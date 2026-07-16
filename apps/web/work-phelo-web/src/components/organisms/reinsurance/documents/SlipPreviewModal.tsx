@@ -4,7 +4,8 @@ import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { useReinsurers, useRiskTypes } from '@/hooks';
-import { isForeignCedant, NIC_LEVY_RATE, WITHHOLDING_TAX_RATE } from '@/lib/reinsuranceTax';
+import { useReinsuranceCharges } from '@/hooks/reinsurance/useReinsuranceCharges';
+import { isForeignCedant, selectChargeRate } from '@/lib/reinsuranceTax';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 
@@ -82,8 +83,11 @@ export function SlipPreviewModal({
 
   const { data: reinsurers = [] } = useReinsurers();
   const { data: riskTypes = [] } = useRiskTypes();
+  const { data: charges } = useReinsuranceCharges();
   const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
   const foreignReinsurer = isForeignCedant(reinsurers.find((r) => r.id === counterpartyId));
+  const nicLevyRate = selectChargeRate(charges, 'NIC_LEVY', currency);
+  const withholdingTaxRate = selectChargeRate(charges, 'WITHHOLDING_TAX', currency);
 
   const businessEntries = placementDetailEntries(businessDetails);
   const offerEntries = placementDetailEntries(offerDetails);
@@ -98,10 +102,12 @@ export function SlipPreviewModal({
   const netPremium =
     reinsurancePremium != null && commissions != null ? reinsurancePremium - commissions : null;
   const nicLevy =
-    foreignReinsurer && reinsurancePremium != null ? reinsurancePremium * NIC_LEVY_RATE : null;
+    foreignReinsurer && reinsurancePremium != null
+      ? reinsurancePremium * (nicLevyRate / 100)
+      : null;
   const withholdingTax =
     foreignReinsurer && reinsurancePremium != null
-      ? reinsurancePremium * WITHHOLDING_TAX_RATE
+      ? reinsurancePremium * (withholdingTaxRate / 100)
       : null;
   const netPremiumPayable =
     netPremium != null ? netPremium - (nicLevy ?? 0) - (withholdingTax ?? 0) : null;
@@ -186,12 +192,9 @@ export function SlipPreviewModal({
             />
             {nicLevy != null && withholdingTax != null && (
               <>
+                <Field label={`NIC Levy (${nicLevyRate}%)`} value={fmtAmount(nicLevy, currency)} />
                 <Field
-                  label={`NIC Levy (${NIC_LEVY_RATE * 100}%)`}
-                  value={fmtAmount(nicLevy, currency)}
-                />
-                <Field
-                  label={`Withholding Tax (${WITHHOLDING_TAX_RATE * 100}%)`}
+                  label={`Withholding Tax (${withholdingTaxRate}%)`}
                   value={fmtAmount(withholdingTax, currency)}
                 />
               </>

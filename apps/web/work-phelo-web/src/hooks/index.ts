@@ -21,6 +21,7 @@ export * from './hr/useCompanyPolicies';
 export * from './useTenantConfig';
 export * from './hr/useProjects';
 export * from './useModuleTransition';
+export * from './useDropdownPosition';
 
 // Reinsurance hooks
 export * from './reinsurance/useFacultatives';

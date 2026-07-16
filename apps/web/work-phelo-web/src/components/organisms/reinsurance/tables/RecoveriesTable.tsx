@@ -419,12 +419,12 @@ export function RecoveriesTable() {
       width: 'minmax(130px, 1fr)',
       render: (row) => <span className="text-gray-700">{row.reinsurerName}</span>,
     },
-    {
-      key: 'claimNumber',
-      label: 'Claim Number',
-      width: '140px',
-      render: (row) => <span className="text-gray-700">{row.claimNumber}</span>,
-    },
+    // {
+    //   key: 'claimNumber',
+    //   label: 'Claim Number',
+    //   width: '140px',
+    //   render: (row) => <span className="text-gray-700">{row.claimNumber}</span>,
+    // },
     {
       key: 'sharePercent',
       label: 'Share (%)',
@@ -435,7 +435,7 @@ export function RecoveriesTable() {
     {
       key: 'recoveryAmount',
       label: 'Recovery Amount',
-      width: '170px',
+      width: '150px',
       render: (row) => (
         <span className="font-medium text-gray-900 block">
           {fmtAmount(row.recoveryAmount, row.currency)}
@@ -457,7 +457,7 @@ export function RecoveriesTable() {
     {
       key: 'actions',
       label: 'Actions',
-      width: '160px',
+      width: '150px',
       render: (row) => <TableButton onClick={() => setPaymentRow(row)}>Record Payment</TableButton>,
     },
   ];

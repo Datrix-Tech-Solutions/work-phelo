@@ -609,7 +609,7 @@ function EndorsementCard({
           ? confirmedClosingByEndorsementParticipantId[row.participantId]
           : undefined;
         if (!confirmedClosing) {
-          return <span className="text-xs text-gray-400">Pending backend closing</span>;
+          return <span className="text-xs text-gray-400">Pending Validation</span>;
         }
         const netPremium =
           confirmedClosing.netPremium === null ? null : Number(confirmedClosing.netPremium);
@@ -699,7 +699,7 @@ function EndorsementCard({
                       if (!isBusy) handleValidateEndorsementParticipant(row);
                     }}
                   >
-                    Validate Endorsement Closing
+                    Validate
                   </TableButton>
                 ))}
             </div>
@@ -709,12 +709,14 @@ function EndorsementCard({
         if (isAccepted) {
           return (
             <div className="flex items-center gap-2">
-              <TableButton
-                variant="blue"
+              <button
+                type="button"
+                title="Preview Endorsement"
                 onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
+                className="text-blue-500 hover:text-blue-600 transition-colors"
               >
-                Preview Endorsement
-              </TableButton>
+                <Icons.Eye className="w-4 h-4" />
+              </button>
               {isValidated ? (
                 <Badge label="Validated" variant="success" />
               ) : (
@@ -725,7 +727,7 @@ function EndorsementCard({
                     if (!isBusy) handleValidateEndorsementParticipant(row);
                   }}
                 >
-                  Validate Endorsement Closing
+                  Validate
                 </TableButton>
               )}
             </div>
@@ -736,7 +738,7 @@ function EndorsementCard({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              title="View"
+              title="View Endorsement"
               onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
               className="text-blue-500 hover:text-blue-600 transition-colors"
             >
@@ -744,7 +746,7 @@ function EndorsementCard({
             </button>
             <button
               type="button"
-              title="Share"
+              title="Send Endorsement Email"
               onClick={() => setMailPreviewCounterpartyId(row.counterpartyId)}
               className="text-green-500 hover:text-green-700 transition-colors"
             >
@@ -752,9 +754,17 @@ function EndorsementCard({
             </button>
             {isDeclined && <Badge label="Declined" variant="danger" />}
             {mailed && (
-              <TableButton isLoading={isBusy} onClick={() => handleAcceptEndorsement(row)}>
-                Accept Revised Terms
-              </TableButton>
+              <button
+                type="button"
+                title={isBusy ? 'Accepting...' : 'Accept'}
+                onClick={() => {
+                  if (!isBusy) handleAcceptEndorsement(row);
+                }}
+                disabled={isBusy}
+                className={`text-green-500 hover:text-green-600 transition-colors ${isBusy ? 'opacity-50 cursor-wait' : ''}`}
+              >
+                <Icons.Check className="w-4 h-4" />
+              </button>
             )}
           </div>
         );
@@ -933,7 +943,7 @@ function EndorsementCard({
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Backend Placed</p>
+              <p className="text-xs text-gray-500">Accepted Capacity</p>
               <p className="text-sm font-semibold text-gray-900">
                 {endorsementSummary.placedPercent}%
               </p>
@@ -941,7 +951,7 @@ function EndorsementCard({
             <div>
               <p className="text-xs text-gray-500">Confirmed Closings</p>
               <p className="text-sm font-semibold text-gray-900">
-                {endorsementSummary.closings.confirmed}/{endorsementSummary.closings.total}
+                {endorsementSummary.closings.confirmed}/{acceptedEndorsementRowsCount}
               </p>
             </div>
           </div>
@@ -974,24 +984,21 @@ function EndorsementCard({
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400">Accepted Line</p>
+                    <p className="text-xs text-gray-400">Accepted Share</p>
                     <p className="text-sm text-gray-700">{closing.signedLinePercent}%</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400">Premium</p>
+                    <p className="text-xs text-gray-400">Gross Premium</p>
                     <p className="text-sm text-gray-700">
-                      {fmtMoney(closing.premiumSnapshot, closing.currency)}
+                      Gross {fmtMoney(closing.premiumSnapshot, closing.currency)}
                     </p>
                     <p className="text-xs text-gray-400">
                       Commission {fmtMoney(closing.commissionAmount, closing.currency)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400">Brokerage / Net</p>
+                    <p className="text-xs text-gray-400">Net Premium</p>
                     <p className="text-sm text-gray-700">
-                      {fmtMoney(closing.brokerageAmount, closing.currency)}
-                    </p>
-                    <p className="text-xs text-gray-400">
                       Net {fmtMoney(closing.netPremium, closing.currency)}
                     </p>
                   </div>

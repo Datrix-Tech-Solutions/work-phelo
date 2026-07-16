@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn, popupClass } from '@/lib/utils';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { useDropdownPosition } from '@/hooks';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -46,24 +47,7 @@ export function DatePicker({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
-
-  const updateDropdownPos = () => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    setDropdownPos({ top: rect.bottom + 8, left: rect.left, width: rect.width });
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    updateDropdownPos();
-    window.addEventListener('scroll', updateDropdownPos, true);
-    window.addEventListener('resize', updateDropdownPos);
-    return () => {
-      window.removeEventListener('scroll', updateDropdownPos, true);
-      window.removeEventListener('resize', updateDropdownPos);
-    };
-  }, [open]);
+  const { pos: dropdownPos } = useDropdownPosition(open, containerRef);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -184,10 +168,12 @@ export function DatePicker({
             style={{
               position: 'fixed',
               top: dropdownPos.top,
+              bottom: dropdownPos.bottom,
               left: dropdownPos.left,
               width: dropdownPos.width,
+              maxHeight: dropdownPos.maxHeight,
             }}
-            className={popupClass('z-50 overflow-hidden')}
+            className={popupClass('z-50 overflow-auto')}
           >
             {/* ── Days view ── */}
             {view === 'days' && (

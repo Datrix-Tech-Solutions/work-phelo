@@ -357,7 +357,7 @@ export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStat
 
 export function toStatusLabel(status: FacultativeStatus): string {
   if (status === 'PARTIALLY_PLACED') return 'Partially Placed';
-  if (status === 'PLACED') return 'Closed';
+  if (status === 'PLACED' || status === 'CLOSING') return 'Closed';
   if (status === 'MARKETING') return 'Open';
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
@@ -525,6 +525,11 @@ export const TERMINAL_ENDORSEMENT_STATUSES: PlacementEndorsementStatus[] = [
   'DECLINED',
   'VOID',
 ];
+
+/** True once an endorsement has been sent to market (past DRAFT) and hasn't been withdrawn. */
+export function isEndorsementSentToMarket(status: PlacementEndorsementStatus): boolean {
+  return status !== 'DRAFT' && status !== 'VOID' && status !== 'DECLINED';
+}
 
 export interface PlacementEndorsement {
   id: string;
@@ -1351,7 +1356,7 @@ export const LEVY_TAX_FORM_DEFAULTS: LevyTaxFormValues = {
   effectiveFrom: new Date().toISOString().slice(0, 10),
   effectiveTo: '',
   roundingMode: 'HALF_UP',
-  decimalPlaces: 2,
+  decimalPlaces: 4,
   isEnabled: true,
   displayOrder: 0,
 };

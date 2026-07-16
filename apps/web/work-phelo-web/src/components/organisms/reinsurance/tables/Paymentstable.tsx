@@ -19,14 +19,14 @@ import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranc
 
 const PAGE_SIZE = 10;
 
-function fmtDate(iso: string) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+// function fmtDate(iso: string) {
+//   if (!iso) return '—';
+//   return new Date(iso).toLocaleDateString('en-GB', {
+//     day: '2-digit',
+//     month: 'short',
+//     year: 'numeric',
+//   });
+// }
 
 function fmtAmount(val: number | null | undefined) {
   if (val == null) return '—';
@@ -133,13 +133,13 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
-    width: '190px',
+    width: '140px',
     render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
   },
   {
     key: 'title',
     label: 'Insured / Risk Type',
-    width: 'minmax(150px, 1fr)',
+    width: 'minmax(150px, 0.8fr)',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
@@ -150,7 +150,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'sumInsured',
     label: 'Sum Insured',
-    width: '150px',
+    width: '130px',
     render: (row) => (
       <span className="font-small text-gray-900 whitespace-nowrap">
         {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
@@ -160,7 +160,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
-    width: '150px',
+    width: '130px',
     render: (row) => {
       const facSumInsured =
         row.sumInsured != null && row.facultativeOffer != null
@@ -176,7 +176,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'participants' as keyof Facultative,
     label: 'Participants',
-    width: '110px',
+    width: '90px',
     render: (row) => {
       const total = row.participants?.length ?? 0;
       const accepted =
@@ -201,17 +201,17 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'commission',
     label: 'Commission',
-    width: '100px',
+    width: '90px',
     render: (row) => (
       <span className="text-gray-700">{row.commission != null ? `${row.commission}%` : '—'}</span>
     ),
   },
-  {
-    key: 'createdAt',
-    label: 'Offer Date',
-    width: '100px',
-    render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
-  },
+  // {
+  //   key: 'createdAt',
+  //   label: 'Offer Date',
+  //   width: '100px',
+  //   render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
+  // },
   {
     key: 'status',
     label: 'Status',
@@ -362,12 +362,12 @@ export function PaymentsTable() {
       }}
       extraFilters={extraFilters}
       actionButton={{
-        label: 'Make Payment',
+        label: 'Recieve Premium',
         onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/new`),
       }}
       rowActions={(row) => [
         {
-          label: 'Record Payment',
+          label: 'Recieve Premium',
           onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
         },
         { label: 'View', onClick: () => {} },

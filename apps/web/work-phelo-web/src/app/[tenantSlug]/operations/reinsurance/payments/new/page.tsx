@@ -43,7 +43,7 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
             Payments
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">Make New Payment</span>
+          <span className="text-gray-700 font-medium">Recieve New Premium</span>
         </nav>
 
         <AddPaymentForm

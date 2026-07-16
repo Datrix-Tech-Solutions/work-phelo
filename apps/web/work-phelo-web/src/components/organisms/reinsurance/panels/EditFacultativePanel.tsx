@@ -11,7 +11,7 @@ import {
   FACULTATIVE_FORM_DEFAULTS,
   RiskType,
 } from '@/types/reinsurance';
-import { useUpdateFacultative, useRiskTypes } from '@/hooks';
+import { useUpdateFacultative, useUpdateFacultativeStatus, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import {
   extractPlacementCustomFields,
@@ -24,6 +24,7 @@ interface EditFacultativePanelProps {
   isOpen: boolean;
   placement: Facultative;
   onClose: () => void;
+  mode?: 'edit' | 'reopen';
 }
 
 function placementToFormValues(
@@ -61,8 +62,15 @@ function placementToFormValues(
   };
 }
 
-export function EditFacultativePanel({ isOpen, placement, onClose }: EditFacultativePanelProps) {
+export function EditFacultativePanel({
+  isOpen,
+  placement,
+  onClose,
+  mode = 'edit',
+}: EditFacultativePanelProps) {
+  const isReopen = mode === 'reopen';
   const { mutateAsync: updateFacultative } = useUpdateFacultative();
+  const { mutateAsync: updateFacultativeStatus } = useUpdateFacultativeStatus(placement.id);
   const { data: allRiskTypes = [] } = useRiskTypes();
 
   const form = useForm<FacultativeFormValues>({
@@ -89,6 +97,12 @@ export function EditFacultativePanel({ isOpen, placement, onClose }: EditFaculta
 
   const onSubmit = async (values: FacultativeFormValues) => {
     try {
+      // Reopening moves the placement out of its terminal PLACED/CLOSED status first — a
+      // CLOSED placement can't have its fields edited directly until it's out of that status.
+      if (isReopen) {
+        await updateFacultativeStatus({ status: 'CLOSING' });
+      }
+
       const selectedRiskType = allRiskTypes.find((rt) => rt.id === values.riskType);
       const { businessDetails, offerDetails } = splitPlacementDetails(
         values.riskDetails,
@@ -113,9 +127,10 @@ export function EditFacultativePanel({ isOpen, placement, onClose }: EditFaculta
         businessDetails,
         offerDetails,
       });
-      useToastStore
-        .getState()
-        .addToast({ message: 'Placement updated successfully', type: 'success' });
+      useToastStore.getState().addToast({
+        message: isReopen ? 'Offer reopened for editing' : 'Placement updated successfully',
+        type: 'success',
+      });
       handleClose();
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
@@ -126,14 +141,18 @@ export function EditFacultativePanel({ isOpen, placement, onClose }: EditFaculta
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Edit Facultative Placement"
+      title={isReopen ? 'Reopen Facultative Placement' : 'Edit Facultative Placement'}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} isLoading={isSubmitting} loadingText="Saving…">
-            Save Changes
+          <Button
+            onClick={handleSubmit(onSubmit)}
+            isLoading={isSubmitting}
+            loadingText={isReopen ? 'Reopening…' : 'Saving…'}
+          >
+            {isReopen ? 'Reopen Offer' : 'Save Changes'}
           </Button>
         </div>
       }

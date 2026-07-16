@@ -1,4 +1,8 @@
-import { Counterparty } from '@/types/reinsurance';
+import {
+  Counterparty,
+  ReinsuranceChargeCode,
+  ReinsuranceChargeConfiguration,
+} from '@/types/reinsurance';
 import { codeToCountry } from '@/lib/geo';
 
 /**
@@ -15,4 +19,29 @@ export function isForeignCedant(cedant: Counterparty | null | undefined): boolea
   const primary = cedant?.addresses.find((a) => a.isPrimary) ?? cedant?.addresses[0];
   if (!primary) return false;
   return codeToCountry(primary.country) !== 'Ghana';
+}
+
+/**
+ * Picks the tenant-configured rate (as a percentage, e.g. 5 for 5%) for a charge
+ * code from live ReinsuranceChargeConfiguration data — preferring a currency-specific
+ * configuration over the currency-agnostic default, and only considering
+ * configurations that are enabled and currently effective.
+ */
+export function selectChargeRate(
+  charges: ReinsuranceChargeConfiguration[] | undefined,
+  code: ReinsuranceChargeCode,
+  currency?: string | null,
+): number {
+  if (!charges?.length) return 0;
+  const now = new Date();
+  const active = charges.filter((charge) => {
+    if (charge.code !== code || !charge.isEnabled) return false;
+    if (new Date(charge.effectiveFrom) > now) return false;
+    if (charge.effectiveTo && new Date(charge.effectiveTo) < now) return false;
+    return true;
+  });
+  const match =
+    active.find((charge) => currency && charge.currency === currency) ??
+    active.find((charge) => !charge.currency);
+  return match ? Number(match.rate) : 0;
 }

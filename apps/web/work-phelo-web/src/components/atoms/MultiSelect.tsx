@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { cn, popupClass } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
+import { useDropdownPosition } from '@/hooks';
 
 export interface MultiSelectOption {
   value: string;
@@ -40,28 +41,14 @@ export function MultiSelect({
      from, so it just pops in instead of animating */
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
-
-  const updateDropdownPos = () => {
-    if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setDropdownPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    updateDropdownPos();
-    window.addEventListener('scroll', updateDropdownPos, true);
-    window.addEventListener('resize', updateDropdownPos);
-    return () => {
-      window.removeEventListener('scroll', updateDropdownPos, true);
-      window.removeEventListener('resize', updateDropdownPos);
-    };
-  }, [open]);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const listboxId = useId();
+  const { pos: dropdownPos, updatePos: updateDropdownPos } = useDropdownPosition(open, triggerRef);
 
   useEffect(() => {
     if (!showDropdown || !open) return;
@@ -118,6 +105,20 @@ export function MultiSelect({
     );
   }, [options, query]);
 
+  /* keep the highlighted option in range as the filtered list changes — adjusted during
+     render (rather than an effect) per React's guidance for state that mirrors a prop/derived value */
+  const [prevFiltered, setPrevFiltered] = useState(filtered);
+  if (filtered !== prevFiltered) {
+    setPrevFiltered(filtered);
+    setHighlightedIndex(filtered.length > 0 ? 0 : -1);
+  }
+
+  /* scroll the highlighted option into view as it moves via keyboard */
+  useEffect(() => {
+    if (!open) return;
+    optionRefs.current[highlightedIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [highlightedIndex, open]);
+
   const handleTriggerClick = () => {
     if (open) {
       closeDropdown();
@@ -125,6 +126,53 @@ export function MultiSelect({
     } else {
       openDropdown();
       setQuery('');
+    }
+  };
+
+  const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      openDropdown();
+      setQuery('');
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex((i) => (filtered.length ? (i + 1) % filtered.length : -1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex((i) =>
+          filtered.length ? (i - 1 + filtered.length) % filtered.length : -1,
+        );
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightedIndex >= 0 && filtered[highlightedIndex]) {
+          toggle(filtered[highlightedIndex].value);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        closeDropdown();
+        setQuery('');
+        triggerRef.current?.focus();
+        break;
+      case 'Home':
+        if (filtered.length) {
+          e.preventDefault();
+          setHighlightedIndex(0);
+        }
+        break;
+      case 'End':
+        if (filtered.length) {
+          e.preventDefault();
+          setHighlightedIndex(filtered.length - 1);
+        }
+        break;
     }
   };
 
@@ -158,6 +206,9 @@ export function MultiSelect({
         ref={triggerRef}
         type="button"
         onClick={handleTriggerClick}
+        onKeyDown={handleTriggerKeyDown}
+        aria-expanded={open}
+        aria-controls={listboxId}
         className={cn(
           'flex items-center justify-between px-4 border rounded-input transition-colors',
           size === 'sm' ? 'py-2' : 'py-3',
@@ -189,6 +240,7 @@ export function MultiSelect({
             style={{
               position: 'fixed',
               top: dropdownPos.top,
+              bottom: dropdownPos.bottom,
               left: dropdownPos.left,
               width: dropdownPos.width,
               gridTemplateRows: expanded ? '1fr' : '0fr',
@@ -206,7 +258,15 @@ export function MultiSelect({
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onMouseDown={(e) => e.stopPropagation()}
+                    onKeyDown={handleSearchKeyDown}
                     placeholder="Search…"
+                    role="combobox"
+                    aria-expanded={open}
+                    aria-controls={listboxId}
+                    aria-autocomplete="list"
+                    aria-activedescendant={
+                      highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined
+                    }
                     className="flex-1 text-sm bg-transparent focus:outline-none text-gray-900 placeholder:text-gray-400 min-w-0"
                   />
                   {query && (
@@ -221,19 +281,35 @@ export function MultiSelect({
                   )}
                 </div>
               </div>
-              <div className="max-h-52 overflow-y-auto py-1">
+              <div
+                id={listboxId}
+                role="listbox"
+                aria-multiselectable="true"
+                className="overflow-y-auto py-1"
+                style={{ maxHeight: Math.min(208, dropdownPos.maxHeight - 56) }}
+              >
                 {filtered.length === 0 ? (
                   <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
                 ) : (
-                  filtered.map((opt) => {
+                  filtered.map((opt, idx) => {
                     const checked = value.includes(opt.value);
                     return (
                       <button
                         key={opt.value}
+                        id={`${listboxId}-option-${idx}`}
+                        role="option"
+                        aria-selected={checked}
+                        ref={(el) => {
+                          optionRefs.current[idx] = el;
+                        }}
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => setHighlightedIndex(idx)}
                         onClick={() => toggle(opt.value)}
-                        className="w-full flex items-start gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-300 text-left transition-colors"
+                        className={cn(
+                          'w-full flex items-start gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-300 text-left transition-colors',
+                          idx === highlightedIndex && 'bg-gray-300',
+                        )}
                       >
                         <span
                           className={cn(

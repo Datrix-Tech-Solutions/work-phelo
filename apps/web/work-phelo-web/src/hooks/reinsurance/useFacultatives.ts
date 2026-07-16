@@ -105,7 +105,7 @@ export function useCreateFacultative() {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
     },
   });
 }
@@ -118,7 +118,7 @@ export function useUpdateFacultative() {
       return res.data;
     },
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, id] });
       queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey });
       queryClient.invalidateQueries({ queryKey: placementLockStatusKey(id) });
@@ -136,7 +136,7 @@ export function useUpdateFacultativeStatus(placementId: string) {
       return transformPlacement(res.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
     },
   });
@@ -151,7 +151,7 @@ export function useDeleteFacultative() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       queryClient.invalidateQueries({ queryKey: ARCHIVED_FACULTATIVES_KEY });
     },
   });
@@ -165,7 +165,7 @@ export function useRestoreFacultative() {
       return transformPlacement(res.data);
     },
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       queryClient.invalidateQueries({ queryKey: ARCHIVED_FACULTATIVES_KEY });
       queryClient.invalidateQueries({ queryKey: placementQueryKey(id) });
     },
@@ -180,6 +180,7 @@ export function useAddParticipant(placementId: string) {
       return transformPlacement(res.data);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
     },
   });
@@ -198,6 +199,7 @@ export function useUpdateParticipant(placementId: string) {
       return transformPlacement(res.data);
     },
     onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       if (!variables.suppressInvalidation) {
         queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
       }
@@ -221,6 +223,7 @@ export function useUpdateParticipantStatus(placementId: string) {
       return transformPlacement(res.data);
     },
     onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       if (!variables.suppressInvalidation) {
         queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
       }
@@ -236,6 +239,7 @@ export function useDeleteParticipant(placementId: string) {
       return transformPlacement(res.data);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
     },
   });
@@ -408,14 +412,14 @@ export function usePlacementEndorsementSummary(
   });
 }
 
-export function usePlacementEffectiveView(placementId: string) {
+export function usePlacementEffectiveView(placementId: string, enabled = true) {
   return useQuery({
     queryKey: placementEffectiveViewKey(placementId),
     queryFn: async () => {
       const res = await api.get(`${BASE}/${placementId}/effective-view`);
       return res.data as EffectivePlacementView;
     },
-    enabled: !!placementId,
+    enabled: !!placementId && enabled,
     staleTime: 15_000,
   });
 }

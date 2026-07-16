@@ -212,7 +212,7 @@ export function ClaimsTable() {
           </div>
         }
         actionButton={{
-          label: 'Make Claim',
+          label: 'Receive Cedant Claim',
           onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/claims/new`),
         }}
         rowActions={(row) => [

@@ -4,9 +4,10 @@ import { useEffect, useMemo } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
-import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
-import { usePlacementEndorsements, usePlacementPayments } from '@/hooks';
+import { Facultative, isEndorsementSentToMarket } from '@/types/reinsurance';
+import { usePlacementEndorsements, usePlacementEffectiveView, usePlacementPayments } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
+import { displayStatusFor } from '@/lib/reinsurance/placementStatus';
 
 export type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
@@ -36,18 +37,6 @@ function fmtAmount(val: number | null, currency: string | null) {
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neutral' | 'danger'> =
-  {
-    DRAFT: 'neutral',
-    MARKETING: 'warning',
-    PARTIALLY_PLACED: 'success',
-    PLACED: 'success',
-    CLOSING: 'success',
-    CLOSED: 'success',
-    DECLINED: 'danger',
-    CANCELLED: 'danger',
-  };
-
 interface FacultativeOverviewProps {
   placement: Facultative;
   onPaymentStatusChange?: (status: PaymentStatus) => void;
@@ -60,6 +49,9 @@ export function FacultativeOverview({
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
   const endorsementCount = endorsements.filter((e) => e.status !== 'VOID').length;
+  const hasActiveEndorsement = endorsements.some((e) => isEndorsementSentToMarket(e.status));
+  const { data: effectiveView } = usePlacementEffectiveView(placement.id, hasActiveEndorsement);
+  const effectiveTotals = hasActiveEndorsement ? effectiveView?.effectiveTotals : undefined;
 
   const paymentStatus = useMemo<PaymentStatus>(() => {
     const facPrem =
@@ -80,24 +72,25 @@ export function FacultativeOverview({
     onPaymentStatusChange?.(paymentStatus);
   }, [paymentStatus, onPaymentStatusChange]);
 
-  const facOffer = placement.facultativeOffer ?? 0;
-  const facSumInsured =
-    placement.sumInsured != null ? placement.sumInsured * (facOffer / 100) : null;
-  const facPremium = placement.premium != null ? placement.premium * (facOffer / 100) : null;
+  const facOffer = effectiveTotals?.facultativeOfferPercent ?? placement.facultativeOffer ?? 0;
+  const premiumValue = effectiveTotals?.premium ?? placement.premium;
+  const sumInsuredValue = effectiveTotals?.sumInsured ?? placement.sumInsured;
+  const commissionValue = effectiveTotals?.commissionPercent ?? placement.commission;
+  const facSumInsured = sumInsuredValue != null ? sumInsuredValue * (facOffer / 100) : null;
+  const facPremium = premiumValue != null ? premiumValue * (facOffer / 100) : null;
 
   const riskEntries = [
     ...placementDetailEntries(placement.businessDetails),
     ...placementDetailEntries(placement.offerDetails),
   ];
 
+  const { label: statusLabel, variant: statusVariant } = displayStatusFor(placement);
+
   return (
     <CollapsibleOverview
       headerExtra={
         <>
-          <Badge
-            label={toStatusLabel(placement.status)}
-            variant={STATUS_VARIANT_MAP[placement.status]}
-          />
+          <Badge label={statusLabel} variant={statusVariant} />
           <span className="text-sm text-gray-500">|</span>
           <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
           {endorsementCount > 0 && (
@@ -126,14 +119,11 @@ export function FacultativeOverview({
         <DetailField label="Rate (%)" value={placement.rate != null ? `${placement.rate}%` : '—'} />
         <DetailField
           label="Cedant Commission (%)"
-          value={placement.commission != null ? `${placement.commission}%` : '—'}
+          value={commissionValue != null ? `${commissionValue}%` : '—'}
         />
         <DetailField label="Fac. Offer (%)" value={`${facOffer}%`} />
-        <DetailField label="Premium" value={fmtAmount(placement.premium, placement.currency)} />
-        <DetailField
-          label="Sum Insured"
-          value={fmtAmount(placement.sumInsured, placement.currency)}
-        />
+        <DetailField label="Premium" value={fmtAmount(premiumValue, placement.currency)} />
+        <DetailField label="Sum Insured" value={fmtAmount(sumInsuredValue, placement.currency)} />
         <DetailField
           label="Fac. Sum Insured"
           value={fmtAmount(facSumInsured, placement.currency)}

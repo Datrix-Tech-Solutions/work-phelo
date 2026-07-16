@@ -7,9 +7,15 @@ import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents
 import { CreditNoteModal } from '@/components/organisms/reinsurance/documents/CreditNoteModal';
 import { DebitNoteModal } from '@/components/organisms/reinsurance/documents/DebitNoteModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
-import { useCedants, useReinsurers } from '@/hooks';
-import { Facultative, PlacementParticipant } from '@/types/reinsurance';
-import { isForeignCedant, NIC_LEVY_RATE, WITHHOLDING_TAX_RATE } from '@/lib/reinsuranceTax';
+import {
+  useCedants,
+  useReinsurers,
+  usePlacementEndorsements,
+  usePlacementEffectiveView,
+} from '@/hooks';
+import { useReinsuranceCharges } from '@/hooks/reinsurance/useReinsuranceCharges';
+import { Facultative, PlacementParticipant, isEndorsementSentToMarket } from '@/types/reinsurance';
+import { isForeignCedant, selectChargeRate } from '@/lib/reinsuranceTax';
 
 interface ClosingRow {
   id: string;
@@ -53,6 +59,13 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
 
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: charges } = useReinsuranceCharges();
+  const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
+  const hasActiveEndorsement = endorsements.some((e) => isEndorsementSentToMarket(e.status));
+  const { data: effectiveView, isLoading: isLoadingEffectiveView } = usePlacementEffectiveView(
+    placement.id,
+    hasActiveEndorsement,
+  );
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
   const foreignCedant = isForeignCedant(fullCedant);
@@ -69,10 +82,43 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   );
 
   const premium = placement.premium ?? 0;
+  const effectiveTotals = hasActiveEndorsement ? effectiveView?.effectiveTotals : undefined;
+  const participantShareOverrides = effectiveView
+    ? Object.fromEntries(
+        effectiveView.effectiveParticipants.map((ep) => [ep.counterpartyId, ep.signedLinePercent]),
+      )
+    : undefined;
 
-  const rows: ClosingRow[] = placement.participants
+  const baseRows: ClosingRow[] = placement.participants
     .filter((p) => p.status === 'CLOSED')
     .map((p) => toClosingRow(p, premium));
+
+  // Once an endorsement is in market, overlay the revised share/premium from the
+  // effective view onto the base rows, and surface any reinsurer that only exists
+  // because of the endorsement (not part of the original placement closings).
+  const effectiveByCounterpartyId =
+    hasActiveEndorsement && effectiveView
+      ? new Map(effectiveView.effectiveParticipants.map((ep) => [ep.counterpartyId, ep]))
+      : null;
+
+  const rows: ClosingRow[] = effectiveByCounterpartyId
+    ? [
+        ...baseRows.map((row) => {
+          const ep = effectiveByCounterpartyId.get(row.counterpartyId);
+          if (!ep) return row;
+          effectiveByCounterpartyId.delete(row.counterpartyId);
+          return { ...row, signedShare: ep.signedLinePercent, signedGrossPremium: ep.grossPremium };
+        }),
+        ...[...effectiveByCounterpartyId.values()].map((ep) => ({
+          id: ep.counterpartyId,
+          counterpartyId: ep.counterpartyId,
+          reinsurerCompany: ep.counterparty.name,
+          signedShare: ep.signedLinePercent,
+          signedGrossPremium: ep.grossPremium,
+          brokerageFee: reinsurers.find((r) => r.id === ep.counterpartyId)?.brokerageFee ?? 0,
+        })),
+      ]
+    : baseRows;
 
   const columns: Column<ClosingRow>[] = [
     {
@@ -117,6 +163,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       <DataTable
         columns={columns}
         data={rows}
+        isLoading={hasActiveEndorsement && isLoadingEffectiveView}
         emptyMessage="No accepted participants yet"
         currentPage={1}
         totalPages={1}
@@ -134,6 +181,11 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         placement={placement}
         counterpartyId=""
         reinsurerCompany=""
+        facultativeOfferOverride={effectiveTotals?.facultativeOfferPercent}
+        sumInsuredOverride={effectiveTotals?.sumInsured}
+        premiumOverride={effectiveTotals?.premium}
+        commissionOverride={effectiveTotals?.commissionPercent}
+        participantShareOverrides={hasActiveEndorsement ? participantShareOverrides : undefined}
         onPrint={() => setGuaranteeNoteOpen(false)}
         onClose={() => setGuaranteeNoteOpen(false)}
       />
@@ -141,6 +193,9 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       <DebitNoteModal
         isOpen={debitNoteOpen}
         placement={placement}
+        facultativeOfferOverride={effectiveTotals?.facultativeOfferPercent}
+        premiumOverride={effectiveTotals?.premium}
+        commissionOverride={effectiveTotals?.commissionPercent}
         onPrint={() => setDebitNoteOpen(false)}
         onClose={() => setDebitNoteOpen(false)}
       />
@@ -153,8 +208,13 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           brokerageFee={creditNoteRow.brokerageFee}
           counterpartyId={creditNoteRow.counterpartyId}
           reinsurerCompany={creditNoteRow.reinsurerCompany}
-          nicLevyPct={foreignCedant ? NIC_LEVY_RATE * 100 : 0}
-          withholdingTaxPct={foreignCedant ? WITHHOLDING_TAX_RATE * 100 : 0}
+          nicLevyPct={foreignCedant ? selectChargeRate(charges, 'NIC_LEVY', placement.currency) : 0}
+          withholdingTaxPct={
+            foreignCedant ? selectChargeRate(charges, 'WITHHOLDING_TAX', placement.currency) : 0
+          }
+          sumInsuredOverride={effectiveTotals?.sumInsured}
+          premiumOverride={effectiveTotals?.premium}
+          commissionOverride={effectiveTotals?.commissionPercent}
           onPrint={() => setCreditNoteRow(null)}
           onClose={() => setCreditNoteRow(null)}
         />
