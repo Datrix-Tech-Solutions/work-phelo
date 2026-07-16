@@ -65,6 +65,7 @@ import { UpdatePlacementEndorsementParticipantDto } from './dto/update-placement
 import { UpdatePlacementEndorsementClosingStatusDto } from './dto/update-placement-endorsement-closing-status.dto';
 import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
+import { ValidateEndorsementParticipantResponseDto } from './dto/validate-endorsement-participant-response.dto';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
@@ -995,6 +996,57 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.endorsementClosingsService.create(
+      request.user,
+      id,
+      endorsementId,
+      participantId,
+    );
+  }
+
+  @Post(
+    ':id/endorsements/:endorsementId/participants/:participantId/validate-and-confirm',
+  )
+  @ApiTags('Reinsurance - Endorsement Closings')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Validate and confirm an endorsement participant atomically',
+    description:
+      'Creates or reuses the active endorsement closing for an ACCEPTED endorsement participant, issues it when needed, confirms it, and marks the endorsement participant CLOSED in one transaction. The endpoint is idempotent for already confirmed endorsement closings and does not mutate original placement participants or original placement closings.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Endorsement participant ID.',
+  })
+  @ApiCreatedResponse({ type: ValidateEndorsementParticipantResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Endorsement is not in a valid workflow state, participant is not ACCEPTED, signed line is missing/zero, capacity exceeds targetPercent, or required snapshot values are missing.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Endorsement or participant is terminal, or the participant is closed without a confirmed active endorsement closing.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Placement, endorsement, or endorsement participant is missing or belongs to another tenant.',
+  })
+  validateAndConfirmEndorsementParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementClosingsService.validateAndConfirm(
       request.user,
       id,
       endorsementId,
