@@ -26,6 +26,13 @@ interface GuaranteeNoteModalProps {
   placement: Facultative;
   counterpartyId: string;
   reinsurerCompany: string;
+  /** Post-endorsement totals, when this placement has an endorsement in market. */
+  facultativeOfferOverride?: number;
+  sumInsuredOverride?: number | null;
+  premiumOverride?: number | null;
+  commissionOverride?: number | null;
+  /** Post-endorsement share per reinsurer, keyed by counterpartyId. */
+  participantShareOverrides?: Record<string, number>;
   onPrint: () => void;
   onClose: () => void;
 }
@@ -35,6 +42,11 @@ export function GuaranteeNoteModal({
   placement,
   counterpartyId,
   reinsurerCompany,
+  facultativeOfferOverride,
+  sumInsuredOverride,
+  premiumOverride,
+  commissionOverride,
+  participantShareOverrides,
   onPrint,
   onClose,
 }: GuaranteeNoteModalProps) {
@@ -73,18 +85,28 @@ export function GuaranteeNoteModal({
 
   const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
-  const facOffer = facultativeOffer ?? 0;
-  const facSumInsured = sumInsured != null ? (facOffer / 100) * sumInsured : null;
-  const facPremium = premium != null ? (facOffer / 100) * premium : null;
-  const commissionAmount = facPremium != null ? ((commission ?? 0) / 100) * facPremium : null;
+  const facOffer = facultativeOfferOverride ?? facultativeOffer ?? 0;
+  const effectiveSumInsured = sumInsuredOverride ?? sumInsured;
+  const effectivePremium = premiumOverride ?? premium;
+  const effectiveCommission = commissionOverride ?? commission;
+  const facSumInsured = effectiveSumInsured != null ? (facOffer / 100) * effectiveSumInsured : null;
+  const facPremium = effectivePremium != null ? (facOffer / 100) * effectivePremium : null;
+  const commissionAmount =
+    facPremium != null ? ((effectiveCommission ?? 0) / 100) * facPremium : null;
   const netPremium =
     facPremium != null && commissionAmount != null ? facPremium - commissionAmount : null;
 
-  const participantRows = participants.filter(
-    (p) =>
-      (p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER') &&
-      parseFloat(p.sharePercent ?? '0') > 0,
-  );
+  const participantRows = participants
+    .filter(
+      (p) =>
+        (p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER') &&
+        parseFloat(p.sharePercent ?? '0') > 0,
+    )
+    .map((p) => ({
+      ...p,
+      displaySharePercent:
+        participantShareOverrides?.[p.counterpartyId] ?? parseFloat(p.sharePercent ?? '0'),
+    }));
 
   return (
     <DocumentPreviewModal
@@ -162,8 +184,8 @@ export function GuaranteeNoteModal({
 
         <hr className="border-gray-100 my-1" />
 
-        <DetailField inline label="Sum Insured" value={fmtAmount(sumInsured, currency)} />
-        <DetailField inline label="Premium" value={fmtAmount(premium, currency)} />
+        <DetailField inline label="Sum Insured" value={fmtAmount(effectiveSumInsured, currency)} />
+        <DetailField inline label="Premium" value={fmtAmount(effectivePremium, currency)} />
         <DetailField
           inline
           label="Facultative (Offer)"
@@ -195,7 +217,7 @@ export function GuaranteeNoteModal({
               key={p.id}
               inline
               label={p.counterparty.name}
-              value={`${parseFloat(p.sharePercent ?? '0')}% of 100%`}
+              value={`${p.displaySharePercent}% of 100%`}
             />
           ))
         )}

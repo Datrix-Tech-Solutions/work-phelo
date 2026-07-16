@@ -11,8 +11,8 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 type FacultativePageTab = 'placements' | 'closing' | 'archived';
 
 const TABS = [
-  { key: 'placements', label: 'Offers' },
-  { key: 'closing', label: 'Closings' },
+  { key: 'placements', label: 'Open' },
+  { key: 'closing', label: 'Closed' },
   { key: 'archived', label: 'Archived' },
 ];
 

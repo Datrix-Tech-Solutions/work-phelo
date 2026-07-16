@@ -59,7 +59,7 @@ describe('ReinsuranceChargeSettingsService', () => {
       create: PrismaMethod;
       update: PrismaMethod;
     };
-    $executeRaw: jest.MockedFunction<(...args: unknown[]) => Promise<number>>;
+    $queryRaw: jest.MockedFunction<(...args: unknown[]) => Promise<unknown[]>>;
     $transaction: jest.MockedFunction<
       (callback: (tx: unknown) => Promise<unknown>) => Promise<unknown>
     >;
@@ -75,7 +75,7 @@ describe('ReinsuranceChargeSettingsService', () => {
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
       },
-      $executeRaw: jest.fn<Promise<number>, unknown[]>().mockResolvedValue(0),
+      $queryRaw: jest.fn<Promise<unknown[]>, unknown[]>().mockResolvedValue([]),
       $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) =>
         callback(prisma),
       ),
@@ -151,8 +151,8 @@ describe('ReinsuranceChargeSettingsService', () => {
     });
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
-    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       prisma.reinsuranceChargeConfiguration.findFirst.mock
         .invocationCallOrder[0],
     );

@@ -257,7 +257,7 @@ export function DataTable<T extends { id: string | number }>({
         <div className="overflow-x-auto flex-1 min-h-0 flex flex-col">
           <div className="min-w-full flex flex-col flex-1 min-h-0">
             {/* Header */}
-            <div className="relative shrink-0">
+            <div className="relative shrink-0 w-fit min-w-full">
               <div
                 className={cardClass(
                   cn(
@@ -321,7 +321,7 @@ export function DataTable<T extends { id: string | number }>({
                     key={row.id}
                     onClick={() => onRowClick?.(row)}
                     className={cn(
-                      'relative group/row border-b border-gray-100 last:border-b-0',
+                      'relative group/row w-fit min-w-full border-b border-gray-100 last:border-b-0',
                       onRowClick && 'cursor-pointer',
                     )}
                   >

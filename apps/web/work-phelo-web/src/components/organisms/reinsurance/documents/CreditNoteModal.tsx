@@ -44,6 +44,10 @@ interface CreditNoteModalProps {
   reinsurerCompany: string;
   nicLevyPct?: number;
   withholdingTaxPct?: number;
+  /** Post-endorsement totals, when this placement has an endorsement in market. */
+  sumInsuredOverride?: number | null;
+  premiumOverride?: number | null;
+  commissionOverride?: number | null;
   onPrint: () => void;
   onClose: () => void;
 }
@@ -57,6 +61,9 @@ export function CreditNoteModal({
   reinsurerCompany,
   nicLevyPct = 0,
   withholdingTaxPct = 0,
+  sumInsuredOverride,
+  premiumOverride,
+  commissionOverride,
   onPrint,
   onClose,
 }: CreditNoteModalProps) {
@@ -90,9 +97,14 @@ export function CreditNoteModal({
     ...placementDetailEntries(offerDetails),
   ].map((entry) => ({ label: entry.label, value: fmtFieldValue(entry.value) }));
 
-  const yourSumInsured = sumInsured != null ? (sharePercent / 100) * sumInsured : null;
-  const yourPremium = premium != null ? (sharePercent / 100) * premium : null;
-  const totalCommissionPct = (commission ?? 0) + brokerageFee;
+  const effectiveSumInsured = sumInsuredOverride ?? sumInsured;
+  const effectivePremium = premiumOverride ?? premium;
+  const effectiveCommission = commissionOverride ?? commission;
+
+  const yourSumInsured =
+    effectiveSumInsured != null ? (sharePercent / 100) * effectiveSumInsured : null;
+  const yourPremium = effectivePremium != null ? (sharePercent / 100) * effectivePremium : null;
+  const totalCommissionPct = (effectiveCommission ?? 0) + brokerageFee;
   const commissionAmt = yourPremium != null ? (totalCommissionPct / 100) * yourPremium : null;
   const nicLevyAmt = yourPremium != null ? (nicLevyPct / 100) * yourPremium : 0;
   const withholdingTaxAmt = yourPremium != null ? (withholdingTaxPct / 100) * yourPremium : 0;
@@ -113,8 +125,8 @@ export function CreditNoteModal({
     },
     { label: 'Currency', value: currency ?? '—' },
     { label: '', divider: true },
-    { label: 'Total Sum Insured', value: fmtAmount(sumInsured, currency) },
-    { label: 'Total Premium', value: fmtAmount(premium, currency) },
+    { label: 'Total Sum Insured', value: fmtAmount(effectiveSumInsured, currency) },
+    { label: 'Total Premium', value: fmtAmount(effectivePremium, currency) },
     { label: 'Your Share', pct: `${sharePercent}%` },
     { label: 'Your Sum Insured', value: fmtAmount(yourSumInsured, currency) },
     { label: 'Your Premium', value: fmtAmount(yourPremium, currency) },

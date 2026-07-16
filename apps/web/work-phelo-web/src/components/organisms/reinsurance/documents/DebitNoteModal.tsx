@@ -31,11 +31,23 @@ function today() {
 interface DebitNoteModalProps {
   isOpen: boolean;
   placement: Facultative;
+  /** Post-endorsement totals, when this placement has an endorsement in market. */
+  facultativeOfferOverride?: number;
+  premiumOverride?: number | null;
+  commissionOverride?: number | null;
   onPrint: () => void;
   onClose: () => void;
 }
 
-export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNoteModalProps) {
+export function DebitNoteModal({
+  isOpen,
+  placement,
+  facultativeOfferOverride,
+  premiumOverride,
+  commissionOverride,
+  onPrint,
+  onClose,
+}: DebitNoteModalProps) {
   const { data: cedants = [] } = useCedants();
   const { data: riskTypes = [] } = useRiskTypes();
 
@@ -63,9 +75,11 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
     ? [primaryAddress.city, primaryAddress.state, primaryAddress.country].filter(Boolean).join(', ')
     : null;
 
-  const facOffer = facultativeOffer ?? 0;
-  const facPremium = premium != null ? (facOffer / 100) * premium : null;
-  const commissionAmt = facPremium != null ? ((commission ?? 0) / 100) * facPremium : null;
+  const facOffer = facultativeOfferOverride ?? facultativeOffer ?? 0;
+  const effectivePremium = premiumOverride ?? premium;
+  const effectiveCommission = commissionOverride ?? commission;
+  const facPremium = effectivePremium != null ? (facOffer / 100) * effectivePremium : null;
+  const commissionAmt = facPremium != null ? ((effectiveCommission ?? 0) / 100) * facPremium : null;
   const netPremium =
     facPremium != null && commissionAmt != null ? facPremium - commissionAmt : null;
 
@@ -181,13 +195,13 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
             </tr>
 
             {[
-              { label: '100% Gross Premium', value: fmtAmount(premium, currency) },
+              { label: '100% Gross Premium', value: fmtAmount(effectivePremium, currency) },
               {
                 label: `${facOffer}% Facultative Share`,
                 value: fmtAmount(facPremium, currency),
               },
               {
-                label: `Less Commission ${commission ?? 0}%`,
+                label: `Less Commission ${effectiveCommission ?? 0}%`,
                 value: commissionAmt != null ? fmtAmount(commissionAmt, currency) : '—',
               },
               {
