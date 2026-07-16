@@ -828,6 +828,13 @@ export interface EndorsementParticipantClosing {
   updatedAt: string;
 }
 
+export interface ValidateEndorsementParticipantResponse {
+  participant: PlacementEndorsementParticipant;
+  closing: EndorsementParticipantClosing;
+  summary: PlacementEndorsementSummary;
+  effectiveStatus: PlacementEndorsementStatus;
+}
+
 export type PlacementDocumentType =
   | 'OFFER_SLIP'
   | 'CLOSING_SLIP'

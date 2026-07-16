@@ -18,15 +18,7 @@ import {
 } from '@/types/reinsurance';
 import {
   findActivePlacementNoteDocument,
-  endorsementClosingsKey,
-  endorsementKey,
-  endorsementNotesKey,
-  endorsementParticipantKey,
-  endorsementSummaryKey,
-  facultativePlacementKey,
-  placementEffectiveViewKey,
   useCedants,
-  useCreateEndorsementClosing,
   useEndorsementClosings,
   useEndorsementNotes,
   useGenerateEndorsementCreditNote,
@@ -40,11 +32,10 @@ import {
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
   useUpdateEndorsementParticipant,
-  useUpdateEndorsementParticipantStatus,
   useReinsurers,
   useRenderPlacementDocumentPdf,
   useUpdateEndorsementStatus,
-  useUpdateEndorsementClosingStatus,
+  useValidateAndConfirmEndorsementParticipant,
   useVoidEndorsementNote,
 } from '@/hooks';
 import { EditEndorsementPanel } from '@/components/organisms/reinsurance/panels/EditEndorsementPanel';
@@ -370,7 +361,7 @@ function EndorsementCard({
     placement.id,
     endorsement.id,
   );
-  const updateEndorsementParticipantStatus = useUpdateEndorsementParticipantStatus(
+  const validateAndConfirmEndorsementParticipant = useValidateAndConfirmEndorsementParticipant(
     placement.id,
     endorsement.id,
   );
@@ -384,11 +375,6 @@ function EndorsementCard({
   );
   const generateNoteDocument = useGeneratePlacementNoteDocument(placement.id);
   const renderDocumentPdf = useRenderPlacementDocumentPdf(placement.id);
-  const createEndorsementClosing = useCreateEndorsementClosing(placement.id, endorsement.id);
-  const updateEndorsementClosingStatus = useUpdateEndorsementClosingStatus(
-    placement.id,
-    endorsement.id,
-  );
   const issueEndorsementNote = useIssueEndorsementNote(placement.id, endorsement.id);
   const voidEndorsementNote = useVoidEndorsementNote(placement.id, endorsement.id);
   const queryClient = useQueryClient();
@@ -507,36 +493,11 @@ function EndorsementCard({
 
     setBusyEPIds((previous) => new Set([...previous, counterpartyId]));
     try {
-      let closing = endorsementClosings.find(
-        (item) => item.endorsementParticipantId === participant.id && item.status !== 'VOID',
-      );
-      if (!closing) {
-        closing = await createEndorsementClosing.mutateAsync({
-          endorsementParticipantId: participant.id,
-          suppressInvalidation: true,
-        });
-      }
-      if (closing.status === 'DRAFT') {
-        closing = await updateEndorsementClosingStatus.mutateAsync({
-          closingId: closing.id,
-          status: 'ISSUED',
-          suppressInvalidation: true,
-        });
-      }
-      if (closing.status === 'ISSUED') {
-        await updateEndorsementClosingStatus.mutateAsync({
-          closingId: closing.id,
-          status: 'CONFIRMED',
-          suppressInvalidation: true,
-        });
-      }
-      await updateEndorsementParticipantStatus.mutateAsync({
+      await validateAndConfirmEndorsementParticipant.mutateAsync({
         participantId: participant.id,
-        status: 'CLOSED',
-        suppressInvalidation: true,
       });
       useToastStore.getState().addToast({
-        message: 'Endorsement participant validated and closing confirmed',
+        message: 'Endorsement participant validated and closing confirmed successfully.',
         type: 'success',
       });
     } catch (error) {
@@ -545,33 +506,6 @@ function EndorsementCard({
         type: 'error',
       });
     } finally {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: endorsementParticipantKey(placement.id, endorsement.id),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: endorsementClosingsKey(placement.id, endorsement.id),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: endorsementNotesKey(placement.id, endorsement.id),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: endorsementKey(placement.id),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: endorsementSummaryKey(placement.id, endorsement.id),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: placementEffectiveViewKey(placement.id),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: facultativePlacementKey(placement.id),
-          exact: true,
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['reinsurance', 'dashboard'],
-        }),
-      ]);
       setBusyEPIds((previous) => {
         const next = new Set(previous);
         next.delete(counterpartyId);
