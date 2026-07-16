@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   PlacementClosingStatus,
   PlacementEndorsementImpactType,
@@ -290,6 +294,8 @@ describe('PlacementEndorsementsService', () => {
         issued: 2,
       },
       pendingActions: [],
+      canClose: true,
+      closeBlockingReasons: [],
       isComplete: true,
     });
   });
@@ -345,6 +351,14 @@ describe('PlacementEndorsementsService', () => {
     expect(result.remainingPercent).toBe(10);
     expect(result.pendingActions).toContain('CREATE_CLOSING');
     expect(result.pendingActions).not.toContain('ADD_CAPACITY');
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ACCEPTED_PARTICIPANT_NOT_VALIDATED',
+        }),
+      ]),
+    );
     expect(result.isComplete).toBe(false);
   });
 
@@ -407,6 +421,15 @@ describe('PlacementEndorsementsService', () => {
         'ISSUE_NOTES',
       ]),
     );
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'ACCEPTED_PARTICIPANT_NOT_VALIDATED' }),
+        expect.objectContaining({ code: 'UNCONFIRMED_CLOSING' }),
+        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_CREDIT_NOTE' }),
+        expect.objectContaining({ code: 'DRAFT_ENDORSEMENT_NOTE' }),
+      ]),
+    );
     expect(result.isComplete).toBe(false);
   });
 
@@ -454,6 +477,8 @@ describe('PlacementEndorsementsService', () => {
     );
 
     expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
     expect(result.isComplete).toBe(false);
   });
 
@@ -523,6 +548,8 @@ describe('PlacementEndorsementsService', () => {
     );
 
     expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
     expect(result.remainingPercent).toBeNull();
   });
 
@@ -582,6 +609,8 @@ describe('PlacementEndorsementsService', () => {
     expect(result.placedPercent).toBe(10);
     expect(result.remainingPercent).toBe(0);
     expect(result.pendingActions).toEqual([]);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
     expect(result.isComplete).toBe(true);
   });
 
@@ -617,6 +646,14 @@ describe('PlacementEndorsementsService', () => {
 
     expect(result.closings.void).toBe(1);
     expect(result.pendingActions).toContain('CREATE_CLOSING');
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ACCEPTED_PARTICIPANT_NOT_VALIDATED',
+        }),
+      ]),
+    );
     expect(result.isComplete).toBe(false);
   });
 
@@ -665,6 +702,13 @@ describe('PlacementEndorsementsService', () => {
 
     expect(result.notes.void).toBe(2);
     expect(result.pendingActions).toContain('GENERATE_NOTES');
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_DEBIT_NOTE' }),
+        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_CREDIT_NOTE' }),
+      ]),
+    );
     expect(result.isComplete).toBe(false);
   });
 
@@ -923,6 +967,7 @@ describe('PlacementEndorsementsService', () => {
         participants: [],
         closings: [],
         notes: [],
+        impactType: PlacementEndorsementImpactType.TERMS_ONLY,
       });
     prisma.placementEndorsement.update.mockResolvedValue({
       ...endorsement,
@@ -964,9 +1009,115 @@ describe('PlacementEndorsementsService', () => {
       service.changeStatus(user, 'placement-1', 'endorsement-1', {
         status: PlacementEndorsementStatus.CLOSED,
       }),
-    ).rejects.toThrow('Pending actions: ADD_CAPACITY');
+    ).rejects.toThrow(ConflictException);
 
     expect(prisma.placementEndorsement.update).not.toHaveBeenCalled();
+  });
+
+  it('allows return-premium endorsements to close with issued credit notes and no debit note', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.CLOSING,
+      impactType: PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+      targetPercent: new Prisma.Decimal('10.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.ACCEPTED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      closings: [
+        {
+          id: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      notes: [
+        {
+          id: 'endorsement-note-1',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: 'endorsement-closing-1',
+        },
+      ],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
+  });
+
+  it('blocks close when duplicate active endorsement closings exist for one participant', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.CLOSING,
+      targetPercent: new Prisma.Decimal('10.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.ACCEPTED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      closings: [
+        {
+          id: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+        {
+          id: 'endorsement-closing-2',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      notes: [
+        {
+          id: 'endorsement-note-1',
+          type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: null,
+        },
+        {
+          id: 'endorsement-note-2',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: 'endorsement-closing-1',
+        },
+        {
+          id: 'endorsement-note-3',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: 'endorsement-closing-2',
+        },
+      ],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'DUPLICATE_ACTIVE_CLOSING' }),
+      ]),
+    );
   });
 
   it('rejects unsupported status transitions from terminal statuses', async () => {

@@ -842,8 +842,10 @@ function EndorsementCard({
     (closing) => closing.status === 'CONFIRMED',
   );
   const hasEndorsementNoteWorkflow = endorsement.status !== 'DRAFT';
+  const requiresEndorsementDebitNote = impactType !== 'DECREASE_OR_CANCELLATION';
   const pendingActions = endorsementSummary?.pendingActions ?? [];
-  const isReadyToClose = pendingActions.includes('CLOSE_ENDORSEMENT');
+  const closeBlockingReasons = endorsementSummary?.closeBlockingReasons ?? [];
+  const isReadyToClose = endorsementSummary?.canClose ?? false;
   const isInClosingPhase =
     !isReadyToClose &&
     endorsement.status !== 'CLOSED' &&
@@ -864,7 +866,9 @@ function EndorsementCard({
       ? 'Generate the required endorsement notes before closing.'
       : isReadyToClose
         ? 'All required endorsement work is complete. Ready for manual close.'
-        : null;
+        : closeBlockingReasons.length > 0
+          ? 'Complete the remaining endorsement actions before closing.'
+          : null;
 
   const handleCloseEndorsement = async () => {
     if (!isReadyToClose) return;
@@ -1056,8 +1060,13 @@ function EndorsementCard({
                 Preview Only Certificate
               </Button>
             )}
-            {isReadyToClose && endorsement.status !== 'CLOSED' && (
-              <Button size="sm" isLoading={isUpdatingStatus} onClick={handleCloseEndorsement}>
+            {endorsement.status !== 'CLOSED' && (
+              <Button
+                size="sm"
+                isLoading={isUpdatingStatus}
+                disabled={!isReadyToClose}
+                onClick={handleCloseEndorsement}
+              >
                 Close Endorsement
               </Button>
             )}
@@ -1066,6 +1075,16 @@ function EndorsementCard({
 
         {pendingWorkflowMessage && (
           <p className="text-xs text-gray-500">{pendingWorkflowMessage}</p>
+        )}
+        {closeBlockingReasons.length > 0 && endorsement.status !== 'CLOSED' && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold text-amber-800">Close readiness blockers</p>
+            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-amber-700">
+              {closeBlockingReasons.map((reason) => (
+                <li key={reason.code}>{reason.message}</li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {/* Reason */}
@@ -1293,15 +1312,17 @@ function EndorsementCard({
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  isLoading={isOpeningDebitNote}
-                  disabled={confirmedEndorsementClosings.length === 0}
-                  onClick={handleViewEndorsementDebitNote}
-                >
-                  View Endorsement Debit Note
-                </Button>
+                {requiresEndorsementDebitNote && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    isLoading={isOpeningDebitNote}
+                    disabled={confirmedEndorsementClosings.length === 0}
+                    onClick={handleViewEndorsementDebitNote}
+                  >
+                    View Endorsement Debit Note
+                  </Button>
+                )}
                 {confirmedEndorsementClosings.map((closing) => (
                   <Button
                     key={closing.id}
@@ -1322,6 +1343,11 @@ function EndorsementCard({
             ) : confirmedEndorsementClosings.length === 0 ? (
               <p className="text-xs text-gray-400">
                 Confirm an endorsement closing before generating endorsement notes.
+              </p>
+            ) : !requiresEndorsementDebitNote ? (
+              <p className="text-xs text-gray-400">
+                Decrease or cancellation endorsements use endorsement credit notes for return
+                premium; no endorsement debit note is required.
               </p>
             ) : null}
 
