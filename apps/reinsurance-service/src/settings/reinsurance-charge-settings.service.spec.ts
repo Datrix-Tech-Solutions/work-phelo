@@ -152,6 +152,9 @@ describe('ReinsuranceChargeSettingsService', () => {
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(prisma.$queryRaw.mock.calls[0]?.[0])).toContain(
+      '::integer',
+    );
     expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       prisma.reinsuranceChargeConfiguration.findFirst.mock
         .invocationCallOrder[0],
