@@ -243,22 +243,22 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
         closingStatus = 'DRAFT';
       }
 
+      const shouldMoveThroughPlaced = ['DRAFT', 'MARKETING', 'PARTIALLY_PLACED'].includes(
+        placement.status,
+      );
+      if (shouldMoveThroughPlaced) {
+        await updatePlacementStatus({ status: 'PLACED' });
+      }
+      if (shouldMoveThroughPlaced || placement.status === 'PLACED') {
+        await updatePlacementStatus({ status: 'CLOSING' });
+      }
+
       if (closingStatus === 'DRAFT') {
         await updateClosingStatus({ closingId, status: 'ISSUED', suppressInvalidation: true });
         await updateClosingStatus({ closingId, status: 'CONFIRMED', suppressInvalidation: true });
       } else if (closingStatus === 'ISSUED') {
         await updateClosingStatus({ closingId, status: 'CONFIRMED', suppressInvalidation: true });
       }
-
-      if (['DRAFT', 'MARKETING', 'PARTIALLY_PLACED'].includes(placement.status)) {
-        await updatePlacementStatus({ status: 'PLACED' });
-      }
-      await updatePlacementStatus({ status: 'CLOSING' });
-      await updateParticipantStatus({
-        participantId: row.id,
-        status: 'CLOSED',
-        suppressInvalidation: true,
-      });
 
       patch(row.id, { status: 'CLOSED' });
       toast().addToast({
