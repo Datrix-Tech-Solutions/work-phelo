@@ -4,6 +4,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { AuditService } from '../audit/audit.service';
 
+jest.mock('bcrypt', () => ({
+  hash: jest.fn().mockResolvedValue('hashed-password'),
+}));
+
 type MockFn = jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
 
 function makePrisma() {
