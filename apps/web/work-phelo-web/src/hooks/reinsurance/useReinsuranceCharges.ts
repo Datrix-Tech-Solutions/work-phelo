@@ -5,6 +5,7 @@ import {
   ReinsuranceChargePayload,
   ReinsuranceChargePreviewResult,
   ReinsuranceChargeTemplate,
+  ReinsuranceChargeUpdatePayload,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/settings/charges';
@@ -52,7 +53,10 @@ export function useCreateReinsuranceCharge() {
 export function useUpdateReinsuranceCharge() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...payload }: Partial<ReinsuranceChargePayload> & { id: string }) => {
+    mutationFn: async ({
+      id,
+      ...payload
+    }: Partial<ReinsuranceChargeUpdatePayload> & { id: string }) => {
       const res = await api.patch<ReinsuranceChargeConfiguration>(`${BASE}/${id}`, payload);
       return res.data;
     },
