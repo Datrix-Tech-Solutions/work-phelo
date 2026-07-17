@@ -43,6 +43,15 @@ export function isEffectivelyClosed(placement: Facultative): boolean {
   return false;
 }
 
+/** Raw backend status, human-formatted only (no grouping/collapsing across statuses). */
+export function rawStatusLabel(status: FacultativeStatus): string {
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export function displayStatusFor(placement: Facultative): {
   label: string;
   variant: StatusVariant;

@@ -7,7 +7,7 @@ import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { Facultative, isEndorsementSentToMarket } from '@/types/reinsurance';
 import { usePlacementEndorsements, usePlacementEffectiveView, usePlacementPayments } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
-import { displayStatusFor } from '@/lib/reinsurance/placementStatus';
+import { RAW_STATUS_VARIANT_MAP, rawStatusLabel } from '@/lib/reinsurance/placementStatus';
 
 export type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
@@ -84,7 +84,9 @@ export function FacultativeOverview({
     ...placementDetailEntries(placement.offerDetails),
   ];
 
-  const { label: statusLabel, variant: statusVariant } = displayStatusFor(placement);
+  const statusLabel =
+    placement.status === 'CLOSING' ? 'Partially Closed' : rawStatusLabel(placement.status);
+  const statusVariant = RAW_STATUS_VARIANT_MAP[placement.status];
 
   return (
     <CollapsibleOverview

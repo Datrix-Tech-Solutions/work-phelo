@@ -10,9 +10,8 @@ import {
 import {
   DistributionTable,
   DistributionEntry,
-  DistributionStatus,
 } from '@/components/molecules/reinsurance/tables/DistributionTable';
-import { Facultative, PlacementParticipant, PlacementParticipantStatus } from '@/types/reinsurance';
+import { Facultative, PlacementParticipant } from '@/types/reinsurance';
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 import {
   useReinsurers,
@@ -45,13 +44,6 @@ interface DistributionListTabProps {
   placement: Facultative;
 }
 
-function participantStatus(s: PlacementParticipantStatus): DistributionStatus {
-  if (s === 'CLOSED') return 'Closed';
-  if (s === 'ACCEPTED') return 'Accepted';
-  if (s === 'DECLINED') return 'Declined';
-  return 'Pending';
-}
-
 function participantToEntry(
   p: PlacementParticipant,
   reinsurerEmails: Record<string, string[]>,
@@ -63,7 +55,7 @@ function participantToEntry(
     emails: reinsurerEmails[p.counterpartyId] ?? [],
     shareLine: parseFloat(p.sharePercent ?? '0'),
     brokerageFee: parseFloat(p.brokerageFee ?? '0'),
-    status: participantStatus(p.status),
+    status: p.status,
   };
 }
 
@@ -198,7 +190,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleMailSent = (row: DistributionEntry) => {
     // Skip status update when already accepted — ACCEPTED → OFFER_SENT is not a valid transition
-    if (row.status === 'Accepted') return;
+    if (row.status === 'ACCEPTED') return;
     updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) =>
       toast().addToast({ message: extractError(error), type: 'error' }),
     );
@@ -207,7 +199,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const handleAccept = async (row: DistributionEntry) => {
     if (acceptingIds.has(row.id)) return;
     setAcceptingIds((prev) => new Set([...prev, row.id]));
-    patch(row.id, { status: 'Accepted' });
+    patch(row.id, { status: 'ACCEPTED' });
 
     try {
       await updateParticipant({
@@ -222,7 +214,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
         suppressInvalidation: true,
       });
     } catch (error) {
-      patch(row.id, { status: 'Pending' });
+      patch(row.id, { status: row.status });
       toast().addToast({ message: extractError(error), type: 'error' });
     } finally {
       await refreshPlacementAfterAccept();
@@ -268,7 +260,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
         suppressInvalidation: true,
       });
 
-      patch(row.id, { status: 'Closed' });
+      patch(row.id, { status: 'CLOSED' });
       toast().addToast({
         message: `A closing for ${row.reinsurerCompany} with ${row.shareLine}% has been created`,
         type: 'success',
@@ -286,7 +278,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleRevert = (row: DistributionEntry) => {
-    patch(row.id, { status: 'Pending' });
+    patch(row.id, { status: 'QUOTED' });
     const closing = closingByParticipantId[row.id];
     // Confirmed closings are immutable backend snapshots; do not void from frontend revert flow.
     const canVoidClosing = closing?.status === 'DRAFT' || closing?.status === 'ISSUED';
@@ -296,17 +288,17 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     voidClosing
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'QUOTED' }))
       .catch((error) => {
-        patch(row.id, { status: 'Accepted' });
+        patch(row.id, { status: 'ACCEPTED' });
         toast().addToast({ message: extractError(error), type: 'error' });
       });
   };
 
   const handleDecline = (row: DistributionEntry) => {
-    patch(row.id, { status: 'Declined', shareLine: 0 });
+    patch(row.id, { status: 'DECLINED', shareLine: 0 });
     updateParticipant({ participantId: row.id, sharePercent: 0 })
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'DECLINED' }))
       .catch((error) => {
-        patch(row.id, { status: 'Pending', shareLine: row.shareLine });
+        patch(row.id, { status: row.status, shareLine: row.shareLine });
         toast().addToast({ message: extractError(error), type: 'error' });
       });
   };
@@ -328,7 +320,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     label: e.reinsurerCompany,
     value: e.shareLine,
     color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
-    isPlaced: e.status === 'Accepted' || e.status === 'Closed',
+    isPlaced: e.status === 'ACCEPTED' || e.status === 'CLOSED',
   }));
 
   return (
