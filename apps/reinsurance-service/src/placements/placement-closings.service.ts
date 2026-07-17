@@ -8,6 +8,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClosingStatus,
   PlacementParticipantStatus,
+  PlacementStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -164,18 +165,76 @@ export class PlacementClosingsService {
     this.assertStatusTransition(closing.status, dto.status);
 
     const now = new Date();
-    return this.prisma.placementClosing.update({
-      where: { id: closingId },
-      data: {
-        status: dto.status,
-        ...(dto.status === PlacementClosingStatus.ISSUED
-          ? { issuedAt: now }
-          : {}),
-        ...(dto.status === PlacementClosingStatus.CONFIRMED
-          ? { confirmedAt: now }
-          : {}),
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.placementClosing.update({
+        where: { id: closingId },
+        data: {
+          status: dto.status,
+          ...(dto.status === PlacementClosingStatus.ISSUED
+            ? { issuedAt: now }
+            : {}),
+          ...(dto.status === PlacementClosingStatus.CONFIRMED
+            ? { confirmedAt: now }
+            : {}),
+        },
+        include: closingInclude,
+      });
+
+      if (dto.status === PlacementClosingStatus.CONFIRMED) {
+        await this.syncPlacementClosedIfFullyConfirmed(tx, user, placementId);
+      }
+
+      return updated;
+    });
+  }
+
+  private async syncPlacementClosedIfFullyConfirmed(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    placementId: string,
+  ): Promise<void> {
+    const placement = await tx.placement.findFirst({
+      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
+      select: { id: true, status: true, facultativeOffer: true },
+    });
+    if (!placement || placement.status !== PlacementStatus.CLOSING) return;
+
+    const targetPercent = this.toOptionalNumber(placement.facultativeOffer);
+    if (targetPercent === null || targetPercent <= 0) return;
+
+    const confirmedClosings = await tx.placementClosing.findMany({
+      where: {
+        tenantId: user.tenantId,
+        placementId,
+        status: PlacementClosingStatus.CONFIRMED,
       },
-      include: closingInclude,
+      select: { signedLinePercent: true },
+    });
+    const confirmedPlacedPercent = this.roundPercent(
+      confirmedClosings.reduce(
+        (total, item) => total + this.toNumber(item.signedLinePercent),
+        0,
+      ),
+    );
+
+    if (confirmedPlacedPercent + 0.0001 < targetPercent) return;
+
+    await tx.placementStatusHistory.create({
+      data: {
+        tenantId: user.tenantId,
+        placementId,
+        fromStatus: PlacementStatus.CLOSING,
+        toStatus: PlacementStatus.CLOSED,
+        changedByUserId: user.id,
+        note: 'Confirmed placement closings reached facultative offer',
+      },
+    });
+
+    await tx.placement.update({
+      where: {
+        id_tenantId: { id: placementId, tenantId: user.tenantId },
+      },
+      data: { status: PlacementStatus.CLOSED, updatedByUserId: user.id },
     });
   }
 
@@ -254,6 +313,10 @@ export class PlacementClosingsService {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
     const parsed = Number(value.toString());
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private roundPercent(value: number): number {
+    return Math.round(value * 10000) / 10000;
   }
 
   private async assertPlacement(
