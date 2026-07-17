@@ -181,6 +181,14 @@ export class PlacementClosingsService {
       });
 
       if (dto.status === PlacementClosingStatus.CONFIRMED) {
+        await tx.placementParticipant.updateMany({
+          where: {
+            id: updated.participantId,
+            tenantId: user.tenantId,
+            placementId,
+          },
+          data: { status: PlacementParticipantStatus.CLOSED },
+        });
         await this.syncPlacementClosedIfFullyConfirmed(tx, user, placementId);
       }
 
