@@ -1614,6 +1614,199 @@ describe('PlacementsService', () => {
     expect(updateArgs.data.title).toBe('Corrected Placement');
   });
 
+  it('force closes placement using confirmed closing percentage', async () => {
+    const closingPlacement = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.CLOSING,
+      closeMode: null,
+      forceClosedAt: null,
+      forceClosedByUserId: null,
+    };
+    const forceClosedAt = new Date('2026-05-28T12:00:00.000Z');
+    const closed = {
+      ...closingPlacement,
+      status: PlacementStatus.CLOSED,
+      facultativeOffer: new Prisma.Decimal('80.0000'),
+      closeMode: 'FORCED',
+      forceClosedAt,
+      forceClosedByUserId: user.id,
+    };
+    prisma.placement.findFirst.mockResolvedValue(closingPlacement);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { signedLinePercent: new Prisma.Decimal('40.0000') },
+      { signedLinePercent: new Prisma.Decimal('40.0000') },
+    ]);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+    prisma.placement.update.mockResolvedValue(closed);
+
+    const result = await service.forceClose(user, 'placement-1');
+
+    expect(result.status).toBe(PlacementStatus.CLOSED);
+    expect(result.forceClosed).toBe(true);
+    expect(result.facultativeOffer?.toString()).toBe('80');
+    expect(prisma.placementClosing.findMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: user.tenantId,
+        placementId: 'placement-1',
+        status: PlacementClosingStatus.CONFIRMED,
+        participant: {
+          status: { not: PlacementParticipantStatus.DECLINED },
+        },
+      },
+      select: { signedLinePercent: true },
+    });
+    const historyArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as
+      | {
+          data: {
+            fromStatus: PlacementStatus;
+            toStatus: PlacementStatus;
+            note: string;
+          };
+        }
+      | undefined;
+    expect(historyArgs?.data).toMatchObject({
+      fromStatus: PlacementStatus.CLOSING,
+      toStatus: PlacementStatus.CLOSED,
+    });
+    expect(historyArgs?.data.note).toContain('FORCED_OPERATION');
+    const updateArgs = prisma.placement.update.mock.calls[0]?.[0] as {
+      data: {
+        status: PlacementStatus;
+        facultativeOffer: Prisma.Decimal;
+        closeMode: string;
+        forceClosedByUserId: string;
+      };
+    };
+    expect(updateArgs.data.status).toBe(PlacementStatus.CLOSED);
+    expect(updateArgs.data.facultativeOffer.toString()).toBe('80');
+    expect(updateArgs.data.closeMode).toBe('FORCED');
+    expect(updateArgs.data.forceClosedByUserId).toBe(user.id);
+    expect(publisher.statusChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousStatus: PlacementStatus.CLOSING,
+        nextStatus: PlacementStatus.CLOSED,
+        note: 'FORCED_OPERATION',
+      }),
+    );
+  });
+
+  it('force closes a fully placed placement at 100 percent', async () => {
+    const placed = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.CLOSING,
+      closeMode: null,
+      forceClosedAt: null,
+      forceClosedByUserId: null,
+    };
+    prisma.placement.findFirst.mockResolvedValue(placed);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { signedLinePercent: new Prisma.Decimal('60.0000') },
+      { signedLinePercent: new Prisma.Decimal('40.0000') },
+    ]);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placed,
+      status: PlacementStatus.CLOSED,
+      facultativeOffer: new Prisma.Decimal('100.0000'),
+      closeMode: 'FORCED',
+      forceClosedAt: new Date('2026-05-28T12:00:00.000Z'),
+      forceClosedByUserId: user.id,
+    });
+
+    const result = await service.forceClose(user, 'placement-1');
+
+    expect(result.facultativeOffer?.toString()).toBe('100');
+  });
+
+  it('force closes with zero actual placed percentage when no confirmed closings exist', async () => {
+    const inClosing = {
+      ...placementWithParticipant(PlacementParticipantStatus.OFFER_SENT),
+      status: PlacementStatus.CLOSING,
+      closeMode: null,
+      forceClosedAt: null,
+      forceClosedByUserId: null,
+    };
+    prisma.placement.findFirst.mockResolvedValue(inClosing);
+    prisma.placementClosing.findMany.mockResolvedValue([]);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...inClosing,
+      status: PlacementStatus.CLOSED,
+      facultativeOffer: new Prisma.Decimal('0.0000'),
+      closeMode: 'FORCED',
+      forceClosedAt: new Date('2026-05-28T12:00:00.000Z'),
+      forceClosedByUserId: user.id,
+    });
+
+    const result = await service.forceClose(user, 'placement-1');
+
+    expect(result.status).toBe(PlacementStatus.CLOSED);
+    expect(result.facultativeOffer?.toString()).toBe('0');
+  });
+
+  it('treats repeated force close on an already forced placement as idempotent', async () => {
+    const forced = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.CLOSED,
+      closeMode: 'FORCED',
+      forceClosedAt: new Date('2026-05-28T12:00:00.000Z'),
+      forceClosedByUserId: user.id,
+    };
+    prisma.placement.findFirst.mockResolvedValue(forced);
+
+    const result = await service.forceClose(user, 'placement-1');
+
+    expect(result.status).toBe(PlacementStatus.CLOSED);
+    expect(result.forceClosed).toBe(true);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.placementClosing.findMany).not.toHaveBeenCalled();
+    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects force close for archived placements', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      archivedAt: new Date('2026-05-28T12:00:00.000Z'),
+    });
+
+    await expect(service.forceClose(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it.each([PlacementStatus.CANCELLED, PlacementStatus.DECLINED])(
+    'rejects force close for %s placements',
+    async (status) => {
+      prisma.placement.findFirst.mockResolvedValue({
+        ...placement,
+        status,
+      });
+
+      await expect(service.forceClose(user, 'placement-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not reveal cross-tenant placements during force close', async () => {
+    prisma.placement.findFirst.mockResolvedValue(null);
+
+    await expect(service.forceClose(user, 'placement-1')).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('archives only an active record in the current tenant', async () => {
     const archived = {
       ...placement,

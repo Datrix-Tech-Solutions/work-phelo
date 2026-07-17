@@ -2419,6 +2419,34 @@ export class PlacementsController {
     return this.placementsService.changeStatus(request.user, id, dto);
   }
 
+  @Post(':id/force-close')
+  @ApiTags('Reinsurance - Placements')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Force close placement using actual placed percentage',
+    description:
+      'Operational override that bypasses normal close workflow validation, sets status to CLOSED, ' +
+      'sets facultativeOffer to the percentage actually confirmed in placement closings, and leaves outstanding workflow history untouched. ' +
+      'Draft, issued, void closings and declined participants are excluded from the actual placed percentage.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description: 'The placement is missing or belongs to another tenant.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived or in a terminal state that cannot be force closed.',
+  })
+  forceClose(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.forceClose(request.user, id);
+  }
+
   @Post(':id/participants')
   @ApiTags('Reinsurance - Placement Participants')
   @RequirePermissions(PlacementPermission.EDIT)

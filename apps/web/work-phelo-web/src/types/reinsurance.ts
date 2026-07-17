@@ -431,6 +431,10 @@ export interface Facultative {
   archivedByUserId: string | null;
   archiveReason: string | null;
   archivedAt: string | null;
+  closeMode?: 'NORMAL' | 'FORCED' | string | null;
+  forceClosed?: boolean;
+  forceClosedAt?: string | null;
+  forceClosedByUserId?: string | null;
   status: FacultativeStatus;
   participants: PlacementParticipant[];
   totalOfferedPercent: number;

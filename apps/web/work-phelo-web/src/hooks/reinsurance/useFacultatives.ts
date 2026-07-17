@@ -186,6 +186,24 @@ export function useAddParticipant(placementId: string) {
   });
 }
 
+export function useForceCloseFacultative(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post<Facultative>(`${BASE}/${placementId}/force-close`);
+      return transformPlacement(res.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
+    },
+  });
+}
+
 export function useUpdateParticipant(placementId: string) {
   const queryClient = useQueryClient();
   return useMutation({
