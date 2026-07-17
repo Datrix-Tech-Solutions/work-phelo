@@ -480,7 +480,7 @@ export class ReinsuranceChargeSettingsService {
   ): Promise<void> {
     const scope = `${tenantId}:${code}:${currency ?? 'ALL'}`;
     const [namespace, key] = this.advisoryLockKeys(scope);
-    await client.$queryRaw(
+    await client.$executeRaw(
       Prisma.sql`SELECT pg_advisory_xact_lock(${namespace}::integer, ${key}::integer)`,
     );
   }
