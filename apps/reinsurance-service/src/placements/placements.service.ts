@@ -1346,6 +1346,11 @@ export class PlacementsService {
       participant,
       signedLinePercent,
     );
+    await this.syncPlacementClosedIfFullyConfirmedInTransaction(
+      tx,
+      user,
+      placement,
+    );
 
     return {
       participant: acceptedParticipant,
@@ -1473,6 +1478,54 @@ export class PlacementsService {
     throw new BadRequestException(
       `Cannot move closing from ${nextClosing.status} to ${PlacementClosingStatus.CONFIRMED}`,
     );
+  }
+
+  private async syncPlacementClosedIfFullyConfirmedInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    placement: Pick<PlacementRecord, 'id' | 'status' | 'facultativeOffer'>,
+  ): Promise<void> {
+    if (placement.status !== PlacementStatus.CLOSING) return;
+
+    const targetPercent = this.nullableDecimalToNumber(
+      placement.facultativeOffer,
+    );
+    if (targetPercent === null || targetPercent <= 0) return;
+
+    const confirmedClosings = await tx.placementClosing.findMany({
+      where: {
+        tenantId: user.tenantId,
+        placementId: placement.id,
+        status: PlacementClosingStatus.CONFIRMED,
+      },
+      select: { signedLinePercent: true },
+    });
+    const confirmedPlacedPercent = this.roundPercent(
+      confirmedClosings.reduce(
+        (total, item) => total + this.decimalToNumber(item.signedLinePercent),
+        0,
+      ),
+    );
+
+    if (confirmedPlacedPercent + 0.0001 < targetPercent) return;
+
+    await tx.placementStatusHistory.create({
+      data: {
+        tenantId: user.tenantId,
+        placementId: placement.id,
+        fromStatus: PlacementStatus.CLOSING,
+        toStatus: PlacementStatus.CLOSED,
+        changedByUserId: user.id,
+        note: 'Confirmed placement closings reached facultative offer',
+      },
+    });
+
+    await tx.placement.update({
+      where: {
+        id_tenantId: { id: placement.id, tenantId: user.tenantId },
+      },
+      data: { status: PlacementStatus.CLOSED, updatedByUserId: user.id },
+    });
   }
 
   private computePlacementClosingSnapshot(
