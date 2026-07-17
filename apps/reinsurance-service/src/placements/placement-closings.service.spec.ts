@@ -96,7 +96,7 @@ describe('PlacementClosingsService', () => {
 
   let prisma: {
     placement: { findFirst: PrismaMethod; update: PrismaMethod };
-    placementParticipant: { findFirst: PrismaMethod };
+    placementParticipant: { findFirst: PrismaMethod; updateMany: PrismaMethod };
     placementClosing: {
       findMany: PrismaMethod;
       findFirst: PrismaMethod;
@@ -118,6 +118,9 @@ describe('PlacementClosingsService', () => {
       },
       placementParticipant: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
       },
       placementClosing: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
@@ -408,6 +411,14 @@ describe('PlacementClosingsService', () => {
       expect(
         (updateArgs.data as { confirmedAt?: unknown }).confirmedAt,
       ).toBeInstanceOf(Date);
+      expect(prisma.placementParticipant.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+        },
+        data: { status: PlacementParticipantStatus.CLOSED },
+      });
     });
 
     it('automatically closes a CLOSING placement when confirmed closings reach the facultative offer', async () => {
