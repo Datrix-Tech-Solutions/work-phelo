@@ -12,7 +12,8 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panels/CreateFacultativePanel';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
-import { Facultative, FacultativeStatus, PlacementPayment } from '@/types/reinsurance';
+import { PartialEditFacultativePanel } from '@/components/organisms/reinsurance/panels/PartialEditFacultativePanel';
+import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import {
   useArchivedFacultatives,
   useCedants,
@@ -24,8 +25,9 @@ import {
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import {
   acceptedPercentFor,
-  displayStatusFor,
   isEffectivelyClosed,
+  RAW_STATUS_VARIANT_MAP,
+  rawStatusLabel,
 } from '@/lib/reinsurance/placementStatus';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -46,15 +48,30 @@ function fmtDateTime(value: string | null) {
 }
 
 const PLACEMENTS_FILTER_OPTIONS = [
-  { value: 'Open', label: 'Open' },
-  { value: 'Draft', label: 'Draft' },
-  { value: 'Partially Placed', label: 'Partially Placed' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'PARTIALLY_PLACED', label: 'Partially Placed' },
+  { value: 'PLACED', label: 'Placed' },
+  { value: 'CLOSING', label: 'Partially Closed' },
 ];
 
-const CLOSING_FILTER_OPTIONS = [
+const CLOSING_STATUS_FILTER_OPTIONS = [
+  { value: 'PLACED', label: 'Placed' },
+  { value: 'CLOSING', label: 'Partially Closed' },
+  { value: 'CLOSED', label: 'Closed' },
+  { value: 'DECLINED', label: 'Declined' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+];
+
+const CLOSING_PAYMENT_FILTER_OPTIONS = [
   { value: 'Outstanding', label: 'Outstanding' },
   { value: 'Part Payment', label: 'Part Payment' },
   { value: 'Paid', label: 'Paid' },
+];
+
+const CLOSING_FILTER_OPTIONS = [
+  ...CLOSING_STATUS_FILTER_OPTIONS,
+  ...CLOSING_PAYMENT_FILTER_OPTIONS,
 ];
 
 type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
@@ -93,11 +110,14 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
   if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
   else if (paid > 0) paymentStatus = 'Part Payment';
 
-  const { label, variant } = displayStatusFor(placement);
-
   return (
     <div className="flex flex-col gap-1">
-      <Badge label={label} variant={variant} />
+      <Badge
+        label={
+          placement.status === 'CLOSING' ? 'Partially Closed' : rawStatusLabel(placement.status)
+        }
+        variant={RAW_STATUS_VARIANT_MAP[placement.status]}
+      />
       <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
     </div>
   );
@@ -230,6 +250,7 @@ export function FacultativeTable({
   const [archiveTarget, setArchiveTarget] = useState<Facultative | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<Facultative | null>(null);
   const [reopenTarget, setReopenTarget] = useState<Facultative | null>(null);
+  const [partialEditTarget, setPartialEditTarget] = useState<Facultative | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
 
   const { data: activeRows = [], isLoading: loadingActive } = useFacultatives();
@@ -296,22 +317,14 @@ export function FacultativeTable({
     }
     if (statusFilter && tab !== 'archived') {
       if (tab === 'placements') {
-        if (statusFilter === 'Open') rows = rows.filter((r) => r.status === 'MARKETING');
-        else if (statusFilter === 'Draft') rows = rows.filter((r) => r.status === 'DRAFT');
-        else if (statusFilter === 'Partially Placed')
-          rows = rows.filter((r) => r.status === 'PARTIALLY_PLACED' || r.status === 'CLOSING');
+        rows = rows.filter((r) => r.status === statusFilter);
       } else {
-        if (statusFilter === 'Placed') {
-          rows = rows.filter((r) =>
-            (['PLACED', 'PARTIALLY_PLACED', 'CLOSING'] as FacultativeStatus[]).includes(r.status),
-          );
-        } else if (statusFilter === 'Closed') {
-          rows = rows.filter((r) =>
-            (['CLOSED', 'DECLINED', 'CANCELLED'] as FacultativeStatus[]).includes(r.status),
-          );
-        } else {
-          rows = rows.filter((r) => paymentStatusMap.get(r.id) === (statusFilter as PaymentStatus));
-        }
+        const isStatusFilter = CLOSING_STATUS_FILTER_OPTIONS.some(
+          (opt) => opt.value === statusFilter,
+        );
+        rows = isStatusFilter
+          ? rows.filter((r) => r.status === statusFilter)
+          : rows.filter((r) => paymentStatusMap.get(r.id) === (statusFilter as PaymentStatus));
       }
     }
     return rows;
@@ -395,7 +408,10 @@ export function FacultativeTable({
 
     if (tab === 'closing' && row.status !== 'DECLINED' && row.status !== 'CANCELLED') {
       const paymentStatus = paymentStatusMap.get(row.id) ?? 'Outstanding';
-      const partialEditAction: RowAction = { label: 'Partial Edit', onClick: () => {} };
+      const partialEditAction: RowAction = {
+        label: 'Partial Edit',
+        onClick: () => setPartialEditTarget(row),
+      };
 
       if (paymentStatus === 'Paid' || paymentStatus === 'Part Payment') {
         return [{ label: 'View Offer', onClick: () => router.push(detailUrl) }, partialEditAction];
@@ -492,6 +508,14 @@ export function FacultativeTable({
           placement={reopenTarget}
           onClose={() => setReopenTarget(null)}
           mode="reopen"
+        />
+      )}
+
+      {partialEditTarget && (
+        <PartialEditFacultativePanel
+          isOpen={!!partialEditTarget}
+          placement={partialEditTarget}
+          onClose={() => setPartialEditTarget(null)}
         />
       )}
 

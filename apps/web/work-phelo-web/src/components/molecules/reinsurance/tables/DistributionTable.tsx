@@ -6,10 +6,8 @@ import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
-import { Facultative } from '@/types/reinsurance';
+import { Facultative, PlacementParticipantStatus } from '@/types/reinsurance';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
-
-export type DistributionStatus = 'Pending' | 'Accepted' | 'Closed' | 'Declined';
 
 export interface DistributionEntry {
   id: string; // participant record ID
@@ -18,15 +16,28 @@ export interface DistributionEntry {
   emails: string[];
   shareLine: number;
   brokerageFee: number;
-  status: DistributionStatus;
+  status: PlacementParticipantStatus;
 }
 
-const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'neutral' | 'danger'> = {
-  Pending: 'warning',
-  Accepted: 'neutral',
-  Closed: 'success',
-  Declined: 'danger',
+const STATUS_VARIANT: Record<
+  PlacementParticipantStatus,
+  'warning' | 'success' | 'neutral' | 'danger'
+> = {
+  INVITED: 'neutral',
+  OFFER_SENT: 'warning',
+  QUOTED: 'warning',
+  ACCEPTED: 'neutral',
+  DECLINED: 'danger',
+  CLOSED: 'success',
 };
+
+function statusLabel(status: PlacementParticipantStatus): string {
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 function fmtAmount(val: number) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -135,7 +146,7 @@ export function DistributionTable({
       label: 'Participant Share (%)',
       width: 'minmax(150px, 1fr)',
       render: (row) => {
-        const isPaid = isPlacementLocked || row.status === 'Closed';
+        const isPaid = isPlacementLocked || row.status === 'CLOSED';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
         return editingId === row.id ? (
           <input
@@ -166,7 +177,7 @@ export function DistributionTable({
       label: 'Brokerage Fee (%)',
       width: 'minmax(150px, 1fr)',
       render: (row) => {
-        const isPaid = isPlacementLocked || row.status === 'Closed';
+        const isPaid = isPlacementLocked || row.status === 'CLOSED';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
         return editingBrokerageId === row.id ? (
           <input
@@ -217,7 +228,9 @@ export function DistributionTable({
       key: 'status',
       label: 'Status',
       width: '110px',
-      render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
+      render: (row) => (
+        <Badge label={statusLabel(row.status)} variant={STATUS_VARIANT[row.status]} />
+      ),
     },
     {
       key: 'actions',
@@ -226,13 +239,13 @@ export function DistributionTable({
       render: (row) => {
         const mailed = mailedIds.has(row.id);
         const responded =
-          row.status === 'Declined' || row.status === 'Accepted' || row.status === 'Closed';
+          row.status === 'DECLINED' || row.status === 'ACCEPTED' || row.status === 'CLOSED';
         const isBusy = busyIds?.has(row.id) ?? false;
         const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
         const showAccept = !isPlacementLocked && mailed && !responded;
         const showDecline = !isPlacementLocked && mailed && !responded;
-        const showRevert = !isPlacementLocked && row.status === 'Accepted';
-        const showClose = !isPlacementLocked && row.status === 'Accepted';
+        const showRevert = !isPlacementLocked && row.status === 'ACCEPTED';
+        const showClose = !isPlacementLocked && row.status === 'ACCEPTED';
         return (
           <div className="flex items-center gap-2">
             <button
@@ -267,7 +280,7 @@ export function DistributionTable({
             {showDecline && (
               <button
                 type="button"
-                title="Decline"
+                title="Decline Offer"
                 onClick={() => {
                   if (!isBusy) handleDecline(row);
                 }}
@@ -298,7 +311,7 @@ export function DistributionTable({
                   if (!isBusy) onClose?.(row);
                 }}
               >
-                Validate
+                Close
               </TableButton>
             )}
             {!responded && (
