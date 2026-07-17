@@ -4,12 +4,30 @@ import { useEffect, useMemo } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
-import { Facultative, isEndorsementSentToMarket } from '@/types/reinsurance';
+import { Icons } from '@/components/atoms/icons';
+import { Facultative, FacultativeStatus, isEndorsementSentToMarket } from '@/types/reinsurance';
 import { usePlacementEndorsements, usePlacementEffectiveView, usePlacementPayments } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
-import { RAW_STATUS_VARIANT_MAP, rawStatusLabel } from '@/lib/reinsurance/placementStatus';
+import { rawStatusLabel } from '@/lib/reinsurance/placementStatus';
 
 export type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
+
+// Overview badge intentionally shows every in-progress status as blue; only Closed differs.
+const OVERVIEW_STATUS_VARIANT: Record<FacultativeStatus, 'info' | 'success'> = {
+  DRAFT: 'info',
+  MARKETING: 'info',
+  PARTIALLY_PLACED: 'info',
+  PLACED: 'info',
+  CLOSING: 'info',
+  CLOSED: 'success',
+  DECLINED: 'info',
+  CANCELLED: 'info',
+};
+
+const STATUS_PING_COLOR: Record<'info' | 'success', { ping: string; dot: string }> = {
+  info: { ping: 'bg-blue-400', dot: 'bg-blue-500' },
+  success: { ping: 'bg-green-400', dot: 'bg-green-500' },
+};
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-xs text-gray-400',
@@ -86,13 +104,27 @@ export function FacultativeOverview({
 
   const statusLabel =
     placement.status === 'CLOSING' ? 'Partially Closed' : rawStatusLabel(placement.status);
-  const statusVariant = RAW_STATUS_VARIANT_MAP[placement.status];
+  const statusVariant = OVERVIEW_STATUS_VARIANT[placement.status];
 
   return (
     <CollapsibleOverview
       headerExtra={
         <>
-          <Badge label={statusLabel} variant={statusVariant} />
+          <span className="flex items-center gap-1.5">
+            <Badge label={statusLabel} variant={statusVariant} />
+            {placement.status === 'CLOSED' ? (
+              <Icons.CircleCheckBig className="w-3.5 h-3.5 text-green-500 mail-pending-bounce" />
+            ) : (
+              <span className="relative flex w-2 h-2">
+                <span
+                  className={`absolute inline-flex w-full h-full rounded-full opacity-105 animate-ping ${STATUS_PING_COLOR[statusVariant].ping}`}
+                />
+                <span
+                  className={`relative inline-flex w-2 h-2 rounded-full ${STATUS_PING_COLOR[statusVariant].dot}`}
+                />
+              </span>
+            )}
+          </span>
           <span className="text-sm text-gray-500">|</span>
           <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
           {endorsementCount > 0 && (

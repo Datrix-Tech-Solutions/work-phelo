@@ -39,22 +39,22 @@ export default function MarketingLayout({
   }));
 
   return (
-    <AppBackground className="h-screen overflow-hidden flex flex-col layout-marketing">
-      <TopNav
-        showMenuButton
-        onMenuClick={() => setCollapsed((v) => !v)}
-        userInitials={initials}
-        notificationCount={0}
-        logoVariant="image"
-      />
-      <div className="flex flex-1 min-h-0 relative">
+    <AppBackground className="h-screen overflow-hidden flex layout-marketing">
+      <Sidebar groups={groups} collapsed={collapsed} />
+      <div className="flex flex-1 min-h-0 flex-col relative">
+        <TopNav
+          showMenuButton
+          onMenuClick={() => setCollapsed((v) => !v)}
+          userInitials={initials}
+          notificationCount={0}
+          logoVariant="image"
+        />
         {!collapsed && (
           <div
             className="absolute inset-0 bg-black/40 z-30 md:hidden"
             onClick={() => setCollapsed(true)}
           />
         )}
-        <Sidebar groups={groups} collapsed={collapsed} />
         <main
           className="flex-1 min-h-0 overflow-hidden flex flex-col"
           onClick={() => {

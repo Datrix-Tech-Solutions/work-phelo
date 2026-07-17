@@ -268,7 +268,7 @@ export function DataTable<T extends { id: string | number }>({
                 )}
               />
               <div
-                className="relative grid gap-x-4 text-xs font-semibold text-gray-900 uppercase tracking-wide px-6 py-3"
+                className="relative grid gap-x-4 text-xs font-semibold text-(--module-btn-bg,var(--color-brand)) uppercase tracking-wide px-6 py-3"
                 style={{
                   gridTemplateColumns: [
                     ...columns.map((c) => c.width ?? '1fr'),
@@ -329,7 +329,7 @@ export function DataTable<T extends { id: string | number }>({
                       className={cardClass(
                         cn(
                           'absolute inset-y-0.5 left-4 right-4 rounded-lg bg-(--table-header-bg,var(--color-gray-200)) opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 pointer-events-none',
-                          'drop-shadow-[0_4px_6px_var(--table-header-shadow,transparent)]',
+                          'drop-shadow-[0_2px_3px_var(--table-header-shadow,transparent)]',
                         ),
                         'glass',
                       )}

@@ -8,6 +8,7 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { Facultative, PlacementParticipantStatus } from '@/types/reinsurance';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
+import { cn } from '@/lib/utils';
 
 export interface DistributionEntry {
   id: string; // participant record ID
@@ -148,6 +149,8 @@ export function DistributionTable({
       render: (row) => {
         const isPaid = isPlacementLocked || row.status === 'CLOSED';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
+        const shareVariant =
+          row.status === 'OFFER_SENT' ? 'red' : row.status === 'ACCEPTED' ? 'green' : 'default';
         return editingId === row.id ? (
           <input
             type="number"
@@ -158,16 +161,33 @@ export function DistributionTable({
             onBlur={() => commitEdit(row)}
             onKeyDown={(e) => e.key === 'Enter' && commitEdit(row)}
             autoFocus
-            className="w-20 px-2 py-1 text-sm border border-brand ring-1 ring-brand/20 rounded-input bg-white focus:outline-none text-gray-900"
+            className={cn(
+              'w-20 px-2 py-1 text-sm border rounded-input bg-white focus:outline-none',
+              shareVariant === 'red' && 'border-red-400 ring-1 ring-red-100 text-red-700',
+              shareVariant === 'green' && 'border-green-400 ring-1 ring-green-100 text-green-700',
+              shareVariant === 'default' && 'border-brand ring-1 ring-brand/20 text-gray-900',
+            )}
           />
         ) : (
           <button
             type="button"
             onClick={() => startEdit(row)}
-            className="w-20 flex items-center justify-between px-2 py-1 text-sm border border-gray-300 rounded-input bg-white text-gray-700 hover:border-brand transition-colors"
+            className={cn(
+              'w-20 flex items-center justify-between px-2 py-1 text-sm border rounded-input bg-white transition-colors',
+              shareVariant === 'red' && 'border-red-300 text-red-700 hover:border-red-400',
+              shareVariant === 'green' && 'border-green-300 text-green-700 hover:border-green-400',
+              shareVariant === 'default' && 'border-gray-300 text-gray-700 hover:border-brand',
+            )}
           >
             <span>{row.shareLine}%</span>
-            <Icons.Pencil className="w-3 h-3 text-gray-400 shrink-0" />
+            <Icons.Pencil
+              className={cn(
+                'w-3 h-3 shrink-0',
+                shareVariant === 'red' && 'text-red-400',
+                shareVariant === 'green' && 'text-green-400',
+                shareVariant === 'default' && 'text-gray-400',
+              )}
+            />
           </button>
         );
       },
@@ -254,15 +274,15 @@ export function DistributionTable({
               onClick={() => setSlipPreviewId(row.id)}
               className="text-blue-500 hover:text-blue-600 transition-colors"
             >
-              <Icons.Eye className="w-4 h-4" />
+              <Icons.Eye className="w-5 h-5" />
             </button>
             <button
               type="button"
               title="Send mail"
               onClick={() => setMailPreviewId(row.id)}
-              className="text-green-500 hover:text-green-700 transition-colors"
+              className={`text-green-500 hover:text-green-700 transition-colors ${row.status === 'INVITED' ? 'mail-pending-bounce' : ''}`}
             >
-              <Icons.Mail className="w-4 h-4" />
+              <Icons.Mail className="w-5 h-5" />
             </button>
             {showAccept && (
               <button
@@ -274,7 +294,7 @@ export function DistributionTable({
                 disabled={isBusy}
                 className={`text-green-500 hover:text-green-600 transition-colors ${disabledActionClass}`}
               >
-                <Icons.Check className="w-4 h-4" />
+                <Icons.Check className="w-5 h-5" />
               </button>
             )}
             {showDecline && (
@@ -287,7 +307,7 @@ export function DistributionTable({
                 disabled={isBusy}
                 className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
-                <Icons.X className="w-4 h-4" />
+                <Icons.X className="w-5 h-5" />
               </button>
             )}
             {showRevert && (
@@ -300,12 +320,13 @@ export function DistributionTable({
                 disabled={isBusy}
                 className={`text-amber-500 hover:text-amber-600 transition-colors ${disabledActionClass}`}
               >
-                <Icons.RotateCcw className="w-4 h-4" />
+                <Icons.RotateCcw className="w-5 h-5" />
               </button>
             )}
             {showClose && (
               <TableButton
                 isLoading={isBusy}
+                variant="red"
                 tooltip="Validate to close the offer"
                 onClick={() => {
                   if (!isBusy) onClose?.(row);
@@ -324,7 +345,7 @@ export function DistributionTable({
                 disabled={isBusy}
                 className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
-                <Icons.Trash2 className="w-4 h-4" />
+                <Icons.Trash2 className="w-5 h-5" />
               </button>
             )}
           </div>

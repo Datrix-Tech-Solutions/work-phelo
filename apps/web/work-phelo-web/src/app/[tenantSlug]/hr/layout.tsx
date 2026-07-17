@@ -120,15 +120,16 @@ export default function HRLayout({
   // }));
 
   return (
-    <AppBackground className="h-screen overflow-hidden flex flex-col layout-hr">
-      <TopNav
-        showMenuButton
-        onMenuClick={() => setCollapsed((v) => !v)}
-        userInitials={initials}
-        notificationCount={0}
-        logoVariant="image"
-      />
-      <div className="flex flex-1 min-h-0 relative">
+    <AppBackground className="h-screen overflow-hidden flex layout-hr">
+      <Sidebar groups={groups} collapsed={collapsed} />
+      <div className="flex flex-1 min-h-0 flex-col relative">
+        <TopNav
+          showMenuButton
+          onMenuClick={() => setCollapsed((v) => !v)}
+          userInitials={initials}
+          notificationCount={0}
+          logoVariant="image"
+        />
         {/* Mobile backdrop: closes sidebar when tapping outside */}
         {!collapsed && (
           <div
@@ -136,7 +137,6 @@ export default function HRLayout({
             onClick={() => setCollapsed(true)}
           />
         )}
-        <Sidebar groups={groups} collapsed={collapsed} />
         <main
           className="flex-1 min-h-0 overflow-y-auto flex flex-col"
           onClick={() => {

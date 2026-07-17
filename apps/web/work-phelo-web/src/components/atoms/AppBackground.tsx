@@ -24,10 +24,10 @@ export function AppBackground<T extends ElementType = 'div'>({
       }}
       {...props}
     >
-      <div aria-hidden className="app-blob-layer">
+      {/* <div aria-hidden className="app-blob-layer">
         <span className="app-blob app-blob-1" />
         <span className="app-blob app-blob-2" />
-      </div>
+      </div> */}
       {children}
     </Component>
   );

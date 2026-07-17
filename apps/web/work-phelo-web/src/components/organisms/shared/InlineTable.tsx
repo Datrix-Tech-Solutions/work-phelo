@@ -62,7 +62,7 @@ export function InlineTable({
                 )}
               />
               <div
-                className="relative grid text-xs font-semibold text-gray-900 uppercase tracking-wide px-6 py-3"
+                className="relative grid text-xs font-semibold text-(--module-btn-bg,var(--color-brand)) uppercase tracking-wide px-6 py-3"
                 style={{ gridTemplateColumns: colTemplate }}
               >
                 {columns.map((col) => (
