@@ -139,6 +139,7 @@ type PlacementWithAggregates = PlacementRecord & {
   totalOfferedPercent: number;
   totalAcceptedPercent: number;
   remainingPercent: number;
+  forceClosed?: boolean;
   lockStatus?: PlacementLockStatusDto;
 };
 
@@ -735,6 +736,132 @@ export class PlacementsService {
       dto.status,
       dto.note,
     );
+    return this.withAggregates(placement);
+  }
+
+  async forceClose(
+    user: RequestUser,
+    id: string,
+  ): Promise<PlacementWithAggregates> {
+    const existing = await this.prisma.placement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: placementInclude,
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Placement not found');
+    }
+    if (existing.archivedAt) {
+      throw new ConflictException('Archived placements cannot be force closed');
+    }
+    if (
+      existing.status === PlacementStatus.CANCELLED ||
+      existing.status === PlacementStatus.DECLINED
+    ) {
+      throw new ConflictException(
+        `Cannot force close a ${existing.status.toLowerCase()} placement`,
+      );
+    }
+    if (
+      existing.status === PlacementStatus.CLOSED &&
+      existing.closeMode === 'FORCED'
+    ) {
+      return this.withAggregates(existing);
+    }
+
+    const placement = await this.prisma.$transaction(async (tx) => {
+      const lockedPlacement = await tx.placement.findFirst({
+        where: { id, tenantId: user.tenantId },
+        include: placementInclude,
+      });
+      if (!lockedPlacement) {
+        throw new NotFoundException('Placement not found');
+      }
+      if (lockedPlacement.archivedAt) {
+        throw new ConflictException(
+          'Archived placements cannot be force closed',
+        );
+      }
+      if (
+        lockedPlacement.status === PlacementStatus.CANCELLED ||
+        lockedPlacement.status === PlacementStatus.DECLINED
+      ) {
+        throw new ConflictException(
+          `Cannot force close a ${lockedPlacement.status.toLowerCase()} placement`,
+        );
+      }
+      if (
+        lockedPlacement.status === PlacementStatus.CLOSED &&
+        lockedPlacement.closeMode === 'FORCED'
+      ) {
+        return lockedPlacement;
+      }
+
+      const confirmedClosings = await tx.placementClosing.findMany({
+        where: {
+          tenantId: user.tenantId,
+          placementId: id,
+          status: PlacementClosingStatus.CONFIRMED,
+          participant: {
+            status: { not: PlacementParticipantStatus.DECLINED },
+          },
+        },
+        select: { signedLinePercent: true },
+      });
+      const actualPlacedPercent = this.roundPercent(
+        confirmedClosings.reduce(
+          (sum, closing) =>
+            sum + this.decimalToNumber(closing.signedLinePercent),
+          0,
+        ),
+      );
+
+      await tx.placementStatusHistory.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId: id,
+          fromStatus: lockedPlacement.status,
+          toStatus: PlacementStatus.CLOSED,
+          changedByUserId: user.id,
+          note: `FORCED_OPERATION: Force closed placement at actual placed capacity ${actualPlacedPercent}%. Outstanding workflow remains historical.`,
+        },
+      });
+
+      return tx.placement.update({
+        where: {
+          id_tenantId: { id, tenantId: user.tenantId },
+        },
+        data: {
+          status: PlacementStatus.CLOSED,
+          facultativeOffer: new Prisma.Decimal(actualPlacedPercent.toFixed(4)),
+          closeMode: 'FORCED',
+          forceClosedAt: new Date(),
+          forceClosedByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+        include: placementInclude,
+      });
+    });
+
+    this.publish(
+      'statusChanged',
+      placement,
+      user,
+      {
+        before: this.auditSnapshot(existing),
+        after: {
+          ...this.auditSnapshot(placement),
+          closeMode: 'FORCED',
+          actualPlacedPercent: this.nullableDecimalToNumber(
+            placement.facultativeOffer,
+          ),
+        },
+      },
+      existing.status,
+      PlacementStatus.CLOSED,
+      'FORCED_OPERATION',
+    );
+
     return this.withAggregates(placement);
   }
 
@@ -2513,6 +2640,7 @@ export class PlacementsService {
     return {
       ...placement,
       ...aggregates,
+      forceClosed: placement.closeMode === 'FORCED',
     };
   }
 

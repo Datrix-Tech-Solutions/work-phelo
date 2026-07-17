@@ -417,6 +417,9 @@ model Placement {
   archivedByUserId        String?
   archiveReason           String?
   archivedAt              DateTime?
+  closeMode               String?
+  forceClosedAt           DateTime?
+  forceClosedByUserId     String?
   createdAt               DateTime                          @default(now())
   updatedAt               DateTime                          @updatedAt
   cedant                  Counterparty                      @relation("PlacementCedant", fields: [cedantId, tenantId], references: [id, tenantId], onDelete: Restrict)

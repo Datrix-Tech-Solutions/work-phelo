@@ -38,6 +38,7 @@ describe('PlacementsController', () => {
     getClosingSlipPreview: jest.fn(),
     update: jest.fn(),
     changeStatus: jest.fn(),
+    forceClose: jest.fn(),
     addParticipant: jest.fn(),
     updateParticipant: jest.fn(),
     changeParticipantStatus: jest.fn(),
@@ -206,6 +207,7 @@ describe('PlacementsController', () => {
     ['createEndorsementClosing', PlacementPermission.EDIT],
     ['changeEndorsementClosingStatus', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
+    ['forceClose', PlacementPermission.EDIT],
     ['addParticipant', PlacementPermission.EDIT],
     ['updateParticipant', PlacementPermission.EDIT],
     ['changeParticipantStatus', PlacementPermission.EDIT],
@@ -338,6 +340,14 @@ describe('PlacementsController', () => {
       'tenant-1',
       'placement-1',
     );
+  });
+
+  it('delegates force close with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.forceClose('placement-1', { user } as never);
+
+    expect(service.forceClose).toHaveBeenCalledWith(user, 'placement-1');
   });
 
   it('delegates effective view reads with authenticated tenant context', async () => {

@@ -5,8 +5,11 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement } from '@/hooks';
+import { useFacultativePlacement, useForceCloseFacultative } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import {
   FacultativeOverview,
   PaymentStatus,
@@ -35,10 +38,25 @@ export default function FacultativeDetailPage({
   const searchParams = useSearchParams();
   const fromClosing = searchParams.get('from') === 'closing';
   const { data: placement, isLoading } = useFacultativePlacement(id);
+  const forceClose = useForceCloseFacultative(id);
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
   const [editOpen, setEditOpen] = useState(false);
   const [endorsementOpen, setEndorsementOpen] = useState(false);
+  const [forceCloseOpen, setForceCloseOpen] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding');
+  const canForceClose =
+    placement && !['CLOSED', 'CANCELLED', 'DECLINED'].includes(placement.status);
+
+  const handleForceClose = async () => {
+    try {
+      const updated = await forceClose.mutateAsync();
+      toast.success(`Placement force closed at ${updated.facultativeOffer ?? 0}% placed capacity.`);
+      setForceCloseOpen(false);
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to force close placement'));
+    }
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -66,6 +84,11 @@ export default function FacultativeDetailPage({
             {paymentStatus === 'Outstanding' && (
               <Button size="sm" onClick={() => setEditOpen(true)}>
                 Edit
+              </Button>
+            )}
+            {canForceClose && (
+              <Button size="sm" variant="danger" onClick={() => setForceCloseOpen(true)}>
+                Force Close
               </Button>
             )}
           </div>
@@ -119,6 +142,33 @@ export default function FacultativeDetailPage({
           onClose={() => setEndorsementOpen(false)}
         />
       )}
+      <Modal
+        isOpen={forceCloseOpen}
+        onClose={() => {
+          if (!forceClose.isPending) setForceCloseOpen(false);
+        }}
+        title="Force Close Placement?"
+        description="This will immediately close the placement using the currently confirmed placed percentage. Outstanding workflow will remain incomplete. Proceed?"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setForceCloseOpen(false)}
+              disabled={forceClose.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleForceClose}
+              isLoading={forceClose.isPending}
+              loadingText="Force closing…"
+            >
+              Force Close
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }

@@ -320,6 +320,29 @@ export class PlacementResponseDto {
   @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
   archivedAt!: string | null;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    enum: ['NORMAL', 'FORCED'],
+    example: 'FORCED',
+    description:
+      'How the placement reached CLOSED state. FORCED indicates an operational override.',
+  })
+  closeMode!: string | null;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'True when the placement was closed through the Force Close override.',
+  })
+  forceClosed!: boolean;
+
+  @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
+  forceClosedAt!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, format: 'uuid' })
+  forceClosedByUserId!: string | null;
+
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
 
