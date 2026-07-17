@@ -1306,6 +1306,8 @@ export interface ReinsuranceChargePayload {
   displayOrder?: number;
 }
 
+export type ReinsuranceChargeUpdatePayload = Omit<ReinsuranceChargePayload, 'code'>;
+
 export interface ReinsuranceChargePreviewLine {
   configurationId: string;
   code: ReinsuranceChargeCode;
