@@ -75,6 +75,7 @@ import {
   Save,
   FileCheck2,
   FileWarning,
+  CircleCheckBig,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -100,6 +101,7 @@ export const Icons = {
   EllipsisVertical,
   CircleX,
   CircleCheck,
+  CircleCheckBig,
   Eye,
   EyeOff,
   GripVertical,

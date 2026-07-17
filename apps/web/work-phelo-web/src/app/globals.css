@@ -21,7 +21,7 @@
   --module-hr:         #032480;  /* deep-blue  — HR */
   --module-marketing:  #0466f8;  /* blue — Marketing */
   --module-accounting: #064707;  /* green — Accounting  064707*/
-  --module-operations: #1E3A8A;  /* purple — Operations */
+  --module-operations: #163895;  /* purple — Operations */
 
   /* Module palette fallbacks — used outside any layout class (brand colors) */
   --module-btn-bg:       var(--brand);
@@ -141,8 +141,8 @@
    white/black like the other tokens) so it reads as a colored ambient glow under the
    DataTable header pill — see the drop-shadow-[...] on the header bg in DataTable.tsx. */
 .layout-hr {
-  --table-header-bg:     color-mix(in oklch, var(--module-hr) 20%, white);
-  --table-header-shadow: color-mix(in oklch, var(--module-hr) 45%, transparent);
+  --table-header-bg:     color-mix(in oklch, var(--module-hr) 10%, white);
+  --table-header-shadow: color-mix(in oklch, var(--module-hr) 25%, transparent);
   --module-btn-bg:       var(--module-hr);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-hr) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-hr) 12%, white);
@@ -151,8 +151,8 @@
   --module-border:       color-mix(in oklch, var(--module-hr) 28%, white);
 }
 .layout-operations {
-  --table-header-bg:     color-mix(in oklch, var(--module-operations) 20%, white);
-  --table-header-shadow: color-mix(in oklch, var(--module-operations) 45%, transparent);
+  --table-header-bg:     color-mix(in oklch, var(--module-operations) 10%, white);
+  --table-header-shadow: color-mix(in oklch, var(--module-operations) 25%, transparent);
   --module-btn-bg:       var(--module-operations);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-operations) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-operations) 12%, white);
@@ -231,8 +231,8 @@
 .app-blob {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(70px);
-  opacity: 0.6;
+  filter: blur(90px);
+  opacity: 0.76;
   will-change: transform;
 }
 
@@ -482,4 +482,19 @@ body {
   .module-splash-arc-5 {
     animation: splash-arc-drift-5 17s ease-in-out infinite;
   }
+}
+
+/* Distribution table — mail icon bounces until the offer email has been sent */
+@keyframes mail-pending-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.mail-pending-bounce {
+  animation: mail-pending-bounce 1s ease-in-out infinite;
 }

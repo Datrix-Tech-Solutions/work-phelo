@@ -218,14 +218,14 @@ export function TopNav({
     <>
       <header
         className={cn(
-          'bg-(--module-btn-bg,var(--color-brand)) relative w-full border-b border-white/10 shadow-md px-5 h-14 flex items-center gap-4 shrink-0',
+          'relative w-full border-b border-white/10 shadow-md px-5 h-14 flex items-center gap-4 shrink-0',
         )}
       >
         {/* Menu button */}
         {showMenuButton && (
           <button
             onClick={onMenuClick}
-            className="text-white/80 hover:text-white transition-colors"
+            className="text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors"
             aria-label="Toggle menu"
           >
             <Menu />
@@ -249,7 +249,7 @@ export function TopNav({
           {/* Bell */}
           <button
             onClick={() => setNotificationsOpen(true)}
-            className="relative text-white/80 hover:text-white transition-colors"
+            className="relative text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors"
             aria-label="Notifications"
           >
             <Bell className="w-5 h-5" />
@@ -265,7 +265,7 @@ export function TopNav({
 
           {/* Apps grid — back to module launcher */}
           <button
-            className="text-white/80 hover:text-white transition-colors"
+            className="text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors"
             aria-label="Apps"
             onClick={() => {
               if (user?.role === 'SUPER_ADMIN') {

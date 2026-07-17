@@ -42,15 +42,16 @@ export default function OperationsLayout({
   }));
 
   return (
-    <AppBackground className="h-screen overflow-hidden flex flex-col layout-operations">
-      <TopNav
-        showMenuButton
-        onMenuClick={() => setCollapsed((v) => !v)}
-        userInitials={initials}
-        notificationCount={0}
-        logoVariant="image"
-      />
-      <div className="flex flex-1 min-h-0 relative">
+    <AppBackground className="h-screen overflow-hidden flex layout-operations">
+      <Sidebar groups={groups} collapsed={collapsed} />
+      <div className="flex flex-1 min-h-0 flex-col relative">
+        <TopNav
+          showMenuButton
+          onMenuClick={() => setCollapsed((v) => !v)}
+          userInitials={initials}
+          notificationCount={0}
+          logoVariant="image"
+        />
         {/* Mobile backdrop */}
         {!collapsed && (
           <div
@@ -58,7 +59,6 @@ export default function OperationsLayout({
             onClick={() => setCollapsed(true)}
           />
         )}
-        <Sidebar groups={groups} collapsed={collapsed} />
         <main
           className="flex-1 min-h-0 overflow-hidden flex flex-col"
           onClick={() => {

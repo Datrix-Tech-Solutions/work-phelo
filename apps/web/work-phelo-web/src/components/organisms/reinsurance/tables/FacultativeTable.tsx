@@ -9,6 +9,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panels/CreateFacultativePanel';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
@@ -19,6 +20,7 @@ import {
   useCedants,
   useDeleteFacultative,
   useFacultatives,
+  useForceCloseFacultative,
   usePlacementPayments,
   useRestoreFacultative,
 } from '@/hooks';
@@ -46,13 +48,19 @@ function fmtDateTime(value: string | null) {
     year: 'numeric',
   });
 }
+const CLOSING_PAYMENT_FILTER_OPTIONS = [
+  { value: 'Outstanding', label: 'Outstanding' },
+  { value: 'Part Payment', label: 'Part Payment' },
+  { value: 'Paid', label: 'Paid' },
+];
 
 const PLACEMENTS_FILTER_OPTIONS = [
   { value: 'DRAFT', label: 'Draft' },
   { value: 'MARKETING', label: 'Marketing' },
   { value: 'PARTIALLY_PLACED', label: 'Partially Placed' },
-  { value: 'PLACED', label: 'Placed' },
+  // { value: 'PLACED', label: 'Placed' },
   { value: 'CLOSING', label: 'Partially Closed' },
+  ...CLOSING_PAYMENT_FILTER_OPTIONS,
 ];
 
 const CLOSING_STATUS_FILTER_OPTIONS = [
@@ -63,14 +71,8 @@ const CLOSING_STATUS_FILTER_OPTIONS = [
   { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
-const CLOSING_PAYMENT_FILTER_OPTIONS = [
-  { value: 'Outstanding', label: 'Outstanding' },
-  { value: 'Part Payment', label: 'Part Payment' },
-  { value: 'Paid', label: 'Paid' },
-];
-
 const CLOSING_FILTER_OPTIONS = [
-  ...CLOSING_STATUS_FILTER_OPTIONS,
+  // ...CLOSING_STATUS_FILTER_OPTIONS,
   ...CLOSING_PAYMENT_FILTER_OPTIONS,
 ];
 
@@ -244,6 +246,8 @@ export function FacultativeTable({
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Facultative | null>(null);
@@ -252,6 +256,7 @@ export function FacultativeTable({
   const [reopenTarget, setReopenTarget] = useState<Facultative | null>(null);
   const [partialEditTarget, setPartialEditTarget] = useState<Facultative | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
+  const [forceCloseTarget, setForceCloseTarget] = useState<Facultative | null>(null);
 
   const { data: activeRows = [], isLoading: loadingActive } = useFacultatives();
   const { data: archivedRows = [], isLoading: loadingArchived } = useArchivedFacultatives({
@@ -260,6 +265,9 @@ export function FacultativeTable({
   const { data: cedants = [] } = useCedants();
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
   const { mutate: restorePlacement, isPending: isRestoring } = useRestoreFacultative();
+  const { mutate: forceClosePlacement, isPending: isForceClosing } = useForceCloseFacultative(
+    forceCloseTarget?.id ?? '',
+  );
 
   const allRows = tab === 'archived' ? archivedRows : activeRows;
   const isLoading = tab === 'archived' ? loadingArchived : loadingActive;
@@ -327,11 +335,31 @@ export function FacultativeTable({
           : rows.filter((r) => paymentStatusMap.get(r.id) === (statusFilter as PaymentStatus));
       }
     }
+    // Open tab filters by when the offer was created; Closing tab by when it was closed.
+    const dateField: 'createdAt' | 'updatedAt' = tab === 'closing' ? 'updatedAt' : 'createdAt';
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      rows = rows.filter((r) => new Date(r[dateField]) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      rows = rows.filter((r) => new Date(r[dateField]) <= to);
+    }
     return rows;
-  }, [allRows, search, statusFilter, tab, paymentStatusMap]);
+  }, [allRows, search, statusFilter, dateFrom, dateTo, tab, paymentStatusMap]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Closing tab: most recently closed first — CLOSED/CLOSING placements are effectively
+  // frozen once they land there, so updatedAt reliably marks the close moment.
+  const sorted = useMemo(() => {
+    if (tab !== 'closing') return filtered;
+    return [...filtered].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+  }, [filtered, tab]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const columns = useMemo<Column<Facultative>[]>(() => {
     if (tab === 'closing') {
@@ -397,6 +425,17 @@ export function FacultativeTable({
     });
   };
 
+  const handleForceClose = () => {
+    if (!forceCloseTarget) return;
+    forceClosePlacement(undefined, {
+      onSuccess: () => {
+        toast.success('Placement force closed successfully');
+        setForceCloseTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to force close placement')),
+    });
+  };
+
   const getRowActions = (row: Facultative): RowAction[] => {
     if (tab === 'archived') {
       return [{ label: 'Restore', onClick: () => setRestoreTarget(row) }];
@@ -425,10 +464,15 @@ export function FacultativeTable({
     }
 
     if (tab === 'placements') {
+      const closeAction: RowAction =
+        row.status === 'CLOSING'
+          ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
+          : { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true };
+
       return [
         { label: 'View Offer', onClick: () => router.push(detailUrl) },
         { label: 'Edit Offer', onClick: () => setEditTarget(row) },
-        { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
+        closeAction,
       ];
     }
 
@@ -461,7 +505,7 @@ export function FacultativeTable({
         }}
         extraFilters={
           (tab === 'placements' || tab === 'closing') && (
-            <div>
+            <div className="flex items-center gap-2">
               <SearchSelect
                 size="sm"
                 placeholder="Status"
@@ -472,6 +516,29 @@ export function FacultativeTable({
                   setPage(1);
                 }}
               />
+              <div className="w-50">
+                <DatePicker
+                  size="sm"
+                  placeholder={tab === 'closing' ? 'Closed from' : 'Created from'}
+                  value={dateFrom}
+                  onChange={(v) => {
+                    setDateFrom(v);
+                    setPage(1);
+                  }}
+                />
+              </div>
+              <div className="w-50">
+                <DatePicker
+                  size="sm"
+                  placeholder={tab === 'closing' ? 'Closed to' : 'Created to'}
+                  value={dateTo}
+                  minDate={dateFrom || undefined}
+                  onChange={(v) => {
+                    setDateTo(v);
+                    setPage(1);
+                  }}
+                />
+              </div>
             </div>
           )
         }
@@ -565,6 +632,32 @@ export function FacultativeTable({
             </Button>
             <Button isLoading={isRestoring} loadingText="Restoring…" onClick={handleRestore}>
               Restore
+            </Button>
+          </div>
+        }
+      />
+
+      <Modal
+        isOpen={!!forceCloseTarget}
+        onClose={() => setForceCloseTarget(null)}
+        title="Force Close Placement?"
+        description={`This bypasses the normal close workflow and closes "${forceCloseTarget?.reference}" at its actual placed capacity. Outstanding workflow history is preserved, but the offer will no longer accept changes.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setForceCloseTarget(null)}
+              disabled={isForceClosing}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isForceClosing}
+              loadingText="Force closing…"
+              onClick={handleForceClose}
+            >
+              Force Close
             </Button>
           </div>
         }
