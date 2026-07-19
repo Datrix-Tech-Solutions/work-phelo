@@ -1,5 +1,6 @@
-import { SearchIcon, ChevronRight } from 'lucide-react';
+import { SearchIcon } from 'lucide-react';
 import { cardClass, inputClass } from '@/lib/utils';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { WeekSelector } from './WeekSelector';
 
 interface Props {
@@ -39,20 +40,17 @@ export function SchedulingToolbar({
         </div>
 
         {/* Department filter */}
-        <div className="relative shrink-0">
-          <select
+        <div className="w-44 shrink-0">
+          <SearchSelect
+            placeholder="All Departments"
+            size="sm"
+            options={[
+              { value: '', label: 'All Departments' },
+              ...departments.map((d) => ({ value: d.id, label: d.name })),
+            ]}
             value={departmentId}
-            onChange={(e) => onDepartmentChange(e.target.value)}
-            className={inputClass(undefined, 'appearance-none pl-4 pr-8 py-2 font-medium')}
-          >
-            <option value="">All Departments</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-          <ChevronRight className="absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            onChange={onDepartmentChange}
+          />
         </div>
       </div>
 

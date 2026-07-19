@@ -45,8 +45,7 @@ export default function FacultativeDetailPage({
   const [endorsementOpen, setEndorsementOpen] = useState(false);
   const [forceCloseOpen, setForceCloseOpen] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding');
-  const canForceClose =
-    placement && !['CLOSED', 'CANCELLED', 'DECLINED'].includes(placement.status);
+  const canForceClose = placement?.status === 'CLOSING';
 
   const handleForceClose = async () => {
     try {

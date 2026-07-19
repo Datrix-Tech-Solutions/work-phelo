@@ -1,9 +1,9 @@
 // 'use client';
 
 import { useState, useMemo } from 'react';
-import { Download } from 'lucide-react';
+import { Download, User, Building2, Wallet, Receipt } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
-import { MetricCard } from '@/components/molecules/shared/MetricCard';
+import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Column, DataTable } from '../../shared/DataTable';
 import { usePayrollRuns, usePayrollRun, useAllEmployees } from '@/hooks';
@@ -200,22 +200,30 @@ export function NSSFTab_KE() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
-        <MetricCard
-          title={`Employee NSSF (${NSSF_RATE * 100}%)`}
+        <KpiCard
+          label={`Employee NSSF (${NSSF_RATE * 100}%)`}
           value={fmt(totals.employeeNSSF)}
-          variant="default"
+          icon={User}
+          iconColor="#6b7280"
         />
-        <MetricCard
-          title={`Employer NSSF (${NSSF_RATE * 100}%)`}
+        <KpiCard
+          label={`Employer NSSF (${NSSF_RATE * 100}%)`}
           value={fmt(totals.employerNSSF)}
-          variant="highlight"
+          icon={Building2}
+          iconColor="#2a78d6"
         />
-        <MetricCard
-          title="Total Remittable (12%)"
+        <KpiCard
+          label="Total Remittable (12%)"
           value={fmt(totals.totalNSSF)}
-          variant="success"
+          icon={Wallet}
+          iconColor="#1baf7a"
         />
-        <MetricCard title="Total PAYE" value={fmt(totals.payeTax)} variant="warning" />
+        <KpiCard
+          label="Total PAYE"
+          value={fmt(totals.payeTax)}
+          icon={Receipt}
+          iconColor="#eda100"
+        />
       </div>
 
       <DataTable

@@ -122,7 +122,7 @@ export default function HRLayout({
   return (
     <AppBackground className="h-screen overflow-hidden flex layout-hr">
       <Sidebar groups={groups} collapsed={collapsed} />
-      <div className="flex flex-1 min-h-0 flex-col relative">
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col relative">
         <TopNav
           showMenuButton
           onMenuClick={() => setCollapsed((v) => !v)}
@@ -138,7 +138,7 @@ export default function HRLayout({
           />
         )}
         <main
-          className="flex-1 min-h-0 overflow-y-auto flex flex-col"
+          className="flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col"
           onClick={() => {
             if (!collapsed) setCollapsed(true);
           }}

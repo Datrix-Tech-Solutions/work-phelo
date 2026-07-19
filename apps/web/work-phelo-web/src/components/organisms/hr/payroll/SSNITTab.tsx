@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Download, AlertCircle } from 'lucide-react';
+import { Download, AlertCircle, User, Building2, Wallet, Landmark } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
-import { MetricCard } from '@/components/molecules/shared/MetricCard';
+import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Column, DataTable } from '../../shared/DataTable';
 import { usePayrollRuns, usePayrollRun, useAllEmployees, usePayrollSettings } from '@/hooks';
@@ -257,19 +257,31 @@ export function SSNITTab() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
-        <MetricCard
-          title={payrollLabels.employeeLabel}
+        <KpiCard
+          label={payrollLabels.employeeLabel}
           value={money(totals.employeeSSNIT)}
-          variant="default"
+          icon={User}
+          iconColor="#6b7280"
         />
-        <MetricCard
-          title={payrollLabels.employerLabel}
+        <KpiCard
+          label={payrollLabels.employerLabel}
           value={money(totals.employerSSNIT)}
-          variant="highlight"
+          icon={Building2}
+          iconColor="#2a78d6"
         />
-        <MetricCard title="Total Remittable" value={money(totals.totalTier1)} variant="success" />
+        <KpiCard
+          label="Total Remittable"
+          value={money(totals.totalTier1)}
+          icon={Wallet}
+          iconColor="#1baf7a"
+        />
         {showTier2 && (
-          <MetricCard title={tier2Label} value={money(totals.tier2)} variant="warning" />
+          <KpiCard
+            label={tier2Label}
+            value={money(totals.tier2)}
+            icon={Landmark}
+            iconColor="#eda100"
+          />
         )}
       </div>
 

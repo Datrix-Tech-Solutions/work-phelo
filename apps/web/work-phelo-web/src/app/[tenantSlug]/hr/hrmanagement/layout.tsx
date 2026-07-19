@@ -99,7 +99,7 @@ export default function HRManagementLayout({ children }: { children: React.React
   ].filter((group) => group.tabs.length > 0);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 min-w-0">
       {/* Sticky header + tabs */}
       <div className="shrink-0">
         <div className={pageHeader}>
@@ -114,7 +114,7 @@ export default function HRManagementLayout({ children }: { children: React.React
       {/* Content */}
       <AppBackground
         as="main"
-        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
+        className={cn(pageContent, 'flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col')}
       >
         {children}
       </AppBackground>

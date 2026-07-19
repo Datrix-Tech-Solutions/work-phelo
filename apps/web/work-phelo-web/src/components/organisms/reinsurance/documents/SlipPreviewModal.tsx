@@ -85,7 +85,8 @@ export function SlipPreviewModal({
   const { data: riskTypes = [] } = useRiskTypes();
   const { data: charges } = useReinsuranceCharges();
   const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
-  const foreignReinsurer = isForeignCedant(reinsurers.find((r) => r.id === counterpartyId));
+  const reinsurer = reinsurers.find((r) => r.id === counterpartyId);
+  const foreignReinsurer = isForeignCedant(reinsurer);
   const nicLevyRate = selectChargeRate(charges, 'NIC_LEVY', currency);
   const withholdingTaxRate = selectChargeRate(charges, 'WITHHOLDING_TAX', currency);
 
@@ -117,7 +118,13 @@ export function SlipPreviewModal({
       isOpen={isOpen}
       title={`Offer Slip — ${title}`}
       documentTitle="Facultative Offer Slip"
-      fileName={buildDocumentFileName('Offer Slip', policyNumber ?? reference, riskTypeName, title)}
+      fileName={buildDocumentFileName(
+        'Offer Slip',
+        policyNumber ?? reference,
+        riskTypeName,
+        title,
+        reinsurer?.name,
+      )}
       onPrint={onPrint}
       onClose={onClose}
     >
