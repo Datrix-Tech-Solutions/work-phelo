@@ -73,13 +73,6 @@ function toPayload(values: LevyTaxFormValues): Omit<ReinsuranceChargePayload, 'c
   };
 }
 
-function toUpdatePayload(values: LevyTaxFormValues): Omit<ReinsuranceChargePayload, 'code'> {
-  const payloadWithCode = toPayload(values);
-  const { code, ...payload } = payloadWithCode;
-  void code;
-  return payload;
-}
-
 function fromConfiguration(config: ReinsuranceChargeConfiguration): LevyTaxFormValues {
   return {
     id: config.id,
@@ -130,7 +123,7 @@ export function LevyTaxesForm() {
     try {
       const payload = toPayload(values);
       if (values.id) {
-        await updateCharge.mutateAsync({ id: values.id, ...toUpdatePayload(values) });
+        await updateCharge.mutateAsync({ id: values.id, ...payload });
         toast.success('Tax and levy configuration updated');
       } else {
         const created = await createCharge.mutateAsync({ code: values.code, ...payload });
