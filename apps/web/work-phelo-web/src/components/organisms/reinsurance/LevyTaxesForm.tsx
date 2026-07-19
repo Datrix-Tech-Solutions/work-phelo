@@ -73,6 +73,13 @@ function toPayload(values: LevyTaxFormValues): Omit<ReinsuranceChargePayload, 'c
   };
 }
 
+function toUpdatePayload(values: LevyTaxFormValues): Omit<ReinsuranceChargePayload, 'code'> {
+  const payloadWithCode = toPayload(values);
+  const { code, ...payload } = payloadWithCode;
+  void code;
+  return payload;
+}
+
 function fromConfiguration(config: ReinsuranceChargeConfiguration): LevyTaxFormValues {
   return {
     id: config.id,
@@ -123,7 +130,7 @@ export function LevyTaxesForm() {
     try {
       const payload = toPayload(values);
       if (values.id) {
-        await updateCharge.mutateAsync({ id: values.id, ...payload });
+        await updateCharge.mutateAsync({ id: values.id, ...toUpdatePayload(values) });
         toast.success('Tax and levy configuration updated');
       } else {
         const created = await createCharge.mutateAsync({ code: values.code, ...payload });
@@ -217,25 +224,39 @@ export function LevyTaxesForm() {
           Configure the tenant-approved rate. No statutory rate is assumed by WorkPhelo.
         </p>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
-          <Controller
-            name="code"
-            control={control}
-            rules={{ required: 'Type is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Type"
-                placeholder="Select type…"
-                options={TYPE_OPTIONS}
-                value={field.value}
-                onChange={(value) => {
-                  const code = value as ReinsuranceChargeCode;
-                  field.onChange(code);
-                  setValue('chargeType', chargeTypeByCode[code], { shouldDirty: true });
-                }}
-                error={errors.code?.message}
-              />
-            )}
-          />
+          {selectedId ? (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-bold text-gray-900">Type</label>
+              <div className="rounded-input border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700">
+                {selectedCharge
+                  ? (codeLabels[selectedCharge.code] ?? selectedCharge.code)
+                  : 'Locked'}
+              </div>
+              <p className="text-xs text-gray-500">
+                Charge type is locked after creation. Create a new configuration for another type.
+              </p>
+            </div>
+          ) : (
+            <Controller
+              name="code"
+              control={control}
+              rules={{ required: 'Type is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Type"
+                  placeholder="Select type…"
+                  options={TYPE_OPTIONS}
+                  value={field.value}
+                  onChange={(value) => {
+                    const code = value as ReinsuranceChargeCode;
+                    field.onChange(code);
+                    setValue('chargeType', chargeTypeByCode[code], { shouldDirty: true });
+                  }}
+                  error={errors.code?.message}
+                />
+              )}
+            />
+          )}
 
           <FormField
             label="Name"
