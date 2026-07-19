@@ -1,5 +1,5 @@
 import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
-import { StatCard } from '@/components/molecules/shared/StatCard';
+import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 
 interface AssetStatsRowProps {
   isLoading: boolean;
@@ -20,35 +20,40 @@ export function AssetStatsRow({
 }: AssetStatsRowProps) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
-      <StatCard
-        title="Total Assets"
-        value={isLoading ? null : total}
-        icon={<Package className="w-4.5 h-4.5 text-gray-600" />}
+      <KpiCard
+        label="Total Assets"
+        value={total}
+        icon={Package}
         iconColor="#6b7280"
+        isLoading={isLoading}
       />
-      <StatCard
-        title="Assigned"
-        value={isLoading ? null : assigned}
-        icon={<UserCheck className="w-4.5 h-4.5 text-blue-600" />}
+      <KpiCard
+        label="Assigned"
+        value={assigned}
+        icon={UserCheck}
         iconColor="#3b82f6"
+        isLoading={isLoading}
       />
-      <StatCard
-        title="Available"
-        value={isLoading ? null : available}
-        icon={<CheckCircle className="w-4.5 h-4.5 text-green-600" />}
+      <KpiCard
+        label="Available"
+        value={available}
+        icon={CheckCircle}
         iconColor="#22c55e"
+        isLoading={isLoading}
       />
-      <StatCard
-        title="Under Maintenance"
-        value={isLoading ? null : maintenance}
-        icon={<Wrench className="w-4.5 h-4.5 text-yellow-600" />}
+      <KpiCard
+        label="Under Maintenance"
+        value={maintenance}
+        icon={Wrench}
         iconColor="#eab308"
+        isLoading={isLoading}
       />
-      <StatCard
-        title="Retired"
-        value={isLoading ? null : retired}
-        icon={<Archive className="w-4.5 h-4.5 text-red-500" />}
+      <KpiCard
+        label="Retired"
+        value={retired}
+        icon={Archive}
         iconColor="#ef4444"
+        isLoading={isLoading}
       />
     </div>
   );

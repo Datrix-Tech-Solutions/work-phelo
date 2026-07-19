@@ -27,9 +27,9 @@ import {
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import {
   acceptedPercentFor,
+  facultativeStatusLabel,
   isEffectivelyClosed,
   RAW_STATUS_VARIANT_MAP,
-  rawStatusLabel,
 } from '@/lib/reinsurance/placementStatus';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -56,7 +56,7 @@ const CLOSING_PAYMENT_FILTER_OPTIONS = [
 
 const PLACEMENTS_FILTER_OPTIONS = [
   { value: 'DRAFT', label: 'Draft' },
-  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'MARKETING', label: 'On Market' },
   { value: 'PARTIALLY_PLACED', label: 'Partially Placed' },
   // { value: 'PLACED', label: 'Placed' },
   { value: 'CLOSING', label: 'Partially Closed' },
@@ -115,9 +115,7 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
   return (
     <div className="flex flex-col gap-1">
       <Badge
-        label={
-          placement.status === 'CLOSING' ? 'Partially Closed' : rawStatusLabel(placement.status)
-        }
+        label={facultativeStatusLabel(placement.status)}
         variant={RAW_STATUS_VARIANT_MAP[placement.status]}
       />
       <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
@@ -361,6 +359,34 @@ export function FacultativeTable({
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Placements tab: only the current page needs a paid/unpaid check, just to swap
+  // Edit Offer for Partial Edit once a payment exists — no filtering depends on this.
+  const openPaymentQueries = useQueries({
+    queries:
+      tab === 'placements'
+        ? paged.map((row) => ({
+            queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
+            queryFn: async () => {
+              const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
+              return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+            },
+          }))
+        : [],
+  });
+
+  const hasPaymentMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    if (tab !== 'placements') return map;
+    paged.forEach((row, i) => {
+      const payments = openPaymentQueries[i]?.data ?? [];
+      map.set(
+        row.id,
+        payments.some((p) => p.status === 'RECORDED'),
+      );
+    });
+    return map;
+  }, [paged, openPaymentQueries, tab]);
+
   const columns = useMemo<Column<Facultative>[]>(() => {
     if (tab === 'closing') {
       return COLUMNS.map((col) => (col.key === 'totalAcceptedPercent' ? SUM_INSURED_COLUMN : col));
@@ -468,10 +494,13 @@ export function FacultativeTable({
         row.status === 'CLOSING'
           ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
           : { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true };
+      const editAction: RowAction = hasPaymentMap.get(row.id)
+        ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
+        : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
 
       return [
         { label: 'View Offer', onClick: () => router.push(detailUrl) },
-        { label: 'Edit Offer', onClick: () => setEditTarget(row) },
+        editAction,
         closeAction,
       ];
     }

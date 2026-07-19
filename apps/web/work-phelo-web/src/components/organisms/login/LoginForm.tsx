@@ -14,6 +14,7 @@ import { Button } from '@/components/atoms/Button';
 // import { GoogleButton } from '@/components/atoms/GoogleButton';
 // import { MicrosoftButton } from '@/components/atoms/MicrosoftButton';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { cardClass } from '@/lib/utils';
 
 interface LoginFormProps {
   showSocialLogin?: boolean;
@@ -62,7 +63,7 @@ export function LoginForm({
   };
 
   return (
-    <div className="w-full max-w-sm px-8 py-10">
+    <div className={cardClass('w-full max-w-sm px-8 py-10')}>
       {isTenantLogin ? (
         <div className="text-center mb-3">
           <p className="text-sm text-gray-500">

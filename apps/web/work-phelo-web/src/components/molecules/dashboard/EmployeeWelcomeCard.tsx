@@ -2,7 +2,23 @@
 
 import Image from 'next/image';
 import { getGreeting } from '@/lib/formatters';
-import { cardClass } from '@/lib/utils';
+import { cardClass, frostedAvatarStyle } from '@/lib/utils';
+
+// Same color identities used by ContactCard's avatar.
+const AVATAR_COLORS = [
+  '#8b5cf6', // violet-500
+  '#3b82f6', // blue-500
+  '#10b981', // emerald-500
+  '#f97316', // orange-500
+  '#ec4899', // pink-500
+  '#14b8a6', // teal-500
+  '#f59e0b', // amber-500
+  '#ef4444', // red-500
+];
+function avatarColor(name: string) {
+  const hash = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
 
 interface EmployeeWelcomeCardProps {
   fullName: string;
@@ -41,7 +57,7 @@ export function EmployeeWelcomeCard({
   ].filter((f): f is { label: string; value: string } => !!f.value);
 
   return (
-    <div className={cardClass('w-full max-w-md p-5 flex flex-col gap-4 shrink-0 border-gray-200')}>
+    <div className={cardClass('w-full p-5 flex flex-col gap-4 shrink-0 border-gray-200')}>
       <div className="flex items-center gap-3 min-w-0">
         {avatarUrl ? (
           <Image
@@ -49,10 +65,13 @@ export function EmployeeWelcomeCard({
             alt={fullName}
             width={48}
             height={48}
-            className="w-12 h-12 rounded-full object-cover ring-2 ring-brand/10 shrink-0"
+            className="w-12 h-12 rounded-full object-cover shrink-0"
           />
         ) : (
-          <div className="w-12 h-12 rounded-full bg-brand flex items-center justify-center text-white text-base font-bold shrink-0">
+          <div
+            className="w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-bold shrink-0"
+            style={frostedAvatarStyle(avatarColor(fullName))}
+          >
             {initialsOf(fullName)}
           </div>
         )}

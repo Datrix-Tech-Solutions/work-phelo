@@ -1,5 +1,5 @@
 import { ClipboardList, CheckCircle, Layers } from 'lucide-react';
-import { StatCard } from '@/components/molecules/shared/StatCard';
+import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 
 interface ProjectStatsRowProps {
   isLoading: boolean;
@@ -18,29 +18,33 @@ export function ProjectStatsRow({
 }: ProjectStatsRowProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
-      <StatCard
-        title="Total Projects"
-        value={isLoading ? null : total}
-        icon={<Layers className="w-4.5 h-4.5 text-green-600" />}
+      <KpiCard
+        label="Total Projects"
+        value={total}
+        icon={Layers}
         iconColor="#22c55e"
+        isLoading={isLoading}
       />
-      <StatCard
-        title="Active Projects"
-        value={isLoading ? null : active}
-        icon={<ClipboardList className="w-4.5 h-4.5 text-blue-600" />}
+      <KpiCard
+        label="Active Projects"
+        value={active}
+        icon={ClipboardList}
         iconColor="#3b82f6"
+        isLoading={isLoading}
       />
-      <StatCard
-        title="Completed"
-        value={isLoading ? null : completed}
-        icon={<CheckCircle className="w-4.5 h-4.5 text-purple-600" />}
+      <KpiCard
+        label="Completed"
+        value={completed}
+        icon={CheckCircle}
         iconColor="#a855f7"
+        isLoading={isLoading}
       />
-      <StatCard
-        title="In Planning"
-        value={isLoading ? null : planning}
-        icon={<ClipboardList className="w-4.5 h-4.5 text-yellow-600" />}
+      <KpiCard
+        label="In Planning"
+        value={planning}
+        icon={ClipboardList}
         iconColor="#eab308"
+        isLoading={isLoading}
       />
     </div>
   );

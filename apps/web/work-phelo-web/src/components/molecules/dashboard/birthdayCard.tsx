@@ -1,7 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import { ChevronLeft, ChevronRight, PartyPopper } from 'lucide-react';
-import { cardClass, waterAvatarStyle } from '@/lib/utils';
+import { cardClass, frostedAvatarStyle } from '@/lib/utils';
 
 interface Birthday {
   id: string;
@@ -9,6 +10,7 @@ interface Birthday {
   date: string;
   initials: string;
   color: string;
+  avatarUrl?: string;
 }
 
 interface BirthdaysCardProps {
@@ -66,13 +68,22 @@ export function BirthdaysCard({
         >
           {birthdays.map((person) => (
             <div key={person.id} className="flex flex-col items-center gap-3 shrink-0 w-24">
-              <div
-                className="relative w-16 h-16 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0 overflow-hidden"
-                style={waterAvatarStyle(person.color)}
-              >
-                <span className="absolute top-2.5 left-3.5 w-3 h-2 rounded-full bg-white/80 blur-[1.5px]" />
-                <span className="relative">{person.initials}</span>
-              </div>
+              {person.avatarUrl ? (
+                <Image
+                  src={person.avatarUrl}
+                  alt={person.initials}
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 rounded-full object-cover shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0"
+                  style={frostedAvatarStyle(person.color)}
+                >
+                  {person.initials}
+                </div>
+              )}
               <div className="text-center w-full">
                 <p className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2 wrap-break-word">
                   {person.name}

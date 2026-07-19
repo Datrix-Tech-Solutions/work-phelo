@@ -52,6 +52,17 @@ export function rawStatusLabel(status: FacultativeStatus): string {
     .join(' ');
 }
 
+// Business-friendly wording for specific statuses — still one label per raw status, no grouping.
+const STATUS_LABEL_OVERRIDES: Partial<Record<FacultativeStatus, string>> = {
+  MARKETING: 'On Market',
+  CLOSING: 'Partially Closed',
+};
+
+/** Same as rawStatusLabel, but swaps in business-friendly wording for a few statuses. */
+export function facultativeStatusLabel(status: FacultativeStatus): string {
+  return STATUS_LABEL_OVERRIDES[status] ?? rawStatusLabel(status);
+}
+
 export function displayStatusFor(placement: Facultative): {
   label: string;
   variant: StatusVariant;

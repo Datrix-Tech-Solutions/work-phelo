@@ -1,9 +1,9 @@
 // 'use client';
 
 import { useState, useMemo } from 'react';
-import { Download } from 'lucide-react';
+import { Download, User, Building2, Wallet, Receipt } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
-import { MetricCard } from '@/components/molecules/shared/MetricCard';
+import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Column, DataTable } from '../../shared/DataTable';
 import { usePayrollRuns, usePayrollRun, useAllEmployees } from '@/hooks';
@@ -201,22 +201,30 @@ export function PensionTab_NG() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
-        <MetricCard
-          title={`Employee Pension (${EMPLOYEE_RATE * 100}%)`}
+        <KpiCard
+          label={`Employee Pension (${EMPLOYEE_RATE * 100}%)`}
           value={fmt(totals.employeePension)}
-          variant="default"
+          icon={User}
+          iconColor="#6b7280"
         />
-        <MetricCard
-          title={`Employer Pension (${EMPLOYER_RATE * 100}%)`}
+        <KpiCard
+          label={`Employer Pension (${EMPLOYER_RATE * 100}%)`}
           value={fmt(totals.employerPension)}
-          variant="highlight"
+          icon={Building2}
+          iconColor="#2a78d6"
         />
-        <MetricCard
-          title="Total Remittable (18%)"
+        <KpiCard
+          label="Total Remittable (18%)"
           value={fmt(totals.totalPension)}
-          variant="success"
+          icon={Wallet}
+          iconColor="#1baf7a"
         />
-        <MetricCard title="Total PAYE" value={fmt(totals.payeTax)} variant="warning" />
+        <KpiCard
+          label="Total PAYE"
+          value={fmt(totals.payeTax)}
+          icon={Receipt}
+          iconColor="#eda100"
+        />
       </div>
 
       <DataTable

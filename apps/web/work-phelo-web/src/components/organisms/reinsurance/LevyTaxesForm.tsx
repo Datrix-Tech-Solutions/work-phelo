@@ -5,6 +5,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { TableButton } from '@/components/atoms/TableButton';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { cardClass } from '@/lib/utils';
 import {
@@ -52,9 +53,10 @@ function toIsoDate(value: string): string {
   return new Date(`${value}T00:00:00.000Z`).toISOString();
 }
 
-function toPayload(values: LevyTaxFormValues): ReinsuranceChargePayload {
+// code is deliberately excluded — it's create-only. The update DTO doesn't accept it,
+// and the backend's whitelist validation rejects the whole request if it's present.
+function toPayload(values: LevyTaxFormValues): Omit<ReinsuranceChargePayload, 'code'> {
   return {
-    code: values.code,
     name: values.name,
     chargeType: values.chargeType,
     rateType: values.rateType,
@@ -69,13 +71,6 @@ function toPayload(values: LevyTaxFormValues): ReinsuranceChargePayload {
     isEnabled: values.isEnabled,
     displayOrder: values.displayOrder,
   };
-}
-
-function toUpdatePayload(values: LevyTaxFormValues): Omit<ReinsuranceChargePayload, 'code'> {
-  const payloadWithCode = toPayload(values);
-  const { code, ...payload } = payloadWithCode;
-  void code;
-  return payload;
 }
 
 function fromConfiguration(config: ReinsuranceChargeConfiguration): LevyTaxFormValues {
@@ -128,10 +123,10 @@ export function LevyTaxesForm() {
     try {
       const payload = toPayload(values);
       if (values.id) {
-        await updateCharge.mutateAsync({ id: values.id, ...toUpdatePayload(values) });
+        await updateCharge.mutateAsync({ id: values.id, ...payload });
         toast.success('Tax and levy configuration updated');
       } else {
-        const created = await createCharge.mutateAsync(payload);
+        const created = await createCharge.mutateAsync({ code: values.code, ...payload });
         setSelectedId(created.id);
         toast.success('Tax and levy configuration created');
       }
@@ -157,19 +152,8 @@ export function LevyTaxesForm() {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
       <div className={cardClass('overflow-hidden h-fit')}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">Configured Charges</h3>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setSelectedId(null);
-              reset(LEVY_TAX_FORM_DEFAULTS);
-            }}
-          >
-            New Configuration
-          </Button>
         </div>
         <div className="divide-y divide-gray-100">
           {charges.isLoading ? (
@@ -180,11 +164,7 @@ export function LevyTaxesForm() {
                 key={charge.id}
                 className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                <button
-                  type="button"
-                  className="text-left"
-                  onClick={() => setSelectedId(charge.id)}
-                >
+                <div>
                   <p className="font-medium text-gray-900">
                     {codeLabels[charge.code] ?? charge.name}
                     <span className="ml-2 text-xs font-normal text-gray-500">{charge.name}</span>
@@ -199,7 +179,7 @@ export function LevyTaxesForm() {
                     from {toDateInput(charge.effectiveFrom)}
                     {charge.effectiveTo ? ` to ${toDateInput(charge.effectiveTo)}` : ''}
                   </p>
-                </button>
+                </div>
                 <div className="flex items-center gap-2">
                   <span
                     className={`rounded-full px-2 py-1 text-xs font-medium ${
@@ -208,15 +188,16 @@ export function LevyTaxesForm() {
                   >
                     {charge.isEnabled ? 'Enabled' : 'Disabled'}
                   </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
+                  <TableButton variant="blue" onClick={() => setSelectedId(charge.id)}>
+                    Edit
+                  </TableButton>
+                  <TableButton
+                    variant={charge.isEnabled ? 'red' : 'green'}
                     isLoading={activateCharge.isPending || deactivateCharge.isPending}
                     onClick={() => handleToggle(charge)}
                   >
                     {charge.isEnabled ? 'Deactivate' : 'Activate'}
-                  </Button>
+                  </TableButton>
                 </div>
               </div>
             ))

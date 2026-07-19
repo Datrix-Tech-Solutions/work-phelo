@@ -8,7 +8,7 @@ import { Icons } from '@/components/atoms/icons';
 import { Facultative, FacultativeStatus, isEndorsementSentToMarket } from '@/types/reinsurance';
 import { usePlacementEndorsements, usePlacementEffectiveView, usePlacementPayments } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
-import { rawStatusLabel } from '@/lib/reinsurance/placementStatus';
+import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
 
 export type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
@@ -102,8 +102,7 @@ export function FacultativeOverview({
     ...placementDetailEntries(placement.offerDetails),
   ];
 
-  const statusLabel =
-    placement.status === 'CLOSING' ? 'Partially Closed' : rawStatusLabel(placement.status);
+  const statusLabel = facultativeStatusLabel(placement.status);
   const statusVariant = OVERVIEW_STATUS_VARIANT[placement.status];
 
   return (

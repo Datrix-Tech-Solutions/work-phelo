@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { StatCard } from '@/components/molecules/shared/StatCard';
+import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { LeaveRequestDetailPanel } from '@/components/organisms/hr/leave/LeaveRequestDetailPanel';
@@ -12,7 +12,7 @@ import { useLeaveTypes, useLeaveRequests } from '@/hooks/hr/useLeave';
 import { useDepartments } from '@/hooks/hr/useDepartments';
 import { formatDate } from '@/lib/formatters';
 import { LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/hr';
-import { Users } from 'lucide-react';
+import { CalendarDays, Clock, Users } from 'lucide-react';
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   APPROVED: 'success',
@@ -46,7 +46,7 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
     : ((departmentsRaw as { data?: { id: string; name: string }[] } | undefined)?.data ?? []);
 
   const { data: allEmployeeOptions, isLoading: employeesLoading } = useEmployeeOptions();
-  const totalEmployees = allEmployeeOptions?.length ?? null;
+  const totalEmployees = allEmployeeOptions?.length ?? 0;
 
   const { data: reqList = [], isLoading: reqLoading } = useLeaveRequests();
   const requestIdFromQuery = searchParams.get('requestId');
@@ -56,9 +56,9 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
     [requestIdFromQuery, reqList],
   );
 
-  const totalRequests = reqList.length || null;
+  const totalRequests = reqList.length;
   const pendingCount = useMemo(
-    () => reqList.filter((r) => r.status === 'PENDING').length || null,
+    () => reqList.filter((r) => r.status === 'PENDING').length,
     [reqList],
   );
 
@@ -133,20 +133,26 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
       <div className="flex flex-col gap-4">
         {/* Stat cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 shrink-0">
-          <StatCard
-            title="Total Leave Requests"
-            value={reqLoading ? null : totalRequests}
-            icon={<Users className="w-5 h-5" />}
+          <KpiCard
+            label="Total Leave Requests"
+            value={totalRequests}
+            icon={CalendarDays}
+            iconColor="#2a78d6"
+            isLoading={reqLoading}
           />
-          <StatCard
-            title="Pending Approval"
-            value={reqLoading ? null : pendingCount}
-            icon={<Users className="w-5 h-5" />}
+          <KpiCard
+            label="Pending Approval"
+            value={pendingCount}
+            icon={Clock}
+            iconColor="#eab308"
+            isLoading={reqLoading}
           />
-          <StatCard
-            title="Total Employees"
-            value={employeesLoading ? null : totalEmployees}
-            icon={<Users className="w-5 h-5" />}
+          <KpiCard
+            label="Total Employees"
+            value={totalEmployees}
+            icon={Users}
+            iconColor="#6b7280"
+            isLoading={employeesLoading}
           />
         </div>
 

@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
-import { MetricCard } from '@/components/molecules/shared/MetricCard';
+import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { Column, DataTable } from '../../shared/DataTable';
 import { usePayrollSettings, usePayrollRuns } from '@/hooks';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
@@ -605,56 +605,56 @@ export function ManagePayrollTab() {
       {/* Metric cards — context-aware */}
       {view === 'salary' ? (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
-          <MetricCard
-            title="Total Gross"
+          <KpiCard
+            label="Total Gross"
             value={money(salaryTotals.gross)}
             icon={TrendingUp}
-            variant="highlight"
+            iconColor="#2a78d6"
           />
-          <MetricCard
-            title="Total Net Pay"
+          <KpiCard
+            label="Total Net Pay"
             value={money(salaryTotals.net)}
             icon={TrendingUp}
-            variant="success"
+            iconColor="#1baf7a"
           />
-          <MetricCard
-            title="Total PAYE"
+          <KpiCard
+            label="Total PAYE"
             value={money(salaryTotals.paye)}
             icon={TrendingDown}
-            variant="warning"
+            iconColor="#eda100"
           />
-          <MetricCard
-            title={payrollLabels.summaryLabel}
+          <KpiCard
+            label={payrollLabels.summaryLabel}
             value={money(salaryTotals.statutory)}
             icon={TrendingUp}
-            variant="highlight"
+            iconColor="#2a78d6"
           />
-          <MetricCard
-            title="Employer Cost"
+          <KpiCard
+            label="Employer Cost"
             value={money(salaryTotals.employerCost)}
             icon={TrendingUp}
-            variant="highlight"
+            iconColor="#2a78d6"
           />
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 shrink-0">
-          <MetricCard
-            title="Total Gross"
+          <KpiCard
+            label="Total Gross"
             value={money(commissionTotals.gross)}
             icon={TrendingUp}
-            variant="highlight"
+            iconColor="#2a78d6"
           />
-          <MetricCard
-            title="Total Tax (10%)"
+          <KpiCard
+            label="Total Tax (10%)"
             value={money(commissionTotals.tax)}
             icon={TrendingDown}
-            variant="warning"
+            iconColor="#eda100"
           />
-          <MetricCard
-            title="Total Net Pay"
+          <KpiCard
+            label="Total Net Pay"
             value={money(commissionTotals.net)}
             icon={TrendingUp}
-            variant="success"
+            iconColor="#1baf7a"
           />
         </div>
       )}
