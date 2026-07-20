@@ -20,7 +20,7 @@ export default function FacultativeReportPage({
   const base = `/${tenantSlug}/operations/reinsurance/reports`;
   const [reportParams, setReportParams] = useState<FacultativeReportParams | null>(null);
 
-  const { rows, summary, isLoading } = useFacultativeReport(reportParams ?? { years: [] }, {
+  const { rows, currencyTotals, isLoading } = useFacultativeReport(reportParams ?? { years: [] }, {
     enabled: reportParams !== null,
   });
 
@@ -45,7 +45,7 @@ export default function FacultativeReportPage({
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col gap-4">
-              <FacultativeReportSummary summary={summary} isLoading={isLoading} />
+              <FacultativeReportSummary currencyTotals={currencyTotals} isLoading={isLoading} />
               <div className="flex-1 min-h-0">
                 <FacultativeReportTable rows={rows} isLoading={isLoading} />
               </div>

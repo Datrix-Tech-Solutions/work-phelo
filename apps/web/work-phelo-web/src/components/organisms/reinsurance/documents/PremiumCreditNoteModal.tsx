@@ -4,7 +4,14 @@ import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative } from '@/types/reinsurance';
 import { useReinsurers } from '@/hooks';
+import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+
+function fmtFieldValue(val: unknown): string {
+  if (val == null) return '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  return String(val);
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
@@ -68,7 +75,14 @@ export function PremiumCreditNoteModal({
     inceptionDate,
     expiryDate,
     cedant,
+    businessDetails,
+    offerDetails,
   } = placement;
+
+  const offerDetailRows = [
+    ...placementDetailEntries(businessDetails),
+    ...placementDetailEntries(offerDetails),
+  ].map((entry) => ({ label: entry.label, value: fmtFieldValue(entry.value) }));
 
   const grossPremium = premium ?? 0;
   const shareAmount = (sharePercent / 100) * grossPremium;
@@ -158,6 +172,13 @@ export function PremiumCreditNoteModal({
               },
               { label: 'Currency', value: currency ?? '—' },
             ].map((row) => (
+              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+                <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
+                <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
+              </tr>
+            ))}
+
+            {offerDetailRows.map((row) => (
               <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>

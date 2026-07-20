@@ -131,7 +131,7 @@ export function ReinsurersPaymentTable({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              title="View Document"
+              title="View Credit Note"
               className="text-blue-500 hover:text-blue-600 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();

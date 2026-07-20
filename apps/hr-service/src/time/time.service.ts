@@ -1095,12 +1095,16 @@ export class TimeService {
     } else if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
     } else if (isEmployeeSelfServiceUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      where.employeeId = actorEmployee.id;
+      if (hasPermissionRule(actor, 'attendance:VIEW')) {
+        if (filters.employeeId) where.employeeId = filters.employeeId;
+      } else {
+        const actorEmployee = await getActorEmployee(
+          this.prisma,
+          tenantId,
+          actor.id,
+        );
+        where.employeeId = actorEmployee.id;
+      }
     } else {
       assertHrAccess(hasPermissionRule(actor, 'attendance:VIEW'));
       if (filters.employeeId) where.employeeId = filters.employeeId;
@@ -1231,12 +1235,16 @@ export class TimeService {
     if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
     } else if (isEmployeeSelfServiceUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      where.employeeId = actorEmployee.id;
+      if (hasPermissionRule(actor, 'time-corrections:VIEW')) {
+        if (filters.employeeId) where.employeeId = filters.employeeId;
+      } else {
+        const actorEmployee = await getActorEmployee(
+          this.prisma,
+          tenantId,
+          actor.id,
+        );
+        where.employeeId = actorEmployee.id;
+      }
     } else {
       assertHrAccess(hasPermissionRule(actor, 'time-corrections:VIEW'));
       if (filters.employeeId) where.employeeId = filters.employeeId;

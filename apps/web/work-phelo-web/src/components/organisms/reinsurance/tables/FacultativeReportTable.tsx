@@ -7,6 +7,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { FacultativeReportRow } from '@/hooks/reinsurance/useFacultativeReport';
 import { FacultativeStatus } from '@/types/reinsurance';
+import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
 
 const PAGE_SIZE = 10;
 
@@ -21,14 +22,6 @@ const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neu
     DECLINED: 'danger',
     CANCELLED: 'danger',
   };
-
-function statusLabel(status: string): string {
-  return status
-    .toLowerCase()
-    .split('_')
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(' ');
-}
 
 function fmtAmount(value: number | null, currency: string | null): string {
   if (value == null) return '—';
@@ -94,7 +87,10 @@ export function FacultativeReportTable({ rows, isLoading }: FacultativeReportTab
         key: 'status',
         label: 'Status',
         render: (row) => (
-          <Badge label={statusLabel(row.status)} variant={STATUS_VARIANT_MAP[row.status]} />
+          <Badge
+            label={facultativeStatusLabel(row.status)}
+            variant={STATUS_VARIANT_MAP[row.status]}
+          />
         ),
       },
       {
