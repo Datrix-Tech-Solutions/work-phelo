@@ -277,7 +277,7 @@ function ClaimReinsurersTable({
             </button>
             <button
               type="button"
-              title="Send Mail"
+              title="Preview Email"
               className="text-green-500 hover:text-green-700 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();

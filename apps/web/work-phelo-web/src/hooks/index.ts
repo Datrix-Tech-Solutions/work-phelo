@@ -33,6 +33,7 @@ export * from './reinsurance/useRiskClasses';
 export * from './reinsurance/useRiskTypes';
 export * from './reinsurance/useCurrencies';
 export * from './reinsurance/usePayments';
+export * from './reinsurance/usePlacementEmails';
 export * from './reinsurance/useReinsuranceDashboard';
 export * from './reinsurance/useClaims';
 export * from './reinsurance/useCedantsReport';

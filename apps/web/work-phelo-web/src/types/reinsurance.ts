@@ -745,6 +745,186 @@ export interface PlacementParticipantClosing {
   updatedAt: string;
 }
 
+/* ── Placement Documents, Attachments & Emails ── */
+export type PlacementDocumentType =
+  | 'OFFER_SLIP'
+  | 'CLOSING_SLIP'
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_SLIP'
+  | 'ENDORSEMENT_CLOSING_SLIP'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE'
+  | 'CLAIM_NOTICE'
+  | 'CLAIM_CASH_CALL';
+
+export type PlacementDocumentStatus = 'GENERATED' | 'STORED' | 'VOID' | 'FAILED';
+
+export interface PlacementDocument {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  participantId: string | null;
+  closingId: string | null;
+  noteId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  claimId: string | null;
+  claimCashCallId: string | null;
+  type: PlacementDocumentType;
+  status: PlacementDocumentStatus;
+  documentNumber: string;
+  version: number;
+  title: string;
+  currency: string | null;
+  sourceSnapshot: Record<string, unknown>;
+  renderPayload: Record<string, unknown>;
+  storageProvider: string | null;
+  objectKey: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  checksum: string | null;
+  generatedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  failureReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PlacementAttachmentStatus = 'ACTIVE' | 'VOID';
+
+export interface PlacementAttachment {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  participantId: string | null;
+  closingId: string | null;
+  endorsementId: string | null;
+  endorsementParticipantId: string | null;
+  endorsementClosingId: string | null;
+  claimId: string | null;
+  claimCashCallId: string | null;
+  paymentId: string | null;
+  status: PlacementAttachmentStatus;
+  title: string | null;
+  description: string | null;
+  originalFileName: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  checksum: string;
+  storageProvider: string;
+  objectKey: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MailboxProvider = 'MICROSOFT_GRAPH' | 'GOOGLE_GMAIL';
+export type MailboxConnectionStatus = 'ACTIVE' | 'DISCONNECTED' | 'ERROR';
+
+export interface ReinsuranceMailboxConnection {
+  id: string;
+  tenantId: string;
+  provider: MailboxProvider;
+  emailAddress: string;
+  normalizedEmail: string;
+  displayName: string | null;
+  status: MailboxConnectionStatus;
+  externalMailboxId: string | null;
+  tokenExpiresAt: string | null;
+  lastSyncedAt: string | null;
+  lastSyncError: string | null;
+  connectedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlacementEmailRecipient {
+  email: string;
+  name?: string;
+}
+
+export interface SendPlacementEmailPayload {
+  mailboxConnectionId: string;
+  to: PlacementEmailRecipient[];
+  cc?: PlacementEmailRecipient[];
+  bcc?: PlacementEmailRecipient[];
+  subject: string;
+  bodyText?: string;
+  bodyHtml?: string;
+  documentIds?: string[];
+  attachmentIds?: string[];
+}
+
+export type EmailMessageStatus = 'DRAFT' | 'SENDING' | 'SENT' | 'FAILED';
+
+export interface EmailMessage {
+  id: string;
+  tenantId: string;
+  mailboxConnectionId: string;
+  threadId: string;
+  providerMessageId: string;
+  direction: 'INBOUND' | 'OUTBOUND';
+  status: EmailMessageStatus;
+  subject: string | null;
+  fromEmail: string | null;
+  fromName: string | null;
+  toRecipients: unknown;
+  ccRecipients: unknown;
+  bccRecipients: unknown;
+  sentAt: string | null;
+  bodyPreview: string | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+  errorMessage: string | null;
+  hasAttachments: boolean;
+  isRead: boolean;
+}
+
+export interface PlacementEmailMailboxSummary {
+  id: string;
+  provider: MailboxProvider;
+  emailAddress: string;
+  displayName: string | null;
+}
+
+export interface PlacementEmailThreadSummary {
+  linkId: string;
+  threadId: string;
+  subject: string | null;
+  participants: unknown;
+  latestMessagePreview: string | null;
+  latestMessageAt: string | null;
+  messageCount: number;
+  hasAttachments: boolean;
+  linkedByUserId: string;
+  note: string | null;
+  linkedAt: string;
+  mailbox: PlacementEmailMailboxSummary;
+}
+
+export interface PlacementEmailSendResponse {
+  thread: PlacementEmailThreadSummary;
+  message: EmailMessage;
+  link: {
+    id: string;
+    placementId: string;
+    threadId: string;
+    messageId: string | null;
+    linkedByUserId: string;
+    note: string | null;
+    archivedAt: string | null;
+    createdAt: string;
+  };
+}
+
 export interface EndorsementParticipantClosing {
   id: string;
   placementId: string;
