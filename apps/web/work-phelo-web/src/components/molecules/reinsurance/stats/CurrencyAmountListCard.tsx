@@ -42,6 +42,7 @@ interface CurrencyAmountListCardProps {
   amountsByCode: Map<string, number>;
   currencies: Currency[];
   isLoading?: boolean;
+  emptyMessage?: string;
 }
 
 export function CurrencyAmountListCard({
@@ -50,6 +51,7 @@ export function CurrencyAmountListCard({
   amountsByCode,
   currencies,
   isLoading,
+  emptyMessage = 'No data for this period',
 }: CurrencyAmountListCardProps) {
   const rows = currencies
     .map((c) => ({ ...c, amount: amountsByCode.get(c.isoCode) ?? null }))
@@ -63,7 +65,7 @@ export function CurrencyAmountListCard({
           columns={buildColumns(columnLabel)}
           data={rows}
           isLoading={isLoading}
-          emptyMessage="No data for this period"
+          emptyMessage={emptyMessage}
           bare
         />
       </div>

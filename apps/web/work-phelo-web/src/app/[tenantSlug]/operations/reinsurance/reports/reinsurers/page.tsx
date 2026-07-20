@@ -20,9 +20,12 @@ export default function ReinsurersReportPage({
   const base = `/${tenantSlug}/operations/reinsurance/reports`;
   const [reportParams, setReportParams] = useState<ReinsurersReportParams | null>(null);
 
-  const { rows, summary, isLoading } = useReinsurersReport(reportParams ?? { years: [] }, {
-    enabled: reportParams !== null,
-  });
+  const { rows, summary, currencyTotals, isLoading } = useReinsurersReport(
+    reportParams ?? { years: [] },
+    {
+      enabled: reportParams !== null,
+    },
+  );
 
   return (
     <TwoPanelShell
@@ -45,7 +48,7 @@ export default function ReinsurersReportPage({
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col gap-4">
-              <ReinsurersReportSummary summary={summary} isLoading={isLoading} />
+              <ReinsurersReportSummary currencyTotals={currencyTotals} isLoading={isLoading} />
               <div className="flex-1 min-h-0">
                 <ReinsurersReportTable
                   rows={rows}

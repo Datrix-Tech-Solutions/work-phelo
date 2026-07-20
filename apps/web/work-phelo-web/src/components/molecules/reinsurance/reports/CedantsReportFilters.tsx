@@ -7,6 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions } from '@/hooks';
 import { FACULTATIVE_STATUSES, FacultativeStatus } from '@/types/reinsurance';
 import { CedantsReportParams } from '@/hooks/reinsurance/useCedantsReport';
+import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS: MultiSelectOption[] = Array.from({ length: 8 }, (_, i) => {
@@ -14,15 +15,10 @@ const YEAR_OPTIONS: MultiSelectOption[] = Array.from({ length: 8 }, (_, i) => {
   return { value: year, label: year };
 });
 
-function statusLabel(status: string): string {
-  return status
-    .toLowerCase()
-    .split('_')
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(' ');
-}
-
-const STATUS_OPTIONS = FACULTATIVE_STATUSES.map((s) => ({ value: s, label: statusLabel(s) }));
+const STATUS_OPTIONS = FACULTATIVE_STATUSES.map((s) => ({
+  value: s,
+  label: facultativeStatusLabel(s),
+}));
 
 interface CedantsReportFiltersProps {
   onGenerate: (params: CedantsReportParams) => void;
@@ -72,7 +68,7 @@ export function CedantsReportFilters({ onGenerate }: CedantsReportFiltersProps) 
 
         <SearchSelect
           label="Currency"
-          placeholder="Base currency"
+          placeholder="All Currencies"
           options={currencyOptions}
           value={currency}
           onChange={setCurrency}

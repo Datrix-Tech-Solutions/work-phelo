@@ -3,6 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useFacultatives } from './useFacultatives';
 import { useCurrencies } from './useCurrencies';
+import { useReportCurrencyTotals, ReportCurrencyTotals } from './useReportCurrencyTotals';
 import {
   Currency,
   Facultative,
@@ -64,6 +65,7 @@ export function useReinsurersReport(
 ): {
   rows: ReinsurerReportRow[];
   summary: ReinsurersReportSummary;
+  currencyTotals: ReportCurrencyTotals;
   isLoading: boolean;
 } {
   const enabled = options.enabled ?? true;
@@ -186,5 +188,16 @@ export function useReinsurersReport(
   const isLoading =
     loadingPlacements || loadingCurrencies || paymentQueries.some((q) => q.isLoading);
 
-  return { rows, summary, isLoading };
+  const currencyTotalsEntries = useMemo(
+    () =>
+      placementParticipants.map(({ placement, participants }) => ({
+        placement,
+        participants,
+        scope: 'participant' as const,
+      })),
+    [placementParticipants],
+  );
+  const currencyTotals = useReportCurrencyTotals(currencyTotalsEntries);
+
+  return { rows, summary, currencyTotals, isLoading };
 }

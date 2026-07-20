@@ -359,7 +359,7 @@ export function toStatusLabel(status: FacultativeStatus): string {
   if (status === 'PARTIALLY_PLACED') return 'Partially Placed';
   if (status === 'PLACED') return 'Placed';
   if (status === 'CLOSING') return 'Partially Closed';
-  if (status === 'MARKETING') return 'Marketing';
+  if (status === 'MARKETING') return 'On Market';
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 

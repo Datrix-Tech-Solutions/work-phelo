@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { useFacultatives } from './useFacultatives';
+import { useReportCurrencyTotals, ReportCurrencyTotals } from './useReportCurrencyTotals';
 import { FacultativeStatus } from '@/types/reinsurance';
 
 const ACCEPTED_STATUSES = new Set(['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED']);
 const OPEN_STATUSES = new Set(['DRAFT', 'MARKETING']);
+const QUALIFYING_PARTICIPANT_STATUSES = new Set(['ACCEPTED', 'CLOSED']);
 
 export interface FacultativeReportParams {
   /** Restricts to these years (by placement createdAt). Omitted/empty = all-time, no restriction. */
@@ -41,6 +43,7 @@ export function useFacultativeReport(
 ): {
   rows: FacultativeReportRow[];
   summary: FacultativeReportSummary;
+  currencyTotals: ReportCurrencyTotals;
   isLoading: boolean;
 } {
   const enabled = options.enabled ?? true;
@@ -99,5 +102,16 @@ export function useFacultativeReport(
     };
   }, [filtered]);
 
-  return { rows, summary, isLoading };
+  const currencyTotalsEntries = useMemo(
+    () =>
+      filtered.map((p) => ({
+        placement: p,
+        participants: p.participants.filter((pt) => QUALIFYING_PARTICIPANT_STATUSES.has(pt.status)),
+        scope: 'placement' as const,
+      })),
+    [filtered],
+  );
+  const currencyTotals = useReportCurrencyTotals(currencyTotalsEntries);
+
+  return { rows, summary, currencyTotals, isLoading };
 }

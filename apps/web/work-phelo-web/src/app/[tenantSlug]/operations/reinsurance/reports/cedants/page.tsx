@@ -16,9 +16,12 @@ export default function CedantsReportPage({ params }: { params: Promise<{ tenant
   const base = `/${tenantSlug}/operations/reinsurance/reports`;
   const [reportParams, setReportParams] = useState<CedantsReportParams | null>(null);
 
-  const { rows, summary, isLoading } = useCedantsReport(reportParams ?? { years: [] }, {
-    enabled: reportParams !== null,
-  });
+  const { rows, summary, currencyTotals, isLoading } = useCedantsReport(
+    reportParams ?? { years: [] },
+    {
+      enabled: reportParams !== null,
+    },
+  );
 
   return (
     <TwoPanelShell
@@ -41,7 +44,7 @@ export default function CedantsReportPage({ params }: { params: Promise<{ tenant
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col gap-4">
-              <CedantsReportSummary summary={summary} isLoading={isLoading} />
+              <CedantsReportSummary currencyTotals={currencyTotals} isLoading={isLoading} />
               <div className="flex-1 min-h-0">
                 <CedantsReportTable
                   rows={rows}

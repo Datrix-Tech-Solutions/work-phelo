@@ -3,11 +3,13 @@ import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useFacultatives } from './useFacultatives';
 import { useCurrencies } from './useCurrencies';
+import { useReportCurrencyTotals, ReportCurrencyTotals } from './useReportCurrencyTotals';
 import { Currency, Facultative, FacultativeStatus, PlacementPayment } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
 const paymentsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'payments'] as const;
+const QUALIFYING_PARTICIPANT_STATUSES = new Set(['ACCEPTED', 'CLOSED']);
 
 function netPremiumFor(p: Facultative): number {
   const fac =
@@ -67,6 +69,7 @@ export function useCedantsReport(
 ): {
   rows: CedantReportRow[];
   summary: CedantsReportSummary;
+  currencyTotals: ReportCurrencyTotals;
   isLoading: boolean;
 } {
   const enabled = options.enabled ?? true;
@@ -152,5 +155,16 @@ export function useCedantsReport(
   const isLoading =
     loadingPlacements || loadingCurrencies || paymentQueries.some((q) => q.isLoading);
 
-  return { rows, summary, isLoading };
+  const currencyTotalsEntries = useMemo(
+    () =>
+      filtered.map((p) => ({
+        placement: p,
+        participants: p.participants.filter((pt) => QUALIFYING_PARTICIPANT_STATUSES.has(pt.status)),
+        scope: 'placement' as const,
+      })),
+    [filtered],
+  );
+  const currencyTotals = useReportCurrencyTotals(currencyTotalsEntries);
+
+  return { rows, summary, currencyTotals, isLoading };
 }
