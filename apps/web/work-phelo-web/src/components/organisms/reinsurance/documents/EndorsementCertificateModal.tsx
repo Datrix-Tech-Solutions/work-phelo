@@ -178,6 +178,7 @@ export function EndorsementCertificateModal({
         placement.policyNumber ?? placement.reference,
         riskTypeName,
         placement.title,
+        `to ${placement.cedant.name}`,
       )}
       onPrint={onPrint}
       onClose={onClose}

@@ -53,6 +53,8 @@ interface PlacementClosingsTabProps {
 export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [guaranteeNoteOpen, setGuaranteeNoteOpen] = useState(false);
   const [debitNoteOpen, setDebitNoteOpen] = useState(false);
+  const [guaranteeNoteViewed, setGuaranteeNoteViewed] = useState(false);
+  const [debitNoteViewed, setDebitNoteViewed] = useState(false);
   const [creditNoteRow, setCreditNoteRow] = useState<ClosingRow | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
   const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
@@ -176,13 +178,19 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
             ? [
                 {
                   label: 'View Guarantee Note',
-                  onClick: () => setGuaranteeNoteOpen(true),
-                  className: 'btn-shake mx-1',
+                  onClick: () => {
+                    setGuaranteeNoteOpen(true);
+                    setGuaranteeNoteViewed(true);
+                  },
+                  className: guaranteeNoteViewed ? 'mx-1' : 'btn-pulse mx-1',
                 },
                 {
                   label: 'View Debit Note',
-                  onClick: () => setDebitNoteOpen(true),
-                  className: 'btn-shake mx-1',
+                  onClick: () => {
+                    setDebitNoteOpen(true);
+                    setDebitNoteViewed(true);
+                  },
+                  className: debitNoteViewed ? 'mx-1' : 'btn-pulse mx-1',
                 },
               ]
             : []),
@@ -197,8 +205,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       <GuaranteeNoteModal
         isOpen={guaranteeNoteOpen}
         placement={placement}
-        counterpartyId=""
-        reinsurerCompany=""
         facultativeOfferOverride={effectiveTotals?.facultativeOfferPercent}
         sumInsuredOverride={effectiveTotals?.sumInsured}
         premiumOverride={effectiveTotals?.premium}

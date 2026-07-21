@@ -24,36 +24,36 @@ const MOODS = [
     emoji: '😞',
     label: 'Very Sad',
     animationClass: 'mood-very-sad',
-    baseClass: 'bg-red-100 hover:bg-red-200',
-    selectedClass: 'bg-red-100 ring-2 ring-red-700',
+    baseClass: 'bg-transparent hover:bg-red-200',
+    selectedClass: 'bg-red-100 ring-2 ring-red-200',
   },
   {
     emoji: '🙁',
     label: 'Sad',
     animationClass: 'mood-sad',
-    baseClass: 'bg-orange-100 hover:bg-orange-200',
-    selectedClass: 'bg-orange-100 ring-2 ring-orange-700',
+    baseClass: 'bg-transparent hover:bg-orange-200',
+    selectedClass: 'bg-orange-100 ring-2 ring-orange-200',
   },
   {
     emoji: '😐',
     label: 'Neutral',
     animationClass: 'mood-neutral',
-    baseClass: 'bg-gray-100 hover:bg-gray-200',
-    selectedClass: 'bg-gray-200 ring-2 ring-gray-700',
+    baseClass: 'bg-transparent hover:bg-gray-200',
+    selectedClass: 'bg-gray-100 ring-2 ring-gray-200',
   },
   {
     emoji: '🙂',
     label: 'Happy',
     animationClass: 'mood-happy',
-    baseClass: 'bg-lime-100 hover:bg-lime-200',
-    selectedClass: 'bg-lime-100 ring-2 ring-lime-700',
+    baseClass: 'bg-transparent hover:bg-lime-200',
+    selectedClass: 'bg-lime-100 ring-2 ring-lime-200',
   },
   {
     emoji: '😄',
     label: 'Very Happy',
     animationClass: 'mood-very-happy',
-    baseClass: 'bg-yellow-100 hover:bg-yellow-200',
-    selectedClass: 'bg-yellow-100 ring-2 ring-yellow-700',
+    baseClass: 'bg-transparent hover:bg-yellow-200',
+    selectedClass: 'bg-yellow-100 ring-2 ring-yellow-200',
   },
 ];
 
@@ -80,7 +80,15 @@ export function MoodSelectorModal() {
   };
 
   return (
-    <Modal isOpen={open} onClose={close} title="How are you feeling today?" width="max-w-lg">
+    <Modal
+      isOpen={open}
+      onClose={close}
+      title="How are you feeling today?"
+      width="max-w-lg"
+      panelClassName="bg-transparent"
+      titleClassName="text-white drop-shadow-md"
+      closeButtonClassName="text-white/80 hover:text-white drop-shadow-md"
+    >
       <div className="grid grid-cols-5 gap-2 mt-2">
         {MOODS.map(({ emoji, label, animationClass, baseClass, selectedClass }) => (
           <button
@@ -93,7 +101,7 @@ export function MoodSelectorModal() {
             )}
           >
             <span className={cn('inline-block text-6xl', animationClass)}>{emoji}</span>
-            <span className="text-xs font-medium text-gray-600">{label}</span>
+            <span className="text-xs font-medium text-white drop-shadow-md">{label}</span>
           </button>
         ))}
       </div>

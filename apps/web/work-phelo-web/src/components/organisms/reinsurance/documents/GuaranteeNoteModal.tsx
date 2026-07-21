@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
-import { useReinsurers, useCedants, useRiskTypes } from '@/hooks';
+import { useCedants, useRiskTypes } from '@/hooks';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 
 function fmtDate(iso: string | null) {
@@ -24,8 +24,6 @@ function fmtAmount(val: number | null, currency: string | null) {
 interface GuaranteeNoteModalProps {
   isOpen: boolean;
   placement: Facultative;
-  counterpartyId: string;
-  reinsurerCompany: string;
   /** Post-endorsement totals, when this placement has an endorsement in market. */
   facultativeOfferOverride?: number;
   sumInsuredOverride?: number | null;
@@ -40,8 +38,6 @@ interface GuaranteeNoteModalProps {
 export function GuaranteeNoteModal({
   isOpen,
   placement,
-  counterpartyId,
-  reinsurerCompany,
   facultativeOfferOverride,
   sumInsuredOverride,
   premiumOverride,
@@ -50,22 +46,16 @@ export function GuaranteeNoteModal({
   onPrint,
   onClose,
 }: GuaranteeNoteModalProps) {
-  const { data: reinsurers = [] } = useReinsurers();
   const { data: cedants = [] } = useCedants();
   const { data: riskTypes = [] } = useRiskTypes();
-
-  const reinsurer = reinsurers.find((r) => r.id === counterpartyId);
-  const reinsurerAddr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
   const cedantAddr = fullCedant?.addresses?.find((a) => a.isPrimary) ?? fullCedant?.addresses?.[0];
 
-  const displayName = reinsurerCompany || placement.cedant.name;
-  const displayCity = reinsurerAddr?.city ?? cedantAddr?.city ?? null;
+  const displayName = placement.cedant.name;
+  const displayCity = cedantAddr?.city ?? null;
   const displayRegionCountry =
-    [reinsurerAddr?.state, reinsurerAddr?.country].filter(Boolean).join(' - ') ||
-    [cedantAddr?.state, cedantAddr?.country].filter(Boolean).join(' - ') ||
-    null;
+    [cedantAddr?.state, cedantAddr?.country].filter(Boolean).join(' - ') || null;
   const {
     currency,
     facultativeOffer,
@@ -119,6 +109,7 @@ export function GuaranteeNoteModal({
         policyNumber ?? reference,
         riskTypeName,
         title,
+        `to ${displayName}`,
       )}
       afterContent={
         <div

@@ -646,7 +646,6 @@ export class PlacementsService {
           tx,
           user.tenantId,
           id,
-          editClassification,
         );
 
         return tx.placement.update({
@@ -2337,7 +2336,6 @@ export class PlacementsService {
     tx: Prisma.TransactionClient,
     tenantId: string,
     placementId: string,
-    editClassification: PlacementEditClassification,
   ): Promise<{
     participantsRequiringReoffer: number;
     participantsPreservedAsAccepted: number;
@@ -2406,39 +2404,23 @@ export class PlacementsService {
       },
     });
 
-    if (editClassification === 'MATERIAL') {
-      const reset = await tx.placementParticipant.updateMany({
-        where: {
-          tenantId,
-          placementId,
-          status: {
-            in: [
-              PlacementParticipantStatus.CLOSED,
-              PlacementParticipantStatus.ACCEPTED,
-              PlacementParticipantStatus.QUOTED,
-            ],
-          },
-        },
-        data: { status: PlacementParticipantStatus.OFFER_SENT },
-      });
-      return {
-        participantsRequiringReoffer: reset.count,
-        participantsPreservedAsAccepted: 0,
-      };
-    }
-
-    const preserved = await tx.placementParticipant.updateMany({
+    const reset = await tx.placementParticipant.updateMany({
       where: {
         tenantId,
         placementId,
-        status: PlacementParticipantStatus.CLOSED,
+        status: {
+          in: [
+            PlacementParticipantStatus.CLOSED,
+            PlacementParticipantStatus.ACCEPTED,
+            PlacementParticipantStatus.QUOTED,
+          ],
+        },
       },
-      data: { status: PlacementParticipantStatus.ACCEPTED },
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
     });
-
     return {
-      participantsRequiringReoffer: 0,
-      participantsPreservedAsAccepted: preserved.count,
+      participantsRequiringReoffer: reset.count,
+      participantsPreservedAsAccepted: 0,
     };
   }
 

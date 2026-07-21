@@ -121,7 +121,13 @@ export function DebitNoteModal({
       isOpen={isOpen}
       title={`Debit Note — ${reference}`}
       documentTitle="Debit Note"
-      fileName={buildDocumentFileName('Debit Note', policyNumber ?? reference, riskTypeName, title)}
+      fileName={buildDocumentFileName(
+        'Debit Note',
+        policyNumber ?? reference,
+        riskTypeName,
+        title,
+        `to ${cedant.name}`,
+      )}
       onPrint={onPrint}
       onClose={onClose}
       afterContent={debitAfterContent}

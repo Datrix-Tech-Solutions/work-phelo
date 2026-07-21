@@ -1214,9 +1214,15 @@ describe('PlacementsService', () => {
       where: {
         tenantId: 'tenant-1',
         placementId: 'placement-1',
-        status: PlacementParticipantStatus.CLOSED,
+        status: {
+          in: [
+            PlacementParticipantStatus.CLOSED,
+            PlacementParticipantStatus.ACCEPTED,
+            PlacementParticipantStatus.QUOTED,
+          ],
+        },
       },
-      data: { status: PlacementParticipantStatus.ACCEPTED },
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
     });
   });
 
@@ -1367,9 +1373,24 @@ describe('PlacementsService', () => {
       prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
     ).toMatchObject({
       where: {
-        status: PlacementParticipantStatus.CLOSED,
+        status: {
+          in: [
+            PlacementParticipantStatus.CLOSED,
+            PlacementParticipantStatus.ACCEPTED,
+            PlacementParticipantStatus.QUOTED,
+          ],
+        },
       },
-      data: { status: PlacementParticipantStatus.ACCEPTED },
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
+    });
+    const historyArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as
+      | {
+          data: Record<string, unknown>;
+        }
+      | undefined;
+    expect(historyArgs?.data).toMatchObject({
+      note: 'Placement edited and returned to Open Offers (administrative edit)',
     });
   });
 

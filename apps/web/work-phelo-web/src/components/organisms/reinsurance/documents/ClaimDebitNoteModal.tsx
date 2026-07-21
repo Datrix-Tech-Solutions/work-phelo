@@ -101,6 +101,7 @@ export function ClaimDebitNoteModal({
         policyNumber ?? reference,
         riskTypeName,
         title,
+        `to ${participant.counterparty.name}`,
       )}
       onPrint={onPrint}
       onClose={onClose}

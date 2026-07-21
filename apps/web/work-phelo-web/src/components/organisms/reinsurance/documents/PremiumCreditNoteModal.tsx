@@ -42,6 +42,8 @@ interface PremiumCreditNoteModalProps {
   brokerageFee: number;
   counterpartyId: string;
   reinsurerCompany: string;
+  nicLevyPct?: number;
+  withholdingTaxPct?: number;
   onPrint: () => void;
   onClose: () => void;
 }
@@ -53,6 +55,8 @@ export function PremiumCreditNoteModal({
   brokerageFee,
   counterpartyId,
   reinsurerCompany,
+  nicLevyPct = 0,
+  withholdingTaxPct = 0,
   onPrint,
   onClose,
 }: PremiumCreditNoteModalProps) {
@@ -88,7 +92,9 @@ export function PremiumCreditNoteModal({
   const shareAmount = (sharePercent / 100) * grossPremium;
   const totalCommissionPct = (commission ?? 0) + brokerageFee;
   const commissionAmt = (totalCommissionPct / 100) * shareAmount;
-  const premiumShareDue = shareAmount - commissionAmt;
+  const nicLevyAmt = (nicLevyPct / 100) * shareAmount;
+  const withholdingTaxAmt = (withholdingTaxPct / 100) * shareAmount;
+  const premiumShareDue = shareAmount - commissionAmt - nicLevyAmt - withholdingTaxAmt;
 
   const creditAfterContent = (
     <div className="mt-10 flex flex-col gap-6 border-t border-gray-200 pt-6">
@@ -115,7 +121,12 @@ export function PremiumCreditNoteModal({
       isOpen={isOpen}
       title={`Credit Note — ${reference}`}
       documentTitle="Credit Note"
-      fileName={buildDocumentFileName('Credit Note', policyNumber ?? reference, title)}
+      fileName={buildDocumentFileName(
+        'Credit Note',
+        policyNumber ?? reference,
+        title,
+        reinsurerCompany ? `to ${reinsurerCompany}` : null,
+      )}
       onPrint={onPrint}
       onClose={onClose}
       afterContent={creditAfterContent}
@@ -205,6 +216,17 @@ export function PremiumCreditNoteModal({
                 label: `Less Commission ${totalCommissionPct}%`,
                 value: fmtAmount(commissionAmt, currency),
               },
+              ...(nicLevyPct > 0
+                ? [{ label: `NIC Levy ${nicLevyPct}%`, value: fmtAmount(nicLevyAmt, currency) }]
+                : []),
+              ...(withholdingTaxPct > 0
+                ? [
+                    {
+                      label: `Withholding Tax ${withholdingTaxPct}%`,
+                      value: fmtAmount(withholdingTaxAmt, currency),
+                    },
+                  ]
+                : []),
               {
                 label: 'Premium Share Due',
                 value: fmtAmount(premiumShareDue, currency),

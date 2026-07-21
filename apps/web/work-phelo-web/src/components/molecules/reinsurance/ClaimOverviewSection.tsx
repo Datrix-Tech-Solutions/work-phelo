@@ -177,6 +177,7 @@ function ClaimReinsurersTable({
   participants,
   allocations,
   claimAmount,
+  isActualAmount,
   currency,
   grossPremium,
   commission,
@@ -187,6 +188,7 @@ function ClaimReinsurersTable({
   participants: PlacementParticipant[];
   allocations: PlacementClaimAllocation[];
   claimAmount?: number | null;
+  isActualAmount?: boolean;
   currency?: string | null;
   grossPremium: number;
   commission: number;
@@ -238,7 +240,7 @@ function ClaimReinsurersTable({
       },
       {
         key: 'signedLinePercent',
-        label: 'Actual Claim',
+        label: isActualAmount ? 'Actual Claim' : 'Est. Claim',
         width: '180px',
         className: 'text-right pr-8',
         render: (row) => {
@@ -293,6 +295,7 @@ function ClaimReinsurersTable({
     [
       allocations,
       claimAmount,
+      isActualAmount,
       currency,
       grossPremium,
       commission,
@@ -331,7 +334,8 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
     ? FOREIGN_CEDANT_DEDUCTION_RATE
     : 0;
 
-  const claimAmount = claim ? parseFloat(claim.estimatedLossAmount) : null;
+  const claimAmount = claim ? parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount) : null;
+  const isActualAmount = !!claim?.finalLossAmount;
   const mailAllocation = mailTarget
     ? allocations.find((a) => a.participantId === mailTarget.id)
     : undefined;
@@ -374,6 +378,7 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
             participants={placement.participants ?? []}
             allocations={allocations}
             claimAmount={claimAmount}
+            isActualAmount={isActualAmount}
             currency={claim?.currency ?? placement.currency}
             grossPremium={placement.premium ?? 0}
             commission={placement.commission ?? 0}

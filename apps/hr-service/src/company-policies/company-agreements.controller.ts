@@ -131,7 +131,7 @@ export class CompanyAgreementsController {
   }
 
   @Post('me/:versionId/sign')
-  @RequirePermissions(Permission.UPDATE_OWN_PROFILE)
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
   @ApiOperation({
     summary: 'Sign an active agreement version with typed legal name',
   })
@@ -156,7 +156,7 @@ export class CompanyAgreementsController {
   }
 
   @Post('me/:versionId/decline')
-  @RequirePermissions(Permission.UPDATE_OWN_PROFILE)
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
   @ApiOperation({
     summary: 'Decline an active agreement version',
   })
