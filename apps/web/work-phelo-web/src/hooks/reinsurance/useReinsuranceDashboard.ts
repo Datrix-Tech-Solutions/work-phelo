@@ -646,7 +646,7 @@ export function useReinsuranceFinancialsByCurrency({ period }: { period: Period 
     const brokerage = new Map<string, number>();
     const claimsIncurred = new Map<string, number>();
 
-    for (const f of all) {
+    for (const f of eligiblePlacements) {
       if (f.currency == null) continue;
       if (new Date(f.createdAt) < start) continue;
 
@@ -687,7 +687,7 @@ export function useReinsuranceFinancialsByCurrency({ period }: { period: Period 
     });
 
     return { totalRisk, sumInsured, premium, brokerage, claimsIncurred };
-  }, [all, claimQueries, period]);
+  }, [eligiblePlacements, claimQueries, period]);
 
   const isLoading = loadingFac || claimQueries.some((q) => q.isLoading);
 

@@ -68,7 +68,8 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   );
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
-  const foreignCedant = isForeignCedant(fullCedant);
+  const creditNoteReinsurer = reinsurers.find((r) => r.id === creditNoteRow?.counterpartyId);
+  const foreignReinsurer = isForeignCedant(creditNoteReinsurer);
 
   const reinsurerEmails: Record<string, string[]> = Object.fromEntries(
     reinsurers.map((r) => {
@@ -81,6 +82,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     }),
   );
 
+  const isPlacementClosed = placement.status === 'CLOSED';
   const premium = placement.premium ?? 0;
   const effectiveTotals = hasActiveEndorsement ? effectiveView?.effectiveTotals : undefined;
   const participantShareOverrides = effectiveView
@@ -170,10 +172,26 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         onPageChange={() => {}}
         noInternalScroll
         secondaryButtons={[
-          { label: 'View Guarantee Note', onClick: () => setGuaranteeNoteOpen(true) },
-          { label: 'View Debit Note', onClick: () => setDebitNoteOpen(true) },
+          ...(isPlacementClosed
+            ? [
+                {
+                  label: 'View Guarantee Note',
+                  onClick: () => setGuaranteeNoteOpen(true),
+                  className: 'btn-shake mx-1',
+                },
+                {
+                  label: 'View Debit Note',
+                  onClick: () => setDebitNoteOpen(true),
+                  className: 'btn-shake mx-1',
+                },
+              ]
+            : []),
         ]}
-        actionButton={{ label: 'Mail to cedant', onClick: () => setMailToCedantOpen(true) }}
+        actionButton={
+          isPlacementClosed
+            ? { label: 'Mail to cedant', onClick: () => setMailToCedantOpen(true) }
+            : undefined
+        }
       />
 
       <GuaranteeNoteModal
@@ -208,9 +226,11 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           brokerageFee={creditNoteRow.brokerageFee}
           counterpartyId={creditNoteRow.counterpartyId}
           reinsurerCompany={creditNoteRow.reinsurerCompany}
-          nicLevyPct={foreignCedant ? selectChargeRate(charges, 'NIC_LEVY', placement.currency) : 0}
+          nicLevyPct={
+            foreignReinsurer ? selectChargeRate(charges, 'NIC_LEVY', placement.currency) : 0
+          }
           withholdingTaxPct={
-            foreignCedant ? selectChargeRate(charges, 'WITHHOLDING_TAX', placement.currency) : 0
+            foreignReinsurer ? selectChargeRate(charges, 'WITHHOLDING_TAX', placement.currency) : 0
           }
           sumInsuredOverride={effectiveTotals?.sumInsured}
           premiumOverride={effectiveTotals?.premium}

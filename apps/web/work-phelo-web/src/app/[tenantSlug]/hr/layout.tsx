@@ -23,6 +23,7 @@ export default function HRLayout({
 }) {
   const { tenantSlug } = use(params);
   const user = useAuthStore((s) => s.user);
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN';
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
@@ -79,7 +80,9 @@ export default function HRLayout({
   // announcements is also core — it is permission-gated, not feature-toggled
   const coreKeys = new Set(['dashboard', 'management', 'announcements']);
   const navAccess: Record<string, boolean> = {
-    dashboard: true,
+    // The dashboard is a self-service "my" view (my leave, my payslips, clock in/out) —
+    // not relevant for a tenant admin, so it's hidden for that role.
+    dashboard: !isTenantAdmin,
 
     employees: canReadEmployees || canReadOwnProfile,
     leave: canAccessLeave,

@@ -45,8 +45,8 @@ function NavTabs({ tabs }: { tabs: NavTab[] }) {
             className={cn(
               'relative px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap',
               isActive
-                ? 'text-white font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-white after:rounded-t-full'
-                : 'text-white/70 hover:text-white',
+                ? 'text-black font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-black after:rounded-t-full'
+                : 'text-black/70 hover:text-black',
             )}
           >
             {tab.label}

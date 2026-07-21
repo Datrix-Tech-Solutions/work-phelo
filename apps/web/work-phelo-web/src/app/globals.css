@@ -459,9 +459,37 @@ body {
   }
 }
 
+/* Reinsurance placement closings — button tada, repeating pulse to draw attention */
+@keyframes btn-shake {
+  0%,
+  70%,
+  100% {
+    transform: scale3d(1, 1, 1);
+  }
+  6%,
+  15% {
+    transform: scale3d(0.9, 0.9, 0.9) rotate(-3deg);
+  }
+  21%,
+  36%,
+  49%,
+  64% {
+    transform: scale3d(1.04, 1.04, 1.04) rotate(3deg);
+  }
+  28%,
+  42%,
+  57% {
+    transform: scale3d(1.04, 1.04, 1.04) rotate(-3deg);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .group:hover .module-icon-shake {
     animation: module-icon-shake 0.5s ease-in-out;
+  }
+
+  .btn-shake {
+    animation: btn-shake 1.5s ease-in-out infinite;
   }
 
   .module-splash-bg {
@@ -497,4 +525,79 @@ body {
 
 .mail-pending-bounce {
   animation: mail-pending-bounce 1s ease-in-out infinite;
+}
+
+/* Mood selector modal — each emoji loops a small animation matching its expression */
+@keyframes mood-very-sad-droop {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-6deg) translateY(3px);
+  }
+}
+
+@keyframes mood-sad-wobble {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-6deg);
+  }
+  75% {
+    transform: rotate(6deg);
+  }
+}
+
+@keyframes mood-neutral-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes mood-happy-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes mood-very-happy-jump {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-12px) rotate(-10deg);
+  }
+  60% {
+    transform: translateY(-12px) rotate(10deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mood-very-sad {
+    animation: mood-very-sad-droop 2.4s ease-in-out infinite;
+  }
+  .mood-sad {
+    animation: mood-sad-wobble 2.2s ease-in-out infinite;
+  }
+  .mood-neutral {
+    animation: mood-neutral-breathe 2s ease-in-out infinite;
+  }
+  .mood-happy {
+    animation: mood-happy-bounce 1.4s ease-in-out infinite;
+  }
+  .mood-very-happy {
+    animation: mood-very-happy-jump 1.1s ease-in-out infinite;
+  }
 }
