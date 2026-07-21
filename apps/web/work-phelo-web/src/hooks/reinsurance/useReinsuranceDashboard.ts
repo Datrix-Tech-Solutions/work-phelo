@@ -16,20 +16,20 @@ const CLOSING_STATUSES: FacultativeStatus[] = ['PARTIALLY_PLACED', 'PLACED', 'CL
 
 export interface DashboardStats {
   totalOffers: number;
-  pendingOffers: number;
+  placedOffers: number;
+  partiallyClosedOffers: number;
   closedOffers: number;
-  acceptanceRate: number;
   trends: {
     totalOffers: number;
-    pendingOffers: number;
+    placedOffers: number;
+    partiallyClosedOffers: number;
     closedOffers: number;
-    acceptanceRate: number;
   };
   previous: {
     totalOffers: number;
-    pendingOffers: number;
+    placedOffers: number;
+    partiallyClosedOffers: number;
     closedOffers: number;
-    acceptanceRate: number;
   };
 }
 
@@ -66,15 +66,10 @@ function periodBounds(period: Period, now: Date): { start: Date; prevStart: Date
 
 function computeStats(items: Facultative[]) {
   const total = items.length;
-  const pending = items.filter((f) => ['DRAFT', 'MARKETING'].includes(f.status)).length;
-  const closed = items.filter((f) =>
-    ['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED'].includes(f.status),
-  ).length;
-  const accepted = items.filter((f) =>
-    ['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED'].includes(f.status),
-  ).length;
-  const acceptanceRate = total > 0 ? (accepted / total) * 100 : 0;
-  return { total, pending, closed, acceptanceRate };
+  const placed = items.filter((f) => ['PARTIALLY_PLACED', 'PLACED'].includes(f.status)).length;
+  const partiallyClosed = items.filter((f) => f.status === 'CLOSING').length;
+  const closed = items.filter((f) => f.status === 'CLOSED').length;
+  return { total, placed, partiallyClosed, closed };
 }
 
 function pctChange(current: number, previous: number): number {
@@ -332,20 +327,20 @@ export function useReinsuranceDashboard({ period }: { period: Period }) {
 
     return {
       totalOffers: cur.total,
-      pendingOffers: cur.pending,
+      placedOffers: cur.placed,
+      partiallyClosedOffers: cur.partiallyClosed,
       closedOffers: cur.closed,
-      acceptanceRate: cur.acceptanceRate,
       trends: {
         totalOffers: pctChange(cur.total, prev.total),
-        pendingOffers: pctChange(cur.pending, prev.pending),
+        placedOffers: pctChange(cur.placed, prev.placed),
+        partiallyClosedOffers: pctChange(cur.partiallyClosed, prev.partiallyClosed),
         closedOffers: pctChange(cur.closed, prev.closed),
-        acceptanceRate: pctChange(cur.acceptanceRate, prev.acceptanceRate),
       },
       previous: {
         totalOffers: prev.total,
-        pendingOffers: prev.pending,
+        placedOffers: prev.placed,
+        partiallyClosedOffers: prev.partiallyClosed,
         closedOffers: prev.closed,
-        acceptanceRate: prev.acceptanceRate,
       },
     };
   }, [all, period]);

@@ -88,6 +88,7 @@ export function CreditNoteModal({
     businessDetails,
     offerDetails,
     riskTypeId,
+    description,
   } = placement;
 
   const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
@@ -113,7 +114,7 @@ export function CreditNoteModal({
       ? yourPremium - commissionAmt - nicLevyAmt - withholdingTaxAmt
       : null;
 
-  const rows: CreditNoteRow[] = [
+  const descriptionRows: CreditNoteRow[] = [
     { label: 'Reinsured', value: cedant.name },
     { label: 'Insured', value: title },
     { label: 'Policy Number', value: reference },
@@ -124,7 +125,9 @@ export function CreditNoteModal({
       value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`,
     },
     { label: 'Currency', value: currency ?? '—' },
-    { label: '', divider: true },
+  ];
+
+  const financialRows: CreditNoteRow[] = [
     { label: 'Total Sum Insured', value: fmtAmount(effectiveSumInsured, currency) },
     { label: 'Total Premium', value: fmtAmount(effectivePremium, currency) },
     { label: 'Your Share', pct: `${sharePercent}%` },
@@ -213,7 +216,35 @@ export function CreditNoteModal({
 
       <table className="w-full text-sm border-collapse">
         <tbody>
-          {rows.map((row, i) =>
+          {descriptionRows.map((row, i) => (
+            <tr key={i} className="border-b border-gray-50 last:border-0">
+              <td className="py-2 pr-4 text-gray-500 w-1/2">{row.label}</td>
+              <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
+                {row.pct ?? ''}
+              </td>
+              <td className="py-2 pl-4 text-right w-1/3 whitespace-nowrap text-gray-800">
+                {row.value ?? ''}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {description && (
+        <div className="my-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+            Comment
+          </p>
+          <div
+            className="text-sm text-gray-700"
+            dangerouslySetInnerHTML={{ __html: description }}
+          />
+        </div>
+      )}
+
+      <table className="w-full text-sm border-collapse">
+        <tbody>
+          {financialRows.map((row, i) =>
             row.divider ? (
               <tr key={i}>
                 <td colSpan={3} className="py-1">

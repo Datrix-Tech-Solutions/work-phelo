@@ -38,6 +38,18 @@ export default function FacultativeFormFields({
 
   const periodFrom = watch('periodFrom');
   const periodTo = watch('periodTo');
+
+  const sumInsuredValue = watch('sumInsured');
+  const premiumValue = watch('premium');
+  const computedRate =
+    typeof sumInsuredValue === 'number' &&
+    Number.isFinite(sumInsuredValue) &&
+    typeof premiumValue === 'number' &&
+    Number.isFinite(premiumValue) &&
+    sumInsuredValue > 0
+      ? premiumValue / sumInsuredValue
+      : null;
+  const rateLabel = computedRate != null ? `Rate (${computedRate.toFixed(2)}%)` : 'Rate (%)';
   const riskClassId = watch('riskClassId');
 
   const durationDays =
@@ -268,32 +280,6 @@ export default function FacultativeFormFields({
 
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="100% Sum Insured"
-              type="number"
-              registration={register('sumInsured', {
-                required: 'Sum insured is required',
-                min: { value: 0, message: 'Cannot be negative' },
-                valueAsNumber: true,
-              })}
-              error={errors.sumInsured}
-              placeholder="e.g. 5000000"
-            />
-
-            <FormField
-              label="Rate (%)"
-              type="number"
-              registration={register('rate', {
-                min: { value: 0, message: 'Cannot be negative' },
-                max: { value: 100, message: 'Cannot exceed 100%' },
-                valueAsNumber: true,
-              })}
-              error={errors.rate}
-              placeholder="e.g. 1.5"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <FormField
               label="100% Premium"
               type="number"
               registration={register('premium', {
@@ -304,7 +290,31 @@ export default function FacultativeFormFields({
               error={errors.premium}
               placeholder="e.g. 75000"
             />
+            <FormField
+              label="100% Sum Insured"
+              type="number"
+              registration={register('sumInsured', {
+                required: 'Sum insured is required',
+                min: { value: 0, message: 'Cannot be negative' },
+                valueAsNumber: true,
+              })}
+              error={errors.sumInsured}
+              placeholder="e.g. 5000000"
+            />
+          </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              label={rateLabel}
+              type="number"
+              registration={register('rate', {
+                min: { value: 0, message: 'Cannot be negative' },
+                max: { value: 100, message: 'Cannot exceed 100%' },
+                valueAsNumber: true,
+              })}
+              error={errors.rate}
+              placeholder="e.g. 1.5"
+            />
             <FormField
               label="Facultative Offer (%)"
               type="number"

@@ -16,9 +16,10 @@ export const RAW_STATUS_VARIANT_MAP: Record<FacultativeStatus, StatusVariant> = 
 /**
  * Raw status alone can't tell 'Closed' apart from 'Partially Placed' once a placement has
  * been through CLOSING — reopening a closed offer for edits reuses the CLOSING status, and
- * validating a fully-placed offer moves it into CLOSING too. So for the in-flight statuses
- * (PARTIALLY_PLACED, PLACED, CLOSING) we fall back to the actual accepted percentage against
- * facultativeOffer instead of trusting the raw status.
+ * validating a fully-placed offer moves it into CLOSING too. So for the in-flight CLOSING
+ * status we fall back to the actual accepted percentage against facultativeOffer instead of
+ * trusting the raw status. PLACED, however, means the offer is fully placed but the closing
+ * workflow hasn't been initiated yet — it stays "open" until the user acts on it.
  */
 export function acceptedPercentFor(placement: Facultative): number {
   return (
@@ -36,7 +37,7 @@ export function isEffectivelyClosed(placement: Facultative): boolean {
   ) {
     return true;
   }
-  if (placement.status === 'PLACED' || placement.status === 'CLOSING') {
+  if (placement.status === 'CLOSING') {
     const facOffer = placement.facultativeOffer ?? 0;
     return facOffer > 0 && acceptedPercentFor(placement) >= facOffer;
   }
@@ -67,11 +68,7 @@ export function displayStatusFor(placement: Facultative): {
   label: string;
   variant: StatusVariant;
 } {
-  if (
-    placement.status === 'PARTIALLY_PLACED' ||
-    placement.status === 'PLACED' ||
-    placement.status === 'CLOSING'
-  ) {
+  if (placement.status === 'PARTIALLY_PLACED' || placement.status === 'CLOSING') {
     return isEffectivelyClosed(placement)
       ? { label: 'Closed', variant: 'success' }
       : { label: 'Partially Placed', variant: 'success' };

@@ -51,7 +51,7 @@ export function CompanyInformationForm({
           <label className="text-sm font-bold text-gray-900">Company Name</label>
           <input
             type="text"
-            placeholder="eg; Transport Manager"
+            placeholder="eg; Company Name Limited"
             value={values.companyName}
             onChange={(e) => set('companyName', e.target.value)}
             className={inputClass(errors?.companyName)}
