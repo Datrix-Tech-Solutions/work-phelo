@@ -8,10 +8,10 @@ import { LoadingMark } from '@/components/atoms/LoadingMark';
 import { cn } from '@/lib/utils';
 
 // Deliberate branding pause — keeps the splash from flashing on fast navigations.
-const MIN_VISIBLE_MS = 5000;
+const MIN_VISIBLE_MS = 2500;
 const FADE_MS = 200;
 // Fallback in case navigation stalls or redirects elsewhere (e.g. auth failure).
-const SAFETY_MS = 5000;
+const SAFETY_MS = 2500;
 
 type ArcOrigin = 'top-left' | 'bottom-right' | 'center' | 'top-right' | 'bottom-left';
 

@@ -295,7 +295,9 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleDecline = (row: DistributionEntry) => {
     patch(row.id, { status: 'DECLINED', shareLine: 0 });
-    updateParticipant({ participantId: row.id, sharePercent: 0 })
+    // Also reset signedLinePercent so a previously-accepted (then reverted) participant
+    // doesn't leave a stale signed line that exceeds the new sharePercent.
+    updateParticipant({ participantId: row.id, sharePercent: 0, signedLinePercent: 0 })
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'DECLINED' }))
       .catch((error) => {
         patch(row.id, { status: row.status, shareLine: row.shareLine });

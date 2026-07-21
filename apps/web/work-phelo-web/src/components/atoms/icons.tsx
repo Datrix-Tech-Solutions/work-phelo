@@ -76,6 +76,7 @@ import {
   FileCheck2,
   FileWarning,
   CircleCheckBig,
+  MapPin,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -148,6 +149,7 @@ export const Icons = {
   Handshake,
   FileCheck2,
   FileWarning,
+  MapPin,
 } as const;
 
 export type IconName = keyof typeof Icons;

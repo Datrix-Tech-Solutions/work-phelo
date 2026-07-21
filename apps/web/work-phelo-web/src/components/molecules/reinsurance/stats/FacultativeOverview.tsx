@@ -149,7 +149,7 @@ export function FacultativeOverview({
         {riskEntries.map((entry) => (
           <DetailField key={entry.key} label={entry.label} value={fmtFieldValue(entry.value)} />
         ))}
-        <DetailField label="Rate (%)" value={placement.rate != null ? `${placement.rate}%` : '—'} />
+        {placement.rate != null && <DetailField label="Rate (%)" value={`${placement.rate}%`} />}
         <DetailField
           label="Cedant Commission (%)"
           value={commissionValue != null ? `${commissionValue}%` : '—'}

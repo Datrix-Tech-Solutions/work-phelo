@@ -188,7 +188,11 @@ export function GuaranteeNoteModal({
           }
         />
         <DetailField inline label="Facultative Premium" value={fmtAmount(facPremium, currency)} />
-        <DetailField inline label="Commission" value={fmtAmount(commissionAmount, currency)} />
+        <DetailField
+          inline
+          label={`Commission (${effectiveCommission ?? 0}%)`}
+          value={fmtAmount(commissionAmount, currency)}
+        />
 
         <hr className="border-gray-100 my-1" />
 

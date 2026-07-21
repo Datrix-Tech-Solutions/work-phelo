@@ -36,7 +36,7 @@ export function DashboardStatsRow({ period, currency }: DashboardStatsRowProps) 
   const prevLabel = PERIOD_PREV_LABELS[period];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
       <KpiCard
         label="Total Offers"
         value={data.totalOffers}
@@ -48,17 +48,27 @@ export function DashboardStatsRow({ period, currency }: DashboardStatsRowProps) 
         periodLabel={periodLabel}
       />
       <KpiCard
-        label="Total Pending"
-        value={data.pendingOffers}
-        icon={Icons.Clock}
-        iconColor="#eda100"
-        trend={data.trends.pendingOffers}
-        trendTooltip={`${prevLabel}: ${data.previous.pendingOffers}`}
+        label="Total Placed"
+        value={data.placedOffers}
+        icon={Icons.Handshake}
+        iconColor="#0ea5e9"
+        trend={data.trends.placedOffers}
+        trendTooltip={`${prevLabel}: ${data.previous.placedOffers}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
       />
       <KpiCard
-        label="Total Closed"
+        label="Partial Closed"
+        value={data.partiallyClosedOffers}
+        icon={Icons.CircleCheckBig}
+        iconColor="#eda100"
+        trend={data.trends.partiallyClosedOffers}
+        trendTooltip={`${prevLabel}: ${data.previous.partiallyClosedOffers}`}
+        isLoading={isLoading}
+        periodLabel={periodLabel}
+      />
+      <KpiCard
+        label="Closed"
         value={data.closedOffers}
         icon={Icons.CircleCheck}
         iconColor="#008300"

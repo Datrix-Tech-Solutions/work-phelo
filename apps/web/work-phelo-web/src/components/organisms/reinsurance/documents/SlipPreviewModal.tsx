@@ -79,6 +79,7 @@ export function SlipPreviewModal({
     businessDetails,
     offerDetails,
     riskTypeId,
+    description,
   } = placement;
 
   const { data: reinsurers = [] } = useReinsurers();
@@ -158,6 +159,17 @@ export function SlipPreviewModal({
                 <DetailField key={entry.key} inline label={entry.label} value={formatted} />
               );
             })}
+          </>
+        )}
+
+        {description && (
+          <>
+            <hr className="border-gray-100 my-1" />
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Comment</p>
+            <div
+              className="text-sm text-gray-700"
+              dangerouslySetInnerHTML={{ __html: description }}
+            />
           </>
         )}
 

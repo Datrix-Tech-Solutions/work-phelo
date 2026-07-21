@@ -147,7 +147,7 @@ export function DistributionTable({
       label: 'Participant Share (%)',
       width: 'minmax(150px, 1fr)',
       render: (row) => {
-        const isPaid = isPlacementLocked || row.status === 'CLOSED';
+        const isPaid = isPlacementLocked || row.status === 'CLOSED' || row.status === 'DECLINED';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
         const shareVariant =
           row.status === 'OFFER_SENT' ? 'red' : row.status === 'ACCEPTED' ? 'green' : 'default';
@@ -197,7 +197,7 @@ export function DistributionTable({
       label: 'Brokerage Fee (%)',
       width: 'minmax(150px, 1fr)',
       render: (row) => {
-        const isPaid = isPlacementLocked || row.status === 'CLOSED';
+        const isPaid = isPlacementLocked || row.status === 'CLOSED' || row.status === 'DECLINED';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
         return editingBrokerageId === row.id ? (
           <input
@@ -262,28 +262,51 @@ export function DistributionTable({
           row.status === 'DECLINED' || row.status === 'ACCEPTED' || row.status === 'CLOSED';
         const isBusy = busyIds?.has(row.id) ?? false;
         const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
-        const showAccept = !isPlacementLocked && mailed && !responded;
-        const showDecline = !isPlacementLocked && mailed && !responded;
+        const showPreviewIcon = row.status !== 'DECLINED' && row.status !== 'CLOSED';
+        const showPreviewButton = row.status === 'CLOSED';
+        const showMail =
+          row.status !== 'OFFER_SENT' &&
+          row.status !== 'QUOTED' &&
+          row.status !== 'ACCEPTED' &&
+          row.status !== 'DECLINED' &&
+          row.status !== 'CLOSED';
+        const showAccept =
+          !isPlacementLocked &&
+          (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
+          !responded;
+        const showDecline =
+          !isPlacementLocked &&
+          (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
+          !responded;
         const showRevert = !isPlacementLocked && row.status === 'ACCEPTED';
         const showClose = !isPlacementLocked && row.status === 'ACCEPTED';
         return (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              title="Preview Slip"
-              onClick={() => setSlipPreviewId(row.id)}
-              className="text-blue-500 hover:text-blue-600 transition-colors"
-            >
-              <Icons.Eye className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              title="Send mail"
-              onClick={() => setMailPreviewId(row.id)}
-              className={`text-green-500 hover:text-green-700 transition-colors ${row.status === 'INVITED' ? 'mail-pending-bounce' : ''}`}
-            >
-              <Icons.Mail className="w-5 h-5" />
-            </button>
+            {showPreviewIcon && (
+              <button
+                type="button"
+                title="Preview Slip"
+                onClick={() => setSlipPreviewId(row.id)}
+                className="text-blue-500 hover:text-blue-600 transition-colors"
+              >
+                <Icons.Eye className="w-5 h-5" />
+              </button>
+            )}
+            {showPreviewButton && (
+              <TableButton variant="blue" onClick={() => setSlipPreviewId(row.id)}>
+                Preview Slip
+              </TableButton>
+            )}
+            {showMail && (
+              <button
+                type="button"
+                title="Send mail"
+                onClick={() => setMailPreviewId(row.id)}
+                className={`text-green-500 hover:text-green-700 transition-colors ${row.status === 'INVITED' ? 'mail-pending-bounce' : ''}`}
+              >
+                <Icons.Mail className="w-5 h-5" />
+              </button>
+            )}
             {showAccept && (
               <button
                 type="button"
@@ -335,7 +358,7 @@ export function DistributionTable({
                 Close
               </TableButton>
             )}
-            {!responded && (
+            {!responded && row.status !== 'QUOTED' && row.status !== 'OFFER_SENT' && (
               <button
                 type="button"
                 title="Delete"
