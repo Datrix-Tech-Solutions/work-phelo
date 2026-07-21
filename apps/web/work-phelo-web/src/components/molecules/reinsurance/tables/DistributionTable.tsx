@@ -287,7 +287,7 @@ export function DistributionTable({
             {showAccept && (
               <button
                 type="button"
-                title={isBusy ? 'Accepting line...' : 'Accept'}
+                title={isBusy ? 'Accepting line...' : 'Accept Offer'}
                 onClick={() => {
                   if (!isBusy) handleAccept(row);
                 }}

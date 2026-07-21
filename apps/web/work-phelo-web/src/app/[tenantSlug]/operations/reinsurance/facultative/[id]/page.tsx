@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
@@ -46,6 +46,25 @@ export default function FacultativeDetailPage({
   const [forceCloseOpen, setForceCloseOpen] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding');
   const canForceClose = placement?.status === 'CLOSING';
+
+  const allReinsurersResolved = useMemo(() => {
+    const reinsurers =
+      placement?.participants.filter(
+        (p) => p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER',
+      ) ?? [];
+    return (
+      reinsurers.length > 0 &&
+      reinsurers.every((p) => p.status === 'CLOSED' || p.status === 'DECLINED')
+    );
+  }, [placement?.participants]);
+
+  const [prevAllResolved, setPrevAllResolved] = useState(false);
+  if (allReinsurersResolved !== prevAllResolved) {
+    setPrevAllResolved(allReinsurersResolved);
+    if (allReinsurersResolved) {
+      setActiveTab('closings');
+    }
+  }
 
   const handleForceClose = async () => {
     try {

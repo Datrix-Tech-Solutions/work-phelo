@@ -100,6 +100,7 @@ export function GuaranteeNoteModal({
     .filter(
       (p) =>
         (p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER') &&
+        p.status === 'CLOSED' &&
         parseFloat(p.sharePercent ?? '0') > 0,
     )
     .map((p) => ({

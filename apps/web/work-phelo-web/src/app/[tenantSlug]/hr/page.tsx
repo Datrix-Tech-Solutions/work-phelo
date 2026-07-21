@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useMemo, useRef, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import {
   useMyProfile,
@@ -56,9 +57,20 @@ export default function EmployeeDashboardPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  const router = useRouter();
 
   const user = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN';
+
+  // The dashboard is a self-service "my" view — not available to tenant admins,
+  // send them to the employees list instead.
+  useEffect(() => {
+    if (isTenantAdmin) {
+      router.replace(`/${tenantSlug}/hr/employees`);
+    }
+  }, [isTenantAdmin, router, tenantSlug]);
+
   const fullName = !authLoading
     ? [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Employee'
     : '';
@@ -224,6 +236,8 @@ export default function EmployeeDashboardPage({
     setSeenLeaveIds(new Set(ids));
     localStorage.setItem('dashboard_leave_seen_ids', JSON.stringify(ids));
   };
+
+  if (isTenantAdmin) return null;
 
   return (
     <div className="p-6 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">

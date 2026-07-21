@@ -2,10 +2,17 @@
 
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav, NavTab } from '@/components/organisms/shared/TopNav';
 import { AppBackground } from '@/components/atoms/AppBackground';
+import { MoodSelectorModal } from '@/components/organisms/shared/MoodSelectorModal';
+
+const PORTAL_BACKGROUNDS = [
+  // '/background/backone.jpg',
+  // '/background/backtwo.jpg',
+  '/background/backthree.jpg',
+];
 
 export default function PortalLayout({
   children,
@@ -20,15 +27,23 @@ export default function PortalLayout({
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
   const isTenantAdmin = user?.role === 'TENANT_ADMIN';
 
+  // Picked once per mount (i.e. each fresh visit to the portal, such as after login) so the
+  // three photos rotate. Server and client each roll independently, which is an intentional,
+  // purely cosmetic hydration mismatch — suppressed on the <Image> in AppBackground.
+  const [background] = useState(
+    () => PORTAL_BACKGROUNDS[Math.floor(Math.random() * PORTAL_BACKGROUNDS.length)],
+  );
+
   const tabs: NavTab[] = [{ key: 'modules', label: 'Modules', href: `/${tenantSlug}/modules` }];
   if (isTenantAdmin) {
     tabs.push({ key: 'executive', label: 'Executive Dashboard', href: `/${tenantSlug}/executive` });
   }
 
   return (
-    <AppBackground className="h-screen overflow-hidden flex flex-col">
+    <AppBackground backgroundImage={background} className="h-screen overflow-hidden flex flex-col">
       <TopNav userInitials={initials} notificationCount={0} logoVariant="image" tabs={tabs} />
       {children}
+      <MoodSelectorModal />
     </AppBackground>
   );
 }

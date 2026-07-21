@@ -43,7 +43,12 @@ interface DataTableProps<T extends { id: string | number }> {
     badgeCount?: number;
     icon?: React.ReactNode;
   };
-  secondaryButtons?: { label: string; onClick: () => void; badgeCount?: number }[];
+  secondaryButtons?: {
+    label: string;
+    onClick: () => void;
+    badgeCount?: number;
+    className?: string;
+  }[];
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
   onRowClick?: (row: T) => void;
@@ -225,7 +230,13 @@ export function DataTable<T extends { id: string | number }>({
               </Button>
             )}
             {secondaryButtons?.map((btn, i) => (
-              <Button key={i} variant="secondary" size="sm" onClick={btn.onClick}>
+              <Button
+                key={i}
+                variant="secondary"
+                size="sm"
+                onClick={btn.onClick}
+                className={btn.className}
+              >
                 {btn.label}
                 {(btn.badgeCount ?? 0) > 0 && (
                   <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">

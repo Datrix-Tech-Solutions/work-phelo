@@ -2,6 +2,7 @@
 
 import { Period } from '@/components/atoms/PeriodToggle';
 import { CurrencyAmountListCard } from '@/components/molecules/reinsurance/stats/CurrencyAmountListCard';
+import { QuickActionsCard } from '@/components/molecules/reinsurance/QuickActionsCard';
 import { useReinsuranceFinancialsByCurrency, useCurrencies } from '@/hooks';
 
 interface FinancialStatsRowProps {
@@ -14,13 +15,6 @@ export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-      <CurrencyAmountListCard
-        title="Total Risk"
-        columnLabel="Total Risk"
-        amountsByCode={data.totalRisk}
-        currencies={currencies}
-        isLoading={isLoading}
-      />
       <CurrencyAmountListCard
         title="Sum Insured"
         columnLabel="Sum Insured"
@@ -49,6 +43,7 @@ export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
         currencies={currencies}
         isLoading={isLoading}
       />
+      <QuickActionsCard />
     </div>
   );
 }
