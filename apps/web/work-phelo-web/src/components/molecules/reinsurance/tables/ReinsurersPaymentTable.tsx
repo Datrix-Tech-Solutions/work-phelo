@@ -7,6 +7,8 @@ import { Icons } from '@/components/atoms/icons';
 import { PremiumCreditNoteModal } from '@/components/organisms/reinsurance/documents/PremiumCreditNoteModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { useReinsurers } from '@/hooks';
+import { useReinsuranceCharges } from '@/hooks/reinsurance/useReinsuranceCharges';
+import { isForeignCedant, selectChargeRate } from '@/lib/reinsuranceTax';
 
 interface ReinsurersPaymentTableProps {
   placement: Facultative;
@@ -24,11 +26,20 @@ function fmt(val: number, currency: string | null) {
   return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function participantNetPremium(p: PlacementParticipant, grossPremium: number, commission: number) {
+function participantNetPremium(
+  p: PlacementParticipant,
+  grossPremium: number,
+  commission: number,
+  nicLevyPct: number,
+  withholdingTaxPct: number,
+) {
   const share = parseFloat(p.sharePercent ?? '0') / 100;
   const brokerage = parseFloat(p.brokerageFee ?? '0');
   const yourPremium = share * grossPremium;
-  return yourPremium * (1 - (commission + brokerage) / 100);
+  const commissionAmt = yourPremium * ((commission + brokerage) / 100);
+  const nicLevyAmt = yourPremium * (nicLevyPct / 100);
+  const withholdingTaxAmt = yourPremium * (withholdingTaxPct / 100);
+  return yourPremium - commissionAmt - nicLevyAmt - withholdingTaxAmt;
 }
 
 export function ReinsurersPaymentTable({
@@ -45,6 +56,20 @@ export function ReinsurersPaymentTable({
   const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
 
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: charges } = useReinsuranceCharges();
+
+  const reinsurerById = useMemo(() => new Map(reinsurers.map((r) => [r.id, r])), [reinsurers]);
+
+  const ratesFor = useMemo(
+    () => (counterpartyId: string) => {
+      const foreign = isForeignCedant(reinsurerById.get(counterpartyId));
+      return {
+        nicLevyPct: foreign ? selectChargeRate(charges, 'NIC_LEVY', currency) : 0,
+        withholdingTaxPct: foreign ? selectChargeRate(charges, 'WITHHOLDING_TAX', currency) : 0,
+      };
+    },
+    [reinsurerById, charges, currency],
+  );
 
   const reinsurerEmails = useMemo<Record<string, string[]>>(
     () =>
@@ -71,8 +96,13 @@ export function ReinsurersPaymentTable({
 
   const total = useMemo(
     () =>
-      participants_.reduce((sum, p) => sum + participantNetPremium(p, grossPremium, commission), 0),
-    [participants_, grossPremium, commission],
+      participants_.reduce((sum, p) => {
+        const { nicLevyPct, withholdingTaxPct } = ratesFor(p.counterpartyId);
+        return (
+          sum + participantNetPremium(p, grossPremium, commission, nicLevyPct, withholdingTaxPct)
+        );
+      }, 0),
+    [participants_, grossPremium, commission, ratesFor],
   );
 
   useEffect(() => {
@@ -102,11 +132,17 @@ export function ReinsurersPaymentTable({
         label: 'Premium Share',
         width: '160px',
         className: 'text-right',
-        render: (row) => (
-          <span className="text-gray-900 block text-right">
-            {fmt(participantNetPremium(row, grossPremium, commission), currency)}
-          </span>
-        ),
+        render: (row) => {
+          const { nicLevyPct, withholdingTaxPct } = ratesFor(row.counterpartyId);
+          return (
+            <span className="text-gray-900 block text-right">
+              {fmt(
+                participantNetPremium(row, grossPremium, commission, nicLevyPct, withholdingTaxPct),
+                currency,
+              )}
+            </span>
+          );
+        },
       },
       // {
       //   key: 'allocated',
@@ -155,7 +191,7 @@ export function ReinsurersPaymentTable({
         ),
       },
     ],
-    [grossPremium, commission, currency], //proRataFactor],
+    [grossPremium, commission, currency, ratesFor], //proRataFactor],
   );
 
   return (
@@ -182,6 +218,7 @@ export function ReinsurersPaymentTable({
           brokerageFee={parseFloat(creditNoteTarget.brokerageFee ?? '0')}
           counterpartyId={creditNoteTarget.counterpartyId}
           reinsurerCompany={creditNoteTarget.counterparty.name}
+          {...ratesFor(creditNoteTarget.counterpartyId)}
           onPrint={() => setCreditNoteTarget(null)}
           onClose={() => setCreditNoteTarget(null)}
         />

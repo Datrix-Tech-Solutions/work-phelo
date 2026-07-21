@@ -85,6 +85,7 @@ export function MakeClaimPanel({
       if (claim) {
         reset({
           estimatedLossAmount: claim.estimatedLossAmount,
+          finalLossAmount: claim.finalLossAmount ?? '',
           occurrenceDate: claim.occurrenceDate.split('T')[0],
           reportedDate: claim.reportedDate.split('T')[0],
           claimCause: claim.claimCause,
@@ -122,7 +123,10 @@ export function MakeClaimPanel({
 
     try {
       if (isEditing) {
-        await updateClaim.mutateAsync(payload);
+        await updateClaim.mutateAsync({
+          ...payload,
+          finalLossAmount: values.finalLossAmount ? parseFloat(values.finalLossAmount) : undefined,
+        });
       } else {
         const newClaim = await createClaim.mutateAsync({
           placementId: effectivePlacement.id,
@@ -202,6 +206,7 @@ export function MakeClaimPanel({
           form={form}
           placement={effectivePlacement}
           hidePlacementInfo={showPicker}
+          isEditing={isEditing}
         />
       )}
     </SidePanel>

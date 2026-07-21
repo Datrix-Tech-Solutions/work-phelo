@@ -57,7 +57,8 @@ export function DepartmentFormFields({ form, employees }: DepartmentFormFieldsPr
 
       {employees.length === 0 && (
         <p className="text-xs text-amber-600 mt-1">
-          No employees available yet. Please add some employees first.
+          No employees available yet. Please add some employees first before selecting a department
+          head.
         </p>
       )}
     </>

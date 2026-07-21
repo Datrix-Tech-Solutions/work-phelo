@@ -215,6 +215,7 @@ export function EndorsementReinsurerCertificateModal({
         placement.policyNumber ?? placement.reference,
         riskTypeName,
         placement.title,
+        reinsurerName ? `to ${reinsurerName}` : null,
       )}
       onPrint={onPrint}
       onClose={onClose}

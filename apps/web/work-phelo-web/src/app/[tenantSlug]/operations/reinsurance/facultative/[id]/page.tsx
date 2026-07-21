@@ -10,6 +10,7 @@ import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement, useForceCloseFacultative } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { isEffectivelyClosed } from '@/lib/reinsurance/placementStatus';
 import {
   FacultativeOverview,
   PaymentStatus,
@@ -46,6 +47,11 @@ export default function FacultativeDetailPage({
   const [forceCloseOpen, setForceCloseOpen] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding');
   const canForceClose = placement?.status === 'CLOSING';
+  const showReopen =
+    !!placement &&
+    isEffectivelyClosed(placement) &&
+    placement.status !== 'DECLINED' &&
+    placement.status !== 'CANCELLED';
 
   const allReinsurersResolved = useMemo(() => {
     const reinsurers =
@@ -101,7 +107,7 @@ export default function FacultativeDetailPage({
             )}
             {paymentStatus === 'Outstanding' && (
               <Button size="sm" onClick={() => setEditOpen(true)}>
-                Edit
+                {showReopen ? 'Reopen Offer' : 'Edit'}
               </Button>
             )}
             {canForceClose && (
@@ -151,6 +157,7 @@ export default function FacultativeDetailPage({
           isOpen={editOpen}
           placement={placement}
           onClose={() => setEditOpen(false)}
+          mode={showReopen ? 'reopen' : 'edit'}
         />
       )}
       {placement && (

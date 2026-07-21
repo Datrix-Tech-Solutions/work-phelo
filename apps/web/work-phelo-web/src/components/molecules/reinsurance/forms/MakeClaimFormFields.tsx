@@ -10,6 +10,7 @@ import { Facultative } from '@/types/reinsurance';
 
 export interface MakeClaimFormValues {
   estimatedLossAmount: string;
+  finalLossAmount: string;
   occurrenceDate: string;
   reportedDate: string;
   claimCause: string;
@@ -19,6 +20,7 @@ export interface MakeClaimFormValues {
 
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
   estimatedLossAmount: '',
+  finalLossAmount: '',
   occurrenceDate: '',
   reportedDate: '',
   claimCause: '',
@@ -43,12 +45,15 @@ interface MakeClaimFormFieldsProps {
   /** Skip the read-only Policy Number/Cedant/Class of Business rows — use when
    * that info is already shown by the caller's own placement picker. */
   hidePlacementInfo?: boolean;
+  /** Show the Actual Claim Amount field — only relevant once a claim already exists. */
+  isEditing?: boolean;
 }
 
 export function MakeClaimFormFields({
   form,
   placement,
   hidePlacementInfo,
+  isEditing,
 }: MakeClaimFormFieldsProps) {
   const {
     register,
@@ -92,6 +97,26 @@ export function MakeClaimFormFields({
         step="any"
         error={errors.estimatedLossAmount}
       />
+
+      {isEditing && (
+        <FormField
+          label="Actual Claim Amount"
+          registration={register('finalLossAmount', {
+            validate: (value) => {
+              if (!value) return true;
+              const amount = parseFloat(value);
+              if (placement.sumInsured != null && amount > placement.sumInsured) {
+                return `Actual claim amount cannot exceed the sum insured (${placement.sumInsured.toLocaleString()})`;
+              }
+              return true;
+            },
+          })}
+          placeholder="0.00"
+          type="number"
+          step="any"
+          error={errors.finalLossAmount}
+        />
+      )}
 
       <Controller
         name="currency"

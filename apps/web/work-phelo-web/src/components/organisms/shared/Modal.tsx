@@ -17,6 +17,9 @@ interface ModalProps {
   height?: string;
   hideClose?: boolean;
   fullScreenMobile?: boolean;
+  panelClassName?: string;
+  titleClassName?: string;
+  closeButtonClassName?: string;
 }
 
 export function Modal({
@@ -31,6 +34,9 @@ export function Modal({
   height = 'max-h-[80vh]',
   hideClose = false,
   fullScreenMobile = false,
+  panelClassName = 'bg-white shadow-2xl',
+  titleClassName = 'text-gray-800',
+  closeButtonClassName = 'text-gray-400 hover:text-gray-600',
 }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -64,7 +70,8 @@ export function Modal({
       {/* Dialog */}
       <div
         className={cn(
-          'z-10 bg-white shadow-2xl flex flex-col',
+          'z-10 flex flex-col',
+          panelClassName,
           fullScreenMobile
             ? cn(
                 // mobile: truly full screen
@@ -79,11 +86,11 @@ export function Modal({
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-3 shrink-0">
-          <h2 className="text-lg font-bold text-gray-800">{title}</h2>
+          <h2 className={cn('text-lg font-bold', titleClassName)}>{title}</h2>
           {!hideClose && (
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors mt-0.5 shrink-0"
+              className={cn('transition-colors mt-0.5 shrink-0', closeButtonClassName)}
               aria-label="Close"
             >
               <Icons.X className="w-5 h-5" />

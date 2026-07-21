@@ -156,7 +156,13 @@ export function CreditNoteModal({
       isOpen={isOpen}
       title={`Closings — ${reference}`}
       documentTitle="Closings"
-      fileName={buildDocumentFileName('Closings', policyNumber ?? reference, riskTypeName, title)}
+      fileName={buildDocumentFileName(
+        'Closings',
+        policyNumber ?? reference,
+        riskTypeName,
+        title,
+        reinsurerCompany ? `to ${reinsurerCompany}` : null,
+      )}
       afterContent={
         <div
           style={{

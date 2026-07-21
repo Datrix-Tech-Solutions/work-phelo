@@ -135,21 +135,9 @@ const WORKFLOWS: Workflow[] = [
   {
     id: 'payroll',
     title: 'Run Payroll',
-    tagline: 'Set up compensation policies before processing your first payroll.',
+    tagline: "You're ready to run payroll for your employees.",
     icon: <CircleDollarSign className="w-4 h-4" />,
     steps: [
-      {
-        title: 'Configure Allowances',
-        description: 'Define allowances such as transport, housing, or meal subsidies.',
-        buttonLabel: 'Go to Allowances',
-        href: 'hrmanagement/companyPolicies/allowances',
-      },
-      {
-        title: 'Configure Deductions',
-        description: 'Set up statutory and custom deductions applied to employee pay.',
-        buttonLabel: 'Go to Finances',
-        href: 'hrmanagement/companyPolicies/finances',
-      },
       {
         title: 'Process Payroll',
         description: "You're ready to run payroll for your employees.",
@@ -342,18 +330,17 @@ export function HelpCenter() {
         <button
           onClick={() => setDropdownOpen((v) => !v)}
           className={cn(
-            'text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors',
+            'inline-flex items-center text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors',
             dropdownOpen && 'text-(--module-btn-bg-hover,var(--color-brand-hover))',
           )}
           aria-label="Help"
         >
-          <MessageCircleQuestion className="w-5 h-5" />
-          {showBeacon && (
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500" />
-            </span>
-          )}
+          <span className="relative inline-flex items-center justify-center w-5 h-5">
+            {showBeacon && (
+              <MessageCircleQuestion className="w-5 h-5 absolute inset-0 animate-ping text-orange-400 opacity-75" />
+            )}
+            <MessageCircleQuestion className="w-5 h-5 relative" />
+          </span>
         </button>
 
         {dropdownOpen &&
