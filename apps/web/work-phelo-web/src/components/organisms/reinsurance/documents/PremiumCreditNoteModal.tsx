@@ -81,6 +81,7 @@ export function PremiumCreditNoteModal({
     cedant,
     businessDetails,
     offerDetails,
+    description,
   } = placement;
 
   const offerDetailRows = [
@@ -248,6 +249,16 @@ export function PremiumCreditNoteModal({
             ))}
           </tbody>
         </table>
+
+        {description && (
+          <div>
+            <p className="text-xs font-semibold text-gray-400  tracking-wide mb-1">Kindly Refer:</p>
+            <div
+              className="text-sm text-gray-700"
+              dangerouslySetInnerHTML={{ __html: description }}
+            />
+          </div>
+        )}
       </div>
     </DocumentPreviewModal>
   );

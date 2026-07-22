@@ -186,13 +186,13 @@ export function MultiSelect({
           {selected.map((opt) => (
             <span
               key={opt.value}
-              className="inline-flex items-center gap-1 bg-orange-50 text-orange-600 text-xs font-medium px-2 py-1 rounded-full"
+              className="inline-flex items-center gap-1 bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) text-xs font-medium px-2 py-1 rounded-full"
             >
               {opt.label}
               <button
                 type="button"
                 onClick={() => toggle(opt.value)}
-                className="hover:text-orange-800 transition-colors"
+                className="hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors"
               >
                 <Icons.X className="w-3 h-3" />
               </button>

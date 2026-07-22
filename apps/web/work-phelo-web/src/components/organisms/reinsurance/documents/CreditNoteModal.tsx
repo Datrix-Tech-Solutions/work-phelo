@@ -230,18 +230,6 @@ export function CreditNoteModal({
         </tbody>
       </table>
 
-      {description && (
-        <div className="my-2">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-            Comment
-          </p>
-          <div
-            className="text-sm text-gray-700"
-            dangerouslySetInnerHTML={{ __html: description }}
-          />
-        </div>
-      )}
-
       <table className="w-full text-sm border-collapse">
         <tbody>
           {financialRows.map((row, i) =>
@@ -268,6 +256,17 @@ export function CreditNoteModal({
                 </td>
               </tr>
             ),
+          )}
+          {description && (
+            <div className="my-2">
+              <p className="text-xs font-semibold text-gray-400  tracking-wide mb-1">
+                Kindly Refer:
+              </p>
+              <div
+                className="text-sm text-gray-700"
+                dangerouslySetInnerHTML={{ __html: description }}
+              />
+            </div>
           )}
         </tbody>
       </table>

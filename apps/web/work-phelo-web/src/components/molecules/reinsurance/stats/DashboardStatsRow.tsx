@@ -3,7 +3,7 @@
 import { Period } from '@/components/atoms/PeriodToggle';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { Icons } from '@/components/atoms/icons';
-import { useReinsuranceDashboard, useReinsuranceClaimRatio } from '@/hooks';
+import { useReinsuranceDashboard } from '@/hooks';
 
 const PERIOD_LABELS: Record<Period, string> = {
   daily: 'day',
@@ -21,17 +21,10 @@ const PERIOD_PREV_LABELS: Record<Period, string> = {
 
 interface DashboardStatsRowProps {
   period: Period;
-  currency: string;
 }
 
-export function DashboardStatsRow({ period, currency }: DashboardStatsRowProps) {
+export function DashboardStatsRow({ period }: DashboardStatsRowProps) {
   const { data, isLoading } = useReinsuranceDashboard({ period });
-  const {
-    ratio: claimRatio,
-    trend: claimRatioTrend,
-    prevRatio,
-    isLoading: loadingRatio,
-  } = useReinsuranceClaimRatio({ period, currency });
   const periodLabel = PERIOD_LABELS[period];
   const prevLabel = PERIOD_PREV_LABELS[period];
 
@@ -78,13 +71,13 @@ export function DashboardStatsRow({ period, currency }: DashboardStatsRowProps) 
         periodLabel={periodLabel}
       />
       <KpiCard
-        label="Claim Ratio"
-        value={`${claimRatio.toFixed(1)}%`}
+        label="Closed Rate"
+        value={`${data.closedRate.toFixed(1)}%`}
         icon={Icons.Activity}
         iconColor="#4a3aa7"
-        trend={claimRatioTrend}
-        trendTooltip={`${prevLabel}: ${prevRatio.toFixed(1)}%`}
-        isLoading={loadingRatio}
+        trend={data.trends.closedRate}
+        trendTooltip={`${prevLabel}: ${data.previous.closedRate.toFixed(1)}%`}
+        isLoading={isLoading}
         periodLabel={periodLabel}
       />
     </div>

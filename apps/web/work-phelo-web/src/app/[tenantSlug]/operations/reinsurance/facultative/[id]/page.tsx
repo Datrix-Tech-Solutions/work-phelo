@@ -98,9 +98,7 @@ export default function FacultativeDetailPage({
         </nav>
         {placement && (
           <div className="flex items-center gap-2">
-            {placement.participants.some(
-              (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
-            ) && (
+            {placement.status === 'CLOSED' && (
               <Button size="sm" variant="primary" onClick={() => setEndorsementOpen(true)}>
                 Endorse Policy
               </Button>
