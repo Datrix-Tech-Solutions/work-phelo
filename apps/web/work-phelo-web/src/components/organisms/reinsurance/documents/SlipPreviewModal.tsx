@@ -8,6 +8,7 @@ import { useReinsuranceCharges } from '@/hooks/reinsurance/useReinsuranceCharges
 import { isForeignCedant, selectChargeRate } from '@/lib/reinsuranceTax';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtFieldValue(val: unknown): string {
   if (val == null) return '—';
@@ -72,7 +73,6 @@ export function SlipPreviewModal({
     rate,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
@@ -121,7 +121,7 @@ export function SlipPreviewModal({
       documentTitle="Facultative Offer Slip"
       fileName={buildDocumentFileName(
         'Offer Slip',
-        policyNumber ?? reference,
+        displayPolicyNumber(policyNumber),
         riskTypeName,
         title,
         reinsurer?.name,
@@ -135,7 +135,7 @@ export function SlipPreviewModal({
         </div>
         <Field label="Cover Type" value={classOfBusiness} />
         <Field label="Original Insured" value={title} />
-        <Field label="Policy Number" value={reference} />
+        <Field label="Policy Number" value={displayPolicyNumber(policyNumber)} />
         <Field label="Currency" value={currency} />
         {(inceptionDate || expiryDate) && (
           <Field

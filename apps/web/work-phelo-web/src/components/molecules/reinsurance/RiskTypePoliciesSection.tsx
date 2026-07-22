@@ -6,6 +6,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { StatCard } from '@/components/atoms/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Facultative, toDisplayStatus } from '@/types/reinsurance';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
 
@@ -35,7 +36,9 @@ const POLICY_COLUMNS: Column<Facultative>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: '1fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.reference}</span>,
+    render: (row) => (
+      <span className="font-medium text-gray-900">{displayPolicyNumber(row.policyNumber)}</span>
+    ),
   },
   {
     key: 'title',

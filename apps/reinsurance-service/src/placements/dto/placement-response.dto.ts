@@ -127,6 +127,14 @@ export class PlacementResponseDto {
   @ApiProperty({ example: 'fac-2026-0001' })
   normalizedReference!: string;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'POL-2026-0001',
+    description: 'Cedant-issued policy number, entered by the user.',
+  })
+  policyNumber!: string | null;
+
   @ApiProperty({ example: 'Acme Energy Facultative Placement' })
   title!: string;
 

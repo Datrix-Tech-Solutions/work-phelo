@@ -5,6 +5,7 @@ import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documen
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import { useCedants, useRiskTypes } from '@/hooks';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -75,7 +76,6 @@ export function PaymentReceiptModal({
     commission,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
@@ -145,7 +145,7 @@ export function PaymentReceiptModal({
     { label: 'Reinsured', value: cedant.name },
     { label: 'Policy Type', value: classOfBusiness ?? '—' },
     { label: 'Insured', value: title ?? '—' },
-    { label: 'Policy Number', value: policyNumber ?? reference ?? '—' },
+    { label: 'Policy Number', value: displayPolicyNumber(policyNumber) },
     { label: 'Policy Period', value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}` },
     { label: 'Currency', value: currency ?? '—' },
   ];
@@ -167,11 +167,11 @@ export function PaymentReceiptModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Payment Receipt — ${reference}`}
+      title={`Payment Receipt — ${displayPolicyNumber(policyNumber)}`}
       documentTitle="Payment Receipt"
       fileName={buildDocumentFileName(
         'Payment Receipt',
-        policyNumber ?? reference,
+        displayPolicyNumber(policyNumber),
         riskTypeName,
         title,
       )}
@@ -184,7 +184,9 @@ export function PaymentReceiptModal({
         <div className="flex items-start justify-between">
           <div>
             <span className="text-xs text-gray-400 uppercase tracking-wide">Receipt No.</span>
-            <p className="font-semibold text-gray-900">{payment.reference ?? reference ?? '—'}</p>
+            <p className="font-semibold text-gray-900">
+              {payment.reference ?? displayPolicyNumber(policyNumber)}
+            </p>
           </div>
           <div className="text-right">
             <span className="text-xs text-gray-400 uppercase tracking-wide">Date</span>

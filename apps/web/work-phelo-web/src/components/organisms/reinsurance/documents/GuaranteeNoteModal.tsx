@@ -6,6 +6,7 @@ import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { useCedants, useRiskTypes } from '@/hooks';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
@@ -64,7 +65,6 @@ export function GuaranteeNoteModal({
     commission,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
@@ -102,11 +102,11 @@ export function GuaranteeNoteModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Guarantee Note — ${reference}`}
+      title={`Guarantee Note — ${displayPolicyNumber(policyNumber)}`}
       documentTitle="Guarantee Note"
       fileName={buildDocumentFileName(
         'Guarantee Note',
-        policyNumber ?? reference,
+        displayPolicyNumber(policyNumber),
         riskTypeName,
         title,
         `to ${displayName}`,
@@ -165,7 +165,7 @@ export function GuaranteeNoteModal({
 
         <DetailField inline label="Cover Type" value={classOfBusiness ?? '—'} />
         <DetailField inline label="Reinsured" value={cedant.name} />
-        <DetailField inline label="Policy Number" value={reference} />
+        <DetailField inline label="Policy Number" value={displayPolicyNumber(policyNumber)} />
         <DetailField inline label="Original Insured" value={title} />
         <DetailField inline label="Currency" value={currency ?? '—'} />
         <DetailField

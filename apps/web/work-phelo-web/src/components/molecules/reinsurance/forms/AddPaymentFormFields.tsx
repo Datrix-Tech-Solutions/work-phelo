@@ -8,6 +8,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useFacultatives, useCurrencyOptions } from '@/hooks';
 import { cn, inputClass } from '@/lib/utils';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 export interface AddPaymentFormValues {
   cedantId: string;
@@ -121,7 +122,7 @@ export function AddPaymentFormFields({
           ].filter(Boolean);
           return {
             value: f.id,
-            label: `${f.policyNumber ?? f.reference} · ${f.title}`,
+            label: `${displayPolicyNumber(f.policyNumber)} · ${f.title}`,
             sublabel: parts.join(' · '),
           };
         }),
@@ -222,7 +223,7 @@ export function AddPaymentFormFields({
           <div key={f.id} className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">
-                {f.policyNumber ?? f.reference}
+                {displayPolicyNumber(f.policyNumber)}
               </p>
               <p className="text-xs text-gray-400">
                 {f.currency ? `${f.currency} ` : ''}
@@ -457,7 +458,10 @@ export function AddPaymentFormFields({
     return (
       <div className="flex flex-col gap-5">
         <ReadOnlyField label="Cedant" value={preFilledPlacement.cedant.name} />
-        <ReadOnlyField label="Business" value={preFilledPlacement.reference} />
+        <ReadOnlyField
+          label="Business"
+          value={displayPolicyNumber(preFilledPlacement.policyNumber)}
+        />
         {paymentTypeField}
         {chequeFields}
         {bankFields}

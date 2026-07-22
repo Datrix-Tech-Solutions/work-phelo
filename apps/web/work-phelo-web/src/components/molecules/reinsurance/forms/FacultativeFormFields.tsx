@@ -258,11 +258,11 @@ export default function FacultativeFormFields({
           <div className="grid grid-cols-2 gap-3">
             <FormField
               label="Policy Number"
-              registration={register('reference', {
+              registration={register('policyNumber', {
                 minLength: { value: 2, message: 'Min 2 characters' },
                 maxLength: { value: 80, message: 'Max 80 characters' },
               })}
-              error={errors.reference}
+              error={errors.policyNumber}
               placeholder="e.g. POL-2024-001"
             />
 

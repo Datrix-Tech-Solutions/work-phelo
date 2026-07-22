@@ -9,6 +9,7 @@ import { Facultative, FacultativeStatus, isEndorsementSentToMarket } from '@/typ
 import { usePlacementEndorsements, usePlacementEffectiveView, usePlacementPayments } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 export type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
@@ -139,7 +140,7 @@ export function FacultativeOverview({
     >
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
         <DetailField label="Class of Risk" value={placement.classOfBusiness ?? '—'} />
-        <DetailField label="Policy No." value={placement.reference} />
+        <DetailField label="Policy No." value={displayPolicyNumber(placement.policyNumber)} />
         <DetailField label="Reinsured" value={placement.cedant.name} />
         <DetailField label="Insured" value={placement.title} />
         <DetailField

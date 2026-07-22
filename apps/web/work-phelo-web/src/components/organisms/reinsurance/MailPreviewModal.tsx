@@ -9,6 +9,7 @@ import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
 import { Icons } from '@/components/atoms/icons';
 import { inputClass } from '@/lib/utils';
 import { Facultative, PlacementClaim, PlacementClaimAllocation } from '@/types/reinsurance';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   useUpdateClaimStatus,
   useCreateClaimCashCall,
@@ -197,7 +198,7 @@ export function MailPreviewModal({
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder={`Facultative Offer — ${placement.reference}`}
+            placeholder={`Facultative Offer — ${displayPolicyNumber(placement.policyNumber)}`}
             className={inputClass()}
           />
         </div>

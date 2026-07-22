@@ -17,6 +17,7 @@ import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/document
 import { useReinsurers, useCedants, useClaimAllocations } from '@/hooks';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import { cardClass } from '@/lib/utils';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const CLAIM_STATUS_VARIANT: Record<
   PlacementClaimStatus,
@@ -87,10 +88,9 @@ function ClaimDetailsPanel({
     <div className={cardClass('flex flex-col gap-3 p-5')}>
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-900">{placement.reference ?? '—'}</span>
-          {placement.policyNumber && (
-            <span className="text-xs text-gray-400">{placement.policyNumber}</span>
-          )}
+          <span className="text-sm font-semibold text-gray-900">
+            {displayPolicyNumber(placement.policyNumber)}
+          </span>
         </div>
         <div className="flex items-center gap-3">
           {placement.cedant?.name && (

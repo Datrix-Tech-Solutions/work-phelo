@@ -1,11 +1,12 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import { FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@/types/reinsurance';
-import { useCreateFacultative, useRiskTypes } from '@/hooks';
+import { useCreateFacultative, useNextFacultativeReference, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { normalizeComment, splitPlacementDetails } from '@/lib/reinsurance/placementFormDetails';
 import { useToastStore } from '@/store/toast.store';
@@ -23,11 +24,19 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
   const {
     handleSubmit,
     reset,
+    setValue,
     formState: { isSubmitting },
   } = form;
 
   const { mutateAsync: createFacultative } = useCreateFacultative();
   const { data: allRiskTypes = [] } = useRiskTypes();
+  const { data: generatedReference } = useNextFacultativeReference(isOpen);
+
+  useEffect(() => {
+    if (isOpen && generatedReference) {
+      setValue('reference', generatedReference);
+    }
+  }, [isOpen, generatedReference, setValue]);
 
   const handleClose = () => {
     reset();
@@ -47,6 +56,7 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
         cedantId: values.insuranceCompany,
         riskTypeId: values.riskType,
         reference: values.reference,
+        policyNumber: values.policyNumber || undefined,
         title: values.title,
         description: normalizeComment(values.comment),
         sumInsured: values.sumInsured as number,
@@ -79,7 +89,12 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} isLoading={isSubmitting} loadingText="Saving…">
+          <Button
+            onClick={handleSubmit(onSubmit)}
+            isLoading={isSubmitting}
+            disabled={!generatedReference}
+            loadingText="Saving…"
+          >
             Save
           </Button>
         </div>

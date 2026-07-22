@@ -16,6 +16,7 @@ import {
 } from '@/types/reinsurance';
 import { useCedants, useFacultatives, usePlacementPayments } from '@/hooks';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
 
@@ -134,7 +135,9 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: '140px',
-    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
+    render: (row) => (
+      <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
+    ),
   },
   {
     key: 'title',
@@ -292,7 +295,7 @@ export function PaymentsTable() {
       const q = search.toLowerCase();
       rows = rows.filter(
         (r) =>
-          r.reference.toLowerCase().includes(q) ||
+          (r.policyNumber?.toLowerCase().includes(q) ?? false) ||
           r.title.toLowerCase().includes(q) ||
           (r.classOfBusiness?.toLowerCase().includes(q) ?? false),
       );

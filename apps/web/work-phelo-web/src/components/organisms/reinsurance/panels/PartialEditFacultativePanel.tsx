@@ -42,7 +42,7 @@ export function PartialEditFacultativePanel({
   placement,
   onClose,
 }: PartialEditFacultativePanelProps) {
-  const [reference, setReference] = useState(placement.reference);
+  const [policyNumber, setPolicyNumber] = useState(placement.policyNumber ?? '');
 
   const riskEntries = [
     ...placementDetailEntries(placement.businessDetails),
@@ -90,8 +90,8 @@ export function PartialEditFacultativePanel({
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Policy Number"
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
+                value={policyNumber}
+                onChange={(e) => setPolicyNumber(e.target.value)}
                 placeholder="e.g. POL-2024-001"
               />
               <DetailField label="Insured" value={placement.title} />

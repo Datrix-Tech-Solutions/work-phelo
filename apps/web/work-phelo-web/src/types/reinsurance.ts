@@ -448,6 +448,7 @@ export interface CreateFacultativePayload {
   cedantId: string;
   riskTypeId: string;
   reference: string;
+  policyNumber?: string;
   title: string;
   description?: string;
   sumInsured: number;
@@ -946,6 +947,7 @@ export interface FacultativeFormValues {
   riskClassId: string;
   riskType: string;
   reference: string;
+  policyNumber: string;
   title: string;
   insured: string;
   sumInsured: number | '';
@@ -972,6 +974,7 @@ export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   riskClassId: '',
   riskType: '',
   reference: '',
+  policyNumber: '',
   title: '',
   insured: '',
   sumInsured: '',

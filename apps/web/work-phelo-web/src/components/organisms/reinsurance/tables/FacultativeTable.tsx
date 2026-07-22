@@ -25,6 +25,7 @@ import {
   useRestoreFacultative,
 } from '@/hooks';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   acceptedPercentFor,
   facultativeStatusLabel,
@@ -128,7 +129,9 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: '150px',
-    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
+    render: (row) => (
+      <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
+    ),
   },
   {
     key: 'title',
@@ -315,7 +318,7 @@ export function FacultativeTable({
       const q = search.toLowerCase();
       rows = rows.filter(
         (r) =>
-          r.reference.toLowerCase().includes(q) ||
+          (r.policyNumber?.toLowerCase().includes(q) ?? false) ||
           r.cedant.name.toLowerCase().includes(q) ||
           r.title.toLowerCase().includes(q) ||
           (r.classOfBusiness?.toLowerCase().includes(q) ?? false),
@@ -653,7 +656,7 @@ export function FacultativeTable({
         isOpen={!!restoreTarget}
         onClose={() => setRestoreTarget(null)}
         title="Restore Placement?"
-        description={`Restore "${restoreTarget?.reference}" to the active facultative list?`}
+        description={`Restore "${displayPolicyNumber(restoreTarget?.policyNumber)}" to the active facultative list?`}
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setRestoreTarget(null)} disabled={isRestoring}>
@@ -670,7 +673,7 @@ export function FacultativeTable({
         isOpen={!!forceCloseTarget}
         onClose={() => setForceCloseTarget(null)}
         title="Force Close Placement?"
-        description={`This bypasses the normal close workflow and closes "${forceCloseTarget?.reference}" at its actual placed capacity. Outstanding workflow history is preserved, but the offer will no longer accept changes.`}
+        description={`This bypasses the normal close workflow and closes "${displayPolicyNumber(forceCloseTarget?.policyNumber)}" at its actual placed capacity. Outstanding workflow history is preserved, but the offer will no longer accept changes.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button

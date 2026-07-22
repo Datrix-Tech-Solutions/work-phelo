@@ -4,6 +4,7 @@ import React from 'react';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Counterparty, Facultative, PlacementEndorsement } from '@/types/reinsurance';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { useRiskTypes } from '@/hooks';
 
 function fmtDate(iso: string | null | undefined) {
@@ -175,7 +176,7 @@ export function EndorsementCertificateModal({
       documentTitle="Endorsement Certificate"
       fileName={buildDocumentFileName(
         'Endorsement Certificate',
-        placement.policyNumber ?? placement.reference,
+        displayPolicyNumber(placement.policyNumber),
         riskTypeName,
         placement.title,
         `to ${placement.cedant.name}`,
@@ -204,7 +205,7 @@ export function EndorsementCertificateModal({
           {[
             { label: 'Cedant', value: placement.cedant.name },
             { label: 'Insured', value: fmtVal(placement.title) },
-            { label: 'Slip No.', value: fmtVal(placement.reference) },
+            { label: 'Policy Number', value: displayPolicyNumber(placement.policyNumber) },
             { label: 'Endorsement No.', value: endorsement.endorsementNumber },
             { label: 'Effective Date', value: fmtDate(endorsement.effectiveDate) },
             { label: 'Currency', value: fmtVal(placement.currency) },

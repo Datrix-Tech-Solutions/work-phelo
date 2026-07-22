@@ -392,6 +392,7 @@ model Placement {
   tenantId                String
   reference               String
   normalizedReference     String
+  policyNumber            String?
   title                   String
   placementType           PlacementType                     @default(FACULTATIVE)
   status                  PlacementStatus                   @default(DRAFT)

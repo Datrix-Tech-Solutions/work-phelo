@@ -6,6 +6,7 @@ import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultatives, usePlacementClaims } from '@/hooks';
 import AddClaimPaymentForm from '@/components/organisms/reinsurance/AddClaimPaymentForm';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function SelectedClaimCard({ placementId }: { placementId: string }) {
   const { data: facultatives = [] } = useFacultatives();
@@ -19,7 +20,7 @@ function SelectedClaimCard({ placementId }: { placementId: string }) {
     <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-900">
-          {placement.policyNumber ?? placement.reference}
+          {displayPolicyNumber(placement.policyNumber)}
         </span>
         <span className="text-xs text-gray-400">{placement.cedant.name}</span>
       </div>
