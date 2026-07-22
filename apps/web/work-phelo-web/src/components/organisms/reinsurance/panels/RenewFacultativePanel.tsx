@@ -6,31 +6,25 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import { Facultative, FacultativeFormValues } from '@/types/reinsurance';
-import { useUpdateFacultative, useUpdateFacultativeStatus, useRiskTypes } from '@/hooks';
+import { useCreateFacultative, useNextFacultativeReference, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import {
+  normalizeComment,
   placementToFormValues,
   splitPlacementDetails,
 } from '@/lib/reinsurance/placementFormDetails';
+import { computeRenewalPeriod } from '@/lib/reinsurance/renewalDates';
 import { useToastStore } from '@/store/toast.store';
 
-interface EditFacultativePanelProps {
+interface RenewFacultativePanelProps {
   isOpen: boolean;
   placement: Facultative;
   onClose: () => void;
-  mode?: 'edit' | 'reopen';
 }
 
-export function EditFacultativePanel({
-  isOpen,
-  placement,
-  onClose,
-  mode = 'edit',
-}: EditFacultativePanelProps) {
-  const isReopen = mode === 'reopen';
-  const { mutateAsync: updateFacultative } = useUpdateFacultative();
-  const { mutateAsync: updateFacultativeStatus } = useUpdateFacultativeStatus(placement.id);
+export function RenewFacultativePanel({ isOpen, placement, onClose }: RenewFacultativePanelProps) {
   const { data: allRiskTypes = [] } = useRiskTypes();
+  const { data: generatedReference } = useNextFacultativeReference(isOpen);
 
   const form = useForm<FacultativeFormValues>({
     defaultValues: placementToFormValues(placement, allRiskTypes),
@@ -39,15 +33,30 @@ export function EditFacultativePanel({
   const {
     handleSubmit,
     reset,
+    setValue,
     formState: { isSubmitting },
   } = form;
 
+  const { mutateAsync: createFacultative } = useCreateFacultative();
+
   useEffect(() => {
-    if (isOpen) {
-      reset(placementToFormValues(placement, allRiskTypes));
+    if (!isOpen) return;
+    const { periodFrom, periodTo } = computeRenewalPeriod(
+      placement.inceptionDate,
+      placement.expiryDate,
+    );
+    reset({
+      ...placementToFormValues(placement, allRiskTypes),
+      periodFrom,
+      periodTo,
+    });
+  }, [isOpen, placement, allRiskTypes, reset]);
+
+  useEffect(() => {
+    if (isOpen && generatedReference) {
+      setValue('reference', generatedReference);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, placement, reset]);
+  }, [isOpen, generatedReference, setValue]);
 
   const handleClose = () => {
     reset();
@@ -56,12 +65,6 @@ export function EditFacultativePanel({
 
   const onSubmit = async (values: FacultativeFormValues) => {
     try {
-      // Reopening moves the placement out of its terminal PLACED/CLOSED status first — a
-      // CLOSED placement can't have its fields edited directly until it's out of that status.
-      if (isReopen) {
-        await updateFacultativeStatus({ status: 'CLOSING' });
-      }
-
       const selectedRiskType = allRiskTypes.find((rt) => rt.id === values.riskType);
       const { businessDetails, offerDetails } = splitPlacementDetails(
         values.riskDetails,
@@ -69,13 +72,13 @@ export function EditFacultativePanel({
         values.extraRiskFields ?? [],
       );
 
-      await updateFacultative({
-        id: placement.id,
-        riskTypeId: values.riskType || undefined,
+      await createFacultative({
+        cedantId: values.insuranceCompany,
+        riskTypeId: values.riskType,
         reference: values.reference,
         policyNumber: values.policyNumber || undefined,
         title: values.title,
-        description: values.comment,
+        description: normalizeComment(values.comment),
         sumInsured: values.sumInsured as number,
         rate: values.rate as number,
         premium: values.premium as number,
@@ -87,10 +90,9 @@ export function EditFacultativePanel({
         businessDetails,
         offerDetails,
       });
-      useToastStore.getState().addToast({
-        message: isReopen ? 'Offer reopened for editing' : 'Placement updated successfully',
-        type: 'success',
-      });
+      useToastStore
+        .getState()
+        .addToast({ message: 'Renewal offer created successfully', type: 'success' });
       handleClose();
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
@@ -101,7 +103,7 @@ export function EditFacultativePanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title={isReopen ? 'Reopen Facultative Placement' : 'Edit Facultative Placement'}
+      title="Renew Facultative Placement"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
@@ -110,9 +112,10 @@ export function EditFacultativePanel({
           <Button
             onClick={handleSubmit(onSubmit)}
             isLoading={isSubmitting}
-            loadingText={isReopen ? 'Reopening…' : 'Saving…'}
+            disabled={!generatedReference}
+            loadingText="Saving…"
           >
-            {isReopen ? 'Reopen Offer' : 'Save Changes'}
+            Create Renewal
           </Button>
         </div>
       }

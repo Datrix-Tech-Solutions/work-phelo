@@ -341,14 +341,7 @@ describe('PlacementsService', () => {
         }
         return Promise.resolve();
       }),
-      assertArchivable: jest.fn((item: { status: PlacementStatus }) => {
-        if (item.status === PlacementStatus.CLOSED) {
-          return Promise.reject(
-            new BadRequestException('Cannot archive a closed placement'),
-          );
-        }
-        return Promise.resolve();
-      }),
+      assertArchivable: jest.fn().mockResolvedValue(undefined),
     };
     service = new PlacementsService(
       prisma as unknown as PrismaService,
@@ -1888,6 +1881,20 @@ describe('PlacementsService', () => {
       ConflictException,
     );
     expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('archives a closed placement that has no financial activity', async () => {
+    const closed = { ...placement, status: PlacementStatus.CLOSED };
+    prisma.placement.findFirst.mockResolvedValue(closed);
+    prisma.placement.update.mockResolvedValue({
+      ...closed,
+      archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      archivedByUserId: 'user-1',
+    });
+
+    await service.archive(user, 'placement-1');
+
+    expect(prisma.placement.update).toHaveBeenCalled();
   });
 
   it('restores an archived placement and clears archive metadata', async () => {

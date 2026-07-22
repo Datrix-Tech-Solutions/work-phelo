@@ -69,4 +69,22 @@ describe('PlacementFinancialLockPolicy', () => {
       lockSource: 'STATUS_TERMINAL',
     });
   });
+
+  it('allows archiving a closed placement that has no financial activity', async () => {
+    const closed = { ...placement, status: PlacementStatus.CLOSED };
+
+    await expect(policy.assertArchivable(closed)).resolves.toBeUndefined();
+  });
+
+  it('blocks archiving any placement with financial activity, regardless of status', async () => {
+    reader.findLockingActivity.mockResolvedValue({
+      source: 'PREMIUM_PAYMENT',
+      lockedAt: new Date('2026-06-04T10:00:00.000Z'),
+    });
+    const closed = { ...placement, status: PlacementStatus.CLOSED };
+
+    await expect(policy.assertArchivable(closed)).rejects.toThrow(
+      ConflictException,
+    );
+  });
 });

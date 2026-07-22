@@ -1,4 +1,10 @@
-import { RiskTypeField } from '@/types/reinsurance';
+import {
+  Facultative,
+  FacultativeFormValues,
+  FACULTATIVE_FORM_DEFAULTS,
+  RiskType,
+  RiskTypeField,
+} from '@/types/reinsurance';
 
 export type PlacementCustomField = {
   id?: string;
@@ -154,6 +160,42 @@ export function extractPlacementCustomFields(
       type: 'TEXT',
       displayOrder: index + 1,
     }));
+}
+
+export function placementToFormValues(
+  placement: Facultative,
+  allRiskTypes: RiskType[],
+): FacultativeFormValues {
+  const selectedRiskType = allRiskTypes.find((rt) => rt.id === placement.riskTypeId);
+  const schemaKeys = new Set(
+    (selectedRiskType?.fields ?? []).filter((f) => f.isActive).map((f) => f.fieldKey),
+  );
+
+  const extraRiskFields = extractPlacementCustomFields(
+    placement.businessDetails,
+    placement.offerDetails,
+    schemaKeys,
+  );
+
+  return {
+    ...FACULTATIVE_FORM_DEFAULTS,
+    insuranceCompany: placement.cedant.id,
+    riskType: placement.riskTypeId ?? '',
+    reference: placement.reference,
+    policyNumber: placement.policyNumber ?? '',
+    title: placement.title,
+    sumInsured: placement.sumInsured ?? '',
+    rate: placement.rate ?? '',
+    premium: placement.premium ?? '',
+    facultativeOffer: placement.facultativeOffer ?? '',
+    commission: placement.commission ?? '',
+    currency: placement.currency ?? '',
+    periodFrom: placement.inceptionDate ?? '',
+    periodTo: placement.expiryDate ?? '',
+    comment: placement.description ?? '',
+    riskDetails: mergePlacementRiskDetails(placement.businessDetails, placement.offerDetails),
+    extraRiskFields,
+  };
 }
 
 export function placementDetailEntries(
