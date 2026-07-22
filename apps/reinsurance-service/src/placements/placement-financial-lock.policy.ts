@@ -80,9 +80,6 @@ export class PlacementFinancialLockPolicy {
     if (status.locked) {
       throw new ConflictException(status.reason);
     }
-    if (placement.status === PlacementStatus.CLOSED) {
-      throw new BadRequestException('Cannot archive a closed placement');
-    }
   }
 
   private isTerminalStatus(status: PlacementStatus): boolean {

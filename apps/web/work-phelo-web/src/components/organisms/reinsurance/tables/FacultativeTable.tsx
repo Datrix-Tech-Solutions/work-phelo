@@ -14,6 +14,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panels/CreateFacultativePanel';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { PartialEditFacultativePanel } from '@/components/organisms/reinsurance/panels/PartialEditFacultativePanel';
+import { RenewFacultativePanel } from '@/components/organisms/reinsurance/panels/RenewFacultativePanel';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import {
   useArchivedFacultatives,
@@ -256,6 +257,7 @@ export function FacultativeTable({
   const [restoreTarget, setRestoreTarget] = useState<Facultative | null>(null);
   const [reopenTarget, setReopenTarget] = useState<Facultative | null>(null);
   const [partialEditTarget, setPartialEditTarget] = useState<Facultative | null>(null);
+  const [renewTarget, setRenewTarget] = useState<Facultative | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
   const [forceCloseTarget, setForceCloseTarget] = useState<Facultative | null>(null);
 
@@ -390,6 +392,26 @@ export function FacultativeTable({
     return map;
   }, [paged, openPaymentQueries, tab]);
 
+  const openPaymentStatusMap = useMemo(() => {
+    const map = new Map<string, PaymentStatus>();
+    if (tab !== 'placements') return map;
+    paged.forEach((row, i) => {
+      const payments = openPaymentQueries[i]?.data ?? [];
+      const deductionRate = isForeignCedant(cedants.find((c) => c.id === row.cedant.id))
+        ? FOREIGN_CEDANT_DEDUCTION_RATE
+        : 0;
+      const netPremium = netPremiumFor(row, deductionRate);
+      const paid = payments
+        .filter((p) => p.status === 'RECORDED')
+        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      let status: PaymentStatus = 'Outstanding';
+      if (netPremium > 0 && paid >= netPremium) status = 'Paid';
+      else if (paid > 0) status = 'Part Payment';
+      map.set(row.id, status);
+    });
+    return map;
+  }, [paged, openPaymentQueries, tab, cedants]);
+
   const columns = useMemo<Column<Facultative>[]>(() => {
     if (tab === 'closing') {
       return COLUMNS.map((col) => (col.key === 'totalAcceptedPercent' ? SUM_INSURED_COLUMN : col));
@@ -474,6 +496,12 @@ export function FacultativeTable({
       tab === 'closing' ? '?from=closing' : ''
     }`;
 
+    const renewAction: RowAction = {
+      label: 'Renew Offer',
+      onClick: () => setRenewTarget(row),
+      variant: 'success',
+    };
+
     if (tab === 'closing' && row.status !== 'DECLINED' && row.status !== 'CANCELLED') {
       const paymentStatus = paymentStatusMap.get(row.id) ?? 'Outstanding';
       const partialEditAction: RowAction = {
@@ -482,21 +510,32 @@ export function FacultativeTable({
       };
 
       if (paymentStatus === 'Paid' || paymentStatus === 'Part Payment') {
-        return [{ label: 'View Offer', onClick: () => router.push(detailUrl) }, partialEditAction];
+        return [
+          { label: 'View Offer', onClick: () => router.push(detailUrl) },
+          partialEditAction,
+          renewAction,
+        ];
       }
 
       return [
         { label: 'View Offer Details', onClick: () => router.push(detailUrl) },
         { label: 'Reopen Offer', onClick: () => setReopenTarget(row) },
         partialEditAction,
+        { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
+        renewAction,
       ];
     }
 
     if (tab === 'placements') {
-      const closeAction: RowAction =
+      const paymentStatus = openPaymentStatusMap.get(row.id) ?? 'Outstanding';
+      const canArchive = paymentStatus === 'Outstanding';
+      const forceCloseAction: RowAction | null =
         row.status === 'CLOSING'
           ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
-          : { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true };
+          : null;
+      const archiveAction: RowAction | null = canArchive
+        ? { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }
+        : null;
       const editAction: RowAction = hasPaymentMap.get(row.id)
         ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
         : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
@@ -504,14 +543,22 @@ export function FacultativeTable({
       return [
         { label: 'View Offer', onClick: () => router.push(detailUrl) },
         editAction,
-        closeAction,
+        ...(forceCloseAction ? [forceCloseAction] : []),
+        ...(archiveAction ? [archiveAction] : []),
+        renewAction,
       ];
     }
+
+    const fallbackPaymentStatus = paymentStatusMap.get(row.id) ?? 'Outstanding';
+    const canArchiveFallback = fallbackPaymentStatus === 'Outstanding';
 
     return [
       { label: 'View', onClick: () => router.push(detailUrl) },
       { label: 'Edit Slip', onClick: () => setEditTarget(row) },
-      { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
+      ...(canArchiveFallback
+        ? [{ label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }]
+        : []),
+      renewAction,
     ];
   };
 
@@ -615,6 +662,14 @@ export function FacultativeTable({
           isOpen={!!partialEditTarget}
           placement={partialEditTarget}
           onClose={() => setPartialEditTarget(null)}
+        />
+      )}
+
+      {renewTarget && (
+        <RenewFacultativePanel
+          isOpen={!!renewTarget}
+          placement={renewTarget}
+          onClose={() => setRenewTarget(null)}
         />
       )}
 

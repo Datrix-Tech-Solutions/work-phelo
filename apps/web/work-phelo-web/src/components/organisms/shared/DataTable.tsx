@@ -21,6 +21,8 @@ export interface RowAction {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  /** Additional color options beyond the default/danger split. */
+  variant?: 'success';
 }
 
 interface DataTableProps<T extends { id: string | number }> {
@@ -104,7 +106,7 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
                 position: 'fixed',
                 right: menuPos.right,
                 ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
-                minWidth: 140,
+                width: 176,
               }}
               className="z-50 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden"
             >
@@ -118,7 +120,11 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
                   }}
                   className={cn(
                     'w-full text-left px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
-                    action.danger ? 'text-red-600' : 'text-gray-700',
+                    action.danger
+                      ? 'text-red-600'
+                      : action.variant === 'success'
+                        ? 'text-blue-600'
+                        : 'text-gray-700',
                   )}
                 >
                   {action.label}
@@ -378,7 +384,9 @@ export function DataTable<T extends { id: string | number }>({
                                     'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
                                     action.danger
                                       ? 'text-red-600 hover:bg-red-50'
-                                      : 'text-brand hover:bg-brand/5',
+                                      : action.variant === 'success'
+                                        ? 'text-blue-600 hover:bg-blue-50'
+                                        : 'text-brand hover:bg-brand/5',
                                   )}
                                 >
                                   {action.label}
