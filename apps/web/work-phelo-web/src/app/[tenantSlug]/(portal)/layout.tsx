@@ -41,7 +41,13 @@ export default function PortalLayout({
 
   return (
     <AppBackground backgroundImage={background} className="h-screen overflow-hidden flex flex-col">
-      <TopNav userInitials={initials} notificationCount={0} logoVariant="image" tabs={tabs} />
+      <TopNav
+        userInitials={initials}
+        notificationCount={0}
+        logoVariant="image"
+        //remember to comment out the tabs when pushing to production because the executive dashboard is not ready yet
+        // tabs={tabs}
+      />
       {children}
       <MoodSelectorModal />
     </AppBackground>

@@ -36,10 +36,11 @@ function toPayrollItems(allowances: EmployeeAllowance[]): AllowanceItem[] {
 interface FormState {
   type: AllowanceType | '';
   amount: string;
+  name: string;
 }
 
 function emptyForm(): FormState {
-  return { type: '', amount: '' };
+  return { type: '', amount: '', name: '' };
 }
 
 function AllowanceCard({
@@ -67,7 +68,7 @@ function AllowanceCard({
         <span
           className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${typeColor}`}
         >
-          {typeLabel}
+          {item.type === 'OTHER' ? item.name : typeLabel}
         </span>
         <p className="text-sm font-semibold text-gray-900">
           {formatPayrollMoney(Number(item.amount), payrollCurrency, payrollCountry)}
@@ -131,6 +132,7 @@ function AllowancesPanelContent({
     const e: Partial<Record<keyof FormState, string>> = {};
     if (!form.type) e.type = 'Required';
     if (!form.amount || Number(form.amount) <= 0) e.amount = 'Enter a valid amount';
+    if (form.type === 'OTHER' && !form.name.trim()) e.name = 'Required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -139,7 +141,11 @@ function AllowancesPanelContent({
     if (!validate()) return;
 
     const type = form.type as AllowanceType;
-    const payload = { type, amount: Number(form.amount) };
+    const payload = {
+      type,
+      amount: Number(form.amount),
+      ...(type === 'OTHER' ? { name: form.name.trim() } : {}),
+    };
 
     if (editingId) {
       updateAllowance(
@@ -167,7 +173,11 @@ function AllowancesPanelContent({
 
   const handleEdit = (item: EmployeeAllowance) => {
     setEditingId(item.id);
-    setForm({ type: item.type as AllowanceType, amount: String(item.amount) });
+    setForm({
+      type: item.type as AllowanceType,
+      amount: String(item.amount),
+      name: item.type === 'OTHER' ? item.name : '',
+    });
     setShowForm(true);
   };
 
@@ -235,10 +245,30 @@ function AllowancesPanelContent({
                     placeholder="Select type…"
                     options={ALLOWANCE_TYPE_OPTIONS}
                     value={form.type}
-                    onChange={(v) => setForm((p) => ({ ...p, type: v as AllowanceType }))}
+                    onChange={(v) =>
+                      setForm((p) => ({
+                        ...p,
+                        type: v as AllowanceType,
+                        name: v === 'OTHER' ? p.name : '',
+                      }))
+                    }
                     error={errors.type}
                   />
                 </div>
+
+                {form.type === 'OTHER' && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-gray-500">Allowance Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Uniform Allowance"
+                      value={form.name}
+                      onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                      className={inputClass(errors.name)}
+                    />
+                    {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-500">Monthly Amount</label>

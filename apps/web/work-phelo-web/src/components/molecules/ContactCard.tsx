@@ -1,21 +1,8 @@
 'use client';
 
-import Image from 'next/image';
 import { MapPin, UserPlus, Trash2, Mail, Phone } from 'lucide-react';
-import { cn, glassStrongClass, frostedAvatarStyle } from '@/lib/utils';
-
-// Same color identities as before (violet, blue, emerald, orange, pink, teal, amber, red),
-// now as vivid hex values so they can drive the frosted-glass tint.
-const AVATAR_COLORS = [
-  '#8b5cf6', // violet-500
-  '#3b82f6', // blue-500
-  '#10b981', // emerald-500
-  '#f97316', // orange-500
-  '#ec4899', // pink-500
-  '#14b8a6', // teal-500
-  '#f59e0b', // amber-500
-  '#ef4444', // red-500
-];
+import { cn, glassStrongClass } from '@/lib/utils';
+import { Avatar } from '@/components/atoms/Avatar';
 
 const PILL_COLORS = {
   green: 'border-green-300 text-green-800',
@@ -26,20 +13,6 @@ const PILL_COLORS = {
 } as const;
 
 export type PillColor = keyof typeof PILL_COLORS;
-
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-function pickColor(name: string) {
-  const hash = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
 
 function Pill({
   color,
@@ -60,34 +33,6 @@ function Pill({
       {icon}
       {children}
     </span>
-  );
-}
-
-function Avatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
-  const initials = getInitials(name);
-  const color = pickColor(name);
-
-  if (avatarUrl) {
-    return (
-      <div className="w-14 h-14 rounded-full overflow-hidden shrink-0">
-        <Image
-          src={avatarUrl}
-          alt={name}
-          width={56}
-          height={56}
-          className="w-full h-full object-cover"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="w-14 h-14 rounded-full flex items-center justify-center shrink-0 text-white backdrop-blur-sm border border-white/30"
-      style={frostedAvatarStyle(color)}
-    >
-      <span className="text-sm font-semibold">{initials}</span>
-    </div>
   );
 }
 

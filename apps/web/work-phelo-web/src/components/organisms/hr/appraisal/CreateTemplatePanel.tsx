@@ -6,6 +6,7 @@ import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
+import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useToast } from '@/hooks/useToast';
 import { useCreateAppraisalTemplate, useUpdateAppraisalTemplate } from '@/hooks';
@@ -44,6 +45,7 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
@@ -79,10 +81,26 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
     }
   }, [editTemplate, reset]);
 
-  const selfWeight = Number(useWatch({ control, name: 'selfAssessmentWeight' }) || 0);
+  const selfWeightRaw = useWatch({ control, name: 'selfAssessmentWeight' });
+  const selfWeight = Number(selfWeightRaw || 0);
   const managerWeight = Number(useWatch({ control, name: 'managerAssessmentWeight' }) || 0);
   const totalWeight = selfWeight + managerWeight;
   const weightIsValid = totalWeight === 100;
+
+  // Manager weight is derived from the self weight so the two always add up to 100%.
+  useEffect(() => {
+    if (selfWeightRaw === '' || selfWeightRaw == null) {
+      setValue('managerAssessmentWeight', '', { shouldValidate: true });
+      return;
+    }
+    const clamped = Math.min(100, Math.max(0, Number(selfWeightRaw)));
+    setValue('managerAssessmentWeight', 100 - clamped, { shouldValidate: true });
+  }, [selfWeightRaw, setValue]);
+
+  const kpisWatch = useWatch({ control, name: 'kpis' }) ?? [];
+  const totalKpiWeight = kpisWatch.reduce((sum, k) => sum + Number(k?.weight || 0), 0);
+  const kpiWeightIsValid = totalKpiWeight === 100;
+  const remainingKpiWeight = Math.max(0, 100 - totalKpiWeight);
 
   const createTemplate = useCreateAppraisalTemplate();
   const updateTemplate = useUpdateAppraisalTemplate();
@@ -95,6 +113,10 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
     }
     if (values.kpis.length === 0) {
       toast.error('Add at least one KPI');
+      return;
+    }
+    if (!kpiWeightIsValid) {
+      toast.error(`KPI weights must total 100%. Current total is ${totalKpiWeight}%`);
       return;
     }
 
@@ -137,13 +159,38 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
       title={isEditing ? 'Edit Template' : 'Add Appraisal Template'}
       description="Define KPI-based templates for performance reviews."
       footer={
-        <div className="flex items-center justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onSubmit)}>
-            Save
-          </Button>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-gray-600">KPI Weight</span>
+              <span
+                className={`font-semibold ${
+                  kpiWeightIsValid
+                    ? 'text-green-600'
+                    : totalKpiWeight > 100
+                      ? 'text-red-500'
+                      : 'text-gray-500'
+                }`}
+              >
+                {totalKpiWeight} of 100%
+              </span>
+            </div>
+            <ProgressBar
+              value={totalKpiWeight}
+              showLabel={false}
+              fillClassName={
+                kpiWeightIsValid ? 'bg-green-500' : totalKpiWeight > 100 ? 'bg-red-500' : 'bg-brand'
+              }
+            />
+          </div>
+          <div className="flex items-center justify-end gap-3">
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onSubmit)}>
+              Save
+            </Button>
+          </div>
         </div>
       }
     >
@@ -187,25 +234,24 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
         <Controller
           name="managerAssessmentWeight"
           control={control}
-          rules={{
-            required: 'Required',
-            min: { value: 0, message: 'Min 0' },
-            max: { value: 100, message: 'Max 100' },
-          }}
+          rules={{ required: 'Set the self assessment weight first' }}
           render={({ field }) => (
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Manager Assessment Weight (%)
+                Manager Assessment Weight ({field.value === '' ? '—' : field.value}%)
               </label>
               <Input
                 type="number"
                 placeholder="60"
+                readOnly
+                disabled
                 error={errors.managerAssessmentWeight?.message}
-                {...field}
-                onChange={(e) =>
-                  field.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                }
+                value={field.value}
+                className="bg-gray-50 text-gray-500 cursor-not-allowed"
               />
+              <p className="text-xs text-gray-400">
+                Automatically set to what&apos;s left of the 100% total.
+              </p>
             </div>
           )}
         />
@@ -257,7 +303,13 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-gray-700">Weight (%)</label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Weight (
+                    <span className="text-gray-600 font-normal">
+                      {remainingKpiWeight === 0 ? '%' : `${remainingKpiWeight}% left`}
+                    </span>
+                    )
+                  </label>
                   <Input
                     type="number"
                     placeholder="eg; 30"

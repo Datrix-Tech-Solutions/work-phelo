@@ -158,6 +158,8 @@ export class DashboardService {
         preview: a.body.substring(0, 100),
         body: a.body,
         publishedAt: a.publishedAt,
+        isRead: a.isRead,
+        readAt: a.readAt,
       })),
     };
   }

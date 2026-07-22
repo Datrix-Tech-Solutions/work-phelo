@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  MaxLength,
+} from 'class-validator';
 
 const ALLOWANCE_TYPES = [
   'TRANSPORT',
@@ -20,6 +27,15 @@ export class CreateEmployeeAllowanceDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   amount!: number;
+
+  @ApiPropertyOptional({
+    example: 'Uniform Allowance',
+    description: 'Custom label, used when type is OTHER',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
 }
 
 export class UpdateEmployeeAllowanceDto {
@@ -34,4 +50,13 @@ export class UpdateEmployeeAllowanceDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   amount?: number;
+
+  @ApiPropertyOptional({
+    example: 'Uniform Allowance',
+    description: 'Custom label, used when type is OTHER',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
 }
