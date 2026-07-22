@@ -6,6 +6,7 @@ import { Facultative } from '@/types/reinsurance';
 import { useReinsurers, useRiskTypes } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtFieldValue(val: unknown): string {
   if (val == null) return '—';
@@ -80,7 +81,6 @@ export function CreditNoteModal({
     commission,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
@@ -117,7 +117,7 @@ export function CreditNoteModal({
   const descriptionRows: CreditNoteRow[] = [
     { label: 'Reinsured', value: cedant.name },
     { label: 'Insured', value: title },
-    { label: 'Policy Number', value: reference },
+    { label: 'Policy Number', value: displayPolicyNumber(policyNumber) },
     { label: 'Class of Insurance', value: classOfBusiness ?? '—' },
     ...riskDetailRows,
     {
@@ -157,11 +157,11 @@ export function CreditNoteModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Closings — ${reference}`}
+      title={`Closings — ${displayPolicyNumber(policyNumber)}`}
       documentTitle="Closings"
       fileName={buildDocumentFileName(
         'Closings',
-        policyNumber ?? reference,
+        displayPolicyNumber(policyNumber),
         riskTypeName,
         title,
         reinsurerCompany ? `to ${reinsurerCompany}` : null,

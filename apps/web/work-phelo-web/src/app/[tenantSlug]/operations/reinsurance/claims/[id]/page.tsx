@@ -8,6 +8,7 @@ import { useFacultativePlacement, usePlacementClaims } from '@/hooks';
 import { ClaimOverviewSection } from '@/components/molecules/reinsurance/ClaimOverviewSection';
 import { Button } from '@/components/atoms/Button';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 export default function ClaimDetailPage({
   params,
@@ -31,7 +32,9 @@ export default function ClaimDetailPage({
             Claims
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
+          <span className="text-gray-700 font-medium">
+            {displayPolicyNumber(placement?.policyNumber)}
+          </span>
         </nav>
 
         {placement && (

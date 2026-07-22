@@ -7,6 +7,7 @@ import { FilterChip } from '@/components/atoms/FilterChip';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
 import { usePlacementPayments, useCedantPlacementPaymentStatuses } from '@/hooks';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
 
@@ -78,7 +79,9 @@ const PLACEMENT_COLUMNS: Column<Facultative>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: '190px',
-    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
+    render: (row) => (
+      <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
+    ),
   },
   {
     key: 'title',

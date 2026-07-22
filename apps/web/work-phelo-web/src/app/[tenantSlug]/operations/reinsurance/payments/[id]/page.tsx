@@ -10,6 +10,7 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
 import { PaymentHistoryTab } from '@/components/molecules/reinsurance/tabs/PaymentHistoryTab';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 type PaymentTab = 'overview' | 'history';
 
@@ -67,7 +68,9 @@ export default function PaymentDetailPage({
             </Link>
           )}
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
+          <span className="text-gray-700 font-medium">
+            {displayPolicyNumber(placement?.policyNumber)}
+          </span>
         </nav>
 
         {placement && <AddPaymentForm placementId={id} />}

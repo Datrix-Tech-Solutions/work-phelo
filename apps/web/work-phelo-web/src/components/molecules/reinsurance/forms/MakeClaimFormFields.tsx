@@ -7,6 +7,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCurrencyOptions } from '@/hooks';
 import { Facultative } from '@/types/reinsurance';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 export interface MakeClaimFormValues {
   estimatedLossAmount: string;
@@ -69,7 +70,7 @@ export function MakeClaimFormFields({
         <>
           <ReadOnlyField
             label="Policy Number"
-            value={placement.policyNumber ?? placement.reference}
+            value={displayPolicyNumber(placement.policyNumber)}
           />
           <ReadOnlyField label="Cedant" value={placement.cedant.name} />
           {placement.classOfBusiness && (

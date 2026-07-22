@@ -5,6 +5,7 @@ import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documen
 import { Facultative } from '@/types/reinsurance';
 import { useCedants, useRiskTypes } from '@/hooks';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
@@ -58,7 +59,6 @@ export function DebitNoteModal({
     commission,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
@@ -119,11 +119,11 @@ export function DebitNoteModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Debit Note — ${reference}`}
+      title={`Debit Note — ${displayPolicyNumber(policyNumber)}`}
       documentTitle="Debit Note"
       fileName={buildDocumentFileName(
         'Debit Note',
-        policyNumber ?? reference,
+        displayPolicyNumber(policyNumber),
         riskTypeName,
         title,
         `to ${cedant.name}`,
@@ -137,7 +137,7 @@ export function DebitNoteModal({
         <div className="flex items-start justify-between">
           <div>
             <span className="text-xs text-gray-400 uppercase tracking-wide">Debit No.</span>
-            <p className="font-semibold text-gray-900">{reference}</p>
+            <p className="font-semibold text-gray-900">{displayPolicyNumber(policyNumber)}</p>
           </div>
           <div className="text-right">
             <span className="text-xs text-gray-400 uppercase tracking-wide">Date</span>
@@ -177,7 +177,7 @@ export function DebitNoteModal({
 
             {[
               { label: 'Insured', value: title },
-              { label: 'Policy Number', value: reference },
+              { label: 'Policy Number', value: displayPolicyNumber(policyNumber) },
               {
                 label: 'Policy Period',
                 value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`,

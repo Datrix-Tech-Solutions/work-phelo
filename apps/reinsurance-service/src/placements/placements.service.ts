@@ -412,6 +412,7 @@ export class PlacementsService {
       tenantId: user.tenantId,
       reference: this.cleanRequired(dto.reference),
       normalizedReference: this.normalizeReference(dto.reference),
+      policyNumber: this.cleanOptional(dto.policyNumber),
       title: this.cleanRequired(dto.title),
       placementType: dto.placementType ?? PlacementType.FACULTATIVE,
       status: PlacementStatus.DRAFT,
@@ -556,6 +557,9 @@ export class PlacementsService {
             reference: this.cleanRequired(dto.reference),
             normalizedReference: this.normalizeReference(dto.reference),
           }
+        : {}),
+      ...(dto.policyNumber !== undefined
+        ? { policyNumber: this.cleanOptional(dto.policyNumber) }
         : {}),
       ...(dto.title !== undefined
         ? { title: this.cleanRequired(dto.title) }

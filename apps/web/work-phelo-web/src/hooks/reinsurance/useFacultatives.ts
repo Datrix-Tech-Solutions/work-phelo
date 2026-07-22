@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/store/auth.store';
+import {
+  buildFacultativeReference,
+  buildFacultativeReferencePrefix,
+} from '@/lib/reinsurance/generateFacultativeReference';
 import {
   Facultative,
   FacultativeStatus,
@@ -94,6 +99,28 @@ export function useFacultativePlacement(id: string) {
       return transformPlacement(res.data);
     },
     enabled: !!id,
+  });
+}
+
+/** Generates the next system reference in the "FAC-{tenant abbr}-{year}-{order}" format. */
+export function useNextFacultativeReference(enabled = true) {
+  const tenantName = useAuthStore((s) => s.user?.tenantName ?? '');
+  const year = new Date().getFullYear();
+  const prefix = buildFacultativeReferencePrefix(tenantName || 'GEN', year);
+
+  return useQuery({
+    queryKey: [...FACULTATIVES_KEY, 'next-reference', prefix],
+    queryFn: async () => {
+      const [activeRes, archivedRes] = await Promise.all([
+        api.get(BASE, { params: { search: prefix, archived: false, limit: 1 } }),
+        api.get(BASE, { params: { search: prefix, archived: true, limit: 1 } }),
+      ]);
+      const activeTotal = activeRes.data?.meta?.total ?? 0;
+      const archivedTotal = archivedRes.data?.meta?.total ?? 0;
+      return buildFacultativeReference(tenantName || 'GEN', year, activeTotal + archivedTotal + 1);
+    },
+    enabled,
+    staleTime: 0,
   });
 }
 

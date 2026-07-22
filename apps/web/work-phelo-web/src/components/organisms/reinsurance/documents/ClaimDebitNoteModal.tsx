@@ -5,6 +5,7 @@ import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documen
 import { Facultative, PlacementParticipant } from '@/types/reinsurance';
 import { useReinsurers, useRiskTypes } from '@/hooks';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -52,7 +53,6 @@ export function ClaimDebitNoteModal({
     currency,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
@@ -94,11 +94,11 @@ export function ClaimDebitNoteModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Claim Debit Note — ${reference}`}
+      title={`Claim Debit Note — ${displayPolicyNumber(policyNumber)}`}
       documentTitle="Claim Debit Note"
       fileName={buildDocumentFileName(
         'Claim Debit Note',
-        policyNumber ?? reference,
+        displayPolicyNumber(policyNumber),
         riskTypeName,
         title,
         `to ${participant.counterparty.name}`,
@@ -145,7 +145,7 @@ export function ClaimDebitNoteModal({
               { label: 'Reinsured', value: cedant.name },
               { label: 'Policy Type', value: classOfBusiness ?? '—' },
               { label: 'Insured', value: title ?? '—' },
-              { label: 'Policy Number', value: policyNumber ?? reference },
+              { label: 'Policy Number', value: displayPolicyNumber(policyNumber) },
               {
                 label: 'Policy Period',
                 value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`,

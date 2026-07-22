@@ -20,6 +20,7 @@ export interface FacultativeReportParams {
 export interface FacultativeReportRow {
   id: string;
   reference: string;
+  policyNumber: string | null;
   cedantName: string;
   classOfBusiness: string | null;
   sumInsured: number | null;
@@ -79,6 +80,7 @@ export function useFacultativeReport(
       .map((p) => ({
         id: p.id,
         reference: p.reference,
+        policyNumber: p.policyNumber,
         cedantName: p.cedant.name,
         classOfBusiness: p.classOfBusiness,
         sumInsured: p.sumInsured,

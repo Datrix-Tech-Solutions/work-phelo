@@ -19,6 +19,7 @@ import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/Dis
 import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/PlacementClosingsTab';
 import { EndorsementTab } from '@/components/molecules/reinsurance/tabs/EndorsmentTab';
 import { type ReinsurerParticipation } from '@/components/molecules/reinsurance/tables/ReinsurerPoliciesTable';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 type ReinsurerTab = 'placements' | 'revenue' | 'premiums' | 'recoveries' | 'contacts';
 type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
@@ -101,7 +102,7 @@ export default function ReinsurerDetailPage({
       return [
         {
           id: p.id,
-          reference: p.reference,
+          reference: displayPolicyNumber(p.policyNumber),
           title: p.title,
           cedant: p.cedant.name,
           role: participant.role,

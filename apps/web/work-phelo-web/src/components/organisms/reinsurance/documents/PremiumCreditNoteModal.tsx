@@ -6,6 +6,7 @@ import { Facultative } from '@/types/reinsurance';
 import { useReinsurers } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtFieldValue(val: unknown): string {
   if (val == null) return '—';
@@ -74,7 +75,6 @@ export function PremiumCreditNoteModal({
     premium,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
@@ -120,11 +120,11 @@ export function PremiumCreditNoteModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Credit Note — ${reference}`}
+      title={`Credit Note — ${displayPolicyNumber(policyNumber)}`}
       documentTitle="Credit Note"
       fileName={buildDocumentFileName(
         'Credit Note',
-        policyNumber ?? reference,
+        displayPolicyNumber(policyNumber),
         title,
         reinsurerCompany ? `to ${reinsurerCompany}` : null,
       )}
@@ -137,7 +137,7 @@ export function PremiumCreditNoteModal({
         <div className="flex items-start justify-between">
           <div>
             <span className="text-xs text-gray-400 uppercase tracking-wide">Credit No.</span>
-            <p className="font-semibold text-gray-900">{reference}</p>
+            <p className="font-semibold text-gray-900">{displayPolicyNumber(policyNumber)}</p>
           </div>
           <div className="text-right">
             <span className="text-xs text-gray-400 uppercase tracking-wide">Date</span>
@@ -177,7 +177,7 @@ export function PremiumCreditNoteModal({
 
             {[
               { label: 'Insured', value: title },
-              { label: 'Policy Number', value: reference },
+              { label: 'Policy Number', value: displayPolicyNumber(policyNumber) },
               {
                 label: 'Policy Period',
                 value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`,

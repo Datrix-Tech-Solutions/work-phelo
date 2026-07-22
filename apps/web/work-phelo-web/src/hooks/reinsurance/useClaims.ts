@@ -11,6 +11,7 @@ import {
   PlacementClaimStatus,
   UpdatePlacementClaimPayload,
 } from '@/types/reinsurance';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const BASE = '/operations/reinsurance/placements';
 
@@ -247,7 +248,7 @@ export function useReinsurerClaims(
           claimNumber: claim.claimNumber,
           status: claim.status,
           placementId: p.id,
-          placementReference: p.policyNumber ?? p.reference,
+          placementReference: displayPolicyNumber(p.policyNumber),
           policyNumber: p.policyNumber,
           cedantName: p.cedant.name,
           currency: claim.currency,
@@ -315,7 +316,7 @@ export function useAllReinsurerClaims(placements: Facultative[]): {
           list.push({
             id: `${claim.id}-${pt.id}`,
             placementId: p.id,
-            policyNumber: p.policyNumber ?? p.reference,
+            policyNumber: displayPolicyNumber(p.policyNumber),
             insuredTitle: p.title,
             riskType: p.classOfBusiness,
             reinsurerId: pt.counterpartyId,

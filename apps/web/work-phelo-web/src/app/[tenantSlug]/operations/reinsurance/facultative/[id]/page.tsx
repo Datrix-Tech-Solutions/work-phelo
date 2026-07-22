@@ -21,6 +21,7 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
 import { EndorsementTab } from '@/components/molecules/reinsurance/tabs/EndorsmentTab';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
 
@@ -94,7 +95,9 @@ export default function FacultativeDetailPage({
             {fromClosing ? 'Closings' : 'Facultative'}
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
+          <span className="text-gray-700 font-medium">
+            {displayPolicyNumber(placement?.policyNumber)}
+          </span>
         </nav>
         {placement && (
           <div className="flex items-center gap-2">

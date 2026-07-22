@@ -11,6 +11,7 @@ import { Facultative, FacultativeStatus, PlacementClaim } from '@/types/reinsura
 import { useCedants, useFacultatives } from '@/hooks';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
 
@@ -57,7 +58,9 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: 'minmax(190px, 1fr)',
-    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
+    render: (row) => (
+      <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
+    ),
   },
   {
     key: 'title',
@@ -169,7 +172,7 @@ export function ClaimsTable() {
       const q = search.toLowerCase();
       rows = rows.filter(
         (r) =>
-          r.reference.toLowerCase().includes(q) ||
+          (r.policyNumber?.toLowerCase().includes(q) ?? false) ||
           r.title.toLowerCase().includes(q) ||
           (r.classOfBusiness?.toLowerCase().includes(q) ?? false) ||
           (r.latestClaim?.claimNumber.toLowerCase().includes(q) ?? false),

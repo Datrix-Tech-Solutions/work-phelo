@@ -15,6 +15,7 @@ import { api } from '@/lib/api';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { Facultative, PlacementClaim } from '@/types/reinsurance';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 interface MakeClaimPanelProps {
   isOpen: boolean;
@@ -63,7 +64,7 @@ export function MakeClaimPanel({
         .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
         .map((f) => ({
           value: f.id,
-          label: f.policyNumber ?? f.reference,
+          label: displayPolicyNumber(f.policyNumber),
           sublabel: [f.classOfBusiness, f.title].filter(Boolean).join(' · '),
         })),
     [facultatives, cedantId],
@@ -153,7 +154,9 @@ export function MakeClaimPanel({
       onClose={handleClose}
       title={isEditing ? 'Edit Claim' : 'Make Claim'}
       description={
-        effectivePlacement ? `Claim for ${effectivePlacement.reference}` : 'Submit a claim'
+        effectivePlacement
+          ? `Claim for ${displayPolicyNumber(effectivePlacement.policyNumber)}`
+          : 'Submit a claim'
       }
       footer={
         effectivePlacement ? (

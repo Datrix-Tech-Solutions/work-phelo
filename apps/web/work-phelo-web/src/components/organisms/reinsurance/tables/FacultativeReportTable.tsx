@@ -8,6 +8,7 @@ import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill'
 import { FacultativeReportRow } from '@/hooks/reinsurance/useFacultativeReport';
 import { FacultativeStatus } from '@/types/reinsurance';
 import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
 
@@ -56,7 +57,9 @@ export function FacultativeReportTable({ rows, isLoading }: FacultativeReportTab
       {
         key: 'reference',
         label: 'Policy Number',
-        render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
+        render: (row) => (
+          <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
+        ),
       },
       {
         key: 'cedantName',
