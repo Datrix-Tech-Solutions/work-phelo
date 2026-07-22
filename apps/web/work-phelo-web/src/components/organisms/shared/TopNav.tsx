@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Bell, Home, LayoutGrid, LogOutIcon, Menu, Settings, UserIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, frostedAvatarStyle } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -57,10 +57,20 @@ function NavTabs({ tabs }: { tabs: NavTab[] }) {
   );
 }
 
+function formatRoleLabel(role: string): string {
+  return role
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 /* ── Profile dropdown ── */
 function ProfileDropdown({
   userInitials,
   userColor,
+  userName,
+  userRole,
   onProfileClick,
   onSettingsClick,
   onLogoutClick,
@@ -68,6 +78,8 @@ function ProfileDropdown({
 }: {
   userInitials: string;
   userColor?: string;
+  userName?: string;
+  userRole?: string;
   onProfileClick: () => void;
   onSettingsClick: () => void;
   onLogoutClick: () => void;
@@ -76,6 +88,7 @@ function ProfileDropdown({
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, right: 0 });
   const anchorRef = useRef<HTMLDivElement>(null);
+  const avatarColor = userColor ?? 'var(--module-btn-bg, var(--color-brand))';
 
   useEffect(() => {
     if (!open) return;
@@ -131,10 +144,8 @@ function ProfileDropdown({
     <div className="relative" ref={anchorRef}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className={cn(
-          'w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold transition-opacity hover:opacity-80 ring-2 ring-white/40',
-          userColor ?? 'bg-brand',
-        )}
+        style={frostedAvatarStyle(avatarColor)}
+        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold backdrop-blur-sm border border-white/30 transition-opacity hover:opacity-80"
       >
         {userInitials}
       </button>
@@ -145,24 +156,47 @@ function ProfileDropdown({
           <>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
             <div
-              style={{ position: 'fixed', top: pos.top, right: pos.right, minWidth: 160 }}
-              className="z-20 bg-white border border-gray-100 rounded-input shadow-lg py-1.5 overflow-hidden"
+              style={{ position: 'fixed', top: pos.top, right: pos.right, minWidth: 200 }}
+              className="z-20 bg-white border border-gray-100 rounded-input shadow-lg overflow-hidden"
             >
-              {items.map((item) => (
-                <button
-                  key={item.label}
-                  onClick={item.onClick}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                    item.danger
-                      ? 'text-red-500 hover:bg-red-50'
-                      : 'text-gray-700 hover:bg-(--surface-hover-subtle,var(--color-gray-50))',
-                  )}
-                >
-                  {item.icon}
-                  {item.label}
-                </button>
-              ))}
+              {userName && (
+                <>
+                  <div className="flex items-center gap-2.5 px-4 py-3">
+                    <span
+                      style={frostedAvatarStyle(avatarColor)}
+                      className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-white text-[10px] font-bold backdrop-blur-sm border border-white/30"
+                    >
+                      {userInitials}
+                    </span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-semibold text-gray-900 truncate">
+                        {userName}
+                      </span>
+                      {userRole && (
+                        <span className="text-xs text-gray-500 truncate">{userRole}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="h-px bg-gray-100" />
+                </>
+              )}
+              <div className="py-1.5">
+                {items.map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={item.onClick}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+                      item.danger
+                        ? 'text-red-500 hover:bg-red-50'
+                        : 'text-gray-700 hover:bg-(--surface-hover-subtle,var(--color-gray-50))',
+                    )}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </>,
           document.body,
@@ -213,6 +247,11 @@ export function TopNav({
     const slug = user?.tenantSlug || pathname.split('/')[1];
     router.push(currentModule ? `/${slug}/${currentModule}/settings` : `/${slug}/settings`);
   };
+
+  const displayName = user
+    ? `${user.firstName.charAt(0).toUpperCase()}. ${user.lastName ?? ''}`.trim()
+    : undefined;
+  const displayRole = user ? formatRoleLabel(user.role) : undefined;
 
   return (
     <>
@@ -287,6 +326,8 @@ export function TopNav({
           <ProfileDropdown
             userInitials={userInitials}
             userColor={userColor}
+            userName={displayName}
+            userRole={displayRole}
             onProfileClick={handleProfileClick}
             onSettingsClick={handleSettingsClick}
             onLogoutClick={() => setLogoutOpen(true)}
@@ -323,7 +364,7 @@ export function TopNav({
               Stay
             </Button>
             <Button
-              variant="outline"
+              variant="danger"
               onClick={handleLogout}
               isLoading={isLoggingOut}
               loadingText="Logging out..."

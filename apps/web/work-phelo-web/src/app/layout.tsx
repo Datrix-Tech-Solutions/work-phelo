@@ -5,6 +5,7 @@ import { AuthProvider } from '@/providers/auth-provider';
 import { ThemeProvider } from '@/providers/theme-provider';
 import { ToastContainer } from '@/components/molecules/shared/ToastContainer';
 import { ModuleSplash } from '@/components/molecules/shared/ModuleSplash';
+import { NavigationLoader } from '@/components/molecules/shared/NavigationLoader';
 import { appFont } from '@/lib/fonts';
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <AuthProvider>{children}</AuthProvider>
           </QueryProvider>
           <ToastContainer />
+          <NavigationLoader />
           <ModuleSplash />
         </ThemeProvider>
       </body>
