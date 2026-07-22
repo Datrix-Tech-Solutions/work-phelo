@@ -33,7 +33,7 @@ export default function ReinsuranceFoundation() {
       </div>
 
       {view === 'general' ? (
-        <GeneralDashboard period={period} currency={currency} />
+        <GeneralDashboard period={period} />
       ) : (
         <>
           <KpiStatsRow period={period} currency={currency} />

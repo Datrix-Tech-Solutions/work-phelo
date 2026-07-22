@@ -6,13 +6,12 @@ import { FinancialStatsRow } from '@/components/molecules/reinsurance/stats/Fina
 
 interface GeneralDashboardProps {
   period: Period;
-  currency: string;
 }
 
-export function GeneralDashboard({ period, currency }: GeneralDashboardProps) {
+export function GeneralDashboard({ period }: GeneralDashboardProps) {
   return (
     <div className="flex flex-col gap-4">
-      <DashboardStatsRow period={period} currency={currency} />
+      <DashboardStatsRow period={period} />
       <FinancialStatsRow period={period} />
     </div>
   );

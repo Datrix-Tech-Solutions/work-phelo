@@ -162,17 +162,6 @@ export function SlipPreviewModal({
           </>
         )}
 
-        {description && (
-          <>
-            <hr className="border-gray-100 my-1" />
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Comment</p>
-            <div
-              className="text-sm text-gray-700"
-              dangerouslySetInnerHTML={{ __html: description }}
-            />
-          </>
-        )}
-
         {(sumInsured != null ||
           rate != null ||
           premium != null ||
@@ -226,6 +215,16 @@ export function SlipPreviewModal({
             <hr className="border-gray-100 my-1" />
 
             <Field label="Net Premium" value={fmtAmount(netPremiumPayable, currency)} />
+          </>
+        )}
+        {description && (
+          <>
+            <hr className="border-gray-100 my-1" />
+            <p className="text-xs font-semibold text-gray-400 tracking-wide">Kindly Refer:</p>
+            <div
+              className="text-sm text-gray-700"
+              dangerouslySetInnerHTML={{ __html: description }}
+            />
           </>
         )}
       </div>

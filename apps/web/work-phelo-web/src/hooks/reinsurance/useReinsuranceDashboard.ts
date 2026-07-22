@@ -19,17 +19,20 @@ export interface DashboardStats {
   placedOffers: number;
   partiallyClosedOffers: number;
   closedOffers: number;
+  closedRate: number;
   trends: {
     totalOffers: number;
     placedOffers: number;
     partiallyClosedOffers: number;
     closedOffers: number;
+    closedRate: number;
   };
   previous: {
     totalOffers: number;
     placedOffers: number;
     partiallyClosedOffers: number;
     closedOffers: number;
+    closedRate: number;
   };
 }
 
@@ -69,7 +72,8 @@ function computeStats(items: Facultative[]) {
   const placed = items.filter((f) => ['PARTIALLY_PLACED', 'PLACED'].includes(f.status)).length;
   const partiallyClosed = items.filter((f) => f.status === 'CLOSING').length;
   const closed = items.filter((f) => f.status === 'CLOSED').length;
-  return { total, placed, partiallyClosed, closed };
+  const closedRate = total > 0 ? (closed / total) * 100 : 0;
+  return { total, placed, partiallyClosed, closed, closedRate };
 }
 
 function pctChange(current: number, previous: number): number {
@@ -330,17 +334,20 @@ export function useReinsuranceDashboard({ period }: { period: Period }) {
       placedOffers: cur.placed,
       partiallyClosedOffers: cur.partiallyClosed,
       closedOffers: cur.closed,
+      closedRate: cur.closedRate,
       trends: {
         totalOffers: pctChange(cur.total, prev.total),
         placedOffers: pctChange(cur.placed, prev.placed),
         partiallyClosedOffers: pctChange(cur.partiallyClosed, prev.partiallyClosed),
         closedOffers: pctChange(cur.closed, prev.closed),
+        closedRate: pctChange(cur.closedRate, prev.closedRate),
       },
       previous: {
         totalOffers: prev.total,
         placedOffers: prev.placed,
         partiallyClosedOffers: prev.partiallyClosed,
         closedOffers: prev.closed,
+        closedRate: prev.closedRate,
       },
     };
   }, [all, period]);

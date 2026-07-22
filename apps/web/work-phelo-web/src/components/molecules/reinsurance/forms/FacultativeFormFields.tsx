@@ -280,6 +280,17 @@ export default function FacultativeFormFields({
 
           <div className="grid grid-cols-2 gap-3">
             <FormField
+              label="100% Sum Insured"
+              type="number"
+              registration={register('sumInsured', {
+                required: 'Sum insured is required',
+                min: { value: 0, message: 'Cannot be negative' },
+                valueAsNumber: true,
+              })}
+              error={errors.sumInsured}
+              placeholder="e.g. 50000"
+            />
+            <FormField
               label="100% Premium"
               type="number"
               registration={register('premium', {
@@ -289,17 +300,6 @@ export default function FacultativeFormFields({
               })}
               error={errors.premium}
               placeholder="e.g. 75000"
-            />
-            <FormField
-              label="100% Sum Insured"
-              type="number"
-              registration={register('sumInsured', {
-                required: 'Sum insured is required',
-                min: { value: 0, message: 'Cannot be negative' },
-                valueAsNumber: true,
-              })}
-              error={errors.sumInsured}
-              placeholder="e.g. 5000000"
             />
           </div>
 

@@ -121,7 +121,7 @@ export function AddPaymentFormFields({
           ].filter(Boolean);
           return {
             value: f.id,
-            label: f.policyNumber ?? f.reference,
+            label: `${f.policyNumber ?? f.reference} · ${f.title}`,
             sublabel: parts.join(' · '),
           };
         }),
