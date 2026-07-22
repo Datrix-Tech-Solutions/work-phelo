@@ -221,6 +221,7 @@ enum AllowanceType {
   TRANSPORT
   HOUSING
   MEDICAL
+  CLOTHING
   OTHER
 
   @@schema("hr")

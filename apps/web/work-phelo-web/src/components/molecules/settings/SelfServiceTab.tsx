@@ -127,7 +127,7 @@ function toBankPayload(values: BankFormValues): TenantBankAccountPayload {
   };
 }
 
-export function DocumentProfileTab() {
+export function SelfServiceTab() {
   const user = useAuthStore((state) => state.user);
   const tenantId = user?.tenantId;
   const canManage = user?.role === 'SUPER_ADMIN' || user?.role === 'TENANT_ADMIN';
@@ -568,7 +568,7 @@ function BankAccountsSection({ tenantId }: { tenantId: string }) {
           <FormField label="Sort Code" registration={register('sortCode')} />
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-gray-900">Default for currency</label>
-            <div className="flex h-[46px] items-center gap-3 rounded-input border border-gray-300 bg-white px-4">
+            <div className="flex h-11.5 items-center gap-3 rounded-input border border-gray-300 bg-white px-4">
               <Toggle enabled={isDefault} onChange={(value) => setValue('isDefault', value)} />
               <span className="text-sm text-gray-600">{isDefault ? 'Default' : 'Not default'}</span>
             </div>
@@ -588,7 +588,7 @@ function BankAccountsSection({ tenantId }: { tenantId: string }) {
       </form>
 
       <div className="mt-5 overflow-hidden rounded-xl border border-gray-200">
-        <table className="w-full min-w-[760px] text-left text-sm">
+        <table className="w-full min-w-190 text-left text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-4 py-3">Bank</th>

@@ -161,11 +161,13 @@ export interface EmployeeDocument {
 export interface AddAllowancePayload {
   type: AllowanceType;
   amount: number;
+  name?: string;
 }
 
 export interface UpdateAllowancePayload {
   type?: AllowanceType;
   amount?: number;
+  name?: string;
 }
 
 export interface UploadDocumentPayload {

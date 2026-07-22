@@ -4,7 +4,7 @@ import { useState, useRef, useMemo } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Column, DataTable } from '../../shared/DataTable';
 import { PayrollRun, PayrollRunDetail } from '@/types/hr';
@@ -90,7 +90,7 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
         title={isPaid ? 'Download' : 'Mark as paid to download'}
         className={`p-1.5 rounded-lg transition-colors ${
           isPaid
-            ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+            ? 'text-green-600 hover:text-green-700 hover:bg-green-50'
             : 'text-gray-200 cursor-not-allowed'
         }`}
       >
@@ -257,13 +257,12 @@ export function PayrollHistoryTab() {
       width: '100px',
       render: (row) => (
         <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
+          <TableButton
+            variant="blue"
             onClick={() => router.push(`/${params.tenantSlug}/hr/payroll/history/${row.id}`)}
           >
             View
-          </Button>
+          </TableButton>
           <DownloadMenu run={row} />
         </div>
       ),

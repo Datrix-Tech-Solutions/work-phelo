@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import { Avatar } from '@/components/atoms/Avatar';
 import { Column, DataTable } from '../../shared/DataTable';
 import { usePayrollSettings, usePayrollRuns } from '@/hooks';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
@@ -59,6 +60,7 @@ function NumberCell({ value, onChange }: { value: number; onChange: (n: number) 
 interface PayrollRow {
   id: string;
   employeeName: string;
+  avatarUrl?: string;
   basicSalary: number;
   allowances: number;
   deductions: number;
@@ -78,6 +80,7 @@ interface PayrollRow {
 interface CommissionRow {
   id: string;
   employeeName: string;
+  avatarUrl?: string;
   department?: string;
   commission: number;
   allowances: number;
@@ -179,6 +182,7 @@ export function ManagePayrollTab() {
       const baseRow = {
         id: e.id,
         employeeName: `${e.firstName} ${e.lastName}`,
+        avatarUrl: e.avatarUrl,
         basicSalary: basic,
         allowances: totalAllowances,
         deductions: otherDeductions,
@@ -267,6 +271,7 @@ export function ManagePayrollTab() {
       return {
         id: e.id,
         employeeName: `${e.firstName} ${e.lastName}`.trim(),
+        avatarUrl: e.avatarUrl,
         department: e.department?.name,
         commission,
         allowances,
@@ -409,9 +414,7 @@ export function ManagePayrollTab() {
       width: '2fr',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white text-xs font-medium shrink-0">
-            {row.employeeName.substring(0, 2).toUpperCase()}
-          </div>
+          <Avatar name={row.employeeName} avatarUrl={row.avatarUrl} size="sm" />
           <div>
             <div className="flex items-center gap-1.5">
               <p
@@ -519,9 +522,7 @@ export function ManagePayrollTab() {
       width: '2fr',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white text-xs font-medium shrink-0">
-            {row.employeeName.substring(0, 2).toUpperCase()}
-          </div>
+          <Avatar name={row.employeeName} avatarUrl={row.avatarUrl} size="sm" />
           <div>
             <p className="font-medium text-gray-900">{row.employeeName}</p>
             {row.department && <p className="text-xs text-gray-500">{row.department}</p>}
