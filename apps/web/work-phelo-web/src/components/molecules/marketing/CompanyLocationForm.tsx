@@ -1,26 +1,61 @@
 'use client';
 
+import { useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Button } from '@/components/atoms/Button';
+import { CompanyLocationMap } from '@/components/organisms/marketing/CompanyLocationMap';
+import { useGeocodeSearch } from '@/hooks';
+import { geocodeReverse } from '@/lib/maptiler';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 export interface CompanyLocationFields {
   location: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface Props {
   values: CompanyLocationFields;
   onChange: (values: CompanyLocationFields) => void;
-  locationOptions?: { value: string; label: string }[];
-  onGetCurrentLocation?: () => void;
 }
 
-export function CompanyLocationForm({
-  values,
-  onChange,
-  locationOptions = [],
-  onGetCurrentLocation,
-}: Props) {
+export function CompanyLocationForm({ values, onChange }: Props) {
+  const [query, setQuery] = useState(values.location);
+  const { data: suggestions = [] } = useGeocodeSearch(query);
+
+  const options = suggestions.map((s) => ({
+    value: `${s.lat},${s.lng}`,
+    label: s.placeName,
+  }));
+
+  function handleSelect(value: string) {
+    const option = options.find((o) => o.value === value);
+    if (!option) return;
+    const [lat, lng] = value.split(',').map(Number);
+    onChange({ location: option.label, lat, lng });
+  }
+
+  function handleMapChange(lat: number, lng: number) {
+    onChange({ ...values, lat, lng });
+  }
+
+  function handleGetCurrentLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const placeName = await geocodeReverse(longitude, latitude);
+        onChange({ location: placeName ?? values.location, lat: latitude, lng: longitude });
+        setQuery(placeName ?? '');
+      },
+      (err) => {
+        useToastStore.getState().addToast({ message: extractError(err), type: 'error' });
+      },
+    );
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col gap-4">
       {/* Search row — mirrors DataTable toolbar layout */}
@@ -29,9 +64,10 @@ export function CompanyLocationForm({
           <SearchSelect
             size="sm"
             placeholder="Search for a location..."
-            options={locationOptions}
-            value={values.location}
-            onChange={(v) => onChange({ ...values, location: v })}
+            options={options}
+            value={values.lat != null ? `${values.lat},${values.lng}` : ''}
+            onChange={handleSelect}
+            onQueryChange={setQuery}
           />
         </div>
         <div className="flex-1" />
@@ -39,17 +75,14 @@ export function CompanyLocationForm({
           type="button"
           variant="secondary"
           size="sm"
-          onClick={onGetCurrentLocation}
+          onClick={handleGetCurrentLocation}
           icon={<MapPin className="w-4 h-4" />}
         >
           Get Current Location
         </Button>
       </div>
 
-      {/* Map placeholder */}
-      <div className="h-150 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center">
-        <p className="text-sm text-gray-400" />
-      </div>
+      <CompanyLocationMap lat={values.lat} lng={values.lng} onChange={handleMapChange} />
     </div>
   );
 }

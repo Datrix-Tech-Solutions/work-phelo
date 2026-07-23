@@ -22,6 +22,7 @@ export * from './useTenantConfig';
 export * from './hr/useProjects';
 export * from './useModuleTransition';
 export * from './useDropdownPosition';
+export * from './marketing/useGeocode';
 
 // Reinsurance hooks
 export * from './reinsurance/useFacultatives';

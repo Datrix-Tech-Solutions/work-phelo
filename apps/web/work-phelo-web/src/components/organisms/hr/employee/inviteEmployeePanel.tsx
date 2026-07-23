@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -201,9 +201,6 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
           registration={register('email', {
             required: 'Required',
             pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
-            onChange: (e: ChangeEvent<HTMLInputElement>) => {
-              e.target.value = e.target.value.toLowerCase();
-            },
           })}
           error={errors.email}
           type="email"

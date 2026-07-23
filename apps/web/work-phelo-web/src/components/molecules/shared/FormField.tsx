@@ -35,6 +35,24 @@ export function FormField({
     );
   }
 
+  if (type === 'email') {
+    const { onChange, ...rest } = registration;
+    return (
+      <Input
+        label={label}
+        type="email"
+        placeholder={placeholder}
+        readOnly={readOnly}
+        error={error?.message}
+        onChange={(e) => {
+          e.target.value = e.target.value.toLowerCase();
+          onChange(e);
+        }}
+        {...rest}
+      />
+    );
+  }
+
   return (
     <Input
       label={label}
