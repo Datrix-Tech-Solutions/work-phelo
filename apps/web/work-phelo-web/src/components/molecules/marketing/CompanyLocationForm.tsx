@@ -22,23 +22,32 @@ interface Props {
 }
 
 export function CompanyLocationForm({ values, onChange }: Props) {
-  const [query, setQuery] = useState(values.location);
+  const [query, setQuery] = useState('');
   const { data: suggestions = [] } = useGeocodeSearch(query);
 
-  const options = suggestions.map((s) => ({
-    value: `${s.lat},${s.lng}`,
-    label: s.placeName,
-  }));
+  // The currently confirmed location (from search, current-location, or the map pin) may not
+  // be among the live search suggestions — merge it in so SearchSelect can still show its label.
+  const selectedValue =
+    values.lat != null && values.lng != null ? `${values.lat},${values.lng}` : '';
+  const options = [
+    ...(selectedValue ? [{ value: selectedValue, label: values.location }] : []),
+    ...suggestions
+      .filter((s) => `${s.lat},${s.lng}` !== selectedValue)
+      .map((s) => ({ value: `${s.lat},${s.lng}`, label: s.placeName })),
+  ];
 
   function handleSelect(value: string) {
     const option = options.find((o) => o.value === value);
     if (!option) return;
     const [lat, lng] = value.split(',').map(Number);
     onChange({ location: option.label, lat, lng });
+    setQuery('');
   }
 
-  function handleMapChange(lat: number, lng: number) {
+  async function handleMapChange(lat: number, lng: number) {
     onChange({ ...values, lat, lng });
+    const placeName = await geocodeReverse(lng, lat);
+    if (placeName) onChange({ location: placeName, lat, lng });
   }
 
   function handleGetCurrentLocation() {
@@ -48,7 +57,7 @@ export function CompanyLocationForm({ values, onChange }: Props) {
         const { latitude, longitude } = pos.coords;
         const placeName = await geocodeReverse(longitude, latitude);
         onChange({ location: placeName ?? values.location, lat: latitude, lng: longitude });
-        setQuery(placeName ?? '');
+        setQuery('');
       },
       (err) => {
         useToastStore.getState().addToast({ message: extractError(err), type: 'error' });
@@ -65,7 +74,7 @@ export function CompanyLocationForm({ values, onChange }: Props) {
             size="sm"
             placeholder="Search for a location..."
             options={options}
-            value={values.lat != null ? `${values.lat},${values.lng}` : ''}
+            value={selectedValue}
             onChange={handleSelect}
             onQueryChange={setQuery}
           />
@@ -81,6 +90,13 @@ export function CompanyLocationForm({ values, onChange }: Props) {
           Get Current Location
         </Button>
       </div>
+
+      {values.location && (
+        <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
+          <MapPin className="w-4 h-4 text-(--module-btn-bg,var(--color-brand)) shrink-0" />
+          <span>{values.location}</span>
+        </div>
+      )}
 
       <CompanyLocationMap lat={values.lat} lng={values.lng} onChange={handleMapChange} />
     </div>

@@ -1,54 +1,184 @@
 'use client';
 
-import { DetailField } from '@/components/atoms/DetailField';
-import { CounterpartyContact } from '@/types/reinsurance';
+import { useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import { ContactCard } from '@/components/molecules/ContactCard';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
+import { FormField } from '@/components/molecules/shared/FormField';
+import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { useUpdateCounterpartyContact, useRemoveCounterpartyContact } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import { Counterparty, CounterpartyContact } from '@/types/reinsurance';
 
 interface CedantContactsTabProps {
-  contacts: CounterpartyContact[];
+  counterparty: Counterparty;
 }
 
-export function CedantContactsTab({ contacts }: CedantContactsTabProps) {
-  const primaryContact = contacts.find((c) => c.isPrimary) ?? contacts[0];
-  const additionalContacts = contacts.filter((c) => !c.isPrimary);
+interface ContactFormValues {
+  fullName: string;
+  jobTitle: string;
+  email: string;
+  phone: string;
+}
+
+export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
+  const toast = useToast();
+  const { mutateAsync: updateContact, isPending: isSaving } = useUpdateCounterpartyContact();
+  const { mutateAsync: removeContact, isPending: isRemoving } = useRemoveCounterpartyContact();
+
+  const [editTarget, setEditTarget] = useState<CounterpartyContact | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CounterpartyContact | null>(null);
+
+  const {
+    register,
+    control,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+  } = useForm<ContactFormValues>({
+    defaultValues: { fullName: '', jobTitle: '', email: '', phone: '' },
+  });
+
+  const phoneValue = useWatch({ control, name: 'phone' });
+
+  const openEdit = (contact: CounterpartyContact) => {
+    setEditTarget(contact);
+    setValue('fullName', contact.fullName);
+    setValue('jobTitle', contact.jobTitle ?? '');
+    setValue('email', contact.email ?? '');
+    setValue('phone', contact.phone ?? '');
+  };
+
+  const onSubmit = async (data: ContactFormValues) => {
+    if (!editTarget) return;
+    try {
+      await updateContact({
+        counterparty,
+        contactId: editTarget.id,
+        contact: {
+          fullName: data.fullName,
+          isPrimary: editTarget.isPrimary,
+          ...(data.jobTitle && { jobTitle: data.jobTitle }),
+          ...(data.email && { email: data.email }),
+          ...(data.phone && { phone: data.phone }),
+        },
+      });
+      toast.success('Contact updated');
+      setEditTarget(null);
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to update contact'));
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await removeContact({ counterparty, contactId: deleteTarget.id });
+      toast.success('Contact removed');
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to remove contact'));
+    }
+  };
+
+  if (counterparty.contacts.length === 0) {
+    return <p className="text-sm text-gray-400">No contacts on record.</p>;
+  }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-6">
-      {primaryContact ? (
+    <>
+      <div className="flex flex-wrap gap-4">
+        {counterparty.contacts.map((c) => (
+          <ContactCard
+            key={c.id}
+            name={c.fullName}
+            subtitle={c.jobTitle ?? undefined}
+            statusPill={c.isPrimary ? { label: 'Primary', color: 'green' } : undefined}
+            email={c.email ?? '—'}
+            phone={c.phone ?? '—'}
+            onEdit={() => openEdit(c)}
+            onDelete={() => setDeleteTarget(c)}
+          />
+        ))}
+      </div>
+
+      <SidePanel
+        isOpen={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        title="Edit Contact"
+        description={editTarget ? `Update details for ${editTarget.fullName}` : undefined}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setEditTarget(null)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button isLoading={isSaving} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
+              Save Changes
+            </Button>
+          </div>
+        }
+      >
         <div className="flex flex-col gap-4">
-          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-            Primary Contact
-          </span>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-5">
-            <DetailField label="Name" value={primaryContact.fullName} />
-            {primaryContact.jobTitle && (
-              <DetailField label="Job Title" value={primaryContact.jobTitle} />
-            )}
-            {primaryContact.email && <DetailField label="Email" value={primaryContact.email} />}
-            {primaryContact.phone && <DetailField label="Phone" value={primaryContact.phone} />}
+          <FormField
+            label="Contact Name"
+            registration={register('fullName', { required: 'Contact name is required' })}
+            error={errors.fullName}
+            placeholder="e.g. Ama Mensah"
+          />
+          <FormField
+            label="Job Title"
+            registration={register('jobTitle')}
+            error={errors.jobTitle}
+            placeholder="e.g. Underwriting Manager"
+          />
+          <FormField
+            label="Email"
+            type="email"
+            registration={register('email', {
+              pattern: {
+                value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                message: 'Enter a valid email address',
+              },
+            })}
+            error={errors.email}
+            placeholder="e.g. ama@example.com"
+          />
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-bold text-gray-900">Phone Number</span>
+            <PhoneInput
+              placeholder="00 000 0000"
+              value={phoneValue ?? ''}
+              onChange={(v) => setValue('phone', v)}
+              error={errors.phone?.message}
+            />
           </div>
         </div>
-      ) : (
-        <p className="text-sm text-gray-400">No contacts on record.</p>
-      )}
+      </SidePanel>
 
-      {additionalContacts.length > 0 && (
-        <div className="flex flex-col gap-4 pt-4 border-t border-gray-100">
-          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-            Additional Contacts
-          </span>
-          {additionalContacts.map((c) => (
-            <div
-              key={c.id}
-              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-5"
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Remove Contact"
+        description={`Are you sure you want to remove "${deleteTarget?.fullName}" from your contacts?`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isRemoving}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isRemoving}
+              loadingText="Removing…"
+              onClick={handleDelete}
             >
-              <DetailField label="Name" value={c.fullName} />
-              {c.jobTitle && <DetailField label="Job Title" value={c.jobTitle} />}
-              {c.email && <DetailField label="Email" value={c.email} />}
-              {c.phone && <DetailField label="Phone" value={c.phone} />}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+              Remove
+            </Button>
+          </div>
+        }
+      />
+    </>
   );
 }

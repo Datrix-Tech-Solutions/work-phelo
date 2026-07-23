@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import Map, { Marker, Popup, NavigationControl } from 'react-map-gl/maplibre';
+import { useEffect, useRef, useState } from 'react';
+import Map, { Marker, Popup, NavigationControl, MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Icons } from '@/components/atoms/icons';
 import { MAPTILER_STYLE_URL, hasMapTilerKey } from '@/lib/maptiler';
@@ -29,7 +29,15 @@ interface Props {
 
 export function TransportOfficerMap({ officers, selectedOfficerId }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const mapRef = useRef<MapRef>(null);
   const active = officers.find((o) => o.id === (activeId ?? selectedOfficerId));
+
+  useEffect(() => {
+    if (!selectedOfficerId) return;
+    const officer = officers.find((o) => o.id === selectedOfficerId);
+    if (!officer) return;
+    mapRef.current?.flyTo({ center: [officer.lng, officer.lat], zoom: 15, duration: 800 });
+  }, [selectedOfficerId, officers]);
 
   if (!hasMapTilerKey()) {
     return (
@@ -41,6 +49,7 @@ export function TransportOfficerMap({ officers, selectedOfficerId }: Props) {
 
   return (
     <Map
+      ref={mapRef}
       initialViewState={DEFAULT_VIEW}
       style={{ width: '100%', height: '100%' }}
       mapStyle={MAPTILER_STYLE_URL}

@@ -72,8 +72,8 @@ export function SidePanel({
         )}
       >
         {/* Header */}
-        <div className="shrink-0 px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-100">
-          <div className="flex items-start justify-between gap-4">
+        <div className="shrink-0 px-3 sm:px-6 py-1 sm:py-2 border-b border-(--glass-border,rgba(255,255,255,0.55))">
+          <div className="flex items-start justify-between gap-1">
             <div>
               <h2 className="text-xl sm:text-xl font-semibold text-gray-900 tracking-tight">
                 {title}
@@ -83,16 +83,16 @@ export function SidePanel({
 
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-500 p-2 rounded-full hover:bg-gray-100 transition-all"
+              className="text-gray-700 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-all"
               aria-label="Close panel"
             >
-              <Icons.X />
+              <Icons.X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto px-2 sm:px-6 py-3 sm:py-5">
+        <div className="flex-1 overflow-y-auto px-2 sm:px-6 py-2 sm:py-3">
           <div className="flex flex-col gap-6 h-full">{children}</div>
         </div>
 

@@ -3,11 +3,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn, popupClass } from '@/lib/utils';
-import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { useDropdownPosition } from '@/hooks';
+import { Calendar } from '@/components/atoms/Calendar';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 interface DatePickerProps {
   label?: string;
@@ -73,14 +73,6 @@ export function DatePicker({
       })()
     : null;
 
-  const isDisabledDay = (day: number) => {
-    const date = new Date(viewYear, viewMonth, day);
-    if (disableFuture && date > todayNorm) return true;
-    if (disablePast && date < todayNorm) return true;
-    if (minDateNorm && date < minDateNorm) return true;
-    return false;
-  };
-
   // A month is disabled if no selectable day exists within it
   const isDisabledMonth = (monthIdx: number) => {
     const firstDay = new Date(viewYear, monthIdx, 1);
@@ -101,9 +93,7 @@ export function DatePicker({
     return false;
   };
 
-  const selectDay = (day: number) => {
-    if (isDisabledDay(day)) return;
-    const iso = new Date(viewYear, viewMonth, day).toISOString().split('T')[0];
+  const selectDay = (iso: string) => {
     onChange?.(iso);
     setOpen(false);
     setView('days');
@@ -122,14 +112,6 @@ export function DatePicker({
       setViewYear((y) => y + 1);
     } else setViewMonth((m) => m + 1);
   };
-
-  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
 
   const yearGrid = Array.from({ length: 9 }, (_, i) => yearPageStart + i);
 
@@ -155,7 +137,7 @@ export function DatePicker({
         )}
       >
         <span>{displayValue || placeholder}</span>
-        <Calendar className={cn('text-gray-400', size === 'sm' ? 'w-4 h-4' : 'w-5 h-5')} />
+        <CalendarIcon className={cn('text-gray-400', size === 'sm' ? 'w-4 h-4' : 'w-5 h-5')} />
       </button>
 
       {error && <p className="text-xs text-red-500">{error}</p>}
@@ -214,49 +196,15 @@ export function DatePicker({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-7 text-xs text-gray-500 py-2 px-3 border-b">
-                  {DAYS.map((d) => (
-                    <div key={d} className="text-center font-medium">
-                      {d}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-7 gap-1 p-3">
-                  {cells.map((day, i) => {
-                    if (!day) return <div key={i} className="h-9" />;
-                    const disabled = isDisabledDay(day);
-                    const isSelected =
-                      parsed &&
-                      parsed.getDate() === day &&
-                      parsed.getMonth() === viewMonth &&
-                      parsed.getFullYear() === viewYear;
-                    const isCurrentDay =
-                      today.getDate() === day &&
-                      today.getMonth() === viewMonth &&
-                      today.getFullYear() === viewYear;
-
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => selectDay(day)}
-                        disabled={disabled}
-                        className={cn(
-                          'h-9 w-full text-sm rounded-lg transition-all',
-                          disabled
-                            ? 'text-gray-300 cursor-not-allowed'
-                            : isSelected
-                              ? 'bg-brand text-white font-semibold shadow-sm'
-                              : isCurrentDay
-                                ? 'border-2 border-brand text-brand font-medium'
-                                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900',
-                        )}
-                      >
-                        {day}
-                      </button>
-                    );
-                  })}
-                </div>
+                <Calendar
+                  viewYear={viewYear}
+                  viewMonth={viewMonth}
+                  value={value}
+                  onSelectDay={selectDay}
+                  disableFuture={disableFuture}
+                  disablePast={disablePast}
+                  minDate={minDate}
+                />
               </>
             )}
 

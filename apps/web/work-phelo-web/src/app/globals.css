@@ -231,46 +231,46 @@
 .app-blob {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(90px);
-  opacity: 0.76;
+  filter: blur(100px);
+  opacity: 0.9;
   will-change: transform;
 }
 
 .app-blob-1 {
-  top: -10%;
-  left: -10%;
-  width: 45vmax;
-  height: 45vmax;
+  top: -12%;
+  left: -5%;
+  width: 25vmax;
+  height: 25vmax;
   background: color-mix(in oklch, var(--module-accent, var(--brand-accent)) 55%, var(--background));
-  animation: blob-drift-a 10s ease-in-out infinite;
+  animation: blob-drift-vertical 10s ease-in-out infinite;
 }
 
 .app-blob-2 {
   bottom: -15%;
-  right: -12%;
-  width: 38vmax;
-  height: 38vmax;
+  right: -5%;
+  width: 28vmax;
+  height: 28vmax;
   background: color-mix(in oklch, var(--module-accent, var(--brand-accent)) 55%, var(--background));
-  animation: blob-drift-b 14s ease-in-out infinite;
+  animation: blob-drift-horizontal 14s ease-in-out infinite;
 }
 
-@keyframes blob-drift-a {
+@keyframes blob-drift-vertical {
   0%,
   100% {
-    transform: translate(0, 0) scale(1);
+    transform: translateY(0) scale(1);
   }
   50% {
-    transform: translate(40%, 45%) scale(1.25);
+    transform: translateY(45%) scale(1.15);
   }
 }
 
-@keyframes blob-drift-b {
+@keyframes blob-drift-horizontal {
   0%,
   100% {
-    transform: translate(0, 0) scale(1);
+    transform: translateX(0) scale(1);
   }
   50% {
-    transform: translate(-35%, -40%) scale(0.8);
+    transform: translateX(55%) scale(1.1);
   }
 }
 

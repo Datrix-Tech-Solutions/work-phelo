@@ -272,7 +272,7 @@ export function TopNav({
         )}
 
         {/* Logo */}
-        <WorkPheloLogo className="text-base shrink-0" variant={logoVariant} />
+        <WorkPheloLogo className="p-2 text-base shrink" variant={logoVariant} />
 
         {/* Tabs — centered relative to the full header width */}
         {tabs && tabs.length > 1 && (

@@ -236,7 +236,7 @@ export default function CedantDetailPage({
               />
 
               <div className="pt-5">
-                {activeTab === 'contacts' && <CedantContactsTab contacts={cedant.contacts} />}
+                {activeTab === 'contacts' && <CedantContactsTab counterparty={cedant} />}
 
                 {activeTab === 'placements' && (
                   <CedantPlacementsTab
