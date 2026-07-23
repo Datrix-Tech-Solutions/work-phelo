@@ -396,23 +396,84 @@ body {
   }
 }
 
-/* Loading mark — sonar rings + breathing icon behind a centered logo/icon */
-.loading-mark-ring {
+/* Loading mark — gooey orbiting blobs + breathing icon behind a centered logo/icon */
+.loading-mark-blob-wrap {
   position: absolute;
   inset: 0;
-  border-radius: 9999px;
-  border: 3px solid rgba(255, 255, 255, 0.85);
-  opacity: 0;
 }
 
-@keyframes loading-mark-pulse {
+.loading-mark-blob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 9999px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--loading-mark-color, var(--brand)) 55%, white),
+    var(--loading-mark-color, var(--brand))
+  );
+}
+
+.loading-mark-blob-1 {
+  width: 50px;
+  height: 50px;
+  margin: -25px;
+}
+.loading-mark-blob-2 {
+  width: 45px;
+  height: 45px;
+  margin: -22.5px;
+}
+.loading-mark-blob-3 {
+  width: 40px;
+  height: 40px;
+  margin: -20px;
+}
+.loading-mark-blob-4 {
+  width: 35px;
+  height: 35px;
+  margin: -17.5px;
+}
+
+@keyframes loading-mark-vortex-rotate {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-mark-orbit-1 {
   0% {
-    transform: scale(0.7);
-    opacity: 0.9;
+    transform: translate(-60px, -60px) scale(0.8);
   }
   100% {
-    transform: scale(1.7);
-    opacity: 0;
+    transform: translate(60px, 60px) scale(1.2);
+  }
+}
+
+@keyframes loading-mark-orbit-2 {
+  0% {
+    transform: translate(60px, -60px) scale(1.1);
+  }
+  100% {
+    transform: translate(-60px, 60px) scale(0.9);
+  }
+}
+
+@keyframes loading-mark-orbit-3 {
+  0% {
+    transform: translate(-70px, 20px) scale(1);
+  }
+  100% {
+    transform: translate(70px, -20px) scale(1.1);
+  }
+}
+
+@keyframes loading-mark-orbit-4 {
+  0% {
+    transform: translate(20px, 70px) scale(0.85);
+  }
+  100% {
+    transform: translate(-20px, -70px) scale(1.15);
   }
 }
 
@@ -427,12 +488,20 @@ body {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .loading-mark-ring-1 {
-    animation: loading-mark-pulse 1.8s ease-out infinite;
+  .loading-mark-blob-wrap {
+    animation: loading-mark-vortex-rotate 6s linear infinite;
   }
-  .loading-mark-ring-2 {
-    animation: loading-mark-pulse 1.8s ease-out infinite;
-    animation-delay: 0.9s;
+  .loading-mark-blob-1 {
+    animation: loading-mark-orbit-1 2s ease-in-out infinite alternate;
+  }
+  .loading-mark-blob-2 {
+    animation: loading-mark-orbit-2 2.4s ease-in-out infinite alternate;
+  }
+  .loading-mark-blob-3 {
+    animation: loading-mark-orbit-3 1.8s ease-in-out infinite alternate;
+  }
+  .loading-mark-blob-4 {
+    animation: loading-mark-orbit-4 2.8s ease-in-out infinite alternate;
   }
   .loading-mark-icon-wrap {
     animation: loading-mark-breathe 1.8s ease-in-out infinite;
