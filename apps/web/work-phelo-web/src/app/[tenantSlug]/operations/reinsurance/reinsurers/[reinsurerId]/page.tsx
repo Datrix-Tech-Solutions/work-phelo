@@ -190,7 +190,7 @@ export default function ReinsurerDetailPage({
               />
 
               <div className="pt-5">
-                {activeTab === 'contacts' && <CedantContactsTab contacts={reinsurer.contacts} />}
+                {activeTab === 'contacts' && <CedantContactsTab counterparty={reinsurer} />}
 
                 {activeTab === 'placements' && (
                   <ReinsurerPlacementsTab

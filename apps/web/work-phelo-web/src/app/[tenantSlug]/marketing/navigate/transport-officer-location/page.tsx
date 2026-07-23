@@ -10,7 +10,7 @@ import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 
 const OFFICERS: OfficerLocation[] = [
-  { id: '1', name: 'Kwame Asante', lat: 5.6037, lng: -0.187, status: 'active' },
+  { id: '1', name: 'Kwame Asante', lat: 5.6037, lng: -0.87, status: 'active' },
   { id: '2', name: 'Ama Boateng', lat: 5.5913, lng: -0.2077, status: 'idle' },
   { id: '3', name: 'Kofi Mensah', lat: 5.6145, lng: -0.1699, status: 'offline' },
 ];

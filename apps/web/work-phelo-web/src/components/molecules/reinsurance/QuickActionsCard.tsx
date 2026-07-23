@@ -9,7 +9,8 @@ import {
   BanknoteArrowDown,
   LucideIcon,
 } from 'lucide-react';
-import { cardClass, waterIconStyle } from '@/lib/utils';
+import { waterIconStyle } from '@/lib/utils';
+import { QuickActionsPanel } from '@/components/atoms/QuickActionsPanel';
 
 interface QuickAction {
   label: string;
@@ -31,14 +32,13 @@ export function QuickActionsCard() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   return (
-    <div className={cardClass('flex flex-col gap-3 p-5 h-80', 'glass')}>
-      <h3 className="text-sm font-semibold text-gray-900">Quick Actions</h3>
+    <QuickActionsPanel className="h-80">
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5">
         {ACTIONS.map(({ label, icon: Icon, href, color }) => (
           <Link
             key={label}
             href={`/${tenantSlug}/operations/reinsurance/${href}`}
-            className="group flex items-center gap-3 rounded-2xl border border-(--module-border,var(--color-gray-200)) bg-white/60 px-3 py-2.5 shadow-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-1 hover:bg-(--tint) hover:shadow-lg"
+            className="group flex items-center gap-3 rounded-2xl border border-white/40 bg-white/95 px-3 py-2.5 shadow-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-1 hover:bg-(--tint) hover:shadow-lg"
             style={{ '--tint': `color-mix(in oklab, ${color} 14%, white)` } as React.CSSProperties}
           >
             <div
@@ -54,6 +54,6 @@ export function QuickActionsCard() {
           </Link>
         ))}
       </div>
-    </div>
+    </QuickActionsPanel>
   );
 }

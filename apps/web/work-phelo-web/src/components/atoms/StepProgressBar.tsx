@@ -57,21 +57,28 @@ export function StepProgressBar({ steps, currentStep }: StepProgressBarProps) {
             return (
               <div key={label} className="flex items-center flex-1 last:flex-none">
                 <div className="flex flex-col items-center gap-2 shrink-0">
-                  <div
-                    className={cn(
-                      'w-8 h-8 rounded-full flex items-center justify-center transition-colors',
-                      isCompleted
-                        ? 'bg-(--module-btn-bg,var(--color-brand))'
-                        : isCurrent
-                          ? 'bg-white border-2 border-gray-300'
-                          : 'bg-gray-200',
+                  <div className="relative w-8 h-8 shrink-0">
+                    {isCurrent && (
+                      <span className="absolute inset-0 rounded-full bg-(--module-btn-bg,var(--color-brand)) opacity-60 animate-ping" />
                     )}
-                  >
-                    {isCompleted ? (
-                      <Check className="w-4 h-4 text-white stroke-[2.5]" />
-                    ) : isCurrent ? (
-                      <span className="w-2 h-2 rounded-full bg-gray-500" />
-                    ) : null}
+                    <div
+                      className={cn(
+                        'relative w-8 h-8 rounded-full flex items-center justify-center transition-colors',
+                        isCompleted
+                          ? 'bg-(--module-btn-bg,var(--color-brand))'
+                          : isCurrent
+                            ? 'bg-white border-2 border-gray-300'
+                            : 'bg-gray-200',
+                      )}
+                    >
+                      {isCompleted ? (
+                        <Check className="w-4 h-4 text-white stroke-[2.5]" />
+                      ) : isCurrent ? (
+                        <span className="relative w-2 h-2 rounded-full bg-gray-500">
+                          <span className="absolute inset-0 rounded-full bg-gray-500 opacity-75 animate-ping" />
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                   <span
                     className={cn(

@@ -9,7 +9,8 @@ import {
   KanbanSquare,
   LucideIcon,
 } from 'lucide-react';
-import { cardClass, waterIconStyle } from '@/lib/utils';
+import { waterIconStyle } from '@/lib/utils';
+import { QuickActionsPanel } from '@/components/atoms/QuickActionsPanel';
 
 interface QuickActionsCardProps {
   onApplyLeave: () => void;
@@ -63,15 +64,14 @@ export function QuickActionsCard({
   ];
 
   return (
-    <div className={cardClass('flex flex-col gap-3 p-5', 'glass')}>
-      <h3 className="text-sm font-semibold text-gray-900">Quick Actions</h3>
+    <QuickActionsPanel>
       <div className="flex flex-col gap-2.5">
         {actions.map(({ label, icon: Icon, color, onClick, badge }) => (
           <button
             key={label}
             type="button"
             onClick={onClick}
-            className="group relative flex w-full items-center gap-3 rounded-2xl border border-(--module-border,var(--color-gray-200)) bg-white/60 px-3 py-2.5 text-left shadow-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-1 hover:bg-(--tint) hover:shadow-lg"
+            className="group relative flex w-full items-center gap-3 rounded-2xl border border-white/40 bg-white/95 px-3 py-2.5 text-left shadow-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-1 hover:bg-(--tint) hover:shadow-lg"
             style={{ '--tint': `color-mix(in oklab, ${color} 14%, white)` } as React.CSSProperties}
           >
             <div
@@ -92,6 +92,6 @@ export function QuickActionsCard({
           </button>
         ))}
       </div>
-    </div>
+    </QuickActionsPanel>
   );
 }

@@ -127,67 +127,63 @@ export function DataList<T extends { id: string | number }>({
               <p className="text-sm font-medium text-gray-500">{emptyMessage}</p>
             </div>
           ) : (
-            data.map((row) => (
-              <div
-                key={row.id}
-                onClick={() => onRowClick?.(row)}
-                className={cn(
-                  'relative group/row border-b border-gray-100 last:border-b-0',
-                  onRowClick && 'cursor-pointer',
-                )}
-              >
+            <div className="p-1">
+              {data.map((row) => (
                 <div
-                  className={cardClass(
-                    'absolute inset-y-0.5 left-1 right-1 rounded-lg bg-(--table-header-bg,var(--color-gray-200)) opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 pointer-events-none',
-                    'glass',
+                  key={row.id}
+                  onClick={() => onRowClick?.(row)}
+                  className={cn(
+                    'group/row rounded-xl bg-gray-100 shadow-sm hover:bg-(--module-accent,var(--color-gray-300)) hover:-translate-y-1 hover:shadow-lg transition-[transform,box-shadow,background-color] duration-200 mb-2 last:mb-0',
+                    onRowClick && 'cursor-pointer',
                   )}
-                />
-                <div
-                  className="relative grid px-4 py-2 items-center text-sm text-gray-800"
-                  style={{ gridTemplateColumns: gridCols }}
                 >
-                  {columns.map((col) => (
-                    <div key={col.key} className={col.className}>
-                      {col.render
-                        ? col.render(row)
-                        : String((row as Record<string, unknown>)[col.key] ?? '')}
-                    </div>
-                  ))}
+                  <div
+                    className="grid px-4 py-4 items-center text-sm text-gray-800"
+                    style={{ gridTemplateColumns: gridCols }}
+                  >
+                    {columns.map((col) => (
+                      <div key={col.key} className={col.className}>
+                        {col.render
+                          ? col.render(row)
+                          : String((row as Record<string, unknown>)[col.key] ?? '')}
+                      </div>
+                    ))}
 
-                  {rowActions &&
-                    (() => {
-                      const actions = rowActions(row);
-                      if (actions.length === 0) return null;
-                      if (actions.length === 1) {
-                        const action = actions[0];
+                    {rowActions &&
+                      (() => {
+                        const actions = rowActions(row);
+                        if (actions.length === 0) return null;
+                        if (actions.length === 1) {
+                          const action = actions[0];
+                          return (
+                            <div className="flex justify-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  action.onClick();
+                                }}
+                                className={cn(
+                                  'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
+                                  action.danger
+                                    ? 'text-red-600 hover:bg-red-50'
+                                    : 'text-brand hover:bg-brand/5',
+                                )}
+                              >
+                                {action.label}
+                              </button>
+                            </div>
+                          );
+                        }
                         return (
-                          <div className="flex justify-center">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                action.onClick();
-                              }}
-                              className={cn(
-                                'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
-                                action.danger
-                                  ? 'text-red-600 hover:bg-red-50'
-                                  : 'text-brand hover:bg-brand/5',
-                              )}
-                            >
-                              {action.label}
-                            </button>
+                          <div className="flex justify-end w-4">
+                            <ThreeDotMenu actions={actions} />
                           </div>
                         );
-                      }
-                      return (
-                        <div className="flex justify-end w-4">
-                          <ThreeDotMenu actions={actions} />
-                        </div>
-                      );
-                    })()}
+                      })()}
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       </div>

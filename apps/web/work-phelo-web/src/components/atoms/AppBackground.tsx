@@ -30,7 +30,7 @@ export function AppBackground<T extends ElementType = 'div'>({
       }}
       {...props}
     >
-      {backgroundImage && (
+      {backgroundImage ? (
         <div aria-hidden className="absolute inset-0 -z-10 overflow-hidden">
           <Image
             src={backgroundImage}
@@ -48,6 +48,11 @@ export function AppBackground<T extends ElementType = 'div'>({
               opacity: 0.78,
             }}
           />
+        </div>
+      ) : (
+        <div aria-hidden className="app-blob-layer">
+          <div className="app-blob app-blob-1" />
+          <div className="app-blob app-blob-2" />
         </div>
       )}
       {children}

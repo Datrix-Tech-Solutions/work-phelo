@@ -53,6 +53,40 @@ export function useAddCounterpartyContact() {
 }
 
 /**
+ * Updates a single contact on an existing counterparty by its id.
+ *
+ * Maps the stored contacts to payload shape, replacing the matching contact
+ * with the edited fields, then PATCHes the full list back.
+ */
+export function useUpdateCounterpartyContact() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      counterparty,
+      contactId,
+      contact,
+    }: {
+      counterparty: Counterparty;
+      contactId: string;
+      contact: CounterpartyContactPayload;
+    }) => {
+      const contacts = counterparty.contacts.map((c) =>
+        c.id === contactId ? contact : toPayload(c),
+      );
+
+      const res = await api.patch<Counterparty>(`${ENDPOINT}/${counterparty.id}`, { contacts });
+      return res.data;
+    },
+    onSuccess: (_, { counterparty }) => {
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEY_BY_TYPE[counterparty.type],
+      });
+    },
+  });
+}
+
+/**
  * Removes a contact from an existing counterparty by its id.
  *
  * Filters the contact out of the stored list then PATCHes with the remainder.

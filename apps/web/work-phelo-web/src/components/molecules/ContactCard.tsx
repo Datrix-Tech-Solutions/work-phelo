@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPin, UserPlus, Trash2, Mail, Phone } from 'lucide-react';
+import { MapPin, UserPlus, Trash2, Mail, Phone, Pencil } from 'lucide-react';
 import { cn, glassStrongClass } from '@/lib/utils';
 import { Avatar } from '@/components/atoms/Avatar';
 
@@ -59,6 +59,7 @@ interface ContactCardProps {
   badge?: { count: number; label: string };
   onClick?: () => void;
   onAddPerson?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
   className?: string;
 }
@@ -75,10 +76,11 @@ export function ContactCard({
   badge,
   onClick,
   onAddPerson,
+  onEdit,
   onDelete,
   className,
 }: ContactCardProps) {
-  const hasActions = !!(onAddPerson || onDelete);
+  const hasActions = !!(onAddPerson || onEdit || onDelete);
 
   return (
     <div
@@ -112,26 +114,42 @@ export function ContactCard({
       {/* Action buttons — visible on hover */}
       {hasActions && (
         <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddPerson?.();
-            }}
-            className="p-2 bg-gray-100 rounded-lg text-blue-300 hover:bg-blue-200 hover:text-blue-800 transition-colors"
-            aria-label="Add person"
-          >
-            <UserPlus size={15} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete?.();
-            }}
-            className="p-2 bg-gray-100 rounded-lg text-red-300 hover:bg-red-50 hover:text-red-600 transition-colors"
-            aria-label="Delete"
-          >
-            <Trash2 size={15} />
-          </button>
+          {onAddPerson && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddPerson();
+              }}
+              className="p-2 bg-gray-100 rounded-lg text-blue-800 hover:bg-blue-300 hover:text-blue-800 transition-colors"
+              aria-label="Add person"
+            >
+              <UserPlus size={15} />
+            </button>
+          )}
+          {onEdit && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              className="p-2 bg-gray-100 rounded-lg text-gray-800 hover:bg-gray-300 hover:text-gray-800 transition-colors"
+              aria-label="Edit"
+            >
+              <Pencil size={15} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="p-2 bg-gray-100 rounded-lg text-red-300 hover:bg-red-50 hover:text-red-600 transition-colors"
+              aria-label="Delete"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
         </div>
       )}
 
