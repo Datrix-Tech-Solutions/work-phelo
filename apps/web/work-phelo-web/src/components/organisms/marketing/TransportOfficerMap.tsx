@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import Map, { Marker, Popup, NavigationControl } from 'react-map-gl/mapbox';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import Map, { Marker, Popup, NavigationControl } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { Icons } from '@/components/atoms/icons';
+import { MAPTILER_STYLE_URL, hasMapTilerKey } from '@/lib/maptiler';
 
 export interface OfficerLocation {
   id: string;
@@ -21,8 +22,6 @@ const STATUS_COLOR: Record<OfficerLocation['status'], string> = {
 
 const DEFAULT_VIEW = { latitude: 5.6037, longitude: -0.187, zoom: 11 };
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
-
 interface Props {
   officers: OfficerLocation[];
   selectedOfficerId?: string;
@@ -32,7 +31,7 @@ export function TransportOfficerMap({ officers, selectedOfficerId }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const active = officers.find((o) => o.id === (activeId ?? selectedOfficerId));
 
-  if (!MAPBOX_TOKEN) {
+  if (!hasMapTilerKey()) {
     return (
       <div className="w-full h-full flex items-center justify-center text-center px-6">
         <p className="text-sm text-gray-500">Map not available.</p>
@@ -42,10 +41,9 @@ export function TransportOfficerMap({ officers, selectedOfficerId }: Props) {
 
   return (
     <Map
-      mapboxAccessToken={MAPBOX_TOKEN}
       initialViewState={DEFAULT_VIEW}
       style={{ width: '100%', height: '100%' }}
-      mapStyle="mapbox://styles/mapbox/streets-v12"
+      mapStyle={MAPTILER_STYLE_URL}
     >
       <NavigationControl position="bottom-right" />
 

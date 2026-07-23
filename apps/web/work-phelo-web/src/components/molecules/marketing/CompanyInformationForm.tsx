@@ -96,7 +96,7 @@ export function CompanyInformationForm({
               type="email"
               placeholder="email@example.com"
               value={values.email}
-              onChange={(e) => set('email', e.target.value)}
+              onChange={(e) => set('email', e.target.value.toLowerCase())}
               className={inputClass(errors?.email)}
             />
             {errors?.email && <p className="text-xs text-red-500">{errors.email}</p>}

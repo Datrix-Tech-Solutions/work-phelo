@@ -107,7 +107,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
               onChange?.(countryCode + numeric);
             }}
             placeholder={placeholder}
-            className="flex-1 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 bg-transparent focus:outline-none"
+            className="flex-1 px-4 py-2 text-sm text-gray-800 placeholder:text-gray-400 bg-transparent focus:outline-none"
           />
         </div>
         {error && <p className="text-xs text-red-500">{error}</p>}

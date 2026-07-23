@@ -21,6 +21,8 @@ interface SearchSelectProps {
   error?: string;
   /** 'md' (default) keeps the standard py-3 height; 'sm' matches the DataTable search input (py-2). */
   size?: 'sm' | 'md';
+  /** Fires on every keystroke — lets callers drive async option sources (e.g. geocoding search). */
+  onQueryChange?: (query: string) => void;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -37,6 +39,7 @@ export function SearchSelect({
   onChange,
   error,
   size = 'sm',
+  onQueryChange,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -173,6 +176,7 @@ export function SearchSelect({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
+    onQueryChange?.(e.target.value);
     if (!open) openDropdown();
   };
 
