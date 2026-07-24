@@ -779,6 +779,13 @@ export interface EndorsementParticipantClosing {
   updatedAt: string;
 }
 
+export interface ValidateEndorsementParticipantResponse {
+  participant: PlacementEndorsementParticipant;
+  closing: EndorsementParticipantClosing;
+  summary: PlacementEndorsementSummary;
+  effectiveStatus: PlacementEndorsementStatus;
+}
+
 export type PlacementPaymentType =
   | 'PREMIUM_RECEIVED'
   | 'REINSURER_DISBURSEMENT'

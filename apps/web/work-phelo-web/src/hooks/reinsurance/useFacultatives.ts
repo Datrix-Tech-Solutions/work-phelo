@@ -23,6 +23,7 @@ import {
   EffectivePlacementView,
   PlacementParticipantClosing,
   EndorsementParticipantClosing,
+  ValidateEndorsementParticipantResponse,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
@@ -559,6 +560,56 @@ export function useUpdateEndorsementParticipantStatus(
       if (!suppressInvalidation) {
         invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
       }
+    },
+  });
+}
+
+export function useValidateAndConfirmEndorsementParticipant(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ participantId }: { participantId: string }) => {
+      if (!endorsementId) {
+        throw new Error('Endorsement is required before validating a participant.');
+      }
+      const res = await api.post<ValidateEndorsementParticipantResponse>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}/validate-and-confirm`,
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      if (!endorsementId) return;
+
+      queryClient.setQueryData<PlacementEndorsementParticipant[]>(
+        endorsementParticipantKey(placementId, endorsementId),
+        (current) =>
+          current?.map((participant) =>
+            participant.id === data.participant.id ? data.participant : participant,
+          ) ?? [data.participant],
+      );
+      queryClient.setQueryData<EndorsementParticipantClosing[]>(
+        endorsementClosingsKey(placementId, endorsementId),
+        (current) => {
+          const existing = current ?? [];
+          const hasClosing = existing.some((closing) => closing.id === data.closing.id);
+          if (!hasClosing) return [...existing, data.closing];
+          return existing.map((closing) =>
+            closing.id === data.closing.id ? data.closing : closing,
+          );
+        },
+      );
+      queryClient.setQueryData<PlacementEndorsementSummary>(
+        endorsementSummaryKey(placementId, endorsementId),
+        data.summary,
+      );
+
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
     },
   });
 }

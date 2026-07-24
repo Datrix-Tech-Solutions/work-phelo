@@ -21,8 +21,7 @@ import {
   useUpdateEndorsementParticipant,
   useUpdateEndorsementParticipantStatus,
   useEndorsementClosings,
-  useCreateEndorsementClosing,
-  useUpdateEndorsementClosingStatus,
+  useValidateAndConfirmEndorsementParticipant,
   usePlacementEndorsementSummary,
   useReinsurers,
   useUpdateEndorsementStatus,
@@ -227,8 +226,7 @@ function EndorsementCard({
     endorsement.id,
   );
   const { data: endorsementSummary } = usePlacementEndorsementSummary(placement.id, endorsement.id);
-  const { data: endorsementClosings = [], refetch: refetchEndorsementClosings } =
-    useEndorsementClosings(placement.id, endorsement.id);
+  const { data: endorsementClosings = [] } = useEndorsementClosings(placement.id, endorsement.id);
   const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
     placement.id,
     endorsement.id,
@@ -241,8 +239,7 @@ function EndorsementCard({
     placement.id,
     endorsement.id,
   );
-  const createEndorsementClosing = useCreateEndorsementClosing(placement.id, endorsement.id);
-  const updateEndorsementClosingStatus = useUpdateEndorsementClosingStatus(
+  const validateAndConfirmEndorsementParticipant = useValidateAndConfirmEndorsementParticipant(
     placement.id,
     endorsement.id,
   );
@@ -345,12 +342,6 @@ function EndorsementCard({
     endorsementRows.map((r, i) => [r.counterpartyId, SEGMENT_COLORS[i % SEGMENT_COLORS.length]]),
   );
 
-  const closingByEndorsementParticipantId = Object.fromEntries(
-    endorsementClosings
-      .filter((closing) => closing.status !== 'VOID')
-      .map((closing) => [closing.endorsementParticipantId, closing]),
-  );
-
   const invalidateEndorsementView = async () => {
     await Promise.all([
       queryClient.invalidateQueries({
@@ -428,67 +419,19 @@ function EndorsementCard({
       return;
     }
     setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
-    let completedStep: 'none' | 'created' | 'issued' | 'confirmed' = 'none';
 
     try {
-      const latestClosings = await refetchEndorsementClosings();
-      let closing =
-        latestClosings.data?.find(
-          (item) => item.endorsementParticipantId === participant.id && item.status !== 'VOID',
-        ) ?? closingByEndorsementParticipantId[participant.id];
-
-      if (!closing) {
-        try {
-          closing = await createEndorsementClosing.mutateAsync({
-            endorsementParticipantId: participant.id,
-            suppressInvalidation: true,
-          });
-          completedStep = 'created';
-        } catch (error) {
-          const refreshedClosings = await refetchEndorsementClosings();
-          const existingClosing = refreshedClosings.data?.find(
-            (item) => item.endorsementParticipantId === participant.id && item.status !== 'VOID',
-          );
-          if (!existingClosing) throw error;
-          closing = existingClosing;
-        }
-      }
-
-      if (closing.status === 'DRAFT') {
-        closing = await updateEndorsementClosingStatus.mutateAsync({
-          closingId: closing.id,
-          status: 'ISSUED',
-          suppressInvalidation: true,
-        });
-        completedStep = 'issued';
-      }
-
-      if (closing.status === 'ISSUED') {
-        await updateEndorsementClosingStatus.mutateAsync({
-          closingId: closing.id,
-          status: 'CONFIRMED',
-          suppressInvalidation: true,
-        });
-        completedStep = 'confirmed';
-      }
-
-      await updateEndorsementParticipantStatus.mutateAsync({
+      await validateAndConfirmEndorsementParticipant.mutateAsync({
         participantId: participant.id,
-        status: 'CLOSED',
-        suppressInvalidation: true,
       });
 
       useToastStore.getState().addToast({
-        message: `Endorsement closing confirmed for ${row.reinsurerName}`,
+        message: 'Endorsement participant validated and closing confirmed successfully.',
         type: 'success',
       });
     } catch (error) {
-      const partialMessage =
-        completedStep === 'none'
-          ? ''
-          : ` Validation partially completed through ${completedStep}. Refreshing backend state; retry to continue.`;
       useToastStore.getState().addToast({
-        message: `${extractError(error)}${partialMessage}`,
+        message: extractError(error),
         type: 'error',
       });
     } finally {
