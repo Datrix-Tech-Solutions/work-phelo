@@ -347,9 +347,11 @@ function EndorsementCard({
   );
   const { data: cedants = [] } = useCedants();
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
-  const { mutate: updateStatus, isPending: isUpdatingStatus } = useUpdateEndorsementStatus(
-    placement.id,
-  );
+  const {
+    mutate: updateStatus,
+    mutateAsync: updateStatusAsync,
+    isPending: isUpdatingStatus,
+  } = useUpdateEndorsementStatus(placement.id);
   const { data: endorsementParticipants = [] } = usePlacementEndorsementParticipants(
     placement.id,
     endorsement.id,
@@ -852,6 +854,48 @@ function EndorsementCard({
   const slipPreviewRow = endorsementRows.find(
     (r) => r.counterpartyId === slipPreviewCounterpartyId,
   );
+  const closeBlockingReasons = endorsementSummary?.closeBlockingReasons ?? [];
+  const isReadyToClose = endorsementSummary?.canClose ?? false;
+  const isInClosingPhase =
+    !isReadyToClose &&
+    endorsement.status !== 'CLOSED' &&
+    (endorsementSummary?.closings.confirmed ?? 0) > 0;
+  const displayedStatusLabel = isReadyToClose
+    ? 'Ready to Close'
+    : isInClosingPhase
+      ? 'Closing'
+      : ENDORSEMENT_STATUS_LABELS[endorsement.status];
+  const displayedStatusVariant = isReadyToClose
+    ? 'success'
+    : isInClosingPhase
+      ? 'warning'
+      : ENDORSEMENT_STATUS_VARIANT[endorsement.status];
+  const pendingWorkflowMessage = endorsementSummary?.pendingActions.includes('ISSUE_NOTES')
+    ? 'Issue the draft endorsement notes before closing.'
+    : endorsementSummary?.pendingActions.includes('GENERATE_NOTES')
+      ? 'Generate the required endorsement notes before closing.'
+      : isReadyToClose
+        ? 'All required endorsement work is complete. Ready for manual close.'
+        : closeBlockingReasons.length > 0
+          ? 'Complete the remaining endorsement actions before closing.'
+          : null;
+
+  const handleCloseEndorsement = async () => {
+    if (!isReadyToClose || isUpdatingStatus) return;
+    try {
+      await updateStatusAsync({ endorsementId: endorsement.id, status: 'CLOSED' });
+      await invalidateEndorsementView();
+      useToastStore.getState().addToast({
+        message: 'Endorsement closed',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({
+        message: extractError(error),
+        type: 'error',
+      });
+    }
+  };
 
   return (
     <>
@@ -863,10 +907,7 @@ function EndorsementCard({
               {endorsement.endorsementNumber}
             </span>
             <Badge label={ENDORSEMENT_TYPE_LABELS[endorsement.type]} variant="neutral" />
-            <Badge
-              label={ENDORSEMENT_STATUS_LABELS[endorsement.status]}
-              variant={ENDORSEMENT_STATUS_VARIANT[endorsement.status]}
-            />
+            <Badge label={displayedStatusLabel} variant={displayedStatusVariant} />
             <span className="text-xs text-gray-400">{fmtDate(endorsement.effectiveDate)}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -892,8 +933,33 @@ function EndorsementCard({
                 Cedant Document
               </Button>
             )}
+            {endorsement.status !== 'DRAFT' && endorsement.status !== 'CLOSED' && (
+              <Button
+                size="sm"
+                isLoading={isUpdatingStatus}
+                disabled={!isReadyToClose}
+                onClick={handleCloseEndorsement}
+              >
+                Close Endorsement
+              </Button>
+            )}
           </div>
         </div>
+
+        {pendingWorkflowMessage && (
+          <p className="text-xs text-gray-500">{pendingWorkflowMessage}</p>
+        )}
+
+        {closeBlockingReasons.length > 0 && endorsement.status !== 'CLOSED' && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold text-amber-800">Close readiness blockers</p>
+            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-amber-700">
+              {closeBlockingReasons.map((reason) => (
+                <li key={reason.code}>{reason.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Reason */}
         {endorsement.reason && (

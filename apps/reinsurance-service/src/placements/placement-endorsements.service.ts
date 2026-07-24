@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -22,6 +23,11 @@ import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endo
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
 
 type PlacementEndorsementRecord = PlacementEndorsement;
+
+type CloseBlockingReason = {
+  code: string;
+  message: string;
+};
 
 const endorsementSummaryInclude = {
   participants: {
@@ -226,6 +232,15 @@ export class PlacementEndorsementsService {
       (participant) =>
         participant.status === PlacementEndorsementParticipantStatus.DECLINED,
     );
+    const pendingParticipantStatuses: PlacementEndorsementParticipantStatus[] =
+      [
+        PlacementEndorsementParticipantStatus.INVITED,
+        PlacementEndorsementParticipantStatus.OFFER_SENT,
+        PlacementEndorsementParticipantStatus.QUOTED,
+      ];
+    const pendingParticipants = endorsement.participants.filter((participant) =>
+      pendingParticipantStatuses.includes(participant.status),
+    );
     const acceptedPercent = acceptedParticipants.reduce(
       (sum, participant) =>
         sum + (this.toOptionalNumber(participant.signedLinePercent) ?? 0),
@@ -279,6 +294,10 @@ export class PlacementEndorsementsService {
     const activeCreditNotes = activeNotes.filter(
       (note) => note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
     );
+    const requiresDebitNote =
+      activeConfirmedClosings.length > 0 &&
+      endorsement.impactType !==
+        PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION;
     const creditNoteClosingIds = new Set(
       activeCreditNotes
         .map((note) => note.endorsementClosingId)
@@ -299,10 +318,8 @@ export class PlacementEndorsementsService {
       pendingActions.add('ADD_CAPACITY');
     }
     if (
-      acceptedRemainingPercent !== null &&
-      acceptedRemainingPercent === 0 &&
-      acceptedParticipants.length > 0 &&
-      endorsement.status === PlacementEndorsementStatus.MARKETING
+      pendingParticipants.length > 0 &&
+      (acceptedRemainingPercent === null || acceptedRemainingPercent > 0)
     ) {
       pendingActions.add('ACCEPT_PARTICIPANTS');
     }
@@ -323,7 +340,7 @@ export class PlacementEndorsementsService {
     ) {
       pendingActions.add('CONFIRM_CLOSING');
     }
-    if (activeConfirmedClosings.length > 0 && activeDebitNotes.length === 0) {
+    if (requiresDebitNote && activeDebitNotes.length === 0) {
       pendingActions.add('GENERATE_NOTES');
     }
     if (confirmedClosingsWithoutCreditNotes.length > 0) {
@@ -337,10 +354,21 @@ export class PlacementEndorsementsService {
       PlacementEndorsementStatus.DECLINED,
       PlacementEndorsementStatus.VOID,
     ];
-    if (
-      pendingActions.size === 0 &&
-      !terminalStatuses.includes(endorsement.status)
-    ) {
+    const closeBlockingReasons = this.evaluateCloseReadiness({
+      endorsement,
+      pendingActions,
+      acceptedWithoutConfirmedClosing,
+      activeClosings,
+      activeConfirmedClosings,
+      requiresDebitNote,
+      activeDebitNotes,
+      confirmedClosingsWithoutCreditNotes,
+      draftNotes,
+      terminalStatuses,
+    });
+    const canClose = closeBlockingReasons.length === 0;
+
+    if (canClose && !terminalStatuses.includes(endorsement.status)) {
       pendingActions.add('CLOSE_ENDORSEMENT');
     }
 
@@ -393,12 +421,153 @@ export class PlacementEndorsementsService {
         ).length,
       },
       pendingActions: Array.from(pendingActions),
+      canClose,
+      closeBlockingReasons,
       isComplete:
         endorsement.status === PlacementEndorsementStatus.CLOSED &&
         (remainingPercent === null || remainingPercent === 0) &&
         acceptedWithoutConfirmedClosing.length === 0 &&
-        pendingActions.size === 0,
+        closeBlockingReasons.length === 0,
     };
+  }
+
+  private evaluateCloseReadiness({
+    endorsement,
+    pendingActions,
+    acceptedWithoutConfirmedClosing,
+    activeClosings,
+    activeConfirmedClosings,
+    requiresDebitNote,
+    activeDebitNotes,
+    confirmedClosingsWithoutCreditNotes,
+    draftNotes,
+    terminalStatuses,
+  }: {
+    endorsement: PlacementEndorsementSummaryRecord;
+    pendingActions: Set<string>;
+    acceptedWithoutConfirmedClosing: Array<{ id: string }>;
+    activeClosings: Array<{
+      id: string;
+      endorsementParticipantId: string;
+      status: PlacementClosingStatus;
+    }>;
+    activeConfirmedClosings: Array<{
+      id: string;
+      endorsementParticipantId: string;
+      status: PlacementClosingStatus;
+    }>;
+    requiresDebitNote: boolean;
+    activeDebitNotes: Array<{ id: string; status: PlacementNoteStatus }>;
+    confirmedClosingsWithoutCreditNotes: Array<{ id: string }>;
+    draftNotes: Array<{ id: string }>;
+    terminalStatuses: PlacementEndorsementStatus[];
+  }): CloseBlockingReason[] {
+    const reasons: CloseBlockingReason[] = [];
+    const addReason = (code: string, message: string) => {
+      if (!reasons.some((reason) => reason.code === code)) {
+        reasons.push({ code, message });
+      }
+    };
+
+    if (endorsement.status === PlacementEndorsementStatus.CLOSED) {
+      return reasons;
+    }
+    if (terminalStatuses.includes(endorsement.status)) {
+      addReason(
+        'TERMINAL_ENDORSEMENT_STATUS',
+        'This endorsement is already terminal and cannot be closed.',
+      );
+    }
+    if (endorsement.status === PlacementEndorsementStatus.DRAFT) {
+      addReason(
+        'ENDORSEMENT_NOT_MARKETED',
+        'Send the endorsement to market before closing it.',
+      );
+    }
+
+    if (acceptedWithoutConfirmedClosing.length > 0) {
+      addReason(
+        'ACCEPTED_PARTICIPANT_NOT_VALIDATED',
+        'One or more accepted endorsement participants still require confirmed closings.',
+      );
+    }
+    if (pendingActions.has('ADD_CAPACITY')) {
+      addReason(
+        'CAPACITY_NOT_FULLY_ACCEPTED',
+        'The endorsement capacity has not been fully accepted.',
+      );
+    }
+    if (pendingActions.has('ACCEPT_PARTICIPANTS')) {
+      addReason(
+        'PARTICIPANTS_PENDING_RESPONSE',
+        'One or more endorsement participants are still awaiting a final response.',
+      );
+    }
+    if (
+      activeClosings.some(
+        (closing) => closing.status === PlacementClosingStatus.DRAFT,
+      )
+    ) {
+      addReason('DRAFT_CLOSING', 'One endorsement closing is still in draft.');
+    }
+    if (
+      activeClosings.some(
+        (closing) => closing.status === PlacementClosingStatus.ISSUED,
+      )
+    ) {
+      addReason(
+        'UNCONFIRMED_CLOSING',
+        'One endorsement closing has been issued but not confirmed.',
+      );
+    }
+    if (this.hasDuplicateActiveClosings(activeClosings)) {
+      addReason(
+        'DUPLICATE_ACTIVE_CLOSING',
+        'A participant has more than one active endorsement closing.',
+      );
+    }
+    if (requiresDebitNote && activeDebitNotes.length === 0) {
+      addReason(
+        'MISSING_ENDORSEMENT_DEBIT_NOTE',
+        'Generate the required endorsement debit note before closing.',
+      );
+    }
+    if (confirmedClosingsWithoutCreditNotes.length > 0) {
+      addReason(
+        'MISSING_ENDORSEMENT_CREDIT_NOTE',
+        'Generate all required endorsement credit notes before closing.',
+      );
+    }
+    if (draftNotes.length > 0) {
+      addReason(
+        'DRAFT_ENDORSEMENT_NOTE',
+        'Issue all draft endorsement notes before closing.',
+      );
+    }
+    if (
+      activeConfirmedClosings.length === 0 &&
+      endorsement.impactType !== PlacementEndorsementImpactType.TERMS_ONLY &&
+      endorsement.impactType !== PlacementEndorsementImpactType.ADMINISTRATIVE
+    ) {
+      addReason(
+        'NO_CONFIRMED_ENDORSEMENT_CLOSING',
+        'At least one confirmed endorsement closing is required before closing.',
+      );
+    }
+
+    return reasons;
+  }
+
+  private hasDuplicateActiveClosings(
+    activeClosings: Array<{ endorsementParticipantId: string }>,
+  ): boolean {
+    const counts = new Map<string, number>();
+    for (const closing of activeClosings) {
+      const count = (counts.get(closing.endorsementParticipantId) ?? 0) + 1;
+      if (count > 1) return true;
+      counts.set(closing.endorsementParticipantId, count);
+    }
+    return false;
   }
 
   async update(
@@ -475,7 +644,24 @@ export class PlacementEndorsementsService {
       placementId,
       endorsementId,
     );
-    this.assertTransition(endorsement.status, dto.status);
+    if (endorsement.status === dto.status) return endorsement;
+
+    if (dto.status === PlacementEndorsementStatus.CLOSED) {
+      const summary = await this.getSummary(
+        user.tenantId,
+        placementId,
+        endorsementId,
+      );
+      if (!summary.canClose) {
+        throw new ConflictException(
+          `Endorsement is not ready to close. ${summary.closeBlockingReasons
+            .map((reason) => reason.message)
+            .join(' ')}`,
+        );
+      }
+    } else {
+      this.assertTransition(endorsement.status, dto.status);
+    }
 
     return this.prisma.placementEndorsement.update({
       where: { id: endorsementId },

@@ -608,6 +608,11 @@ export interface PlacementEndorsementSummary {
     void: number;
   };
   pendingActions: PlacementEndorsementPendingAction[];
+  canClose: boolean;
+  closeBlockingReasons: Array<{
+    code: string;
+    message: string;
+  }>;
   isComplete: boolean;
 }
 
