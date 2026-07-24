@@ -5,19 +5,25 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
 import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents/GuaranteeNoteModal';
 import { NoteDocumentModal } from '@/components/organisms/reinsurance/documents/NoteDocumentModal';
+import { PlacementClosingSnapshotModal } from '@/components/organisms/reinsurance/documents/PlacementClosingSnapshotModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import {
   useCedants,
   useReinsurers,
   usePlacementClosings,
+  usePlacementDocuments,
   usePlacementNotes,
   useCreatePlacementDebitNote,
   useCreatePlacementCreditNote,
-  useGeneratePlacementNoteDocument,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { Facultative, PlacementDocument, PlacementNote } from '@/types/reinsurance';
+import {
+  Facultative,
+  PlacementDocument,
+  PlacementNote,
+  PlacementParticipantClosing,
+} from '@/types/reinsurance';
 
 interface ClosingRow {
   id: string;
@@ -31,6 +37,7 @@ interface ClosingRow {
   netPremium: number | null;
   currency: string | null;
   createdAt: string;
+  closing: PlacementParticipantClosing;
 }
 
 function fmtPct(val: number) {
@@ -67,19 +74,21 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [guaranteeNoteOpen, setGuaranteeNoteOpen] = useState(false);
   const [guaranteeNoteViewed, setGuaranteeNoteViewed] = useState(false);
   const [debitNoteViewed, setDebitNoteViewed] = useState(false);
+  const [closingPreview, setClosingPreview] = useState<PlacementParticipantClosing | null>(null);
   const [noteDocumentPreview, setNoteDocumentPreview] = useState<PlacementDocument | null>(null);
+  const [noteRecordPreview, setNoteRecordPreview] = useState<PlacementNote | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
   const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
 
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
   const { data: closings = [], isLoading: isLoadingClosings } = usePlacementClosings(placement.id);
+  const { data: placementDocuments = [] } = usePlacementDocuments(placement.id);
   const { data: placementNotes = [], refetch: refetchPlacementNotes } = usePlacementNotes(
     placement.id,
   );
   const createDebitNote = useCreatePlacementDebitNote(placement.id);
   const createCreditNote = useCreatePlacementCreditNote(placement.id);
-  const generateNoteDocument = useGeneratePlacementNoteDocument(placement.id);
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
 
@@ -95,8 +104,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   );
 
   const isPlacementClosed = placement.status === 'CLOSED';
-  const isNoteBusy =
-    createDebitNote.isPending || createCreditNote.isPending || generateNoteDocument.isPending;
+  const isNoteBusy = createDebitNote.isPending || createCreditNote.isPending;
 
   const rows: ClosingRow[] = closings
     .filter((closing) => closing.status === 'CONFIRMED')
@@ -112,11 +120,15 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       netPremium: toNumber(closing.netPremium),
       currency: closing.currency,
       createdAt: closing.createdAt,
+      closing,
     }));
 
   const openNoteDocument = async (note: PlacementNote) => {
-    const document = await generateNoteDocument.mutateAsync({ noteId: note.id });
-    setNoteDocumentPreview(document);
+    const document = placementDocuments.find(
+      (item) => item.noteId === note.id && item.status !== 'VOID',
+    );
+    setNoteDocumentPreview(document ?? null);
+    setNoteRecordPreview(document ? null : note);
   };
 
   const findActiveDebitNote = (notes = placementNotes) => notes.find(isActiveDebitNote);
@@ -140,7 +152,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       await openNoteDocument(note);
       setDebitNoteViewed(true);
       useToastStore.getState().addToast({
-        message: 'Debit note snapshot ready',
+        message: 'Debit note ready',
         type: 'success',
       });
     } catch (error) {
@@ -164,7 +176,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       if (!note) throw new Error('Active credit note could not be found.');
       await openNoteDocument(note);
       useToastStore.getState().addToast({
-        message: 'Credit note snapshot ready',
+        message: 'Credit note ready',
         type: 'success',
       });
     } catch (error) {
@@ -217,6 +229,9 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       width: '1fr',
       render: (row) => (
         <div className="flex items-center gap-3">
+          <TableButton variant="gray" onClick={() => setClosingPreview(row.closing)}>
+            View Closing
+          </TableButton>
           <TableButton isLoading={isNoteBusy} onClick={() => handleOpenCreditNote(row)}>
             View Credit Note
           </TableButton>
@@ -273,9 +288,21 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       />
 
       <NoteDocumentModal
-        isOpen={!!noteDocumentPreview}
+        isOpen={!!noteDocumentPreview || !!noteRecordPreview}
         document={noteDocumentPreview}
-        onClose={() => setNoteDocumentPreview(null)}
+        note={noteRecordPreview}
+        placement={placement}
+        onClose={() => {
+          setNoteDocumentPreview(null);
+          setNoteRecordPreview(null);
+        }}
+      />
+
+      <PlacementClosingSnapshotModal
+        isOpen={!!closingPreview}
+        placement={placement}
+        closing={closingPreview}
+        onClose={() => setClosingPreview(null)}
       />
 
       <MailPreviewModal

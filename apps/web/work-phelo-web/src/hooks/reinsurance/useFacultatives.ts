@@ -320,6 +320,18 @@ export function usePlacementNotes(placementId: string) {
   });
 }
 
+export function usePlacementDocuments(placementId: string) {
+  return useQuery({
+    queryKey: placementDocumentsKey(placementId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/documents`);
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as PlacementDocument[];
+    },
+    enabled: !!placementId,
+  });
+}
+
 export function useCreatePlacementDebitNote(placementId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -684,6 +696,21 @@ export function useEndorsementClosings(placementId: string, endorsementId: strin
       const res = await api.get(`${BASE}/${placementId}/endorsements/${endorsementId}/closings`);
       const raw = res.data?.items ?? res.data ?? [];
       return raw as EndorsementParticipantClosing[];
+    },
+    enabled: !!placementId && !!endorsementId,
+  });
+}
+
+export function usePlacementEndorsementNotes(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  return useQuery({
+    queryKey: [...endorsementKey(placementId), endorsementId ?? '', 'notes'],
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/endorsements/${endorsementId}/notes`);
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as PlacementNote[];
     },
     enabled: !!placementId && !!endorsementId,
   });

@@ -868,6 +868,7 @@ export interface EndorsementParticipantClosing {
   endorsementParticipant: {
     id: string;
     counterpartyId: string;
+    originalParticipantId?: string | null;
     status: PlacementEndorsementParticipantStatus;
     counterparty: {
       id: string;

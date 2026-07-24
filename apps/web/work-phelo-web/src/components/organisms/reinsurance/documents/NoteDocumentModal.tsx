@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
-import { PlacementDocument } from '@/types/reinsurance';
+import { Facultative, PlacementDocument, PlacementNote } from '@/types/reinsurance';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 
 type UnknownRecord = Record<string, unknown>;
@@ -10,6 +10,8 @@ type UnknownRecord = Record<string, unknown>;
 interface NoteDocumentModalProps {
   isOpen: boolean;
   document: PlacementDocument | null;
+  note?: PlacementNote | null;
+  placement?: Facultative;
   onClose: () => void;
 }
 
@@ -107,6 +109,31 @@ function documentTitle(type: unknown): string {
   return 'Debit Note';
 }
 
+function noteTitle(type: unknown): string {
+  if (type === 'CREDIT_NOTE' || type === 'ENDORSEMENT_CREDIT_NOTE') return 'Credit Note';
+  return 'Debit Note';
+}
+
+function notePayloadFromRecord(note: PlacementNote, placement?: Facultative): UnknownRecord {
+  return {
+    documentType: note.type,
+    note: {
+      ...note,
+      placement: placement
+        ? {
+            id: placement.id,
+            reference: placement.reference,
+            title: placement.title,
+            classOfBusiness: placement.classOfBusiness,
+            inceptionDate: placement.inceptionDate,
+            expiryDate: placement.expiryDate,
+            currency: placement.currency,
+          }
+        : undefined,
+    },
+  };
+}
+
 function NoteFooter({ payload }: { payload: UnknownRecord }) {
   const profile = profileFromPayload(payload);
   return (
@@ -140,31 +167,50 @@ function NoteFooter({ payload }: { payload: UnknownRecord }) {
   );
 }
 
-export function NoteDocumentModal({ isOpen, document, onClose }: NoteDocumentModalProps) {
-  if (!document) return null;
+export function NoteDocumentModal({
+  isOpen,
+  document,
+  note: noteRecord,
+  placement: placementRecord,
+  onClose,
+}: NoteDocumentModalProps) {
+  if (!document && !noteRecord) return null;
 
-  const payload = record(document.renderPayload);
+  const isOfficialSnapshot = !!document;
+  const payload = document
+    ? record(document.renderPayload)
+    : notePayloadFromRecord(noteRecord!, placementRecord);
   const note = record(payload.note);
   const placement = record(note.placement);
   const counterparty = record(note.counterparty);
   const closing = record(note.closing || note.endorsementClosing);
-  const title = documentTitle(note.type);
+  const title = document ? documentTitle(note.type) : noteTitle(note.type);
   const profile = profileFromPayload(payload);
+  const displayNumber = text(note.noteNumber || document?.documentNumber);
 
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`${title} — ${text(note.noteNumber || document.documentNumber)}`}
+      title={`${title} — ${displayNumber}`}
       documentTitle={title}
-      fileName={buildDocumentFileName(title, text(note.noteNumber || document.documentNumber))}
+      fileName={buildDocumentFileName(title, displayNumber)}
       logoSrc={profile.logoSrc}
       companyName={profile.displayName}
-      qrValue={`${document.documentNumber}:${document.version}:${document.status}`}
+      qrValue={
+        document
+          ? `${document.documentNumber}:${document.version}:${document.status}`
+          : `${text(note.noteNumber)}:${text(note.id)}:${text(note.status)}`
+      }
       onPrint={() => {}}
       onClose={onClose}
     >
       <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
         {statusLabel(note.status)}
+        {!isOfficialSnapshot && (
+          <span className="block pt-1 text-blue-700">
+            Backend record preview. No immutable official document snapshot has been generated yet.
+          </span>
+        )}
         {note.status === 'DRAFT' && (
           <span className="block pt-1 text-amber-700">
             This note is a backend draft. Issue it before treating it as official.
@@ -175,9 +221,9 @@ export function NoteDocumentModal({ isOpen, document, onClose }: NoteDocumentMod
       <SectionHeading>Document Control</SectionHeading>
       <InfoRows
         rows={[
-          { label: 'Document Number', value: document.documentNumber },
+          { label: 'Document Number', value: document?.documentNumber ?? 'Not generated' },
           { label: 'Note Number', value: text(note.noteNumber) },
-          { label: 'Version', value: `v${document.version}` },
+          { label: 'Version', value: document ? `v${document.version}` : 'Live backend record' },
           { label: 'Status', value: statusLabel(note.status) },
           { label: 'Note Date', value: fmtDate(note.noteDate) },
           { label: 'Issued At', value: fmtDate(note.issuedAt) },

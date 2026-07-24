@@ -8,9 +8,11 @@ import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import {
   EffectivePlacementView,
+  EndorsementParticipantClosing,
   Facultative,
   PlacementEndorsement,
   PlacementDocument,
+  PlacementNote,
   ENDORSEMENT_TYPE_LABELS,
   ENDORSEMENT_STATUS_LABELS,
   ENDORSEMENT_STATUS_VARIANT,
@@ -22,6 +24,8 @@ import {
   useUpdateEndorsementParticipant,
   useUpdateEndorsementParticipantStatus,
   useEndorsementClosings,
+  usePlacementDocuments,
+  usePlacementEndorsementNotes,
   useValidateAndConfirmEndorsementParticipant,
   usePlacementEndorsementSummary,
   usePlacementEffectiveView,
@@ -44,6 +48,9 @@ import { CreateDistributionPanel } from '@/components/organisms/reinsurance/pane
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
 import { EndorsementDocumentModal } from '@/components/organisms/reinsurance/documents/EndorsementDocumentModal';
+import { EndorsementClosingSnapshotModal } from '@/components/organisms/reinsurance/documents/EndorsementClosingSnapshotModal';
+import { EndorsementSlipPreviewModal } from '@/components/organisms/reinsurance/documents/EndorsementSlipPreviewModal';
+import { NoteDocumentModal } from '@/components/organisms/reinsurance/documents/NoteDocumentModal';
 import { cardClass } from '@/lib/utils';
 
 interface EndorsementTabProps {
@@ -313,7 +320,12 @@ function EndorsementCard({
   const [revisedShares, setRevisedShares] = useState<Record<string, string>>({});
   const [busyEPIds, setBusyEPIds] = useState<Set<string>>(new Set());
   const [slipPreviewCounterpartyId, setSlipPreviewCounterpartyId] = useState<string | null>(null);
+  const [endorsementSlipPreviewOpen, setEndorsementSlipPreviewOpen] = useState(false);
+  const [endorsementClosingPreview, setEndorsementClosingPreview] =
+    useState<EndorsementParticipantClosing | null>(null);
   const [documentPreview, setDocumentPreview] = useState<PlacementDocument | null>(null);
+  const [noteDocumentPreview, setNoteDocumentPreview] = useState<PlacementDocument | null>(null);
+  const [noteRecordPreview, setNoteRecordPreview] = useState<PlacementNote | null>(null);
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [mailPreviewCounterpartyId, setMailPreviewCounterpartyId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
@@ -345,6 +357,11 @@ function EndorsementCard({
   );
   const { data: endorsementSummary } = usePlacementEndorsementSummary(placement.id, endorsement.id);
   const { data: endorsementClosings = [] } = useEndorsementClosings(placement.id, endorsement.id);
+  const { data: endorsementNotes = [] } = usePlacementEndorsementNotes(
+    placement.id,
+    endorsement.id,
+  );
+  const { data: placementDocuments = [] } = usePlacementDocuments(placement.id);
   const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
     placement.id,
     endorsement.id,
@@ -484,6 +501,22 @@ function EndorsementCard({
     ]);
   };
 
+  const activePlacementDocuments = placementDocuments.filter(
+    (document) => document.status !== 'VOID',
+  );
+  const endorsementSlipDocument = activePlacementDocuments.find(
+    (document) => document.type === 'ENDORSEMENT_SLIP' && document.endorsementId === endorsement.id,
+  );
+
+  const findCertificateDocument = (closingId: string) =>
+    activePlacementDocuments.find(
+      (document) =>
+        document.type === 'ENDORSEMENT_CERTIFICATE' && document.endorsementClosingId === closingId,
+    );
+
+  const findNoteDocument = (noteId: string) =>
+    activePlacementDocuments.find((document) => document.noteId === noteId);
+
   const openGeneratedDocument = async (
     generate: () => Promise<PlacementDocument>,
     successMessage: string,
@@ -503,17 +536,64 @@ function EndorsementCard({
     }
   };
 
-  const handleOpenEndorsementSlip = () =>
+  const handleViewEndorsementSlip = () => {
+    if (endorsementSlipDocument) {
+      setDocumentPreview(endorsementSlipDocument);
+      return;
+    }
+    setEndorsementSlipPreviewOpen(true);
+  };
+
+  const handleGenerateOfficialEndorsementSlip = () =>
     openGeneratedDocument(
       () => generateEndorsementSlip.mutateAsync(),
-      'Endorsement slip snapshot ready',
+      'Official endorsement slip snapshot ready',
     );
 
-  const handleOpenEndorsementCertificate = (closingId: string) =>
-    openGeneratedDocument(
-      () => generateEndorsementCertificate.mutateAsync({ closingId }),
-      'Endorsement certificate snapshot ready',
+  const handleViewEndorsementCertificate = (closing: EndorsementParticipantClosing) => {
+    if (closing.status !== 'CONFIRMED') {
+      useToastStore.getState().addToast({
+        message: 'Endorsement certificate is available only after closing confirmation.',
+        type: 'error',
+      });
+      return;
+    }
+    const document = findCertificateDocument(closing.id);
+    if (document) {
+      setDocumentPreview(document);
+      return;
+    }
+    setEndorsementClosingPreview(closing);
+    useToastStore.getState().addToast({
+      message: 'Official certificate not generated yet. Showing confirmed closing snapshot.',
+      type: 'success',
+    });
+  };
+
+  const handleGenerateOfficialEndorsementCertificate = (closing: EndorsementParticipantClosing) => {
+    if (closing.status !== 'CONFIRMED') {
+      useToastStore.getState().addToast({
+        message: 'Endorsement certificate can only be generated for confirmed closings.',
+        type: 'error',
+      });
+      return;
+    }
+    const document = findCertificateDocument(closing.id);
+    if (document) {
+      setDocumentPreview(document);
+      return;
+    }
+    return openGeneratedDocument(
+      () => generateEndorsementCertificate.mutateAsync({ closingId: closing.id }),
+      'Official endorsement certificate snapshot ready',
     );
+  };
+
+  const handleViewEndorsementNote = (note: PlacementNote) => {
+    const document = findNoteDocument(note.id);
+    setNoteDocumentPreview(document ?? null);
+    setNoteRecordPreview(document ? null : note);
+  };
 
   const handleAddReinsurers = async (entries: ReinsurerEntry[]) => {
     try {
@@ -644,8 +724,6 @@ function EndorsementCard({
       .filter((closing) => closing.status === 'CONFIRMED')
       .map((closing) => [closing.endorsementParticipantId, closing]),
   );
-  const isDocumentBusy =
-    generateEndorsementSlip.isPending || generateEndorsementCertificate.isPending;
 
   const epColumns: Column<EndorsementParticipantRow>[] = [
     {
@@ -750,7 +828,7 @@ function EndorsementCard({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                title="View"
+                title="Preview Endorsement Offer"
                 onClick={() => setSlipPreviewCounterpartyId(row.counterpartyId)}
                 className="text-blue-500 hover:text-blue-600 transition-colors"
               >
@@ -811,17 +889,15 @@ function EndorsementCard({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                title={confirmedClosing ? 'Open Endorsement Certificate' : 'Open Endorsement Slip'}
+                title={confirmedClosing ? 'View Endorsement Closing' : 'Preview Endorsement Offer'}
                 onClick={() => {
-                  if (isDocumentBusy) return;
                   if (confirmedClosing) {
-                    handleOpenEndorsementCertificate(confirmedClosing.id);
+                    setEndorsementClosingPreview(confirmedClosing);
                   } else {
-                    handleOpenEndorsementSlip();
+                    setSlipPreviewCounterpartyId(row.counterpartyId);
                   }
                 }}
-                disabled={isDocumentBusy}
-                className={`text-blue-500 hover:text-blue-600 transition-colors ${isDocumentBusy ? 'opacity-50 cursor-wait' : ''}`}
+                className="text-blue-500 hover:text-blue-600 transition-colors"
               >
                 <Icons.Eye className="w-4 h-4" />
               </button>
@@ -846,12 +922,11 @@ function EndorsementCard({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              title="Open Endorsement Slip"
+              title="Preview Endorsement Offer"
               onClick={() => {
-                if (!isDocumentBusy) handleOpenEndorsementSlip();
+                setSlipPreviewCounterpartyId(row.counterpartyId);
               }}
-              disabled={isDocumentBusy}
-              className={`text-blue-500 hover:text-blue-600 transition-colors ${isDocumentBusy ? 'opacity-50 cursor-wait' : ''}`}
+              className="text-blue-500 hover:text-blue-600 transition-colors"
             >
               <Icons.Eye className="w-4 h-4" />
             </button>
@@ -961,13 +1036,18 @@ function EndorsementCard({
               </>
             )}
             {endorsement.status !== 'DRAFT' && (
+              <Button size="sm" variant="secondary" onClick={handleViewEndorsementSlip}>
+                {endorsementSlipDocument ? 'View Endorsement Slip' : 'Preview Endorsement Slip'}
+              </Button>
+            )}
+            {endorsement.status !== 'DRAFT' && (
               <Button
                 size="sm"
-                variant="secondary"
-                isLoading={isDocumentBusy}
-                onClick={handleOpenEndorsementSlip}
+                variant="outline"
+                isLoading={generateEndorsementSlip.isPending}
+                onClick={handleGenerateOfficialEndorsementSlip}
               >
-                Open Endorsement Slip
+                Generate Official Slip
               </Button>
             )}
             {endorsement.status !== 'DRAFT' && endorsement.status !== 'CLOSED' && (
@@ -1147,7 +1227,7 @@ function EndorsementCard({
               {endorsementClosings.map((closing) => (
                 <div
                   key={closing.id}
-                  className="grid grid-cols-2 gap-3 p-3 lg:grid-cols-6 lg:items-center"
+                  className="grid grid-cols-2 gap-3 p-3 lg:grid-cols-7 lg:items-center"
                 >
                   <div>
                     <p className="text-xs text-gray-400">Closing</p>
@@ -1198,6 +1278,93 @@ function EndorsementCard({
                       }
                     />
                   </div>
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    <TableButton
+                      variant="gray"
+                      onClick={() => setEndorsementClosingPreview(closing)}
+                    >
+                      View Closing
+                    </TableButton>
+                    {closing.status === 'CONFIRMED' && (
+                      <>
+                        <TableButton
+                          variant="blue"
+                          onClick={() => handleViewEndorsementCertificate(closing)}
+                        >
+                          {findCertificateDocument(closing.id)
+                            ? 'View Certificate'
+                            : 'Preview Cert.'}
+                        </TableButton>
+                        <TableButton
+                          variant="orange"
+                          isLoading={generateEndorsementCertificate.isPending}
+                          onClick={() => handleGenerateOfficialEndorsementCertificate(closing)}
+                        >
+                          Generate Cert.
+                        </TableButton>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {endorsementNotes.length > 0 && (
+          <div className="flex flex-col gap-3 border-t border-gray-100 pt-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Endorsement Notes
+              </p>
+              <p className="text-xs text-gray-400">
+                Backend note records remain previewable even before an official document snapshot is
+                generated.
+              </p>
+            </div>
+            <div className="flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-100">
+              {endorsementNotes.map((note) => (
+                <div
+                  key={note.id}
+                  className="grid grid-cols-2 gap-3 p-3 lg:grid-cols-5 lg:items-center"
+                >
+                  <div>
+                    <p className="text-xs text-gray-400">Note</p>
+                    <p className="text-sm font-medium text-gray-900">{note.noteNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Type</p>
+                    <p className="text-sm text-gray-700">{note.type}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Net Amount</p>
+                    <p className="text-sm text-gray-700">
+                      {fmtMoney(note.netAmount, note.currency)}
+                    </p>
+                  </div>
+                  <div>
+                    <Badge
+                      label={
+                        note.status === 'ISSUED'
+                          ? 'Issued'
+                          : note.status === 'VOID'
+                            ? 'VOID'
+                            : 'Draft / Not Issued'
+                      }
+                      variant={
+                        note.status === 'ISSUED'
+                          ? 'success'
+                          : note.status === 'VOID'
+                            ? 'danger'
+                            : 'warning'
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 lg:justify-end">
+                    <TableButton variant="gray" onClick={() => handleViewEndorsementNote(note)}>
+                      View
+                    </TableButton>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1224,6 +1391,17 @@ function EndorsementCard({
           onClose={() => setSlipPreviewCounterpartyId(null)}
         />
       )}
+
+      <EndorsementSlipPreviewModal
+        isOpen={endorsementSlipPreviewOpen}
+        placement={placement}
+        endorsement={endorsement}
+        participants={endorsementParticipants}
+        closings={endorsementClosings}
+        notes={endorsementNotes}
+        summary={endorsementSummary}
+        onClose={() => setEndorsementSlipPreviewOpen(false)}
+      />
 
       {/* Share document with reinsurer */}
       <MailPreviewModal
@@ -1256,6 +1434,25 @@ function EndorsementCard({
         isOpen={!!documentPreview}
         document={documentPreview}
         onClose={() => setDocumentPreview(null)}
+      />
+
+      <EndorsementClosingSnapshotModal
+        isOpen={!!endorsementClosingPreview}
+        placement={placement}
+        endorsement={endorsement}
+        closing={endorsementClosingPreview}
+        onClose={() => setEndorsementClosingPreview(null)}
+      />
+
+      <NoteDocumentModal
+        isOpen={!!noteDocumentPreview || !!noteRecordPreview}
+        document={noteDocumentPreview}
+        note={noteRecordPreview}
+        placement={placement}
+        onClose={() => {
+          setNoteDocumentPreview(null);
+          setNoteRecordPreview(null);
+        }}
       />
     </>
   );
