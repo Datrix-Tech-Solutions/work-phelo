@@ -92,6 +92,7 @@ describe('PlacementsController', () => {
     findAll: jest.fn(),
     findOne: jest.fn(),
     create: jest.fn(),
+    validateAndConfirm: jest.fn(),
     changeStatus: jest.fn(),
   };
   const notesService = {
@@ -205,6 +206,7 @@ describe('PlacementsController', () => {
     ['changeEndorsementParticipantStatus', PlacementPermission.EDIT],
     ['deleteEndorsementParticipant', PlacementPermission.EDIT],
     ['createEndorsementClosing', PlacementPermission.EDIT],
+    ['validateAndConfirmEndorsementParticipant', PlacementPermission.EDIT],
     ['changeEndorsementClosingStatus', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
     ['forceClose', PlacementPermission.EDIT],
@@ -644,6 +646,12 @@ describe('PlacementsController', () => {
       { status: PlacementClosingStatus.ISSUED },
       { user } as never,
     );
+    await controller.validateAndConfirmEndorsementParticipant(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      { user } as never,
+    );
 
     expect(endorsementClosingsService.create).toHaveBeenCalledWith(
       user,
@@ -657,6 +665,12 @@ describe('PlacementsController', () => {
       'endorsement-1',
       'endorsement-closing-1',
       expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
+    );
+    expect(endorsementClosingsService.validateAndConfirm).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
     );
   });
 
