@@ -757,12 +757,93 @@ export type PlacementParticipantClosingStatus = 'DRAFT' | 'ISSUED' | 'CONFIRMED'
 
 export interface PlacementParticipantClosing {
   id: string;
+  tenantId: string;
   placementId: string;
   participantId: string;
-  status: PlacementParticipantClosingStatus;
   closingNumber: string;
+  status: PlacementParticipantClosingStatus;
+  signedLinePercent: string;
+  sharePercent: string | null;
+  grossPremium: string | null;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  netPremium: string | null;
+  currency: string | null;
+  issuedAt: string | null;
+  confirmedAt: string | null;
+  createdByUserId: string;
+  participant: {
+    id: string;
+    counterpartyId: string;
+    role: string;
+    status: string;
+    counterparty: {
+      id: string;
+      type: string;
+      name: string;
+      registrationNumber: string | null;
+    };
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+export type PlacementNoteType =
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE';
+
+export type PlacementNoteStatus = 'DRAFT' | 'ISSUED' | 'VOID';
+
+export type PlacementNoteDirection = 'CEDANT_TO_BROKER' | 'BROKER_TO_REINSURER';
+
+export interface PlacementNote {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  closingId: string | null;
+  participantId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  endorsementParticipantId: string | null;
+  counterpartyId: string;
+  settledByPaymentId: string | null;
+  type: PlacementNoteType;
+  direction: PlacementNoteDirection;
+  noteNumber: string;
+  status: PlacementNoteStatus;
+  currency: string;
+  grossAmount: string;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  nicLevyPercent: string;
+  nicLevyAmount: string;
+  withholdingTaxPercent: string;
+  withholdingTaxAmount: string;
+  netAmount: string;
+  appliedCharges: Record<string, unknown> | null;
+  noteDate: string;
+  issuedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: {
+    id: string;
+    type: string;
+    name: string;
+    registrationNumber: string | null;
+  };
+  participant: { id: string; counterpartyId: string } | null;
+  closing: { id: string; closingNumber: string } | null;
+  endorsementParticipant: { id: string; counterpartyId: string } | null;
+  endorsementClosing: { id: string; closingNumber: string } | null;
 }
 
 export interface EndorsementParticipantClosing {
