@@ -62,6 +62,7 @@ describe('PlacementsController', () => {
     generateNoteDocument: jest.fn(),
     generateEndorsementSlip: jest.fn(),
     generateEndorsementClosingSlip: jest.fn(),
+    generateEndorsementCertificate: jest.fn(),
     generateClaimNotice: jest.fn(),
     generateClaimCashCall: jest.fn(),
     renderPdf: jest.fn(),
@@ -223,6 +224,7 @@ describe('PlacementsController', () => {
     ['generateNoteDocument', PlacementPermission.EDIT],
     ['generateEndorsementSlipDocument', PlacementPermission.EDIT],
     ['generateEndorsementClosingSlipDocument', PlacementPermission.EDIT],
+    ['generateEndorsementCertificateDocument', PlacementPermission.EDIT],
     ['generateClaimNoticeDocument', PlacementPermission.EDIT],
     ['generateClaimCashCallDocument', PlacementPermission.EDIT],
     ['renderAndStoreDocumentPdf', PlacementPermission.EDIT],
@@ -745,6 +747,12 @@ describe('PlacementsController', () => {
       'endorsement-closing-1',
       { user } as never,
     );
+    await controller.generateEndorsementCertificateDocument(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+      { user } as never,
+    );
     await controller.generateClaimNoticeDocument('placement-1', 'claim-1', {
       user,
     } as never);
@@ -817,6 +825,14 @@ describe('PlacementsController', () => {
     );
     expect(
       documentsService.generateEndorsementClosingSlip,
+    ).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+    expect(
+      documentsService.generateEndorsementCertificate,
     ).toHaveBeenCalledWith(
       user,
       'placement-1',

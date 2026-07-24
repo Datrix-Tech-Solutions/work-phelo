@@ -805,6 +805,45 @@ export interface ValidateEndorsementParticipantResponse {
   effectiveStatus: PlacementEndorsementStatus;
 }
 
+export type PlacementDocumentType =
+  | 'OFFER_SLIP'
+  | 'CLOSING_SLIP'
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_SLIP'
+  | 'ENDORSEMENT_CERTIFICATE'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE'
+  | 'CLAIM_CASH_CALL'
+  | 'CLAIM_NOTICE';
+
+export type PlacementDocumentStatus = 'DRAFT' | 'GENERATED' | 'FAILED' | 'VOID';
+
+export interface PlacementDocument {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  participantId: string | null;
+  closingId: string | null;
+  noteId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  claimId: string | null;
+  claimCashCallId: string | null;
+  type: PlacementDocumentType;
+  status: PlacementDocumentStatus;
+  documentNumber: string;
+  version: number;
+  title: string;
+  currency: string | null;
+  generatedAt: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+}
+
 export type PlacementPaymentType =
   | 'PREMIUM_RECEIVED'
   | 'REINSURER_DISBURSEMENT'

@@ -13,6 +13,12 @@ import {
   isNoteDocumentPayload,
   renderNoteTemplate,
 } from './templates/note.template';
+import {
+  isEndorsementCertificatePayload,
+  isEndorsementSlipPayload,
+  renderEndorsementCertificateTemplate,
+  renderEndorsementSlipTemplate,
+} from './templates/endorsement.template';
 
 @Injectable()
 export class PlacementDocumentTemplateRegistry {
@@ -54,6 +60,26 @@ export class PlacementDocumentTemplateRegistry {
       }
 
       return renderNoteTemplate(payload, context);
+    }
+
+    if (type === PlacementDocumentType.ENDORSEMENT_SLIP) {
+      if (!isEndorsementSlipPayload(payload)) {
+        throw new BadRequestException(
+          'ENDORSEMENT_SLIP renderPayload is missing valid immutable endorsement data',
+        );
+      }
+
+      return renderEndorsementSlipTemplate(payload, context);
+    }
+
+    if (type === PlacementDocumentType.ENDORSEMENT_CERTIFICATE) {
+      if (!isEndorsementCertificatePayload(payload)) {
+        throw new BadRequestException(
+          'ENDORSEMENT_CERTIFICATE renderPayload is missing valid immutable endorsement closing data',
+        );
+      }
+
+      return renderEndorsementCertificateTemplate(payload, context);
     }
 
     throw new BadRequestException(`PDF rendering is not supported for ${type}`);
