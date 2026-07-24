@@ -584,6 +584,7 @@ export interface PlacementEndorsementSummary {
   impactType: PlacementEndorsementImpactType;
   status: PlacementEndorsementStatus;
   targetPercent: number | null;
+  acceptedPercent: number;
   placedPercent: number;
   remainingPercent: number | null;
   participants: {

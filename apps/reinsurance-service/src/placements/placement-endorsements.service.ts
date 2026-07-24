@@ -36,6 +36,7 @@ const endorsementSummaryInclude = {
       id: true,
       endorsementParticipantId: true,
       status: true,
+      signedLinePercent: true,
     },
   },
   notes: {
@@ -225,16 +226,12 @@ export class PlacementEndorsementsService {
       (participant) =>
         participant.status === PlacementEndorsementParticipantStatus.DECLINED,
     );
-    const placedPercent = acceptedParticipants.reduce(
+    const acceptedPercent = acceptedParticipants.reduce(
       (sum, participant) =>
         sum + (this.toOptionalNumber(participant.signedLinePercent) ?? 0),
       0,
     );
     const targetPercent = this.toOptionalNumber(endorsement.targetPercent);
-    const remainingPercent =
-      targetPercent === null
-        ? null
-        : Math.max(0, targetPercent - placedPercent);
 
     const activeClosings = endorsement.closings.filter(
       (closing) => closing.status !== PlacementClosingStatus.VOID,
@@ -245,6 +242,19 @@ export class PlacementEndorsementsService {
     const activeConfirmedClosings = confirmedClosings.filter((closing) =>
       activeClosings.some((activeClosing) => activeClosing.id === closing.id),
     );
+    const placedPercent = activeConfirmedClosings.reduce(
+      (sum, closing) =>
+        sum + (this.toOptionalNumber(closing.signedLinePercent) ?? 0),
+      0,
+    );
+    const remainingPercent =
+      targetPercent === null
+        ? null
+        : Math.max(0, targetPercent - placedPercent);
+    const acceptedRemainingPercent =
+      targetPercent === null
+        ? null
+        : Math.max(0, targetPercent - acceptedPercent);
     const activeClosingParticipantIds = new Set(
       activeClosings.map((closing) => closing.endorsementParticipantId),
     );
@@ -285,12 +295,12 @@ export class PlacementEndorsementsService {
     if (endorsement.status === PlacementEndorsementStatus.DRAFT) {
       pendingActions.add('SEND_TO_MARKET');
     }
-    if (remainingPercent !== null && remainingPercent > 0) {
+    if (acceptedRemainingPercent !== null && acceptedRemainingPercent > 0) {
       pendingActions.add('ADD_CAPACITY');
     }
     if (
-      remainingPercent !== null &&
-      remainingPercent === 0 &&
+      acceptedRemainingPercent !== null &&
+      acceptedRemainingPercent === 0 &&
       acceptedParticipants.length > 0 &&
       endorsement.status === PlacementEndorsementStatus.MARKETING
     ) {
@@ -343,6 +353,7 @@ export class PlacementEndorsementsService {
       status: endorsement.status,
       effectiveDate: endorsement.effectiveDate.toISOString(),
       targetPercent,
+      acceptedPercent,
       placedPercent,
       remainingPercent,
       participants: {
