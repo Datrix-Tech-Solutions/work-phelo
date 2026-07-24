@@ -105,8 +105,13 @@ describe('PlacementEndorsementClosingsService', () => {
   };
 
   let prisma: {
+    placement: { findFirst: PrismaMethod };
     placementEndorsement: { findFirst: PrismaMethod };
-    placementEndorsementParticipant: { findFirst: PrismaMethod };
+    placementEndorsementParticipant: {
+      findFirst: PrismaMethod;
+      findMany: PrismaMethod;
+      update: PrismaMethod;
+    };
     placementEndorsementClosing: {
       findMany: PrismaMethod;
       findFirst: PrismaMethod;
@@ -131,16 +136,24 @@ describe('PlacementEndorsementClosingsService', () => {
     };
     $transaction: jest.Mock;
   };
+  let endorsementsService: {
+    getSummary: jest.Mock;
+  };
 
   let service: PlacementEndorsementClosingsService;
 
   beforeEach(() => {
     prisma = {
+      placement: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+      },
       placementEndorsement: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementEndorsementParticipant: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementEndorsementClosing: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
@@ -168,9 +181,36 @@ describe('PlacementEndorsementClosingsService', () => {
         callback(prisma),
       ),
     };
+    endorsementsService = {
+      getSummary: jest.fn().mockResolvedValue({
+        id: 'endorsement-1',
+        placementId: 'placement-1',
+        endorsementNumber: 'END-001',
+        type: 'PARTICIPANT_ADDITION',
+        impactType: 'CAPACITY_INCREASE',
+        status: PlacementEndorsementStatus.MARKETING,
+        effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
+        targetPercent: 30,
+        placedPercent: 30,
+        remainingPercent: 0,
+        participants: { total: 1, accepted: 1, declined: 0 },
+        closings: { total: 1, confirmed: 1, draft: 0, issued: 0, void: 0 },
+        notes: {
+          total: 0,
+          endorsementDebitNotes: 0,
+          endorsementCreditNotes: 0,
+          issued: 0,
+          draft: 0,
+          void: 0,
+        },
+        pendingActions: ['CLOSE_ENDORSEMENT'],
+        isComplete: true,
+      }),
+    };
 
     service = new PlacementEndorsementClosingsService(
       prisma as unknown as PrismaService,
+      endorsementsService as never,
     );
   });
 
@@ -491,5 +531,414 @@ describe('PlacementEndorsementClosingsService', () => {
         ).rejects.toThrow(BadRequestException);
       },
     );
+  });
+
+  describe('validateAndConfirm', () => {
+    beforeEach(() => {
+      prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+      prisma.placementEndorsement.findFirst.mockResolvedValue({
+        ...endorsement,
+        targetPercent: new Prisma.Decimal('30.0000'),
+        status: PlacementEndorsementStatus.MARKETING,
+      });
+      prisma.placementEndorsementParticipant.findFirst
+        .mockResolvedValueOnce(acceptedParticipant)
+        .mockResolvedValue({
+          ...acceptedParticipant,
+          status: PlacementEndorsementParticipantStatus.CLOSED,
+        });
+      prisma.placementEndorsementParticipant.findMany.mockResolvedValue([]);
+      prisma.placementEndorsementParticipant.update.mockResolvedValue({
+        ...acceptedParticipant,
+        status: PlacementEndorsementParticipantStatus.CLOSED,
+      });
+      prisma.placementEndorsementClosing.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({
+          ...closingWithParticipant,
+          status: PlacementClosingStatus.CONFIRMED,
+        });
+      prisma.placementEndorsementClosing.count.mockResolvedValue(0);
+      prisma.placementEndorsementClosing.create.mockResolvedValue(
+        closingWithParticipant,
+      );
+      prisma.placementEndorsementClosing.update
+        .mockResolvedValueOnce({
+          ...closingWithParticipant,
+          status: PlacementClosingStatus.ISSUED,
+          issuedAt: new Date('2026-06-05T09:10:00.000Z'),
+        })
+        .mockResolvedValueOnce({
+          ...closingWithParticipant,
+          status: PlacementClosingStatus.CONFIRMED,
+          issuedAt: new Date('2026-06-05T09:10:00.000Z'),
+          confirmedAt: new Date('2026-06-05T09:11:00.000Z'),
+        });
+    });
+
+    it('creates, issues, confirms and closes an accepted endorsement participant atomically', async () => {
+      const result = await service.validateAndConfirm(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const createArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingCreateArgs>(
+          prisma.placementEndorsementClosing.create,
+        );
+      expect(createArgs.data).toMatchObject({
+        status: PlacementClosingStatus.DRAFT,
+        endorsementParticipantId: 'endorsement-participant-1',
+        signedLinePercent: 30,
+        premiumSnapshot: 9000,
+        netPremium: 7425,
+      });
+      const issueArgs = prisma.placementEndorsementClosing.update.mock
+        .calls[0][0] as Prisma.PlacementEndorsementClosingUpdateArgs;
+      const confirmArgs = prisma.placementEndorsementClosing.update.mock
+        .calls[1][0] as Prisma.PlacementEndorsementClosingUpdateArgs;
+      expect(issueArgs.data).toMatchObject({
+        status: PlacementClosingStatus.ISSUED,
+      });
+      expect(confirmArgs.data).toMatchObject({
+        status: PlacementClosingStatus.CONFIRMED,
+      });
+      expect(
+        prisma.placementEndorsementParticipant.update,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: PlacementEndorsementParticipantStatus.CLOSED },
+        }),
+      );
+      expect(result.closing.status).toBe(PlacementClosingStatus.CONFIRMED);
+      expect(result.participant.status).toBe(
+        PlacementEndorsementParticipantStatus.CLOSED,
+      );
+      expect(result.effectiveStatus).toBe(PlacementEndorsementStatus.CLOSING);
+      expect(prisma.placementClosing.create).not.toHaveBeenCalled();
+      expect(prisma.placementClosing.update).not.toHaveBeenCalled();
+      expect(prisma.placementParticipant.update).not.toHaveBeenCalled();
+    });
+
+    it('reuses an existing confirmed closing on idempotent retry', async () => {
+      prisma.placementEndorsementParticipant.findFirst.mockReset();
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        status: PlacementEndorsementParticipantStatus.CLOSED,
+      });
+      prisma.placementEndorsementClosing.findFirst.mockReset();
+      prisma.placementEndorsementClosing.findFirst.mockResolvedValue({
+        ...closingWithParticipant,
+        status: PlacementClosingStatus.CONFIRMED,
+      });
+
+      const result = await service.validateAndConfirm(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      expect(prisma.placementEndorsementClosing.create).not.toHaveBeenCalled();
+      expect(prisma.placementEndorsementClosing.update).not.toHaveBeenCalled();
+      expect(result.closing.status).toBe(PlacementClosingStatus.CONFIRMED);
+    });
+
+    it('issues and confirms an existing DRAFT closing without creating a duplicate', async () => {
+      prisma.placementEndorsementClosing.findFirst.mockReset();
+      prisma.placementEndorsementClosing.findFirst
+        .mockResolvedValueOnce(closingWithParticipant)
+        .mockResolvedValue({
+          ...closingWithParticipant,
+          status: PlacementClosingStatus.CONFIRMED,
+        });
+
+      await service.validateAndConfirm(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      expect(prisma.placementEndorsementClosing.create).not.toHaveBeenCalled();
+      expect(prisma.placementEndorsementClosing.update).toHaveBeenCalledTimes(
+        2,
+      );
+    });
+
+    it('confirms an existing ISSUED closing without creating a duplicate', async () => {
+      prisma.placementEndorsementClosing.findFirst.mockReset();
+      prisma.placementEndorsementClosing.findFirst
+        .mockResolvedValueOnce({
+          ...closingWithParticipant,
+          status: PlacementClosingStatus.ISSUED,
+        })
+        .mockResolvedValue({
+          ...closingWithParticipant,
+          status: PlacementClosingStatus.CONFIRMED,
+        });
+      prisma.placementEndorsementClosing.update.mockReset();
+      prisma.placementEndorsementClosing.update.mockResolvedValue({
+        ...closingWithParticipant,
+        status: PlacementClosingStatus.CONFIRMED,
+      });
+
+      await service.validateAndConfirm(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      expect(prisma.placementEndorsementClosing.create).not.toHaveBeenCalled();
+      expect(prisma.placementEndorsementClosing.update).toHaveBeenCalledTimes(
+        1,
+      );
+      const updateArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingUpdateArgs>(
+          prisma.placementEndorsementClosing.update,
+        );
+      expect(updateArgs.data).toMatchObject({
+        status: PlacementClosingStatus.CONFIRMED,
+      });
+      expect(updateArgs.data).toHaveProperty('confirmedAt');
+    });
+
+    it('retries once when serializable transaction conflict is reported', async () => {
+      const conflict = new Prisma.PrismaClientKnownRequestError(
+        'Transaction conflict',
+        {
+          code: 'P2034',
+          clientVersion: 'test',
+        },
+      );
+      prisma.$transaction
+        .mockRejectedValueOnce(conflict)
+        .mockImplementationOnce((callback: (tx: unknown) => Promise<unknown>) =>
+          callback(prisma),
+        );
+
+      await service.validateAndConfirm(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns controlled conflict after bounded P2034 retry exhaustion', async () => {
+      const conflict = new Prisma.PrismaClientKnownRequestError(
+        'Transaction conflict',
+        {
+          code: 'P2034',
+          clientVersion: 'test',
+        },
+      );
+      prisma.$transaction.mockRejectedValue(conflict);
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(endorsementsService.getSummary).not.toHaveBeenCalled();
+    });
+
+    it('retries unique closing-number conflicts and succeeds without leaking raw Prisma errors', async () => {
+      const conflict = new Prisma.PrismaClientKnownRequestError(
+        'Unique conflict',
+        {
+          code: 'P2002',
+          clientVersion: 'test',
+        },
+      );
+      prisma.$transaction
+        .mockRejectedValueOnce(conflict)
+        .mockImplementationOnce((callback: (tx: unknown) => Promise<unknown>) =>
+          callback(prisma),
+        );
+
+      await service.validateAndConfirm(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects declined participants', async () => {
+      prisma.placementEndorsementParticipant.findFirst.mockReset();
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        status: PlacementEndorsementParticipantStatus.DECLINED,
+      });
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('rejects CLOSED participants without a confirmed active closing as inconsistent state', async () => {
+      prisma.placementEndorsementParticipant.findFirst.mockReset();
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        status: PlacementEndorsementParticipantStatus.CLOSED,
+      });
+      prisma.placementEndorsementClosing.findFirst.mockReset();
+      prisma.placementEndorsementClosing.findFirst.mockResolvedValue({
+        ...closingWithParticipant,
+        status: PlacementClosingStatus.DRAFT,
+      });
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.placementEndorsementClosing.update).not.toHaveBeenCalled();
+    });
+
+    it('does not reuse VOID closings and creates a fresh active closing', async () => {
+      await service.validateAndConfirm(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      const findArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingFindFirstArgs>(
+          prisma.placementEndorsementClosing.findFirst,
+        );
+      expect(findArgs.where).toMatchObject({
+        status: { not: PlacementClosingStatus.VOID },
+      });
+      expect(prisma.placementEndorsementClosing.create).toHaveBeenCalled();
+    });
+
+    it('rejects terminal endorsements', async () => {
+      prisma.placementEndorsement.findFirst.mockResolvedValue({
+        ...endorsement,
+        targetPercent: new Prisma.Decimal('30.0000'),
+        status: PlacementEndorsementStatus.CLOSED,
+      });
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('rejects capacity overrun before creating or updating a closing', async () => {
+      prisma.placementEndorsementParticipant.findMany.mockResolvedValue([
+        { signedLinePercent: new Prisma.Decimal('10.0000') },
+      ]);
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.placementEndorsementClosing.create).not.toHaveBeenCalled();
+      expect(prisma.placementEndorsementClosing.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects accepted signed lines that exceed the offered endorsement share', async () => {
+      prisma.placementEndorsementParticipant.findFirst.mockReset();
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        sharePercent: '20.0000',
+        signedLinePercent: '30.0000',
+      });
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.placementEndorsementClosing.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-positive endorsement premium snapshots', async () => {
+      prisma.placementEndorsement.findFirst.mockResolvedValue({
+        ...endorsement,
+        targetPercent: new Prisma.Decimal('30.0000'),
+        status: PlacementEndorsementStatus.MARKETING,
+        proposedSnapshot: {
+          ...endorsement.proposedSnapshot,
+          premium: '0.00',
+        },
+      });
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.placementEndorsementClosing.create).not.toHaveBeenCalled();
+    });
+
+    it('does not reveal cross-tenant or missing placements', async () => {
+      prisma.placement.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('propagates failures before participant close so the transaction can roll back', async () => {
+      prisma.placementEndorsementClosing.update
+        .mockReset()
+        .mockRejectedValueOnce(new Error('database failed'));
+
+      await expect(
+        service.validateAndConfirm(
+          user,
+          'placement-1',
+          'endorsement-1',
+          'endorsement-participant-1',
+        ),
+      ).rejects.toThrow('database failed');
+      expect(
+        prisma.placementEndorsementParticipant.update,
+      ).not.toHaveBeenCalled();
+    });
   });
 });
