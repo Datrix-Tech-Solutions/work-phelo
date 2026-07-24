@@ -10,6 +10,7 @@ import {
   EffectivePlacementView,
   Facultative,
   PlacementEndorsement,
+  PlacementDocument,
   ENDORSEMENT_TYPE_LABELS,
   ENDORSEMENT_STATUS_LABELS,
   ENDORSEMENT_STATUS_VARIANT,
@@ -28,7 +29,6 @@ import {
   useUpdateEndorsementStatus,
   useGenerateEndorsementSlipDocument,
   useGenerateEndorsementCertificateDocument,
-  useRenderPlacementDocumentPdf,
   endorsementParticipantKey,
   endorsementClosingsKey,
   endorsementSummaryKey,
@@ -43,22 +43,12 @@ import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreview
 import { CreateDistributionPanel } from '@/components/organisms/reinsurance/panels/CreateDistributionPanel';
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
+import { EndorsementDocumentModal } from '@/components/organisms/reinsurance/documents/EndorsementDocumentModal';
 import { cardClass } from '@/lib/utils';
 
 interface EndorsementTabProps {
   placement: Facultative;
 }
-
-const SEGMENT_COLORS = [
-  '#3b82f6',
-  '#8b5cf6',
-  '#84cc16',
-  '#f59e0b',
-  '#f97316',
-  '#ec4899',
-  '#06b6d4',
-  '#10b981',
-];
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -82,12 +72,6 @@ function fmtMoney(value: unknown, currency?: string | null): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-}
-
-function openPdfBlob(blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noopener,noreferrer');
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function EffectivePlacementSection({
@@ -329,6 +313,7 @@ function EndorsementCard({
   const [revisedShares, setRevisedShares] = useState<Record<string, string>>({});
   const [busyEPIds, setBusyEPIds] = useState<Set<string>>(new Set());
   const [slipPreviewCounterpartyId, setSlipPreviewCounterpartyId] = useState<string | null>(null);
+  const [documentPreview, setDocumentPreview] = useState<PlacementDocument | null>(null);
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [mailPreviewCounterpartyId, setMailPreviewCounterpartyId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
@@ -381,7 +366,6 @@ function EndorsementCard({
     placement.id,
     endorsement.id,
   );
-  const renderPlacementDocumentPdf = useRenderPlacementDocumentPdf(placement.id);
   const queryClient = useQueryClient();
 
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
@@ -397,35 +381,10 @@ function EndorsementCard({
   const proposedFacOffer = proposed
     ? parseFloat(String(proposed.facultativeOffer ?? snapshotFacOffer))
     : snapshotFacOffer;
-  const addedCapacity = Math.max(0, +(proposedFacOffer - snapshotFacOffer).toFixed(4));
 
   const snapshotCounterpartyIds = new Set(
     snapshotParticipants.map((p) => String(p.counterpartyId)),
   );
-
-  const exhaustedSnapshotParticipants = snapshotParticipants.filter((p) => {
-    const s = String(p.status ?? '');
-    return s === 'ACCEPTED' || s === 'CLOSED';
-  });
-
-  const snapshotPlacedPct = +exhaustedSnapshotParticipants
-    .reduce((sum, p) => sum + parseFloat(String(p.signedLinePercent ?? p.sharePercent ?? '0')), 0)
-    .toFixed(4);
-
-  const endorsementBarTotal = +(snapshotPlacedPct + addedCapacity).toFixed(4);
-
-  const acceptedEndorsementParticipants = endorsementParticipants.filter(
-    (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
-  );
-
-  // What's left to offer a new reinsurer once the reinsurers already on the
-  // placement before this endorsement have accepted their (possibly revised) line.
-  const acceptedOldEndorsementPct = +acceptedEndorsementParticipants
-    .filter((p) => snapshotCounterpartyIds.has(p.counterpartyId))
-    .reduce((sum, p) => sum + parseFloat(String(p.signedLinePercent ?? p.sharePercent ?? '0')), 0)
-    .toFixed(4);
-
-  const leftoverFacOffer = Math.max(0, +(proposedFacOffer - acceptedOldEndorsementPct).toFixed(4));
 
   const acceptedCounterpartyIds = new Set(
     endorsementParticipants
@@ -475,11 +434,34 @@ function EndorsementCard({
     acceptedCounterpartyIds.has(r.counterpartyId),
   ).length;
 
-  // Built from the combined row list (old + newly-added) so newly-accepted reinsurers
-  // get a bar segment color instead of rendering invisibly.
-  const snapColorMap = Object.fromEntries(
-    endorsementRows.map((r, i) => [r.counterpartyId, SEGMENT_COLORS[i % SEGMENT_COLORS.length]]),
+  const summaryTargetPercent = endorsementSummary?.targetPercent ?? proposedFacOffer;
+  const summaryAcceptedPercent = endorsementSummary?.acceptedPercent ?? 0;
+  const summaryConfirmedPercent = endorsementSummary?.placedPercent ?? 0;
+  const summaryRemainingPercent =
+    endorsementSummary?.remainingPercent ??
+    Math.max(0, +(summaryTargetPercent - summaryConfirmedPercent).toFixed(4));
+  const acceptedRemainingPercent = Math.max(
+    0,
+    +(summaryTargetPercent - summaryAcceptedPercent).toFixed(4),
   );
+  const capacityBarTotal = Math.max(
+    summaryTargetPercent,
+    summaryAcceptedPercent,
+    summaryConfirmedPercent,
+    0,
+  );
+  const confirmedCapacityWidth =
+    capacityBarTotal > 0 ? Math.min(100, (summaryConfirmedPercent / capacityBarTotal) * 100) : 0;
+  const acceptedPendingWidth =
+    capacityBarTotal > 0
+      ? Math.min(
+          100 - confirmedCapacityWidth,
+          (Math.max(0, summaryAcceptedPercent - summaryConfirmedPercent) / capacityBarTotal) * 100,
+        )
+      : 0;
+  const remainingCapacityWidth =
+    capacityBarTotal > 0 ? Math.max(0, 100 - confirmedCapacityWidth - acceptedPendingWidth) : 0;
+  const leftoverFacOffer = acceptedRemainingPercent;
 
   const invalidateEndorsementView = async () => {
     await Promise.all([
@@ -503,13 +485,12 @@ function EndorsementCard({
   };
 
   const openGeneratedDocument = async (
-    generate: () => Promise<{ id: string }>,
+    generate: () => Promise<PlacementDocument>,
     successMessage: string,
   ) => {
     try {
       const document = await generate();
-      const pdf = await renderPlacementDocumentPdf.mutateAsync({ documentId: document.id });
-      openPdfBlob(pdf);
+      setDocumentPreview(document);
       useToastStore.getState().addToast({
         message: successMessage,
         type: 'success',
@@ -523,12 +504,15 @@ function EndorsementCard({
   };
 
   const handleOpenEndorsementSlip = () =>
-    openGeneratedDocument(() => generateEndorsementSlip.mutateAsync(), 'Endorsement slip opened');
+    openGeneratedDocument(
+      () => generateEndorsementSlip.mutateAsync(),
+      'Endorsement slip snapshot ready',
+    );
 
   const handleOpenEndorsementCertificate = (closingId: string) =>
     openGeneratedDocument(
       () => generateEndorsementCertificate.mutateAsync({ closingId }),
-      'Endorsement certificate opened',
+      'Endorsement certificate snapshot ready',
     );
 
   const handleAddReinsurers = async (entries: ReinsurerEntry[]) => {
@@ -661,9 +645,7 @@ function EndorsementCard({
       .map((closing) => [closing.endorsementParticipantId, closing]),
   );
   const isDocumentBusy =
-    generateEndorsementSlip.isPending ||
-    generateEndorsementCertificate.isPending ||
-    renderPlacementDocumentPdf.isPending;
+    generateEndorsementSlip.isPending || generateEndorsementCertificate.isPending;
 
   const epColumns: Column<EndorsementParticipantRow>[] = [
     {
@@ -1051,64 +1033,59 @@ function EndorsementCard({
               style={{ gridTemplateRows: participantsExpanded ? '1fr' : '0fr' }}
             >
               <div className="overflow-hidden flex flex-col gap-3">
-                {/* Capacity bar — only what has been accepted within this endorsement */}
-                {endorsementBarTotal > 0 && (
+                {/* Capacity bar — driven by backend endorsement summary, not participant row math. */}
+                {capacityBarTotal > 0 && (
                   <div className="flex flex-col gap-2 pt-1">
                     <div className="flex items-center justify-between text-xs font-medium text-gray-500">
-                      <span>Accepted Capacity at Endorsement</span>
+                      <span>Endorsement Capacity</span>
                       <span>
-                        <span className="text-gray-700">{snapshotPlacedPct}%</span>
-                        {addedCapacity > 0 && (
-                          <>
-                            <span className="text-gray-400"> + {addedCapacity}% new</span>
-                            <span className="text-gray-400"> / {endorsementBarTotal}%</span>
-                          </>
-                        )}
+                        <span className="text-emerald-700">
+                          {summaryConfirmedPercent}% confirmed
+                        </span>
+                        <span className="text-gray-400"> · </span>
+                        <span className="text-amber-700">
+                          {Math.max(0, summaryAcceptedPercent - summaryConfirmedPercent)}% accepted
+                          pending
+                        </span>
+                        <span className="text-gray-400">
+                          {' '}
+                          · {summaryRemainingPercent}% remaining
+                        </span>
                       </span>
                     </div>
 
                     <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
-                      {exhaustedSnapshotParticipants.map((p, i) => {
-                        const cid = String(p.counterpartyId);
-                        const share = parseFloat(
-                          String(p.signedLinePercent ?? p.sharePercent ?? '0'),
-                        );
-                        return (
-                          <div
-                            key={i}
-                            style={{
-                              width: `${(share / endorsementBarTotal) * 100}%`,
-                              backgroundColor: snapColorMap[cid],
-                            }}
-                            className="h-full transition-all duration-500"
-                          />
-                        );
-                      })}
+                      <div
+                        style={{ width: `${confirmedCapacityWidth}%` }}
+                        className="h-full bg-emerald-500 transition-all duration-500"
+                      />
+                      <div
+                        style={{ width: `${acceptedPendingWidth}%` }}
+                        className="h-full bg-amber-400 transition-all duration-500"
+                      />
+                      <div
+                        style={{ width: `${remainingCapacityWidth}%` }}
+                        className="h-full bg-gray-200 transition-all duration-500"
+                      />
                     </div>
 
                     <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                      {exhaustedSnapshotParticipants.map((p) => {
-                        const cid = String(p.counterpartyId);
-                        const r = reinsurers.find((r) => r.id === cid);
-                        const share = parseFloat(
-                          String(p.signedLinePercent ?? p.sharePercent ?? '0'),
-                        );
-                        return (
-                          <div key={cid} className="flex items-center gap-1.5">
-                            <span
-                              className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: snapColorMap[cid] }}
-                            />
-                            <span
-                              className="text-xs font-medium"
-                              style={{ color: snapColorMap[cid] }}
-                            >
-                              {r?.name ?? cid}
-                              <span className="text-gray-400 font-normal"> · {share}%</span>
-                            </span>
-                          </div>
-                        );
-                      })}
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="text-xs font-medium text-emerald-700">
+                          Confirmed closing capacity
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                        <span className="text-xs font-medium text-amber-700">
+                          Accepted, awaiting validation
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />
+                        <span className="text-xs font-medium text-gray-500">Remaining</span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1273,6 +1250,12 @@ function EndorsementCard({
         onAdd={handleAddReinsurers}
         existingIds={endorsementRows.map((r) => r.counterpartyId)}
         title="Add Endorsement Participant"
+      />
+
+      <EndorsementDocumentModal
+        isOpen={!!documentPreview}
+        document={documentPreview}
+        onClose={() => setDocumentPreview(null)}
       />
     </>
   );

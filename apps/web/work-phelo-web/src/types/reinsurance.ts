@@ -842,6 +842,8 @@ export interface PlacementDocument {
   updatedAt: string;
   voidedAt: string | null;
   voidReason: string | null;
+  sourceSnapshot?: Record<string, unknown> | null;
+  renderPayload?: Record<string, unknown> | null;
 }
 
 export type PlacementPaymentType =
