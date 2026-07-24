@@ -12,7 +12,7 @@ export class PlacementEndorsementParticipantSummaryCountsDto {
   @ApiProperty({
     example: 2,
     description:
-      'Participants in ACCEPTED or CLOSED status. These count toward placed endorsement capacity.',
+      'Participants in ACCEPTED or CLOSED status. These count toward accepted endorsement capacity; confirmed closings drive placed capacity.',
   })
   accepted!: number;
 
@@ -101,7 +101,15 @@ export class PlacementEndorsementSummaryResponseDto {
     type: Number,
     example: 10,
     description:
-      'Accepted endorsement participant signed lines. Original placement participants are excluded.',
+      'Accepted endorsement participant signed lines before validation. Original placement participants are excluded.',
+  })
+  acceptedPercent!: number;
+
+  @ApiProperty({
+    type: Number,
+    example: 10,
+    description:
+      'Confirmed endorsement closing signed lines. This is the backend source of truth for placed endorsement capacity.',
   })
   placedPercent!: number;
 
@@ -110,7 +118,7 @@ export class PlacementEndorsementSummaryResponseDto {
     nullable: true,
     example: 0,
     description:
-      'targetPercent minus placedPercent, floored at 0. Null when targetPercent is not set.',
+      'targetPercent minus confirmed placedPercent, floored at 0. Null when targetPercent is not set.',
   })
   remainingPercent!: number | null;
 

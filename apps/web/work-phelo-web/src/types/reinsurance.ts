@@ -537,6 +537,58 @@ export interface PlacementEndorsement {
   updatedAt: string;
 }
 
+export type PlacementEndorsementImpactType =
+  | 'CAPACITY_INCREASE'
+  | 'TERMS_ONLY'
+  | 'DECREASE_OR_CANCELLATION'
+  | 'ADMINISTRATIVE';
+
+export type PlacementEndorsementPendingAction =
+  | 'SEND_TO_MARKET'
+  | 'ADD_CAPACITY'
+  | 'ACCEPT_PARTICIPANTS'
+  | 'CREATE_CLOSING'
+  | 'ISSUE_CLOSING'
+  | 'CONFIRM_CLOSING'
+  | 'GENERATE_NOTES'
+  | 'ISSUE_NOTES'
+  | 'CLOSE_ENDORSEMENT';
+
+export interface PlacementEndorsementSummary {
+  id: string;
+  placementId: string;
+  endorsementNumber: string;
+  type: PlacementEndorsementType;
+  impactType: PlacementEndorsementImpactType;
+  status: PlacementEndorsementStatus;
+  targetPercent: number | null;
+  acceptedPercent: number;
+  placedPercent: number;
+  remainingPercent: number | null;
+  participants: {
+    total: number;
+    accepted: number;
+    declined: number;
+  };
+  closings: {
+    total: number;
+    confirmed: number;
+    draft: number;
+    issued: number;
+    void: number;
+  };
+  notes: {
+    total: number;
+    endorsementDebitNotes: number;
+    endorsementCreditNotes: number;
+    issued: number;
+    draft: number;
+    void: number;
+  };
+  pendingActions: PlacementEndorsementPendingAction[];
+  isComplete: boolean;
+}
+
 export type PlacementEndorsementParticipantStatus =
   | 'INVITED'
   | 'OFFER_SENT'
