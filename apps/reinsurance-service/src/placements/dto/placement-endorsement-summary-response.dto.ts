@@ -57,6 +57,20 @@ export class PlacementEndorsementNoteSummaryCountsDto {
   void!: number;
 }
 
+export class PlacementEndorsementCloseBlockingReasonDto {
+  @ApiProperty({
+    example: 'UNCONFIRMED_CLOSING',
+    description: 'Stable machine-readable reason code for close blockers.',
+  })
+  code!: string;
+
+  @ApiProperty({
+    example: 'One endorsement closing has been issued but not confirmed.',
+    description: 'Broker/support friendly explanation of the close blocker.',
+  })
+  message!: string;
+}
+
 export class PlacementEndorsementSummaryResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -138,6 +152,21 @@ export class PlacementEndorsementSummaryResponseDto {
       'Backend-derived workflow hints such as SEND_TO_MARKET, ADD_CAPACITY, ACCEPT_PARTICIPANTS, CREATE_CLOSING, ISSUE_CLOSING, CONFIRM_CLOSING, GENERATE_NOTES, ISSUE_NOTES or CLOSE_ENDORSEMENT.',
   })
   pendingActions!: string[];
+
+  @ApiProperty({
+    example: false,
+    description:
+      'Backend-enforced close readiness. The close status transition validates this again before accepting CLOSED.',
+  })
+  canClose!: boolean;
+
+  @ApiProperty({
+    type: [PlacementEndorsementCloseBlockingReasonDto],
+    example: [],
+    description:
+      'Backend-derived reasons why the endorsement cannot be closed yet.',
+  })
+  closeBlockingReasons!: PlacementEndorsementCloseBlockingReasonDto[];
 
   @ApiProperty({
     example: true,
