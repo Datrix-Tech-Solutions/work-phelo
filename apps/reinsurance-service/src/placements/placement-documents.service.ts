@@ -285,6 +285,7 @@ export class PlacementDocumentsService {
         endorsementId: note.endorsementId,
         endorsementClosingId: note.endorsementClosingId,
       },
+      reuseActive: true,
     });
   }
 
