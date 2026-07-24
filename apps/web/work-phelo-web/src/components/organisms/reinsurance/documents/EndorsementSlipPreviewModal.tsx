@@ -20,6 +20,15 @@ interface EndorsementSlipPreviewModalProps {
   closings: EndorsementParticipantClosing[];
   notes: PlacementNote[];
   summary?: PlacementEndorsementSummary;
+  documentTitle?: string;
+  previewNotice?: string;
+  focusedCounterpartyId?: string | null;
+  focusedRecipient?: {
+    name: string;
+    relationship: string;
+    offeredLinePercent: string | number;
+    status: string;
+  } | null;
   onClose: () => void;
 }
 
@@ -174,29 +183,41 @@ export function EndorsementSlipPreviewModal({
   closings,
   notes,
   summary,
+  documentTitle = 'Endorsement Slip Preview',
+  previewNotice = 'Backend record preview. No immutable official endorsement slip snapshot has been generated yet.',
+  focusedCounterpartyId,
+  focusedRecipient,
   onClose,
 }: EndorsementSlipPreviewModalProps) {
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = getSnapshotPlacement(endorsement.proposedSnapshot ?? {});
   const confirmedClosings = closings.filter((closing) => closing.status === 'CONFIRMED');
+  const focusedParticipant = focusedCounterpartyId
+    ? participants.find((participant) => participant.counterpartyId === focusedCounterpartyId)
+    : undefined;
+  const focusedReinsurerName =
+    focusedRecipient?.name ??
+    focusedParticipant?.counterparty?.name ??
+    focusedParticipant?.counterpartyId ??
+    null;
 
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Endorsement Slip Preview — ${endorsement.endorsementNumber}`}
-      documentTitle="Endorsement Slip Preview"
+      title={`${documentTitle} — ${endorsement.endorsementNumber}`}
+      documentTitle={documentTitle}
       fileName={buildDocumentFileName(
-        'Endorsement Slip Preview',
+        documentTitle,
         endorsement.endorsementNumber,
         placement.reference,
+        focusedReinsurerName ?? undefined,
       )}
       qrValue={`${endorsement.endorsementNumber}:${endorsement.id}:PREVIEW`}
       onPrint={() => {}}
       onClose={onClose}
     >
       <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
-        Backend record preview. No immutable official endorsement slip snapshot has been generated
-        yet.
+        {previewNotice}
       </div>
 
       <SectionHeading>Endorsement</SectionHeading>
@@ -215,6 +236,44 @@ export function EndorsementSlipPreviewModal({
 
       <SectionHeading>Original vs Proposed Business</SectionHeading>
       <ChangeTable original={original} proposed={proposed} currency={placement.currency} />
+
+      {(focusedParticipant || focusedRecipient) && (
+        <>
+          <SectionHeading>Market Recipient</SectionHeading>
+          <InfoRows
+            rows={[
+              {
+                label: 'Reinsurer',
+                value:
+                  focusedRecipient?.name ??
+                  focusedParticipant?.counterparty?.name ??
+                  focusedParticipant?.counterpartyId ??
+                  '—',
+              },
+              {
+                label: 'Relationship',
+                value:
+                  focusedRecipient?.relationship ??
+                  (focusedParticipant?.originalParticipantId
+                    ? 'Existing placement participant reviewing revised terms'
+                    : 'New endorsement participant reviewing current endorsed risk'),
+              },
+              {
+                label: 'Offered / Revised Line',
+                value: fmtPct(
+                  focusedRecipient?.offeredLinePercent ??
+                    focusedParticipant?.signedLinePercent ??
+                    focusedParticipant?.sharePercent,
+                ),
+              },
+              {
+                label: 'Response Status',
+                value: focusedRecipient?.status ?? focusedParticipant?.status ?? '—',
+              },
+            ]}
+          />
+        </>
+      )}
 
       <SectionHeading>Capacity Summary</SectionHeading>
       <InfoRows

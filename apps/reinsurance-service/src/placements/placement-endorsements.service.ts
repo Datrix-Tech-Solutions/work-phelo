@@ -294,7 +294,11 @@ export class PlacementEndorsementsService {
     const activeCreditNotes = activeNotes.filter(
       (note) => note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
     );
+    const requiresFinancialNotes =
+      endorsement.impactType !== PlacementEndorsementImpactType.TERMS_ONLY &&
+      endorsement.impactType !== PlacementEndorsementImpactType.ADMINISTRATIVE;
     const requiresDebitNote =
+      requiresFinancialNotes &&
       activeConfirmedClosings.length > 0 &&
       endorsement.impactType !==
         PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION;
@@ -303,9 +307,11 @@ export class PlacementEndorsementsService {
         .map((note) => note.endorsementClosingId)
         .filter((closingId): closingId is string => Boolean(closingId)),
     );
-    const confirmedClosingsWithoutCreditNotes = activeConfirmedClosings.filter(
-      (closing) => !creditNoteClosingIds.has(closing.id),
-    );
+    const confirmedClosingsWithoutCreditNotes = requiresFinancialNotes
+      ? activeConfirmedClosings.filter(
+          (closing) => !creditNoteClosingIds.has(closing.id),
+        )
+      : [];
     const draftNotes = activeNotes.filter(
       (note) => note.status === PlacementNoteStatus.DRAFT,
     );

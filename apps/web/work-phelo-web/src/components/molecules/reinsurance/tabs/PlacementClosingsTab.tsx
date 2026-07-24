@@ -72,8 +72,6 @@ interface PlacementClosingsTabProps {
 
 export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [guaranteeNoteOpen, setGuaranteeNoteOpen] = useState(false);
-  const [guaranteeNoteViewed, setGuaranteeNoteViewed] = useState(false);
-  const [debitNoteViewed, setDebitNoteViewed] = useState(false);
   const [closingPreview, setClosingPreview] = useState<PlacementParticipantClosing | null>(null);
   const [noteDocumentPreview, setNoteDocumentPreview] = useState<PlacementDocument | null>(null);
   const [noteRecordPreview, setNoteRecordPreview] = useState<PlacementNote | null>(null);
@@ -150,7 +148,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       }
       if (!note) throw new Error('Active debit note could not be found.');
       await openNoteDocument(note);
-      setDebitNoteViewed(true);
       useToastStore.getState().addToast({
         message: 'Debit note ready',
         type: 'success',
@@ -245,40 +242,82 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
 
   return (
     <>
-      <DataTable
-        columns={columns}
-        data={rows}
-        isLoading={isLoadingClosings}
-        emptyMessage="No confirmed placement closings yet"
-        currentPage={1}
-        totalPages={1}
-        onPageChange={() => {}}
-        noInternalScroll
-        secondaryButtons={[
-          ...(isPlacementClosed
-            ? [
-                {
-                  label: 'Preview Guarantee Note',
-                  onClick: () => {
+      <div className="flex flex-col gap-5">
+        <section className="rounded-xl border border-gray-100 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Market / Offer
+          </p>
+          <p className="mt-1 text-sm font-medium text-gray-900">Offer Slip</p>
+          <p className="mt-1 text-xs text-gray-500">
+            Placement offer slips are managed from the market distribution list before reinsurer
+            closings are confirmed.
+          </p>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Reinsurer Closings
+            </p>
+            <p className="text-xs text-gray-400">
+              Each row is a confirmed backend placement closing. Credit notes remain tied to the
+              corresponding reinsurer closing.
+            </p>
+          </div>
+          <DataTable
+            columns={columns}
+            data={rows}
+            isLoading={isLoadingClosings}
+            emptyMessage="No confirmed placement closings yet"
+            currentPage={1}
+            totalPages={1}
+            onPageChange={() => {}}
+            noInternalScroll
+          />
+        </section>
+
+        <section className="rounded-xl border border-gray-100 bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Cedant / Placement Documents
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Debit Note and Guarantee Note are placement-level cedant documents, not
+                reinsurer-specific closing documents.
+              </p>
+            </div>
+            {isPlacementClosed ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <TableButton variant="gray" isLoading={isNoteBusy} onClick={handleOpenDebitNote}>
+                  View/Create Debit Note
+                </TableButton>
+                <TableButton
+                  variant="gray"
+                  onClick={() => {
                     setGuaranteeNoteOpen(true);
-                    setGuaranteeNoteViewed(true);
-                  },
-                  className: guaranteeNoteViewed ? 'mx-1' : 'btn-pulse mx-1',
-                },
-                {
-                  label: 'View Debit Note',
-                  onClick: handleOpenDebitNote,
-                  className: debitNoteViewed ? 'mx-1' : 'btn-pulse mx-1',
-                },
-              ]
-            : []),
-        ]}
-        actionButton={
-          isPlacementClosed
-            ? { label: 'Mail to cedant', onClick: () => setMailToCedantOpen(true) }
-            : undefined
-        }
-      />
+                  }}
+                >
+                  Preview Guarantee Note
+                </TableButton>
+                <TableButton variant="blue" onClick={() => setMailToCedantOpen(true)}>
+                  Mail to Cedant
+                </TableButton>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">
+                Cedant documents become available once the placement is closed.
+              </p>
+            )}
+          </div>
+          {isPlacementClosed && (
+            <p className="mt-3 text-xs text-amber-700">
+              Guarantee Note is currently a frontend preview only; it is not an official immutable
+              backend document yet.
+            </p>
+          )}
+        </section>
+      </div>
 
       <GuaranteeNoteModal
         isOpen={guaranteeNoteOpen}
