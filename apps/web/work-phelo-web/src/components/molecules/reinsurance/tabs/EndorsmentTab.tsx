@@ -7,6 +7,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import {
+  EffectivePlacementView,
   Facultative,
   PlacementEndorsement,
   ENDORSEMENT_TYPE_LABELS,
@@ -23,6 +24,7 @@ import {
   useEndorsementClosings,
   useValidateAndConfirmEndorsementParticipant,
   usePlacementEndorsementSummary,
+  usePlacementEffectiveView,
   useReinsurers,
   useUpdateEndorsementStatus,
   endorsementParticipantKey,
@@ -80,6 +82,133 @@ function fmtMoney(value: unknown, currency?: string | null): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function EffectivePlacementSection({
+  view,
+  isLoading,
+  isError,
+}: {
+  view: EffectivePlacementView | undefined;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  if (isLoading) {
+    return <p className="text-sm text-gray-400">Loading latest confirmed placement position...</p>;
+  }
+  if (isError || !view) {
+    return (
+      <p className="text-sm text-red-500">
+        Latest confirmed placement position could not be loaded.
+      </p>
+    );
+  }
+
+  const totals = view.effectiveTotals;
+  const capacity = view.capacityBreakdown;
+  const participationLabels: Record<string, string> = {
+    ORIGINAL: 'Original',
+    REVISED: 'Revised',
+    ADDED: 'New',
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900">
+            Latest Confirmed Placement Position
+          </h4>
+          <p className="text-xs text-gray-500 mt-1">
+            Read-only view from confirmed placement and endorsement closings. The original placement
+            remains unchanged.
+          </p>
+        </div>
+        <Badge label="Read only" variant="neutral" />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          ['Original Capacity', `${capacity.originalCapacityPercent ?? '—'}%`],
+          ['Effective Capacity', `${capacity.effectiveTotalCapacityPercent}%`],
+          ['Confirmed Endorsement Capacity', `${capacity.confirmedEndorsementCapacityPercent}%`],
+          ['Remaining Capacity', `${capacity.remainingCapacityPercent}%`],
+          ['Sum Insured', fmtMoney(totals.sumInsured, totals.currency)],
+          ['Effective Premium', fmtMoney(totals.premium, totals.currency)],
+          ['Closing Gross Premium', fmtMoney(totals.grossPremium, totals.currency)],
+          ['Closing Net Premium', fmtMoney(totals.netPremium, totals.currency)],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">{label}</p>
+            <p className="text-sm font-semibold text-gray-900 mt-1">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+          Effective Reinsurer Lines ({totals.participantCount})
+        </p>
+        {view.effectiveParticipants.length === 0 ? (
+          <p className="text-xs text-gray-400">No confirmed participant lines yet.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-100">
+            {view.effectiveParticipants.map((participant) => (
+              <div
+                key={participant.counterpartyId}
+                className="py-2 flex items-center justify-between gap-3"
+              >
+                <div>
+                  <span className="text-sm text-gray-700">{participant.counterparty.name}</span>
+                  <p className="text-[11px] text-gray-400">
+                    {participationLabels[participant.participationType] ??
+                      participant.participationType}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {participant.signedLinePercent}%
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Net {fmtMoney(participant.netPremium, totals.currency)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {view.pendingEndorsements.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold text-amber-800">Pending endorsements</p>
+          <p className="text-xs text-amber-700 mt-1">
+            {view.pendingEndorsements
+              .map(
+                (item) => `${item.endorsementNumber} (${ENDORSEMENT_STATUS_LABELS[item.status]})`,
+              )
+              .join(', ')}
+          </p>
+          {capacity.acceptedEndorsementCapacityPercent > 0 && (
+            <p className="text-xs text-amber-700 mt-1">
+              Accepted but not yet effective capacity: {capacity.acceptedEndorsementCapacityPercent}
+              %
+            </p>
+          )}
+        </div>
+      )}
+
+      {view.warnings.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {view.warnings.map((warning) => (
+            <p key={warning} className="text-xs text-amber-700">
+              {warning}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const PARAM_FIELDS: { key: string; label: string }[] = [
@@ -878,7 +1007,7 @@ function EndorsementCard({
         )}
 
         {endorsement.status !== 'DRAFT' && endorsementSummary && (
-          <div className="grid grid-cols-3 gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+          <div className="grid grid-cols-2 gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 lg:grid-cols-4">
             <div>
               <p className="text-xs text-gray-500">Target Capacity</p>
               <p className="text-sm font-semibold text-gray-900">
@@ -887,6 +1016,12 @@ function EndorsementCard({
             </div>
             <div>
               <p className="text-xs text-gray-500">Accepted Capacity</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {endorsementSummary.acceptedPercent}%
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Confirmed Capacity</p>
               <p className="text-sm font-semibold text-gray-900">
                 {endorsementSummary.placedPercent}%
               </p>
@@ -1055,10 +1190,23 @@ function EndorsementCard({
 
 export function EndorsementTab({ placement }: EndorsementTabProps) {
   const { data: endorsements = [], isLoading } = usePlacementEndorsements(placement.id);
+  const {
+    data: effectiveView,
+    isLoading: effectiveViewLoading,
+    isError: effectiveViewError,
+  } = usePlacementEffectiveView(placement.id, endorsements.length > 0);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-5">
       <h3 className="text-base font-semibold text-gray-900">Policy Endorsement</h3>
+
+      {endorsements.length > 0 && (
+        <EffectivePlacementSection
+          view={effectiveView}
+          isLoading={effectiveViewLoading}
+          isError={effectiveViewError}
+        />
+      )}
 
       {isLoading ? (
         <p className="text-sm text-gray-400">Loading endorsements…</p>

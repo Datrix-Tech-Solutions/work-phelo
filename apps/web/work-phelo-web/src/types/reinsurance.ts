@@ -626,6 +626,10 @@ export interface EffectivePlacementView {
   };
   effectiveTotals: {
     facultativeOfferPercent: number;
+    originalFacultativeOfferPercent: number | null;
+    acceptedEndorsementCapacityPercent: number;
+    confirmedEndorsementCapacityPercent: number;
+    remainingCapacityPercent: number;
     participantCount: number;
     sumInsured: number | null;
     premium: number | null;
@@ -637,6 +641,13 @@ export interface EffectivePlacementView {
     brokerageAmount: number;
     netPremium: number;
   };
+  capacityBreakdown: {
+    originalCapacityPercent: number | null;
+    acceptedEndorsementCapacityPercent: number;
+    confirmedEndorsementCapacityPercent: number;
+    remainingCapacityPercent: number;
+    effectiveTotalCapacityPercent: number;
+  };
   effectiveParticipants: Array<{
     counterpartyId: string;
     counterparty: {
@@ -646,6 +657,7 @@ export interface EffectivePlacementView {
       registrationNumber: string | null;
     };
     signedLinePercent: number;
+    participationType: 'ORIGINAL' | 'REVISED' | 'ADDED';
     grossPremium: number;
     commissionAmount: number;
     brokerageAmount: number;
@@ -655,6 +667,7 @@ export interface EffectivePlacementView {
       closingId: string;
       participantId?: string;
       endorsementParticipantId?: string;
+      originalParticipantId?: string | null;
       signedLinePercent: number;
     }>;
   }>;
