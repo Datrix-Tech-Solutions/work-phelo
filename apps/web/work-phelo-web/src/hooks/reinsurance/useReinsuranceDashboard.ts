@@ -615,6 +615,15 @@ export interface FinancialsByCurrency {
   premium: Map<string, number>;
   brokerage: Map<string, number>;
   claimsIncurred: Map<string, number>;
+  recoveries: Map<string, number>;
+  outstandingPremium: Map<string, number>;
+}
+
+/** Net premium due to the cedant for a placement: the fac share of premium, less commission. */
+function netPremiumFor(f: Facultative): number {
+  const fac =
+    f.premium != null && f.facultativeOffer != null ? (f.facultativeOffer / 100) * f.premium : 0;
+  return f.commission != null ? fac * (1 - f.commission / 100) : fac;
 }
 
 /** Native-currency financial breakdown — no conversion, each amount stays in its own placement's currency. */
@@ -639,6 +648,16 @@ export function useReinsuranceFinancialsByCurrency({ period }: { period: Period 
     })),
   });
 
+  const paymentQueries = useQueries({
+    queries: eligiblePlacements.map((p) => ({
+      queryKey: ['reinsurance', 'placements', p.id, 'payments'] as const,
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
   const data = useMemo(() => {
     const { start } = periodBounds(period, new Date());
 
@@ -647,10 +666,12 @@ export function useReinsuranceFinancialsByCurrency({ period }: { period: Period 
     const premium = new Map<string, number>();
     const brokerage = new Map<string, number>();
     const claimsIncurred = new Map<string, number>();
+    const recoveries = new Map<string, number>();
+    const outstandingPremium = new Map<string, number>();
 
-    for (const f of eligiblePlacements) {
-      if (f.currency == null) continue;
-      if (new Date(f.createdAt) < start) continue;
+    eligiblePlacements.forEach((f, i) => {
+      if (f.currency == null) return;
+      if (new Date(f.createdAt) < start) return;
 
       if (f.sumInsured != null) {
         sumInsured.set(f.currency, (sumInsured.get(f.currency) ?? 0) + f.sumInsured);
@@ -674,24 +695,51 @@ export function useReinsuranceFinancialsByCurrency({ period }: { period: Period 
           );
         }
       }
-    }
 
-    claimQueries.forEach((query) => {
-      const claims = (query.data ?? []) as PlacementClaim[];
+      const payments = (paymentQueries[i]?.data ?? []) as PlacementPayment[];
+      const premiumPaid = payments
+        .filter((pmt) => pmt.type === 'PREMIUM_RECEIVED' && pmt.status === 'RECORDED')
+        .reduce((sum, pmt) => sum + parseFloat(pmt.amount), 0);
+      const outstanding = Math.max(0, netPremiumFor(f) - premiumPaid);
+      if (outstanding > 0) {
+        outstandingPremium.set(f.currency, (outstandingPremium.get(f.currency) ?? 0) + outstanding);
+      }
+
+      const acceptedParticipants = f.participants.filter(
+        (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
+      );
+      const claims = (claimQueries[i]?.data ?? []) as PlacementClaim[];
       for (const claim of claims) {
         if (!ACTIVE_CLAIM_STATUSES.includes(claim.status as (typeof ACTIVE_CLAIM_STATUSES)[number]))
           continue;
         if (new Date(claim.createdAt) < start) continue;
 
-        const amount = parseFloat(claim.estimatedLossAmount);
-        claimsIncurred.set(claim.currency, (claimsIncurred.get(claim.currency) ?? 0) + amount);
+        const claimAmount = parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount);
+        claimsIncurred.set(claim.currency, (claimsIncurred.get(claim.currency) ?? 0) + claimAmount);
+
+        for (const p of acceptedParticipants) {
+          const share = parseFloat(p.signedLinePercent ?? p.sharePercent ?? '0');
+          recoveries.set(
+            claim.currency,
+            (recoveries.get(claim.currency) ?? 0) + claimAmount * (share / 100),
+          );
+        }
       }
     });
 
-    return { totalRisk, sumInsured, premium, brokerage, claimsIncurred };
-  }, [eligiblePlacements, claimQueries, period]);
+    return {
+      totalRisk,
+      sumInsured,
+      premium,
+      brokerage,
+      claimsIncurred,
+      recoveries,
+      outstandingPremium,
+    };
+  }, [eligiblePlacements, claimQueries, paymentQueries, period]);
 
-  const isLoading = loadingFac || claimQueries.some((q) => q.isLoading);
+  const isLoading =
+    loadingFac || claimQueries.some((q) => q.isLoading) || paymentQueries.some((q) => q.isLoading);
 
   return { data, isLoading };
 }

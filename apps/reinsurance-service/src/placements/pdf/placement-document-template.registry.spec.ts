@@ -304,14 +304,128 @@ describe('PlacementDocumentTemplateRegistry', () => {
     expect(html).not.toContain('NaN');
   });
 
+  it('renders endorsement slip and certificate payloads', () => {
+    const endorsementHtml = registry.renderHtml(
+      PlacementDocumentType.ENDORSEMENT_SLIP,
+      {
+        documentType: PlacementDocumentType.ENDORSEMENT_SLIP,
+        endorsement: {
+          endorsementNumber: 'END-001',
+          type: 'POLICY_AMENDMENT',
+          impactType: 'ADMINISTRATIVE',
+          status: 'CLOSING',
+          effectiveDate: '2026-07-01T00:00:00.000Z',
+          originalSnapshot: { placement: { title: 'Original Risk' } },
+          proposedSnapshot: { placement: { title: 'Revised Risk' } },
+          placement: {
+            reference: 'FAC-001',
+            title: 'Revised Risk',
+            currency: 'GHS',
+            cedant: { name: 'Acme Insurance' },
+          },
+          participants: [
+            {
+              status: 'CLOSED',
+              signedLinePercent: '40',
+              counterparty: { name: 'Avenue Re' },
+            },
+          ],
+          closings: [
+            {
+              status: 'CONFIRMED',
+              closingNumber: 'ENC-001',
+              signedLinePercent: '40',
+              premiumSnapshot: '5000',
+              netPremium: '4500',
+              endorsementParticipant: {
+                counterparty: { name: 'Avenue Re' },
+              },
+            },
+          ],
+          notes: [],
+        },
+        documentProfile: {
+          identity: { displayName: 'BrokerCo', legalName: 'BrokerCo Ltd' },
+          contact: {},
+          footer: { text: 'BrokerCo footer' },
+          branding: {},
+          banking: { defaultAccounts: [] },
+          signatory: { name: 'Ama Broker', title: 'Managing Broker' },
+        },
+      },
+      {
+        documentNumber: 'DOC-ES-001',
+        title: 'Endorsement Slip',
+        generatedAt: '2026-07-01T00:00:00.000Z',
+      },
+    );
+
+    expect(endorsementHtml).toContain('Endorsement Slip');
+    expect(endorsementHtml).toContain('END-001');
+    expect(endorsementHtml).toContain('Confirmed Endorsement Closings');
+    expect(endorsementHtml).not.toContain('NaN');
+
+    const certificateHtml = registry.renderHtml(
+      PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+      {
+        documentType: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+        endorsementCertificate: {
+          closingNumber: 'ENC-001',
+          status: 'CONFIRMED',
+          signedLinePercent: '40',
+          premiumSnapshot: '5000',
+          commissionAmount: '500',
+          brokerageAmount: '250',
+          netPremium: '4250',
+          currency: 'GHS',
+          placement: {
+            reference: 'FAC-001',
+            title: 'Revised Risk',
+            currency: 'GHS',
+            cedant: { name: 'Acme Insurance' },
+          },
+          endorsement: {
+            endorsementNumber: 'END-001',
+            effectiveDate: '2026-07-01T00:00:00.000Z',
+            originalSnapshot: { placement: { title: 'Original Risk' } },
+            proposedSnapshot: { placement: { title: 'Revised Risk' } },
+          },
+          endorsementParticipant: {
+            counterparty: { name: 'Avenue Re' },
+            originalParticipant: { signedLinePercent: '35' },
+          },
+          notes: [],
+        },
+        documentProfile: {
+          identity: { displayName: 'BrokerCo', legalName: 'BrokerCo Ltd' },
+          contact: {},
+          footer: { text: 'BrokerCo footer' },
+          branding: {},
+          banking: { defaultAccounts: [] },
+          signatory: { name: 'Ama Broker', title: 'Managing Broker' },
+        },
+      },
+      {
+        documentNumber: 'DOC-ECF-001',
+        title: 'Endorsement Certificate',
+        generatedAt: '2026-07-01T00:00:00.000Z',
+      },
+    );
+
+    expect(certificateHtml).toContain('Endorsement Certificate');
+    expect(certificateHtml).toContain('ENC-001');
+    expect(certificateHtml).toContain('Confirmed Participation');
+    expect(certificateHtml).not.toContain('NaN');
+  });
+
   it('rejects unsupported document types', () => {
     expect(() =>
       registry.renderHtml(
-        PlacementDocumentType.ENDORSEMENT_SLIP,
-        { documentType: PlacementDocumentType.ENDORSEMENT_SLIP },
+        PlacementDocumentType.CLAIM_NOTICE,
+        { documentType: PlacementDocumentType.CLAIM_NOTICE },
         {
-          documentNumber: 'DOC-ES-001',
-          title: 'Endorsement Slip',
+          documentNumber: 'DOC-CLM-001',
+          title: 'Claim Notice',
           generatedAt: null,
         },
       ),

@@ -8,8 +8,10 @@ import {
 import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
+  PlacementClosingStatus,
   PlacementDocumentStatus,
   PlacementDocumentType,
+  PlacementNoteStatus,
   PlacementNoteType,
   Prisma,
 } from '../../prisma/generated/client';
@@ -285,6 +287,7 @@ export class PlacementDocumentsService {
         endorsementId: note.endorsementId,
         endorsementClosingId: note.endorsementClosingId,
       },
+      reuseActive: true,
     });
   }
 
@@ -296,8 +299,86 @@ export class PlacementDocumentsService {
     const endorsement = await this.prisma.placementEndorsement.findFirst({
       where: { id: endorsementId, tenantId: user.tenantId, placementId },
       include: {
-        participants: true,
-        closings: true,
+        placement: {
+          select: {
+            id: true,
+            reference: true,
+            title: true,
+            classOfBusiness: true,
+            currency: true,
+            inceptionDate: true,
+            expiryDate: true,
+            cedant: {
+              select: {
+                id: true,
+                name: true,
+                registrationNumber: true,
+                email: true,
+                phone: true,
+                country: true,
+              },
+            },
+          },
+        },
+        participants: {
+          include: {
+            counterparty: {
+              select: {
+                id: true,
+                type: true,
+                name: true,
+                registrationNumber: true,
+                email: true,
+                phone: true,
+                country: true,
+              },
+            },
+            originalParticipant: {
+              select: {
+                id: true,
+                sharePercent: true,
+                signedLinePercent: true,
+                counterpartyId: true,
+              },
+            },
+          },
+        },
+        closings: {
+          include: {
+            endorsementParticipant: {
+              include: {
+                counterparty: {
+                  select: {
+                    id: true,
+                    type: true,
+                    name: true,
+                    registrationNumber: true,
+                    email: true,
+                    phone: true,
+                    country: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        notes: {
+          where: { status: { not: PlacementNoteStatus.VOID } },
+          select: {
+            id: true,
+            type: true,
+            noteNumber: true,
+            status: true,
+            currency: true,
+            grossAmount: true,
+            commissionAmount: true,
+            brokerageAmount: true,
+            nicLevyAmount: true,
+            withholdingTaxAmount: true,
+            netAmount: true,
+            endorsementClosingId: true,
+          },
+        },
       },
     });
     if (!endorsement) {
@@ -309,13 +390,133 @@ export class PlacementDocumentsService {
       type: PlacementDocumentType.ENDORSEMENT_SLIP,
       prefix: 'DOC-ES-',
       title: `Endorsement Slip ${endorsement.endorsementNumber}`,
-      currency: null,
+      currency: endorsement.placement.currency,
       sourceSnapshot: snapshot,
       renderPayload: {
         documentType: PlacementDocumentType.ENDORSEMENT_SLIP,
         endorsement: snapshot,
       },
       sourceLinks: { endorsementId: endorsement.id },
+      reuseActive: true,
+    });
+  }
+
+  async generateEndorsementCertificate(
+    user: RequestUser,
+    placementId: string,
+    endorsementId: string,
+    closingId: string,
+  ): Promise<PlacementDocumentRecord> {
+    const closing = await this.prisma.placementEndorsementClosing.findFirst({
+      where: {
+        id: closingId,
+        tenantId: user.tenantId,
+        placementId,
+        endorsementId,
+        status: PlacementClosingStatus.CONFIRMED,
+      },
+      include: {
+        placement: {
+          select: {
+            id: true,
+            reference: true,
+            title: true,
+            classOfBusiness: true,
+            currency: true,
+            inceptionDate: true,
+            expiryDate: true,
+            cedant: {
+              select: {
+                id: true,
+                name: true,
+                registrationNumber: true,
+                email: true,
+                phone: true,
+                country: true,
+              },
+            },
+          },
+        },
+        endorsement: {
+          select: {
+            id: true,
+            endorsementNumber: true,
+            type: true,
+            impactType: true,
+            status: true,
+            effectiveDate: true,
+            reason: true,
+            description: true,
+            changeSummary: true,
+            originalSnapshot: true,
+            proposedSnapshot: true,
+            targetPercent: true,
+            closedAt: true,
+          },
+        },
+        endorsementParticipant: {
+          include: {
+            counterparty: {
+              select: {
+                id: true,
+                type: true,
+                name: true,
+                registrationNumber: true,
+                email: true,
+                phone: true,
+                country: true,
+              },
+            },
+            originalParticipant: {
+              select: {
+                id: true,
+                sharePercent: true,
+                signedLinePercent: true,
+                counterpartyId: true,
+              },
+            },
+          },
+        },
+        notes: {
+          where: { status: { not: PlacementNoteStatus.VOID } },
+          select: {
+            id: true,
+            type: true,
+            noteNumber: true,
+            status: true,
+            currency: true,
+            grossAmount: true,
+            commissionAmount: true,
+            brokerageAmount: true,
+            nicLevyAmount: true,
+            withholdingTaxAmount: true,
+            netAmount: true,
+          },
+        },
+      },
+    });
+    if (!closing) {
+      throw new BadRequestException(
+        'A confirmed endorsement closing is required before generating an endorsement certificate',
+      );
+    }
+
+    const snapshot = this.toJsonSafe(closing);
+    return this.createGeneratedDocument(user, placementId, {
+      type: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+      prefix: 'DOC-ECF-',
+      title: `Endorsement Certificate ${closing.closingNumber}`,
+      currency: closing.currency,
+      sourceSnapshot: snapshot,
+      renderPayload: {
+        documentType: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+        endorsementCertificate: snapshot,
+      },
+      sourceLinks: {
+        endorsementId: closing.endorsementId,
+        endorsementClosingId: closing.id,
+      },
+      reuseActive: true,
     });
   }
 
@@ -607,10 +808,12 @@ export class PlacementDocumentsService {
       PlacementDocumentType.CREDIT_NOTE,
       PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE,
       PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      PlacementDocumentType.ENDORSEMENT_SLIP,
+      PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
     ]);
     if (!renderableTypes.has(document.type)) {
       throw new BadRequestException(
-        'PDF rendering is currently supported only for OFFER_SLIP, CLOSING_SLIP, DEBIT_NOTE, CREDIT_NOTE, ENDORSEMENT_DEBIT_NOTE and ENDORSEMENT_CREDIT_NOTE documents',
+        'PDF rendering is currently supported only for OFFER_SLIP, CLOSING_SLIP, DEBIT_NOTE, CREDIT_NOTE, ENDORSEMENT_DEBIT_NOTE, ENDORSEMENT_CREDIT_NOTE, ENDORSEMENT_SLIP and ENDORSEMENT_CERTIFICATE documents',
       );
     }
     if (document.status === PlacementDocumentStatus.VOID) {
@@ -660,17 +863,12 @@ export class PlacementDocumentsService {
 
     return this.prisma.$transaction(async (tx) => {
       if (descriptor.reuseActive) {
-        const existing = await tx.placementDocument.findFirst({
-          where: {
-            tenantId: user.tenantId,
-            placementId,
-            type: descriptor.type,
-            status: { not: PlacementDocumentStatus.VOID },
-            ...this.versionSourceWhere(descriptor.sourceLinks),
-          },
-          include: documentInclude,
-          orderBy: { createdAt: 'desc' },
-        });
+        const existing = await this.findReusableDocument(
+          user.tenantId,
+          placementId,
+          descriptor,
+          tx,
+        );
         if (existing) return existing;
       }
 
@@ -712,18 +910,30 @@ export class PlacementDocumentsService {
     tenantId: string,
     placementId: string,
     descriptor: DocumentSourceDescriptor,
+    tx: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<PlacementDocumentRecord | null> {
-    return this.prisma.placementDocument.findFirst({
-      where: {
-        tenantId,
-        placementId,
-        type: descriptor.type,
-        status: { not: PlacementDocumentStatus.VOID },
-        ...this.versionSourceWhere(descriptor.sourceLinks),
-      },
-      include: documentInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+    return tx.placementDocument
+      .findMany({
+        where: {
+          tenantId,
+          placementId,
+          type: descriptor.type,
+          status: { not: PlacementDocumentStatus.VOID },
+          ...this.versionSourceWhere(descriptor.sourceLinks),
+        },
+        include: documentInclude,
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      })
+      .then((documents) => {
+        const sourceSnapshot = this.stableJson(descriptor.sourceSnapshot);
+        return (
+          documents.find(
+            (document) =>
+              this.stableJson(document.sourceSnapshot) === sourceSnapshot,
+          ) ?? null
+        );
+      });
   }
 
   private isBrandedDocument(type: PlacementDocumentType): boolean {
@@ -734,7 +944,26 @@ export class PlacementDocumentsService {
       PlacementDocumentType.CREDIT_NOTE,
       PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE,
       PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      PlacementDocumentType.ENDORSEMENT_SLIP,
+      PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
     ]).has(type);
+  }
+
+  private stableJson(value: unknown): string {
+    return JSON.stringify(this.sortJson(this.toJsonSafe(value)));
+  }
+
+  private sortJson(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map((item) => this.sortJson(item));
+    if (value && typeof value === 'object') {
+      return Object.keys(value as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((sorted, key) => {
+          sorted[key] = this.sortJson((value as Record<string, unknown>)[key]);
+          return sorted;
+        }, {});
+    }
+    return value;
   }
 
   private withTenantDocumentProfile(
@@ -872,6 +1101,7 @@ export class PlacementDocumentsService {
       [PlacementDocumentType.DEBIT_NOTE]: 'DOC-DN-',
       [PlacementDocumentType.CREDIT_NOTE]: 'DOC-CN-',
       [PlacementDocumentType.ENDORSEMENT_SLIP]: 'DOC-ES-',
+      [PlacementDocumentType.ENDORSEMENT_CERTIFICATE]: 'DOC-ECF-',
       [PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE]: 'DOC-EDN-',
       [PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE]: 'DOC-ECN-',
       [PlacementDocumentType.CLAIM_CASH_CALL]: 'DOC-CCL-',
@@ -887,6 +1117,8 @@ export class PlacementDocumentsService {
       [PlacementDocumentType.DEBIT_NOTE]: 'Debit Note',
       [PlacementDocumentType.CREDIT_NOTE]: 'Credit Note',
       [PlacementDocumentType.ENDORSEMENT_SLIP]: 'Endorsement Slip',
+      [PlacementDocumentType.ENDORSEMENT_CERTIFICATE]:
+        'Endorsement Certificate',
       [PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE]: 'Endorsement Debit Note',
       [PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE]:
         'Endorsement Credit Note',

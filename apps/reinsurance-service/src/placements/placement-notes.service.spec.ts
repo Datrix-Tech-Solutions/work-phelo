@@ -6,6 +6,7 @@ import {
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementEndorsementImpactType,
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
@@ -626,6 +627,7 @@ describe('PlacementNotesService', () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
     });
     prisma.placementNote.findFirst.mockResolvedValue(null);
     prisma.placementEndorsementClosing.findMany.mockResolvedValue([]);
@@ -635,16 +637,96 @@ describe('PlacementNotesService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('rejects endorsement debit note for decrease or cancellation endorsements', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      impactType: PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+    });
+
+    await expect(
+      service.createEndorsementDebitNote(user, 'placement-1', 'endorsement-1'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.placementNote.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects endorsement debit note when confirmed closing snapshots have mixed currencies', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        premiumSnapshot: new Prisma.Decimal('1500.00'),
+        commissionAmount: new Prisma.Decimal('150.00'),
+        currency: 'USD',
+      },
+      {
+        premiumSnapshot: new Prisma.Decimal('500.00'),
+        commissionAmount: new Prisma.Decimal('50.00'),
+        currency: 'GHS',
+      },
+    ]);
+
+    await expect(
+      service.createEndorsementDebitNote(user, 'placement-1', 'endorsement-1'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.placementNote.create).not.toHaveBeenCalled();
+  });
+
   it('rejects duplicate active endorsement debit note', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
     });
     prisma.placementNote.findFirst.mockResolvedValue({ id: 'active-note' });
 
     await expect(
       service.createEndorsementDebitNote(user, 'placement-1', 'endorsement-1'),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('allows endorsement debit note regeneration after VOID and preserves numbering history', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        premiumSnapshot: new Prisma.Decimal('1500.00'),
+        commissionAmount: new Prisma.Decimal('150.00'),
+        currency: 'USD',
+      },
+    ]);
+    prisma.placementNote.count.mockResolvedValue(1);
+    prisma.placementNote.create.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      noteNumber: 'EDN-002',
+      endorsementId: 'endorsement-1',
+    });
+
+    const result = await service.createEndorsementDebitNote(
+      user,
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.noteNumber).toBe('EDN-002');
+    expect(prisma.placementNote.count).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      },
+    });
   });
 
   it('creates endorsement credit note from a confirmed endorsement closing snapshot', async () => {

@@ -9,7 +9,7 @@ import {
   BanknoteArrowDown,
   LucideIcon,
 } from 'lucide-react';
-import { waterIconStyle } from '@/lib/utils';
+import { cn, waterIconStyle } from '@/lib/utils';
 import { QuickActionsPanel } from '@/components/atoms/QuickActionsPanel';
 
 interface QuickAction {
@@ -28,11 +28,15 @@ const ACTIONS: QuickAction[] = [
   { label: 'Make Payment', icon: BanknoteArrowDown, href: 'payments/new', color: '#eb6834' },
 ];
 
-export function QuickActionsCard() {
+interface QuickActionsCardProps {
+  className?: string;
+}
+
+export function QuickActionsCard({ className }: QuickActionsCardProps) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   return (
-    <QuickActionsPanel className="h-80">
+    <QuickActionsPanel className={cn('h-80', className)}>
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5">
         {ACTIONS.map(({ label, icon: Icon, href, color }) => (
           <Link
@@ -42,7 +46,7 @@ export function QuickActionsCard() {
             style={{ '--tint': `color-mix(in oklab, ${color} 14%, white)` } as React.CSSProperties}
           >
             <div
-              className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
+              className="w-5 h-5 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
               style={waterIconStyle(color)}
             >
               <Icon

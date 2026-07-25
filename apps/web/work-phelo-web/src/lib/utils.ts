@@ -37,6 +37,13 @@ export function cardClass(extra?: string, border?: 'module' | 'glass') {
   );
 }
 
+/** An "invisible" cardClass() — same layout/rounding, but with the background, blur, border,
+ * and shadow all cancelled out. Used for wrappers that hold DataList's floating cardRows
+ * (KpiCard-style stat lists), where the surface itself shouldn't compete with the rows. */
+export function transparentCardClass(extra?: string) {
+  return cardClass(cn('bg-transparent backdrop-blur-none shadow-none border-transparent', extra));
+}
+
 /** Popup/panel surfaces (SidePanel, DatePicker/SearchSelect/MultiSelect dropdowns) — near-solid for
  * legibility, unlike the more translucent cardClass()/glassStrongClass() ambient surfaces. Same iOS
  * "Liquid Glass" blur + saturation + specular-highlight treatment as those two. The highlight is a

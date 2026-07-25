@@ -5,7 +5,7 @@ import { DataList, Column } from '@/components/organisms/shared/DataList';
 import { Period } from '@/components/atoms/PeriodToggle';
 import { Currency } from '@/types/reinsurance';
 import { useFacultatives, useCurrencies } from '@/hooks';
-import { cardClass } from '@/lib/utils';
+import { transparentCardClass } from '@/lib/utils';
 
 type AmountRow = Currency & { amount: number | null };
 
@@ -89,15 +89,10 @@ export function BrokerageByCurrencyCard({ period }: BrokerageByCurrencyCardProps
     .filter((row) => row.amount != null);
 
   return (
-    <div className={cardClass('flex flex-col gap-3 p-5 h-80', 'glass')}>
+    <div className={transparentCardClass('flex flex-col gap-3 py-5 h-80')}>
       <h3 className="text-sm font-semibold text-gray-900">Brokerage by Currency</h3>
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <DataList
-          columns={BROKERAGE_COLUMNS}
-          data={rows}
-          emptyMessage="No data for this period"
-          bare
-        />
+      <div className="flex-1 min-h-0 overflow-y-auto -mx-3 px-3">
+        <DataList columns={BROKERAGE_COLUMNS} data={rows} emptyMessage="No data for this period" />
       </div>
     </div>
   );

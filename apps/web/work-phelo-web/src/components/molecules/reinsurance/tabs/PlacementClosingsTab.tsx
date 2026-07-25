@@ -4,26 +4,31 @@ import { useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
 import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents/GuaranteeNoteModal';
-import { CreditNoteModal } from '@/components/organisms/reinsurance/documents/CreditNoteModal';
-import { DebitNoteModal } from '@/components/organisms/reinsurance/documents/DebitNoteModal';
+import { NoteDocumentModal } from '@/components/organisms/reinsurance/documents/NoteDocumentModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import {
   useCedants,
   useReinsurers,
-  usePlacementEndorsements,
-  usePlacementEffectiveView,
+  usePlacementClosings,
+  usePlacementDocuments,
+  usePlacementNotes,
+  useCreatePlacementDebitNote,
+  useCreatePlacementCreditNote,
 } from '@/hooks';
-import { useReinsuranceCharges } from '@/hooks/reinsurance/useReinsuranceCharges';
-import { Facultative, PlacementParticipant, isEndorsementSentToMarket } from '@/types/reinsurance';
-import { isForeignCedant, selectChargeRate } from '@/lib/reinsuranceTax';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
+import { Facultative, PlacementDocument, PlacementNote } from '@/types/reinsurance';
 
 interface ClosingRow {
   id: string;
   counterpartyId: string;
   reinsurerCompany: string;
   signedShare: number;
-  signedGrossPremium: number;
+  signedGrossPremium: number | null;
   brokerageFee: number;
+  status: string;
+  netPremium: number | null;
+  currency: string | null;
 }
 
 function fmtPct(val: number) {
@@ -34,16 +39,22 @@ function fmtAmount(val: number, currency: string | null) {
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-function toClosingRow(p: PlacementParticipant, premium: number): ClosingRow {
-  const signedShare = parseFloat(p.signedLinePercent ?? p.sharePercent ?? '0');
-  return {
-    id: p.id,
-    counterpartyId: p.counterpartyId,
-    reinsurerCompany: p.counterparty.name,
-    signedShare,
-    signedGrossPremium: (signedShare / 100) * premium,
-    brokerageFee: parseFloat(p.brokerageFee ?? '0'),
-  };
+function toNumber(val: string | number | null | undefined): number | null {
+  if (val == null || val === '') return null;
+  const parsed = typeof val === 'number' ? val : Number(val);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isActiveNote(note: PlacementNote) {
+  return note.status !== 'VOID';
+}
+
+function isActiveDebitNote(note: PlacementNote) {
+  return note.type === 'DEBIT_NOTE' && isActiveNote(note);
+}
+
+function isActiveCreditNote(note: PlacementNote, closingId: string) {
+  return note.type === 'CREDIT_NOTE' && note.closingId === closingId && isActiveNote(note);
 }
 
 interface PlacementClosingsTabProps {
@@ -52,26 +63,24 @@ interface PlacementClosingsTabProps {
 
 export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [guaranteeNoteOpen, setGuaranteeNoteOpen] = useState(false);
-  const [debitNoteOpen, setDebitNoteOpen] = useState(false);
   const [guaranteeNoteViewed, setGuaranteeNoteViewed] = useState(false);
   const [debitNoteViewed, setDebitNoteViewed] = useState(false);
-  const [creditNoteRow, setCreditNoteRow] = useState<ClosingRow | null>(null);
+  const [noteDocumentPreview, setNoteDocumentPreview] = useState<PlacementDocument | null>(null);
+  const [noteRecordPreview, setNoteRecordPreview] = useState<PlacementNote | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
   const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
 
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
-  const { data: charges } = useReinsuranceCharges();
-  const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
-  const hasActiveEndorsement = endorsements.some((e) => isEndorsementSentToMarket(e.status));
-  const { data: effectiveView, isLoading: isLoadingEffectiveView } = usePlacementEffectiveView(
+  const { data: closings = [], isLoading: isLoadingClosings } = usePlacementClosings(placement.id);
+  const { data: placementDocuments = [] } = usePlacementDocuments(placement.id);
+  const { data: placementNotes = [], refetch: refetchPlacementNotes } = usePlacementNotes(
     placement.id,
-    hasActiveEndorsement,
   );
+  const createDebitNote = useCreatePlacementDebitNote(placement.id);
+  const createCreditNote = useCreatePlacementCreditNote(placement.id);
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
-  const creditNoteReinsurer = reinsurers.find((r) => r.id === creditNoteRow?.counterpartyId);
-  const foreignReinsurer = isForeignCedant(creditNoteReinsurer);
 
   const reinsurerEmails: Record<string, string[]> = Object.fromEntries(
     reinsurers.map((r) => {
@@ -85,44 +94,82 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   );
 
   const isPlacementClosed = placement.status === 'CLOSED';
-  const premium = placement.premium ?? 0;
-  const effectiveTotals = hasActiveEndorsement ? effectiveView?.effectiveTotals : undefined;
-  const participantShareOverrides = effectiveView
-    ? Object.fromEntries(
-        effectiveView.effectiveParticipants.map((ep) => [ep.counterpartyId, ep.signedLinePercent]),
-      )
-    : undefined;
+  const isNoteBusy = createDebitNote.isPending || createCreditNote.isPending;
 
-  const baseRows: ClosingRow[] = placement.participants
-    .filter((p) => p.status === 'CLOSED')
-    .map((p) => toClosingRow(p, premium));
+  const rows: ClosingRow[] = closings
+    .filter((closing) => closing.status === 'CONFIRMED')
+    .map((closing) => ({
+      id: closing.id,
+      counterpartyId: closing.participant.counterpartyId,
+      reinsurerCompany: closing.participant.counterparty.name,
+      signedShare: toNumber(closing.signedLinePercent) ?? 0,
+      signedGrossPremium: toNumber(closing.grossPremium),
+      brokerageFee: toNumber(closing.brokeragePercent) ?? 0,
+      status: closing.status,
+      netPremium: toNumber(closing.netPremium),
+      currency: closing.currency,
+    }));
 
-  // Once an endorsement is in market, overlay the revised share/premium from the
-  // effective view onto the base rows, and surface any reinsurer that only exists
-  // because of the endorsement (not part of the original placement closings).
-  const effectiveByCounterpartyId =
-    hasActiveEndorsement && effectiveView
-      ? new Map(effectiveView.effectiveParticipants.map((ep) => [ep.counterpartyId, ep]))
-      : null;
+  const openNoteDocument = async (note: PlacementNote) => {
+    const document = placementDocuments.find(
+      (item) => item.noteId === note.id && item.status !== 'VOID',
+    );
+    setNoteDocumentPreview(document ?? null);
+    setNoteRecordPreview(document ? null : note);
+  };
 
-  const rows: ClosingRow[] = effectiveByCounterpartyId
-    ? [
-        ...baseRows.map((row) => {
-          const ep = effectiveByCounterpartyId.get(row.counterpartyId);
-          if (!ep) return row;
-          effectiveByCounterpartyId.delete(row.counterpartyId);
-          return { ...row, signedShare: ep.signedLinePercent, signedGrossPremium: ep.grossPremium };
-        }),
-        ...[...effectiveByCounterpartyId.values()].map((ep) => ({
-          id: ep.counterpartyId,
-          counterpartyId: ep.counterpartyId,
-          reinsurerCompany: ep.counterparty.name,
-          signedShare: ep.signedLinePercent,
-          signedGrossPremium: ep.grossPremium,
-          brokerageFee: reinsurers.find((r) => r.id === ep.counterpartyId)?.brokerageFee ?? 0,
-        })),
-      ]
-    : baseRows;
+  const findActiveDebitNote = (notes = placementNotes) => notes.find(isActiveDebitNote);
+  const findActiveCreditNote = (closingId: string, notes = placementNotes) =>
+    notes.find((note) => isActiveCreditNote(note, closingId));
+
+  const handleOpenDebitNote = async () => {
+    setDebitNoteViewed(true);
+    try {
+      let note = findActiveDebitNote();
+      if (!note) {
+        try {
+          note = await createDebitNote.mutateAsync();
+        } catch (error) {
+          const message = extractError(error);
+          if (!message.toLowerCase().includes('active debit note')) throw error;
+          const refreshed = await refetchPlacementNotes();
+          note = findActiveDebitNote(refreshed.data ?? []);
+        }
+      }
+      if (!note) throw new Error('Active debit note could not be found.');
+      await openNoteDocument(note);
+      useToastStore.getState().addToast({
+        message: 'Debit note ready',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleOpenCreditNote = async (row: ClosingRow) => {
+    try {
+      let note = findActiveCreditNote(row.id);
+      if (!note) {
+        try {
+          note = await createCreditNote.mutateAsync({ closingId: row.id });
+        } catch (error) {
+          const message = extractError(error);
+          if (!message.toLowerCase().includes('active credit note')) throw error;
+          const refreshed = await refetchPlacementNotes();
+          note = findActiveCreditNote(row.id, refreshed.data ?? []);
+        }
+      }
+      if (!note) throw new Error('Active credit note could not be found.');
+      await openNoteDocument(note);
+      useToastStore.getState().addToast({
+        message: 'Credit note ready',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
 
   const columns: Column<ClosingRow>[] = [
     {
@@ -143,9 +190,25 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       width: '1.5fr',
       render: (row) => (
         <span className="text-gray-700">
-          {fmtAmount(row.signedGrossPremium, placement.currency)}
+          {row.signedGrossPremium === null ? '—' : fmtAmount(row.signedGrossPremium, row.currency)}
         </span>
       ),
+    },
+    {
+      key: 'netPremium',
+      label: 'Net Premium',
+      width: '1.5fr',
+      render: (row) => (
+        <span className="text-gray-700">
+          {row.netPremium === null ? '—' : fmtAmount(row.netPremium, row.currency)}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Closing Status',
+      width: '1fr',
+      render: (row) => <span className="text-gray-700">{row.status}</span>,
     },
     {
       key: 'actions',
@@ -153,7 +216,9 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       width: '1fr',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <TableButton onClick={() => setCreditNoteRow(row)}>View Closings</TableButton>
+          <TableButton isLoading={isNoteBusy} onClick={() => handleOpenCreditNote(row)}>
+            View Closings
+          </TableButton>
           <TableButton variant="blue" onClick={() => setMailToReinsurerRow(row)}>
             Mail Reinsurer
           </TableButton>
@@ -167,7 +232,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       <DataTable
         columns={columns}
         data={rows}
-        isLoading={hasActiveEndorsement && isLoadingEffectiveView}
+        isLoading={isLoadingClosings}
         emptyMessage="No accepted participants yet"
         currentPage={1}
         totalPages={1}
@@ -186,10 +251,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
                 },
                 {
                   label: 'View Debit Note',
-                  onClick: () => {
-                    setDebitNoteOpen(true);
-                    setDebitNoteViewed(true);
-                  },
+                  onClick: handleOpenDebitNote,
                   className: debitNoteViewed ? 'mx-1' : 'btn-pulse mx-1',
                 },
               ]
@@ -205,46 +267,20 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       <GuaranteeNoteModal
         isOpen={guaranteeNoteOpen}
         placement={placement}
-        facultativeOfferOverride={effectiveTotals?.facultativeOfferPercent}
-        sumInsuredOverride={effectiveTotals?.sumInsured}
-        premiumOverride={effectiveTotals?.premium}
-        commissionOverride={effectiveTotals?.commissionPercent}
-        participantShareOverrides={hasActiveEndorsement ? participantShareOverrides : undefined}
         onPrint={() => setGuaranteeNoteOpen(false)}
         onClose={() => setGuaranteeNoteOpen(false)}
       />
 
-      <DebitNoteModal
-        isOpen={debitNoteOpen}
+      <NoteDocumentModal
+        isOpen={!!noteDocumentPreview || !!noteRecordPreview}
+        document={noteDocumentPreview}
+        note={noteRecordPreview}
         placement={placement}
-        facultativeOfferOverride={effectiveTotals?.facultativeOfferPercent}
-        premiumOverride={effectiveTotals?.premium}
-        commissionOverride={effectiveTotals?.commissionPercent}
-        onPrint={() => setDebitNoteOpen(false)}
-        onClose={() => setDebitNoteOpen(false)}
+        onClose={() => {
+          setNoteDocumentPreview(null);
+          setNoteRecordPreview(null);
+        }}
       />
-
-      {creditNoteRow && (
-        <CreditNoteModal
-          isOpen={!!creditNoteRow}
-          placement={placement}
-          sharePercent={creditNoteRow.signedShare}
-          brokerageFee={creditNoteRow.brokerageFee}
-          counterpartyId={creditNoteRow.counterpartyId}
-          reinsurerCompany={creditNoteRow.reinsurerCompany}
-          nicLevyPct={
-            foreignReinsurer ? selectChargeRate(charges, 'NIC_LEVY', placement.currency) : 0
-          }
-          withholdingTaxPct={
-            foreignReinsurer ? selectChargeRate(charges, 'WITHHOLDING_TAX', placement.currency) : 0
-          }
-          sumInsuredOverride={effectiveTotals?.sumInsured}
-          premiumOverride={effectiveTotals?.premium}
-          commissionOverride={effectiveTotals?.commissionPercent}
-          onPrint={() => setCreditNoteRow(null)}
-          onClose={() => setCreditNoteRow(null)}
-        />
-      )}
 
       <MailPreviewModal
         isOpen={mailToCedantOpen}

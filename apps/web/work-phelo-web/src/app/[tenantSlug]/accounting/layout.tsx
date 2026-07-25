@@ -39,7 +39,7 @@ export default function AccountingLayout({
   }));
 
   return (
-    <AppBackground className="h-screen overflow-hidden flex layout-accounting">
+    <AppBackground className="h-dvh overflow-hidden flex layout-accounting">
       <Sidebar groups={groups} collapsed={collapsed} />
       <div className="flex flex-1 min-h-0 flex-col relative">
         <TopNav

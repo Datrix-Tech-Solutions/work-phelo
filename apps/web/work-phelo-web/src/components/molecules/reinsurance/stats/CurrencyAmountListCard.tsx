@@ -2,7 +2,7 @@
 
 import { DataList, Column } from '@/components/organisms/shared/DataList';
 import { Currency } from '@/types/reinsurance';
-import { cardClass } from '@/lib/utils';
+import { transparentCardClass } from '@/lib/utils';
 
 type AmountRow = Currency & { amount: number | null };
 
@@ -58,15 +58,14 @@ export function CurrencyAmountListCard({
     .filter((row) => row.amount != null);
 
   return (
-    <div className={cardClass('flex flex-col gap-3 p-5 h-80', 'glass')}>
+    <div className={transparentCardClass('flex flex-col gap-3 py-5 h-80')}>
       <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto -mx-3 px-3">
         <DataList
           columns={buildColumns(columnLabel)}
           data={rows}
           isLoading={isLoading}
           emptyMessage={emptyMessage}
-          bare
         />
       </div>
     </div>

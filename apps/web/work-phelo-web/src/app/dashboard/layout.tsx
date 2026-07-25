@@ -12,7 +12,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   return (
-    <AppBackground className="h-screen overflow-hidden flex flex-col">
+    <AppBackground className="h-dvh overflow-hidden flex flex-col">
       <TopNav userInitials={initials} notificationCount={0} logoVariant="image" />
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
     </AppBackground>

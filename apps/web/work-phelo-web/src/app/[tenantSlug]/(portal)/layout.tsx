@@ -40,7 +40,7 @@ export default function PortalLayout({
   }
 
   return (
-    <AppBackground backgroundImage={background} className="h-screen overflow-hidden flex flex-col">
+    <AppBackground backgroundImage={background} className="h-dvh overflow-hidden flex flex-col">
       <TopNav
         userInitials={initials}
         notificationCount={0}
