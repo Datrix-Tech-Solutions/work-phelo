@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
+import Image from 'next/image';
 import QRCode from 'react-qr-code';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -15,6 +16,9 @@ interface DocumentPreviewModalProps {
   documentTitle: string;
   /** Name used for the saved PDF when printing — e.g. "Debit Note-POL123-Acme Ltd". Falls back to documentTitle. */
   fileName?: string;
+  logoSrc?: string | null;
+  companyName?: string | null;
+  qrValue?: string;
   onPrint: () => void;
   onClose: () => void;
   children: ReactNode;
@@ -26,6 +30,9 @@ export function DocumentPreviewModal({
   title,
   documentTitle,
   fileName,
+  logoSrc,
+  companyName,
+  qrValue = COMPANY_URL,
   onPrint,
   onClose,
   children,
@@ -62,17 +69,28 @@ export function DocumentPreviewModal({
       >
         <div className="flex flex-col gap-2">
           <div className="grid grid-cols-3 items-center pb-2 border-b border-gray-100">
-            <CompanyLogo
-              width={120}
-              height={60}
-              className="object-contain justify-self-start"
-              priority
-            />
+            {logoSrc ? (
+              <Image
+                src={logoSrc}
+                alt={companyName ?? 'Company logo'}
+                width={120}
+                height={60}
+                className="object-contain justify-self-start max-h-[60px]"
+                unoptimized
+              />
+            ) : (
+              <CompanyLogo
+                width={120}
+                height={60}
+                className="object-contain justify-self-start"
+                priority
+              />
+            )}
             <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide text-center">
               {documentTitle}
             </h2>
             <div className="flex flex-col items-center gap-1 justify-self-end">
-              <QRCode value={COMPANY_URL} size={56} />
+              <QRCode value={qrValue} size={56} />
             </div>
           </div>
 

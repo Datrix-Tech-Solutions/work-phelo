@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   PlacementClosingStatus,
   PlacementEndorsementImpactType,
@@ -248,6 +252,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -277,6 +282,7 @@ describe('PlacementEndorsementsService', () => {
       impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
       status: PlacementEndorsementStatus.CLOSED,
       targetPercent: 10,
+      acceptedPercent: 10,
       placedPercent: 10,
       remainingPercent: 0,
       participants: { total: 2, accepted: 1, declined: 1 },
@@ -288,6 +294,8 @@ describe('PlacementEndorsementsService', () => {
         issued: 2,
       },
       pendingActions: [],
+      canClose: true,
+      closeBlockingReasons: [],
       isComplete: true,
     });
   });
@@ -314,11 +322,52 @@ describe('PlacementEndorsementsService', () => {
     expect(result.isComplete).toBe(false);
   });
 
+  it('does not count accepted participants as placed before confirmed endorsement closings exist', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.MARKETING,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      targetPercent: new Prisma.Decimal('10.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.ACCEPTED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      closings: [],
+      notes: [],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.acceptedPercent).toBe(10);
+    expect(result.placedPercent).toBe(0);
+    expect(result.remainingPercent).toBe(10);
+    expect(result.pendingActions).toContain('CREATE_CLOSING');
+    expect(result.pendingActions).not.toContain('ADD_CAPACITY');
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ACCEPTED_PARTICIPANT_NOT_VALIDATED',
+        }),
+      ]),
+    );
+    expect(result.isComplete).toBe(false);
+  });
+
   it('reports pending actions for unconfirmed closings and missing endorsement notes', async () => {
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       ...endorsement,
       status: PlacementEndorsementStatus.CLOSING,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
       targetPercent: new Prisma.Decimal('20.0000'),
       participants: [
         {
@@ -337,11 +386,13 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
         {
           id: 'endorsement-closing-2',
           endorsementParticipantId: 'endorsement-participant-2',
           status: PlacementClosingStatus.ISSUED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -360,12 +411,24 @@ describe('PlacementEndorsementsService', () => {
       'endorsement-1',
     );
 
-    expect(result.remainingPercent).toBe(0);
+    expect(result.acceptedPercent).toBe(20);
+    expect(result.placedPercent).toBe(10);
+    expect(result.remainingPercent).toBe(10);
+    expect(result.pendingActions).not.toContain('ADD_CAPACITY');
     expect(result.pendingActions).toEqual(
       expect.arrayContaining([
         'CONFIRM_CLOSING',
         'GENERATE_NOTES',
         'ISSUE_NOTES',
+      ]),
+    );
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'ACCEPTED_PARTICIPANT_NOT_VALIDATED' }),
+        expect.objectContaining({ code: 'UNCONFIRMED_CLOSING' }),
+        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_CREDIT_NOTE' }),
+        expect.objectContaining({ code: 'DRAFT_ENDORSEMENT_NOTE' }),
       ]),
     );
     expect(result.isComplete).toBe(false);
@@ -376,6 +439,7 @@ describe('PlacementEndorsementsService', () => {
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       ...endorsement,
       status: PlacementEndorsementStatus.CLOSING,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
       targetPercent: new Prisma.Decimal('10.0000'),
       participants: [
         {
@@ -389,6 +453,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -414,7 +479,129 @@ describe('PlacementEndorsementsService', () => {
     );
 
     expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
     expect(result.isComplete).toBe(false);
+  });
+
+  it('marks a fully validated MARKETING endorsement ready to close after notes are issued', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.MARKETING,
+      targetPercent: new Prisma.Decimal('10.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.ACCEPTED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      closings: [
+        {
+          id: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      notes: [
+        {
+          id: 'endorsement-note-1',
+          type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: null,
+        },
+        {
+          id: 'endorsement-note-2',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: 'endorsement-closing-1',
+        },
+      ],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
+    expect(result.isComplete).toBe(false);
+  });
+
+  it('does not leave a terms-only endorsement in market when no capacity workflow is required', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.MARKETING,
+      impactType: PlacementEndorsementImpactType.TERMS_ONLY,
+      targetPercent: null,
+      participants: [],
+      closings: [],
+      notes: [],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
+    expect(result.remainingPercent).toBeNull();
+  });
+
+  it('allows a terms-only endorsement with confirmed closings to close without financial notes', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.MARKETING,
+      impactType: PlacementEndorsementImpactType.TERMS_ONLY,
+      targetPercent: new Prisma.Decimal('70.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.CLOSED,
+          signedLinePercent: new Prisma.Decimal('35.0000'),
+        },
+        {
+          id: 'endorsement-participant-2',
+          status: PlacementEndorsementParticipantStatus.CLOSED,
+          signedLinePercent: new Prisma.Decimal('35.0000'),
+        },
+      ],
+      closings: [
+        {
+          id: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('35.0000'),
+        },
+        {
+          id: 'endorsement-closing-2',
+          endorsementParticipantId: 'endorsement-participant-2',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('35.0000'),
+        },
+      ],
+      notes: [],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
   });
 
   it('does not let declined participants block completion when another participant places full capacity', async () => {
@@ -440,6 +627,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -468,9 +656,12 @@ describe('PlacementEndorsementsService', () => {
       accepted: 1,
       declined: 1,
     });
+    expect(result.acceptedPercent).toBe(10);
     expect(result.placedPercent).toBe(10);
     expect(result.remainingPercent).toBe(0);
     expect(result.pendingActions).toEqual([]);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
     expect(result.isComplete).toBe(true);
   });
 
@@ -479,6 +670,7 @@ describe('PlacementEndorsementsService', () => {
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       ...endorsement,
       status: PlacementEndorsementStatus.CLOSING,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
       targetPercent: new Prisma.Decimal('10.0000'),
       participants: [
         {
@@ -492,6 +684,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.VOID,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [],
@@ -505,6 +698,14 @@ describe('PlacementEndorsementsService', () => {
 
     expect(result.closings.void).toBe(1);
     expect(result.pendingActions).toContain('CREATE_CLOSING');
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ACCEPTED_PARTICIPANT_NOT_VALIDATED',
+        }),
+      ]),
+    );
     expect(result.isComplete).toBe(false);
   });
 
@@ -513,6 +714,7 @@ describe('PlacementEndorsementsService', () => {
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       ...endorsement,
       status: PlacementEndorsementStatus.CLOSING,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
       targetPercent: new Prisma.Decimal('10.0000'),
       participants: [
         {
@@ -526,6 +728,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -552,6 +755,13 @@ describe('PlacementEndorsementsService', () => {
 
     expect(result.notes.void).toBe(2);
     expect(result.pendingActions).toContain('GENERATE_NOTES');
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_DEBIT_NOTE' }),
+        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_CREDIT_NOTE' }),
+      ]),
+    );
     expect(result.isComplete).toBe(false);
   });
 
@@ -798,10 +1008,20 @@ describe('PlacementEndorsementsService', () => {
 
   it('allows supported lifecycle transitions and stamps closedAt', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
-    prisma.placementEndorsement.findFirst.mockResolvedValue({
-      ...endorsement,
-      status: PlacementEndorsementStatus.CLOSING,
-    });
+    prisma.placementEndorsement.findFirst
+      .mockResolvedValueOnce({
+        ...endorsement,
+        status: PlacementEndorsementStatus.CLOSING,
+      })
+      .mockResolvedValueOnce({
+        ...endorsement,
+        status: PlacementEndorsementStatus.CLOSING,
+        impactType: PlacementEndorsementImpactType.TERMS_ONLY,
+        targetPercent: null,
+        participants: [],
+        closings: [],
+        notes: [],
+      });
     prisma.placementEndorsement.update.mockResolvedValue({
       ...endorsement,
       status: PlacementEndorsementStatus.CLOSED,
@@ -820,6 +1040,156 @@ describe('PlacementEndorsementsService', () => {
       updatedByUserId: 'user-1',
     });
     expect(updateArgs.data).toHaveProperty('closedAt');
+  });
+
+  it('rejects manual close while endorsement workflow actions remain', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst
+      .mockResolvedValueOnce({
+        ...endorsement,
+        status: PlacementEndorsementStatus.MARKETING,
+      })
+      .mockResolvedValueOnce({
+        ...endorsement,
+        status: PlacementEndorsementStatus.MARKETING,
+        impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+        targetPercent: new Prisma.Decimal('10.0000'),
+        participants: [],
+        closings: [],
+        notes: [],
+      });
+
+    await expect(
+      service.changeStatus(user, 'placement-1', 'endorsement-1', {
+        status: PlacementEndorsementStatus.CLOSED,
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(prisma.placementEndorsement.update).not.toHaveBeenCalled();
+  });
+
+  it('returns existing state when an already closed endorsement is closed again', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.CLOSED,
+    });
+
+    const result = await service.changeStatus(
+      user,
+      'placement-1',
+      'endorsement-1',
+      { status: PlacementEndorsementStatus.CLOSED },
+    );
+
+    expect(result.status).toBe(PlacementEndorsementStatus.CLOSED);
+    expect(prisma.placementEndorsement.update).not.toHaveBeenCalled();
+  });
+
+  it('allows decrease or cancellation endorsements to close with issued credit notes and no debit note', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.CLOSING,
+      impactType: PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+      targetPercent: new Prisma.Decimal('10.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.ACCEPTED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      closings: [
+        {
+          id: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      notes: [
+        {
+          id: 'endorsement-note-1',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: 'endorsement-closing-1',
+        },
+      ],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
+  });
+
+  it('blocks close when duplicate active endorsement closings exist for one participant', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.CLOSING,
+      targetPercent: new Prisma.Decimal('10.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.ACCEPTED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      closings: [
+        {
+          id: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+        {
+          id: 'endorsement-closing-2',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      notes: [
+        {
+          id: 'endorsement-note-1',
+          type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: null,
+        },
+        {
+          id: 'endorsement-note-2',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: 'endorsement-closing-1',
+        },
+        {
+          id: 'endorsement-note-3',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: 'endorsement-closing-2',
+        },
+      ],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.canClose).toBe(false);
+    expect(result.closeBlockingReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'DUPLICATE_ACTIVE_CLOSING' }),
+      ]),
+    );
   });
 
   it('rejects unsupported status transitions from terminal statuses', async () => {

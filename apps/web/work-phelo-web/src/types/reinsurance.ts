@@ -584,6 +584,7 @@ export interface PlacementEndorsementSummary {
   impactType: PlacementEndorsementImpactType;
   status: PlacementEndorsementStatus;
   targetPercent: number | null;
+  acceptedPercent: number;
   placedPercent: number;
   remainingPercent: number | null;
   participants: {
@@ -607,6 +608,11 @@ export interface PlacementEndorsementSummary {
     void: number;
   };
   pendingActions: PlacementEndorsementPendingAction[];
+  canClose: boolean;
+  closeBlockingReasons: Array<{
+    code: string;
+    message: string;
+  }>;
   isComplete: boolean;
 }
 
@@ -625,6 +631,10 @@ export interface EffectivePlacementView {
   };
   effectiveTotals: {
     facultativeOfferPercent: number;
+    originalFacultativeOfferPercent: number | null;
+    acceptedEndorsementCapacityPercent: number;
+    confirmedEndorsementCapacityPercent: number;
+    remainingCapacityPercent: number;
     participantCount: number;
     sumInsured: number | null;
     premium: number | null;
@@ -636,6 +646,13 @@ export interface EffectivePlacementView {
     brokerageAmount: number;
     netPremium: number;
   };
+  capacityBreakdown: {
+    originalCapacityPercent: number | null;
+    acceptedEndorsementCapacityPercent: number;
+    confirmedEndorsementCapacityPercent: number;
+    remainingCapacityPercent: number;
+    effectiveTotalCapacityPercent: number;
+  };
   effectiveParticipants: Array<{
     counterpartyId: string;
     counterparty: {
@@ -645,6 +662,7 @@ export interface EffectivePlacementView {
       registrationNumber: string | null;
     };
     signedLinePercent: number;
+    participationType: 'ORIGINAL' | 'REVISED' | 'ADDED';
     grossPremium: number;
     commissionAmount: number;
     brokerageAmount: number;
@@ -654,6 +672,7 @@ export interface EffectivePlacementView {
       closingId: string;
       participantId?: string;
       endorsementParticipantId?: string;
+      originalParticipantId?: string | null;
       signedLinePercent: number;
     }>;
   }>;
@@ -738,12 +757,93 @@ export type PlacementParticipantClosingStatus = 'DRAFT' | 'ISSUED' | 'CONFIRMED'
 
 export interface PlacementParticipantClosing {
   id: string;
+  tenantId: string;
   placementId: string;
   participantId: string;
-  status: PlacementParticipantClosingStatus;
   closingNumber: string;
+  status: PlacementParticipantClosingStatus;
+  signedLinePercent: string;
+  sharePercent: string | null;
+  grossPremium: string | null;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  netPremium: string | null;
+  currency: string | null;
+  issuedAt: string | null;
+  confirmedAt: string | null;
+  createdByUserId: string;
+  participant: {
+    id: string;
+    counterpartyId: string;
+    role: string;
+    status: string;
+    counterparty: {
+      id: string;
+      type: string;
+      name: string;
+      registrationNumber: string | null;
+    };
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+export type PlacementNoteType =
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE';
+
+export type PlacementNoteStatus = 'DRAFT' | 'ISSUED' | 'VOID';
+
+export type PlacementNoteDirection = 'CEDANT_TO_BROKER' | 'BROKER_TO_REINSURER';
+
+export interface PlacementNote {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  closingId: string | null;
+  participantId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  endorsementParticipantId: string | null;
+  counterpartyId: string;
+  settledByPaymentId: string | null;
+  type: PlacementNoteType;
+  direction: PlacementNoteDirection;
+  noteNumber: string;
+  status: PlacementNoteStatus;
+  currency: string;
+  grossAmount: string;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  nicLevyPercent: string;
+  nicLevyAmount: string;
+  withholdingTaxPercent: string;
+  withholdingTaxAmount: string;
+  netAmount: string;
+  appliedCharges: Record<string, unknown> | null;
+  noteDate: string;
+  issuedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: {
+    id: string;
+    type: string;
+    name: string;
+    registrationNumber: string | null;
+  };
+  participant: { id: string; counterpartyId: string } | null;
+  closing: { id: string; closingNumber: string } | null;
+  endorsementParticipant: { id: string; counterpartyId: string } | null;
+  endorsementClosing: { id: string; closingNumber: string } | null;
 }
 
 export interface EndorsementParticipantClosing {
@@ -768,6 +868,7 @@ export interface EndorsementParticipantClosing {
   endorsementParticipant: {
     id: string;
     counterpartyId: string;
+    originalParticipantId?: string | null;
     status: PlacementEndorsementParticipantStatus;
     counterparty: {
       id: string;
@@ -777,6 +878,54 @@ export interface EndorsementParticipantClosing {
   };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ValidateEndorsementParticipantResponse {
+  participant: PlacementEndorsementParticipant;
+  closing: EndorsementParticipantClosing;
+  summary: PlacementEndorsementSummary;
+  effectiveStatus: PlacementEndorsementStatus;
+}
+
+export type PlacementDocumentType =
+  | 'OFFER_SLIP'
+  | 'CLOSING_SLIP'
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_SLIP'
+  | 'ENDORSEMENT_CERTIFICATE'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE'
+  | 'CLAIM_CASH_CALL'
+  | 'CLAIM_NOTICE';
+
+export type PlacementDocumentStatus = 'DRAFT' | 'GENERATED' | 'FAILED' | 'VOID';
+
+export interface PlacementDocument {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  participantId: string | null;
+  closingId: string | null;
+  noteId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  claimId: string | null;
+  claimCashCallId: string | null;
+  type: PlacementDocumentType;
+  status: PlacementDocumentStatus;
+  documentNumber: string;
+  version: number;
+  title: string;
+  currency: string | null;
+  generatedAt: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+  sourceSnapshot?: Record<string, unknown> | null;
+  renderPayload?: Record<string, unknown> | null;
 }
 
 export type PlacementPaymentType =

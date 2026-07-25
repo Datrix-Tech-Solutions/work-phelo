@@ -62,6 +62,7 @@ describe('PlacementsController', () => {
     generateNoteDocument: jest.fn(),
     generateEndorsementSlip: jest.fn(),
     generateEndorsementClosingSlip: jest.fn(),
+    generateEndorsementCertificate: jest.fn(),
     generateClaimNotice: jest.fn(),
     generateClaimCashCall: jest.fn(),
     renderPdf: jest.fn(),
@@ -92,6 +93,7 @@ describe('PlacementsController', () => {
     findAll: jest.fn(),
     findOne: jest.fn(),
     create: jest.fn(),
+    validateAndConfirm: jest.fn(),
     changeStatus: jest.fn(),
   };
   const notesService = {
@@ -205,6 +207,7 @@ describe('PlacementsController', () => {
     ['changeEndorsementParticipantStatus', PlacementPermission.EDIT],
     ['deleteEndorsementParticipant', PlacementPermission.EDIT],
     ['createEndorsementClosing', PlacementPermission.EDIT],
+    ['validateAndConfirmEndorsementParticipant', PlacementPermission.EDIT],
     ['changeEndorsementClosingStatus', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
     ['forceClose', PlacementPermission.EDIT],
@@ -221,6 +224,7 @@ describe('PlacementsController', () => {
     ['generateNoteDocument', PlacementPermission.EDIT],
     ['generateEndorsementSlipDocument', PlacementPermission.EDIT],
     ['generateEndorsementClosingSlipDocument', PlacementPermission.EDIT],
+    ['generateEndorsementCertificateDocument', PlacementPermission.EDIT],
     ['generateClaimNoticeDocument', PlacementPermission.EDIT],
     ['generateClaimCashCallDocument', PlacementPermission.EDIT],
     ['renderAndStoreDocumentPdf', PlacementPermission.EDIT],
@@ -644,6 +648,12 @@ describe('PlacementsController', () => {
       { status: PlacementClosingStatus.ISSUED },
       { user } as never,
     );
+    await controller.validateAndConfirmEndorsementParticipant(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      { user } as never,
+    );
 
     expect(endorsementClosingsService.create).toHaveBeenCalledWith(
       user,
@@ -657,6 +667,12 @@ describe('PlacementsController', () => {
       'endorsement-1',
       'endorsement-closing-1',
       expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
+    );
+    expect(endorsementClosingsService.validateAndConfirm).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
     );
   });
 
@@ -726,6 +742,12 @@ describe('PlacementsController', () => {
       { user } as never,
     );
     await controller.generateEndorsementClosingSlipDocument(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+      { user } as never,
+    );
+    await controller.generateEndorsementCertificateDocument(
       'placement-1',
       'endorsement-1',
       'endorsement-closing-1',
@@ -803,6 +825,14 @@ describe('PlacementsController', () => {
     );
     expect(
       documentsService.generateEndorsementClosingSlip,
+    ).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+    expect(
+      documentsService.generateEndorsementCertificate,
     ).toHaveBeenCalledWith(
       user,
       'placement-1',

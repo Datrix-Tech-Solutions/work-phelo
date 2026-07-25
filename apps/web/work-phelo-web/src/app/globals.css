@@ -16,13 +16,16 @@
 
   /* Scheduling shift colors */
   --shift-night: #0d1b3e;   /* night-shift blocks — use bg-shift-night / border-shift-night */
-
+ 
   /* Module identity colors — used for icon backgrounds */
-  --module-hr:         #032480;  /* deep-blue  — HR */
+  --module-hr:         #0047AB;  /* deep-blue  — HR */
   --module-marketing:  #0466f8;  /* blue — Marketing */
-  --module-accounting: #064707;  /* green — Accounting  064707*/
-  --module-operations: #163895;  /* purple — Operations */
+  --module-accounting: #2C5F34;  /* green — Accounting  064707*/
+  --module-operations: #163895;  /* purple — Operations 163895*/
 
+  /*UNUSED COLORS #9966CC Amethyst #2C5F34  Forest Green  #0466f8  Blue  #0047AB <- Cobalt Blue, 557C99 <- SLATE BLUE, 007FFF <- Azure, 636B2F <- Olive Green  */
+  /* dark mode background color 0f172a
+  
   /* Module palette fallbacks — used outside any layout class (brand colors) */
   --module-btn-bg:       var(--brand);
   --module-btn-bg-hover: var(--brand-hover);
@@ -583,6 +586,38 @@ body {
 
 .mail-pending-bounce {
   animation: mail-pending-bounce 1s ease-in-out infinite;
+}
+
+/* Reinsurance OffersOverviewCard — center number/label slides in from below when
+   moving to a later metric, from above when moving to an earlier one. */
+@keyframes metric-slide-up {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes metric-slide-down {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.metric-slide-up {
+  animation: metric-slide-up 400ms ease-out;
+}
+
+.metric-slide-down {
+  animation: metric-slide-down 400ms ease-out;
 }
 
 /* Mood selector modal — each emoji loops a small animation matching its expression */

@@ -91,7 +91,10 @@ describe('ClosingSnapshotReader', () => {
         brokerageAmount: new Prisma.Decimal('90.00'),
         netPremium: new Prisma.Decimal('990.00'),
         currency: 'GHS',
-        endorsementParticipant: { counterpartyId: 'reinsurer-2' },
+        endorsementParticipant: {
+          counterpartyId: 'reinsurer-2',
+          originalParticipantId: 'participant-2',
+        },
       },
     ]);
 
@@ -115,6 +118,7 @@ describe('ClosingSnapshotReader', () => {
         sourceType: 'ENDORSEMENT_CLOSING',
         closingId: 'endorsement-closing-1',
         endorsementParticipantId: 'endorsement-participant-1',
+        originalParticipantId: 'participant-2',
         counterpartyId: 'reinsurer-2',
         signedLinePercent: 10,
         premium: 1200,

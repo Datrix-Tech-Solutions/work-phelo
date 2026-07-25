@@ -2,7 +2,7 @@
 
 import { Calendar } from 'lucide-react';
 import { formatHolidayDate } from '@/lib/formatters';
-import { cardClass, waterIconStyle } from '@/lib/utils';
+import { transparentCardClass, waterIconStyle } from '@/lib/utils';
 import { DataList, type Column } from '@/components/organisms/shared/DataList';
 
 interface Holiday {
@@ -42,9 +42,11 @@ const columns: Column<Holiday>[] = [
 
 export function UpcomingHolidaysCard({ holidays }: UpcomingHolidaysCardProps) {
   return (
-    <div className={cardClass('p-5 flex flex-col gap-3 min-h-60 flex-1 border-gray-200')}>
+    <div className={transparentCardClass('py-5 flex flex-col gap-3 min-h-60 flex-1')}>
       <h2 className="text-base font-bold text-gray-900">Upcoming Holidays</h2>
-      <DataList columns={columns} data={holidays} emptyMessage="No upcoming public holidays" bare />
+      <div className="-mx-3 px-3">
+        <DataList columns={columns} data={holidays} emptyMessage="No upcoming public holidays" />
+      </div>
     </div>
   );
 }

@@ -13,6 +13,8 @@ import {
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdatePlacementEndorsementClosingStatusDto } from './dto/update-placement-endorsement-closing-status.dto';
+import { PlacementEndorsementSummaryResponseDto } from './dto/placement-endorsement-summary-response.dto';
+import { PlacementEndorsementsService } from './placement-endorsements.service';
 
 const endorsementClosingInclude = {
   endorsementParticipant: {
@@ -32,18 +34,44 @@ type EndorsementClosingRecord = Prisma.PlacementEndorsementClosingGetPayload<{
   include: typeof endorsementClosingInclude;
 }>;
 
+const endorsementParticipantInclude = {
+  counterparty: {
+    select: {
+      id: true,
+      name: true,
+      registrationNumber: true,
+    },
+  },
+} satisfies Prisma.PlacementEndorsementParticipantInclude;
+
+type EndorsementParticipantRecord =
+  Prisma.PlacementEndorsementParticipantGetPayload<{
+    include: typeof endorsementParticipantInclude;
+  }>;
+
 type EndorsementForClosing = {
   id: string;
   tenantId: string;
   placementId: string;
   status: PlacementEndorsementStatus;
+  targetPercent: Prisma.Decimal | null;
   originalSnapshot: Prisma.JsonValue;
   proposedSnapshot: Prisma.JsonValue | null;
 };
 
+export type ValidateEndorsementParticipantResult = {
+  participant: EndorsementParticipantRecord;
+  closing: EndorsementClosingRecord;
+  summary: PlacementEndorsementSummaryResponseDto;
+  effectiveStatus: PlacementEndorsementStatus;
+};
+
 @Injectable()
 export class PlacementEndorsementClosingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly endorsementsService: PlacementEndorsementsService,
+  ) {}
 
   async findAll(
     tenantId: string,
@@ -119,9 +147,15 @@ export class PlacementEndorsementClosingsService {
     }
 
     const signedLinePercent = this.toNumber(participant.signedLinePercent);
-    if (signedLinePercent <= 0) {
+    const sharePercent = this.toOptionalNumber(participant.sharePercent);
+    if (signedLinePercent <= 0 || signedLinePercent > 100) {
       throw new BadRequestException(
-        'Endorsement participant must have a signed line percentage greater than zero',
+        'Endorsement participant signed line percentage must be greater than zero and at most 100',
+      );
+    }
+    if (sharePercent !== null && signedLinePercent > sharePercent) {
+      throw new BadRequestException(
+        'Endorsement participant signed line percentage cannot exceed offered share percentage',
       );
     }
 
@@ -167,6 +201,228 @@ export class PlacementEndorsementClosingsService {
         include: endorsementClosingInclude,
       });
     });
+  }
+
+  async validateAndConfirm(
+    user: RequestUser,
+    placementId: string,
+    endorsementId: string,
+    participantId: string,
+  ): Promise<ValidateEndorsementParticipantResult> {
+    let result:
+      | {
+          participant: EndorsementParticipantRecord;
+          closing: EndorsementClosingRecord;
+        }
+      | undefined;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        result = await this.prisma.$transaction(
+          async (tx) =>
+            this.validateAndConfirmInTransaction(
+              tx,
+              user,
+              placementId,
+              endorsementId,
+              participantId,
+            ),
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        break;
+      } catch (error) {
+        if (
+          attempt === 0 &&
+          (this.isSerializableTransactionConflict(error) ||
+            this.isUniqueConstraintConflict(error))
+        ) {
+          continue;
+        }
+        this.rethrowControlledPrismaError(error);
+        throw error;
+      }
+    }
+
+    if (!result) {
+      throw new ConflictException(
+        'Could not complete endorsement participant validation workflow',
+      );
+    }
+
+    const participant = await this.findValidatedParticipant(
+      user.tenantId,
+      placementId,
+      endorsementId,
+      result.participant.id,
+    );
+    const closing = await this.findOne(
+      user.tenantId,
+      placementId,
+      endorsementId,
+      result.closing.id,
+    );
+    const summary = await this.endorsementsService.getSummary(
+      user.tenantId,
+      placementId,
+      endorsementId,
+    );
+
+    return {
+      participant,
+      closing,
+      summary,
+      effectiveStatus: this.deriveEffectiveStatus(summary),
+    };
+  }
+
+  private async findValidatedParticipant(
+    tenantId: string,
+    placementId: string,
+    endorsementId: string,
+    participantId: string,
+  ): Promise<EndorsementParticipantRecord> {
+    const participant =
+      await this.prisma.placementEndorsementParticipant.findFirst({
+        where: {
+          id: participantId,
+          tenantId,
+          placementId,
+          endorsementId,
+        },
+        include: endorsementParticipantInclude,
+      });
+    if (!participant) {
+      throw new NotFoundException(
+        'Placement endorsement participant not found',
+      );
+    }
+    return participant;
+  }
+
+  private async validateAndConfirmInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    placementId: string,
+    endorsementId: string,
+    participantId: string,
+  ): Promise<{
+    participant: EndorsementParticipantRecord;
+    closing: EndorsementClosingRecord;
+  }> {
+    const endorsement = await this.findEndorsementInTransaction(
+      tx,
+      user.tenantId,
+      placementId,
+      endorsementId,
+    );
+    this.assertEndorsementCanValidate(endorsement);
+
+    const participant = await tx.placementEndorsementParticipant.findFirst({
+      where: {
+        id: participantId,
+        tenantId: user.tenantId,
+        placementId,
+        endorsementId,
+      },
+      include: endorsementParticipantInclude,
+    });
+    if (!participant) {
+      throw new NotFoundException(
+        'Placement endorsement participant not found',
+      );
+    }
+
+    const existingActive = await tx.placementEndorsementClosing.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        placementId,
+        endorsementId,
+        endorsementParticipantId: participantId,
+        status: { not: PlacementClosingStatus.VOID },
+      },
+      include: endorsementClosingInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (participant.status === PlacementEndorsementParticipantStatus.CLOSED) {
+      if (existingActive?.status === PlacementClosingStatus.CONFIRMED) {
+        return { participant, closing: existingActive };
+      }
+      throw new ConflictException(
+        'Endorsement participant is already closed without a confirmed active endorsement closing',
+      );
+    }
+
+    if (participant.status === PlacementEndorsementParticipantStatus.DECLINED) {
+      throw new ConflictException(
+        'Declined endorsement participants cannot be validated',
+      );
+    }
+
+    if (participant.status !== PlacementEndorsementParticipantStatus.ACCEPTED) {
+      throw new BadRequestException(
+        'Endorsement participant must be ACCEPTED before validation',
+      );
+    }
+
+    const signedLinePercent = this.toNumber(participant.signedLinePercent);
+    const sharePercent = this.toOptionalNumber(participant.sharePercent);
+    if (signedLinePercent <= 0 || signedLinePercent > 100) {
+      throw new BadRequestException(
+        'Endorsement participant signed line percentage must be greater than zero and at most 100',
+      );
+    }
+    if (sharePercent !== null && signedLinePercent > sharePercent) {
+      throw new BadRequestException(
+        'Endorsement participant signed line percentage cannot exceed offered share percentage',
+      );
+    }
+    await this.assertAcceptedCapacityWithinTarget(
+      tx,
+      user.tenantId,
+      endorsementId,
+      endorsement.targetPercent,
+      signedLinePercent,
+      participantId,
+    );
+
+    let closing = existingActive;
+    if (!closing) {
+      const snapshotSource = this.buildSnapshotSource(endorsement);
+      const snapshot = this.computeSnapshot(
+        snapshotSource,
+        participant,
+        signedLinePercent,
+      );
+      const count = await tx.placementEndorsementClosing.count({
+        where: { tenantId: user.tenantId, placementId },
+      });
+      const closingNumber = `ENC-${String(count + 1).padStart(3, '0')}`;
+
+      closing = await tx.placementEndorsementClosing.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId,
+          endorsementId,
+          endorsementParticipantId: participantId,
+          closingNumber,
+          status: PlacementClosingStatus.DRAFT,
+          createdByUserId: user.id,
+          ...snapshot,
+        },
+        include: endorsementClosingInclude,
+      });
+    }
+
+    closing = await this.issueAndConfirmClosing(tx, closing);
+
+    const closedParticipant = await tx.placementEndorsementParticipant.update({
+      where: { id: participantId },
+      data: { status: PlacementEndorsementParticipantStatus.CLOSED },
+      include: endorsementParticipantInclude,
+    });
+
+    return { participant: closedParticipant, closing };
   }
 
   async changeStatus(
@@ -218,6 +474,43 @@ export class PlacementEndorsementClosingsService {
         tenantId: true,
         placementId: true,
         status: true,
+        targetPercent: true,
+        originalSnapshot: true,
+        proposedSnapshot: true,
+      },
+    });
+    if (!endorsement) {
+      throw new NotFoundException('Placement endorsement not found');
+    }
+    return endorsement;
+  }
+
+  private async findEndorsementInTransaction(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    placementId: string,
+    endorsementId: string,
+  ): Promise<EndorsementForClosing> {
+    const placement = await tx.placement.findFirst({
+      where: { id: placementId, tenantId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!placement) {
+      throw new NotFoundException('Placement not found');
+    }
+
+    const endorsement = await tx.placementEndorsement.findFirst({
+      where: {
+        id: endorsementId,
+        tenantId,
+        placementId,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        placementId: true,
+        status: true,
+        targetPercent: true,
         originalSnapshot: true,
         proposedSnapshot: true,
       },
@@ -236,6 +529,121 @@ export class PlacementEndorsementClosingsService {
         'VOID endorsements cannot create endorsement closings',
       );
     }
+  }
+
+  private assertEndorsementCanValidate(endorsement: {
+    status: PlacementEndorsementStatus;
+  }): void {
+    const terminalStatuses: PlacementEndorsementStatus[] = [
+      PlacementEndorsementStatus.CLOSED,
+      PlacementEndorsementStatus.DECLINED,
+      PlacementEndorsementStatus.VOID,
+    ];
+    if (terminalStatuses.includes(endorsement.status)) {
+      throw new ConflictException(
+        'Terminal endorsements cannot validate endorsement participants',
+      );
+    }
+    if (endorsement.status === PlacementEndorsementStatus.DRAFT) {
+      throw new BadRequestException(
+        'Endorsement must be sent to market before participant validation',
+      );
+    }
+  }
+
+  private async assertAcceptedCapacityWithinTarget(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    endorsementId: string,
+    targetPercent: Prisma.Decimal | null,
+    signedLinePercent: number,
+    participantId: string,
+  ): Promise<void> {
+    if (!targetPercent) return;
+    const acceptedParticipants =
+      await tx.placementEndorsementParticipant.findMany({
+        where: {
+          tenantId,
+          endorsementId,
+          status: {
+            in: [
+              PlacementEndorsementParticipantStatus.ACCEPTED,
+              PlacementEndorsementParticipantStatus.CLOSED,
+            ],
+          },
+          id: { not: participantId },
+        },
+        select: { signedLinePercent: true },
+      });
+    const currentAccepted = acceptedParticipants.reduce(
+      (sum, item) => sum + (this.toOptionalNumber(item.signedLinePercent) ?? 0),
+      0,
+    );
+    if (currentAccepted + signedLinePercent > targetPercent.toNumber()) {
+      throw new BadRequestException(
+        'Accepted endorsement signed lines cannot exceed targetPercent',
+      );
+    }
+  }
+
+  private async issueAndConfirmClosing(
+    tx: Prisma.TransactionClient,
+    closing: EndorsementClosingRecord,
+  ): Promise<EndorsementClosingRecord> {
+    const now = new Date();
+    if (closing.status === PlacementClosingStatus.CONFIRMED) {
+      return closing;
+    }
+    if (closing.status === PlacementClosingStatus.VOID) {
+      throw new ConflictException(
+        'VOID endorsement closings cannot be validated',
+      );
+    }
+
+    let current = closing;
+    if (current.status === PlacementClosingStatus.DRAFT) {
+      current = await tx.placementEndorsementClosing.update({
+        where: { id: current.id },
+        data: {
+          status: PlacementClosingStatus.ISSUED,
+          issuedAt: current.issuedAt ?? now,
+        },
+        include: endorsementClosingInclude,
+      });
+    }
+
+    if (current.status === PlacementClosingStatus.ISSUED) {
+      current = await tx.placementEndorsementClosing.update({
+        where: { id: current.id },
+        data: {
+          status: PlacementClosingStatus.CONFIRMED,
+          confirmedAt: current.confirmedAt ?? now,
+        },
+        include: endorsementClosingInclude,
+      });
+    }
+
+    if (current.status !== PlacementClosingStatus.CONFIRMED) {
+      throw new BadRequestException(
+        `Cannot validate endorsement closing from ${current.status}`,
+      );
+    }
+    return current;
+  }
+
+  private deriveEffectiveStatus(
+    summary: PlacementEndorsementSummaryResponseDto,
+  ): PlacementEndorsementStatus {
+    if (summary.status === PlacementEndorsementStatus.CLOSED) {
+      return PlacementEndorsementStatus.CLOSED;
+    }
+    if (summary.pendingActions.includes('CLOSE_ENDORSEMENT')) {
+      return PlacementEndorsementStatus.CLOSING;
+    }
+    if (summary.closings.confirmed > 0) {
+      return PlacementEndorsementStatus.CLOSING;
+    }
+    return summary.status;
   }
 
   private assertStatusTransition(
@@ -275,6 +683,11 @@ export class PlacementEndorsementClosingsService {
     if (premium === null) {
       throw new BadRequestException(
         'Endorsement premium snapshot is required before creating an endorsement closing',
+      );
+    }
+    if (premium <= 0) {
+      throw new BadRequestException(
+        'Endorsement premium snapshot must be greater than zero before creating an endorsement closing',
       );
     }
 
@@ -394,5 +807,39 @@ export class PlacementEndorsementClosingsService {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
     const parsed = Number(value.toString());
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private isSerializableTransactionConflict(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2034'
+    );
+  }
+
+  private isUniqueConstraintConflict(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
+  }
+
+  private rethrowControlledPrismaError(error: unknown): void {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        throw new ConflictException(
+          'An active endorsement closing was created by another request. Please retry validation.',
+        );
+      }
+      if (['P2003', 'P2014', 'P2025'].includes(error.code)) {
+        throw new ConflictException(
+          'Endorsement validation could not be completed because related records changed. Refresh and retry.',
+        );
+      }
+      if (error.code === 'P2034') {
+        throw new ConflictException(
+          'Endorsement validation could not be completed due to a concurrent update. Please retry.',
+        );
+      }
+    }
   }
 }

@@ -22,7 +22,10 @@ import {
   PlacementEndorsementSummary,
   EffectivePlacementView,
   PlacementParticipantClosing,
+  PlacementNote,
   EndorsementParticipantClosing,
+  ValidateEndorsementParticipantResponse,
+  PlacementDocument,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
@@ -31,6 +34,8 @@ const ARCHIVED_FACULTATIVES_KEY = ['reinsurance', 'placements', 'archived'] as c
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
 const placementDocumentsKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'documents'] as const;
+const placementNotesKey = (placementId: string) =>
+  [...placementQueryKey(placementId), 'notes'] as const;
 const placementLockStatusKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'lock-status'] as const;
 const paymentEligibleFacultativesKey = [...FACULTATIVES_KEY, 'payment-eligible'] as const;
@@ -38,6 +43,7 @@ const paymentEligibleFacultativesKey = [...FACULTATIVES_KEY, 'payment-eligible']
 export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
 export const placementClosingsKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'closings'] as const;
+export const facultativePlacementNotesKey = (placementId: string) => placementNotesKey(placementId);
 
 type SuppressInvalidationOption = {
   suppressInvalidation?: boolean;
@@ -302,6 +308,73 @@ export function usePlacementClosings(placementId: string) {
   });
 }
 
+export function usePlacementNotes(placementId: string) {
+  return useQuery({
+    queryKey: placementNotesKey(placementId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/notes`);
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as PlacementNote[];
+    },
+    enabled: !!placementId,
+  });
+}
+
+export function usePlacementDocuments(placementId: string) {
+  return useQuery({
+    queryKey: placementDocumentsKey(placementId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/documents`);
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as PlacementDocument[];
+    },
+    enabled: !!placementId,
+  });
+}
+
+export function useCreatePlacementDebitNote(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post(`${BASE}/${placementId}/notes/debit`);
+      return res.data as PlacementNote;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
+export function useCreatePlacementCreditNote(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ closingId }: { closingId: string }) => {
+      const res = await api.post(`${BASE}/${placementId}/closings/${closingId}/notes/credit`);
+      return res.data as PlacementNote;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
+export function useGeneratePlacementNoteDocument(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ noteId }: { noteId: string }) => {
+      const res = await api.post<PlacementDocument>(
+        `${BASE}/${placementId}/notes/${noteId}/documents`,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
 export function useCreateClosing(placementId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -376,6 +449,9 @@ function invalidateEndorsementWorkflow(
     queryClient.invalidateQueries({ queryKey: endorsementClosingsKey(placementId, endorsementId) });
     queryClient.invalidateQueries({
       queryKey: [...endorsementKey(placementId), endorsementId, 'notes'],
+    });
+    queryClient.invalidateQueries({
+      queryKey: [...endorsementKey(placementId), endorsementId, 'documents'],
     });
   }
 }
@@ -563,6 +639,56 @@ export function useUpdateEndorsementParticipantStatus(
   });
 }
 
+export function useValidateAndConfirmEndorsementParticipant(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ participantId }: { participantId: string }) => {
+      if (!endorsementId) {
+        throw new Error('Endorsement is required before validating a participant.');
+      }
+      const res = await api.post<ValidateEndorsementParticipantResponse>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}/validate-and-confirm`,
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      if (!endorsementId) return;
+
+      queryClient.setQueryData<PlacementEndorsementParticipant[]>(
+        endorsementParticipantKey(placementId, endorsementId),
+        (current) =>
+          current?.map((participant) =>
+            participant.id === data.participant.id ? data.participant : participant,
+          ) ?? [data.participant],
+      );
+      queryClient.setQueryData<EndorsementParticipantClosing[]>(
+        endorsementClosingsKey(placementId, endorsementId),
+        (current) => {
+          const existing = current ?? [];
+          const hasClosing = existing.some((closing) => closing.id === data.closing.id);
+          if (!hasClosing) return [...existing, data.closing];
+          return existing.map((closing) =>
+            closing.id === data.closing.id ? data.closing : closing,
+          );
+        },
+      );
+      queryClient.setQueryData<PlacementEndorsementSummary>(
+        endorsementSummaryKey(placementId, endorsementId),
+        data.summary,
+      );
+
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
+    },
+  });
+}
+
 export function useEndorsementClosings(placementId: string, endorsementId: string | undefined) {
   return useQuery({
     queryKey: endorsementClosingsKey(placementId, endorsementId ?? ''),
@@ -570,6 +696,21 @@ export function useEndorsementClosings(placementId: string, endorsementId: strin
       const res = await api.get(`${BASE}/${placementId}/endorsements/${endorsementId}/closings`);
       const raw = res.data?.items ?? res.data ?? [];
       return raw as EndorsementParticipantClosing[];
+    },
+    enabled: !!placementId && !!endorsementId,
+  });
+}
+
+export function usePlacementEndorsementNotes(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  return useQuery({
+    queryKey: [...endorsementKey(placementId), endorsementId ?? '', 'notes'],
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/endorsements/${endorsementId}/notes`);
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as PlacementNote[];
     },
     enabled: !!placementId && !!endorsementId,
   });
@@ -624,6 +765,63 @@ export function useUpdateEndorsementClosingStatus(
       if (!variables.suppressInvalidation) {
         invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
       }
+    },
+  });
+}
+
+export function useGenerateEndorsementSlipDocument(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!endorsementId) {
+        throw new Error('Endorsement is required before generating an endorsement slip.');
+      }
+      const res = await api.post<PlacementDocument>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/documents/endorsement-slip`,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
+    },
+  });
+}
+
+export function useGenerateEndorsementCertificateDocument(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ closingId }: { closingId: string }) => {
+      if (!endorsementId) {
+        throw new Error('Endorsement is required before generating an endorsement certificate.');
+      }
+      const res = await api.post<PlacementDocument>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/closings/${closingId}/documents/endorsement-certificate`,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
+    },
+  });
+}
+
+export function useRenderPlacementDocumentPdf(placementId: string) {
+  return useMutation({
+    mutationFn: async ({ documentId }: { documentId: string }) => {
+      const res = await api.post<Blob>(
+        `${BASE}/${placementId}/documents/${documentId}/render-pdf`,
+        undefined,
+        { responseType: 'blob' },
+      );
+      return res.data;
     },
   });
 }

@@ -5,7 +5,7 @@ import { DataList, Column } from '@/components/organisms/shared/DataList';
 import { Period } from '@/components/atoms/PeriodToggle';
 import { useFacultatives, useCurrencies } from '@/hooks';
 import { Currency } from '@/types/reinsurance';
-import { cardClass } from '@/lib/utils';
+import { transparentCardClass } from '@/lib/utils';
 
 const REINSURER_ROLES = new Set(['REINSURER', 'LEAD_REINSURER', 'CO_REINSURER']);
 const QUALIFYING_STATUSES = new Set(['ACCEPTED', 'CLOSED']);
@@ -129,15 +129,14 @@ export function TopReinsurersCard({ period, currency }: TopReinsurersCardProps) 
   }, [all, currencies, period, currency]);
 
   return (
-    <div className={cardClass('flex flex-col gap-3 p-5 h-80', 'glass')}>
+    <div className={transparentCardClass('flex flex-col gap-3 py-5 h-80')}>
       <h3 className="text-sm font-semibold text-gray-900">Top 5 Reinsurers</h3>
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto -mx-3 px-3">
         <DataList
           columns={buildColumns(symbol)}
           data={rows}
           isLoading={loadingFac || loadingCur}
           emptyMessage="No reinsurer data for this period"
-          bare
         />
       </div>
     </div>

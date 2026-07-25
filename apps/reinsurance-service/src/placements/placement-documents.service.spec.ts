@@ -323,6 +323,7 @@ describe('PlacementDocumentsService', () => {
     prisma.placementParticipant.findFirst.mockResolvedValue({
       id: 'participant-1',
     });
+    prisma.placementDocument.findMany.mockResolvedValue([]);
     prisma.placementDocument.count.mockResolvedValue(0);
     prisma.placementDocument.create.mockResolvedValue(document);
   });
@@ -452,13 +453,33 @@ describe('PlacementDocumentsService', () => {
   });
 
   it('reuses an active participant offer slip instead of creating duplicates', async () => {
+    const participantPayload = {
+      documentType: PlacementDocumentType.OFFER_SLIP,
+      placement: offerPreview.placement,
+      cedant: offerPreview.cedant,
+      businessEntries: offerPreview.businessEntries,
+      offerEntries: offerPreview.offerEntries,
+      debitGuaranteeFinancials: offerPreview.debitGuaranteeFinancials,
+      participantPreview: offerPreview.participantPreviews[0],
+      offerContext: {
+        participantId: 'participant-1',
+        counterpartyId: 'reinsurer-1',
+        reinsurerName: 'Avenue Re',
+        offeredLinePercent: 40,
+        signedLinePercent: null,
+        totalOfferedPercent: 40,
+        totalAcceptedPercent: 0,
+        remainingPercent: 20,
+      },
+    };
     const existing = {
       ...document,
       id: 'document-existing',
       participantId: 'participant-1',
       type: PlacementDocumentType.OFFER_SLIP,
+      sourceSnapshot: participantPayload,
     };
-    prisma.placementDocument.findFirst.mockResolvedValue(existing);
+    prisma.placementDocument.findMany.mockResolvedValue([existing]);
 
     const result = await service.generateParticipantOfferSlip(
       user,
@@ -474,10 +495,10 @@ describe('PlacementDocumentsService', () => {
       type: PlacementDocumentType.OFFER_SLIP,
       status: { not: PlacementDocumentStatus.VOID },
     };
-    const findFirstArgs = firstCallArg<Prisma.PlacementDocumentFindFirstArgs>(
-      prisma.placementDocument.findFirst,
+    const findManyArgs = firstCallArg<Prisma.PlacementDocumentFindManyArgs>(
+      prisma.placementDocument.findMany,
     );
-    expect(findFirstArgs.where).toMatchObject(expectedWhere);
+    expect(findManyArgs.where).toMatchObject(expectedWhere);
     expect(prisma.placementDocument.create).not.toHaveBeenCalled();
     expect(tenantDocumentProfile.getSnapshot).not.toHaveBeenCalled();
   });
@@ -730,6 +751,87 @@ describe('PlacementDocumentsService', () => {
     });
   });
 
+  it('reuses an active note document for the same backend note', async () => {
+    const note = {
+      id: 'note-1',
+      placementId: 'placement-1',
+      closingId: null,
+      participantId: null,
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      noteNumber: 'ECN-001',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      status: PlacementNoteStatus.ISSUED,
+      currency: 'USD',
+      grossAmount: new Prisma.Decimal('2500.00'),
+      commissionAmount: new Prisma.Decimal('250.00'),
+      brokerageAmount: new Prisma.Decimal('125.00'),
+      nicLevyAmount: new Prisma.Decimal('0'),
+      withholdingTaxAmount: new Prisma.Decimal('0'),
+      netAmount: new Prisma.Decimal('2125.00'),
+      noteDate: new Date('2026-06-12T00:00:00.000Z'),
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+      },
+      counterparty: {
+        id: 'reinsurer-1',
+        name: 'Avenue Re',
+        registrationNumber: 'RE-001',
+      },
+      closing: null,
+      participant: null,
+      endorsement: {
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        type: 'ADDITION',
+        impactType: 'CAPACITY_INCREASE',
+        effectiveDate: new Date('2026-06-01T00:00:00.000Z'),
+      },
+      endorsementClosing: {
+        id: 'endorsement-closing-1',
+        closingNumber: 'END-CLO-001',
+      },
+      endorsementParticipant: {
+        id: 'endorsement-participant-1',
+        counterpartyId: 'reinsurer-1',
+      },
+    };
+    prisma.placementNote.findFirst.mockResolvedValue(note);
+    const existingDocument = {
+      ...document,
+      id: 'document-existing',
+      noteId: 'note-1',
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      type: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      sourceSnapshot: note,
+    };
+    prisma.placementDocument.findMany.mockResolvedValue([existingDocument]);
+
+    const result = await service.generateNoteDocument(
+      user,
+      'placement-1',
+      'note-1',
+    );
+
+    expect(result).toBe(existingDocument);
+    const findManyArgs = firstCallArg<Prisma.PlacementDocumentFindManyArgs>(
+      prisma.placementDocument.findMany,
+    );
+    expect(findManyArgs.where).toMatchObject({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      type: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      status: { not: PlacementDocumentStatus.VOID },
+      noteId: 'note-1',
+    });
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
   it('does not create a document when the tenant profile is unavailable', async () => {
     tenantDocumentProfile.getSnapshot.mockRejectedValue(
       new InternalServerErrorException('Auth unavailable'),
@@ -786,19 +888,25 @@ describe('PlacementDocumentsService', () => {
     expect(prisma.placementDocument.create).not.toHaveBeenCalled();
   });
 
-  it('generates endorsement slip and endorsement closing slip documents', async () => {
+  it('generates endorsement slip, certificate and endorsement closing slip documents', async () => {
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
       endorsementNumber: 'END-001',
-      currency: null,
+      placement: { id: 'placement-1', reference: 'FAC-001', currency: 'GHS' },
       participants: [],
       closings: [],
+      notes: [],
     });
     prisma.placementDocument.create
       .mockResolvedValueOnce({
         ...document,
         type: PlacementDocumentType.ENDORSEMENT_SLIP,
         documentNumber: 'DOC-ES-001',
+      })
+      .mockResolvedValueOnce({
+        ...document,
+        type: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+        documentNumber: 'DOC-ECF-001',
       })
       .mockResolvedValueOnce({
         ...document,
@@ -821,12 +929,38 @@ describe('PlacementDocumentsService', () => {
       id: 'endorsement-closing-1',
       endorsementId: 'endorsement-1',
       closingNumber: 'ENC-001',
+      status: 'CONFIRMED',
       currency: 'GHS',
-      endorsement: { id: 'endorsement-1', endorsementNumber: 'END-001' },
+      placement: { id: 'placement-1', reference: 'FAC-001', currency: 'GHS' },
+      endorsement: {
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        originalSnapshot: {},
+        proposedSnapshot: {},
+      },
       endorsementParticipant: {
         id: 'endorsement-participant-1',
         counterparty: { id: 'reinsurer-1', name: 'Avenue Re' },
+        originalParticipant: null,
       },
+      notes: [],
+    });
+
+    await service.generateEndorsementCertificate(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+    const certificateCreate = callArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+      1,
+    );
+    expect(certificateCreate.data).toMatchObject({
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      type: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+      documentNumber: 'DOC-ECF-001',
     });
 
     await service.generateEndorsementClosingSlip(
@@ -837,13 +971,66 @@ describe('PlacementDocumentsService', () => {
     );
     const secondCreate = callArg<Prisma.PlacementDocumentCreateArgs>(
       prisma.placementDocument.create,
-      1,
+      2,
     );
     expect(secondCreate.data).toMatchObject({
       endorsementId: 'endorsement-1',
       endorsementClosingId: 'endorsement-closing-1',
       type: PlacementDocumentType.CLOSING_SLIP,
       documentNumber: 'DOC-CS-001',
+    });
+  });
+
+  it('reuses active endorsement documents only when the source snapshot is unchanged', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      placement: { id: 'placement-1', reference: 'FAC-001', currency: 'GHS' },
+      participants: [],
+      closings: [],
+      notes: [],
+    });
+    prisma.placementDocument.findMany
+      .mockResolvedValueOnce([
+        {
+          ...document,
+          type: PlacementDocumentType.ENDORSEMENT_SLIP,
+          endorsementId: 'endorsement-1',
+          sourceSnapshot: {
+            id: 'endorsement-1',
+            endorsementNumber: 'END-OLD',
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          ...document,
+          type: PlacementDocumentType.ENDORSEMENT_SLIP,
+          endorsementId: 'endorsement-1',
+          sourceSnapshot: {
+            id: 'endorsement-1',
+            endorsementNumber: 'END-OLD',
+          },
+        },
+      ]);
+    prisma.placementDocument.create.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.ENDORSEMENT_SLIP,
+      documentNumber: 'DOC-ES-002',
+      version: 2,
+    });
+    prisma.placementDocument.count.mockResolvedValue(1);
+
+    await service.generateEndorsementSlip(user, 'placement-1', 'endorsement-1');
+
+    expect(prisma.placementDocument.create).toHaveBeenCalled();
+    expect(
+      firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+        prisma.placementDocument.create,
+      ).data,
+    ).toMatchObject({
+      type: PlacementDocumentType.ENDORSEMENT_SLIP,
+      version: 2,
     });
   });
 
@@ -1318,7 +1505,7 @@ describe('PlacementDocumentsService', () => {
   it('rejects unsupported document types for PDF rendering', async () => {
     prisma.placementDocument.findFirst.mockResolvedValue({
       ...document,
-      type: PlacementDocumentType.ENDORSEMENT_SLIP,
+      type: PlacementDocumentType.CLAIM_NOTICE,
     });
 
     await expect(

@@ -5,7 +5,7 @@ import { DataList, Column } from '@/components/organisms/shared/DataList';
 import { Period } from '@/components/atoms/PeriodToggle';
 import { useFacultatives, useCurrencies } from '@/hooks';
 import { Currency } from '@/types/reinsurance';
-import { cardClass } from '@/lib/utils';
+import { transparentCardClass } from '@/lib/utils';
 
 interface CedantRow {
   id: string;
@@ -116,15 +116,14 @@ export function TopCedantsList({ period, currency }: TopCedantsListProps) {
   }, [all, currencies, period, currency]);
 
   return (
-    <div className={cardClass('flex flex-col gap-3 p-5 h-80', 'glass')}>
+    <div className={transparentCardClass('flex flex-col gap-3 py-5 h-80')}>
       <h3 className="text-sm font-semibold text-gray-900">Top 5 Cedants</h3>
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto -mx-3 px-3">
         <DataList
           columns={buildColumns(symbol)}
           data={rows}
           isLoading={loadingFac || loadingCur}
           emptyMessage="No cedant data for this period"
-          bare
         />
       </div>
     </div>

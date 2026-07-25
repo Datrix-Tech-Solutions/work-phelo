@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cardClass, cn } from '@/lib/utils';
 
 export type DashboardView = 'detailed' | 'general';
 
@@ -16,7 +16,7 @@ interface DashboardViewToggleProps {
 
 export function DashboardViewToggle({ value, onChange }: DashboardViewToggleProps) {
   return (
-    <div className="flex items-center gap-1 rounded-input border border-gray-200 bg-white p-1">
+    <div className={cardClass('flex items-center gap-1 p-1 shadow-none')}>
       {VIEWS.map(({ label, value: v }) => (
         <button
           key={v}
@@ -24,7 +24,9 @@ export function DashboardViewToggle({ value, onChange }: DashboardViewToggleProp
           onClick={() => onChange(v)}
           className={cn(
             'px-4 py-1.5 text-sm font-medium rounded-input transition-colors',
-            value === v ? 'bg-brand text-white' : 'text-gray-600 hover:bg-gray-100',
+            value === v
+              ? 'bg-(--module-btn-bg,var(--color-brand)) text-white'
+              : 'text-gray-600 hover:bg-gray-100',
           )}
         >
           {label}
