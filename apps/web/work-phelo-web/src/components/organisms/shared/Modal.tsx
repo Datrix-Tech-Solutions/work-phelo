@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { cn } from '@/lib/utils';
+import { cn, popupClass } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
 interface ModalProps {
@@ -34,7 +34,7 @@ export function Modal({
   height = 'max-h-[80vh]',
   hideClose = false,
   fullScreenMobile = false,
-  panelClassName = 'bg-white shadow-2xl',
+  panelClassName = popupClass('shadow-2xl'),
   titleClassName = 'text-gray-800',
   closeButtonClassName = 'text-gray-400 hover:text-gray-600',
 }: ModalProps) {

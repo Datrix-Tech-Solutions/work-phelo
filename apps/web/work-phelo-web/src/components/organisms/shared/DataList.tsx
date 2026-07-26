@@ -130,7 +130,7 @@ export function DataList<T extends { id: string | number }>({
               className={cn(
                 'group/row transition-[transform,box-shadow,background-color] duration-200 mb-2 last:mb-0',
                 cardClass(
-                  '-translate-y-2.5 shadow-[0_10px_20px_-12px_rgba(0,0,0,0.22),0_2px_6px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))] hover:-translate-y-3.5 hover:shadow-[0_16px_28px_-16px_rgba(0,0,0,0.4),0_4px_10px_-2px_rgba(0,0,0,0.2),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))]',
+                  'shadow-[0_10px_20px_-12px_rgba(0,0,0,0.22),0_2px_6px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))] hover:-translate-y-1 hover:shadow-[0_16px_28px_-16px_rgba(0,0,0,0.4),0_4px_10px_-2px_rgba(0,0,0,0.2),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))]',
                 ),
                 onRowClick && 'cursor-pointer',
               )}

@@ -129,10 +129,10 @@ export function DatePicker({
           'w-full flex items-center justify-between border rounded-input text-sm transition-colors',
           size === 'sm' ? 'px-2 py-2' : 'px-4 py-3',
           open
-            ? 'bg-white border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
+            ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
             : error
-              ? 'bg-white/90 backdrop-blur-sm border-red-500'
-              : 'bg-white/90 backdrop-blur-sm border-(--module-border,var(--color-gray-300))',
+              ? 'bg-transparent border-red-500'
+              : 'bg-transparent border-gray-400',
           displayValue ? 'text-gray-900' : 'text-gray-400',
         )}
       >

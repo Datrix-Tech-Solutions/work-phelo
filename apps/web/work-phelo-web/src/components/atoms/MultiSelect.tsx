@@ -213,10 +213,10 @@ export function MultiSelect({
           'flex items-center justify-between px-4 border rounded-input transition-colors',
           size === 'sm' ? 'py-2' : 'py-3',
           open
-            ? 'bg-white border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
+            ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
             : error
-              ? 'bg-white/90 backdrop-blur-sm border-red-500'
-              : 'bg-white/90 backdrop-blur-sm border-(--module-border,var(--color-gray-300))',
+              ? 'bg-transparent border-red-500'
+              : 'bg-transparent border-gray-400',
         )}
       >
         <span className={cn('text-sm', selected.length > 0 ? 'text-gray-900' : 'text-gray-400')}>

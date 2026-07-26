@@ -99,7 +99,7 @@ export function TopCedantsByOffersChart({ period }: TopCedantsByOffersChartProps
                 disableLine: true,
                 disableTicks: true,
                 width: 'auto',
-                tickLabelStyle: { fontSize: 11 },
+                tickLabelStyle: { fontSize: 11, fill: 'var(--color-gray-700)' },
                 categoryGapRatio: 0.75,
               },
             ]}
@@ -123,9 +123,9 @@ export function TopCedantsByOffersChart({ period }: TopCedantsByOffersChartProps
             sx={{
               '& .MuiBarChart-element': { rx: 5, ry: 5 },
               ...(hovered !== null && {
-                '& .MuiChartsAxis-tickLabel': { fill: '#9ca3af' },
+                '& .MuiChartsAxis-tickLabel': { fill: 'var(--color-gray-400)' },
                 [`& .MuiChartsAxis-tickContainer:nth-of-type(${hovered + 1}) .MuiChartsAxis-tickLabel`]:
-                  { fill: '#111827', fontWeight: 600 },
+                  { fill: 'var(--color-gray-900)', fontWeight: 600 },
               }),
             }}
           />

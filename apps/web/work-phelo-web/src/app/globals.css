@@ -24,8 +24,7 @@
   --module-operations: #163895;  /* purple — Operations 163895*/
 
   /*UNUSED COLORS #9966CC Amethyst #2C5F34  Forest Green  #0466f8  Blue  #0047AB <- Cobalt Blue, 557C99 <- SLATE BLUE, 007FFF <- Azure, 636B2F <- Olive Green  */
-  /* dark mode background color 0f172a
-  
+
   /* Module palette fallbacks — used outside any layout class (brand colors) */
   --module-btn-bg:       var(--brand);
   --module-btn-bg-hover: var(--brand-hover);
@@ -51,10 +50,15 @@
   --glass-subtle: rgba(255, 255, 255, 0.3);
 
   /* Popup/panel surfaces (SidePanel, DatePicker dropdown, SearchSelect dropdown) —
-     these need to read as close to solid for legibility (dense content, extended
-     reading/interaction), so they get a much higher opacity than the ambient glass
-     surfaces above. Still gets a touch of blur so it doesn't look totally flat. */
-  --glass-solid: rgba(255, 255, 255, 0.9);
+     the app's own flat background (#ffffff here), same idea as the dark-mode
+     override below: a solid surface instead of a translucent glass fill, since
+     the translucency read poorly in light mode. */
+  --glass-solid: var(--background);
+
+  /* Popup border — deliberately its own token rather than reusing --glass-border,
+     so darkening/deepening it doesn't also affect cardClass()'s glass-card edges
+     or the Sidebar's active-item outline, which share --glass-border. */
+  --popup-border: rgba(0, 0, 0, 0.15);
 
   /* cardClass()'s 'module' (default) border — the outer glass-card edge. Kept a touch
      more opaque than the border-white/40 used by cardClass()'s 'glass' variant (inner
@@ -67,6 +71,23 @@
      as an inset box-shadow, not a border, so it doesn't fight with --glass-border. */
   --glass-highlight: rgba(255, 255, 255, 0.65);
 
+  /* Button's 'secondary' variant — own tokens rather than plain bg-gray-100/text-gray-900/
+     border-gray-300, because this app inverts the whole --color-gray-* scale for dark mode
+     (see below) and gray-100 inverts to a near-black #202124 that's barely distinguishable
+     from the dark page/card behind it — reads as a flat black button instead of a raised
+     neutral surface. These get their own dark override that's actually lighter than the
+     page instead of inheriting the generic inversion. */
+  --btn-secondary-bg:     #f3f4f6;
+  --btn-secondary-border: #d1d5db;
+  --btn-secondary-text:   #111827;
+
+  /* QuickActionsCard tiles (reinsurance + HR/dashboard) — solid white so they pop
+     against the module-colored QuickActionsPanel shell. Dark-mode override below
+     swaps this for a subtle light-on-navy wash instead of carrying solid white
+     through unchanged, which read as an out-of-place bright tile. */
+  --qa-tile-bg:     rgba(255, 255, 255, 0.95);
+  --qa-tile-border: rgba(255, 255, 255, 0.4);
+
   /* Deliberately-dark chip color (tooltips, selected-score buttons) — intentionally NOT
      overridden below, so these stay dark regardless of theme instead of inverting along
      with --color-gray-900 and ending up as a pale chip with unreadable white text. */
@@ -75,7 +96,7 @@
 
 /* Dark mode — toggled via data-theme="dark" on <html> (see src/store/theme.store.ts) */
 :root[data-theme='dark'] {
-  --background: #0a0a0a;
+  --background: #0f172a;
   --foreground: #ededed;
 
   --surface-hover-subtle: rgba(255, 255, 255, 0.05);
@@ -85,11 +106,21 @@
   --focus-ring:           rgba(255, 255, 255, 0.35);
   --glass-strong:         rgba(255, 255, 255, 0.08);
   --glass-subtle:         rgba(255, 255, 255, 0.05);
-  /* Near-solid dark, not a white tint — a light popup floating over a dark app would
-     clash, so "close to solid" in dark mode means a solid dark surface instead. */
-  --glass-solid:          rgba(20, 22, 26, 0.95);
+  --qa-tile-bg:           rgba(255, 255, 255, 0.08);
+  --qa-tile-border:       rgba(255, 255, 255, 0.14);
+  --btn-secondary-bg:     rgba(255, 255, 255, 0.1);
+  --btn-secondary-border: rgba(255, 255, 255, 0.22);
+  --btn-secondary-text:   #f5f5f6;
+  /* Hover-only override — undeclared in light mode, so Button.tsx's own fallback to
+     --btn-secondary-text applies there (no change to light-mode hover text). */
+  --btn-secondary-hover-text: #ffffff;
+  /* Same solid navy as the Sidebar's dark-mode surface (--sidebar-bg: var(--background)),
+     not a white tint or a translucent version of it — a light or see-through popup
+     floating over a dark app would clash/look inconsistent with the sidebar. */
+  --glass-solid:          var(--background);
   --glass-border:         rgba(255, 255, 255, 0.16);
   --glass-highlight:      rgba(255, 255, 255, 0.14);
+  --popup-border:         rgba(255, 255, 255, 0.25);
 
   /* Invert the neutral gray scale itself — every text-gray, bg-gray, and border-gray
      utility across the app reads this variable, so this is what actually makes body
@@ -198,26 +229,66 @@
 
    --table-header-shadow is deliberately NOT overridden here, same reasoning as
    --module-accent above: it's mixed toward transparent rather than white/black,
-   so its intensity already reads consistently against either theme. */
+   so its intensity already reads consistently against either theme.
+
+   --table-header-text is new here (undeclared in light mode — DataTable/InlineTable's
+   own fallback to --module-btn-bg applies instead, unchanged). In light mode the raw
+   module color reads fine as header text against the pale table-header-bg tint above,
+   but against *this* dark, same-hue table-header-bg it was nearly invisible (dark
+   green text on dark green background). --module-accent — already a lighter,
+   toward-white tint of the same module color, used elsewhere for icons/blobs — gives
+   enough contrast without introducing a new color. */
 :root[data-theme='dark'] .layout-hr {
   --table-header-bg: color-mix(in oklch, var(--module-hr) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-hr) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-hr) 32%, black);
+  --sidebar-border:    var(--module-hr);
+  --sidebar-active-bg: var(--module-hr);
+  --table-header-text: var(--module-accent);
 }
 :root[data-theme='dark'] .layout-operations {
   --table-header-bg: color-mix(in oklch, var(--module-operations) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-operations) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-operations) 32%, black);
+  --sidebar-border:    var(--module-operations);
+  --sidebar-active-bg: var(--module-operations);
+  --table-header-text: var(--module-accent);
 }
 :root[data-theme='dark'] .layout-accounting {
   --table-header-bg: color-mix(in oklch, var(--module-accounting) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-accounting) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-accounting) 32%, black);
+  --sidebar-border:    var(--module-accounting);
+  --sidebar-active-bg: var(--module-accounting);
+  --table-header-text: var(--module-accent);
 }
 :root[data-theme='dark'] .layout-marketing {
   --table-header-bg: color-mix(in oklch, var(--module-marketing) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-marketing) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-marketing) 32%, black);
+  --sidebar-border:    var(--module-marketing);
+  --sidebar-active-bg: var(--module-marketing);
+  --table-header-text: var(--module-accent);
+}
+
+/* Sidebar dark-mode tokens — undeclared in light mode (Sidebar.tsx's own
+   fallback values, white/rgba, apply instead). --sidebar-border/-active-bg
+   must be re-set per .layout-* class above rather than once here, for the
+   same reason --module-btn-bg is: a var() reference resolves against the
+   element carrying the declaration, and .layout-* classes live on a
+   descendant of <html>, not on it — see Sidebar.tsx dark-mode discussion.
+   This generic fallback only covers pages with no .layout-* module class.
+
+   --sidebar-bg is the exception: it's module-INDEPENDENT (every module's
+   sidebar becomes the same flat dark surface), and --background is only
+   ever declared here on :root[data-theme='dark'] itself — no descendant
+   class redefines it — so a single declaration resolves correctly
+   everywhere, unlike the module-scoped tokens above. */
+:root[data-theme='dark'] {
+  --sidebar-bg:          var(--background);
+  --sidebar-border:      var(--brand);
+  --sidebar-active-bg:   var(--brand);
+  --sidebar-active-text: #ffffff;
 }
 
 /* Slow-drifting shapes behind <AppBackground> content — same hue as the flat fill

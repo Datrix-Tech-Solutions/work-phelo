@@ -159,6 +159,11 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
 
 const PAGE_SIZE = 10;
 
+const STATUS_OPTIONS = [
+  { label: 'Approved', value: 'APPROVED' },
+  { label: 'Paid', value: 'PAID' },
+];
+
 export function PayrollHistoryTab() {
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
@@ -310,16 +315,20 @@ export function PayrollHistoryTab() {
                 }}
               />
             </div>
+            <div className="w-32">
+              <SearchSelect
+                placeholder="Status"
+                size="sm"
+                options={STATUS_OPTIONS}
+                value={statusFilter}
+                onChange={(val) => {
+                  setStatusFilter(val);
+                  setPage(1);
+                }}
+              />
+            </div>
           </>
         }
-        filterOptions={[
-          { label: 'Approved', value: 'APPROVED' },
-          { label: 'Paid', value: 'PAID' },
-        ]}
-        onFilter={(val) => {
-          setStatusFilter(val);
-          setPage(1);
-        }}
         secondaryButton={{
           label: sortOrder === 'desc' ? '↓ Newest First' : '↑ Oldest First',
           onClick: () => {

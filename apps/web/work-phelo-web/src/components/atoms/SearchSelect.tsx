@@ -213,10 +213,10 @@ export function SearchSelect({
         className={cn(
           'flex items-center border rounded-input px-4 transition-colors',
           open
-            ? 'bg-white border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
+            ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
             : error
-              ? 'bg-white/90 backdrop-blur-sm border-red-500'
-              : 'bg-white/90 backdrop-blur-sm border-(--module-border,var(--color-gray-300))',
+              ? 'bg-transparent border-red-500'
+              : 'bg-transparent border-gray-400',
         )}
       >
         <input
