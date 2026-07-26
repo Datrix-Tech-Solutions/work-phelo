@@ -201,6 +201,7 @@ export function PayrollHistoryTab() {
     {
       key: 'month',
       label: 'Month',
+      width: 'minmax(200px, 1fr)',
       render: (row) => (
         <span className="font-medium text-gray-900">{payrollMonthLabel(row.month, row.year)}</span>
       ),
@@ -208,21 +209,25 @@ export function PayrollHistoryTab() {
     {
       key: 'totalGross',
       label: 'Total Gross',
+      width: '100px',
       render: (row) => formatPayrollMoney(row.totalGross, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalNet',
       label: 'Total Net Pay',
+      width: '100px',
       render: (row) => formatPayrollMoney(row.totalNet, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalPAYE',
       label: 'Total PAYE',
+      width: '100px',
       render: (row) => formatPayrollMoney(row.totalPAYE, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalSSNIT',
       label: 'Statutory',
+      width: '100px',
       render: (row) => (
         <span title={getPayrollLabels(row.payrollCountry).totalLabel}>
           {formatPayrollMoney(row.totalSSNIT, row.payrollCurrency, row.payrollCountry)}
@@ -232,12 +237,14 @@ export function PayrollHistoryTab() {
     {
       key: 'totalEmployerCost',
       label: 'Total Employer Cost',
+      width: '150px',
       render: (row) =>
         formatPayrollMoney(row.totalEmployerCost, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'status',
       label: 'Status',
+      width: '100px',
       render: (row) => {
         const isPaid = row.status === 'PAID';
         return (

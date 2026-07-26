@@ -369,6 +369,7 @@ export interface LeaveRequest {
   tenantSlug: string;
   employeeId: string;
   employeeName: string;
+  employeeAvatarUrl?: string;
   leaveTypeId: string;
   leaveTypeName: string;
   isPaid: boolean;
@@ -494,6 +495,7 @@ export interface ProjectMember {
   email: string;
   jobTitle: string;
   department: string | null;
+  avatarUrl?: string;
 }
 
 export interface ProjectDetail extends Project {

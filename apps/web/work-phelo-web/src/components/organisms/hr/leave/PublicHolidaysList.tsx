@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreatePublicHolidayPanel } from '@/components/organisms/hr/leave/CreatePublicHolidayPanel';
 import { api } from '@/lib/api';
@@ -65,16 +66,19 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
     {
       key: 'name',
       label: 'Holiday Name',
+      width: 'minmax(150px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
       key: 'date',
       label: 'Official Date',
+      width: '130px',
       render: (row) => <span className="text-gray-700">{formatHolidayDate(row.date)}</span>,
     },
     {
       key: 'observedDate',
       label: 'Observed',
+      width: '130px',
       render: (row) => (
         <div>
           <span className="text-gray-700">{formatHolidayDate(row.observedDate ?? row.date)}</span>
@@ -85,38 +89,27 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
     {
       key: 'countryScope',
       label: 'Scope',
+      width: '130px',
       render: (row) => <span className="text-gray-600">{formatScope(row)}</span>,
     },
     {
-      key: '_view',
+      key: 'actions',
       label: '',
-      width: '72px',
+      width: '150px',
       render: (row) => (
-        <div className="flex justify-center">
-          <button
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <TableButton
+            variant="blue"
             onClick={() => {
               setEditHoliday(row);
               setPanelOpen(true);
             }}
-            className="text-sm font-medium px-2 py-1 rounded-lg text-brand hover:bg-brand/5 transition-colors"
           >
             View
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: '_delete',
-      label: '',
-      width: '72px',
-      render: (row) => (
-        <div className="flex justify-center">
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="text-sm font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-          >
+          </TableButton>
+          <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
             Delete
-          </button>
+          </TableButton>
         </div>
       ),
     },

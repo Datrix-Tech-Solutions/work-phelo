@@ -142,11 +142,13 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
     {
       key: 'title',
       label: 'Cycle Name',
+      width: 'minmax(150px, 1.5fr)',
       render: (r) => <span className="font-medium text-gray-900">{r.title}</span>,
     },
     {
       key: 'date range',
       label: 'Date range',
+      width: '150px',
       render: (r) => (
         <span className="text-xs text-gray-600">
           {formatDate(r.startDate)} – {formatDate(r.endDate)}
@@ -156,16 +158,19 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
     {
       key: 'totalEmployees',
       label: 'Employees',
+      width: '100px',
       render: (r) => <EmployeeCountCell cycleId={r.id} fallback={r.totalEmployees} />,
     },
     {
       key: 'completionRate',
       label: 'Completion',
+      width: '200px',
       render: (r) => <CompletionCell cycleId={r.id} />,
     },
     {
       key: 'status',
       label: 'Status',
+      width: '150px',
       render: (r) => <StatusCell cycleId={r.id} startDate={r.startDate} endDate={r.endDate} />,
     },
   ];

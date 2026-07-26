@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { TableButton } from '@/components/atoms/TableButton';
+import { Avatar } from '@/components/atoms/Avatar';
 import { AssignProjectMemberPanel } from '@/components/organisms/hr/projects/AssignProjectMemberPanel';
 import {
   useProjectMembers,
@@ -15,15 +17,6 @@ import { Permission } from '@/lib/permissionMap';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import type { ProjectMember } from '@/types/hr';
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase();
-}
 
 const ROLE_LABELS: Record<string, string> = {
   OWNER: 'Owner',
@@ -91,11 +84,10 @@ export function ProjectMembersTable({ projectId }: Props) {
     {
       key: 'name',
       label: 'Employee',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
-            <span className="text-xs font-bold text-brand">{getInitials(row.name)}</span>
-          </div>
+          <Avatar name={row.name} avatarUrl={row.avatarUrl} size="sm" />
           <div>
             <p className="font-medium text-gray-900">{row.name}</p>
             {row.jobTitle && <p className="text-xs text-gray-400">{row.jobTitle}</p>}
@@ -129,20 +121,18 @@ export function ProjectMembersTable({ projectId }: Props) {
               if (row.role === 'OWNER') return null;
               const isLead = row.role === 'MANAGER';
               return (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isLead) handleRemove(row.employeeId);
-                  }}
-                  disabled={isLead || removeMember.isPending}
-                  className={
-                    isLead
-                      ? 'text-xs text-red-400 font-medium opacity-30 cursor-not-allowed'
-                      : 'text-xs text-red-500 hover:text-red-700 font-medium'
-                  }
-                >
-                  Remove
-                </button>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <TableButton
+                    variant="red"
+                    onClick={() => {
+                      if (!isLead) handleRemove(row.employeeId);
+                    }}
+                    disabled={isLead || removeMember.isPending}
+                    tooltip={isLead ? "Project lead can't be removed" : undefined}
+                  >
+                    Remove
+                  </TableButton>
+                </div>
               );
             },
           },

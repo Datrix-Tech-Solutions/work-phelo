@@ -13,7 +13,14 @@ const STATUS_STYLES: Record<string, { dot: string; text: string; bg: string; lab
     bg: 'bg-yellow-50',
     label: 'Probation',
   },
+  ON_LEAVE: { dot: 'bg-blue-400', text: 'text-blue-700', bg: 'bg-blue-50', label: 'On Leave' },
   SUSPENDED: { dot: 'bg-red-400', text: 'text-red-700', bg: 'bg-red-50', label: 'Suspended' },
+  TERMINATED: {
+    dot: 'bg-red-600',
+    text: 'text-red-800',
+    bg: 'bg-red-100',
+    label: 'Terminated',
+  },
   OFFBOARDED: {
     dot: 'bg-gray-400',
     text: 'text-gray-600',

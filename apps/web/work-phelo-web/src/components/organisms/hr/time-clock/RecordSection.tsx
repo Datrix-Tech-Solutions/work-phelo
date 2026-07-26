@@ -46,25 +46,44 @@ export function RecordsSection({
     {
       key: 'employeeName',
       label: 'Employee',
+      width: 'minmax(150px, 1.5fr)',
       render: (r) => <span className="font-medium">{r.employeeName}</span>,
     },
-    { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
-    { key: 'department', label: 'Department', render: (r) => <span>{r.department ?? '—'}</span> },
+    {
+      key: 'date',
+      label: 'Date',
+      width: '100px',
+      render: (r) => <span>{formatDate(r.date)}</span>,
+    },
+    {
+      key: 'department',
+      label: 'Department',
+      width: 'minmax(100px, 1fr)',
+      render: (r) => <span>{r.department ?? '—'}</span>,
+    },
 
-    { key: 'clockIn', label: 'Clock In', render: (r) => <span>{formatTime(r.clockIn)}</span> },
+    {
+      key: 'clockIn',
+      label: 'Clock In',
+      width: '100px',
+      render: (r) => <span>{formatTime(r.clockIn)}</span>,
+    },
     {
       key: 'clockOut',
       label: 'Clock Out',
+      width: '100px',
       render: (r) => <span>{r.clockOut ? formatTime(r.clockOut) : '—'}</span>,
     },
     {
       key: 'totalMinutes',
       label: 'Hours',
+      width: '90px',
       render: (r) => <span className="font-semibold">{formatMinutes(r.totalMinutes)}</span>,
     },
     {
       key: 'flags',
       label: 'Flags',
+      width: '100px',
       render: (r) =>
         r.isOutsideSchedule ? (
           <Badge variant="warning" label="Off Schedule" />

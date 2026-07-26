@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Badge } from '@/components/atoms/Badge';
+import { Avatar } from '@/components/atoms/Avatar';
 import { formatTime } from '@/lib/formatters';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
 import { LiveAttendanceStatsRow } from '@/components/molecules/hr/time-clock/LiveAttendanceStatsRow';
@@ -14,15 +15,6 @@ function formatDurationMs(ms: number) {
   const m = Math.floor((ms % 3_600_000) / 60_000);
   if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
   return `${m}m`;
-}
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
 }
 
 function formatWorkMode(workMode?: LiveAttendanceEntry['workMode']) {
@@ -90,19 +82,12 @@ export function LiveAttendanceTable() {
     {
       key: 'employeeName',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(200px, 1.5fr)',
       render: (entry) => {
         const workModeLabel = formatWorkMode(entry.workMode);
         return (
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-brand text-white text-xs font-semibold flex items-center justify-center shrink-0 overflow-hidden">
-              {entry.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={entry.avatarUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                getInitials(entry.employeeName)
-              )}
-            </div>
+            <Avatar name={entry.employeeName} avatarUrl={entry.avatarUrl} size="sm" />
             <div className="min-w-0">
               <p className="font-medium text-gray-900 truncate">{entry.employeeName}</p>
               {(entry.jobTitle || workModeLabel) && (
@@ -119,7 +104,7 @@ export function LiveAttendanceTable() {
     {
       key: 'department',
       label: 'Department',
-      width: '1.5fr',
+      width: 'minmax(150px,1.5fr)',
       render: (entry) => <span className="text-gray-600 truncate">{entry.department ?? '—'}</span>,
     },
     {

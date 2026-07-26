@@ -75,6 +75,7 @@ export function BranchesTable() {
     {
       key: 'name',
       label: 'Branch Name',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => (
         <div className="flex flex-col gap-1 items-start">
           <span className="font-medium text-gray-900">{row.name}</span>
@@ -85,7 +86,7 @@ export function BranchesTable() {
     {
       key: 'location',
       label: 'Location',
-      width: '2fr',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) => (
         <div className="flex items-center gap-1.5 text-sm text-gray-600">
           {(row.city || row.country) && <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
@@ -96,7 +97,7 @@ export function BranchesTable() {
     {
       key: 'managerId',
       label: 'Branch Manager',
-      width: '2fr',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) => {
         const mgr = row.managerId ? employeeMap.get(row.managerId) : null;
         return mgr ? (
@@ -111,6 +112,7 @@ export function BranchesTable() {
     {
       key: '_count',
       label: 'Members',
+      width: '90px',
       render: (row) => (
         <span className="text-sm font-medium text-gray-700">{row._count?.employees ?? 0}</span>
       ),
@@ -118,6 +120,7 @@ export function BranchesTable() {
     {
       key: 'status',
       label: 'Status',
+      width: '100px',
       render: (row) => <BranchStatus count={row._count?.employees ?? 0} isActive={row.isActive} />,
     },
   ];

@@ -229,15 +229,31 @@ export default function PayrollHistoryDetailPage({
     {
       key: 'employee',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => <EmployeeCell row={row} />,
     },
-    { key: 'basicSalary', label: 'Basic Salary', render: (row) => money(row.basicSalary) },
-    { key: 'allowances', label: 'Allowances', render: (row) => money(itemAllowances(row)) },
-    { key: 'deductions', label: 'Deductions', render: (row) => money(itemDeductions(row)) },
+    {
+      key: 'basicSalary',
+      label: 'Basic Salary',
+      width: '100px',
+      render: (row) => money(row.basicSalary),
+    },
+    {
+      key: 'allowances',
+      label: 'Allowances',
+      width: '100px',
+      render: (row) => money(itemAllowances(row)),
+    },
+    {
+      key: 'deductions',
+      label: 'Deductions',
+      width: '100px',
+      render: (row) => money(itemDeductions(row)),
+    },
     {
       key: 'grossSalary',
       label: 'Gross',
+      width: '100px',
       render: (row) => {
         const s = salarySectionFigures(row);
         return money(s ? s.gross : parseFloat(row.grossSalary));
@@ -248,11 +264,13 @@ export default function PayrollHistoryDetailPage({
           {
             key: 'tier1Contribution',
             label: 'Tier 1 (0.5%)',
+            width: '100px',
             render: (row: PayrollItem) => money(row.tier1Contribution),
           },
           {
             key: 'tier2Contribution',
             label: 'Tier 2 (5%)',
+            width: '100px',
             render: (row: PayrollItem) => money(row.tier2Contribution),
           },
         ]
@@ -260,12 +278,14 @@ export default function PayrollHistoryDetailPage({
           {
             key: 'employeeSSNIT',
             label: payrollLabels.employeeLabel,
+            width: '100px',
             render: (row: PayrollItem) => money(row.employeeSSNIT),
           },
         ]),
     {
       key: 'payeTax',
       label: 'PAYE',
+      width: '100px',
       render: (row) => {
         const s = salarySectionFigures(row);
         return money(s ? s.paye : parseFloat(row.payeTax));
@@ -274,6 +294,7 @@ export default function PayrollHistoryDetailPage({
     {
       key: 'netSalary',
       label: 'Net Salary',
+      width: '150px',
       render: (row) => {
         const s = salarySectionFigures(row);
         return (
@@ -290,32 +311,37 @@ export default function PayrollHistoryDetailPage({
     {
       key: 'employee',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => <EmployeeCell row={row} />,
     },
     {
       key: 'commissionAmount',
       label: 'Commission',
+      width: '150px',
       render: (row) => money(commissionSectionFigures(row).commission),
     },
     {
       key: 'allowances',
       label: 'Allowances',
+      width: '150px',
       render: (row) => money(commissionSectionFigures(row).allowances),
     },
     {
       key: 'deductions',
       label: 'Deductions',
+      width: '150px',
       render: (row) => money(commissionSectionFigures(row).deductions),
     },
     {
       key: 'gross',
       label: 'Gross',
+      width: '150px',
       render: (row) => money(commissionSectionFigures(row).gross),
     },
     {
       key: 'tax',
       label: 'Tax (10%)',
+      width: '150px',
       render: (row) => (
         <span className="text-amber-600">{money(commissionSectionFigures(row).tax)}</span>
       ),
@@ -323,6 +349,7 @@ export default function PayrollHistoryDetailPage({
     {
       key: 'netPay',
       label: 'Net Pay',
+      width: '200px',
       render: (row) => (
         <span className="font-semibold text-emerald-600">
           {money(commissionSectionFigures(row).net)}

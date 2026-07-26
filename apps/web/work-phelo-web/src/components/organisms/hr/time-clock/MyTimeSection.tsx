@@ -36,7 +36,12 @@ export function MyTimeSection({
   const historyTotalPages = historyData?.totalPages ?? 1;
 
   const historyColumns: Column<TimeEntry>[] = [
-    { key: 'date', width: '1fr', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
+    {
+      key: 'date',
+      width: 'minmax(100px, 1fr)',
+      label: 'Date',
+      render: (r) => <span>{formatDate(r.date)}</span>,
+    },
     {
       key: 'clockIn',
       width: '200px',
@@ -60,20 +65,28 @@ export function MyTimeSection({
       width: '200px',
       label: 'Status',
       render: (r) => (
-        <div className="flex items-center gap-2">
-          <span className="font-semibold capitalize">
-            {r.status === 'CLOCKED_IN' ? 'Active' : r.status === 'ON_BREAK' ? 'On Break' : 'Done'}
-          </span>
-          {r.workMode ? (
-            <Badge
-              variant="info"
-              label={r.workMode.charAt(0) + r.workMode.slice(1).toLowerCase()}
-            />
-          ) : null}
+        <div className="flex flex-col gap-1">
+          <Badge
+            variant={
+              r.status === 'CLOCKED_IN'
+                ? 'success'
+                : r.status === 'ON_BREAK'
+                  ? 'warning'
+                  : 'neutral'
+            }
+            label={
+              r.status === 'CLOCKED_IN' ? 'Active' : r.status === 'ON_BREAK' ? 'On Break' : 'Done'
+            }
+          />
           {r.isOutsideSchedule ? (
-            <Badge variant="warning" label="Off Schedule" />
+            <span className="text-xs text-amber-600">Off Schedule</span>
           ) : r.isLate ? (
-            <Badge variant="warning" label="Late" />
+            <span className="text-xs text-amber-600">Late</span>
+          ) : null}
+          {r.workMode ? (
+            <span className="text-xs text-gray-500">
+              {r.workMode.charAt(0) + r.workMode.slice(1).toLowerCase()}
+            </span>
           ) : null}
         </div>
       ),

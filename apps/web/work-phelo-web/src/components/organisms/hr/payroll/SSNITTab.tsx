@@ -164,7 +164,7 @@ export function SSNITTab() {
     {
       key: 'employee',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => (
         <div>
           <p className="font-medium text-gray-900">{row.name}</p>
@@ -175,6 +175,7 @@ export function SSNITTab() {
     {
       key: 'ssnitNumber',
       label: payrollLabels.idLabel,
+      width: 'minmax(150px, 1.5fr)',
       render: (row) =>
         row.ssnitNumber ? (
           <span className="font-mono text-sm text-gray-700">{row.ssnitNumber}</span>
@@ -188,21 +189,25 @@ export function SSNITTab() {
     {
       key: 'insurableEarnings',
       label: 'Insurable Earnings',
+      width: '100px',
       render: (row) => money(row.insurableEarnings),
     },
     {
       key: 'employeeSSNIT',
       label: payrollLabels.employeeLabel,
+      width: '100px',
       render: (row) => money(row.employeeSSNIT),
     },
     {
       key: 'employerSSNIT',
       label: payrollLabels.employerLabel,
+      width: '100px',
       render: (row) => money(row.employerSSNIT),
     },
     {
       key: 'totalTier1',
       label: payrollLabels.totalLabel,
+      width: '100px',
       render: (row) => <span className="font-semibold text-gray-900">{money(row.totalTier1)}</span>,
     },
     ...(showTier2
@@ -210,6 +215,7 @@ export function SSNITTab() {
           {
             key: 'tier2',
             label: tier2Label,
+            width: '100px',
             render: (row: SSNITRow) => money(row.tier2),
           },
         ]
@@ -219,6 +225,7 @@ export function SSNITTab() {
           {
             key: 'tier3',
             label: tier3Label,
+            width: '100px',
             render: (row: SSNITRow) => money(row.tier3Employee),
           },
         ]

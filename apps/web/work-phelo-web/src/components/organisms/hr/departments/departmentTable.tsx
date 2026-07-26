@@ -109,13 +109,13 @@ export function DepartmentsTable() {
     {
       key: 'name',
       label: 'Department Name',
-      width: '2fr',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
       key: 'manager',
       label: 'Department Head',
-      width: '2fr',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => (
         <span className="text-sm text-gray-500">
           {row.managerId ? (employeeMap.get(row.managerId) ?? '—') : '—'}
@@ -125,6 +125,7 @@ export function DepartmentsTable() {
     {
       key: 'memberCount',
       label: 'Members',
+      width: '120px',
       render: (row) => (
         <span className="text-sm font-medium text-gray-700">{row._count?.employees ?? 0}</span>
       ),
@@ -132,6 +133,7 @@ export function DepartmentsTable() {
     {
       key: 'status',
       label: 'Status',
+      width: '120px',
       render: (row) => {
         const count = row._count?.employees ?? 0;
         if (!row.isActive) return <Badge variant="neutral" label="Inactive" />;

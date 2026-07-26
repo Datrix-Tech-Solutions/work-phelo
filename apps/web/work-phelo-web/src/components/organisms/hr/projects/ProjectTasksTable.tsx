@@ -41,6 +41,7 @@ const COLUMNS: Column<ProjectTask>[] = [
   {
     key: 'name',
     label: 'Task',
+    width: 'minmax(200px, 1.5fr)',
     render: (row) => {
       const meta = STATUS_META[row.status];
       const isDone = row.status === 'DONE';
