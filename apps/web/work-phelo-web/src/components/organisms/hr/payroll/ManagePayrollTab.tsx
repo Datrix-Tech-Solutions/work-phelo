@@ -411,7 +411,7 @@ export function ManagePayrollTab() {
     {
       key: 'employee',
       label: 'Employee',
-      width: 'minmax(200px, 1.5fr)',
+      width: 'minmax(200px, 1fr)',
       render: (row) => (
         <div className="flex items-center gap-3">
           <Avatar name={row.employeeName} avatarUrl={row.avatarUrl} size="sm" />
@@ -439,7 +439,7 @@ export function ManagePayrollTab() {
     {
       key: 'basicSalary',
       label: 'Basic Salary',
-      width: 'minmax(150px, 1.5fr)',
+      width: 'minmax(150px, 0.5fr)',
       render: (row) => (
         <NumberCell value={row.basicSalary} onChange={(n) => handleBasicChange(row.id, n)} />
       ),
@@ -447,7 +447,7 @@ export function ManagePayrollTab() {
     {
       key: 'allowances',
       label: 'Allowances',
-      width: 'minmax(150px, 1.5fr)',
+      width: 'minmax(150px, 0.5fr)',
       render: (row) => (
         <button
           onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
@@ -470,7 +470,7 @@ export function ManagePayrollTab() {
     {
       key: 'deductions',
       label: 'Deductions',
-      width: 'minmax(150px, 1.5fr)',
+      width: 'minmax(150px, 0.5fr)',
       render: (row) => (
         <button
           onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}

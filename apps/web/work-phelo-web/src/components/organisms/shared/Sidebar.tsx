@@ -47,7 +47,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
         isDeactivated
           ? 'text-white/30'
           : isCurrent
-            ? 'text-(--module-btn-bg,var(--color-brand))'
+            ? 'text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand)))'
             : 'text-white/70',
       )}
     >
@@ -99,7 +99,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
           className={cn(
             baseRow,
             isCurrent
-              ? 'bg-white text-(--module-btn-bg,var(--color-brand)) font-semibold shadow-sm border border-(--glass-border,rgba(255,255,255,0.55))'
+              ? 'bg-(--sidebar-active-bg,white) text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand))) font-semibold shadow-sm border border-(--glass-border,rgba(255,255,255,0.55))'
               : 'text-white/80 hover:bg-white/10 hover:text-white',
           )}
         >
@@ -161,7 +161,7 @@ function SidebarChildItem({
         baseRow,
         isCurrent
           ? variant === 'onColor'
-            ? 'bg-white text-(--module-btn-bg,var(--color-brand)) font-semibold'
+            ? 'bg-(--sidebar-active-bg,white) text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand))) font-semibold'
             : 'bg-(--module-btn-bg,var(--color-brand)) text-white font-semibold'
           : variant === 'onColor'
             ? 'text-white/70 hover:bg-white/10 hover:text-white'
@@ -213,7 +213,7 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
           isDeactivated
             ? 'cursor-not-allowed text-white/30'
             : isAnyChildActive
-              ? 'bg-white text-(--module-btn-bg,var(--color-brand)) font-semibold shadow-sm border border-(--glass-border,rgba(255,255,255,0.55))'
+              ? 'bg-(--sidebar-active-bg,white) text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand))) font-semibold shadow-sm border border-(--glass-border,rgba(255,255,255,0.55))'
               : 'text-white/80 hover:bg-white/10 hover:text-white',
         )}
       >
@@ -223,7 +223,7 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
             isDeactivated
               ? 'text-white/30'
               : isAnyChildActive
-                ? 'text-(--module-btn-bg,var(--color-brand))'
+                ? 'text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand)))'
                 : 'text-white/70',
           )}
         >
@@ -313,7 +313,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
       onMouseEnter={() => collapsed && setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       className={cn(
-        'bg-(--module-btn-bg,var(--color-brand)) border-r border-white/10 shadow-lg flex flex-col shrink-0 overflow-hidden',
+        'bg-(--sidebar-bg,var(--module-btn-bg,var(--color-brand))) border-r border-(--sidebar-border,rgba(255,255,255,0.1)) shadow-lg flex flex-col shrink-0 overflow-hidden',
         // Mobile: absolute drawer that slides over content (below the top nav)
         'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
         // Desktop: static in flex flow with width animation (spring curve)

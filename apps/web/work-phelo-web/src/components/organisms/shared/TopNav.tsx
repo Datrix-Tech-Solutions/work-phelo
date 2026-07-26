@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Bell, Home, LayoutGrid, LogOutIcon, Menu, Settings, UserIcon } from 'lucide-react';
-import { cn, frostedAvatarStyle } from '@/lib/utils';
+import { cn, frostedAvatarStyle, popupClass } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -157,7 +157,7 @@ function ProfileDropdown({
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
             <div
               style={{ position: 'fixed', top: pos.top, right: pos.right, minWidth: 200 }}
-              className="z-20 bg-white border border-gray-100 rounded-input shadow-lg overflow-hidden"
+              className={popupClass('z-20 overflow-hidden')}
             >
               {userName && (
                 <>

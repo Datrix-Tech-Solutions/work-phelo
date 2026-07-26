@@ -8,12 +8,12 @@ export function cn(...inputs: ClassValue[]) {
 
 export function inputClass(error?: string, extra?: string) {
   return cn(
-    'w-full px-2 py-2 border rounded-input text-sm bg-white/90 backdrop-blur-sm text-gray-800',
+    'w-full px-2 py-2 border rounded-input text-sm bg-transparent text-gray-900',
     'placeholder:text-gray-400 transition-colors',
-    'focus:outline-none focus:bg-white',
+    'focus:outline-none',
     error
       ? 'border-red-500 focus:ring-2 focus:ring-red-500/30 focus:border-red-500'
-      : 'border-(--module-border,var(--color-gray-300)) focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',
+      : 'border-gray-400 focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',
     extra,
   );
 }
@@ -37,11 +37,15 @@ export function cardClass(extra?: string, border?: 'module' | 'glass') {
   );
 }
 
-/** An "invisible" cardClass() — same layout/rounding, but with the background, blur, border,
- * and shadow all cancelled out. Used for wrappers that hold DataList's floating cardRows
- * (KpiCard-style stat lists), where the surface itself shouldn't compete with the rows. */
+/** An "invisible" cardClass() — same layout/rounding, but never emits a background, blur,
+ * border, or shadow class at all (rather than emitting cardClass()'s and trying to cancel
+ * them via bg-transparent/border-transparent/shadow-none, which depended on twMerge
+ * recognizing those as conflicting with cardClass()'s CSS-variable-based utilities — it
+ * didn't reliably, so the surface showed through). Used for wrappers that hold DataList's
+ * floating cardRows (KpiCard-style stat lists), where the surface itself shouldn't compete
+ * with the rows. */
 export function transparentCardClass(extra?: string) {
-  return cardClass(cn('bg-transparent backdrop-blur-none shadow-none border-transparent', extra));
+  return cn('rounded-xl', extra);
 }
 
 /** Popup/panel surfaces (SidePanel, DatePicker/SearchSelect/MultiSelect dropdowns) — near-solid for
@@ -51,8 +55,8 @@ export function transparentCardClass(extra?: string) {
  * shadow-2xl) instead of being overwritten by it. */
 export function popupClass(extra?: string) {
   return cn(
-    'bg-(--glass-solid,rgba(255,255,255,0.9)) backdrop-blur-xl backdrop-saturate-150 rounded-card',
-    'border border-(--glass-border,rgba(255,255,255,0.55)) shadow-xl ring-1 ring-inset ring-(--glass-highlight,rgba(255,255,255,0.65))',
+    'bg-(--glass-solid,#ffffff) backdrop-blur-xl backdrop-saturate-150 rounded-card',
+    'border border-(--popup-border,rgba(0,0,0,0.15)) shadow-xl ring-1 ring-inset ring-(--glass-highlight,rgba(255,255,255,0.65))',
     extra,
   );
 }

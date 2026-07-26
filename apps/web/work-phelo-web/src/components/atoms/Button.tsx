@@ -31,7 +31,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       primary:
         'bg-(--module-btn-bg,var(--color-brand)) text-white border border-(--glass-border,rgba(255,255,255,0.55)) hover:bg-(--module-btn-bg-hover,var(--color-brand-hover)) focus:ring-(--module-btn-bg,var(--color-brand)) shadow-[0_4px_12px_-2px_color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_50%,transparent)] hover:shadow-[0_8px_18px_-4px_color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_60%,transparent)]',
       secondary:
-        'bg-gray-100 text-gray-900 border border-gray-300 hover:bg-(--module-tint,var(--color-brand-tint)) hover:border-(--module-btn-bg,var(--color-brand)) focus:ring-(--focus-ring,var(--color-gray-400))',
+        'bg-(--btn-secondary-bg,#f3f4f6) text-(--btn-secondary-text,#111827) border border-(--btn-secondary-border,#d1d5db) hover:bg-[color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_16%,transparent)] hover:text-(--btn-secondary-hover-text,var(--btn-secondary-text,#111827)) hover:border-(--module-btn-bg,var(--color-brand)) focus:ring-(--focus-ring,var(--color-gray-400))',
       outline:
         'border border-(--glass-border,rgba(255,255,255,0.55)) text-gray-700 hover:bg-(--surface-hover-subtle,var(--color-gray-50)) focus:ring-(--focus-ring,var(--color-gray-400))',
       ghost:

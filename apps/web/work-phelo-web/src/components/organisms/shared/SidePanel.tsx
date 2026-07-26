@@ -56,7 +56,7 @@ export function SidePanel({
         className={cn(
           popupClass(
             cn(
-              'fixed z-50 flex flex-col shadow-2xl overflow-hidden border border-(--glass-border,rgba(255,255,255,0.55))',
+              'fixed z-50 flex flex-col shadow-2xl overflow-hidden',
               'transition-all duration-300 ease-out',
               // Mobile: full screen, no rounding
               'inset-0 rounded-none',
