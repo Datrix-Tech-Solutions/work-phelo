@@ -91,12 +91,27 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
     {
       key: 'employeeName',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(150px, 1.5fr)',
       render: (r) => <span className="font-medium text-gray-900">{r.employeeName}</span>,
     },
-    { key: 'department', label: 'Department', render: (r) => <span>{r.department || '—'}</span> },
-    { key: 'jobTitle', label: 'Job Title', render: (r) => <span>{r.jobTitle || '—'}</span> },
-    { key: 'managerName', label: 'Manager', render: (r) => <span>{r.managerName || '—'}</span> },
+    {
+      key: 'department',
+      label: 'Department',
+      width: 'minmax(100px, 1fr)',
+      render: (r) => <span>{r.department || '—'}</span>,
+    },
+    {
+      key: 'jobTitle',
+      label: 'Job Title',
+      width: '150px',
+      render: (r) => <span>{r.jobTitle || '—'}</span>,
+    },
+    {
+      key: 'managerName',
+      label: 'Manager',
+      width: '150px',
+      render: (r) => <span>{r.managerName || '—'}</span>,
+    },
     {
       key: 'selfScore',
       label: 'Self (%)',

@@ -113,13 +113,13 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
     {
       key: 'employee',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(150px, 1.5fr)',
       render: (r) => <span className="font-medium text-gray-900">{r.employeeName || '—'}</span>,
     },
     {
       key: 'manager',
       label: 'Manager',
-      width: '2fr',
+      width: 'minmax(150px, 1.5fr)',
       render: (r) => <span className="text-gray-700">{r.managerName || '—'}</span>,
     },
     {

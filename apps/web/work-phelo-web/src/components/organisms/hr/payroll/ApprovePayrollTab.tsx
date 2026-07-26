@@ -117,26 +117,31 @@ export function ApprovePayrollTab() {
     {
       key: 'month',
       label: 'Month',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => <span className="font-medium text-gray-900">{monthLabel(row)}</span>,
     },
     {
       key: 'totalGross',
       label: 'Total Gross',
+      width: '150px',
       render: (row) => formatPayrollMoney(row.totalGross, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalNet',
       label: 'Total Net Pay',
+      width: '150px',
       render: (row) => formatPayrollMoney(row.totalNet, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalPAYE',
       label: 'Total PAYE',
+      width: '150px',
       render: (row) => formatPayrollMoney(row.totalPAYE, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalSSNIT',
       label: 'Statutory',
+      width: '150px',
       render: (row) => (
         <span title={getPayrollLabels(row.payrollCountry).totalLabel}>
           {formatPayrollMoney(row.totalSSNIT, row.payrollCurrency, row.payrollCountry)}
@@ -146,6 +151,7 @@ export function ApprovePayrollTab() {
     {
       key: 'totalEmployerCost',
       label: 'Total Employer Cost',
+      width: '150px',
       render: (row) =>
         formatPayrollMoney(row.totalEmployerCost, row.payrollCurrency, row.payrollCountry),
     },

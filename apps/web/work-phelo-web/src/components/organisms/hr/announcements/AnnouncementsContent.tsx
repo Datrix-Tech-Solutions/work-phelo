@@ -27,19 +27,19 @@ const COLUMNS: Column<AnnouncementRow>[] = [
   {
     key: 'title',
     label: 'Title',
-    width: '1.5fr',
+    width: 'minmax(100px, 1fr)',
     render: (row) => <span className="font-medium text-gray-900">{row.title}</span>,
   },
   {
     key: 'message',
     label: 'Message',
-    width: '2fr',
+    width: 'minmax(200px, 2.5fr)',
     render: (row) => <span className="text-gray-500 line-clamp-1">{row.message}</span>,
   },
   {
     key: 'expiresAt',
     label: 'Expires',
-    width: '1fr',
+    width: '100px',
     render: (row) => (
       <span className="text-gray-600">
         {row.expiresAt

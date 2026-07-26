@@ -303,7 +303,9 @@ export function DataTable<T extends { id: string | number }>({
             </div>
 
             {/* Scrollable Content Area */}
-            <div className={noInternalScroll ? '' : 'flex-1 min-h-0 overflow-y-auto'}>
+            <div
+              className={noInternalScroll ? '' : 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden'}
+            >
               {isLoading ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="flex flex-col items-center gap-4">

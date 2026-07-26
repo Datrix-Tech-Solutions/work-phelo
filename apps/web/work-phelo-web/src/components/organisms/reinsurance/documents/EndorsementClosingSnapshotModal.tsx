@@ -1,13 +1,16 @@
 'use client';
 
-import React from 'react';
+import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import {
   EndorsementParticipantClosing,
   Facultative,
   PlacementEndorsement,
 } from '@/types/reinsurance';
+import { useReinsurers, useRiskTypes } from '@/hooks';
+import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 interface EndorsementClosingSnapshotModalProps {
   isOpen: boolean;
@@ -17,72 +20,53 @@ interface EndorsementClosingSnapshotModalProps {
   onClose: () => void;
 }
 
-function text(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
-  return String(value);
+interface ClosingRow {
+  label: string;
+  pct?: string;
+  value?: string;
+  bold?: boolean;
+  divider?: boolean;
 }
 
-function numberValue(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+function fmtFieldValue(val: unknown): string {
+  if (val == null || val === '') return '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  return String(val);
 }
 
-function fmtPct(value: unknown): string {
-  const numeric = numberValue(value);
-  if (numeric === null) return '—';
-  return `${numeric.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  })}%`;
-}
-
-function fmtMoney(value: unknown, currency?: string | null): string {
-  const numeric = numberValue(value);
-  if (numeric === null) return '—';
-  return `${currency ?? ''} ${numeric.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`.trim();
-}
-
-function fmtDate(value: unknown): string {
-  if (!value) return '—';
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return text(value);
-  return date.toLocaleDateString('en-GB', {
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', {
     day: '2-digit',
-    month: 'long',
+    month: 'short',
     year: 'numeric',
   });
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-3 mt-6 first:mt-0">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-500">
-        {children}
-      </p>
-      <div className="border-t border-gray-300" />
-    </div>
-  );
+function fmtAmount(val: number | null | undefined, currency: string | null | undefined) {
+  if (val == null) return '—';
+  return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
-  return (
-    <table className="w-full border-collapse text-sm">
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.label} className="border-b border-gray-50 last:border-0">
-            <td className="w-2/5 py-1.5 pr-4 text-gray-500">{row.label}</td>
-            <td className="py-1.5 pl-4 font-medium text-gray-900">{row.value}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+function getSnapshotPlacement(snapshot: Record<string, unknown>): Record<string, unknown> {
+  if (snapshot.placement && typeof snapshot.placement === 'object') {
+    return snapshot.placement as Record<string, unknown>;
+  }
+  return snapshot;
 }
 
+function toNum(val: unknown): number | null {
+  if (val == null || val === '') return null;
+  const n = typeof val === 'string' ? parseFloat(val) : Number(val);
+  return isNaN(n) ? null : n;
+}
+
+/**
+ * Reinsurer-facing "Closings" document for a confirmed endorsement closing — same letter +
+ * description/financial table layout as the placement-side "Closings" document
+ * (NoteDocumentModal's credit-note content), just populated with this closing's confirmed,
+ * post-endorsement figures instead of a persisted note.
+ */
 export function EndorsementClosingSnapshotModal({
   isOpen,
   placement,
@@ -90,87 +74,167 @@ export function EndorsementClosingSnapshotModal({
   closing,
   onClose,
 }: EndorsementClosingSnapshotModalProps) {
+  const { data: reinsurers = [] } = useReinsurers();
+  const { data: riskTypes = [] } = useRiskTypes();
+
   if (!closing) return null;
 
   const reinsurer = closing.endorsementParticipant.counterparty;
-  const originalParticipantId = closing.endorsementParticipant.originalParticipantId;
+  const fullReinsurer = reinsurers.find((r) => r.id === reinsurer.id);
+  const addr = fullReinsurer?.addresses?.find((a) => a.isPrimary) ?? fullReinsurer?.addresses?.[0];
+  const reinsurerCity = addr?.city ?? null;
+  const reinsurerRegionCountry = [addr?.state, addr?.country].filter(Boolean).join(' - ') || null;
+  const riskTypeName = riskTypes.find((rt) => rt.id === placement.riskTypeId)?.name ?? null;
+
+  // Prefer the endorsement's current (proposed) terms — these tables show the risk as it
+  // stands after this endorsement, not the terms at original placement.
+  const proposed = endorsement.proposedSnapshot
+    ? getSnapshotPlacement(endorsement.proposedSnapshot)
+    : null;
+  const originalPlacement = getSnapshotPlacement(endorsement.originalSnapshot);
+  const pick = <T,>(key: string, fallback: T): T => {
+    const source = proposed ?? originalPlacement;
+    return source[key] !== undefined && source[key] !== null ? (source[key] as T) : fallback;
+  };
+
+  const title = pick<string>('title', placement.title);
+  const classOfBusiness = pick<string | null>('classOfBusiness', placement.classOfBusiness);
+  const inceptionDate = pick<string | null>('inceptionDate', placement.inceptionDate);
+  const expiryDate = pick<string | null>('expiryDate', placement.expiryDate);
+
+  const currency = closing.currency ?? placement.currency;
+  const signedLinePercent = toNum(closing.signedLinePercent);
+  const sumInsuredSnapshot = toNum(closing.sumInsuredSnapshot);
+  const premiumSnapshot = toNum(closing.premiumSnapshot);
+  const commissionPercent = toNum(closing.commissionPercent) ?? 0;
+  const commissionAmount = toNum(closing.commissionAmount) ?? 0;
+  const brokeragePercent = toNum(closing.brokeragePercent) ?? 0;
+  const brokerageAmount = toNum(closing.brokerageAmount) ?? 0;
+  const totalCommissionPct = commissionPercent + brokeragePercent;
+  const totalCommissionAmt = commissionAmount + brokerageAmount;
+  const netPremium = toNum(closing.netPremium);
+
+  const riskDetailRows: ClosingRow[] = [
+    ...placementDetailEntries(placement.businessDetails),
+    ...placementDetailEntries(placement.offerDetails),
+  ].map((entry) => ({ label: entry.label, value: fmtFieldValue(entry.value) }));
+
+  const descriptionRows: ClosingRow[] = [
+    { label: 'Reinsured', value: placement.cedant.name },
+    { label: 'Insured', value: title },
+    { label: 'Policy Number', value: displayPolicyNumber(placement.policyNumber) },
+    { label: 'Class of Insurance', value: classOfBusiness ?? '—' },
+    ...riskDetailRows,
+    { label: 'Period of Insurance', value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}` },
+    { label: 'Currency', value: currency ?? '—' },
+  ];
+
+  const financialRows: ClosingRow[] = [
+    { label: 'Your Share', pct: signedLinePercent != null ? `${signedLinePercent}%` : '—' },
+    { label: 'Your Sum Insured', value: fmtAmount(sumInsuredSnapshot, currency) },
+    { label: 'Your Premium', value: fmtAmount(premiumSnapshot, currency) },
+    {
+      label: 'Less Commission',
+      pct: `${totalCommissionPct}%`,
+      value: fmtAmount(totalCommissionAmt, currency),
+    },
+    { label: '', divider: true },
+    { label: 'Net Premium', value: fmtAmount(netPremium, currency), bold: true },
+  ];
 
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Endorsement Closing — ${closing.closingNumber}`}
-      documentTitle="Endorsement Closing Snapshot"
+      title={`Closings — ${displayPolicyNumber(placement.policyNumber)}`}
+      documentTitle="Closings"
       fileName={buildDocumentFileName(
-        'Endorsement Closing Snapshot',
-        closing.closingNumber,
-        endorsement.endorsementNumber,
-        reinsurer.name,
+        'Closings',
+        displayPolicyNumber(placement.policyNumber),
+        riskTypeName,
+        title,
+        reinsurer.name ? `to ${reinsurer.name}` : null,
       )}
       qrValue={`${closing.closingNumber}:${closing.id}:${closing.status}`}
       onPrint={() => {}}
       onClose={onClose}
     >
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
-        Backend endorsement closing snapshot. This is inspection-only and does not generate an
-        official certificate.
+      {/* Address block */}
+      <div className="flex flex-col gap-0.5 text-sm mb-4">
+        <p className="text-gray-500">
+          {new Date().toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+          })}
+        </p>
+        <p className="font-medium text-gray-900 mt-2">The Managing Director</p>
+        <p className="text-gray-800">{reinsurer.name}</p>
+        {reinsurerCity && <p className="text-gray-600">{reinsurerCity}</p>}
+        {reinsurerRegionCountry && <p className="text-gray-600">{reinsurerRegionCountry}</p>}
+        <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
+        <p className="text-gray-700 mt-3 leading-relaxed">
+          We refer to the risk below and your confirmed participation following this endorsement.
+          Kindly find the confirmed closing particulars below.
+        </p>
       </div>
 
-      <SectionHeading>Closing Control</SectionHeading>
-      <InfoRows
-        rows={[
-          { label: 'Closing Number', value: closing.closingNumber },
-          { label: 'Status', value: closing.status },
-          { label: 'Created', value: fmtDate(closing.createdAt) },
-          { label: 'Issued At', value: fmtDate(closing.issuedAt) },
-          { label: 'Confirmed At', value: fmtDate(closing.confirmedAt) },
-        ]}
-      />
+      <table className="w-full text-sm border-collapse">
+        <tbody>
+          {descriptionRows.map((row, i) => (
+            <tr key={i} className="border-b border-gray-50 last:border-0">
+              <td className="py-2 pr-4 text-gray-500 w-1/2">{row.label}</td>
+              <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
+                {row.pct ?? ''}
+              </td>
+              <td className="py-2 pl-4 text-right w-1/3 whitespace-nowrap text-gray-800">
+                {row.value ?? ''}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-      <SectionHeading>Endorsement</SectionHeading>
-      <InfoRows
-        rows={[
-          { label: 'Placement Reference', value: placement.reference },
-          { label: 'Insured', value: placement.title },
-          { label: 'Endorsement Number', value: endorsement.endorsementNumber },
-          { label: 'Endorsement Type', value: endorsement.type },
-          { label: 'Impact Type', value: text(endorsement.impactType) },
-          { label: 'Effective Date', value: fmtDate(endorsement.effectiveDate) },
-        ]}
-      />
+      <table className="w-full text-sm border-collapse">
+        <tbody>
+          {financialRows.map((row, i) =>
+            row.divider ? (
+              <tr key={i}>
+                <td colSpan={3} className="py-1">
+                  <hr className="border-gray-100" />
+                </td>
+              </tr>
+            ) : (
+              <tr key={i} className="border-b border-gray-50 last:border-0">
+                <td
+                  className={`py-2 pr-4 text-gray-500 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : ''}`}
+                >
+                  {row.label}
+                </td>
+                <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
+                  {row.pct ?? ''}
+                </td>
+                <td
+                  className={`py-2 pl-4 text-right w-1/3 whitespace-nowrap ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-800'}`}
+                >
+                  {row.value ?? ''}
+                </td>
+              </tr>
+            ),
+          )}
+        </tbody>
+      </table>
 
-      <SectionHeading>Reinsurer</SectionHeading>
-      <InfoRows
-        rows={[
-          { label: 'Reinsurer', value: reinsurer.name },
-          { label: 'Registration Number', value: text(reinsurer.registrationNumber) },
-          {
-            label: 'Participant Classification',
-            value: originalParticipantId ? 'REVISED' : 'ADDED',
-          },
-          { label: 'Original Participant ID', value: text(originalParticipantId) },
-        ]}
-      />
-
-      <SectionHeading>Financial Snapshot</SectionHeading>
-      <InfoRows
-        rows={[
-          { label: 'Signed Line', value: fmtPct(closing.signedLinePercent) },
-          { label: 'Share Percent', value: fmtPct(closing.sharePercent) },
-          {
-            label: 'Sum Insured Snapshot',
-            value: fmtMoney(closing.sumInsuredSnapshot, closing.currency),
-          },
-          { label: 'Premium Snapshot', value: fmtMoney(closing.premiumSnapshot, closing.currency) },
-          { label: 'Commission Percent', value: fmtPct(closing.commissionPercent) },
-          {
-            label: 'Commission Amount',
-            value: fmtMoney(closing.commissionAmount, closing.currency),
-          },
-          { label: 'Brokerage Percent', value: fmtPct(closing.brokeragePercent) },
-          { label: 'Brokerage Amount', value: fmtMoney(closing.brokerageAmount, closing.currency) },
-          { label: 'Net Premium', value: fmtMoney(closing.netPremium, closing.currency) },
-        ]}
-      />
+      <div className="mt-8 flex flex-col gap-2 text-sm text-gray-700">
+        <p>Thank You.</p>
+        <p>Yours faithfully,</p>
+        <Image
+          src="/signature.png"
+          alt="Signature"
+          width={160}
+          height={80}
+          className="object-contain mt-2"
+        />
+      </div>
     </DocumentPreviewModal>
   );
 }

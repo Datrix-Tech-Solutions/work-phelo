@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Avatar } from '@/components/atoms/Avatar';
 import { EmploymentStatusBadge } from '@/components/molecules/hr/employees/EmploymentStatusBadge';
 import { BranchMembersPanel } from './BranchMembersPanel';
 import { useAllEmployees, useEmployeeOptions } from '@/hooks/hr/useEmployees';
@@ -19,10 +20,6 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'SUSPENDED', label: 'Suspended' },
   { value: 'OFFBOARDED', label: 'Offboarded' },
 ];
-
-function getInitials(firstName: string, lastName: string) {
-  return `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase();
-}
 
 interface Props {
   branch: Branch;
@@ -65,13 +62,10 @@ export function BranchMembersTable({ branch }: Props) {
     {
       key: 'name',
       label: 'Employee',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
-            <span className="text-xs font-bold text-brand">
-              {getInitials(row.firstName, row.lastName)}
-            </span>
-          </div>
+          <Avatar name={`${row.firstName} ${row.lastName}`} avatarUrl={row.avatarUrl} size="sm" />
           <p className="font-medium text-gray-900">
             {row.firstName} {row.lastName}
           </p>
@@ -81,6 +75,7 @@ export function BranchMembersTable({ branch }: Props) {
     {
       key: 'role',
       label: 'Role',
+      width: 'minmax(150px, 1fr)',
       render: (row) => (
         <div className="flex flex-col gap-0.5">
           <span className="text-sm text-gray-700">{row.jobTitle}</span>
@@ -93,11 +88,13 @@ export function BranchMembersTable({ branch }: Props) {
     {
       key: 'department',
       label: 'Department',
+      width: 'minmax(150px, 1fr)',
       render: (row) => <span className="text-sm text-gray-700">{row.department?.name ?? '—'}</span>,
     },
     {
       key: 'contact',
       label: 'Contact',
+      width: 'minmax(150px, 1fr)',
       render: (row) => (
         <div className="flex flex-col gap-0.5">
           <span className="text-sm text-gray-700">{row.email}</span>
@@ -108,7 +105,7 @@ export function BranchMembersTable({ branch }: Props) {
     {
       key: 'status',
       label: 'Status',
-      width: '150px',
+      width: '130px',
       render: (row) => <EmploymentStatusBadge status={row.employmentStatus} />,
     },
   ];

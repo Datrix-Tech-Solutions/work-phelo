@@ -76,11 +76,13 @@ export function MyLeaveTab({ tenantSlug }: Props) {
     {
       key: 'leaveTypeName',
       label: 'Leave Type',
+      width: 'minmax(200px, 1.5fr)',
       render: (r) => <span className="font-medium text-gray-900">{r.leaveTypeName}</span>,
     },
     {
       key: 'period',
       label: 'Period',
+      width: 'minmax(150px, 1fr)',
       render: (r) => (
         <span className="text-sm text-gray-500">
           {formatDate(r.startDate)} – {formatDate(r.endDate)}
@@ -90,11 +92,13 @@ export function MyLeaveTab({ tenantSlug }: Props) {
     {
       key: 'totalDays',
       label: 'Days',
+      width: '100px',
       render: (r) => <span className="text-gray-700">{r.totalDays}</span>,
     },
     {
       key: 'status',
       label: 'Status',
+      width: '150px',
       render: (r) => <Badge variant={STATUS_VARIANT[r.status]} label={r.status} />,
     },
   ];

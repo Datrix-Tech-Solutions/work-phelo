@@ -175,19 +175,19 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'reinsurerCompany',
       label: 'Reinsurance Company',
-      width: '2fr',
+      width: 'minmax(200px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.reinsurerCompany}</span>,
     },
     {
       key: 'signedShare',
       label: 'Signed Share',
-      width: '1fr',
+      width: '150px',
       render: (row) => <span className="text-gray-700">{fmtPct(row.signedShare)}</span>,
     },
     {
       key: 'signedGrossPremium',
       label: 'Signed Gross Premium',
-      width: '1.5fr',
+      width: 'minmax(200px, 1fr)',
       render: (row) => (
         <span className="text-gray-700">
           {row.signedGrossPremium === null ? '—' : fmtAmount(row.signedGrossPremium, row.currency)}
@@ -197,23 +197,18 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'netPremium',
       label: 'Net Premium',
-      width: '1.5fr',
+      width: 'minmax(200px, 1fr)',
       render: (row) => (
         <span className="text-gray-700">
           {row.netPremium === null ? '—' : fmtAmount(row.netPremium, row.currency)}
         </span>
       ),
     },
-    {
-      key: 'status',
-      label: 'Closing Status',
-      width: '1fr',
-      render: (row) => <span className="text-gray-700">{row.status}</span>,
-    },
+
     {
       key: 'actions',
       label: 'Actions',
-      width: '1fr',
+      width: 'minmax(200px, 1fr)',
       render: (row) => (
         <div className="flex items-center gap-3">
           <TableButton isLoading={isNoteBusy} onClick={() => handleOpenCreditNote(row)}>

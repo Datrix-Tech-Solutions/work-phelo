@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateTemplatePanel } from '@/components/organisms/hr/appraisal/CreateTemplatePanel';
 import { api } from '@/lib/api';
@@ -55,12 +56,13 @@ export function AppraisalTemplatesList({ tenantSlug }: Props) {
     {
       key: 'name',
       label: 'Template Name',
+      width: 'minmax(150px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
       key: 'sections',
       label: 'Sections',
-      width: '2fr',
+      width: 'minmax(200px, 2fr)',
       render: (row) => {
         const titles = row.kpis.map((k) => k.title).join(', ');
         return (
@@ -88,7 +90,7 @@ export function AppraisalTemplatesList({ tenantSlug }: Props) {
     {
       key: 'createdAt',
       label: 'Date Created',
-      width: '130px',
+      width: '100px',
       render: (row) => (
         <span className="text-gray-700">
           {new Date(row.createdAt).toLocaleDateString('en-GB', {
@@ -104,22 +106,19 @@ export function AppraisalTemplatesList({ tenantSlug }: Props) {
       label: '',
       width: '120px',
       render: (row) => (
-        <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-          <button
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <TableButton
+            variant="gray"
             onClick={() => {
               setEditTemplate(row);
               setPanelOpen(true);
             }}
-            className="text-sm font-semibold text-gray-800 hover:text-brand transition-colors"
           >
             Edit
-          </button>
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
-          >
+          </TableButton>
+          <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
             Delete
-          </button>
+          </TableButton>
         </div>
       ),
     },

@@ -132,7 +132,7 @@ export function NSSFTab_KE() {
     {
       key: 'employee',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => (
         <div>
           <p className="font-medium text-gray-900">{row.name}</p>
@@ -143,6 +143,7 @@ export function NSSFTab_KE() {
     {
       key: 'nssfNumber',
       label: 'NSSF Number',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) =>
         row.nssfNumber ? (
           <span className="font-mono text-sm text-gray-700">{row.nssfNumber}</span>
@@ -153,26 +154,31 @@ export function NSSFTab_KE() {
     {
       key: 'basicSalary',
       label: 'Basic Salary',
+      width: '100px',
       render: (row) => fmt(row.basicSalary),
     },
     {
       key: 'employeeNSSF',
       label: `Employee (${NSSF_RATE * 100}%)`,
+      width: '100px',
       render: (row) => fmt(row.employeeNSSF),
     },
     {
       key: 'employerNSSF',
       label: `Employer (${NSSF_RATE * 100}%)`,
+      width: '100px',
       render: (row) => fmt(row.employerNSSF),
     },
     {
       key: 'totalNSSF',
       label: 'Total Remittable (12%)',
+      width: '100px',
       render: (row) => <span className="font-semibold text-gray-900">{fmt(row.totalNSSF)}</span>,
     },
     {
       key: 'payeTax',
       label: 'PAYE Tax',
+      width: '100px',
       render: (row) => fmt(row.payeTax),
     },
   ];

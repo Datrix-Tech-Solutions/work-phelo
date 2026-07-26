@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { Badge } from '@/components/atoms/Badge';
+import { Avatar } from '@/components/atoms/Avatar';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { LeaveRequestDetailPanel } from '@/components/organisms/hr/leave/LeaveRequestDetailPanel';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
@@ -92,22 +93,30 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
     {
       key: 'employeeName',
       label: 'Employee Name',
-      width: '1.5fr',
-      render: (r) => <span className="font-medium text-gray-900">{r.employeeName}</span>,
+      width: 'minmax(200px, 1.5fr)',
+      render: (r) => (
+        <div className="flex items-center gap-3">
+          <Avatar name={r.employeeName} avatarUrl={r.employeeAvatarUrl} size="sm" />
+          <span className="font-medium text-gray-900">{r.employeeName}</span>
+        </div>
+      ),
     },
     {
       key: 'leaveTypeName',
       label: 'Leave Type',
+      width: 'minmax(150px, 1fr)',
       render: (r) => <span className="text-gray-700">{r.leaveTypeName}</span>,
     },
     {
       key: 'startDate',
       label: 'Start Date',
+      width: '150px',
       render: (r) => <span className="text-gray-700">{formatDate(r.startDate)}</span>,
     },
     {
       key: 'endDate',
       label: 'End Date',
+      width: '150px',
       render: (r) => <span className="text-gray-700">{formatDate(r.endDate)}</span>,
     },
     {
@@ -119,11 +128,13 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
     {
       key: 'createdAt',
       label: 'Submitted',
+      width: '150px',
       render: (r) => <span className="text-gray-500 text-sm">{formatDate(r.createdAt)}</span>,
     },
     {
       key: 'status',
       label: 'Status',
+      width: '150px',
       render: (r) => <Badge variant={STATUS_VARIANT[r.status]} label={r.status} />,
     },
   ];

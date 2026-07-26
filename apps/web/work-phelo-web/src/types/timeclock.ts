@@ -68,5 +68,6 @@ export interface CorrectionRequest {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   reviewNote?: string;
   reviewedAt?: string;
+  reviewedByName?: string;
   createdAt: string;
 }

@@ -43,6 +43,10 @@ interface RawCorrectionRequest {
     firstName: string;
     lastName: string;
   };
+  reviewedBy?: {
+    firstName: string;
+    lastName: string;
+  } | null;
 }
 
 function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
@@ -89,6 +93,7 @@ function transformCorrectionRequest(r: RawCorrectionRequest): CorrectionRequest 
     status: r.status,
     reviewNote: r.reviewNote ?? undefined,
     reviewedAt: toIsoString(r.reviewedAt),
+    reviewedByName: r.reviewedBy ? `${r.reviewedBy.firstName} ${r.reviewedBy.lastName}` : undefined,
     createdAt: new Date(r.createdAt).toISOString(),
   };
 }

@@ -411,7 +411,7 @@ export function ManagePayrollTab() {
     {
       key: 'employee',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => (
         <div className="flex items-center gap-3">
           <Avatar name={row.employeeName} avatarUrl={row.avatarUrl} size="sm" />
@@ -439,6 +439,7 @@ export function ManagePayrollTab() {
     {
       key: 'basicSalary',
       label: 'Basic Salary',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) => (
         <NumberCell value={row.basicSalary} onChange={(n) => handleBasicChange(row.id, n)} />
       ),
@@ -446,6 +447,7 @@ export function ManagePayrollTab() {
     {
       key: 'allowances',
       label: 'Allowances',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) => (
         <button
           onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
@@ -468,6 +470,7 @@ export function ManagePayrollTab() {
     {
       key: 'deductions',
       label: 'Deductions',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) => (
         <button
           onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
@@ -490,21 +493,25 @@ export function ManagePayrollTab() {
     {
       key: 'grossSalary',
       label: 'Gross',
+      width: '100px',
       render: (row) => (row.validationError ? '—' : money(row.grossSalary)),
     },
     {
       key: 'employeeSSNIT',
       label: payrollLabels.employeeLabel,
+      width: '100px',
       render: (row) => (row.validationError ? '—' : money(row.employeeStatutoryContrib)),
     },
     {
       key: 'paye',
       label: 'PAYE',
+      width: '100px',
       render: (row) => (row.validationError ? '—' : money(row.paye)),
     },
     {
       key: 'netSalary',
       label: 'Net Salary',
+      width: '150px',
       render: (row) =>
         row.validationError ? (
           '—'
@@ -519,7 +526,7 @@ export function ManagePayrollTab() {
     {
       key: 'employeeName',
       label: 'Employee',
-      width: '2fr',
+      width: 'minmax(200px, 2fr)',
       render: (row) => (
         <div className="flex items-center gap-3">
           <Avatar name={row.employeeName} avatarUrl={row.avatarUrl} size="sm" />
@@ -533,6 +540,7 @@ export function ManagePayrollTab() {
     {
       key: 'commission',
       label: 'Commission',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) => (
         <NumberCell value={row.commission} onChange={(n) => handleCommissionChange(row.id, n)} />
       ),
@@ -540,6 +548,7 @@ export function ManagePayrollTab() {
     {
       key: 'allowances',
       label: 'Allowances',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) => (
         <button
           onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
@@ -562,6 +571,7 @@ export function ManagePayrollTab() {
     {
       key: 'deductions',
       label: 'Deductions',
+      width: 'minmax(150px, 1.5fr)',
       render: (row) => (
         <button
           onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
@@ -584,16 +594,19 @@ export function ManagePayrollTab() {
     {
       key: 'gross',
       label: 'Gross',
+      width: '100px',
       render: (row) => money(row.gross),
     },
     {
       key: 'tax',
       label: 'Tax (10%)',
+      width: '100px',
       render: (row) => <span className="text-amber-600">{money(row.tax)}</span>,
     },
     {
       key: 'netPay',
       label: 'Net Pay',
+      width: '150px',
       render: (row) => <span className="font-semibold text-emerald-600">{money(row.netPay)}</span>,
     },
   ];

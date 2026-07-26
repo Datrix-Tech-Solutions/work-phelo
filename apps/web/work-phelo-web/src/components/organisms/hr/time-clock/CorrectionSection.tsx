@@ -1,7 +1,8 @@
-import { Badge } from '@/components/atoms/Badge';
+import { useState } from 'react';
 import { formatDate, formatTime } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { Column, DataTable } from '../../shared/DataTable';
+import { CorrectionRequestDetailPanel } from './CorrectionRequestDetailPanel';
 import type { CorrectionRequest } from '@/types/timeclock';
 
 interface Props {
@@ -21,37 +22,53 @@ export function CorrectionsSection({
   pendingCount,
   onReview,
 }: Props) {
+  const [viewTarget, setViewTarget] = useState<CorrectionRequest | null>(null);
+
   const correctionsColumns: Column<CorrectionRequest>[] = [
     {
       key: 'employeeName',
       label: 'Employee',
+      width: 'minmax(150px,1fr)',
       render: (r) => <span className="font-medium">{r.employeeName}</span>,
     },
-    { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
+    {
+      key: 'date',
+      label: 'Date',
+      width: '100px',
+      render: (r) => <span>{formatDate(r.date)}</span>,
+    },
     {
       key: 'requestedClockIn',
       label: 'Requested In',
+      width: '100px',
       render: (r) => <span>{r.requestedClockIn ? formatTime(r.requestedClockIn) : '—'}</span>,
     },
     {
       key: 'requestedClockOut',
       label: 'Requested Out',
+      width: '100px',
       render: (r) => <span>{r.requestedClockOut ? formatTime(r.requestedClockOut) : '—'}</span>,
     },
     {
       key: 'reason',
       label: 'Reason',
+      width: 'minmax(200px,1.5fr)',
       render: (r) => <span className="line-clamp-1">{r.reason}</span>,
     },
-    { key: 'createdAt', label: 'Submitted', render: (r) => <span>{formatDate(r.createdAt)}</span> },
     {
-      key: 'status',
-      label: 'Status',
-      render: (r) => {
-        const map = { PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger' } as const;
-        return <Badge variant={map[r.status as keyof typeof map]} label={r.status} />;
-      },
+      key: 'createdAt',
+      label: 'Submitted',
+      width: '100px',
+      render: (r) => <span>{formatDate(r.createdAt)}</span>,
     },
+    // {
+    //   key: 'status',
+    //   label: 'Status',
+    //   render: (r) => {
+    //     const map = { PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger' } as const;
+    //     return <Badge variant={map[r.status as keyof typeof map]} label={r.status} />;
+    //   },
+    // },
   ];
 
   return (
@@ -90,8 +107,14 @@ export function CorrectionsSection({
                 { label: 'Approve', onClick: () => onReview(row, 'APPROVED') },
                 { label: 'Reject', danger: true, onClick: () => onReview(row, 'REJECTED') },
               ]
-            : [{ label: 'View', onClick: () => {} }]
+            : [{ label: 'View', onClick: () => setViewTarget(row) }]
         }
+      />
+
+      <CorrectionRequestDetailPanel
+        isOpen={!!viewTarget}
+        onClose={() => setViewTarget(null)}
+        request={viewTarget}
       />
     </div>
   );

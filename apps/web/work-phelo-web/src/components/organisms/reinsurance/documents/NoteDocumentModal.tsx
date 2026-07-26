@@ -99,12 +99,6 @@ function profileFromPayload(payload: UnknownRecord) {
   };
 }
 
-function statusLabel(status: unknown): string {
-  if (status === 'ISSUED') return 'Issued / Official';
-  if (status === 'VOID') return 'Void / Historical';
-  return 'Draft / Not Issued';
-}
-
 function noteKind(type: unknown): 'CREDIT' | 'DEBIT' {
   return type === 'CREDIT_NOTE' || type === 'ENDORSEMENT_CREDIT_NOTE' ? 'CREDIT' : 'DEBIT';
 }
@@ -495,7 +489,6 @@ export function NoteDocumentModal({
 
   if (!document && !noteRecord) return null;
 
-  const isOfficialSnapshot = !!document;
   const payload = document ? record(document.renderPayload) : {};
   const note: UnknownRecord = document ? record(payload.note) : record(noteRecord);
   const profile = profileFromPayload(payload);
@@ -536,20 +529,6 @@ export function NoteDocumentModal({
       onPrint={() => {}}
       onClose={onClose}
     >
-      {!isOfficialSnapshot && (
-        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
-          {statusLabel(note.status)}
-          <span className="block pt-1 text-blue-700">
-            Backend record preview. No immutable official document snapshot has been generated yet.
-          </span>
-          {note.status === 'DRAFT' && (
-            <span className="block pt-1 text-amber-700">
-              This note is a backend draft. Issue it before treating it as official.
-            </span>
-          )}
-        </div>
-      )}
-
       {kind === 'CREDIT' ? (
         <CreditNoteContent
           note={note}

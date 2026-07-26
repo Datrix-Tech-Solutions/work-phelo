@@ -76,16 +76,19 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
     {
       key: 'employeeName',
       label: 'Employee',
+      width: 'minmax(150px, 1.5fr)',
       render: (r) => <span className="font-medium text-gray-900">{r.employeeName}</span>,
     },
     {
       key: 'cycleName',
       label: 'Cycle',
+      width: 'minmax(100px, 1fr)',
       render: (r) => <span className="text-gray-700">{r.cycleName}</span>,
     },
     {
       key: 'selfSubmittedAt',
       label: 'Self Submitted',
+      width: '150px',
       render: (r) =>
         r.selfSubmittedAt ? (
           <span className="text-sm text-gray-700">{formatDate(r.selfSubmittedAt)}</span>
@@ -96,6 +99,7 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
     {
       key: 'managerReviewDeadline',
       label: 'Manager Deadline',
+      width: '150px',
       render: (r) => (
         <span className="text-sm text-gray-700">{formatDate(r.managerReviewDeadline)}</span>
       ),
@@ -103,6 +107,7 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
     {
       key: 'daysLeft',
       label: 'Days Left',
+      width: '120px',
       render: (r) => {
         const days = daysUntil(r.managerReviewDeadline);
         return (

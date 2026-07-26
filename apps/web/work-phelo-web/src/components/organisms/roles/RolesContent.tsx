@@ -54,7 +54,7 @@ export function RolesContent() {
     {
       key: 'name',
       label: 'Roles',
-      width: '200px',
+      width: 'minmax(150px, 0.5fr)',
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
@@ -67,7 +67,7 @@ export function RolesContent() {
     {
       key: 'members',
       label: 'Members',
-      width: '120px',
+      width: '70px',
       render: (row) => (
         <div className="flex items-center gap-1.5 text-sm text-gray-600">
           <Users className="w-3.5 h-3.5 text-gray-400" />
@@ -78,7 +78,7 @@ export function RolesContent() {
     {
       key: 'description',
       label: 'Description',
-      width: 'minmax(0, 1fr)',
+      width: 'minmax(200px, 3fr)',
       className: 'overflow-hidden min-w-0 pr-4',
       render: (row) => (
         <span

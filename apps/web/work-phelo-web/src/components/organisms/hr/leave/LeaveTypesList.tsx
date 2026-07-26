@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Badge } from '@/components/atoms/Badge';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateLeaveTypePanel } from '@/components/organisms/hr/leave/CreateLeaveTypePanel';
@@ -62,11 +63,13 @@ export function LeaveTypesList({ tenantSlug }: Props) {
     {
       key: 'name',
       label: 'Leave Type',
+      width: 'minmax(200px, 1.5fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
       key: 'isPaid',
       label: 'Paid',
+      width: '100px',
       render: (row) => (
         <Badge variant={row.isPaid ? 'success' : 'neutral'} label={row.isPaid ? 'Yes' : 'No'} />
       ),
@@ -74,11 +77,13 @@ export function LeaveTypesList({ tenantSlug }: Props) {
     {
       key: 'daysAllowed',
       label: 'Days / Year',
+      width: '100px',
       render: (row) => <span className="font-medium">{row.daysAllowed}</span>,
     },
     {
       key: 'isCarryOver',
       label: 'Carry Over',
+      width: '150px',
       render: (row) => (
         <span className="text-gray-700">
           {row.isCarryOver
@@ -92,6 +97,7 @@ export function LeaveTypesList({ tenantSlug }: Props) {
     {
       key: 'requiresApproval',
       label: 'Requires Approval',
+      width: '150px',
       render: (row) => (
         <Badge
           variant={row.requiresApproval ? 'warning' : 'neutral'}
@@ -102,6 +108,7 @@ export function LeaveTypesList({ tenantSlug }: Props) {
     {
       key: 'applicableTo',
       label: 'Applicable To',
+      width: '200px',
       render: (row) => {
         const types = row.applicableTo ?? [];
         if (types.length === 0) return <span className="text-gray-500 text-sm">All</span>;
@@ -119,35 +126,23 @@ export function LeaveTypesList({ tenantSlug }: Props) {
       },
     },
     {
-      key: '_view',
+      key: 'actions',
       label: '',
-      width: '72px',
+      width: '150px',
       render: (row) => (
-        <div className="flex justify-center">
-          <button
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <TableButton
+            variant="blue"
             onClick={() => {
               setEditLeaveType(row);
               setPanelOpen(true);
             }}
-            className="text-sm font-medium px-2 py-1 rounded-lg text-brand hover:bg-brand/5 transition-colors"
           >
             View
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: '_delete',
-      label: '',
-      width: '72px',
-      render: (row) => (
-        <div className="flex justify-center">
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="text-sm font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-          >
+          </TableButton>
+          <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
             Delete
-          </button>
+          </TableButton>
         </div>
       ),
     },

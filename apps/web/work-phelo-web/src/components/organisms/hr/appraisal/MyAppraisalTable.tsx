@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useMyAppraisals, useAppraisalCycles } from '@/hooks/hr/useAppraisals';
 import { Column, DataTable } from '../../shared/DataTable';
+import { TableButton } from '@/components/atoms/TableButton';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
@@ -119,11 +120,13 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
     {
       key: 'cycleName',
       label: 'Cycle Name',
+      width: 'minmax(150px, 1.5fr)',
       render: (r) => <span className="font-medium text-gray-900">{r.cycleName}</span>,
     },
     {
       key: 'selfAssessmentDeadline',
       label: 'Self-Assessment Deadline',
+      width: '200px',
       render: (r) => (
         <span className="text-gray-700">{formatDeadline(r.selfAssessmentDeadline)}</span>
       ),
@@ -131,6 +134,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
     {
       key: 'overallScore',
       label: 'Overall Score',
+      width: '150px',
       render: (r) => {
         const managerReviewed =
           r.overallStatus === 'Finalized' || r.overallStatus === 'ManagerSubmitted';
@@ -164,27 +168,31 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
         if (status === 'Cancelled') return null;
         if (status === 'In Progress' || status === 'Overdue') {
           return (
-            <button
-              onClick={() =>
-                router.push(
-                  `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`,
-                )
-              }
-              className="px-2 py-1.5 text-sm font-medium text-gray-700 hover:text-brand transition-colors"
-            >
-              Start
-            </button>
+            <div onClick={(e) => e.stopPropagation()}>
+              <TableButton
+                variant="green"
+                onClick={() =>
+                  router.push(
+                    `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`,
+                  )
+                }
+              >
+                Start
+              </TableButton>
+            </div>
           );
         }
         return (
-          <button
-            onClick={() =>
-              router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
-            }
-            className="px-2 py-1.5 text-sm font-medium text-gray-700 hover:text-brand transition-colors"
-          >
-            View Assessment
-          </button>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TableButton
+              variant="blue"
+              onClick={() =>
+                router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
+              }
+            >
+              View Assessment
+            </TableButton>
+          </div>
         );
       },
     },
