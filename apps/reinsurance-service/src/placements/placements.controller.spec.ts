@@ -23,6 +23,7 @@ import { PlacementEndorsementClosingsService } from './placement-endorsement-clo
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
+import { PlacementFinancialPositionService } from './placement-financial-position.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
@@ -80,6 +81,9 @@ describe('PlacementsController', () => {
   };
   const effectiveViewService = {
     getEffectiveView: jest.fn(),
+  };
+  const financialPositionService = {
+    getFinancialPosition: jest.fn(),
   };
   const endorsementParticipantsService = {
     findAll: jest.fn(),
@@ -151,6 +155,7 @@ describe('PlacementsController', () => {
       endorsementClosingsService as unknown as PlacementEndorsementClosingsService,
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
+      financialPositionService as unknown as PlacementFinancialPositionService,
       claimsService as unknown as PlacementClaimsService,
       claimCashCallsService as unknown as PlacementClaimCashCallsService,
     );
@@ -168,6 +173,7 @@ describe('PlacementsController', () => {
     ['findAll', PlacementPermission.VIEW],
     ['findOne', PlacementPermission.VIEW],
     ['getEffectiveView', PlacementPermission.VIEW],
+    ['getFinancialPosition', PlacementPermission.VIEW],
     ['getLockStatus', PlacementPermission.VIEW],
     ['getOfferSlipPreview', PlacementPermission.VIEW],
     ['getClosingSlipPreview', PlacementPermission.VIEW],
@@ -365,6 +371,22 @@ describe('PlacementsController', () => {
       'tenant-1',
       'placement-1',
       undefined,
+    );
+  });
+
+  it('delegates financial position reads with authenticated tenant context', async () => {
+    const controller = createController();
+
+    await controller.getFinancialPosition(
+      'placement-1',
+      '2026-08-01T00:00:00.000Z',
+      { user } as never,
+    );
+
+    expect(financialPositionService.getFinancialPosition).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      '2026-08-01T00:00:00.000Z',
     );
   });
 

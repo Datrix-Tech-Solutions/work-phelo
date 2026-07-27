@@ -110,7 +110,9 @@ import {
   PlacementPaymentListResponseDto,
   PlacementPaymentResponseDto,
 } from './dto/placement-payment-response.dto';
+import { PlacementFinancialPositionResponseDto } from './dto/placement-financial-position-response.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
+import { PlacementFinancialPositionService } from './placement-financial-position.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
 import {
@@ -154,6 +156,7 @@ export class PlacementsController {
     private readonly endorsementClosingsService: PlacementEndorsementClosingsService,
     private readonly notesService: PlacementNotesService,
     private readonly paymentsService: PlacementPaymentsService,
+    private readonly financialPositionService: PlacementFinancialPositionService,
     private readonly claimsService: PlacementClaimsService,
     private readonly claimCashCallsService: PlacementClaimCashCallsService,
   ) {}
@@ -2111,6 +2114,45 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.notesService.void(request.user, id, noteId, dto);
+  }
+
+  @Get(':id/financial-position')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get placement financial position',
+    description:
+      'Returns the current effective premium obligation and settlement position for the placement. ' +
+      'Original closings, effective endorsement closing snapshots and immutable payment/reversal records are projected without mutating historical records.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiQuery({
+    name: 'asOfDate',
+    required: false,
+    description:
+      'Optional ISO date/time for historical or future financial-position reconstruction. Defaults to now.',
+  })
+  @ApiOkResponse({ type: PlacementFinancialPositionResponseDto })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The position contains multiple currencies and cannot be aggregated safely.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  getFinancialPosition(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('asOfDate') asOfDate: string | undefined,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.financialPositionService.getFinancialPosition(
+      request.user.tenantId,
+      id,
+      asOfDate,
+    );
   }
 
   @Get(':id/payments')

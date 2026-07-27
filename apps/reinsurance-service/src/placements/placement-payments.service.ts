@@ -15,6 +15,7 @@ import {
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
+import { PlacementFinancialPositionService } from './placement-financial-position.service';
 
 const paymentInclude = {
   counterparty: {
@@ -43,16 +44,12 @@ type PlacementPaymentRecord = Prisma.PlacementPaymentGetPayload<{
   include: typeof paymentInclude;
 }>;
 
-type ConfirmedClosingSnapshot = {
-  id: string;
-  participantId: string;
-  netPremium: Prisma.Decimal | number | string | null;
-  currency: string | null;
-};
-
 @Injectable()
 export class PlacementPaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly financialPositionService: PlacementFinancialPositionService,
+  ) {}
 
   async findAll(
     tenantId: string,
@@ -217,31 +214,6 @@ export class PlacementPaymentsService {
     if (!placement) throw new NotFoundException('Placement not found');
   }
 
-  private async getConfirmedClosingSnapshots(
-    tenantId: string,
-    placementId: string,
-  ): Promise<ConfirmedClosingSnapshot[]> {
-    const closings = await this.prisma.placementClosing.findMany({
-      where: {
-        tenantId,
-        placementId,
-        status: PlacementClosingStatus.CONFIRMED,
-      },
-      select: {
-        id: true,
-        participantId: true,
-        netPremium: true,
-        currency: true,
-      },
-    });
-    if (closings.length === 0) {
-      throw new BadRequestException(
-        'At least one confirmed closing is required before recording payment',
-      );
-    }
-    return closings;
-  }
-
   private async effectiveRecordedPaymentsTotal(where: {
     tenantId: string;
     placementId: string;
@@ -263,25 +235,6 @@ export class PlacementPaymentsService {
       (total, payment) => total + this.decimalToNumber(payment.amount),
       0,
     );
-  }
-
-  private totalNetPremium(closings: ConfirmedClosingSnapshot[]): number {
-    return closings.reduce(
-      (total, closing) => total + this.decimalToNumber(closing.netPremium),
-      0,
-    );
-  }
-
-  private assertSingleCurrency(
-    currency: string,
-    closings: ConfirmedClosingSnapshot[],
-  ): void {
-    const currencies = new Set(closings.map((closing) => closing.currency));
-    if (currencies.size !== 1 || !currencies.has(currency)) {
-      throw new BadRequestException(
-        'Confirmed closing currencies must match the payment currency',
-      );
-    }
   }
 
   private assertDoesNotExceedOutstanding(
@@ -316,22 +269,25 @@ export class PlacementPaymentsService {
       );
     }
 
-    const closings = await this.getConfirmedClosingSnapshots(
+    const position = await this.financialPositionService.getFinancialPosition(
       tenantId,
       placementId,
+      new Date(dto.paymentDate),
     );
-    this.assertSingleCurrency(currency, closings);
-    const totalDue = this.totalNetPremium(closings);
-    const totalPaid = await this.effectiveRecordedPaymentsTotal({
-      tenantId,
-      placementId,
-      type: PlacementPaymentType.PREMIUM_RECEIVED,
-      currency,
-    });
+    if (position.isMultiCurrency || position.currency !== currency) {
+      throw new BadRequestException(
+        'Financial position currency must match the payment currency',
+      );
+    }
+    if (position.cedant.currentObligation <= 0) {
+      throw new BadRequestException(
+        'At least one confirmed closing is required before recording payment',
+      );
+    }
     this.assertDoesNotExceedOutstanding(
       dto.amount,
-      totalDue - totalPaid,
-      'Premium received exceeds the outstanding confirmed closing premium',
+      position.cedant.outstanding,
+      'Premium received exceeds the outstanding current effective premium',
     );
   }
 

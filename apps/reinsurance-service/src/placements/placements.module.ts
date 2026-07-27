@@ -6,6 +6,7 @@ import { ClaimAllocationCalculator } from './claim-allocation.calculator';
 import { ClosingSnapshotReader } from './closing-snapshot.reader';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementFinancialPositionService } from './placement-financial-position.service';
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementAttachmentsController } from './placement-attachments.controller';
@@ -56,6 +57,7 @@ import { TenantDocumentProfileClient } from './tenant-document-profile.client';
     S3DocumentStorageService,
     PlacementFinancialActivityReader,
     PlacementFinancialLockPolicy,
+    PlacementFinancialPositionService,
     ReinsuranceMoneyHelper,
     ClosingSnapshotReader,
     ClaimAllocationCalculator,
