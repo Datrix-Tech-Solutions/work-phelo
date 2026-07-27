@@ -20,8 +20,8 @@ import {
   useUpdateParticipantStatus,
   useUpdateFacultativeStatus,
   useDeleteParticipant,
-  useCreateClosing,
   useUpdateClosingStatus,
+  useAcceptAndConfirmPlacementParticipant,
   usePlacementClosings,
   usePlacementPayments,
   facultativePlacementKey,
@@ -70,8 +70,10 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const { mutateAsync: updateParticipantStatus } = useUpdateParticipantStatus(placement.id);
   const { mutateAsync: updatePlacementStatus } = useUpdateFacultativeStatus(placement.id);
   const { mutateAsync: deleteParticipant } = useDeleteParticipant(placement.id);
-  const { mutateAsync: createClosing } = useCreateClosing(placement.id);
   const { mutateAsync: updateClosingStatus } = useUpdateClosingStatus(placement.id);
+  const { mutateAsync: acceptAndConfirmParticipant } = useAcceptAndConfirmPlacementParticipant(
+    placement.id,
+  );
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -231,36 +233,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     setAcceptingIds((prev) => new Set([...prev, row.id]));
 
     try {
-      let closingId = closingByParticipantId[row.id]?.id;
-      let closingStatus = closingByParticipantId[row.id]?.status;
-
-      if (!closingId) {
-        const createdClosing = await createClosing({
-          participantId: row.id,
-          suppressInvalidation: true,
-        });
-        closingId = createdClosing.id;
-        closingStatus = 'DRAFT';
-      }
-
-      const shouldMoveThroughPlaced = ['DRAFT', 'MARKETING', 'PARTIALLY_PLACED'].includes(
-        placement.status,
-      );
-      if (shouldMoveThroughPlaced) {
-        await updatePlacementStatus({ status: 'PLACED' });
-      }
-      if (shouldMoveThroughPlaced || placement.status === 'PLACED') {
-        await updatePlacementStatus({ status: 'CLOSING' });
-      }
-
-      if (closingStatus === 'DRAFT') {
-        await updateClosingStatus({ closingId, status: 'ISSUED', suppressInvalidation: true });
-        await updateClosingStatus({ closingId, status: 'CONFIRMED', suppressInvalidation: true });
-      } else if (closingStatus === 'ISSUED') {
-        await updateClosingStatus({ closingId, status: 'CONFIRMED', suppressInvalidation: true });
-      }
-
-      patch(row.id, { status: 'CLOSED' });
+      await acceptAndConfirmParticipant({ participantId: row.id });
       toast().addToast({
         message: `A closing for ${row.reinsurerCompany} with ${row.shareLine}% has been created`,
         type: 'success',

@@ -22,6 +22,7 @@ import {
   PlacementEndorsementSummary,
   EffectivePlacementView,
   PlacementParticipantClosing,
+  AcceptPlacementParticipantResponse,
   PlacementNote,
   EndorsementParticipantClosing,
   ValidateEndorsementParticipantResponse,
@@ -415,6 +416,26 @@ export function useUpdateClosingStatus(placementId: string) {
       if (!variables.suppressInvalidation) {
         queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
       }
+    },
+  });
+}
+
+export function useAcceptAndConfirmPlacementParticipant(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ participantId }: { participantId: string }) => {
+      const res = await api.post<AcceptPlacementParticipantResponse>(
+        `${BASE}/${placementId}/participants/${participantId}/accept-and-confirm`,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
     },
   });
 }

@@ -1751,7 +1751,7 @@ export class PlacementsService {
     await this.syncPlacementClosedIfFullyConfirmedInTransaction(
       tx,
       user,
-      placement,
+      placement.id,
     );
 
     return {
@@ -1885,9 +1885,13 @@ export class PlacementsService {
   private async syncPlacementClosedIfFullyConfirmedInTransaction(
     tx: Prisma.TransactionClient,
     user: RequestUser,
-    placement: Pick<PlacementRecord, 'id' | 'status' | 'facultativeOffer'>,
+    placementId: string,
   ): Promise<void> {
-    if (placement.status !== PlacementStatus.CLOSING) return;
+    const placement = await tx.placement.findFirst({
+      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
+      select: { id: true, status: true, facultativeOffer: true },
+    });
+    if (!placement || placement.status === PlacementStatus.CLOSED) return;
 
     const targetPercent = this.nullableDecimalToNumber(
       placement.facultativeOffer,
@@ -1910,6 +1914,26 @@ export class PlacementsService {
     );
 
     if (confirmedPlacedPercent + 0.0001 < targetPercent) return;
+
+    if (placement.status !== PlacementStatus.CLOSING) {
+      await tx.placementStatusHistory.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId: placement.id,
+          fromStatus: placement.status,
+          toStatus: PlacementStatus.CLOSING,
+          changedByUserId: user.id,
+          note: 'Confirmed placement closings reached facultative offer',
+        },
+      });
+
+      await tx.placement.update({
+        where: {
+          id_tenantId: { id: placement.id, tenantId: user.tenantId },
+        },
+        data: { status: PlacementStatus.CLOSING, updatedByUserId: user.id },
+      });
+    }
 
     await tx.placementStatusHistory.create({
       data: {

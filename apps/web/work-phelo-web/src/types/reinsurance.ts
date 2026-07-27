@@ -790,6 +790,11 @@ export interface PlacementParticipantClosing {
   updatedAt: string;
 }
 
+export interface AcceptPlacementParticipantResponse {
+  participant: PlacementParticipant;
+  closing: PlacementParticipantClosing;
+}
+
 export type PlacementNoteType =
   | 'DEBIT_NOTE'
   | 'CREDIT_NOTE'

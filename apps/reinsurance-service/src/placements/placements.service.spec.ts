@@ -249,7 +249,7 @@ describe('PlacementsService', () => {
         delete: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementClosing: {
-        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+        findMany: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue([]),
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
         create: jest.fn<Promise<unknown>, [unknown]>(),
@@ -2532,6 +2532,7 @@ describe('PlacementsService', () => {
     prisma.placement.findFirst
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placementAfterWorkflow)
       .mockResolvedValueOnce(placementAfterWorkflow);
     prisma.placementParticipant.update.mockResolvedValue(acceptedParticipant);
     prisma.placement.update.mockResolvedValue(placementAfterWorkflow);
@@ -2600,6 +2601,7 @@ describe('PlacementsService', () => {
     prisma.placement.findFirst
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce({
         ...existingPlacement,
         status: PlacementStatus.CLOSED,
@@ -2653,6 +2655,92 @@ describe('PlacementsService', () => {
     });
   });
 
+  it('moves a fully confirmed PLACED placement through CLOSING to CLOSED during accept-and-confirm', async () => {
+    const existingPlacement = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.PLACED,
+      facultativeOffer: '40.0000',
+      participants: [acceptedParticipant],
+    };
+    const closedPlacement = {
+      ...existingPlacement,
+      status: PlacementStatus.CLOSED,
+    };
+    const draftClosing = {
+      ...confirmedClosing,
+      status: PlacementClosingStatus.DRAFT,
+      issuedAt: null,
+      confirmedAt: null,
+    };
+    const issuedClosing = {
+      ...draftClosing,
+      status: PlacementClosingStatus.ISSUED,
+      issuedAt: new Date('2026-05-28T10:01:00.000Z'),
+    };
+
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(closedPlacement);
+    prisma.placementParticipant.findFirst.mockResolvedValue(
+      acceptedParticipant,
+    );
+    prisma.placementClosing.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.count.mockResolvedValue(0);
+    prisma.placementClosing.create.mockResolvedValue(draftClosing);
+    prisma.placementClosing.update
+      .mockResolvedValueOnce(issuedClosing)
+      .mockResolvedValueOnce(confirmedClosing);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { signedLinePercent: '40.0000' },
+    ]);
+    prisma.placement.update.mockResolvedValue(closedPlacement);
+    prisma.placementStatusHistory.create.mockResolvedValue({ id: 'history' });
+
+    await service.acceptParticipantAndConfirm(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+
+    type StatusHistoryCreateCall = [
+      { data: { fromStatus: PlacementStatus; toStatus: PlacementStatus } },
+    ];
+    const statusHistoryCalls = prisma.placementStatusHistory.create.mock
+      .calls as unknown as StatusHistoryCreateCall[];
+    const statusHistoryTransitions = statusHistoryCalls.map(([args]) => ({
+      fromStatus: args.data.fromStatus,
+      toStatus: args.data.toStatus,
+    }));
+    expect(statusHistoryTransitions).toContainEqual({
+      fromStatus: PlacementStatus.PLACED,
+      toStatus: PlacementStatus.CLOSING,
+    });
+    expect(statusHistoryTransitions).toContainEqual({
+      fromStatus: PlacementStatus.CLOSING,
+      toStatus: PlacementStatus.CLOSED,
+    });
+    expect(prisma.placement.update).toHaveBeenCalledWith({
+      where: {
+        id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' },
+      },
+      data: {
+        status: PlacementStatus.CLOSING,
+        updatedByUserId: 'user-1',
+      },
+    });
+    expect(prisma.placement.update).toHaveBeenCalledWith({
+      where: {
+        id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' },
+      },
+      data: {
+        status: PlacementStatus.CLOSED,
+        updatedByUserId: 'user-1',
+      },
+    });
+  });
+
   it('reuses an existing confirmed closing on retry without creating a duplicate', async () => {
     const existingPlacement = {
       ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
@@ -2660,6 +2748,7 @@ describe('PlacementsService', () => {
       participants: [acceptedParticipant],
     };
     prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement);
@@ -2704,6 +2793,7 @@ describe('PlacementsService', () => {
     prisma.placement.findFirst
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placementAfterWorkflow)
       .mockResolvedValueOnce(placementAfterWorkflow);
     prisma.placementParticipant.update.mockResolvedValue(acceptedParticipant);
     prisma.placement.update.mockResolvedValue(placementAfterWorkflow);
