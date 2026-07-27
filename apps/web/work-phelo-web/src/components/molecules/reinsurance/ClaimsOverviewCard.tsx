@@ -5,6 +5,7 @@ import { Period } from '@/components/atoms/PeriodToggle';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { useReinsuranceClaimStats, useReinsuranceClaimsTrend } from '@/hooks';
 import { cardClass } from '@/lib/utils';
+import { useThemeStore } from '@/store/theme.store';
 
 const CLAIMS_COLOR = '#d03b3b';
 const RECOVERIES_COLOR = '#0ca30c';
@@ -56,6 +57,8 @@ export function ClaimsOverviewCard({ period, currency }: ClaimsOverviewCardProps
 
   const isLoading = loadingStats || loadingTrend;
   const [hovered, setHovered] = useState<number | null>(null);
+  const isDark = useThemeStore((s) => s.theme === 'dark');
+  const gridStroke = isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb';
 
   const W = 700;
   const H = 150;
@@ -136,7 +139,7 @@ export function ClaimsOverviewCard({ period, currency }: ClaimsOverviewCardProps
               const y = toY(tick);
               return (
                 <g key={i}>
-                  <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#e5e7eb" strokeWidth={1} />
+                  <line x1={PL} y1={y} x2={W - PR} y2={y} stroke={gridStroke} strokeWidth={1} />
                   <text x={PL - 8} y={y + 4} textAnchor="end" fontSize={17} fill="#9ca3af">
                     {fmtAmount(tick, '')}
                   </text>

@@ -31,7 +31,7 @@ export default function NewInvoicePage({ params }: { params: Promise<{ tenantSlu
         <h2 className="text-base font-semibold text-gray-900">New Vendor Invoice</h2>
       </div>
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         <NewInvoiceForm onCancel={() => router.push(`/${tenantSlug}/accounting/accountspayable`)} />
       </div>
     </div>

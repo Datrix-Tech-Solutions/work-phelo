@@ -80,7 +80,7 @@ export function useFacultatives() {
   return useQuery({
     queryKey: FACULTATIVES_KEY,
     queryFn: async () => {
-      const res = await api.get(BASE);
+      const res = await api.get(BASE, { params: { limit: 100 } });
       return extractList(res.data);
     },
   });
@@ -90,7 +90,7 @@ export function useArchivedFacultatives(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ARCHIVED_FACULTATIVES_KEY,
     queryFn: async () => {
-      const res = await api.get(BASE, { params: { archived: true } });
+      const res = await api.get(BASE, { params: { archived: true, limit: 100 } });
       return extractList(res.data);
     },
     enabled: options.enabled ?? true,

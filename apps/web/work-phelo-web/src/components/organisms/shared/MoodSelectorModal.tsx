@@ -85,9 +85,6 @@ export function MoodSelectorModal() {
       onClose={close}
       title="How are you feeling today?"
       width="w-[95vw] max-w-2xl"
-      // panelClassName="bg-transparent"
-      titleClassName="text-black drop-shadow-md"
-      closeButtonClassName="text-black/90 hover:text-white drop-shadow-md"
     >
       <div className="grid grid-cols-5 gap-1 mt-2 -mx-6 sm:mx-0">
         {MOODS.map(({ emoji, label, animationClass, baseClass, selectedClass }) => (
@@ -101,7 +98,7 @@ export function MoodSelectorModal() {
             )}
           >
             <span className={cn('inline-block text-5xl sm:text-6xl', animationClass)}>{emoji}</span>
-            <span className="text-xs font-medium text-black drop-shadow-md">{label}</span>
+            <span className="text-xs font-medium text-gray-900">{label}</span>
           </button>
         ))}
       </div>

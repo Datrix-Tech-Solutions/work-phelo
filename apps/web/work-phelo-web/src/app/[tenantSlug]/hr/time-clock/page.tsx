@@ -15,7 +15,6 @@ import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 import { CorrectionRequestPanel } from '@/components/organisms/hr/time-clock/CorrectionRequestPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-import { AppBackground } from '@/components/atoms/AppBackground';
 
 import {
   useMyTodaySession,
@@ -133,10 +132,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
         />
       </div>
 
-      <AppBackground
-        as="main"
-        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
-      >
+      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}>
         {activeTab === 'my' && !isAdmin && (
           <MyTimeSection
             session={session}
@@ -195,7 +191,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
             onReview={(req, action) => setReviewTarget({ req, action })}
           />
         )}
-      </AppBackground>
+      </div>
 
       {/* Global Panels */}
       <CorrectionRequestPanel isOpen={correctionOpen} onClose={() => setCorrectionOpen(false)} />

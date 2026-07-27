@@ -37,7 +37,7 @@ export default function NewClaimPage({ params }: { params: Promise<{ tenantSlug:
         <Button onClick={() => setPanelOpen(true)}>Make Claim</Button>
       </div>
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         <div className="max-w-sm">
           <ClaimSummary placement={placement} />
         </div>

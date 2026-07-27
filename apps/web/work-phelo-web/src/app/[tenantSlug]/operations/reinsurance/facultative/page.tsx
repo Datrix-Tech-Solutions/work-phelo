@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pageHeader, pagePx, pageContent } from '@/lib/layout';
-import { AppBackground } from '@/components/atoms/AppBackground';
 import { FacultativeTable } from '@/components/organisms/reinsurance/tables/FacultativeTable';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 
@@ -38,12 +37,9 @@ export default function FacultativePage() {
         />
       </div>
 
-      <AppBackground
-        as="main"
-        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
-      >
+      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}>
         <FacultativeTable key={activeTab} tab={activeTab} />
-      </AppBackground>
+      </div>
     </div>
   );
 }

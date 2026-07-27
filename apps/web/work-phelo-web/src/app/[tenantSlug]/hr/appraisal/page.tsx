@@ -14,7 +14,6 @@ import { AppraisalTabs } from '@/components/molecules/hr/appraisal/AppraisalTabs
 import { MyAppraisalsTable } from '@/components/organisms/hr/appraisal/MyAppraisalTable';
 import { TeamReviewTable } from '@/components/organisms/hr/appraisal/TeamReviewTable';
 import { HRAppraisalsTable } from '@/components/organisms/hr/appraisal/HRAppraisalTable';
-import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
@@ -67,10 +66,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
         />
       </div>
 
-      <AppBackground
-        as="main"
-        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
-      >
+      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}>
         {activeTab === 'my' && hasHRProfile && (
           <MyAppraisalsTable
             search={mySearch}
@@ -97,7 +93,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
             onPageChange={setHrPage}
           />
         )}
-      </AppBackground>
+      </div>
     </div>
   );
 }

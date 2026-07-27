@@ -57,7 +57,7 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
         />
       </div>
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         {selectedPlacements.length > 0 ? (
           <div className="flex flex-col gap-6">
             {selectedPlacements.map((placement) => {

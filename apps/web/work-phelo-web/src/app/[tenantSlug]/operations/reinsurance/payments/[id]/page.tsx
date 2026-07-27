@@ -76,7 +76,7 @@ export default function PaymentDetailPage({
         {placement && <AddPaymentForm placementId={id} />}
       </div>
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         {placement ? (
           <div className="flex flex-col gap-6">
             <div className="flex flex-col">

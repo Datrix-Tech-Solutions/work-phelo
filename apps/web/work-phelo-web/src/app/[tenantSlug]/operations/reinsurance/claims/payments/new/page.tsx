@@ -67,7 +67,7 @@ export default function AddClaimPaymentPage({
         <AddClaimPaymentForm defaultOpen onPlacementsChange={setSelectedPlacementIds} />
       </div>
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         {hasSelection ? (
           <div className="flex flex-col gap-4">
             {selectedPlacementIds.map((id) => (
