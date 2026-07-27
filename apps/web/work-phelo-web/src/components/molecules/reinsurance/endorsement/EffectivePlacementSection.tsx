@@ -5,6 +5,15 @@ import { EffectivePlacementView, ENDORSEMENT_STATUS_LABELS } from '@/types/reins
 import { fmtMoney } from './formatters';
 import { cardClass } from '@/lib/utils';
 
+function fmtDate(iso: string) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export function EffectivePlacementSection({
   view,
   isLoading,
@@ -25,14 +34,19 @@ export function EffectivePlacementSection({
     );
   }
 
+  const terms = view.effectiveTerms;
   const totals = view.effectiveTotals;
   const capacity = view.capacityBreakdown;
+  const currency = terms.currency ?? totals.currency;
   return (
     <details className={cardClass('p-4')}>
       <summary className="cursor-pointer list-none">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h4 className="text-sm font-semibold text-gray-900">Current Effective Position</h4>
+            <p className="text-xs text-gray-500 mt-1">
+              Current effective as of {fmtDate(view.viewAsOf)}
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-right lg:grid-cols-3">
             <div>
@@ -44,13 +58,13 @@ export function EffectivePlacementSection({
             <div>
               <p className="text-[11px] uppercase tracking-wide text-gray-400">Sum Insured</p>
               <p className="text-sm font-semibold text-gray-900">
-                {fmtMoney(totals.sumInsured, totals.currency)}
+                {fmtMoney(terms.sumInsured, currency)}
               </p>
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-wide text-gray-400">Premium</p>
               <p className="text-sm font-semibold text-gray-900">
-                {fmtMoney(totals.premium, totals.currency)}
+                {fmtMoney(terms.premium, currency)}
               </p>
             </div>
           </div>
@@ -74,10 +88,10 @@ export function EffectivePlacementSection({
             ['Effective Capacity', `${capacity.effectiveTotalCapacityPercent}%`],
             ['Confirmed Endorsement Capacity', `${capacity.confirmedEndorsementCapacityPercent}%`],
             ['Remaining Capacity', `${capacity.remainingCapacityPercent}%`],
-            ['Sum Insured', fmtMoney(totals.sumInsured, totals.currency)],
-            ['Effective Premium', fmtMoney(totals.premium, totals.currency)],
-            ['Closing Gross Premium', fmtMoney(totals.grossPremium, totals.currency)],
-            ['Closing Net Premium', fmtMoney(totals.netPremium, totals.currency)],
+            ['Sum Insured', fmtMoney(terms.sumInsured, currency)],
+            ['Effective Premium', fmtMoney(terms.premium, currency)],
+            ['Closing Gross Premium', fmtMoney(totals.grossPremium, currency)],
+            ['Closing Net Premium', fmtMoney(totals.netPremium, currency)],
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
               <p className="text-xs text-gray-500">{label}</p>
@@ -108,7 +122,7 @@ export function EffectivePlacementSection({
                       {participant.signedLinePercent}%
                     </p>
                     <p className="text-xs text-gray-500">
-                      Net {fmtMoney(participant.netPremium, totals.currency)}
+                      Net {fmtMoney(participant.netPremium, currency)}
                     </p>
                   </div>
                 </div>
@@ -133,6 +147,22 @@ export function EffectivePlacementSection({
                 {capacity.acceptedEndorsementCapacityPercent}%
               </p>
             )}
+          </div>
+        )}
+
+        {view.scheduledEndorsements.length > 0 && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <p className="text-xs font-semibold text-blue-800">Scheduled future endorsements</p>
+            <p className="text-xs text-blue-700 mt-1">
+              {view.scheduledEndorsements
+                .map(
+                  (item) =>
+                    `${item.endorsementNumber} (${fmtDate(item.effectiveDate)}, ${
+                      ENDORSEMENT_STATUS_LABELS[item.status]
+                    })`,
+                )
+                .join(', ')}
+            </p>
           </div>
         )}
 

@@ -5,7 +5,7 @@ import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { Icons } from '@/components/atoms/icons';
-import { Facultative, FacultativeStatus, isEndorsementSentToMarket } from '@/types/reinsurance';
+import { Facultative, FacultativeStatus } from '@/types/reinsurance';
 import {
   confirmedNetPremiumFor,
   totalEffectivePremiumReceived,
@@ -76,9 +76,11 @@ export function FacultativeOverview({
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
   const endorsementCount = endorsements.filter((e) => e.status !== 'VOID').length;
-  const hasActiveEndorsement = endorsements.some((e) => isEndorsementSentToMarket(e.status));
-  const { data: effectiveView } = usePlacementEffectiveView(placement.id, hasActiveEndorsement);
-  const effectiveTotals = hasActiveEndorsement ? effectiveView?.effectiveTotals : undefined;
+  const { data: effectiveView, isError: effectiveViewError } = usePlacementEffectiveView(
+    placement.id,
+  );
+  const effectiveTerms = effectiveView?.effectiveTerms;
+  const effectiveTotals = effectiveView?.effectiveTotals;
 
   const paymentStatus = useMemo<PaymentStatus>(() => {
     const netPremium = confirmedNetPremiumFor(closings);
@@ -92,16 +94,31 @@ export function FacultativeOverview({
     onPaymentStatusChange?.(paymentStatus);
   }, [paymentStatus, onPaymentStatusChange]);
 
-  const facOffer = effectiveTotals?.facultativeOfferPercent ?? placement.facultativeOffer ?? 0;
-  const premiumValue = effectiveTotals?.premium ?? placement.premium;
-  const sumInsuredValue = effectiveTotals?.sumInsured ?? placement.sumInsured;
-  const commissionValue = effectiveTotals?.commissionPercent ?? placement.commission;
+  const currentCurrency =
+    effectiveTerms?.currency ?? effectiveTotals?.currency ?? placement.currency;
+  const facOffer =
+    effectiveTerms?.facultativeOfferPercent ??
+    effectiveTotals?.facultativeOfferPercent ??
+    placement.facultativeOffer ??
+    0;
+  const premiumValue = effectiveTerms?.premium ?? effectiveTotals?.premium ?? placement.premium;
+  const sumInsuredValue =
+    effectiveTerms?.sumInsured ?? effectiveTotals?.sumInsured ?? placement.sumInsured;
+  const commissionValue =
+    effectiveTerms?.commissionPercent ?? effectiveTotals?.commissionPercent ?? placement.commission;
+  const rateValue = effectiveTerms?.rate ?? effectiveTotals?.rate ?? placement.rate;
+  const titleValue = effectiveTerms?.title ?? placement.title;
+  const inceptionDate = effectiveTerms?.inceptionDate ?? placement.inceptionDate;
+  const expiryDate = effectiveTerms?.expiryDate ?? placement.expiryDate;
   const facSumInsured = sumInsuredValue != null ? sumInsuredValue * (facOffer / 100) : null;
   const facPremium = premiumValue != null ? premiumValue * (facOffer / 100) : null;
+  const appliedEndorsementCount = effectiveView?.appliedEndorsements.length ?? 0;
+  const scheduledEndorsementCount = effectiveView?.scheduledEndorsements.length ?? 0;
+  const pendingEndorsementCount = effectiveView?.pendingEndorsements.length ?? 0;
 
   const riskEntries = [
-    ...placementDetailEntries(placement.businessDetails),
-    ...placementDetailEntries(placement.offerDetails),
+    ...placementDetailEntries(effectiveTerms?.businessDetails ?? placement.businessDetails),
+    ...placementDetailEntries(effectiveTerms?.offerDetails ?? placement.offerDetails),
   ];
 
   const statusLabel = facultativeStatusLabel(placement.status);
@@ -136,34 +153,75 @@ export function FacultativeOverview({
               </span>
             </>
           )}
+          {effectiveView && (
+            <>
+              <span className="text-sm text-gray-500">|</span>
+              <span className="text-xs text-gray-600 font-medium">
+                Current effective as of {fmtDate(effectiveView.viewAsOf)}
+              </span>
+            </>
+          )}
         </>
       }
     >
+      {(appliedEndorsementCount > 0 ||
+        scheduledEndorsementCount > 0 ||
+        pendingEndorsementCount > 0 ||
+        effectiveViewError) && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {appliedEndorsementCount > 0 && (
+            <Badge
+              label={`Includes ${appliedEndorsementCount} effective endorsement${
+                appliedEndorsementCount > 1 ? 's' : ''
+              }`}
+              variant="success"
+            />
+          )}
+          {scheduledEndorsementCount > 0 && (
+            <Badge
+              label={`${scheduledEndorsementCount} scheduled future endorsement${
+                scheduledEndorsementCount > 1 ? 's' : ''
+              }`}
+              variant="neutral"
+            />
+          )}
+          {pendingEndorsementCount > 0 && (
+            <Badge
+              label={`${pendingEndorsementCount} pending endorsement${
+                pendingEndorsementCount > 1 ? 's' : ''
+              }`}
+              variant="warning"
+            />
+          )}
+          {effectiveViewError && (
+            <span className="text-xs text-amber-700">
+              Current effective view could not be loaded; showing original placement terms.
+            </span>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
         <DetailField label="Class of Risk" value={placement.classOfBusiness ?? '—'} />
         <DetailField label="Policy No." value={displayPolicyNumber(placement.policyNumber)} />
         <DetailField label="Reinsured" value={placement.cedant.name} />
-        <DetailField label="Insured" value={placement.title} />
+        <DetailField label="Insured" value={titleValue} />
         <DetailField
           label="Period of Insurance"
-          value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
+          value={`${fmtDate(inceptionDate ?? '')} – ${fmtDate(expiryDate ?? '')}`}
         />
         {riskEntries.map((entry) => (
           <DetailField key={entry.key} label={entry.label} value={fmtFieldValue(entry.value)} />
         ))}
-        {placement.rate != null && <DetailField label="Rate (%)" value={`${placement.rate}%`} />}
+        {rateValue != null && <DetailField label="Rate (%)" value={`${rateValue}%`} />}
         <DetailField
           label="Cedant Commission (%)"
           value={commissionValue != null ? `${commissionValue}%` : '—'}
         />
         <DetailField label="Fac. Offer (%)" value={`${facOffer}%`} />
-        <DetailField label="Premium" value={fmtAmount(premiumValue, placement.currency)} />
-        <DetailField label="Sum Insured" value={fmtAmount(sumInsuredValue, placement.currency)} />
-        <DetailField
-          label="Fac. Sum Insured"
-          value={fmtAmount(facSumInsured, placement.currency)}
-        />
-        <DetailField label="Fac. Premium" value={fmtAmount(facPremium, placement.currency)} />
+        <DetailField label="Premium" value={fmtAmount(premiumValue, currentCurrency)} />
+        <DetailField label="Sum Insured" value={fmtAmount(sumInsuredValue, currentCurrency)} />
+        <DetailField label="Fac. Sum Insured" value={fmtAmount(facSumInsured, currentCurrency)} />
+        <DetailField label="Fac. Premium" value={fmtAmount(facPremium, currentCurrency)} />
       </div>
     </CollapsibleOverview>
   );
