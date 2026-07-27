@@ -33,7 +33,7 @@ const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
 const ARCHIVED_FACULTATIVES_KEY = ['reinsurance', 'placements', 'archived'] as const;
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
-const placementDocumentsKey = (placementId: string) =>
+export const placementDocumentsKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'documents'] as const;
 const placementNotesKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'notes'] as const;
@@ -734,6 +734,70 @@ export function usePlacementEndorsementNotes(
       return raw as PlacementNote[];
     },
     enabled: !!placementId && !!endorsementId,
+  });
+}
+
+export function useCreateEndorsementDebitNote(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!endorsementId) {
+        throw new Error('Endorsement is required before creating an endorsement debit note.');
+      }
+      const res = await api.post<PlacementNote>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/notes/debit`,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
+export function useCreateEndorsementCreditNote(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ closingId }: { closingId: string }) => {
+      if (!endorsementId) {
+        throw new Error('Endorsement is required before creating an endorsement credit note.');
+      }
+      const res = await api.post<PlacementNote>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/closings/${closingId}/notes/credit`,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
+export function useIssueEndorsementNote(placementId: string, endorsementId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ noteId }: { noteId: string }) => {
+      if (!endorsementId) {
+        throw new Error('Endorsement is required before issuing an endorsement note.');
+      }
+      const res = await api.patch<PlacementNote>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/notes/${noteId}/status`,
+        { status: 'ISSUED' },
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
   });
 }
 

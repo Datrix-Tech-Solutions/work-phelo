@@ -32,7 +32,10 @@ interface EndorsementParticipantsTableProps {
   onValidate: (row: EndorsementParticipantRow) => void;
   onViewClosing: (closing: EndorsementParticipantClosing) => void;
   onViewCreditNote: (note: PlacementNote) => void;
+  onGenerateCreditNote: (closing: EndorsementParticipantClosing) => void;
+  onIssueNote: (note: PlacementNote) => void;
   onViewCertificate: (document: PlacementDocument) => void;
+  isNoteBusy: boolean;
 }
 
 export function EndorsementParticipantsTable({
@@ -54,7 +57,10 @@ export function EndorsementParticipantsTable({
   onValidate,
   onViewClosing,
   onViewCreditNote,
+  onGenerateCreditNote,
+  onIssueNote,
   onViewCertificate,
+  isNoteBusy,
 }: EndorsementParticipantsTableProps) {
   const columns: Column<EndorsementParticipantRow>[] = [
     {
@@ -182,9 +188,31 @@ export function EndorsementParticipantsTable({
               <TableButton variant="gray" onClick={() => onViewClosing(confirmedClosing)}>
                 View Closing
               </TableButton>
-              {creditNote && (
-                <TableButton variant="gray" onClick={() => onViewCreditNote(creditNote)}>
-                  Credit Note
+              {creditNote &&
+                (creditNote.status === 'DRAFT' ? (
+                  <TableButton
+                    variant="blue"
+                    isLoading={isNoteBusy}
+                    onClick={() => {
+                      if (!isNoteBusy) onIssueNote(creditNote);
+                    }}
+                  >
+                    Issue Credit Note
+                  </TableButton>
+                ) : (
+                  <TableButton variant="gray" onClick={() => onViewCreditNote(creditNote)}>
+                    Credit Note
+                  </TableButton>
+                ))}
+              {!creditNote && (
+                <TableButton
+                  variant="blue"
+                  isLoading={isNoteBusy}
+                  onClick={() => {
+                    if (!isNoteBusy) onGenerateCreditNote(confirmedClosing);
+                  }}
+                >
+                  Generate Credit Note
                 </TableButton>
               )}
               {certificateDocument && (

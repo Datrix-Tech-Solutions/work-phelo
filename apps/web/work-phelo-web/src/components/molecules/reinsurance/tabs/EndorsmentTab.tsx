@@ -20,6 +20,9 @@ import {
   useEndorsementClosings,
   usePlacementDocuments,
   usePlacementEndorsementNotes,
+  useCreateEndorsementDebitNote,
+  useCreateEndorsementCreditNote,
+  useIssueEndorsementNote,
   useValidateAndConfirmEndorsementParticipant,
   usePlacementEndorsementSummary,
   usePlacementEffectiveView,
@@ -28,6 +31,8 @@ import {
   endorsementParticipantKey,
   endorsementClosingsKey,
   endorsementSummaryKey,
+  endorsementKey,
+  placementDocumentsKey,
   placementEffectiveViewKey,
   facultativePlacementKey,
 } from '@/hooks';
@@ -120,6 +125,9 @@ function EndorsementCard({
     endorsement.id,
   );
   const { data: placementDocuments = [] } = usePlacementDocuments(placement.id);
+  const createEndorsementDebitNote = useCreateEndorsementDebitNote(placement.id, endorsement.id);
+  const createEndorsementCreditNote = useCreateEndorsementCreditNote(placement.id, endorsement.id);
+  const issueEndorsementNote = useIssueEndorsementNote(placement.id, endorsement.id);
   const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
     placement.id,
     endorsement.id,
@@ -231,6 +239,12 @@ function EndorsementCard({
         queryKey: endorsementSummaryKey(placement.id, endorsement.id),
       }),
       queryClient.invalidateQueries({
+        queryKey: [...endorsementKey(placement.id), endorsement.id, 'notes'],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: placementDocumentsKey(placement.id),
+      }),
+      queryClient.invalidateQueries({
         queryKey: placementEffectiveViewKey(placement.id),
       }),
       queryClient.invalidateQueries({
@@ -265,6 +279,15 @@ function EndorsementCard({
   const endorsementDebitNotes = endorsementNotes.filter(
     (note) => note.type === 'ENDORSEMENT_DEBIT_NOTE',
   );
+  const activeEndorsementDebitNote = endorsementDebitNotes.find((note) => note.status !== 'VOID');
+  const requiresEndorsementDebitNote =
+    endorsementSummary?.closeBlockingReasons.some(
+      (reason) => reason.code === 'MISSING_ENDORSEMENT_DEBIT_NOTE',
+    ) ?? false;
+  const isNoteBusy =
+    createEndorsementDebitNote.isPending ||
+    createEndorsementCreditNote.isPending ||
+    issueEndorsementNote.isPending;
 
   const handleViewEndorsementSlip = () => {
     if (endorsementSlipDocument) {
@@ -278,6 +301,53 @@ function EndorsementCard({
     const document = findNoteDocument(note.id);
     setNoteDocumentPreview(document ?? null);
     setNoteRecordPreview(document ? null : note);
+  };
+
+  const handleGenerateEndorsementDebitNote = async () => {
+    try {
+      const note = activeEndorsementDebitNote ?? (await createEndorsementDebitNote.mutateAsync());
+      handleViewEndorsementNote(note);
+      await invalidateEndorsementView();
+      useToastStore.getState().addToast({
+        message: 'Endorsement debit note ready',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleGenerateEndorsementCreditNote = async (closing: EndorsementParticipantClosing) => {
+    try {
+      const existingNote = findEndorsementCreditNote(closing.id);
+      const note =
+        existingNote ??
+        (await createEndorsementCreditNote.mutateAsync({
+          closingId: closing.id,
+        }));
+      handleViewEndorsementNote(note);
+      await invalidateEndorsementView();
+      useToastStore.getState().addToast({
+        message: 'Endorsement credit note ready',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleIssueEndorsementNote = async (note: PlacementNote) => {
+    try {
+      const issuedNote = await issueEndorsementNote.mutateAsync({ noteId: note.id });
+      handleViewEndorsementNote(issuedNote);
+      await invalidateEndorsementView();
+      useToastStore.getState().addToast({
+        message: 'Endorsement note issued',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
   };
 
   const handlePreviewMarketDocument = (row: EndorsementParticipantRow) => {
@@ -544,7 +614,10 @@ function EndorsementCard({
               onValidate={handleValidateEndorsementParticipant}
               onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
               onViewCreditNote={handleViewEndorsementNote}
+              onGenerateCreditNote={handleGenerateEndorsementCreditNote}
+              onIssueNote={handleIssueEndorsementNote}
               onViewCertificate={(document) => setDocumentPreview(document)}
+              isNoteBusy={isNoteBusy}
             />
           )}
 
@@ -553,6 +626,12 @@ function EndorsementCard({
               <EndorsementDocumentsSection
                 notes={endorsementDebitNotes}
                 onViewNote={handleViewEndorsementNote}
+                onGenerateDebitNote={handleGenerateEndorsementDebitNote}
+                onIssueNote={handleIssueEndorsementNote}
+                canGenerateDebitNote={
+                  requiresEndorsementDebitNote || Boolean(activeEndorsementDebitNote)
+                }
+                isNoteBusy={isNoteBusy}
               />
               <EndorsementCloseSection
                 isClosed={endorsement.status === 'CLOSED'}
