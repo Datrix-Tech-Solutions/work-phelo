@@ -50,6 +50,9 @@ export class PlacementPaymentResponseDto {
   closingId!: string | null;
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  endorsementClosingId!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
   participantId!: string | null;
 
   @ApiProperty({ format: 'uuid' })
@@ -119,6 +122,9 @@ export class PlacementPaymentResponseDto {
 
   @ApiPropertyOptional({ type: PlacementPaymentClosingDto, nullable: true })
   closing!: PlacementPaymentClosingDto | null;
+
+  @ApiPropertyOptional({ type: PlacementPaymentClosingDto, nullable: true })
+  endorsementClosing!: PlacementPaymentClosingDto | null;
 }
 
 export class PlacementPaymentListResponseDto {

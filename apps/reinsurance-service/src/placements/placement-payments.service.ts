@@ -8,6 +8,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementEndorsementStatus,
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
@@ -33,6 +34,12 @@ const paymentInclude = {
     },
   },
   closing: {
+    select: {
+      id: true,
+      closingNumber: true,
+    },
+  },
+  endorsementClosing: {
     select: {
       id: true,
       closingNumber: true,
@@ -142,6 +149,7 @@ export class PlacementPaymentsService {
         tenantId: user.tenantId,
         placementId,
         closingId: dto.closingId,
+        endorsementClosingId: dto.endorsementClosingId,
         participantId: dto.participantId,
         counterpartyId: dto.counterpartyId,
         type: dto.type,
@@ -183,6 +191,7 @@ export class PlacementPaymentsService {
           tenantId: user.tenantId,
           placementId,
           closingId: payment.closingId,
+          endorsementClosingId: payment.endorsementClosingId,
           participantId: payment.participantId,
           counterpartyId: payment.counterpartyId,
           type: payment.type,
@@ -263,9 +272,9 @@ export class PlacementPaymentsService {
         'Premium received counterparty must be the placement cedant',
       );
     }
-    if (dto.closingId || dto.participantId) {
+    if (dto.closingId || dto.endorsementClosingId || dto.participantId) {
       throw new BadRequestException(
-        'Premium received is placement-level; omit closingId and participantId',
+        'Premium received is placement-level; omit closingId, endorsementClosingId and participantId',
       );
     }
 
@@ -305,9 +314,25 @@ export class PlacementPaymentsService {
         'Reinsurer disbursement counterparty must be a reinsurer',
       );
     }
+    const hasOriginalClosingSource = Boolean(dto.closingId);
+    const hasEndorsementClosingSource = Boolean(dto.endorsementClosingId);
+    if (hasOriginalClosingSource === hasEndorsementClosingSource) {
+      throw new BadRequestException(
+        'Reinsurer disbursement requires exactly one closing source',
+      );
+    }
+    if (hasEndorsementClosingSource) {
+      await this.assertEndorsementClosingDisbursement(
+        tenantId,
+        placementId,
+        counterparty,
+        dto,
+      );
+      return;
+    }
     if (!dto.closingId || !dto.participantId) {
       throw new BadRequestException(
-        'Reinsurer disbursement requires closingId and participantId',
+        'Original closing disbursement requires closingId and participantId',
       );
     }
 
@@ -353,10 +378,97 @@ export class PlacementPaymentsService {
       closingId: dto.closingId,
       participantId: dto.participantId,
     });
+    const position = await this.financialPositionService.getFinancialPosition(
+      tenantId,
+      placementId,
+      new Date(dto.paymentDate),
+    );
+    const reinsurerPosition = position.reinsurers.find(
+      (item) => item.counterpartyId === counterparty.id,
+    );
     this.assertDoesNotExceedOutstanding(
       dto.amount,
-      this.decimalToNumber(closing.netPremium) - totalPaid,
-      'Reinsurer disbursement exceeds the outstanding confirmed closing premium',
+      Math.min(
+        this.decimalToNumber(closing.netPremium) - totalPaid,
+        reinsurerPosition?.outstanding ?? 0,
+      ),
+      'Reinsurer disbursement exceeds the outstanding effective reinsurer premium',
+    );
+  }
+
+  private async assertEndorsementClosingDisbursement(
+    tenantId: string,
+    placementId: string,
+    counterparty: { id: string; type: CounterpartyType },
+    dto: CreatePlacementPaymentDto,
+  ): Promise<void> {
+    if (dto.participantId) {
+      throw new BadRequestException(
+        'Endorsement closing disbursement must omit participantId',
+      );
+    }
+    if (!dto.endorsementClosingId) {
+      throw new BadRequestException(
+        'Endorsement closing disbursement requires endorsementClosingId',
+      );
+    }
+
+    const closing = await this.prisma.placementEndorsementClosing.findFirst({
+      where: {
+        id: dto.endorsementClosingId,
+        tenantId,
+        placementId,
+        status: PlacementClosingStatus.CONFIRMED,
+        endorsement: {
+          tenantId,
+          placementId,
+          status: PlacementEndorsementStatus.CLOSED,
+          effectiveDate: { lte: new Date(dto.paymentDate) },
+        },
+      },
+      include: {
+        endorsementParticipant: {
+          select: {
+            id: true,
+            counterpartyId: true,
+          },
+        },
+      },
+    });
+
+    if (!closing) {
+      throw new BadRequestException(
+        'Reinsurer disbursement requires a matching confirmed effective endorsement closing',
+      );
+    }
+    if (closing.endorsementParticipant.counterpartyId !== counterparty.id) {
+      throw new BadRequestException(
+        'Payment counterparty must match the endorsement closing reinsurer',
+      );
+    }
+    if (closing.currency !== dto.currency) {
+      throw new BadRequestException(
+        'Endorsement closing currency must match the payment currency',
+      );
+    }
+
+    const position = await this.financialPositionService.getFinancialPosition(
+      tenantId,
+      placementId,
+      new Date(dto.paymentDate),
+    );
+    if (position.isMultiCurrency || position.currency !== dto.currency) {
+      throw new BadRequestException(
+        'Financial position currency must match the payment currency',
+      );
+    }
+    const reinsurerPosition = position.reinsurers.find(
+      (item) => item.counterpartyId === counterparty.id,
+    );
+    this.assertDoesNotExceedOutstanding(
+      dto.amount,
+      reinsurerPosition?.outstanding ?? 0,
+      'Reinsurer disbursement exceeds the outstanding effective reinsurer premium',
     );
   }
 

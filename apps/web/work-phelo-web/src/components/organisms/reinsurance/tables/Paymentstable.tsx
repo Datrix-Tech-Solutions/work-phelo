@@ -3,24 +3,16 @@
 import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQueries } from '@tanstack/react-query';
-import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
 import {
-  Facultative,
-  FacultativeStatus,
-  PlacementParticipantClosing,
-  PlacementPayment,
-  toStatusLabel,
-} from '@/types/reinsurance';
-import {
-  confirmedNetPremiumFor,
-  totalEffectivePremiumReceived,
+  fetchPlacementFinancialPosition,
+  placementFinancialPositionKey,
   useFacultatives,
-  usePlacementClosings,
-  usePlacementPayments,
+  usePlacementFinancialPosition,
 } from '@/hooks';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
@@ -75,32 +67,32 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 function PaymentSummaryCell({ placement }: { placement: Facultative }) {
-  const { data: payments = [] } = usePlacementPayments(placement.id);
-  const { data: closings = [] } = usePlacementClosings(placement.id);
-  const netPremium = confirmedNetPremiumFor(closings);
-  const paid = totalEffectivePremiumReceived(payments);
-  const outstanding = Math.max(0, netPremium - paid);
-  const cur = placement.currency ?? '';
+  const { data: position } = usePlacementFinancialPosition(placement.id);
+  const paid = position?.cedant.netSettled ?? 0;
+  const outstanding = position?.cedant.outstanding ?? 0;
+  const cur = position?.currency ?? placement.currency ?? '';
+  const outstandingLabel =
+    position?.cedant.position === 'CREDIT_BALANCE' || outstanding < 0 ? 'credit' : 'outstanding';
   return (
     <div className="flex flex-col gap-0.5">
       <span className="font-bold text-gray-900">
         {cur} {fmtAmount(paid)}
       </span>
       <span className="text-xs text-gray-400">
-        {cur} {fmtAmount(outstanding)} outstanding
+        {cur} {fmtAmount(Math.abs(outstanding))} {outstandingLabel}
       </span>
     </div>
   );
 }
 
 function PaymentStatusCell({ placement }: { placement: Facultative }) {
-  const { data: payments = [] } = usePlacementPayments(placement.id);
-  const { data: closings = [] } = usePlacementClosings(placement.id);
-  const netPremium = confirmedNetPremiumFor(closings);
-  const paid = totalEffectivePremiumReceived(payments);
+  const { data: position } = usePlacementFinancialPosition(placement.id);
+  const due = position?.cedant.currentObligation ?? 0;
+  const paid = position?.cedant.netSettled ?? 0;
+  const outstanding = position?.cedant.outstanding ?? 0;
 
   let paymentStatus: PaymentStatus = 'Outstanding';
-  if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
+  if (due > 0 && outstanding <= 0.0001) paymentStatus = 'Paid';
   else if (paid > 0) paymentStatus = 'Part Payment';
 
   return (
@@ -232,40 +224,27 @@ export function PaymentsTable() {
     [allRows],
   );
 
-  const paymentQueries = useQueries({
+  const positionQueries = useQueries({
     queries: closingRows.map((row) => ({
-      queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
-      queryFn: async () => {
-        const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
-        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-      },
-    })),
-  });
-
-  const closingQueries = useQueries({
-    queries: closingRows.map((row) => ({
-      queryKey: ['reinsurance', 'placements', row.id, 'closings'] as const,
-      queryFn: async () => {
-        const res = await api.get(`/operations/reinsurance/placements/${row.id}/closings`);
-        return (res.data?.items ?? res.data ?? []) as PlacementParticipantClosing[];
-      },
+      queryKey: placementFinancialPositionKey(row.id),
+      queryFn: () => fetchPlacementFinancialPosition(row.id),
     })),
   });
 
   const paymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
     closingRows.forEach((row, i) => {
-      const payments = paymentQueries[i]?.data ?? [];
-      const closings = closingQueries[i]?.data ?? [];
-      const netPremium = confirmedNetPremiumFor(closings);
-      const paid = totalEffectivePremiumReceived(payments);
+      const position = positionQueries[i]?.data;
+      const due = position?.cedant.currentObligation ?? 0;
+      const paid = position?.cedant.netSettled ?? 0;
+      const outstanding = position?.cedant.outstanding ?? 0;
       let status: PaymentStatus = 'Outstanding';
-      if (netPremium > 0 && paid >= netPremium) status = 'Paid';
+      if (due > 0 && outstanding <= 0.0001) status = 'Paid';
       else if (paid > 0) status = 'Part Payment';
       map.set(row.id, status);
     });
     return map;
-  }, [closingRows, paymentQueries, closingQueries]);
+  }, [closingRows, positionQueries]);
 
   const payableRows = useMemo(
     () => closingRows.filter((r) => paymentStatusMap.get(r.id) !== 'Outstanding'),

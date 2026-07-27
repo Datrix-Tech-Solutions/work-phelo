@@ -60,9 +60,22 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
     },
     {
       key: 'counterparty',
-      label: 'Cedant',
+      label: 'Counterparty',
       width: '1.5fr',
       render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
+    },
+    {
+      key: 'closing',
+      label: 'Closing',
+      width: '1.3fr',
+      render: (row) => {
+        const label = row.endorsementClosing
+          ? `Endorsement · ${row.endorsementClosing.closingNumber}`
+          : row.closing
+            ? `Original · ${row.closing.closingNumber}`
+            : 'Placement-level';
+        return <span className="text-gray-700">{label}</span>;
+      },
     },
     {
       key: 'notes',

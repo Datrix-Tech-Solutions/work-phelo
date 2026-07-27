@@ -74,7 +74,7 @@ export class PlacementFinancialPositionService {
             placementId,
             effectiveAsOf,
           ),
-          this.findPayments(tx, tenantId, placementId),
+          this.findPayments(tx, tenantId, placementId, effectiveAsOf),
         ]);
 
       const reinsurers = new Map<string, ReinsurerPositionAccumulator>();
@@ -377,12 +377,14 @@ export class PlacementFinancialPositionService {
     tx: Prisma.TransactionClient,
     tenantId: string,
     placementId: string,
+    asOfDate: Date,
   ) {
     return tx.placementPayment.findMany({
-      where: { tenantId, placementId },
+      where: { tenantId, placementId, paymentDate: { lte: asOfDate } },
       select: {
         id: true,
         counterpartyId: true,
+        endorsementClosingId: true,
         type: true,
         amount: true,
         currency: true,

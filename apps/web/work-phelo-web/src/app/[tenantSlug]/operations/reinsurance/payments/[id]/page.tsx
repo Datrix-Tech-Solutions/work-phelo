@@ -1,11 +1,11 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement, usePlacementPayments } from '@/hooks';
+import { useFacultativePlacement } from '@/hooks';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
 import { PaymentHistoryTab } from '@/components/molecules/reinsurance/tabs/PaymentHistoryTab';
@@ -28,16 +28,7 @@ export default function PaymentDetailPage({
   const searchParams = useSearchParams();
   const fromClosing = searchParams.get('from') === 'closing';
   const { data: placement } = useFacultativePlacement(id);
-  const { data: payments = [] } = usePlacementPayments(id);
   const [activeTab, setActiveTab] = useState<PaymentTab>('overview');
-
-  const paidAmount = useMemo(
-    () =>
-      payments
-        .filter((p) => p.status === 'RECORDED')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-    [payments],
-  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -87,9 +78,7 @@ export default function PaymentDetailPage({
               />
 
               <div className="pt-5">
-                {activeTab === 'overview' && (
-                  <BusinessPaymentSection placement={placement} paidAmount={paidAmount} />
-                )}
+                {activeTab === 'overview' && <BusinessPaymentSection placement={placement} />}
                 {activeTab === 'history' && (
                   <PaymentHistoryTab placementId={id} placement={placement} />
                 )}

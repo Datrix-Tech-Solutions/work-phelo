@@ -473,26 +473,26 @@ model Currency {
 }
 
 model ReinsuranceChargeConfiguration {
-  id               String                              @id @default(uuid())
+  id               String                            @id @default(uuid())
   tenantId         String
   code             ReinsuranceChargeCode
   name             String
   chargeType       ReinsuranceChargeType
   rateType         ReinsuranceChargeRateType
-  rate             Decimal                             @db.Decimal(18, 6)
+  rate             Decimal                           @db.Decimal(18, 6)
   calculationBasis ReinsuranceChargeCalculationBasis
   direction        ReinsuranceChargeDirection
   currency         String?
   effectiveFrom    DateTime
   effectiveTo      DateTime?
-  roundingMode     ReinsuranceChargeRoundingMode       @default(HALF_UP)
-  decimalPlaces    Int                                 @default(2)
-  isEnabled        Boolean                             @default(true)
-  displayOrder     Int                                 @default(0)
+  roundingMode     ReinsuranceChargeRoundingMode     @default(HALF_UP)
+  decimalPlaces    Int                               @default(2)
+  isEnabled        Boolean                           @default(true)
+  displayOrder     Int                               @default(0)
   createdByUserId  String
   updatedByUserId  String
-  createdAt        DateTime                            @default(now())
-  updatedAt        DateTime                            @updatedAt
+  createdAt        DateTime                          @default(now())
+  updatedAt        DateTime                          @updatedAt
 
   @@unique([id, tenantId])
   @@index([tenantId, code, currency, effectiveFrom, effectiveTo])
@@ -752,32 +752,34 @@ model PlacementClaimCashCall {
 }
 
 model PlacementPayment {
-  id                  String                    @id @default(uuid())
-  tenantId            String
-  placementId         String
-  closingId           String?
-  participantId       String?
-  counterpartyId      String
-  type                PlacementPaymentType
-  direction           PlacementPaymentDirection
-  amount              Decimal                   @db.Decimal(18, 2)
-  currency            String
-  paymentDate         DateTime
-  reference           String?
-  notes               String?
-  status              PlacementPaymentStatus    @default(RECORDED)
-  reversalOfPaymentId String?
-  createdByUserId     String
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  placement           Placement                 @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  closing             PlacementClosing?         @relation(fields: [closingId], references: [id], onDelete: Restrict)
-  participant         PlacementParticipant?     @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  counterparty        Counterparty              @relation("PlacementPaymentCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalOfPayment   PlacementPayment?         @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
-  reversalPayments    PlacementPayment[]        @relation("PlacementPaymentReversal")
-  settledNotes        PlacementNote[]           @relation("PlacementNoteSettlement")
-  attachments         PlacementAttachment[]
+  id                   String                       @id @default(uuid())
+  tenantId             String
+  placementId          String
+  closingId            String?
+  endorsementClosingId String?
+  participantId        String?
+  counterpartyId       String
+  type                 PlacementPaymentType
+  direction            PlacementPaymentDirection
+  amount               Decimal                      @db.Decimal(18, 2)
+  currency             String
+  paymentDate          DateTime
+  reference            String?
+  notes                String?
+  status               PlacementPaymentStatus       @default(RECORDED)
+  reversalOfPaymentId  String?
+  createdByUserId      String
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  placement            Placement                    @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closing              PlacementClosing?            @relation(fields: [closingId], references: [id], onDelete: Restrict)
+  endorsementClosing   PlacementEndorsementClosing? @relation(fields: [endorsementClosingId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participant          PlacementParticipant?        @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty         Counterparty                 @relation("PlacementPaymentCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfPayment    PlacementPayment?            @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
+  reversalPayments     PlacementPayment[]           @relation("PlacementPaymentReversal")
+  settledNotes         PlacementNote[]              @relation("PlacementNoteSettlement")
+  attachments          PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, status, createdAt])
@@ -786,6 +788,7 @@ model PlacementPayment {
   @@index([tenantId, counterpartyId, createdAt])
   @@index([tenantId, participantId, createdAt])
   @@index([tenantId, closingId, createdAt])
+  @@index([tenantId, endorsementClosingId, createdAt])
   @@index([tenantId, reversalOfPaymentId])
   @@schema("reinsurance")
 }
@@ -947,6 +950,7 @@ model PlacementEndorsementClosing {
   notes                    PlacementNote[]
   documents                PlacementDocument[]
   attachments              PlacementAttachment[]
+  payments                 PlacementPayment[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, closingNumber])

@@ -975,6 +975,7 @@ export interface PlacementPayment {
   tenantId: string;
   placementId: string;
   closingId: string | null;
+  endorsementClosingId: string | null;
   participantId: string | null;
   counterpartyId: string;
   type: PlacementPaymentType;
@@ -992,6 +993,7 @@ export interface PlacementPayment {
   counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
   participant: { id: string; counterpartyId: string } | null;
   closing: { id: string; closingNumber: string } | null;
+  endorsementClosing: { id: string; closingNumber: string } | null;
 }
 
 export interface CreatePlacementPaymentPayload {
@@ -999,12 +1001,71 @@ export interface CreatePlacementPaymentPayload {
   direction: PlacementPaymentDirection;
   counterpartyId: string;
   closingId?: string;
+  endorsementClosingId?: string;
   participantId?: string;
   amount: number;
   currency: string;
   paymentDate: string;
   reference?: string;
   notes?: string;
+}
+
+export type PlacementFinancialPositionState =
+  | 'RECEIVABLE'
+  | 'PAYABLE'
+  | 'SETTLED'
+  | 'CREDIT_BALANCE';
+
+export interface PlacementFinancialPositionAdjustment {
+  sourceType: 'PLACEMENT_CLOSING' | 'ENDORSEMENT_CLOSING';
+  closingId: string;
+  endorsementId: string | null;
+  endorsementNumber: string | null;
+  counterpartyId: string | null;
+  originalParticipantId: string | null;
+  amount: number;
+  currency: string;
+  effectiveDate: string | null;
+}
+
+export interface PlacementCedantFinancialPosition {
+  originalObligation: number;
+  endorsementAdjustments: number;
+  currentObligation: number;
+  received: number;
+  refunded: number;
+  grossRecorded: number;
+  reversed: number;
+  netSettled: number;
+  outstanding: number;
+  position: PlacementFinancialPositionState;
+}
+
+export interface PlacementReinsurerFinancialPosition {
+  counterpartyId: string;
+  counterpartyName: string;
+  originalPayable: number;
+  endorsementAdjustments: number;
+  currentEffectivePayable: number;
+  paid: number;
+  refunded: number;
+  grossRecorded: number;
+  reversed: number;
+  netSettled: number;
+  outstanding: number;
+  position: PlacementFinancialPositionState;
+  adjustments: PlacementFinancialPositionAdjustment[];
+}
+
+export interface PlacementFinancialPosition {
+  placementId: string;
+  asOfDate: string;
+  currency: string | null;
+  isMultiCurrency: boolean;
+  cedant: PlacementCedantFinancialPosition;
+  reinsurers: PlacementReinsurerFinancialPosition[];
+  adjustments: PlacementFinancialPositionAdjustment[];
+  warnings: string[];
 }
 
 /* ── Placement Claims ── */

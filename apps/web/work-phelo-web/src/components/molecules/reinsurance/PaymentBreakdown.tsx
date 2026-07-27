@@ -1,6 +1,6 @@
 'use client';
 
-import { Facultative } from '@/types/reinsurance';
+import { Facultative, PlacementFinancialPosition } from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
 import { cardClass } from '@/lib/utils';
 
@@ -11,24 +11,11 @@ function fmt(val: number, currency: string | null) {
 
 interface PaymentBreakdownProps {
   placement?: Facultative | null;
-  paidAmount?: number;
+  financialPosition?: PlacementFinancialPosition | null;
 }
 
-export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProps) {
-  const {
-    premium,
-    commission,
-    facultativeOffer,
-    currency,
-    reference,
-    policyNumber,
-    title,
-    cedant,
-    classOfBusiness,
-  } = placement ?? {
-    premium: 0,
-    commission: 0,
-    facultativeOffer: 0,
+export function PaymentBreakdown({ placement, financialPosition }: PaymentBreakdownProps) {
+  const { currency, reference, policyNumber, title, cedant, classOfBusiness } = placement ?? {
     currency: null,
     reference: null,
     policyNumber: null,
@@ -37,18 +24,10 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
     classOfBusiness: null,
   };
 
-  const grossPremium = premium ?? 0;
-  const facOffer = facultativeOffer ?? 0;
-  const commissionRate = commission ?? 0;
-
-  const facPremium = (facOffer / 100) * grossPremium;
-  const netPremium = facPremium * (1 - commissionRate / 100);
-
-  const premiumToBePaid = Math.min(paidAmount ?? 0, netPremium);
-  const premiumBalance = netPremium - premiumToBePaid;
-
-  const bankBalance = premiumToBePaid;
-  const reinsurers = bankBalance;
+  const position = financialPosition?.cedant;
+  const positionCurrency = financialPosition?.currency ?? currency;
+  const outstanding = position?.outstanding ?? 0;
+  const isCredit = position?.position === 'CREDIT_BALANCE' || outstanding < 0;
 
   return (
     <div className={cardClass('flex flex-col gap-3 p-5')}>
@@ -74,32 +53,59 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
           <hr className="border-gray-100" />
         </>
       )}
-      <DetailField horizontal label="Gross Premium" value={fmt(grossPremium, currency)} />
       <DetailField
         horizontal
-        label="Premium"
-        value={<span className="font-semibold text-gray-900">{fmt(netPremium, currency)}</span>}
+        label="Original Obligation"
+        value={fmt(position?.originalObligation ?? 0, positionCurrency)}
       />
       <DetailField
         horizontal
-        label="Premium to be Paid"
+        label="Endorsement Adjustments"
+        value={fmt(position?.endorsementAdjustments ?? 0, positionCurrency)}
+      />
+      <DetailField
+        horizontal
+        label="Current Obligation"
         value={
-          <span className="font-semibold text-gray-900">{fmt(premiumToBePaid, currency)}</span>
+          <span className="font-semibold text-gray-900">
+            {fmt(position?.currentObligation ?? 0, positionCurrency)}
+          </span>
         }
       />
-      <DetailField horizontal label="Premium Balance" value={fmt(premiumBalance, currency)} />
+      <DetailField
+        horizontal
+        label="Received"
+        value={
+          <span className="font-semibold text-gray-900">
+            {fmt(position?.netSettled ?? 0, positionCurrency)}
+          </span>
+        }
+      />
+      <DetailField
+        horizontal
+        label={isCredit ? 'Credit / Refund Position' : 'Outstanding'}
+        value={fmt(Math.abs(outstanding), positionCurrency)}
+      />
 
       <hr className="border-gray-100" />
 
       <DetailField
         horizontal
-        label="Bank Balance"
-        value={<span className="font-semibold text-gray-900">{fmt(bankBalance, currency)}</span>}
+        label="Gross Recorded"
+        value={
+          <span className="font-semibold text-gray-900">
+            {fmt(position?.grossRecorded ?? 0, positionCurrency)}
+          </span>
+        }
       />
       <DetailField
         horizontal
-        label="Reinsurers"
-        value={<span className="font-semibold text-brand">{fmt(reinsurers, currency)}</span>}
+        label="Reversed"
+        value={
+          <span className="font-semibold text-brand">
+            {fmt(position?.reversed ?? 0, positionCurrency)}
+          </span>
+        }
       />
     </div>
   );

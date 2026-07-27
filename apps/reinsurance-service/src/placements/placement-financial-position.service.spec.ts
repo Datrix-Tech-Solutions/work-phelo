@@ -218,6 +218,18 @@ describe('PlacementFinancialPositionService', () => {
     });
   });
 
+  it('uses only payments recorded on or before the requested as-of date', async () => {
+    await service.getFinancialPosition(tenantId, placementId, asOfDate);
+
+    const paymentArgs = tx.placementPayment.findMany.mock
+      .calls[0]?.[0] as Prisma.PlacementPaymentFindManyArgs;
+    expect(paymentArgs.where).toMatchObject({
+      tenantId,
+      placementId,
+      paymentDate: { lte: asOfDate },
+    });
+  });
+
   it('calculates replacement endorsement adjustments as revised minus previously effective line', async () => {
     tx.placementEndorsementClosing.findMany.mockResolvedValue([
       {

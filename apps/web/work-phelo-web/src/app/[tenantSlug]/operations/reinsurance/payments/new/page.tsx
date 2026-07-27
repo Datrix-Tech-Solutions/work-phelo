@@ -14,22 +14,10 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
   const { data: facultatives = [] } = useFacultatives();
 
   const [selectedPlacementIds, setSelectedPlacementIds] = useState<string[]>([]);
-  const [paidAmount, setPaidAmount] = useState<number | undefined>(undefined);
-  const [allocations, setAllocations] = useState<Record<string, number>>({});
 
   const selectedPlacements = useMemo(
     () => selectedPlacementIds.map((id) => facultatives.find((f) => f.id === id)).filter(Boolean),
     [facultatives, selectedPlacementIds],
-  );
-
-  const totalNetPremium = useMemo(
-    () =>
-      selectedPlacements.reduce((sum, p) => {
-        if (!p) return sum;
-        const facPremium = ((p.facultativeOffer ?? 0) / 100) * (p.premium ?? 0);
-        return sum + facPremium * (1 - (p.commission ?? 0) / 100);
-      }, 0),
-    [selectedPlacements],
   );
 
   return (
@@ -50,10 +38,7 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
           defaultOpen
           onPlacementsChange={(ids) => {
             setSelectedPlacementIds(ids);
-            setAllocations({});
           }}
-          onPaymentRecorded={setPaidAmount}
-          onAllocationsRecorded={setAllocations}
         />
       </div>
 
@@ -61,29 +46,7 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
         {selectedPlacements.length > 0 ? (
           <div className="flex flex-col gap-6">
             {selectedPlacements.map((placement) => {
-              const hasManualAllocations = Object.keys(allocations).length > 0;
-
-              const proportionalAmount =
-                !hasManualAllocations && paidAmount !== undefined && totalNetPremium > 0
-                  ? (() => {
-                      const facPremium =
-                        ((placement!.facultativeOffer ?? 0) / 100) * (placement!.premium ?? 0);
-                      const netPremium = facPremium * (1 - (placement!.commission ?? 0) / 100);
-                      return (netPremium / totalNetPremium) * paidAmount;
-                    })()
-                  : undefined;
-
-              const displayAmount = hasManualAllocations
-                ? (allocations[placement!.id] ?? 0)
-                : proportionalAmount;
-
-              return (
-                <BusinessPaymentSection
-                  key={placement!.id}
-                  placement={placement!}
-                  paidAmount={displayAmount}
-                />
-              );
+              return <BusinessPaymentSection key={placement!.id} placement={placement!} />;
             })}
           </div>
         ) : (
