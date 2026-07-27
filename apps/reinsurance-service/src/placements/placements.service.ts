@@ -1889,7 +1889,12 @@ export class PlacementsService {
   ): Promise<void> {
     const placement = await tx.placement.findFirst({
       where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
-      select: { id: true, status: true, facultativeOffer: true },
+      select: {
+        id: true,
+        status: true,
+        facultativeOffer: true,
+        participants: { select: { id: true, role: true, status: true } },
+      },
     });
     if (!placement || placement.status === PlacementStatus.CLOSED) return;
 
@@ -1904,16 +1909,44 @@ export class PlacementsService {
         placementId: placement.id,
         status: PlacementClosingStatus.CONFIRMED,
       },
-      select: { signedLinePercent: true },
+      select: { participantId: true, signedLinePercent: true },
     });
+    const confirmedParticipantIds = new Set(
+      confirmedClosings.map((item) => item.participantId),
+    );
     const confirmedPlacedPercent = this.roundPercent(
       confirmedClosings.reduce(
         (total, item) => total + this.decimalToNumber(item.signedLinePercent),
         0,
       ),
     );
+    const fullyFilled = confirmedPlacedPercent + 0.0001 >= targetPercent;
 
-    if (confirmedPlacedPercent + 0.0001 < targetPercent) return;
+    // "Room left on the offer" is only meaningful once every invited reinsurer has been
+    // resolved (closed or declined) — a still-pending participant could yet fill the gap, so
+    // the placement can't be called partially closed while anyone is still outstanding.
+    const reinsurerRoles: PlacementParticipantRole[] = [
+      PlacementParticipantRole.REINSURER,
+      PlacementParticipantRole.LEAD_REINSURER,
+      PlacementParticipantRole.CO_REINSURER,
+    ];
+    const reinsurers = placement.participants.filter((participant) =>
+      reinsurerRoles.includes(participant.role),
+    );
+    const allReinsurersResolved =
+      reinsurers.length > 0 &&
+      reinsurers.every(
+        (participant) =>
+          confirmedParticipantIds.has(participant.id) ||
+          participant.status === PlacementParticipantStatus.DECLINED,
+      );
+
+    if (!fullyFilled && !allReinsurersResolved) return;
+
+    const nextStatus = fullyFilled
+      ? PlacementStatus.CLOSED
+      : PlacementStatus.CLOSING;
+    if (placement.status === nextStatus) return;
 
     if (placement.status !== PlacementStatus.CLOSING) {
       await tx.placementStatusHistory.create({
@@ -1923,7 +1956,9 @@ export class PlacementsService {
           fromStatus: placement.status,
           toStatus: PlacementStatus.CLOSING,
           changedByUserId: user.id,
-          note: 'Confirmed placement closings reached facultative offer',
+          note: fullyFilled
+            ? 'Confirmed placement closings reached facultative offer'
+            : 'All invited reinsurers have resolved their offers with capacity remaining',
         },
       });
 
@@ -1934,6 +1969,8 @@ export class PlacementsService {
         data: { status: PlacementStatus.CLOSING, updatedByUserId: user.id },
       });
     }
+
+    if (!fullyFilled) return;
 
     await tx.placementStatusHistory.create({
       data: {

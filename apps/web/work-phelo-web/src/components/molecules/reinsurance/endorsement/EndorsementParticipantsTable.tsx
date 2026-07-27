@@ -185,13 +185,13 @@ export function EndorsementParticipantsTable({
         if (confirmedClosing) {
           return (
             <div className="flex flex-wrap items-center gap-2">
-              <TableButton variant="gray" onClick={() => onViewClosing(confirmedClosing)}>
+              <TableButton variant="green" onClick={() => onViewClosing(confirmedClosing)}>
                 View Closing
               </TableButton>
               {creditNote &&
                 (creditNote.status === 'DRAFT' ? (
                   <TableButton
-                    variant="blue"
+                    variant="red"
                     isLoading={isNoteBusy}
                     onClick={() => {
                       if (!isNoteBusy) onIssueNote(creditNote);
@@ -200,13 +200,13 @@ export function EndorsementParticipantsTable({
                     Issue Credit Note
                   </TableButton>
                 ) : (
-                  <TableButton variant="gray" onClick={() => onViewCreditNote(creditNote)}>
+                  <TableButton variant="green" onClick={() => onViewCreditNote(creditNote)}>
                     Credit Note
                   </TableButton>
                 ))}
               {!creditNote && (
                 <TableButton
-                  variant="blue"
+                  variant="gray"
                   isLoading={isNoteBusy}
                   onClick={() => {
                     if (!isNoteBusy) onGenerateCreditNote(confirmedClosing);
@@ -338,14 +338,11 @@ export function EndorsementParticipantsTable({
   ];
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
+    <section className="flex flex-col">
+      <div className="flex items-center justify-between mb-2">
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Market / Reinsurers
-          </p>
-          <p className="text-xs text-gray-400">
-            One row follows each reinsurer from offer through confirmed endorsement closing.
+            Endorsement Participants
           </p>
         </div>
         <Button size="sm" onClick={onAddParticipant}>

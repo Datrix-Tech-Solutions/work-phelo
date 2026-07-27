@@ -46,7 +46,7 @@ export function SortableListRow({ id, index, label, sublabel, onEdit, onDelete }
         type="button"
         {...attributes}
         {...listeners}
-        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+        className="text-gray-400 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 touch-none"
         aria-label="Drag to reorder"
       >
         <GripVertical className="w-4 h-4" />

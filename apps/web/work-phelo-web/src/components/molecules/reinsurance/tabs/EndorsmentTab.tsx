@@ -43,7 +43,7 @@ import {
   getSnapshotPlacement,
   getSnapshotParticipants,
 } from '@/lib/reinsurance/endorsementSnapshot';
-import { cardClass } from '@/lib/utils';
+import { cardClass, cn } from '@/lib/utils';
 import { EffectivePlacementSection } from '@/components/molecules/reinsurance/endorsement/EffectivePlacementSection';
 import { EndorsementHeader } from '@/components/molecules/reinsurance/endorsement/EndorsementHeader';
 import { EndorsementSummaryLine } from '@/components/molecules/reinsurance/endorsement/EndorsementSummaryLine';
@@ -80,6 +80,7 @@ function EndorsementCard({
   placement: Facultative;
 }) {
   const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [revisedShares, setRevisedShares] = useState<Record<string, string>>({});
   const [busyEPIds, setBusyEPIds] = useState<Set<string>>(new Set());
   const [marketPreview, setMarketPreview] = useState<EndorsementMarketPreviewState | null>(null);
@@ -547,13 +548,25 @@ function EndorsementCard({
 
   return (
     <>
-      <details className={`${cardClass('p-5 flex flex-col gap-4')} group`}>
-        <summary className="cursor-pointer list-none flex flex-col gap-2">
+      <div className={cardClass('p-5 flex flex-col gap-4')}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setDetailsOpen((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setDetailsOpen((v) => !v);
+            }
+          }}
+          className="cursor-pointer flex flex-col gap-2"
+        >
           <EndorsementHeader
             endorsement={endorsement}
             displayedStatusLabel={displayedStatusLabel}
             displayedStatusVariant={displayedStatusVariant}
             isUpdatingStatus={isUpdatingStatus}
+            isOpen={detailsOpen}
             onEdit={() => setEditPanelOpen(true)}
             onSendToMarket={() =>
               updateStatus({ endorsementId: endorsement.id, status: 'MARKETING' })
@@ -568,77 +581,92 @@ function EndorsementCard({
             offerPercent={summaryTargetPercent}
             currency={summaryCurrency}
           />
-        </summary>
-
-        <div className="flex flex-col gap-5 mt-4 border-t border-gray-100 pt-4">
-          {/* Reason */}
-          {endorsement.reason && (
-            <p className="text-sm text-gray-600 border-l-2 border-orange-300 pl-3">
-              {endorsement.reason}
-            </p>
-          )}
-
-          <EndorsementCapacitySection
-            isDraft={endorsement.status === 'DRAFT'}
-            original={original}
-            proposed={proposed}
-            endorsementSummary={endorsementSummary}
-            summaryTargetPercent={summaryTargetPercent}
-            acceptedCapacityRows={acceptedCapacityRows}
-            capacityColorMap={capacityColorMap}
-          />
-
-          {endorsement.status !== 'DRAFT' && (
-            <EndorsementParticipantsTable
-              rows={endorsementRows}
-              endorsementParticipants={endorsementParticipants}
-              acceptedCounterpartyIds={acceptedCounterpartyIds}
-              confirmedClosingByEndorsementParticipantId={
-                confirmedClosingByEndorsementParticipantId
-              }
-              findEndorsementCreditNote={findEndorsementCreditNote}
-              findCertificateDocument={findCertificateDocument}
-              busyEPIds={busyEPIds}
-              mailedIds={mailedIds}
-              revisedShares={revisedShares}
-              onRevisedShareChange={(counterpartyId, value) =>
-                setRevisedShares((prev) => ({ ...prev, [counterpartyId]: value }))
-              }
-              onAddParticipant={() => setAddPanelOpen(true)}
-              onPreviewMarketDocument={handlePreviewMarketDocument}
-              onMailReinsurer={(counterpartyId) => setMailPreviewCounterpartyId(counterpartyId)}
-              onAccept={handleAcceptEndorsement}
-              onReject={handleRejectEndorsementParticipant}
-              onValidate={handleValidateEndorsementParticipant}
-              onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
-              onViewCreditNote={handleViewEndorsementNote}
-              onGenerateCreditNote={handleGenerateEndorsementCreditNote}
-              onIssueNote={handleIssueEndorsementNote}
-              onViewCertificate={(document) => setDocumentPreview(document)}
-              isNoteBusy={isNoteBusy}
-            />
-          )}
-
-          {endorsement.status !== 'DRAFT' && (
-            <>
-              <EndorsementDocumentsSection
-                notes={endorsementDebitNotes}
-                onViewNote={handleViewEndorsementNote}
-                onGenerateDebitNote={handleGenerateEndorsementDebitNote}
-                onIssueNote={handleIssueEndorsementNote}
-                canGenerateDebitNote={canGenerateEndorsementDebitNote}
-                isNoteBusy={isNoteBusy}
-              />
-              <EndorsementCloseSection
-                isClosed={endorsement.status === 'CLOSED'}
-                isUpdatingStatus={isUpdatingStatus}
-                isReadyToClose={isReadyToClose}
-                onClose={handleCloseEndorsement}
-              />
-            </>
-          )}
         </div>
-      </details>
+
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows] duration-600 ease-in-out',
+            detailsOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div
+              key={detailsOpen ? 'open' : 'closed'}
+              className={cn(
+                'flex flex-col gap-5 mt-4 border-t border-gray-100 pt-4',
+                detailsOpen && 'metric-slide-up',
+              )}
+            >
+              {/* Reason */}
+              {endorsement.reason && (
+                <p className="text-sm text-gray-600 border-l-2 border-orange-300 pl-3">
+                  {endorsement.reason}
+                </p>
+              )}
+
+              <EndorsementCapacitySection
+                isDraft={endorsement.status === 'DRAFT'}
+                original={original}
+                proposed={proposed}
+                endorsementSummary={endorsementSummary}
+                summaryTargetPercent={summaryTargetPercent}
+                acceptedCapacityRows={acceptedCapacityRows}
+                capacityColorMap={capacityColorMap}
+              />
+
+              {endorsement.status !== 'DRAFT' && (
+                <EndorsementParticipantsTable
+                  rows={endorsementRows}
+                  endorsementParticipants={endorsementParticipants}
+                  acceptedCounterpartyIds={acceptedCounterpartyIds}
+                  confirmedClosingByEndorsementParticipantId={
+                    confirmedClosingByEndorsementParticipantId
+                  }
+                  findEndorsementCreditNote={findEndorsementCreditNote}
+                  findCertificateDocument={findCertificateDocument}
+                  busyEPIds={busyEPIds}
+                  mailedIds={mailedIds}
+                  revisedShares={revisedShares}
+                  onRevisedShareChange={(counterpartyId, value) =>
+                    setRevisedShares((prev) => ({ ...prev, [counterpartyId]: value }))
+                  }
+                  onAddParticipant={() => setAddPanelOpen(true)}
+                  onPreviewMarketDocument={handlePreviewMarketDocument}
+                  onMailReinsurer={(counterpartyId) => setMailPreviewCounterpartyId(counterpartyId)}
+                  onAccept={handleAcceptEndorsement}
+                  onReject={handleRejectEndorsementParticipant}
+                  onValidate={handleValidateEndorsementParticipant}
+                  onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
+                  onViewCreditNote={handleViewEndorsementNote}
+                  onGenerateCreditNote={handleGenerateEndorsementCreditNote}
+                  onIssueNote={handleIssueEndorsementNote}
+                  onViewCertificate={(document) => setDocumentPreview(document)}
+                  isNoteBusy={isNoteBusy}
+                />
+              )}
+
+              {endorsement.status !== 'DRAFT' && (
+                <>
+                  <EndorsementDocumentsSection
+                    notes={endorsementDebitNotes}
+                    onViewNote={handleViewEndorsementNote}
+                    onGenerateDebitNote={handleGenerateEndorsementDebitNote}
+                    onIssueNote={handleIssueEndorsementNote}
+                    canGenerateDebitNote={canGenerateEndorsementDebitNote}
+                    isNoteBusy={isNoteBusy}
+                  />
+                  <EndorsementCloseSection
+                    isClosed={endorsement.status === 'CLOSED'}
+                    isUpdatingStatus={isUpdatingStatus}
+                    isReadyToClose={isReadyToClose}
+                    onClose={handleCloseEndorsement}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       <EndorsementModals
         placement={placement}

@@ -152,6 +152,17 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const patch = (id: string, update: Partial<DistributionEntry>) =>
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
 
+  // Optimistic status patches only exist to bridge the gap until the server round-trip lands —
+  // once it does, drop them so a leftover patch (e.g. 'ACCEPTED') can't mask a later real status
+  // (e.g. 'CLOSED') that the server returns for the same row.
+  const clearStatusPatch = (id: string) =>
+    setPatches((prev) => {
+      if (!prev[id] || !('status' in prev[id])) return prev;
+      const rest = { ...prev[id] };
+      delete rest.status;
+      return { ...prev, [id]: rest };
+    });
+
   const refreshPlacementAfterAccept = useCallback(
     () => queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
     [placement.id, queryClient],
@@ -234,6 +245,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       toast().addToast({ message: extractError(error), type: 'error' });
     } finally {
       await refreshPlacementAfterAccept();
+      clearStatusPatch(row.id);
       setAcceptingIds((prev) => {
         const next = new Set(prev);
         next.delete(row.id);
@@ -256,6 +268,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       toast().addToast({ message: extractError(error), type: 'error' });
     } finally {
       await refreshPlacementAfterAccept();
+      clearStatusPatch(row.id);
       setAcceptingIds((prev) => {
         const next = new Set(prev);
         next.delete(row.id);

@@ -330,8 +330,9 @@ export function HelpCenter() {
         <button
           onClick={() => setDropdownOpen((v) => !v)}
           className={cn(
-            'inline-flex items-center text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors',
-            dropdownOpen && 'text-(--module-btn-bg-hover,var(--color-brand-hover))',
+            'inline-flex items-center text-(--topnav-icon-text,var(--module-btn-bg,var(--color-brand))) hover:text-(--topnav-icon-hover,var(--module-btn-bg-hover,var(--color-brand-hover))) transition-colors',
+            dropdownOpen &&
+              'text-(--topnav-icon-hover,var(--module-btn-bg-hover,var(--color-brand-hover)))',
           )}
           aria-label="Help"
         >
@@ -386,7 +387,7 @@ export function HelpCenter() {
                         Update your personal details and profile photo.
                       </p>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                    <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
                   </button>
                 ) : (
                   WORKFLOWS.map((workflow) => (
@@ -402,7 +403,7 @@ export function HelpCenter() {
                         <p className="text-sm font-medium text-gray-800">{workflow.title}</p>
                         <p className="text-xs text-gray-400 truncate">{workflow.tagline}</p>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
                     </button>
                   ))
                 )}

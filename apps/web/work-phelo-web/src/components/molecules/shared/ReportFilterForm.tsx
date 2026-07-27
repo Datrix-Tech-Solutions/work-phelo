@@ -43,7 +43,7 @@ export function ReportFilterForm({ onGenerate }: ReportFilterFormProps) {
                 <button
                   type="button"
                   onClick={() => removeYear(year)}
-                  className="text-gray-300 hover:text-red-400 transition-colors"
+                  className="text-gray-400 hover:text-red-400 transition-colors"
                 >
                   <Icons.X className="w-4 h-4" />
                 </button>

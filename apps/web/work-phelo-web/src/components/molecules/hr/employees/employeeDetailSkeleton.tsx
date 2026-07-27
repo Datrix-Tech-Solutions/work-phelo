@@ -4,7 +4,7 @@ export function EmployeeDetailSkeleton() {
       {/* Breadcrumb Skeleton */}
       <div className="flex items-center gap-2">
         <div className="h-4 w-20 bg-gray-100 rounded animate-pulse" />
-        <div className="text-gray-300">›</div>
+        <div className="text-gray-400">›</div>
         <div className="h-4 w-48 bg-gray-100 rounded animate-pulse" />
       </div>
 

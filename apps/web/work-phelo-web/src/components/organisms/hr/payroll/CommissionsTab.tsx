@@ -52,7 +52,7 @@ function CommissionCell({ value, onChange }: { value: number; onChange: (n: numb
         setLocal(raw);
         onChange(raw === '' ? 0 : Number(raw));
       }}
-      className="w-28 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 cursor-text hover:border-brand/50 hover:bg-white focus:outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10 placeholder:text-gray-300 transition-colors"
+      className="w-28 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 cursor-text hover:border-brand/50 hover:bg-white focus:outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 transition-colors"
     />
   );
 }

@@ -146,7 +146,7 @@ function SidebarChildItem({
         className={cn(
           baseRow,
           'cursor-not-allowed',
-          variant === 'onColor' ? 'text-white/30' : 'text-gray-300',
+          variant === 'onColor' ? 'text-white/30' : 'text-gray-400',
         )}
       >
         <span className="truncate">{item.label}</span>

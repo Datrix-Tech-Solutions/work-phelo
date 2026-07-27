@@ -209,7 +209,7 @@ export function CreatableSearchSelect({
             <button
               type="button"
               onClick={handleClear}
-              className="text-gray-300 hover:text-gray-500 transition-colors p-0.5"
+              className="text-gray-400 hover:text-gray-500 transition-colors p-0.5"
             >
               <Icons.X className="w-5 h-5" />
             </button>

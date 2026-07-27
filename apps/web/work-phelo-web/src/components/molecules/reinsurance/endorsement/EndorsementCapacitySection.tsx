@@ -3,6 +3,7 @@
 import { PlacementEndorsementSummary } from '@/types/reinsurance';
 import { ParameterCards } from './ParameterCards';
 import { CapacityBar } from './CapacityBar';
+import { cardClass } from '@/lib/utils';
 
 interface CapacityRow {
   counterpartyId: string;
@@ -36,7 +37,7 @@ export function EndorsementCapacitySection({
       </p>
       {proposed && <ParameterCards original={original} proposed={proposed} />}
       {!isDraft && endorsementSummary && (
-        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 flex flex-col gap-3">
+        <div className={cardClass('p-3 flex flex-col gap-3')}>
           <CapacityBar
             acceptedPercent={endorsementSummary.acceptedPercent}
             targetPercent={endorsementSummary.targetPercent ?? summaryTargetPercent}

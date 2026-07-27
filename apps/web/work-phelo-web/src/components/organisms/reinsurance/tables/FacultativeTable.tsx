@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
@@ -443,7 +444,7 @@ export function FacultativeTable({
       {
         key: 'archivedAt',
         label: 'Archive Details',
-        width: '220px',
+        width: 'minmax(200px, 1.5fr)',
         render: (row) => (
           <div className="flex flex-col gap-1">
             <Badge label="Archived" variant="neutral" />
@@ -457,6 +458,16 @@ export function FacultativeTable({
               <span className="text-xs text-gray-500 line-clamp-2">{row.archiveReason}</span>
             )}
           </div>
+        ),
+      },
+      {
+        key: 'restore' as keyof Facultative,
+        label: '',
+        width: '90px',
+        render: (row) => (
+          <TableButton variant="green" onClick={() => setRestoreTarget(row)}>
+            Restore
+          </TableButton>
         ),
       },
     ];
@@ -508,7 +519,7 @@ export function FacultativeTable({
 
   const getRowActions = (row: Facultative): RowAction[] => {
     if (tab === 'archived') {
-      return [{ label: 'Restore', onClick: () => setRestoreTarget(row) }];
+      return [];
     }
 
     const detailUrl = `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${

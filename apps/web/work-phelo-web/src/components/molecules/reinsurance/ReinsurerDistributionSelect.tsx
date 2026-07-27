@@ -145,7 +145,7 @@ export function ReinsurerDistributionSelect({
                   <button
                     type="button"
                     onClick={() => removeEntry(entry.id)}
-                    className="text-gray-300 hover:text-red-400 transition-colors shrink-0"
+                    className="text-gray-400 hover:text-red-400 transition-colors shrink-0"
                   >
                     <Icons.X className="w-4 h-4" />
                   </button>
@@ -180,7 +180,7 @@ export function ReinsurerDistributionSelect({
                         <button
                           type="button"
                           onClick={cancelEdit}
-                          className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
+                          className="shrink-0 text-gray-400 hover:text-gray-500 transition-colors"
                         >
                           <Icons.X className="w-3.5 h-3.5" />
                         </button>
@@ -188,7 +188,7 @@ export function ReinsurerDistributionSelect({
                     ) : (
                       <div key={idx} className="flex items-center justify-between gap-2">
                         <span className="text-xs text-gray-500 truncate">
-                          {email || <span className="italic text-gray-300">No email</span>}
+                          {email || <span className="italic text-gray-400">No email</span>}
                         </span>
                         <div className="flex items-center gap-2 shrink-0">
                           <button
@@ -201,7 +201,7 @@ export function ReinsurerDistributionSelect({
                           <button
                             type="button"
                             onClick={() => removeEmail(entry.id, idx)}
-                            className="text-gray-300 hover:text-red-400 transition-colors"
+                            className="text-gray-400 hover:text-red-400 transition-colors"
                           >
                             <Icons.X className="w-3.5 h-3.5" />
                           </button>
@@ -231,7 +231,7 @@ export function ReinsurerDistributionSelect({
                       <button
                         type="button"
                         onClick={cancelEdit}
-                        className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
+                        className="shrink-0 text-gray-400 hover:text-gray-500 transition-colors"
                       >
                         <Icons.X className="w-3.5 h-3.5" />
                       </button>

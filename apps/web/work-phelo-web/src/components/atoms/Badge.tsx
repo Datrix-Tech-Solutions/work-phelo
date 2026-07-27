@@ -7,7 +7,7 @@ interface BadgeProps {
 
 export function Badge({ label, variant = 'neutral' }: BadgeProps) {
   const variants = {
-    success: 'border-green-300 text-green-800',
+    success: 'border-green-400 text-green-600',
     warning: 'border-amber-300 text-amber-800',
     danger: 'border-red-300 text-red-800',
     info: 'border-blue-300 text-blue-800',

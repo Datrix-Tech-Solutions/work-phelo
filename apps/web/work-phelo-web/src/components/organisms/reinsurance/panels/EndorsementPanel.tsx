@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm, UseFormReturn, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -11,6 +11,7 @@ import { Facultative, FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@
 import { useCreateEndorsement, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import {
+  extractPlacementCustomFields,
   mergePlacementRiskDetails,
   splitPlacementDetails,
 } from '@/lib/reinsurance/placementFormDetails';
@@ -30,6 +31,7 @@ function placementToFormValues(placement: Facultative): EndorsementFormValues {
     insuranceCompany: placement.cedant.id,
     riskType: placement.riskTypeId ?? '',
     reference: placement.reference,
+    policyNumber: placement.policyNumber ?? '',
     title: placement.title,
     sumInsured: placement.sumInsured ?? '',
     rate: placement.rate ?? '',
@@ -40,6 +42,11 @@ function placementToFormValues(placement: Facultative): EndorsementFormValues {
     periodFrom: placement.inceptionDate ?? '',
     periodTo: placement.expiryDate ?? '',
     riskDetails: mergePlacementRiskDetails(placement.businessDetails, placement.offerDetails),
+    extraRiskFields: extractPlacementCustomFields(
+      placement.businessDetails,
+      placement.offerDetails,
+      new Set(),
+    ),
     comment: '',
     effectiveDate: new Date().toISOString().split('T')[0],
   };
@@ -61,8 +68,15 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
     formState: { errors, isSubmitting },
   } = form;
 
+  // Only reset when the panel transitions closed → open, not on every re-fetch of `placement`
+  // while it's already open — otherwise unsaved edits (e.g. a newly added extra field) get
+  // silently wiped by background query invalidations that happen on the same tab.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (isOpen) reset(placementToFormValues(placement));
+    if (isOpen && !wasOpen.current) {
+      reset(placementToFormValues(placement));
+    }
+    wasOpen.current = isOpen;
   }, [isOpen, placement, reset]);
 
   const handleClose = () => {
@@ -83,6 +97,7 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
         cedantId: values.insuranceCompany || undefined,
         riskTypeId: values.riskType || undefined,
         reference: values.reference,
+        policyNumber: values.policyNumber,
         title: values.title,
         sumInsured: values.sumInsured as number,
         rate: values.rate as number,
@@ -104,6 +119,7 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
           riskTypeId: proposedSnapshot.riskTypeId,
           cedantId: proposedSnapshot.cedantId,
           reference: proposedSnapshot.reference,
+          policyNumber: proposedSnapshot.policyNumber,
           title: proposedSnapshot.title,
           sumInsured: proposedSnapshot.sumInsured,
           rate: proposedSnapshot.rate,
