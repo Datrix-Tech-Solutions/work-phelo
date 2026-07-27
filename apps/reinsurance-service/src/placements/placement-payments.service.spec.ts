@@ -80,7 +80,7 @@ describe('PlacementPaymentsService', () => {
   let prisma: {
     placement: { findFirst: PrismaMethod };
     counterparty: { findFirst: PrismaMethod };
-    placementClosing: { findFirst: PrismaMethod };
+    placementClosing: { findFirst: PrismaMethod; findMany: PrismaMethod };
     placementPayment: {
       findMany: PrismaMethod;
       findFirst: PrismaMethod;
@@ -95,7 +95,10 @@ describe('PlacementPaymentsService', () => {
     prisma = {
       placement: { findFirst: jest.fn<Promise<unknown>, [unknown]>() },
       counterparty: { findFirst: jest.fn<Promise<unknown>, [unknown]>() },
-      placementClosing: { findFirst: jest.fn<Promise<unknown>, [unknown]>() },
+      placementClosing: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+      },
       placementPayment: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
@@ -106,6 +109,15 @@ describe('PlacementPaymentsService', () => {
         callback(prisma),
       ),
     };
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        id: 'closing-1',
+        participantId: 'participant-1',
+        netPremium: '1000.00',
+        currency: 'USD',
+      },
+    ]);
+    prisma.placementPayment.findMany.mockResolvedValue([]);
     service = new PlacementPaymentsService(prisma as unknown as PrismaService);
   });
 
@@ -173,7 +185,7 @@ describe('PlacementPaymentsService', () => {
       id: 'cedant-1',
       type: CounterpartyType.CEDANT,
     });
-    prisma.placementClosing.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.findMany.mockResolvedValue([]);
 
     await expect(
       service.create(user, 'placement-1', {
@@ -228,15 +240,15 @@ describe('PlacementPaymentsService', () => {
       id: 'reinsurer-1',
       type: CounterpartyType.REINSURER,
     });
-    prisma.placementClosing.findFirst
-      .mockResolvedValueOnce({ id: 'closing-1' })
-      .mockResolvedValueOnce({
-        id: 'closing-1',
-        participant: {
-          id: 'participant-1',
-          counterpartyId: 'reinsurer-1',
-        },
-      });
+    prisma.placementClosing.findFirst.mockResolvedValue({
+      id: 'closing-1',
+      netPremium: new Prisma.Decimal('500.00'),
+      currency: 'USD',
+      participant: {
+        id: 'participant-1',
+        counterpartyId: 'reinsurer-1',
+      },
+    });
     prisma.placementPayment.create.mockResolvedValue({
       ...payment,
       id: 'payment-2',
@@ -279,15 +291,121 @@ describe('PlacementPaymentsService', () => {
     });
   });
 
+  it('rejects premium received over the confirmed closing outstanding amount', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+    });
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        id: 'closing-1',
+        participantId: 'participant-1',
+        netPremium: '1000.00',
+        currency: 'USD',
+      },
+      {
+        id: 'closing-2',
+        participantId: 'participant-2',
+        netPremium: '500.00',
+        currency: 'USD',
+      },
+    ]);
+    prisma.placementPayment.findMany.mockResolvedValue([
+      { amount: new Prisma.Decimal('1200.00') },
+    ]);
+
+    await expect(
+      service.create(user, 'placement-1', {
+        type: PlacementPaymentType.PREMIUM_RECEIVED,
+        direction: PlacementPaymentDirection.INBOUND,
+        counterpartyId: 'cedant-1',
+        amount: 400,
+        currency: 'USD',
+        paymentDate: '2026-06-04T12:00:00.000Z',
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.placementPayment.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores reversed originals and reversal rows when calculating premium outstanding', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+    });
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        id: 'closing-1',
+        participantId: 'participant-1',
+        netPremium: '1000.00',
+        currency: 'USD',
+      },
+    ]);
+    prisma.placementPayment.findMany.mockResolvedValue([]);
+    prisma.placementPayment.create.mockResolvedValue(payment);
+
+    await service.create(user, 'placement-1', {
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      direction: PlacementPaymentDirection.INBOUND,
+      counterpartyId: 'cedant-1',
+      amount: 1000,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+    });
+
+    const existingPaymentLookup =
+      firstCallArg<Prisma.PlacementPaymentFindManyArgs>(
+        prisma.placementPayment.findMany,
+      );
+    expect(existingPaymentLookup.where).toMatchObject({
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      status: PlacementPaymentStatus.RECORDED,
+      reversalOfPaymentId: null,
+    });
+  });
+
+  it('rejects reinsurer disbursement over the closing outstanding amount', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+    });
+    prisma.placementClosing.findFirst.mockResolvedValue({
+      id: 'closing-1',
+      netPremium: new Prisma.Decimal('500.00'),
+      currency: 'USD',
+      participant: {
+        id: 'participant-1',
+        counterpartyId: 'reinsurer-1',
+      },
+    });
+    prisma.placementPayment.findMany.mockResolvedValue([
+      { amount: new Prisma.Decimal('450.00') },
+    ]);
+
+    await expect(
+      service.create(user, 'placement-1', {
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        direction: PlacementPaymentDirection.OUTBOUND,
+        counterpartyId: 'reinsurer-1',
+        closingId: 'closing-1',
+        participantId: 'participant-1',
+        amount: 75,
+        currency: 'USD',
+        paymentDate: '2026-06-04T12:00:00.000Z',
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.placementPayment.create).not.toHaveBeenCalled();
+  });
+
   it('rejects wrong-tenant or mismatched closing/participant for reinsurer disbursement', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.counterparty.findFirst.mockResolvedValue({
       id: 'reinsurer-1',
       type: CounterpartyType.REINSURER,
     });
-    prisma.placementClosing.findFirst
-      .mockResolvedValueOnce({ id: 'closing-1' })
-      .mockResolvedValueOnce(null);
+    prisma.placementClosing.findFirst.mockResolvedValue(null);
 
     await expect(
       service.create(user, 'placement-1', {

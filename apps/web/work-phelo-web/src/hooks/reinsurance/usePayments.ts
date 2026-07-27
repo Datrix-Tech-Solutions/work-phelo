@@ -6,6 +6,7 @@ import {
   FacultativeStatus,
   PlacementPayment,
   CreatePlacementPaymentPayload,
+  PlacementParticipantClosing,
 } from '@/types/reinsurance';
 import { useFacultatives } from './useFacultatives';
 
@@ -13,15 +14,23 @@ const BASE = '/operations/reinsurance/placements';
 
 const paymentsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'payments'] as const;
+const placementClosingsKey = (placementId: string) =>
+  ['reinsurance', 'placements', placementId, 'closings'] as const;
+
+async function fetchPlacementPayments(placementId: string): Promise<PlacementPayment[]> {
+  const res = await api.get(`${BASE}/${placementId}/payments`);
+  return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+}
+
+async function fetchPlacementClosings(placementId: string): Promise<PlacementParticipantClosing[]> {
+  const res = await api.get(`${BASE}/${placementId}/closings`);
+  return (res.data?.items ?? res.data ?? []) as PlacementParticipantClosing[];
+}
 
 export function usePlacementPayments(placementId: string) {
   return useQuery({
     queryKey: paymentsKey(placementId),
-    queryFn: async () => {
-      const res = await api.get(`${BASE}/${placementId}/payments`);
-      const items: PlacementPayment[] = res.data?.items ?? res.data ?? [];
-      return items;
-    },
+    queryFn: () => fetchPlacementPayments(placementId),
     enabled: !!placementId,
   });
 }
@@ -64,15 +73,32 @@ export const CLOSING_STATUSES: FacultativeStatus[] = [
   'CANCELLED',
 ];
 
-function netPremiumFor(p: Facultative): number {
-  const fac =
-    p.premium != null && p.facultativeOffer != null ? (p.facultativeOffer / 100) * p.premium : 0;
-  return p.commission != null ? fac * (1 - p.commission / 100) : fac;
+export function confirmedNetPremiumFor(closings: PlacementParticipantClosing[]): number {
+  return closings
+    .filter((closing) => closing.status === 'CONFIRMED')
+    .reduce((sum, closing) => sum + parseFloat(closing.netPremium ?? '0'), 0);
 }
 
-function totalPaidFor(payments: PlacementPayment[]): number {
+export function totalEffectivePremiumReceived(payments: PlacementPayment[]): number {
   return payments
-    .filter((p) => p.status === 'RECORDED')
+    .filter(
+      (p) => p.type === 'PREMIUM_RECEIVED' && p.status === 'RECORDED' && !p.reversalOfPaymentId,
+    )
+    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+}
+
+export function totalEffectiveReinsurerDisbursement(
+  payments: PlacementPayment[],
+  reinsurerId: string,
+): number {
+  return payments
+    .filter(
+      (p) =>
+        p.type === 'REINSURER_DISBURSEMENT' &&
+        p.counterpartyId === reinsurerId &&
+        p.status === 'RECORDED' &&
+        !p.reversalOfPaymentId,
+    )
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
 
@@ -97,10 +123,14 @@ export function useCedantPlacementPaymentStatuses(
   const paymentQueries = useQueries({
     queries: relevantPlacements.map((p) => ({
       queryKey: paymentsKey(p.id),
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/payments`);
-        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-      },
+      queryFn: () => fetchPlacementPayments(p.id),
+    })),
+  });
+
+  const closingQueries = useQueries({
+    queries: relevantPlacements.map((p) => ({
+      queryKey: placementClosingsKey(p.id),
+      queryFn: () => fetchPlacementClosings(p.id),
     })),
   });
 
@@ -108,8 +138,9 @@ export function useCedantPlacementPaymentStatuses(
     const map = new Map<string, PlacementPaymentStatus>();
     relevantPlacements.forEach((placement, i) => {
       const payments = paymentQueries[i]?.data ?? [];
-      const net = netPremiumFor(placement);
-      const paid = totalPaidFor(payments);
+      const closings = closingQueries[i]?.data ?? [];
+      const net = confirmedNetPremiumFor(closings);
+      const paid = totalEffectivePremiumReceived(payments);
       if (net > 0 && paid >= net) {
         map.set(placement.id, 'paid');
       } else if (paid > 0) {
@@ -119,7 +150,7 @@ export function useCedantPlacementPaymentStatuses(
       }
     });
     return map;
-  }, [relevantPlacements, paymentQueries]);
+  }, [relevantPlacements, paymentQueries, closingQueries]);
 }
 
 export interface PremiumsSummary {
@@ -137,25 +168,31 @@ export function usePremiumsSummary(placements: Facultative[]): PremiumsSummary {
   const paymentQueries = useQueries({
     queries: placements.map((p) => ({
       queryKey: paymentsKey(p.id),
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/payments`);
-        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-      },
+      queryFn: () => fetchPlacementPayments(p.id),
     })),
   });
 
-  const isLoading = paymentQueries.some((q) => q.isLoading);
+  const closingQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: placementClosingsKey(p.id),
+      queryFn: () => fetchPlacementClosings(p.id),
+    })),
+  });
+
+  const isLoading =
+    paymentQueries.some((q) => q.isLoading) || closingQueries.some((q) => q.isLoading);
 
   const summary = useMemo(() => {
     let totalDue = 0;
     let totalPaid = 0;
     placements.forEach((p, i) => {
       const payments = paymentQueries[i]?.data ?? [];
-      totalDue += netPremiumFor(p);
-      totalPaid += totalPaidFor(payments);
+      const closings = closingQueries[i]?.data ?? [];
+      totalDue += confirmedNetPremiumFor(closings);
+      totalPaid += totalEffectivePremiumReceived(payments);
     });
     return { totalDue, totalPaid };
-  }, [placements, paymentQueries]);
+  }, [placements, paymentQueries, closingQueries]);
 
   return { ...summary, isLoading };
 }
@@ -201,7 +238,8 @@ export function useReinsurerPaymentSummary(
           (pmt) =>
             pmt.type === 'REINSURER_DISBURSEMENT' &&
             pmt.counterpartyId === reinsurerId &&
-            pmt.status === 'RECORDED',
+            pmt.status === 'RECORDED' &&
+            !pmt.reversalOfPaymentId,
         )
         .forEach((pmt) => {
           map.set(pmt.currency, (map.get(pmt.currency) ?? 0) + parseFloat(pmt.amount));
@@ -256,7 +294,8 @@ export function useReinsurerClaimPayments(
             pmt.type === 'CLAIM_SETTLEMENT' &&
             pmt.direction === 'INBOUND' &&
             pmt.counterpartyId === reinsurerId &&
-            pmt.status === 'RECORDED',
+            pmt.status === 'RECORDED' &&
+            !pmt.reversalOfPaymentId,
         )
         .reduce((sum, pmt) => sum + parseFloat(pmt.amount), 0);
       map.set(p.id, paid);
@@ -298,7 +337,8 @@ export function useAllReinsurerClaimPayments(placements: Facultative[]): {
           (pmt) =>
             pmt.type === 'CLAIM_SETTLEMENT' &&
             pmt.direction === 'INBOUND' &&
-            pmt.status === 'RECORDED',
+            pmt.status === 'RECORDED' &&
+            !pmt.reversalOfPaymentId,
         )
         .forEach((pmt) => {
           const key = `${p.id}:${pmt.counterpartyId}`;
@@ -336,7 +376,12 @@ export function useCedantPaymentSummary(placements: Facultative[]): {
     paymentQueries.forEach((q) => {
       const payments = q.data ?? [];
       payments
-        .filter((pmt) => pmt.type === 'PREMIUM_RECEIVED' && pmt.status === 'RECORDED')
+        .filter(
+          (pmt) =>
+            pmt.type === 'PREMIUM_RECEIVED' &&
+            pmt.status === 'RECORDED' &&
+            !pmt.reversalOfPaymentId,
+        )
         .forEach((pmt) => {
           map.set(pmt.currency, (map.get(pmt.currency) ?? 0) + parseFloat(pmt.amount));
         });
@@ -362,10 +407,14 @@ export function useCedantOutstandingCounts(): Map<string, number> {
   const paymentQueries = useQueries({
     queries: closingPlacements.map((p) => ({
       queryKey: paymentsKey(p.id),
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/payments`);
-        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-      },
+      queryFn: () => fetchPlacementPayments(p.id),
+    })),
+  });
+
+  const closingQueries = useQueries({
+    queries: closingPlacements.map((p) => ({
+      queryKey: placementClosingsKey(p.id),
+      queryFn: () => fetchPlacementClosings(p.id),
     })),
   });
 
@@ -373,12 +422,13 @@ export function useCedantOutstandingCounts(): Map<string, number> {
     const counts = new Map<string, number>();
     closingPlacements.forEach((placement, i) => {
       const payments = paymentQueries[i]?.data ?? [];
-      const net = netPremiumFor(placement);
-      const paid = totalPaidFor(payments);
+      const closings = closingQueries[i]?.data ?? [];
+      const net = confirmedNetPremiumFor(closings);
+      const paid = totalEffectivePremiumReceived(payments);
       if (net > 0 && paid < net) {
         counts.set(placement.cedant.id, (counts.get(placement.cedant.id) ?? 0) + 1);
       }
     });
     return counts;
-  }, [closingPlacements, paymentQueries]);
+  }, [closingPlacements, paymentQueries, closingQueries]);
 }

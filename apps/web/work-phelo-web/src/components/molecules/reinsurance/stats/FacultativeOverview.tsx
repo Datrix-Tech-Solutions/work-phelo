@@ -6,7 +6,14 @@ import { Badge } from '@/components/atoms/Badge';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { Icons } from '@/components/atoms/icons';
 import { Facultative, FacultativeStatus, isEndorsementSentToMarket } from '@/types/reinsurance';
-import { usePlacementEndorsements, usePlacementEffectiveView, usePlacementPayments } from '@/hooks';
+import {
+  confirmedNetPremiumFor,
+  totalEffectivePremiumReceived,
+  usePlacementClosings,
+  usePlacementEndorsements,
+  usePlacementEffectiveView,
+  usePlacementPayments,
+} from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
@@ -66,6 +73,7 @@ export function FacultativeOverview({
   onPaymentStatusChange,
 }: FacultativeOverviewProps) {
   const { data: payments = [] } = usePlacementPayments(placement.id);
+  const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
   const endorsementCount = endorsements.filter((e) => e.status !== 'VOID').length;
   const hasActiveEndorsement = endorsements.some((e) => isEndorsementSentToMarket(e.status));
@@ -73,19 +81,12 @@ export function FacultativeOverview({
   const effectiveTotals = hasActiveEndorsement ? effectiveView?.effectiveTotals : undefined;
 
   const paymentStatus = useMemo<PaymentStatus>(() => {
-    const facPrem =
-      placement.premium != null && placement.facultativeOffer != null
-        ? (placement.facultativeOffer / 100) * placement.premium
-        : 0;
-    const netPremium =
-      placement.commission != null ? facPrem * (1 - placement.commission / 100) : facPrem;
-    const paid = payments
-      .filter((p) => p.status === 'RECORDED')
-      .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const netPremium = confirmedNetPremiumFor(closings);
+    const paid = totalEffectivePremiumReceived(payments);
     if (netPremium > 0 && paid >= netPremium) return 'Paid';
     if (paid > 0) return 'Part Payment';
     return 'Outstanding';
-  }, [payments, placement.premium, placement.facultativeOffer, placement.commission]);
+  }, [payments, closings]);
 
   useEffect(() => {
     onPaymentStatusChange?.(paymentStatus);
