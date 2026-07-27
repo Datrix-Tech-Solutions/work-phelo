@@ -280,10 +280,8 @@ function EndorsementCard({
     (note) => note.type === 'ENDORSEMENT_DEBIT_NOTE',
   );
   const activeEndorsementDebitNote = endorsementDebitNotes.find((note) => note.status !== 'VOID');
-  const requiresEndorsementDebitNote =
-    endorsementSummary?.closeBlockingReasons.some(
-      (reason) => reason.code === 'MISSING_ENDORSEMENT_DEBIT_NOTE',
-    ) ?? false;
+  const canGenerateEndorsementDebitNote =
+    endorsement.status === 'CLOSED' || Boolean(activeEndorsementDebitNote);
   const isNoteBusy =
     createEndorsementDebitNote.isPending ||
     createEndorsementCreditNote.isPending ||
@@ -628,9 +626,7 @@ function EndorsementCard({
                 onViewNote={handleViewEndorsementNote}
                 onGenerateDebitNote={handleGenerateEndorsementDebitNote}
                 onIssueNote={handleIssueEndorsementNote}
-                canGenerateDebitNote={
-                  requiresEndorsementDebitNote || Boolean(activeEndorsementDebitNote)
-                }
+                canGenerateDebitNote={canGenerateEndorsementDebitNote}
                 isNoteBusy={isNoteBusy}
               />
               <EndorsementCloseSection

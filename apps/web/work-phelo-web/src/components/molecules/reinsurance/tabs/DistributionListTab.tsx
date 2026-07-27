@@ -103,9 +103,23 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     [reinsurerEmails],
   );
 
+  const confirmedClosingParticipantIds = useMemo(
+    () =>
+      new Set(
+        closings
+          .filter((closing) => closing.status === 'CONFIRMED')
+          .map((closing) => closing.participantId),
+      ),
+    [closings],
+  );
+
   const serverEntries = useMemo(
-    () => toEntries(placement.participants),
-    [placement.participants, toEntries],
+    () =>
+      toEntries(placement.participants).map((entry) => ({
+        ...entry,
+        hasConfirmedClosing: confirmedClosingParticipantIds.has(entry.id),
+      })),
+    [confirmedClosingParticipantIds, placement.participants, toEntries],
   );
 
   const [patches, setPatches] = useState<Record<string, Partial<DistributionEntry>>>({});

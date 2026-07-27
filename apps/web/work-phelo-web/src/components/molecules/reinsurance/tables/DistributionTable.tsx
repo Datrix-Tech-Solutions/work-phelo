@@ -18,6 +18,7 @@ export interface DistributionEntry {
   shareLine: number;
   brokerageFee: number;
   status: PlacementParticipantStatus;
+  hasConfirmedClosing?: boolean;
 }
 
 const STATUS_VARIANT: Record<
@@ -249,7 +250,10 @@ export function DistributionTable({
       label: 'Status',
       width: '110px',
       render: (row) => (
-        <Badge label={statusLabel(row.status)} variant={STATUS_VARIANT[row.status]} />
+        <Badge
+          label={row.hasConfirmedClosing ? 'Closed' : statusLabel(row.status)}
+          variant={row.hasConfirmedClosing ? 'success' : STATUS_VARIANT[row.status]}
+        />
       ),
     },
     {
@@ -258,18 +262,18 @@ export function DistributionTable({
       width: '150px',
       render: (row) => {
         const mailed = mailedIds.has(row.id);
-        const responded =
-          row.status === 'DECLINED' || row.status === 'ACCEPTED' || row.status === 'CLOSED';
+        const isFinalized = row.status === 'CLOSED' || Boolean(row.hasConfirmedClosing);
+        const responded = row.status === 'DECLINED' || row.status === 'ACCEPTED' || isFinalized;
         const isBusy = busyIds?.has(row.id) ?? false;
         const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
-        const showPreviewIcon = row.status !== 'DECLINED' && row.status !== 'CLOSED';
-        const showPreviewButton = row.status === 'CLOSED';
+        const showPreviewIcon = row.status !== 'DECLINED' && !isFinalized;
+        const showPreviewButton = isFinalized;
         const showMail =
           row.status !== 'OFFER_SENT' &&
           row.status !== 'QUOTED' &&
           row.status !== 'ACCEPTED' &&
           row.status !== 'DECLINED' &&
-          row.status !== 'CLOSED';
+          !isFinalized;
         const showAccept =
           !isPlacementLocked &&
           (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
@@ -279,7 +283,7 @@ export function DistributionTable({
           (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
           !responded;
         const showRevert = !isPlacementLocked && row.status === 'ACCEPTED';
-        const showClose = !isPlacementLocked && row.status === 'ACCEPTED';
+        const showClose = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
         return (
           <div className="flex items-center gap-2">
             {showPreviewIcon && (

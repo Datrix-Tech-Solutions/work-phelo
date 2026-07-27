@@ -285,37 +285,6 @@ export class PlacementEndorsementsService {
       (participant) => !confirmedClosingParticipantIds.has(participant.id),
     );
 
-    const activeNotes = endorsement.notes.filter(
-      (note) => note.status !== PlacementNoteStatus.VOID,
-    );
-    const activeDebitNotes = activeNotes.filter(
-      (note) => note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
-    );
-    const activeCreditNotes = activeNotes.filter(
-      (note) => note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
-    );
-    const requiresFinancialNotes =
-      endorsement.impactType !== PlacementEndorsementImpactType.TERMS_ONLY &&
-      endorsement.impactType !== PlacementEndorsementImpactType.ADMINISTRATIVE;
-    const requiresDebitNote =
-      requiresFinancialNotes &&
-      activeConfirmedClosings.length > 0 &&
-      endorsement.impactType !==
-        PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION;
-    const creditNoteClosingIds = new Set(
-      activeCreditNotes
-        .map((note) => note.endorsementClosingId)
-        .filter((closingId): closingId is string => Boolean(closingId)),
-    );
-    const confirmedClosingsWithoutCreditNotes = requiresFinancialNotes
-      ? activeConfirmedClosings.filter(
-          (closing) => !creditNoteClosingIds.has(closing.id),
-        )
-      : [];
-    const draftNotes = activeNotes.filter(
-      (note) => note.status === PlacementNoteStatus.DRAFT,
-    );
-
     const pendingActions = new Set<string>();
     if (endorsement.status === PlacementEndorsementStatus.DRAFT) {
       pendingActions.add('SEND_TO_MARKET');
@@ -346,15 +315,6 @@ export class PlacementEndorsementsService {
     ) {
       pendingActions.add('CONFIRM_CLOSING');
     }
-    if (requiresDebitNote && activeDebitNotes.length === 0) {
-      pendingActions.add('GENERATE_NOTES');
-    }
-    if (confirmedClosingsWithoutCreditNotes.length > 0) {
-      pendingActions.add('GENERATE_NOTES');
-    }
-    if (draftNotes.length > 0) {
-      pendingActions.add('ISSUE_NOTES');
-    }
     const terminalStatuses: PlacementEndorsementStatus[] = [
       PlacementEndorsementStatus.CLOSED,
       PlacementEndorsementStatus.DECLINED,
@@ -366,10 +326,6 @@ export class PlacementEndorsementsService {
       acceptedWithoutConfirmedClosing,
       activeClosings,
       activeConfirmedClosings,
-      requiresDebitNote,
-      activeDebitNotes,
-      confirmedClosingsWithoutCreditNotes,
-      draftNotes,
       terminalStatuses,
     });
     const canClose = closeBlockingReasons.length === 0;
@@ -443,10 +399,6 @@ export class PlacementEndorsementsService {
     acceptedWithoutConfirmedClosing,
     activeClosings,
     activeConfirmedClosings,
-    requiresDebitNote,
-    activeDebitNotes,
-    confirmedClosingsWithoutCreditNotes,
-    draftNotes,
     terminalStatuses,
   }: {
     endorsement: PlacementEndorsementSummaryRecord;
@@ -462,10 +414,6 @@ export class PlacementEndorsementsService {
       endorsementParticipantId: string;
       status: PlacementClosingStatus;
     }>;
-    requiresDebitNote: boolean;
-    activeDebitNotes: Array<{ id: string; status: PlacementNoteStatus }>;
-    confirmedClosingsWithoutCreditNotes: Array<{ id: string }>;
-    draftNotes: Array<{ id: string }>;
     terminalStatuses: PlacementEndorsementStatus[];
   }): CloseBlockingReason[] {
     const reasons: CloseBlockingReason[] = [];
@@ -530,24 +478,6 @@ export class PlacementEndorsementsService {
       addReason(
         'DUPLICATE_ACTIVE_CLOSING',
         'A participant has more than one active endorsement closing.',
-      );
-    }
-    if (requiresDebitNote && activeDebitNotes.length === 0) {
-      addReason(
-        'MISSING_ENDORSEMENT_DEBIT_NOTE',
-        'Generate the required endorsement debit note before closing.',
-      );
-    }
-    if (confirmedClosingsWithoutCreditNotes.length > 0) {
-      addReason(
-        'MISSING_ENDORSEMENT_CREDIT_NOTE',
-        'Generate all required endorsement credit notes before closing.',
-      );
-    }
-    if (draftNotes.length > 0) {
-      addReason(
-        'DRAFT_ENDORSEMENT_NOTE',
-        'Issue all draft endorsement notes before closing.',
       );
     }
     if (

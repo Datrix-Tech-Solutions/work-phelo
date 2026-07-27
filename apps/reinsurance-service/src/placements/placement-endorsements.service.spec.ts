@@ -362,7 +362,7 @@ describe('PlacementEndorsementsService', () => {
     expect(result.isComplete).toBe(false);
   });
 
-  it('reports pending actions for unconfirmed closings and missing endorsement notes', async () => {
+  it('reports pending actions for unconfirmed closings without treating notes as close blockers', async () => {
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       ...endorsement,
@@ -416,19 +416,24 @@ describe('PlacementEndorsementsService', () => {
     expect(result.remainingPercent).toBe(10);
     expect(result.pendingActions).not.toContain('ADD_CAPACITY');
     expect(result.pendingActions).toEqual(
-      expect.arrayContaining([
-        'CONFIRM_CLOSING',
-        'GENERATE_NOTES',
-        'ISSUE_NOTES',
-      ]),
+      expect.arrayContaining(['CONFIRM_CLOSING']),
     );
+    expect(result.pendingActions).not.toContain('GENERATE_NOTES');
+    expect(result.pendingActions).not.toContain('ISSUE_NOTES');
     expect(result.canClose).toBe(false);
     expect(result.closeBlockingReasons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'ACCEPTED_PARTICIPANT_NOT_VALIDATED' }),
         expect.objectContaining({ code: 'UNCONFIRMED_CLOSING' }),
-        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_CREDIT_NOTE' }),
-        expect.objectContaining({ code: 'DRAFT_ENDORSEMENT_NOTE' }),
+      ]),
+    );
+    expect(
+      result.closeBlockingReasons.map((reason) => reason.code),
+    ).not.toEqual(
+      expect.arrayContaining([
+        'MISSING_ENDORSEMENT_DEBIT_NOTE',
+        'MISSING_ENDORSEMENT_CREDIT_NOTE',
+        'DRAFT_ENDORSEMENT_NOTE',
       ]),
     );
     expect(result.isComplete).toBe(false);
@@ -484,7 +489,7 @@ describe('PlacementEndorsementsService', () => {
     expect(result.isComplete).toBe(false);
   });
 
-  it('marks a fully validated MARKETING endorsement ready to close after notes are issued', async () => {
+  it('marks a fully validated MARKETING endorsement ready to close after closings are confirmed', async () => {
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       ...endorsement,
@@ -505,20 +510,7 @@ describe('PlacementEndorsementsService', () => {
           signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
-      notes: [
-        {
-          id: 'endorsement-note-1',
-          type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
-          status: PlacementNoteStatus.ISSUED,
-          endorsementClosingId: null,
-        },
-        {
-          id: 'endorsement-note-2',
-          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
-          status: PlacementNoteStatus.ISSUED,
-          endorsementClosingId: 'endorsement-closing-1',
-        },
-      ],
+      notes: [],
     });
 
     const result = await service.getSummary(
@@ -754,14 +746,11 @@ describe('PlacementEndorsementsService', () => {
     );
 
     expect(result.notes.void).toBe(2);
-    expect(result.pendingActions).toContain('GENERATE_NOTES');
-    expect(result.canClose).toBe(false);
-    expect(result.closeBlockingReasons).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_DEBIT_NOTE' }),
-        expect.objectContaining({ code: 'MISSING_ENDORSEMENT_CREDIT_NOTE' }),
-      ]),
-    );
+    expect(result.pendingActions).not.toContain('GENERATE_NOTES');
+    expect(result.pendingActions).not.toContain('ISSUE_NOTES');
+    expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.canClose).toBe(true);
+    expect(result.closeBlockingReasons).toEqual([]);
     expect(result.isComplete).toBe(false);
   });
 

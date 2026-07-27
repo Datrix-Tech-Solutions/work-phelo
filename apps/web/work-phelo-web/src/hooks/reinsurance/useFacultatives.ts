@@ -430,6 +430,7 @@ export function useAcceptAndConfirmPlacementParticipant(placementId: string) {
       return res.data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
       queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });

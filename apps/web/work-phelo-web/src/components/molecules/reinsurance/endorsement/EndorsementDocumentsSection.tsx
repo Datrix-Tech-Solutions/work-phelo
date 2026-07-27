@@ -31,10 +31,10 @@ export function EndorsementDocumentsSection({
         <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-100 bg-amber-50 p-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-              Endorsement Debit Note Required
+              Post-closing financial document
             </p>
             <p className="text-sm text-amber-800">
-              Generate and issue the debit note before closing this endorsement.
+              Generate the endorsement debit note from finalized closing details.
             </p>
           </div>
           <TableButton
