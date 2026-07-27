@@ -6,6 +6,7 @@ import {
 import {
   PlacementClaimStatus,
   PlacementClosingStatus,
+  PlacementEndorsementStatus,
   PlacementPaymentType,
   PlacementStatus,
   Prisma,
@@ -13,6 +14,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ClaimAllocationCalculator } from './claim-allocation.calculator';
 import { ClosingSnapshotReader } from './closing-snapshot.reader';
+import { PlacementEffectivePositionService } from './placement-effective-position.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
@@ -68,6 +70,19 @@ describe('PlacementClaimsService', () => {
     updatedAt: new Date('2026-06-05T10:00:00.000Z'),
   };
 
+  const closedEndorsement = {
+    id: 'endorsement-1',
+    endorsementNumber: 'END-001',
+    effectiveDate: new Date('2026-05-01T00:00:00.000Z'),
+    createdAt: new Date('2026-05-02T00:00:00.000Z'),
+    closings: [
+      {
+        id: 'endorsement-closing-1',
+        status: PlacementClosingStatus.CONFIRMED,
+      },
+    ],
+  };
+
   let prisma: {
     placement: { findFirst: PrismaMethod };
     placementClaim: {
@@ -82,6 +97,7 @@ describe('PlacementClaimsService', () => {
       findFirst: PrismaMethod;
       createMany: PrismaMethod;
     };
+    placementEndorsement: { findMany: PrismaMethod };
     placementClosing: { findMany: PrismaMethod };
     placementEndorsementClosing: { findMany: PrismaMethod };
     placementPayment: { findFirst: PrismaMethod };
@@ -107,6 +123,9 @@ describe('PlacementClaimsService', () => {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         createMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
+      placementEndorsement: {
+        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+      },
       placementClosing: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
@@ -126,13 +145,14 @@ describe('PlacementClaimsService', () => {
     money = new ReinsuranceMoneyHelper();
     service = new PlacementClaimsService(
       prisma as unknown as PrismaService,
-      new ClosingSnapshotReader(money),
+      new PlacementEffectivePositionService(new ClosingSnapshotReader(money)),
       new ClaimAllocationCalculator(money),
       money,
     );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
     );
+    prisma.placementEndorsement.findMany.mockResolvedValue([]);
   });
 
   it('creates a claim loss event with placement-scoped CLM numbering', async () => {
@@ -327,6 +347,7 @@ describe('PlacementClaimsService', () => {
         participant: { counterpartyId: 'reinsurer-1' },
       },
     ]);
+    prisma.placementEndorsement.findMany.mockResolvedValue([closedEndorsement]);
     prisma.placementEndorsementClosing.findMany.mockResolvedValue([
       {
         id: 'endorsement-closing-1',
@@ -339,7 +360,10 @@ describe('PlacementClaimsService', () => {
         brokerageAmount: new Prisma.Decimal('90.00'),
         netPremium: new Prisma.Decimal('990.00'),
         currency: 'GHS',
-        endorsementParticipant: { counterpartyId: 'reinsurer-2' },
+        endorsementParticipant: {
+          counterpartyId: 'reinsurer-2',
+          originalParticipantId: null,
+        },
       },
     ]);
     prisma.placementClaimAllocation.createMany.mockResolvedValue({ count: 2 });
@@ -360,6 +384,14 @@ describe('PlacementClaimsService', () => {
       );
     expect(endorsementClosingFindArgs.where).toMatchObject({
       status: PlacementClosingStatus.CONFIRMED,
+    });
+    const endorsementFindArgs =
+      firstCallArg<Prisma.PlacementEndorsementFindManyArgs>(
+        prisma.placementEndorsement.findMany,
+      );
+    expect(endorsementFindArgs.where).toMatchObject({
+      status: PlacementEndorsementStatus.CLOSED,
+      effectiveDate: { lte: claim.occurrenceDate },
     });
     const createManyArgs =
       firstCallArg<Prisma.PlacementClaimAllocationCreateManyArgs>(
@@ -400,6 +432,198 @@ describe('PlacementClaimsService', () => {
           allocatedFinalLossAmount: 3750,
           cashCallAmount: null,
           paidAmount: null,
+        }),
+      ]),
+    );
+  });
+
+  it('allocates claims before an endorsement using only original placement closings', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      occurrenceDate: new Date('2026-04-01T00:00:00.000Z'),
+    });
+    prisma.placementClaimAllocation.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        id: 'closing-1',
+        participantId: 'participant-1',
+        signedLinePercent: new Prisma.Decimal('60.0000'),
+        grossPremium: new Prisma.Decimal('6000.00'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('600.00'),
+        brokeragePercent: new Prisma.Decimal('7.5000'),
+        brokerageAmount: new Prisma.Decimal('450.00'),
+        netPremium: new Prisma.Decimal('4950.00'),
+        currency: 'GHS',
+        participant: { counterpartyId: 'reinsurer-1' },
+      },
+      {
+        id: 'closing-2',
+        participantId: 'participant-2',
+        signedLinePercent: new Prisma.Decimal('40.0000'),
+        grossPremium: new Prisma.Decimal('4000.00'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('400.00'),
+        brokeragePercent: new Prisma.Decimal('7.5000'),
+        brokerageAmount: new Prisma.Decimal('300.00'),
+        netPremium: new Prisma.Decimal('3300.00'),
+        currency: 'GHS',
+        participant: { counterpartyId: 'reinsurer-2' },
+      },
+    ]);
+    prisma.placementEndorsement.findMany.mockResolvedValue([]);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        id: 'future-endorsement-closing',
+        endorsementParticipantId: 'future-endorsement-participant',
+        signedLinePercent: new Prisma.Decimal('20.0000'),
+        premiumSnapshot: new Prisma.Decimal('2000.00'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('200.00'),
+        brokeragePercent: new Prisma.Decimal('7.5000'),
+        brokerageAmount: new Prisma.Decimal('150.00'),
+        netPremium: new Prisma.Decimal('1650.00'),
+        currency: 'GHS',
+        endorsementParticipant: {
+          counterpartyId: 'reinsurer-3',
+          originalParticipantId: null,
+        },
+      },
+    ]);
+    prisma.placementClaimAllocation.createMany.mockResolvedValue({ count: 2 });
+    prisma.placementClaimAllocation.findMany.mockResolvedValue([]);
+
+    await service.generateAllocations(user, 'placement-1', 'claim-1');
+
+    const createManyArgs =
+      firstCallArg<Prisma.PlacementClaimAllocationCreateManyArgs>(
+        prisma.placementClaimAllocation.createMany,
+      );
+    expect(createManyArgs.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          placementClosingId: 'closing-1',
+          signedLinePercent: 60,
+          allocatedEstimatedLossAmount: 24000,
+        }),
+        expect.objectContaining({
+          placementClosingId: 'closing-2',
+          signedLinePercent: 40,
+          allocatedEstimatedLossAmount: 16000,
+        }),
+      ]),
+    );
+    expect(createManyArgs.data).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          endorsementClosingId: 'future-endorsement-closing',
+        }),
+      ]),
+    );
+  });
+
+  it('allocates claims after a replacement endorsement without double-counting the original line', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      occurrenceDate: new Date('2026-08-01T00:00:00.000Z'),
+    });
+    prisma.placementClaimAllocation.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        id: 'closing-a',
+        participantId: 'participant-a',
+        signedLinePercent: new Prisma.Decimal('60.0000'),
+        grossPremium: new Prisma.Decimal('6000.00'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('600.00'),
+        brokeragePercent: new Prisma.Decimal('7.5000'),
+        brokerageAmount: new Prisma.Decimal('450.00'),
+        netPremium: new Prisma.Decimal('4950.00'),
+        currency: 'GHS',
+        participant: { counterpartyId: 'reinsurer-a' },
+      },
+      {
+        id: 'closing-b',
+        participantId: 'participant-b',
+        signedLinePercent: new Prisma.Decimal('40.0000'),
+        grossPremium: new Prisma.Decimal('4000.00'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('400.00'),
+        brokeragePercent: new Prisma.Decimal('7.5000'),
+        brokerageAmount: new Prisma.Decimal('300.00'),
+        netPremium: new Prisma.Decimal('3300.00'),
+        currency: 'GHS',
+        participant: { counterpartyId: 'reinsurer-b' },
+      },
+    ]);
+    prisma.placementEndorsement.findMany.mockResolvedValue([
+      {
+        ...closedEndorsement,
+        effectiveDate: new Date('2026-07-01T00:00:00.000Z'),
+        closings: [
+          {
+            id: 'endorsement-closing-a',
+            status: PlacementClosingStatus.CONFIRMED,
+          },
+        ],
+      },
+    ]);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        id: 'endorsement-closing-a',
+        endorsementParticipantId: 'endorsement-participant-a',
+        signedLinePercent: new Prisma.Decimal('40.0000'),
+        premiumSnapshot: new Prisma.Decimal('4000.00'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('400.00'),
+        brokeragePercent: new Prisma.Decimal('7.5000'),
+        brokerageAmount: new Prisma.Decimal('300.00'),
+        netPremium: new Prisma.Decimal('3300.00'),
+        currency: 'GHS',
+        endorsementParticipant: {
+          counterpartyId: 'reinsurer-a',
+          originalParticipantId: 'participant-a',
+        },
+      },
+    ]);
+    prisma.placementClaimAllocation.createMany.mockResolvedValue({ count: 2 });
+    prisma.placementClaimAllocation.findMany.mockResolvedValue([]);
+
+    await service.generateAllocations(user, 'placement-1', 'claim-1');
+
+    const createManyArgs =
+      firstCallArg<Prisma.PlacementClaimAllocationCreateManyArgs>(
+        prisma.placementClaimAllocation.createMany,
+      );
+    const rows = Array.isArray(createManyArgs.data)
+      ? createManyArgs.data
+      : [createManyArgs.data];
+
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          endorsementClosingId: 'endorsement-closing-a',
+          endorsementParticipantId: 'endorsement-participant-a',
+          counterpartyId: 'reinsurer-a',
+          signedLinePercent: 40,
+          allocatedEstimatedLossAmount: 16000,
+        }),
+        expect.objectContaining({
+          placementClosingId: 'closing-b',
+          participantId: 'participant-b',
+          counterpartyId: 'reinsurer-b',
+          signedLinePercent: 40,
+          allocatedEstimatedLossAmount: 16000,
+        }),
+      ]),
+    );
+    expect(rows).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          placementClosingId: 'closing-a',
         }),
       ]),
     );

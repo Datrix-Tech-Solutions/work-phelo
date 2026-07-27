@@ -1506,7 +1506,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Generate claim liability allocations',
     description:
-      'Creates DRAFT allocation rows from CONFIRMED PlacementClosing and PlacementEndorsementClosing snapshots. DRAFT, ISSUED and VOID closings are excluded. This does not create cash calls, notes or payments.',
+      'Creates DRAFT allocation rows from the confirmed participation effective on the claim occurrence date. Original confirmed placement closings and confirmed closings from CLOSED endorsements effective on or before the loss date are used; DRAFT, ISSUED and VOID closings are excluded. This does not create cash calls, notes or payments.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })

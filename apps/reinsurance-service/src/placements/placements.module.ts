@@ -15,6 +15,7 @@ import { PlacementDocumentsService } from './placement-documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
+import { PlacementEffectivePositionService } from './placement-effective-position.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
@@ -46,6 +47,7 @@ import { TenantDocumentProfileClient } from './tenant-document-profile.client';
     PlacementEndorsementsService,
     PlacementEndorsementParticipantsService,
     PlacementEndorsementClosingsService,
+    PlacementEffectivePositionService,
     PlacementEffectiveViewService,
     PlacementNotesService,
     PlacementPaymentsService,

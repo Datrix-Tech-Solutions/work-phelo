@@ -179,9 +179,6 @@ function ClaimReinsurersTable({
   claimAmount,
   isActualAmount,
   currency,
-  grossPremium,
-  commission,
-  deductionRate,
   onMail,
   onPreview,
 }: {
@@ -190,68 +187,87 @@ function ClaimReinsurersTable({
   claimAmount?: number | null;
   isActualAmount?: boolean;
   currency?: string | null;
-  grossPremium: number;
-  commission: number;
-  deductionRate: number;
   onMail: (participant: PlacementParticipant) => void;
   onPreview: (participant: PlacementParticipant) => void;
 }) {
-  const reinsurers = useMemo(
-    () =>
-      participants.filter(
-        (p) => p.role !== 'BROKER' && (p.status === 'ACCEPTED' || p.status === 'CLOSED'),
-      ),
-    [participants],
-  );
+  type ClaimReinsurerRow = {
+    id: string;
+    reinsurerName: string;
+    signedLinePercent: string | null;
+    allocationSource: string;
+    allocatedAmount: number | null;
+    createdAt: string | null;
+    participant: PlacementParticipant | null;
+  };
 
-  const columns: Column<PlacementParticipant>[] = useMemo(
+  const rows = useMemo<ClaimReinsurerRow[]>(() => {
+    if (allocations.length > 0) {
+      return allocations.map((allocation) => ({
+        id: allocation.id,
+        reinsurerName: allocation.counterparty.name,
+        signedLinePercent: allocation.signedLinePercent,
+        allocationSource:
+          allocation.endorsementClosing?.closingNumber ??
+          allocation.placementClosing?.closingNumber ??
+          'Confirmed closing snapshot',
+        allocatedAmount: parseFloat(
+          allocation.allocatedFinalLossAmount ?? allocation.allocatedEstimatedLossAmount,
+        ),
+        createdAt: allocation.createdAt,
+        participant: null,
+      }));
+    }
+
+    return participants
+      .filter((p) => p.role !== 'BROKER' && (p.status === 'ACCEPTED' || p.status === 'CLOSED'))
+      .map((participant) => ({
+        id: participant.id,
+        reinsurerName: participant.counterparty.name,
+        signedLinePercent: participant.sharePercent,
+        allocationSource: 'Estimate before allocation generation',
+        allocatedAmount:
+          participant.sharePercent != null && claimAmount != null
+            ? (parseFloat(participant.sharePercent) / 100) * claimAmount
+            : null,
+        createdAt: participant.createdAt ?? null,
+        participant,
+      }));
+  }, [allocations, claimAmount, participants]);
+
+  const columns: Column<ClaimReinsurerRow>[] = useMemo(
     () => [
       {
-        key: 'counterparty',
+        key: 'reinsurerName',
         label: 'Reinsurer',
-        render: (row) => <span className="font-medium text-gray-900">{row.counterparty.name}</span>,
+        render: (row) => <span className="font-medium text-gray-900">{row.reinsurerName}</span>,
       },
       {
-        key: 'brokerageFee',
-        label: 'Premium Share',
-        width: '160px',
-        className: 'text-right',
-        render: (row) => {
-          const share = row.sharePercent != null ? parseFloat(row.sharePercent) / 100 : 0;
-          const brokerage = row.brokerageFee != null ? parseFloat(row.brokerageFee) : 0;
-          const yourPremium = share * grossPremium;
-          const premiumShare =
-            yourPremium * (1 - (commission + brokerage) / 100) - yourPremium * deductionRate;
-          return (
-            <span className="text-gray-700 block text-right">{fmt(premiumShare, currency)}</span>
-          );
-        },
-      },
-      {
-        key: 'sharePercent',
-        label: 'Share',
-        width: '80px',
+        key: 'signedLinePercent',
+        label: allocations.length > 0 ? 'Effective Line' : 'Est. Share',
+        width: '110px',
         className: 'text-center',
         render: (row) => (
           <span className="text-gray-600 block text-center">
-            {row.sharePercent != null ? `${row.sharePercent}%` : '—'}
+            {row.signedLinePercent != null ? `${row.signedLinePercent}%` : '—'}
           </span>
         ),
       },
       {
-        key: 'signedLinePercent',
+        key: 'allocationSource',
+        label: 'Source',
+        width: '180px',
+        render: (row) => <span className="text-gray-600">{row.allocationSource}</span>,
+      },
+      {
+        key: 'allocatedAmount',
         label: isActualAmount ? 'Actual Claim' : 'Est. Claim',
         width: '180px',
         className: 'text-right pr-8',
-        render: (row) => {
-          const allocation = allocations.find((a) => a.participantId === row.id);
-          const actual = allocation
-            ? parseFloat(allocation.allocatedEstimatedLossAmount)
-            : row.sharePercent != null && claimAmount != null
-              ? (parseFloat(row.sharePercent) / 100) * claimAmount
-              : null;
-          return <span className="text-gray-900 block text-right">{fmt(actual, currency)}</span>;
-        },
+        render: (row) => (
+          <span className="text-gray-900 block text-right">
+            {fmt(row.allocatedAmount, currency)}
+          </span>
+        ),
       },
       {
         key: 'createdAt',
@@ -264,55 +280,55 @@ function ClaimReinsurersTable({
         label: 'Actions',
         width: '100px',
         className: 'pr-6',
-        render: (row) => (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              title="Preview Debit Note"
-              className="text-blue-500 hover:text-blue-600 transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPreview(row);
-              }}
-            >
-              <Icons.Eye className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              title="Send Mail"
-              className="text-green-500 hover:text-green-700 transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMail(row);
-              }}
-            >
-              <Icons.Mail className="w-4 h-4" />
-            </button>
-          </div>
-        ),
+        render: (row) =>
+          row.participant ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                title="Preview Debit Note"
+                className="text-blue-500 hover:text-blue-600 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (row.participant) onPreview(row.participant);
+                }}
+              >
+                <Icons.Eye className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                title="Send Mail"
+                className="text-green-500 hover:text-green-700 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (row.participant) onMail(row.participant);
+                }}
+              >
+                <Icons.Mail className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">Backend allocation</span>
+          ),
       },
     ],
-    [
-      allocations,
-      claimAmount,
-      isActualAmount,
-      currency,
-      grossPremium,
-      commission,
-      deductionRate,
-      onMail,
-      onPreview,
-    ],
+    [allocations.length, isActualAmount, currency, onMail, onPreview],
   );
 
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-2 bg-white rounded-t-xl border border-b-0 border-gray-200">
-        <span className="text-sm font-bold text-gray-900">Participants</span>
+        <span className="text-sm font-bold text-gray-900">
+          {allocations.length > 0 ? 'Claim Allocations' : 'Participants'}
+        </span>
+        {allocations.length === 0 && claimAmount != null && (
+          <p className="text-xs text-gray-400 mt-1">
+            Estimated from current participants until backend allocations are generated.
+          </p>
+        )}
       </div>
       <DataTable
         columns={columns}
-        data={reinsurers}
+        data={rows}
         emptyMessage="No accepted reinsurers"
         currentPage={1}
         totalPages={0}
@@ -358,6 +374,16 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
   const mailRecipients = mailTarget ? (reinsurerEmails[mailTarget.counterpartyId] ?? []) : [];
 
   const totalActualClaim = useMemo(() => {
+    if (allocations.length > 0) {
+      return allocations.reduce(
+        (sum, allocation) =>
+          sum +
+          parseFloat(
+            allocation.allocatedFinalLossAmount ?? allocation.allocatedEstimatedLossAmount,
+          ),
+        0,
+      );
+    }
     if (claimAmount == null) return null;
     return (placement.participants ?? [])
       .filter((p) => p.role !== 'BROKER' && (p.status === 'ACCEPTED' || p.status === 'CLOSED'))
@@ -365,7 +391,7 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
         const share = p.sharePercent != null ? parseFloat(p.sharePercent) / 100 : 0;
         return sum + share * claimAmount;
       }, 0);
-  }, [placement.participants, claimAmount]);
+  }, [allocations, placement.participants, claimAmount]);
 
   return (
     <div className={cardClass('flex flex-col gap-4 p-4')}>
@@ -380,9 +406,6 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
             claimAmount={claimAmount}
             isActualAmount={isActualAmount}
             currency={claim?.currency ?? placement.currency}
-            grossPremium={placement.premium ?? 0}
-            commission={placement.commission ?? 0}
-            deductionRate={deductionRate}
             onMail={setMailTarget}
             onPreview={setDebitNoteTarget}
           />
@@ -390,7 +413,9 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
       </div>
 
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm">
-        <span className="font-semibold text-gray-900">Total Claim</span>
+        <span className="font-semibold text-gray-900">
+          {allocations.length > 0 ? 'Total Allocated Claim' : 'Total Claim Estimate'}
+        </span>
         <span className="font-semibold text-gray-900">
           {fmt(totalActualClaim, claim?.currency ?? placement.currency)}
         </span>

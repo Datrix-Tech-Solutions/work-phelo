@@ -12,13 +12,11 @@ import {
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClaimAllocationCalculator } from './claim-allocation.calculator';
-import {
-  ClosingSnapshot,
-  ClosingSnapshotReader,
-} from './closing-snapshot.reader';
+import { ClosingSnapshot } from './closing-snapshot.reader';
 import { CreatePlacementClaimDto } from './dto/create-placement-claim.dto';
 import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
 import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
+import { PlacementEffectivePositionService } from './placement-effective-position.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 
 const claimAllocationInclude = {
@@ -55,7 +53,7 @@ type PlacementClaimAllocationRecord =
 export class PlacementClaimsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly closingSnapshotReader: ClosingSnapshotReader,
+    private readonly effectivePositionService: PlacementEffectivePositionService,
     private readonly claimAllocationCalculator: ClaimAllocationCalculator,
     private readonly money: ReinsuranceMoneyHelper,
   ) {}
@@ -239,11 +237,14 @@ export class PlacementClaimsService {
         );
       }
 
-      const snapshots = await this.closingSnapshotReader.findConfirmedSnapshots(
-        tx,
-        user.tenantId,
-        placementId,
-      );
+      const effectivePosition =
+        await this.effectivePositionService.getEffectivePositionAtDate(
+          tx,
+          user.tenantId,
+          placementId,
+          claim.occurrenceDate,
+        );
+      const snapshots = effectivePosition.snapshots;
 
       const estimatedLossAmount = this.money.toNumber(
         claim.estimatedLossAmount,
