@@ -24,7 +24,9 @@ import {
   useForceCloseFacultative,
   usePlacementPayments,
   useRestoreFacultative,
+  useCurrentTenantUsers,
 } from '@/hooks';
+import { TenantUser } from '@/types/tenant';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
@@ -37,6 +39,11 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
+
+function displayUserName(user: Pick<TenantUser, 'firstName' | 'lastName' | 'email'>): string {
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  return fullName || user.email || 'Unknown user';
+}
 
 function fmtAmount(val: number) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -265,6 +272,7 @@ export function FacultativeTable({
   const { data: archivedRows = [], isLoading: loadingArchived } = useArchivedFacultatives({
     enabled: tab === 'archived',
   });
+  const { data: tenantUsers = [] } = useCurrentTenantUsers({ enabled: tab === 'archived' });
   const { data: cedants = [] } = useCedants();
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
   const { mutate: restorePlacement, isPending: isRestoring } = useRestoreFacultative();
@@ -413,6 +421,15 @@ export function FacultativeTable({
   }, [paged, openPaymentQueries, tab, cedants]);
 
   const columns = useMemo<Column<Facultative>[]>(() => {
+    const userNameById = new Map(
+      (Array.isArray(tenantUsers) ? (tenantUsers as TenantUser[]) : []).map((user) => [
+        user.id,
+        displayUserName(user),
+      ]),
+    );
+    const actorName = (userId: string | null) =>
+      userId ? (userNameById.get(userId) ?? 'Unknown user') : 'Unknown user';
+
     if (tab === 'closing') {
       return COLUMNS.map((col) => (col.key === 'totalAcceptedPercent' ? SUM_INSURED_COLUMN : col));
     }
@@ -432,7 +449,9 @@ export function FacultativeTable({
             <Badge label="Archived" variant="neutral" />
             <span className="text-xs text-gray-500">{fmtDateTime(row.archivedAt)}</span>
             {row.archivedByUserId && (
-              <span className="text-xs text-gray-400">User ID: {row.archivedByUserId}</span>
+              <span className="text-xs text-gray-400" title={row.archivedByUserId}>
+                Archived by: {actorName(row.archivedByUserId)}
+              </span>
             )}
             {row.archiveReason && (
               <span className="text-xs text-gray-500 line-clamp-2">{row.archiveReason}</span>
@@ -441,7 +460,7 @@ export function FacultativeTable({
         ),
       },
     ];
-  }, [tab]);
+  }, [tab, tenantUsers]);
 
   const closeArchiveModal = () => {
     setArchiveTarget(null);

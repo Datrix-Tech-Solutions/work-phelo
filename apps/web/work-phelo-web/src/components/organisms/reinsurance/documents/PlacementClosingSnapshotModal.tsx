@@ -4,6 +4,8 @@ import React from 'react';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative, PlacementParticipantClosing } from '@/types/reinsurance';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { useCurrentTenantUsers } from '@/hooks';
+import { TenantUser } from '@/types/tenant';
 
 interface PlacementClosingSnapshotModalProps {
   isOpen: boolean;
@@ -15,6 +17,18 @@ interface PlacementClosingSnapshotModalProps {
 function text(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
   return String(value);
+}
+
+function displayUserName(user: Pick<TenantUser, 'firstName' | 'lastName' | 'email'>): string {
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  return fullName || user.email || 'Unknown user';
+}
+
+function resolveUserName(users: unknown, userId: string | null | undefined): string {
+  if (!userId) return 'Unknown user';
+  const list = Array.isArray(users) ? (users as TenantUser[]) : [];
+  const user = list.find((item) => item.id === userId);
+  return user ? displayUserName(user) : 'Unknown user';
 }
 
 function numberValue(value: unknown): number | null {
@@ -84,9 +98,14 @@ export function PlacementClosingSnapshotModal({
   closing,
   onClose,
 }: PlacementClosingSnapshotModalProps) {
+  const { data: tenantUsers = [] } = useCurrentTenantUsers({
+    enabled: isOpen && Boolean(closing?.createdByUserId),
+  });
+
   if (!closing) return null;
 
   const reinsurer = closing.participant.counterparty;
+  const createdByName = resolveUserName(tenantUsers, closing.createdByUserId);
 
   return (
     <DocumentPreviewModal
@@ -115,7 +134,7 @@ export function PlacementClosingSnapshotModal({
           { label: 'Created', value: fmtDate(closing.createdAt) },
           { label: 'Issued At', value: fmtDate(closing.issuedAt) },
           { label: 'Confirmed At', value: fmtDate(closing.confirmedAt) },
-          { label: 'Created By', value: text(closing.createdByUserId) },
+          { label: 'Created By', value: createdByName },
         ]}
       />
 
