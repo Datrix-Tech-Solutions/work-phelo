@@ -458,7 +458,15 @@ export function RecoveriesTable() {
       key: 'actions',
       label: 'Actions',
       width: '150px',
-      render: (row) => <TableButton onClick={() => setPaymentRow(row)}>Record Payment</TableButton>,
+      render: () => (
+        <TableButton
+          variant="gray"
+          disabled
+          tooltip="Claim recovery receipts are deferred until the backend recovery settlement flow is implemented."
+        >
+          Deferred
+        </TableButton>
+      ),
     },
   ];
 
