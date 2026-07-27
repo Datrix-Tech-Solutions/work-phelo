@@ -20,8 +20,15 @@ describe('PlacementEffectiveViewService', () => {
     reference: 'POL/UTC/MC/001',
     title: 'Factory Fire',
     cedantId: 'cedant-1',
+    riskTypeId: 'risk-type-1',
+    businessDetails: { occupancy: 'Factory' },
+    offerDetails: { warranty: 'Subject to survey' },
+    description: 'Original placement comment',
+    inceptionDate: new Date('2026-01-01T00:00:00.000Z'),
+    expiryDate: new Date('2026-12-31T00:00:00.000Z'),
     currency: 'USD',
     sumInsured: '1000000.00',
+    rate: '2.5000',
     premium: '100000.00',
     commission: '10.0000',
     facultativeOffer: '60.0000',
@@ -88,11 +95,20 @@ describe('PlacementEffectiveViewService', () => {
       endorsementNumber: 'END-001',
       type: PlacementEndorsementType.PARTICIPANT_ADDITION,
       impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
-      status: PlacementEndorsementStatus.CLOSING,
+      status: PlacementEndorsementStatus.CLOSED,
       effectiveDate: new Date('2026-06-10T00:00:00.000Z'),
+      createdAt: new Date('2026-06-10T09:00:00.000Z'),
       targetPercent: '70.0000',
       proposedSnapshot: {
+        title: 'Factory Fire Revised',
+        riskTypeId: 'risk-type-2',
+        businessDetails: { occupancy: 'Expanded factory' },
+        offerDetails: { warranty: 'Subject to survey and photos' },
+        description: 'Revised placement terms',
+        inceptionDate: '2026-01-15T00:00:00.000Z',
+        expiryDate: '2027-01-14T00:00:00.000Z',
         sumInsured: '1500000.00',
+        rate: '2.7500',
         premium: '150000.00',
         commission: '10.0000',
         preliminaryBrokerage: '7.5000',
@@ -173,6 +189,24 @@ describe('PlacementEffectiveViewService', () => {
       }),
     );
     expect(result.effectiveTotals.facultativeOfferPercent).toBe(60);
+    expect(result.viewAsOf).toEqual(expect.any(String));
+    expect(result.effectiveTerms).toMatchObject({
+      title: 'Factory Fire',
+      cedantId: 'cedant-1',
+      riskTypeId: 'risk-type-1',
+      businessDetails: { occupancy: 'Factory' },
+      offerDetails: { warranty: 'Subject to survey' },
+      description: 'Original placement comment',
+      inceptionDate: '2026-01-01T00:00:00.000Z',
+      expiryDate: '2026-12-31T00:00:00.000Z',
+      currency: 'USD',
+      sumInsured: 1000000,
+      rate: 2.5,
+      premium: 100000,
+      commissionPercent: 10,
+      brokeragePercent: 7.5,
+      facultativeOfferPercent: 60,
+    });
     expect(result.capacityBreakdown).toMatchObject({
       originalCapacityPercent: 60,
       acceptedEndorsementCapacityPercent: 0,
@@ -220,7 +254,22 @@ describe('PlacementEffectiveViewService', () => {
       effectiveTotalCapacityPercent: 70,
     });
     expect(result.effectiveTotals.sumInsured).toBe(1500000);
+    expect(result.effectiveTotals.rate).toBe(2.75);
     expect(result.effectiveTotals.premium).toBe(150000);
+    expect(result.effectiveTerms).toMatchObject({
+      title: 'Factory Fire Revised',
+      riskTypeId: 'risk-type-2',
+      businessDetails: { occupancy: 'Expanded factory' },
+      offerDetails: { warranty: 'Subject to survey and photos' },
+      description: 'Revised placement terms',
+      inceptionDate: '2026-01-15T00:00:00.000Z',
+      expiryDate: '2027-01-14T00:00:00.000Z',
+      currency: 'USD',
+      sumInsured: 1500000,
+      rate: 2.75,
+      premium: 150000,
+      facultativeOfferPercent: 70,
+    });
     expect(result.effectiveParticipants).toHaveLength(3);
     expect(
       result.effectiveParticipants.find(
@@ -315,6 +364,155 @@ describe('PlacementEffectiveViewService', () => {
     expect(result.pendingEndorsements).toHaveLength(1);
   });
 
+  it.each([
+    PlacementEndorsementStatus.DRAFT,
+    PlacementEndorsementStatus.MARKETING,
+    PlacementEndorsementStatus.ACCEPTED,
+    PlacementEndorsementStatus.CLOSING,
+  ])(
+    'does not apply a %s endorsement even when it has confirmed closing rows',
+    async (status) => {
+      closingSnapshotReader.findConfirmedEndorsementClosingSnapshots.mockResolvedValue(
+        [
+          {
+            sourceType: 'ENDORSEMENT_CLOSING',
+            closingId: 'endorsement-closing-1',
+            endorsementParticipantId: 'endorsement-participant-1',
+            counterpartyId: 'reinsurer-c',
+            signedLinePercent: 10,
+            premium: 15000,
+            commissionPercent: 10,
+            commissionAmount: 1500,
+            brokeragePercent: 7.5,
+            brokerageAmount: 1125,
+            netPremium: 12375,
+            currency: 'USD',
+          },
+        ],
+      );
+      tx.placementEndorsement.findMany.mockResolvedValue([
+        makeConfirmedEndorsement({ status }),
+      ]);
+
+      const result = await service.getEffectiveView(
+        tenantId,
+        placementId,
+        new Date('2026-07-01T00:00:00.000Z'),
+      );
+
+      expect(result.effectiveTotals.facultativeOfferPercent).toBe(60);
+      expect(result.effectiveParticipants).toHaveLength(2);
+      expect(result.appliedEndorsements).toEqual([]);
+      expect(result.scheduledEndorsements).toEqual([]);
+      expect(result.pendingEndorsements).toEqual([
+        expect.objectContaining({
+          id: 'endorsement-1',
+          status,
+        }),
+      ]);
+    },
+  );
+
+  it('reports a closed future-dated endorsement as scheduled without applying it', async () => {
+    closingSnapshotReader.findConfirmedEndorsementClosingSnapshots.mockResolvedValue(
+      [
+        {
+          sourceType: 'ENDORSEMENT_CLOSING',
+          closingId: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          counterpartyId: 'reinsurer-c',
+          signedLinePercent: 10,
+          premium: 15000,
+          commissionPercent: 10,
+          commissionAmount: 1500,
+          brokeragePercent: 7.5,
+          brokerageAmount: 1125,
+          netPremium: 12375,
+          currency: 'USD',
+        },
+      ],
+    );
+    tx.placementEndorsement.findMany.mockResolvedValue([
+      makeConfirmedEndorsement({
+        effectiveDate: new Date('2026-09-01T00:00:00.000Z'),
+      }),
+    ]);
+
+    const result = await service.getEffectiveView(
+      tenantId,
+      placementId,
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+
+    expect(result.viewAsOf).toBe('2026-08-01T00:00:00.000Z');
+    expect(result.effectiveTotals.facultativeOfferPercent).toBe(60);
+    expect(result.effectiveParticipants).toHaveLength(2);
+    expect(result.appliedEndorsements).toEqual([]);
+    expect(result.pendingEndorsements).toEqual([]);
+    expect(result.scheduledEndorsements).toEqual([
+      expect.objectContaining({
+        id: 'endorsement-1',
+        status: PlacementEndorsementStatus.CLOSED,
+        confirmedClosingCount: 1,
+      }),
+    ]);
+  });
+
+  it('applies a closed endorsement once its effective date is reached', async () => {
+    closingSnapshotReader.findConfirmedEndorsementClosingSnapshots.mockResolvedValue(
+      [
+        {
+          sourceType: 'ENDORSEMENT_CLOSING',
+          closingId: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          counterpartyId: 'reinsurer-c',
+          signedLinePercent: 10,
+          premium: 15000,
+          commissionPercent: 10,
+          commissionAmount: 1500,
+          brokeragePercent: 7.5,
+          brokerageAmount: 1125,
+          netPremium: 12375,
+          currency: 'USD',
+        },
+      ],
+    );
+    tx.placementEndorsement.findMany.mockResolvedValue([
+      makeConfirmedEndorsement({
+        effectiveDate: new Date('2026-08-01T00:00:00.000Z'),
+      }),
+    ]);
+
+    const result = await service.getEffectiveView(
+      tenantId,
+      placementId,
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+
+    expect(result.effectiveTotals.facultativeOfferPercent).toBe(70);
+    expect(result.effectiveParticipants).toHaveLength(3);
+    expect(result.appliedEndorsements).toHaveLength(1);
+    expect(result.scheduledEndorsements).toEqual([]);
+  });
+
+  it('does not expose declined endorsements as applied, scheduled or pending', async () => {
+    tx.placementEndorsement.findMany.mockResolvedValue([
+      makeConfirmedEndorsement({
+        status: PlacementEndorsementStatus.DECLINED,
+      }),
+    ]);
+
+    const result = await service.getEffectiveView(
+      tenantId,
+      placementId,
+      new Date('2026-07-01T00:00:00.000Z'),
+    );
+
+    expect(result.appliedEndorsements).toEqual([]);
+    expect(result.scheduledEndorsements).toEqual([]);
+    expect(result.pendingEndorsements).toEqual([]);
+  });
+
   it('replaces an absolute revised facultative offer instead of adding it to the base', async () => {
     tx.placement.findFirst.mockResolvedValue({
       ...placement,
@@ -382,7 +580,11 @@ describe('PlacementEffectiveViewService', () => {
 
     expect(tx.placementEndorsement.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        orderBy: [{ effectiveDate: 'asc' }, { createdAt: 'asc' }],
+        orderBy: [
+          { effectiveDate: 'asc' },
+          { createdAt: 'asc' },
+          { id: 'asc' },
+        ],
       }),
     );
   });

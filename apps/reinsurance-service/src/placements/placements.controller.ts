@@ -168,6 +168,12 @@ export class PlacementsController {
       'Original placement records remain immutable; DRAFT, MARKETING and otherwise unconfirmed endorsement activity is reported as pending.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiQuery({
+    name: 'asOfDate',
+    required: false,
+    description:
+      'Optional ISO date/time for historical effective-view reconstruction. Defaults to now.',
+  })
   @ApiOkResponse({ type: EffectivePlacementViewResponseDto })
   @ApiNotFoundResponse({
     type: ApiErrorResponseDto,
@@ -176,11 +182,13 @@ export class PlacementsController {
   })
   getEffectiveView(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('asOfDate') asOfDate: string | undefined,
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.effectiveViewService.getEffectiveView(
       request.user.tenantId,
       id,
+      asOfDate,
     );
   }
 

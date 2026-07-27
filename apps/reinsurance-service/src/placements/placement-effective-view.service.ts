@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   CounterpartyType,
   PlacementClosingStatus,
@@ -21,8 +25,15 @@ type PlacementForEffectiveView = {
   reference: string;
   title: string;
   cedantId: string;
+  riskTypeId: string | null;
+  businessDetails: Prisma.JsonValue | null;
+  offerDetails: Prisma.JsonValue | null;
+  description: string | null;
+  inceptionDate: Date | null;
+  expiryDate: Date | null;
   currency: string | null;
   sumInsured: Prisma.Decimal | null;
+  rate: Prisma.Decimal | null;
   premium: Prisma.Decimal | null;
   commission: Prisma.Decimal | null;
   facultativeOffer: Prisma.Decimal | null;
@@ -36,6 +47,7 @@ type EndorsementForEffectiveView = {
   impactType: PlacementEndorsementImpactType;
   status: PlacementEndorsementStatus;
   effectiveDate: Date;
+  createdAt: Date;
   targetPercent: Prisma.Decimal | null;
   proposedSnapshot: Prisma.JsonValue | null;
   closings: Array<{
@@ -63,7 +75,16 @@ type CounterpartySummary = {
 };
 
 type MutableEffectiveTotals = {
+  title: string;
+  cedantId: string;
+  riskTypeId: string | null;
+  businessDetails: Prisma.JsonValue | null;
+  offerDetails: Prisma.JsonValue | null;
+  description: string | null;
+  inceptionDate: string | null;
+  expiryDate: string | null;
   sumInsured: number | null;
+  rate: number | null;
   premium: number | null;
   currency: string | null;
   commissionPercent: number | null;
@@ -82,7 +103,9 @@ export class PlacementEffectiveViewService {
   async getEffectiveView(
     tenantId: string,
     placementId: string,
+    asOfDate: Date | string = new Date(),
   ): Promise<EffectivePlacementViewResponseDto> {
+    const viewAsOf = this.parseAsOfDate(asOfDate);
     return this.prisma.$transaction(async (tx) => {
       const placement = await this.findPlacement(tx, tenantId, placementId);
       const [placementSnapshots, endorsementSnapshots, endorsements] =
@@ -102,7 +125,10 @@ export class PlacementEffectiveViewService {
 
       const baseTotals = this.buildBaseTotals(placement);
       const appliedEndorsements = endorsements.filter((endorsement) =>
-        this.isEffectiveEndorsement(endorsement),
+        this.isEffectiveEndorsement(endorsement, viewAsOf),
+      );
+      const scheduledEndorsements = endorsements.filter((endorsement) =>
+        this.isScheduledEndorsement(endorsement, viewAsOf),
       );
       const appliedEndorsementClosingIds = new Set(
         appliedEndorsements.flatMap((endorsement) =>
@@ -155,6 +181,7 @@ export class PlacementEffectiveViewService {
         this.sumAcceptedPendingEndorsementCapacity(
           endorsements,
           appliedEndorsements,
+          viewAsOf,
         );
       const confirmedEndorsementCapacityPercent = this.money.roundMoney(
         effectiveEndorsementSnapshots.reduce(
@@ -191,6 +218,7 @@ export class PlacementEffectiveViewService {
       }
 
       return {
+        viewAsOf: viewAsOf.toISOString(),
         basePlacement: {
           id: placement.id,
           reference: placement.reference,
@@ -199,6 +227,7 @@ export class PlacementEffectiveViewService {
           currency: placement.currency,
           sumInsured: this.money.toOptionalNumber(placement.sumInsured),
           premium: this.money.toOptionalNumber(placement.premium),
+          rate: this.money.toOptionalNumber(placement.rate),
           commissionPercent: this.money.toOptionalNumber(placement.commission),
           brokeragePercent: this.money.toOptionalNumber(
             placement.preliminaryBrokerage,
@@ -219,6 +248,7 @@ export class PlacementEffectiveViewService {
           sumInsured: effectiveFinancials.sumInsured,
           premium: effectiveFinancials.premium,
           currency: effectiveFinancials.currency,
+          rate: effectiveFinancials.rate,
           commissionPercent: effectiveFinancials.commissionPercent,
           brokeragePercent: effectiveFinancials.brokeragePercent,
           grossPremium: this.sumMoney(snapshots, 'premium'),
@@ -235,9 +265,34 @@ export class PlacementEffectiveViewService {
           remainingCapacityPercent,
           effectiveTotalCapacityPercent: facultativeOfferPercent,
         },
+        effectiveTerms: {
+          title: effectiveFinancials.title,
+          cedantId: effectiveFinancials.cedantId,
+          riskTypeId: effectiveFinancials.riskTypeId,
+          businessDetails: this.toRecordOrNull(
+            effectiveFinancials.businessDetails,
+          ),
+          offerDetails: this.toRecordOrNull(effectiveFinancials.offerDetails),
+          description: effectiveFinancials.description,
+          inceptionDate: effectiveFinancials.inceptionDate,
+          expiryDate: effectiveFinancials.expiryDate,
+          currency: effectiveFinancials.currency,
+          sumInsured: effectiveFinancials.sumInsured,
+          rate: effectiveFinancials.rate,
+          premium: effectiveFinancials.premium,
+          commissionPercent: effectiveFinancials.commissionPercent,
+          brokeragePercent: effectiveFinancials.brokeragePercent,
+          facultativeOfferPercent: effectiveFinancials.facultativeOfferPercent,
+        },
         effectiveParticipants,
         appliedEndorsements: this.mapAppliedEndorsements(appliedEndorsements),
-        pendingEndorsements: this.mapPendingEndorsements(endorsements),
+        scheduledEndorsements: this.mapEndorsementSummaries(
+          scheduledEndorsements,
+        ),
+        pendingEndorsements: this.mapPendingEndorsements(
+          endorsements,
+          viewAsOf,
+        ),
         warnings,
       };
     });
@@ -255,8 +310,15 @@ export class PlacementEffectiveViewService {
         reference: true,
         title: true,
         cedantId: true,
+        riskTypeId: true,
+        businessDetails: true,
+        offerDetails: true,
+        description: true,
+        inceptionDate: true,
+        expiryDate: true,
         currency: true,
         sumInsured: true,
+        rate: true,
         premium: true,
         commission: true,
         facultativeOffer: true,
@@ -284,6 +346,7 @@ export class PlacementEffectiveViewService {
         impactType: true,
         status: true,
         effectiveDate: true,
+        createdAt: true,
         targetPercent: true,
         proposedSnapshot: true,
         closings: {
@@ -308,7 +371,7 @@ export class PlacementEffectiveViewService {
           orderBy: { createdAt: 'asc' },
         },
       },
-      orderBy: [{ effectiveDate: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ effectiveDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
   }
 
@@ -339,7 +402,16 @@ export class PlacementEffectiveViewService {
     placement: PlacementForEffectiveView,
   ): MutableEffectiveTotals {
     return {
+      title: placement.title,
+      cedantId: placement.cedantId,
+      riskTypeId: placement.riskTypeId,
+      businessDetails: placement.businessDetails,
+      offerDetails: placement.offerDetails,
+      description: placement.description,
+      inceptionDate: this.toIsoStringOrNull(placement.inceptionDate),
+      expiryDate: this.toIsoStringOrNull(placement.expiryDate),
       sumInsured: this.money.toOptionalNumber(placement.sumInsured),
+      rate: this.money.toOptionalNumber(placement.rate),
       premium: this.money.toOptionalNumber(placement.premium),
       currency: placement.currency,
       commissionPercent: this.money.toOptionalNumber(placement.commission),
@@ -362,10 +434,57 @@ export class PlacementEffectiveViewService {
         const proposedPlacement = this.asRecord(proposed.placement);
 
         return {
+          title:
+            this.firstString(
+              proposed.title,
+              proposedPlacement.title,
+              current.title,
+            ) ?? current.title,
+          cedantId:
+            this.firstString(
+              proposed.cedantId,
+              proposedPlacement.cedantId,
+              current.cedantId,
+            ) ?? current.cedantId,
+          riskTypeId: this.firstNullableString(
+            proposed.riskTypeId,
+            proposedPlacement.riskTypeId,
+            current.riskTypeId,
+          ),
+          businessDetails: this.firstJsonValue(
+            proposed.businessDetails,
+            proposedPlacement.businessDetails,
+            current.businessDetails,
+          ),
+          offerDetails: this.firstJsonValue(
+            proposed.offerDetails,
+            proposedPlacement.offerDetails,
+            current.offerDetails,
+          ),
+          description: this.firstNullableString(
+            proposed.description,
+            proposedPlacement.description,
+            current.description,
+          ),
+          inceptionDate: this.firstDateIsoString(
+            proposed.inceptionDate,
+            proposedPlacement.inceptionDate,
+            current.inceptionDate,
+          ),
+          expiryDate: this.firstDateIsoString(
+            proposed.expiryDate,
+            proposedPlacement.expiryDate,
+            current.expiryDate,
+          ),
           sumInsured: this.firstOptionalNumber(
             proposed.sumInsured,
             proposedPlacement.sumInsured,
             current.sumInsured,
+          ),
+          rate: this.firstOptionalNumber(
+            proposed.rate,
+            proposedPlacement.rate,
+            current.rate,
           ),
           premium: this.firstOptionalNumber(
             proposed.premium,
@@ -524,6 +643,7 @@ export class PlacementEffectiveViewService {
   private sumAcceptedPendingEndorsementCapacity(
     endorsements: EndorsementForEffectiveView[],
     appliedEndorsements: EndorsementForEffectiveView[],
+    asOfDate: Date,
   ): number {
     const appliedIds = new Set(
       appliedEndorsements.map((endorsement) => endorsement.id),
@@ -539,6 +659,9 @@ export class PlacementEffectiveViewService {
             !appliedIds.has(endorsement.id) &&
             endorsement.status !== PlacementEndorsementStatus.VOID &&
             endorsement.status !== PlacementEndorsementStatus.DECLINED,
+        )
+        .filter(
+          (endorsement) => !this.isScheduledEndorsement(endorsement, asOfDate),
         )
         .flatMap((endorsement) => endorsement.participants)
         .filter((participant) => acceptedStatuses.has(participant.status))
@@ -575,10 +698,11 @@ export class PlacementEffectiveViewService {
 
   private isEffectiveEndorsement(
     endorsement: EndorsementForEffectiveView,
+    asOfDate: Date,
   ): boolean {
     if (
-      endorsement.status === PlacementEndorsementStatus.VOID ||
-      endorsement.status === PlacementEndorsementStatus.DECLINED
+      endorsement.status !== PlacementEndorsementStatus.CLOSED ||
+      endorsement.effectiveDate.getTime() > asOfDate.getTime()
     ) {
       return false;
     }
@@ -595,21 +719,44 @@ export class PlacementEffectiveViewService {
     );
   }
 
-  private mapPendingEndorsements(endorsements: EndorsementForEffectiveView[]) {
+  private isScheduledEndorsement(
+    endorsement: EndorsementForEffectiveView,
+    asOfDate: Date,
+  ): boolean {
+    return (
+      endorsement.status === PlacementEndorsementStatus.CLOSED &&
+      endorsement.effectiveDate.getTime() > asOfDate.getTime()
+    );
+  }
+
+  private mapEndorsementSummaries(endorsements: EndorsementForEffectiveView[]) {
+    return endorsements.map((endorsement) => ({
+      id: endorsement.id,
+      endorsementNumber: endorsement.endorsementNumber,
+      type: endorsement.type,
+      status: endorsement.status,
+      effectiveDate: endorsement.effectiveDate.toISOString(),
+      targetPercent: this.money.toOptionalNumber(endorsement.targetPercent),
+      confirmedClosingCount: endorsement.closings.filter(
+        (closing) => closing.status === PlacementClosingStatus.CONFIRMED,
+      ).length,
+    }));
+  }
+
+  private mapPendingEndorsements(
+    endorsements: EndorsementForEffectiveView[],
+    asOfDate: Date,
+  ) {
     return endorsements
       .filter(
         (endorsement) =>
           endorsement.status !== PlacementEndorsementStatus.VOID &&
           endorsement.status !== PlacementEndorsementStatus.DECLINED &&
-          !this.isEffectiveEndorsement(endorsement),
+          !this.isScheduledEndorsement(endorsement, asOfDate) &&
+          !this.isEffectiveEndorsement(endorsement, asOfDate),
       )
       .map((endorsement) => ({
-        id: endorsement.id,
-        endorsementNumber: endorsement.endorsementNumber,
-        type: endorsement.type,
-        status: endorsement.status,
-        effectiveDate: endorsement.effectiveDate.toISOString(),
-        targetPercent: this.money.toOptionalNumber(endorsement.targetPercent),
+        ...this.mapEndorsementSummaries([endorsement])[0],
         confirmedClosingCount: 0,
       }));
   }
@@ -669,5 +816,63 @@ export class PlacementEffectiveViewService {
       }
     }
     return null;
+  }
+
+  private firstNullableString(...values: Array<unknown>): string | null {
+    for (const value of values) {
+      if (value === null) return null;
+      if (typeof value === 'string') {
+        const cleaned = value.trim();
+        return cleaned.length > 0 ? cleaned : null;
+      }
+    }
+    return null;
+  }
+
+  private firstDateIsoString(...values: Array<unknown>): string | null {
+    for (const value of values) {
+      if (value === null) return null;
+      const iso = this.toIsoStringOrNull(value);
+      if (iso) return iso;
+    }
+    return null;
+  }
+
+  private firstJsonValue(...values: Array<unknown>): Prisma.JsonValue | null {
+    for (const value of values) {
+      if (value === undefined) continue;
+      return value === null ? null : (value as Prisma.JsonValue);
+    }
+    return null;
+  }
+
+  private toIsoStringOrNull(value: unknown): string | null {
+    if (!value) return null;
+    if (
+      !(value instanceof Date) &&
+      typeof value !== 'string' &&
+      typeof value !== 'number'
+    ) {
+      return null;
+    }
+    const date = value instanceof Date ? value : new Date(String(value));
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  private toRecordOrNull(
+    value: Prisma.JsonValue | null,
+  ): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private parseAsOfDate(value: Date | string): Date {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid effective view asOfDate');
+    }
+    return date;
   }
 }

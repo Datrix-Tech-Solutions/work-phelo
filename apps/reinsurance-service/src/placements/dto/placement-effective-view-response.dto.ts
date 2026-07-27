@@ -27,6 +27,9 @@ export class EffectivePlacementBaseDto {
   @ApiPropertyOptional({ type: Number, nullable: true, example: 50000 })
   premium!: number | null;
 
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 2.5 })
+  rate!: number | null;
+
   @ApiPropertyOptional({ type: Number, nullable: true, example: 10 })
   commissionPercent!: number | null;
 
@@ -77,6 +80,9 @@ export class EffectivePlacementTotalsDto {
   @ApiPropertyOptional({ type: String, nullable: true, example: 'USD' })
   currency!: string | null;
 
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 2.5 })
+  rate!: number | null;
+
   @ApiPropertyOptional({ type: Number, nullable: true, example: 10 })
   commissionPercent!: number | null;
 
@@ -111,6 +117,63 @@ export class EffectivePlacementCapacityBreakdownDto {
 
   @ApiProperty({ example: 70 })
   effectiveTotalCapacityPercent!: number;
+}
+
+export class EffectivePlacementTermsDto {
+  @ApiProperty({ example: 'Factory Fire' })
+  title!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  cedantId!: string;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  riskTypeId!: string | null;
+
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    description:
+      'Effective risk/business details reconstructed from immutable placement and endorsement snapshots.',
+  })
+  businessDetails!: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    description:
+      'Effective offer details reconstructed from immutable placement and endorsement snapshots.',
+  })
+  offerDetails!: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  description!: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  inceptionDate!: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  expiryDate!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'USD' })
+  currency!: string | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 1500000 })
+  sumInsured!: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 2.5 })
+  rate!: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 75000 })
+  premium!: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 10 })
+  commissionPercent!: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 7.5 })
+  brokeragePercent!: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 70 })
+  facultativeOfferPercent!: number | null;
 }
 
 export class EffectiveParticipantCounterpartyDto {
@@ -240,6 +303,14 @@ export class PendingEndorsementSummaryDto {
 }
 
 export class EffectivePlacementViewResponseDto {
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    description:
+      'Date/time used to decide which closed endorsements are currently effective.',
+  })
+  viewAsOf!: string;
+
   @ApiProperty({ type: EffectivePlacementBaseDto })
   basePlacement!: EffectivePlacementBaseDto;
 
@@ -249,11 +320,21 @@ export class EffectivePlacementViewResponseDto {
   @ApiProperty({ type: EffectivePlacementCapacityBreakdownDto })
   capacityBreakdown!: EffectivePlacementCapacityBreakdownDto;
 
+  @ApiProperty({ type: EffectivePlacementTermsDto })
+  effectiveTerms!: EffectivePlacementTermsDto;
+
   @ApiProperty({ type: [EffectiveParticipantDto] })
   effectiveParticipants!: EffectiveParticipantDto[];
 
   @ApiProperty({ type: [EffectiveEndorsementSummaryDto] })
   appliedEndorsements!: EffectiveEndorsementSummaryDto[];
+
+  @ApiProperty({
+    type: [PendingEndorsementSummaryDto],
+    description:
+      'Closed endorsements with future effective dates. They are approved/scheduled but not included in current effective totals.',
+  })
+  scheduledEndorsements!: PendingEndorsementSummaryDto[];
 
   @ApiProperty({ type: [PendingEndorsementSummaryDto] })
   pendingEndorsements!: PendingEndorsementSummaryDto[];

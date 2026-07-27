@@ -617,6 +617,7 @@ export interface PlacementEndorsementSummary {
 }
 
 export interface EffectivePlacementView {
+  viewAsOf: string;
   basePlacement: {
     id: string;
     reference: string;
@@ -625,6 +626,7 @@ export interface EffectivePlacementView {
     currency: string | null;
     sumInsured: number | null;
     premium: number | null;
+    rate: number | null;
     commissionPercent: number | null;
     brokeragePercent: number | null;
     facultativeOfferPercent: number | null;
@@ -639,6 +641,7 @@ export interface EffectivePlacementView {
     sumInsured: number | null;
     premium: number | null;
     currency: string | null;
+    rate: number | null;
     commissionPercent: number | null;
     brokeragePercent: number | null;
     grossPremium: number;
@@ -652,6 +655,23 @@ export interface EffectivePlacementView {
     confirmedEndorsementCapacityPercent: number;
     remainingCapacityPercent: number;
     effectiveTotalCapacityPercent: number;
+  };
+  effectiveTerms: {
+    title: string;
+    cedantId: string;
+    riskTypeId: string | null;
+    businessDetails: Record<string, unknown> | null;
+    offerDetails: Record<string, unknown> | null;
+    description: string | null;
+    inceptionDate: string | null;
+    expiryDate: string | null;
+    currency: string | null;
+    sumInsured: number | null;
+    rate: number | null;
+    premium: number | null;
+    commissionPercent: number | null;
+    brokeragePercent: number | null;
+    facultativeOfferPercent: number | null;
   };
   effectiveParticipants: Array<{
     counterpartyId: string;
@@ -692,6 +712,15 @@ export interface EffectivePlacementView {
     }>;
   }>;
   pendingEndorsements: Array<{
+    id: string;
+    endorsementNumber: string;
+    type: PlacementEndorsementType;
+    status: PlacementEndorsementStatus;
+    effectiveDate: string;
+    targetPercent: number | null;
+    confirmedClosingCount: number;
+  }>;
+  scheduledEndorsements: Array<{
     id: string;
     endorsementNumber: string;
     type: PlacementEndorsementType;

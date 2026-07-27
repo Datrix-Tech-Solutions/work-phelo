@@ -357,11 +357,14 @@ describe('PlacementsController', () => {
   it('delegates effective view reads with authenticated tenant context', async () => {
     const controller = createController();
 
-    await controller.getEffectiveView('placement-1', { user } as never);
+    await controller.getEffectiveView('placement-1', undefined, {
+      user,
+    } as never);
 
     expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
+      undefined,
     );
   });
 
