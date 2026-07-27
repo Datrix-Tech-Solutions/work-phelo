@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useThemeStore } from '@/store/theme.store';
 
 export interface PremiumDataPoint {
   date: string;
@@ -36,6 +37,8 @@ export function PremiumTrendChart({
   color = 'var(--module-btn-bg, var(--brand))',
 }: PremiumTrendChartProps) {
   const [hovered, setHovered] = useState<number | null>(null);
+  const isDark = useThemeStore((s) => s.theme === 'dark');
+  const gridStroke = isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb';
 
   if (data.length === 0) {
     return (
@@ -96,7 +99,7 @@ export function PremiumTrendChart({
     >
       <defs>
         <linearGradient id="premiumGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+          <stop offset="0%" stopColor={color} stopOpacity={0.6} />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -106,7 +109,7 @@ export function PremiumTrendChart({
         const y = toY(tick);
         return (
           <g key={i}>
-            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#e5e7eb" strokeWidth={1} />
+            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke={gridStroke} strokeWidth={1} />
             <text x={PL - 8} y={y + 5} textAnchor="end" fontSize={17} fill="#9ca3af">
               {formatAmount(tick)}
             </text>

@@ -51,7 +51,7 @@ export default function ClaimDetailPage({
         onClose={() => setPanelOpen(false)}
       />
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         {placement ? (
           <ClaimOverviewSection placement={placement} claim={activeClaim} />
         ) : (

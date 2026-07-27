@@ -10,7 +10,6 @@ import { pageHeader, pagePx, pageContent } from '@/lib/layout';
 import { LeaveTabs } from '@/components/molecules/hr/leave/LeaveTabs';
 import { MyLeaveTab } from '@/components/organisms/hr/leave/MyLeaveTab';
 import { LeaveRequestsTab } from '@/components/organisms/hr/leave/LeaveRequestsTab';
-import { AppBackground } from '@/components/atoms/AppBackground';
 
 const VALID_TABS = ['my', 'requests'] as const;
 type Tab = (typeof VALID_TABS)[number];
@@ -62,15 +61,12 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
         />
       </div>
 
-      <AppBackground
-        as="main"
-        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
-      >
+      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}>
         {activeTab === 'my' && hasHRProfile && <MyLeaveTab tenantSlug={tenantSlug} />}
         {activeTab === 'requests' && canSeeRequests && (
           <LeaveRequestsTab tenantSlug={tenantSlug} canReview={canSeeRequests} />
         )}
-      </AppBackground>
+      </div>
     </div>
   );
 }

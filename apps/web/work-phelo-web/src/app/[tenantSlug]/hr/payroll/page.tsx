@@ -18,7 +18,6 @@ import { NSSFTab_KE } from '@/components/organisms/hr/payroll/NSSFTab_KE';
 import { ApprovePayrollTab } from '@/components/organisms/hr/payroll/ApprovePayrollTab';
 import { PayrollHistoryTab } from '@/components/organisms/hr/payroll/PayrollHistoryTab';
 import { usePayrollSettings } from '@/hooks';
-import { AppBackground } from '@/components/atoms/AppBackground';
 
 type Tab = 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history';
 
@@ -81,16 +80,13 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
         />
       </div>
 
-      <AppBackground
-        as="main"
-        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
-      >
+      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}>
         {tab === 'payslip' && hasHRProfile && <MyPayslipTab />}
         {tab === 'manage' && canManagePayroll && <ManagePayrollTab />}
         {tab === 'ssnit' && canManagePayroll && renderContributionsTab()}
         {tab === 'approve' && canApprovePayroll && <ApprovePayrollTab />}
         {tab === 'history' && canViewHistory && <PayrollHistoryTab />}
-      </AppBackground>
+      </div>
     </div>
   );
 }

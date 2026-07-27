@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { Period } from '@/components/atoms/PeriodToggle';
 import { useFacultatives, useRiskTypes, useRiskClasses } from '@/hooks';
+import { useThemeStore } from '@/store/theme.store';
 
 const COLORS = [
   '#f97316',
@@ -54,6 +55,7 @@ interface RiskClassPieChartProps {
 
 export function RiskClassPieChart({ period }: RiskClassPieChartProps) {
   const [hovered, setHovered] = useState<number | null>(null);
+  const isDark = useThemeStore((s) => s.theme === 'dark');
   const { data: all = [] } = useFacultatives();
   const { data: riskTypes = [] } = useRiskTypes();
   const { data: riskClasses = [] } = useRiskClasses();
@@ -179,7 +181,16 @@ export function RiskClassPieChart({ period }: RiskClassPieChartProps) {
               />
               <span
                 className="truncate transition-colors duration-200"
-                style={{ color: hovered !== null && hovered !== i ? '#9ca3af' : '#374151' }}
+                style={{
+                  color:
+                    hovered !== null && hovered !== i
+                      ? isDark
+                        ? '#374151'
+                        : '#9ca3af'
+                      : isDark
+                        ? '#9ca3af'
+                        : '#374151',
+                }}
               >
                 {s.label}
               </span>

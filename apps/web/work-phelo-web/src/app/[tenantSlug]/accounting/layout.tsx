@@ -56,7 +56,7 @@ export default function AccountingLayout({
           />
         )}
         <main
-          className="flex-1 min-h-0 overflow-hidden flex flex-col"
+          className="flex-1 min-h-0 overflow-y-auto flex flex-col"
           onClick={() => {
             if (!collapsed) setCollapsed(true);
           }}
