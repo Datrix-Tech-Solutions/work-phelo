@@ -8,7 +8,7 @@ import type { TodaySession } from '@/types/timeclock';
 interface Props {
   session: TodaySession | undefined;
   isLoading: boolean;
-  onClockIn: () => void;
+  onClockIn: (location?: string) => void;
   onClockOut: () => void;
   isClockingIn: boolean;
   isClockingOut: boolean;

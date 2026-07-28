@@ -137,8 +137,8 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
           <MyTimeSection
             session={session}
             isLoading={sessionLoading}
-            onClockIn={() =>
-              clockIn(undefined, {
+            onClockIn={(location) =>
+              clockIn(location ? { location } : undefined, {
                 onSuccess: () => toast.success('Clocked in successfully'),
                 onError: (err) => toast.error(extractError(err, 'Failed to clock in')),
               })

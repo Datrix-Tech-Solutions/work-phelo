@@ -58,7 +58,7 @@ export function RecordsSection({
     {
       key: 'department',
       label: 'Department',
-      width: 'minmax(100px, 1fr)',
+      width: 'minmax(90px, 0.5fr)',
       render: (r) => <span>{r.department ?? '—'}</span>,
     },
 
@@ -79,6 +79,12 @@ export function RecordsSection({
       label: 'Hours',
       width: '90px',
       render: (r) => <span className="font-semibold">{formatMinutes(r.totalMinutes)}</span>,
+    },
+    {
+      key: 'location',
+      label: 'Location',
+      width: 'minmax(150px, 1.5fr)',
+      render: (r) => <span className="truncate">{r.location ?? '—'}</span>,
     },
     {
       key: 'flags',

@@ -8,7 +8,7 @@ import type { TodaySession, TimeEntry } from '@/types/timeclock';
 interface Props {
   session: TodaySession | undefined;
   isLoading: boolean;
-  onClockIn: () => void;
+  onClockIn: (location?: string) => void;
   onClockOut: () => void;
   onReportMissed: () => void;
   isClockingIn: boolean;
@@ -59,6 +59,12 @@ export function MyTimeSection({
       width: '200px',
       label: 'Hours',
       render: (r) => <span>{r.totalMinutes > 0 ? formatMinutes(r.totalMinutes) : '—'}</span>,
+    },
+    {
+      key: 'location',
+      width: 'minmax(150px, 1fr)',
+      label: 'Location',
+      render: (r) => <span className="truncate">{r.location ?? '—'}</span>,
     },
     {
       key: 'status',

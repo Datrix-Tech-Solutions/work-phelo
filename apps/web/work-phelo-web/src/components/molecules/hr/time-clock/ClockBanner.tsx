@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertCircle, LogIn, LogOut } from 'lucide-react';
+import { AlertCircle, Loader2, LogIn, LogOut, MapPin } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { useClockInLocation } from '@/hooks';
 import type { TodaySession } from '@/types/timeclock';
 
 interface Props {
@@ -13,7 +14,7 @@ interface Props {
   isClockedIn: boolean;
   isOnBreak: boolean;
   isDone: boolean;
-  onClockIn: () => void;
+  onClockIn: (location?: string) => void;
   onClockOut: () => void;
   isClockingIn: boolean;
   isClockingOut: boolean;
@@ -41,6 +42,12 @@ export function ClockBanner({
   const [confirmClockOut, setConfirmClockOut] = useState(false);
   const { date, time } = formatBannerDate(now);
   const isActive = isClockedIn || isOnBreak;
+  const location = useClockInLocation();
+
+  function openClockInConfirm() {
+    setConfirmClockIn(true);
+    location.capture();
+  }
 
   return (
     <>
@@ -82,7 +89,7 @@ export function ClockBanner({
           {!isLoading && !isActive && !isDone && (
             <Button
               size="sm"
-              onClick={() => setConfirmClockIn(true)}
+              onClick={openClockInConfirm}
               isLoading={isClockingIn}
               loadingText="Clocking in…"
               //look for a better for clock in
@@ -122,7 +129,8 @@ export function ClockBanner({
               size="sm"
               onClick={() => {
                 setConfirmClockIn(false);
-                onClockIn();
+                onClockIn(location.status === 'ready' ? (location.label ?? undefined) : undefined);
+                location.reset();
               }}
               className="bg-brand text-white hover:bg-brand-gradient-end"
             >
@@ -130,7 +138,25 @@ export function ClockBanner({
             </Button>
           </>
         }
-      />
+      >
+        {location.status === 'loading' && (
+          <p className="flex items-center gap-1.5 mt-2 text-xs text-gray-400">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Detecting your location…
+          </p>
+        )}
+        {location.status === 'ready' && location.label && (
+          <p className="flex items-center gap-1.5 mt-2 text-xs text-gray-500">
+            <MapPin className="w-3.5 h-3.5 shrink-0" />
+            {location.label}
+          </p>
+        )}
+        {location.status === 'error' && (
+          <p className="mt-2 text-xs text-gray-400">
+            Location unavailable — you can still clock in.
+          </p>
+        )}
+      </Modal>
 
       <Modal
         isOpen={confirmClockOut}

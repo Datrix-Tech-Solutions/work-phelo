@@ -2910,6 +2910,7 @@ export class TimeService {
       isLate: r.isLate,
       isOutsideSchedule: r.isOutsideSchedule,
       workMode: r.workMode,
+      location: r.location ?? undefined,
     }));
   }
 
