@@ -11,9 +11,13 @@ import {
   PlacementEndorsement,
   PlacementEndorsementStatus,
   PlacementEndorsementParticipant,
+  PlacementEndorsementSummary,
   CreateEndorsementPayload,
   CreateEndorsementParticipantPayload,
   PlacementParticipantClosing,
+  EndorsementParticipantClosing,
+  AcceptPlacementParticipantResponse,
+  ValidateEndorsementParticipantResponse,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
@@ -23,6 +27,19 @@ const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placeme
 export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
 export const placementClosingsKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'closings'] as const;
+const endorsementKey = (placementId: string) => [...FACULTATIVES_KEY, placementId, 'endorsements'];
+const endorsementSummaryKey = (placementId: string, endorsementId: string) =>
+  [...endorsementKey(placementId), endorsementId, 'summary'] as const;
+const endorsementParticipantKey = (placementId: string, endorsementId: string) => [
+  ...endorsementKey(placementId),
+  endorsementId,
+  'participants',
+];
+const endorsementClosingsKey = (placementId: string, endorsementId: string) => [
+  ...endorsementKey(placementId),
+  endorsementId,
+  'closings',
+];
 
 type SuppressInvalidationOption = {
   suppressInvalidation?: boolean;
@@ -185,6 +202,27 @@ export function useUpdateParticipantStatus(placementId: string) {
   });
 }
 
+export function useAcceptAndConfirmPlacementParticipant(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      participantId,
+    }: {
+      participantId: string;
+    }): Promise<AcceptPlacementParticipantResponse> => {
+      const res = await api.post(
+        `${BASE}/${placementId}/participants/${participantId}/accept-and-confirm`,
+      );
+      return res.data as AcceptPlacementParticipantResponse;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
+    },
+  });
+}
+
 export function useDeleteParticipant(placementId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -254,8 +292,6 @@ export function useUpdateClosingStatus(placementId: string) {
   });
 }
 
-const endorsementKey = (placementId: string) => [...FACULTATIVES_KEY, placementId, 'endorsements'];
-
 export function usePlacementEndorsements(placementId: string) {
   return useQuery({
     queryKey: endorsementKey(placementId),
@@ -298,15 +334,21 @@ export function useUpdateEndorsementStatus(placementId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
     },
   });
 }
 
-const endorsementParticipantKey = (placementId: string, endorsementId: string) => [
-  ...endorsementKey(placementId),
-  endorsementId,
-  'participants',
-];
+export function usePlacementEndorsementSummary(placementId: string, endorsementId: string) {
+  return useQuery({
+    queryKey: endorsementSummaryKey(placementId, endorsementId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/endorsements/${endorsementId}/summary`);
+      return res.data as PlacementEndorsementSummary;
+    },
+    enabled: !!placementId && !!endorsementId,
+  });
+}
 
 export function usePlacementEndorsementParticipants(
   placementId: string,
@@ -320,6 +362,18 @@ export function usePlacementEndorsementParticipants(
       );
       const raw = res.data?.items ?? res.data ?? [];
       return raw as PlacementEndorsementParticipant[];
+    },
+    enabled: !!placementId && !!endorsementId,
+  });
+}
+
+export function useEndorsementClosings(placementId: string, endorsementId: string | undefined) {
+  return useQuery({
+    queryKey: endorsementClosingsKey(placementId, endorsementId ?? ''),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/endorsements/${endorsementId}/closings`);
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as EndorsementParticipantClosing[];
     },
     enabled: !!placementId && !!endorsementId,
   });
@@ -342,6 +396,102 @@ export function useCreateEndorsementParticipant(
       queryClient.invalidateQueries({
         queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
       });
+      queryClient.invalidateQueries({
+        queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+      });
+    },
+  });
+}
+
+export function useUpdateEndorsementParticipant(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      participantId,
+      ...payload
+    }: Partial<CreateEndorsementParticipantPayload> & {
+      participantId: string;
+    }): Promise<PlacementEndorsementParticipant> => {
+      const res = await api.patch(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}`,
+        payload,
+      );
+      return res.data as PlacementEndorsementParticipant;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+      });
+      queryClient.invalidateQueries({
+        queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+      });
+    },
+  });
+}
+
+export function useUpdateEndorsementParticipantStatus(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      participantId,
+      status,
+      note,
+    }: {
+      participantId: string;
+      status: PlacementEndorsementParticipant['status'];
+      note?: string;
+    }): Promise<PlacementEndorsementParticipant> => {
+      const res = await api.patch(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}/status`,
+        { status, note },
+      );
+      return res.data as PlacementEndorsementParticipant;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+      });
+      queryClient.invalidateQueries({
+        queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+      });
+    },
+  });
+}
+
+export function useValidateAndConfirmEndorsementParticipant(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      participantId,
+    }: {
+      participantId: string;
+    }): Promise<ValidateEndorsementParticipantResponse> => {
+      const res = await api.post(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}/validate-and-confirm`,
+      );
+      return res.data as ValidateEndorsementParticipantResponse;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
+      queryClient.invalidateQueries({
+        queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+      });
+      queryClient.invalidateQueries({
+        queryKey: endorsementClosingsKey(placementId, endorsementId ?? ''),
+      });
+      queryClient.invalidateQueries({
+        queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+      });
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
     },
   });
 }

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  PlacementEndorsementImpactType,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
 } from '../../../prisma/generated/client';
@@ -25,6 +26,14 @@ export class PlacementEndorsementResponseDto {
     example: PlacementEndorsementType.SUM_INSURED_INCREASE,
   })
   type!: PlacementEndorsementType;
+
+  @ApiProperty({
+    enum: PlacementEndorsementImpactType,
+    example: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+    description:
+      'Backend-derived workflow classification. CAPACITY_INCREASE requires market placement; TERMS_ONLY indicates financial/coverage terms changed without capacity increase; DECREASE_OR_CANCELLATION covers reductions/cancellations; ADMINISTRATIVE is non-financial/admin-only.',
+  })
+  impactType!: PlacementEndorsementImpactType;
 
   @ApiProperty({
     enum: PlacementEndorsementStatus,

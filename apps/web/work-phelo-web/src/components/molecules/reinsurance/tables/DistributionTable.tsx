@@ -36,6 +36,7 @@ interface DistributionTableProps {
   placement: Facultative;
   hasActiveEndorsement?: boolean;
   confirmedCounterpartyIds?: Set<string>;
+  confirmedParticipantIds?: Set<string>;
   isPlacementLocked?: boolean;
   busyIds?: Set<string>;
   onShareCommit: (row: DistributionEntry, share: number) => void;
@@ -54,6 +55,7 @@ export function DistributionTable({
   placement,
   hasActiveEndorsement = false,
   confirmedCounterpartyIds,
+  confirmedParticipantIds,
   isPlacementLocked = false,
   busyIds,
   onShareCommit,
@@ -231,11 +233,16 @@ export function DistributionTable({
         const mailed = mailedIds.has(row.id);
         const hasReconfirmed =
           confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
+        const hasConfirmedClosing = confirmedParticipantIds?.has(row.id) ?? false;
         const responded = row.status === 'Declined' || row.status === 'Accepted';
         const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
         const isBusy = busyIds?.has(row.id) ?? false;
         const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
-        const showAccept = !isPlacementLocked && (isReconfirming || (mailed && !responded));
+        const showAccept =
+          !isPlacementLocked &&
+          (isReconfirming ||
+            (mailed && !responded) ||
+            (row.status === 'Accepted' && !hasConfirmedClosing));
         const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
         const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
         return (
@@ -259,7 +266,13 @@ export function DistributionTable({
             {showAccept && (
               <button
                 type="button"
-                title={isBusy ? 'Accepting line...' : 'Accept'}
+                title={
+                  isBusy
+                    ? 'Validating line...'
+                    : row.status === 'Accepted'
+                      ? 'Validate and confirm closing'
+                      : 'Accept'
+                }
                 onClick={() => {
                   if (!isBusy) handleAccept(row);
                 }}

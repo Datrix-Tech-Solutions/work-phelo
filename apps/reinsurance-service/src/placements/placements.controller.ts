@@ -56,11 +56,13 @@ import {
   PlacementEndorsementListResponseDto,
   PlacementEndorsementResponseDto,
 } from './dto/placement-endorsement-response.dto';
+import { PlacementEndorsementSummaryResponseDto } from './dto/placement-endorsement-summary-response.dto';
 import { UpdatePlacementEndorsementParticipantStatusDto } from './dto/update-placement-endorsement-participant-status.dto';
 import { UpdatePlacementEndorsementParticipantDto } from './dto/update-placement-endorsement-participant.dto';
 import { UpdatePlacementEndorsementClosingStatusDto } from './dto/update-placement-endorsement-closing-status.dto';
 import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
+import { ValidateEndorsementParticipantResponseDto } from './dto/validate-endorsement-participant-response.dto';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
@@ -96,6 +98,7 @@ import {
   ClosingSlipPreviewResponseDto,
   OfferSlipPreviewResponseDto,
 } from './dto/slip-preview-response.dto';
+import { AcceptPlacementParticipantResponseDto } from './dto/accept-placement-participant-response.dto';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
@@ -317,6 +320,38 @@ export class PlacementsController {
     );
   }
 
+  @Get(':id/endorsements/:endorsementId/summary')
+  @ApiTags('Reinsurance - Endorsements')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get placement endorsement aggregate summary',
+    description:
+      'Returns read-only endorsement workflow totals using endorsement participants, endorsement closings and endorsement notes only. Original placement participants, closings and notes are excluded from capacity and completion calculations.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementSummaryResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement endorsement is missing or belongs to another tenant/placement.',
+  })
+  getEndorsementSummary(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementsService.getSummary(
+      request.user.tenantId,
+      id,
+      endorsementId,
+    );
+  }
+
   @Patch(':id/endorsements/:endorsementId')
   @ApiTags('Reinsurance - Endorsements')
   @RequirePermissions(PlacementPermission.EDIT)
@@ -492,6 +527,57 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.endorsementClosingsService.create(
+      request.user,
+      id,
+      endorsementId,
+      participantId,
+    );
+  }
+
+  @Post(
+    ':id/endorsements/:endorsementId/participants/:participantId/validate-and-confirm',
+  )
+  @ApiTags('Reinsurance - Endorsement Closings')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Validate and confirm an endorsement participant atomically',
+    description:
+      'Creates or reuses the active endorsement closing for an ACCEPTED endorsement participant, issues it when needed, confirms it, and marks the endorsement participant CLOSED in one transaction. The endpoint is idempotent for already confirmed endorsement closings and does not mutate original placement participants or original placement closings.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Endorsement participant ID.',
+  })
+  @ApiCreatedResponse({ type: ValidateEndorsementParticipantResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Endorsement is not in a valid workflow state, participant is not ACCEPTED, signed line is missing/zero, capacity exceeds targetPercent, or required snapshot values are missing.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Endorsement or participant is terminal, or the participant is closed without a confirmed active endorsement closing.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Placement, endorsement, or endorsement participant is missing or belongs to another tenant.',
+  })
+  validateAndConfirmEndorsementParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementClosingsService.validateAndConfirm(
       request.user,
       id,
       endorsementId,
@@ -1591,6 +1677,51 @@ export class PlacementsController {
       id,
       participantId,
       dto,
+    );
+  }
+
+  @Post(':id/participants/:participantId/accept-and-confirm')
+  @ApiTags('Reinsurance - Placement Participants')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Accept a participant and confirm its closing atomically',
+    description:
+      'Runs the placement market acceptance workflow in one transactional backend operation: ' +
+      'validates the participant can move to ACCEPTED, marks it ACCEPTED, creates an active closing when none exists, ' +
+      'issues the closing and confirms it. Existing active DRAFT or ISSUED closings are advanced; existing CONFIRMED closings are reused. ' +
+      'The endpoint is idempotent for retries/double-clicks and leaves the individual participant and closing endpoints unchanged.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiCreatedResponse({ type: AcceptPlacementParticipantResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Invalid participant transition, missing signed line, missing placement premium, or invalid capacity.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is financially locked and participant changes require endorsement, or the workflow cannot be completed safely.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  acceptParticipantAndConfirm(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.acceptParticipantAndConfirm(
+      request.user,
+      id,
+      participantId,
     );
   }
 

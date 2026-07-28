@@ -354,7 +354,8 @@ export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStat
 }
 
 export function toStatusLabel(status: FacultativeStatus): string {
-  if (status === 'PARTIALLY_PLACED' || status === 'PLACED') return 'Closed';
+  if (status === 'PARTIALLY_PLACED') return 'Partially Placed';
+  if (status === 'PLACED') return 'Placed';
   if (status === 'MARKETING') return 'Open';
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
@@ -537,6 +538,63 @@ export interface PlacementEndorsement {
   updatedAt: string;
 }
 
+export type PlacementEndorsementImpactType =
+  | 'CAPACITY_INCREASE'
+  | 'TERMS_ONLY'
+  | 'DECREASE_OR_CANCELLATION'
+  | 'ADMINISTRATIVE';
+
+export type PlacementEndorsementPendingAction =
+  | 'SEND_TO_MARKET'
+  | 'ADD_CAPACITY'
+  | 'ACCEPT_PARTICIPANTS'
+  | 'CREATE_CLOSING'
+  | 'ISSUE_CLOSING'
+  | 'CONFIRM_CLOSING'
+  | 'GENERATE_NOTES'
+  | 'ISSUE_NOTES'
+  | 'CLOSE_ENDORSEMENT';
+
+export interface PlacementEndorsementSummary {
+  id: string;
+  placementId: string;
+  endorsementNumber: string;
+  type: PlacementEndorsementType;
+  impactType: PlacementEndorsementImpactType;
+  status: PlacementEndorsementStatus;
+  targetPercent: number | null;
+  acceptedPercent: number;
+  placedPercent: number;
+  remainingPercent: number | null;
+  participants: {
+    total: number;
+    accepted: number;
+    declined: number;
+  };
+  closings: {
+    total: number;
+    confirmed: number;
+    draft: number;
+    issued: number;
+    void: number;
+  };
+  notes: {
+    total: number;
+    endorsementDebitNotes: number;
+    endorsementCreditNotes: number;
+    issued: number;
+    draft: number;
+    void: number;
+  };
+  pendingActions: PlacementEndorsementPendingAction[];
+  canClose: boolean;
+  closeBlockingReasons: Array<{
+    code: string;
+    message: string;
+  }>;
+  isComplete: boolean;
+}
+
 export type PlacementEndorsementParticipantStatus =
   | 'INVITED'
   | 'OFFER_SENT'
@@ -547,6 +605,7 @@ export type PlacementEndorsementParticipantStatus =
 
 export interface PlacementEndorsementParticipant {
   id: string;
+  tenantId?: string;
   placementId: string;
   endorsementId: string;
   originalParticipantId: string | null;
@@ -555,8 +614,10 @@ export interface PlacementEndorsementParticipant {
   sharePercent: string | null;
   signedLinePercent: string | null;
   notes: string | null;
+  createdByUserId?: string;
   createdAt: string;
   updatedAt: string;
+  counterparty?: { id: string; name: string; registrationNumber: string | null };
 }
 
 export interface CreateEndorsementParticipantPayload {
@@ -586,6 +647,33 @@ export interface PlacementParticipantClosing {
   closingNumber: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EndorsementParticipantClosing {
+  id: string;
+  placementId: string;
+  endorsementId: string;
+  endorsementParticipantId: string;
+  status: PlacementParticipantClosingStatus;
+  closingNumber: string;
+  signedLinePercent: string | null;
+  premiumSnapshot?: string | null;
+  netPremium?: string | null;
+  currency?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcceptPlacementParticipantResponse {
+  participant: PlacementParticipant;
+  closing: PlacementParticipantClosing;
+}
+
+export interface ValidateEndorsementParticipantResponse {
+  participant: PlacementEndorsementParticipant;
+  closing: EndorsementParticipantClosing;
+  summary: PlacementEndorsementSummary;
+  effectiveStatus: PlacementEndorsementStatus;
 }
 
 export type PlacementPaymentType =
