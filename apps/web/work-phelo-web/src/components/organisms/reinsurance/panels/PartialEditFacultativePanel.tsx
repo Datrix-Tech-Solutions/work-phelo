@@ -8,6 +8,9 @@ import { FormSection } from '@/components/atoms/FormSection';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
+import { useUpdateFacultative } from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 interface PartialEditFacultativePanelProps {
   isOpen: boolean;
@@ -35,14 +38,48 @@ function fmtAmount(val: number | null, currency: string | null) {
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-// Placement is closed/mostly-closed at this point, so only the policy number is editable here.
-// Everything else is shown read-only. Not wired to a save mutation yet — Save Changes just closes.
 export function PartialEditFacultativePanel({
   isOpen,
   placement,
   onClose,
 }: PartialEditFacultativePanelProps) {
+  return (
+    <PartialEditFacultativePanelContent
+      key={`${placement.id}:${placement.policyNumber ?? ''}`}
+      isOpen={isOpen}
+      placement={placement}
+      onClose={onClose}
+    />
+  );
+}
+
+// Placement is closed/mostly-closed at this point, so only administrative fields are editable.
+// Everything else is shown read-only to preserve financial and market history.
+function PartialEditFacultativePanelContent({
+  isOpen,
+  placement,
+  onClose,
+}: PartialEditFacultativePanelProps) {
+  const { mutateAsync: updateFacultative, isPending } = useUpdateFacultative();
   const [policyNumber, setPolicyNumber] = useState(placement.policyNumber ?? '');
+  const addToast = useToastStore((s) => s.addToast);
+
+  const handleSave = async () => {
+    const trimmedPolicyNumber = policyNumber.trim();
+    try {
+      await updateFacultative({
+        id: placement.id,
+        policyNumber: trimmedPolicyNumber || null,
+      });
+      addToast({ message: 'Policy number updated successfully', type: 'success' });
+      onClose();
+    } catch (error) {
+      addToast({
+        message: extractError(error, 'Failed to update policy number'),
+        type: 'error',
+      });
+    }
+  };
 
   const riskEntries = [
     ...placementDetailEntries(placement.businessDetails),
@@ -56,10 +93,12 @@ export function PartialEditFacultativePanel({
       title="Partial Edit Facultative Placement"
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
-          <Button onClick={onClose}>Save Changes</Button>
+          <Button onClick={handleSave} isLoading={isPending} loadingText="Saving…">
+            Save Changes
+          </Button>
         </div>
       }
     >

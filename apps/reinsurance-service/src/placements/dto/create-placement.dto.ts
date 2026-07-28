@@ -46,7 +46,7 @@ export class CreatePlacementDto {
   @IsString()
   @MinLength(2)
   @MaxLength(80)
-  policyNumber?: string;
+  policyNumber?: string | null;
 
   @ApiProperty({
     example: 'Acme Energy Facultative Placement',

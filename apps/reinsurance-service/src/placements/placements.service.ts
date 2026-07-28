@@ -473,13 +473,6 @@ export class PlacementsService {
     }
 
     const existing = await this.findOne(user.tenantId, id);
-    if (existing.lockStatus && !existing.lockStatus.canEdit) {
-      throw new ConflictException(
-        existing.lockStatus.editRequiresEndorsement
-          ? DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE
-          : existing.lockStatus.reason,
-      );
-    }
 
     this.validateDates(
       dto.inceptionDate ?? existing.inceptionDate?.toISOString(),
@@ -622,7 +615,22 @@ export class PlacementsService {
     const changedMaterialFields = this.getChangedMaterialFields(existing, dto);
     const editClassification: PlacementEditClassification =
       changedMaterialFields.length > 0 ? 'MATERIAL' : 'ADMINISTRATIVE';
-    const nextStatus = this.deriveReopenedStatus(existing);
+    const isAdministrativeOnlyEdit = editClassification === 'ADMINISTRATIVE';
+    if (
+      existing.lockStatus &&
+      !existing.lockStatus.canEdit &&
+      !isAdministrativeOnlyEdit
+    ) {
+      throw new ConflictException(
+        existing.lockStatus.editRequiresEndorsement
+          ? DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE
+          : existing.lockStatus.reason,
+      );
+    }
+
+    const nextStatus = isAdministrativeOnlyEdit
+      ? existing.status
+      : this.deriveReopenedStatus(existing);
     let participantResetSummary = {
       participantsRequiringReoffer: 0,
       participantsPreservedAsAccepted: 0,
@@ -646,11 +654,10 @@ export class PlacementsService {
           });
         }
 
-        participantResetSummary = await this.supersedePlacementMarketArtifacts(
-          tx,
-          user.tenantId,
-          id,
-        );
+        if (!isAdministrativeOnlyEdit) {
+          participantResetSummary =
+            await this.supersedePlacementMarketArtifacts(tx, user.tenantId, id);
+        }
 
         return tx.placement.update({
           where: {
@@ -2825,8 +2832,9 @@ export class PlacementsService {
     return value.trim();
   }
 
-  private cleanOptional(value?: string): string | null | undefined {
+  private cleanOptional(value?: string | null): string | null | undefined {
     if (value === undefined) return undefined;
+    if (value === null) return null;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   }

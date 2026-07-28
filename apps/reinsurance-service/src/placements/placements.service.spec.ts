@@ -8,10 +8,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementClosingStatus,
-  PlacementDocumentStatus,
-  PlacementDocumentType,
   PlacementNoteStatus,
-  PlacementNoteType,
   PlacementParticipantRole,
   PlacementParticipantStatus,
   PlacementStatus,
@@ -1100,124 +1097,77 @@ describe('PlacementsService', () => {
     });
   });
 
-  it('reopens a safely editable placement with active participants to marketing and supersedes market artifacts', async () => {
+  it('updates administrative placement fields without reopening or superseding market artifacts', async () => {
     const placedWithoutImmutableActivity = {
       ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
       status: PlacementStatus.PARTIALLY_PLACED,
     };
-    const reopened = {
+    const updated = {
       ...placedWithoutImmutableActivity,
       description: 'Internal admin note',
-      status: PlacementStatus.MARKETING,
     };
     prisma.placement.findFirst.mockResolvedValue(
       placedWithoutImmutableActivity,
     );
-    prisma.placement.update.mockResolvedValue(reopened);
+    prisma.placement.update.mockResolvedValue(updated);
 
     const result = await service.update(user, 'placement-1', {
       description: 'Internal admin note',
     });
 
-    expect(result.status).toBe(PlacementStatus.MARKETING);
-    const historyArgs = prisma.placementStatusHistory.create.mock
-      .calls[0]?.[0] as
-      | {
-          data: Record<string, unknown>;
-        }
-      | undefined;
-    expect(historyArgs?.data).toMatchObject({
-      tenantId: 'tenant-1',
-      placementId: 'placement-1',
-      fromStatus: PlacementStatus.PARTIALLY_PLACED,
-      toStatus: PlacementStatus.MARKETING,
-      note: 'Placement edited and returned to Open Offers (administrative edit)',
-    });
-
-    expect(prisma.placementClosing.updateMany.mock.calls[0]?.[0]).toMatchObject(
-      {
-        where: {
-          tenantId: 'tenant-1',
-          placementId: 'placement-1',
-          status: {
-            in: [
-              PlacementClosingStatus.DRAFT,
-              PlacementClosingStatus.ISSUED,
-              PlacementClosingStatus.CONFIRMED,
-            ],
-          },
-        },
-        data: { status: PlacementClosingStatus.VOID },
-      },
-    );
-
-    expect(prisma.placementNote.updateMany.mock.calls[0]?.[0]).toMatchObject({
-      where: {
-        tenantId: 'tenant-1',
-        placementId: 'placement-1',
-        endorsementId: null,
-        type: {
-          in: [PlacementNoteType.DEBIT_NOTE, PlacementNoteType.CREDIT_NOTE],
-        },
-        status: {
-          in: [PlacementNoteStatus.DRAFT, PlacementNoteStatus.ISSUED],
-        },
-      },
+    expect(result.status).toBe(PlacementStatus.PARTIALLY_PLACED);
+    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+    expect(prisma.placementClosing.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementNote.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementDocument.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementParticipant.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
       data: {
-        status: PlacementNoteStatus.VOID,
-        voidReason: 'Placement edited; note superseded',
+        description: 'Internal admin note',
+        status: PlacementStatus.PARTIALLY_PLACED,
       },
-    });
-
-    const documentArgs = prisma.placementDocument.updateMany.mock
-      .calls[0]?.[0] as
-      | {
-          where: Record<string, unknown>;
-          data: Record<string, unknown>;
-        }
-      | undefined;
-    expect(documentArgs?.where).toMatchObject({
-      tenantId: 'tenant-1',
-      placementId: 'placement-1',
-      endorsementId: null,
-      type: {
-        in: [
-          PlacementDocumentType.OFFER_SLIP,
-          PlacementDocumentType.CLOSING_SLIP,
-          PlacementDocumentType.DEBIT_NOTE,
-          PlacementDocumentType.CREDIT_NOTE,
-        ],
-      },
-      status: {
-        in: [
-          PlacementDocumentStatus.DRAFT,
-          PlacementDocumentStatus.GENERATED,
-          PlacementDocumentStatus.FAILED,
-        ],
-      },
-    });
-    expect(documentArgs?.data).toMatchObject({
-      status: PlacementDocumentStatus.VOID,
-      voidReason: 'Placement edited; document superseded',
-    });
-
-    expect(
-      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
-    ).toMatchObject({
-      where: {
-        tenantId: 'tenant-1',
-        placementId: 'placement-1',
-        status: {
-          in: [
-            PlacementParticipantStatus.CLOSED,
-            PlacementParticipantStatus.ACCEPTED,
-            PlacementParticipantStatus.QUOTED,
-          ],
-        },
-      },
-      data: { status: PlacementParticipantStatus.OFFER_SENT },
     });
   });
+
+  it.each([
+    PlacementStatus.CLOSED,
+    PlacementStatus.PARTIALLY_PLACED,
+    PlacementStatus.CLOSING,
+  ])(
+    'updates policy number on a %s placement without reopening or mutating historical records',
+    async (status) => {
+      const placementWithConfirmedHistory = {
+        ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
+        policyNumber: null,
+        status,
+      };
+      prisma.placement.findFirst.mockResolvedValue(
+        placementWithConfirmedHistory,
+      );
+      prisma.placement.update.mockResolvedValue({
+        ...placementWithConfirmedHistory,
+        policyNumber: 'POL-2026-001',
+      });
+
+      const result = await service.update(user, 'placement-1', {
+        policyNumber: 'POL-2026-001',
+      });
+
+      expect(result.status).toBe(status);
+      expect(result.policyNumber).toBe('POL-2026-001');
+      expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+      expect(prisma.placementClosing.updateMany).not.toHaveBeenCalled();
+      expect(prisma.placementNote.updateMany).not.toHaveBeenCalled();
+      expect(prisma.placementDocument.updateMany).not.toHaveBeenCalled();
+      expect(prisma.placementParticipant.updateMany).not.toHaveBeenCalled();
+      expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+        data: {
+          policyNumber: 'POL-2026-001',
+          status,
+        },
+      });
+    },
+  );
 
   it('keeps a safely editable placement with no active participants in draft without duplicate status history', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
@@ -1299,6 +1249,11 @@ describe('PlacementsService', () => {
     expect(historyArgs?.data).toMatchObject({
       note: 'Placement edited and returned to Open Offers (material edit: premium)',
     });
+    expect(prisma.placementClosing.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { status: PlacementClosingStatus.VOID },
+      }),
+    );
   });
 
   it('resets accepted participants to offer-sent when expiry date changes', async () => {
@@ -1354,7 +1309,7 @@ describe('PlacementsService', () => {
     });
     prisma.placement.update.mockResolvedValue({
       ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
-      status: PlacementStatus.MARKETING,
+      status: PlacementStatus.PLACED,
     });
 
     await service.update(user, 'placement-1', {
@@ -1362,28 +1317,11 @@ describe('PlacementsService', () => {
       expiryDate: '2027-05-31T00:00:00.000Z',
     });
 
-    expect(
-      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
-    ).toMatchObject({
-      where: {
-        status: {
-          in: [
-            PlacementParticipantStatus.CLOSED,
-            PlacementParticipantStatus.ACCEPTED,
-            PlacementParticipantStatus.QUOTED,
-          ],
-        },
-      },
-      data: { status: PlacementParticipantStatus.OFFER_SENT },
-    });
-    const historyArgs = prisma.placementStatusHistory.create.mock
-      .calls[0]?.[0] as
-      | {
-          data: Record<string, unknown>;
-        }
-      | undefined;
-    expect(historyArgs?.data).toMatchObject({
-      note: 'Placement edited and returned to Open Offers (administrative edit)',
+    expect(prisma.placementParticipant.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+    expect(prisma.placementClosing.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      data: { status: PlacementStatus.PLACED },
     });
   });
 

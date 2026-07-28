@@ -448,7 +448,7 @@ export interface CreateFacultativePayload {
   cedantId: string;
   riskTypeId: string;
   reference: string;
-  policyNumber?: string;
+  policyNumber?: string | null;
   title: string;
   description?: string;
   sumInsured: number;
