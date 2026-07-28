@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import {
@@ -731,6 +731,29 @@ export function useEndorsementClosings(placementId: string, endorsementId: strin
   });
 }
 
+export function usePlacementEndorsementClosings(
+  placementId: string,
+  endorsements: PlacementEndorsement[],
+) {
+  const queries = useQueries({
+    queries: endorsements.map((endorsement) => ({
+      queryKey: endorsementClosingsKey(placementId, endorsement.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${placementId}/endorsements/${endorsement.id}/closings`);
+        const raw = res.data?.items ?? res.data ?? [];
+        return raw as EndorsementParticipantClosing[];
+      },
+      enabled: !!placementId && !!endorsement.id,
+    })),
+  });
+
+  return {
+    data: queries.flatMap((query) => query.data ?? []),
+    isLoading: queries.some((query) => query.isLoading),
+    isError: queries.some((query) => query.isError),
+  };
+}
+
 export function usePlacementEndorsementNotes(
   placementId: string,
   endorsementId: string | undefined,
@@ -786,6 +809,29 @@ export function useCreateEndorsementCreditNote(
     onSuccess: () => {
       invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
       queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
+export function useCreatePlacementEndorsementCreditNote(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      endorsementId,
+      closingId,
+    }: {
+      endorsementId: string;
+      closingId: string;
+    }) => {
+      const res = await api.post<PlacementNote>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/closings/${closingId}/notes/credit`,
+      );
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      invalidateEndorsementWorkflow(queryClient, placementId, variables.endorsementId);
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
     },
   });
 }

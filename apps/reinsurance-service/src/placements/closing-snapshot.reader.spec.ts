@@ -82,6 +82,7 @@ describe('ClosingSnapshotReader', () => {
     tx.placementEndorsementClosing.findMany.mockResolvedValue([
       {
         id: 'endorsement-closing-1',
+        endorsementId: 'endorsement-1',
         endorsementParticipantId: 'endorsement-participant-1',
         signedLinePercent: new Prisma.Decimal('10.0000'),
         premiumSnapshot: new Prisma.Decimal('1200.00'),
@@ -117,6 +118,7 @@ describe('ClosingSnapshotReader', () => {
       {
         sourceType: 'ENDORSEMENT_CLOSING',
         closingId: 'endorsement-closing-1',
+        endorsementId: 'endorsement-1',
         endorsementParticipantId: 'endorsement-participant-1',
         originalParticipantId: 'participant-2',
         counterpartyId: 'reinsurer-2',

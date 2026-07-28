@@ -692,6 +692,7 @@ export interface EffectivePlacementView {
     sources: Array<{
       sourceType: 'PLACEMENT_CLOSING' | 'ENDORSEMENT_CLOSING';
       closingId: string;
+      endorsementId?: string;
       participantId?: string;
       endorsementParticipantId?: string;
       originalParticipantId?: string | null;

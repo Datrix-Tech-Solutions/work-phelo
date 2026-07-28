@@ -9,7 +9,6 @@ import {
   EndorsementParticipantClosing,
   PlacementDocument,
   PlacementEndorsementParticipant,
-  PlacementNote,
 } from '@/types/reinsurance';
 import { EndorsementParticipantRow } from './types';
 
@@ -18,7 +17,6 @@ interface EndorsementParticipantsTableProps {
   endorsementParticipants: PlacementEndorsementParticipant[];
   acceptedCounterpartyIds: Set<string>;
   confirmedClosingByEndorsementParticipantId: Record<string, EndorsementParticipantClosing>;
-  findEndorsementCreditNote: (closingId: string) => PlacementNote | undefined;
   findCertificateDocument: (closingId: string) => PlacementDocument | undefined;
   busyEPIds: Set<string>;
   mailedIds: Set<string>;
@@ -31,11 +29,7 @@ interface EndorsementParticipantsTableProps {
   onReject: (row: EndorsementParticipantRow) => void;
   onValidate: (row: EndorsementParticipantRow) => void;
   onViewClosing: (closing: EndorsementParticipantClosing) => void;
-  onViewCreditNote: (note: PlacementNote) => void;
-  onGenerateCreditNote: (closing: EndorsementParticipantClosing) => void;
-  onIssueNote: (note: PlacementNote) => void;
   onViewCertificate: (document: PlacementDocument) => void;
-  isNoteBusy: boolean;
 }
 
 export function EndorsementParticipantsTable({
@@ -43,7 +37,6 @@ export function EndorsementParticipantsTable({
   endorsementParticipants,
   acceptedCounterpartyIds,
   confirmedClosingByEndorsementParticipantId,
-  findEndorsementCreditNote,
   findCertificateDocument,
   busyEPIds,
   mailedIds,
@@ -56,11 +49,7 @@ export function EndorsementParticipantsTable({
   onReject,
   onValidate,
   onViewClosing,
-  onViewCreditNote,
-  onGenerateCreditNote,
-  onIssueNote,
   onViewCertificate,
-  isNoteBusy,
 }: EndorsementParticipantsTableProps) {
   const columns: Column<EndorsementParticipantRow>[] = [
     {
@@ -175,7 +164,6 @@ export function EndorsementParticipantsTable({
         const confirmedClosing = row.participantId
           ? confirmedClosingByEndorsementParticipantId[row.participantId]
           : undefined;
-        const creditNote = confirmedClosing ? findEndorsementCreditNote(confirmedClosing.id) : null;
         const certificateDocument = confirmedClosing
           ? findCertificateDocument(confirmedClosing.id)
           : null;
@@ -188,33 +176,6 @@ export function EndorsementParticipantsTable({
               <TableButton variant="green" onClick={() => onViewClosing(confirmedClosing)}>
                 View Closing
               </TableButton>
-              {creditNote &&
-                (creditNote.status === 'DRAFT' ? (
-                  <TableButton
-                    variant="red"
-                    isLoading={isNoteBusy}
-                    onClick={() => {
-                      if (!isNoteBusy) onIssueNote(creditNote);
-                    }}
-                  >
-                    Issue Credit Note
-                  </TableButton>
-                ) : (
-                  <TableButton variant="green" onClick={() => onViewCreditNote(creditNote)}>
-                    Credit Note
-                  </TableButton>
-                ))}
-              {!creditNote && (
-                <TableButton
-                  variant="gray"
-                  isLoading={isNoteBusy}
-                  onClick={() => {
-                    if (!isNoteBusy) onGenerateCreditNote(confirmedClosing);
-                  }}
-                >
-                  Generate Credit Note
-                </TableButton>
-              )}
               {certificateDocument && (
                 <TableButton variant="blue" onClick={() => onViewCertificate(certificateDocument)}>
                   Certificate

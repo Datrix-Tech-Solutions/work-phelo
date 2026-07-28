@@ -30,8 +30,18 @@ interface GuaranteeNoteModalProps {
   sumInsuredOverride?: number | null;
   premiumOverride?: number | null;
   commissionOverride?: number | null;
+  currencyOverride?: string | null;
+  titleOverride?: string | null;
+  policyNumberOverride?: string | null;
+  inceptionDateOverride?: string | null;
+  expiryDateOverride?: string | null;
   /** Post-endorsement share per reinsurer, keyed by counterpartyId. */
   participantShareOverrides?: Record<string, number>;
+  effectiveParticipantOverrides?: Array<{
+    id: string;
+    counterpartyName: string;
+    displaySharePercent: number;
+  }>;
   onPrint: () => void;
   onClose: () => void;
 }
@@ -43,7 +53,13 @@ export function GuaranteeNoteModal({
   sumInsuredOverride,
   premiumOverride,
   commissionOverride,
+  currencyOverride,
+  titleOverride,
+  policyNumberOverride,
+  inceptionDateOverride,
+  expiryDateOverride,
   participantShareOverrides,
+  effectiveParticipantOverrides,
   onPrint,
   onClose,
 }: GuaranteeNoteModalProps) {
@@ -79,6 +95,11 @@ export function GuaranteeNoteModal({
   const effectiveSumInsured = sumInsuredOverride ?? sumInsured;
   const effectivePremium = premiumOverride ?? premium;
   const effectiveCommission = commissionOverride ?? commission;
+  const effectiveCurrency = currencyOverride ?? currency;
+  const effectiveTitle = titleOverride ?? title;
+  const effectivePolicyNumber = policyNumberOverride ?? policyNumber;
+  const effectiveInceptionDate = inceptionDateOverride ?? inceptionDate;
+  const effectiveExpiryDate = expiryDateOverride ?? expiryDate;
   const facSumInsured = effectiveSumInsured != null ? (facOffer / 100) * effectiveSumInsured : null;
   const facPremium = effectivePremium != null ? (facOffer / 100) * effectivePremium : null;
   const commissionAmount =
@@ -86,29 +107,32 @@ export function GuaranteeNoteModal({
   const netPremium =
     facPremium != null && commissionAmount != null ? facPremium - commissionAmount : null;
 
-  const participantRows = participants
-    .filter(
-      (p) =>
-        (p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER') &&
-        p.status === 'CLOSED' &&
-        parseFloat(p.sharePercent ?? '0') > 0,
-    )
-    .map((p) => ({
-      ...p,
-      displaySharePercent:
-        participantShareOverrides?.[p.counterpartyId] ?? parseFloat(p.sharePercent ?? '0'),
-    }));
+  const participantRows =
+    effectiveParticipantOverrides ??
+    participants
+      .filter(
+        (p) =>
+          (p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER') &&
+          p.status === 'CLOSED' &&
+          parseFloat(p.sharePercent ?? '0') > 0,
+      )
+      .map((p) => ({
+        id: p.id,
+        counterpartyName: p.counterparty.name,
+        displaySharePercent:
+          participantShareOverrides?.[p.counterpartyId] ?? parseFloat(p.sharePercent ?? '0'),
+      }));
 
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Guarantee Note — ${displayPolicyNumber(policyNumber)}`}
+      title={`Guarantee Note — ${displayPolicyNumber(effectivePolicyNumber)}`}
       documentTitle="Guarantee Note"
       fileName={buildDocumentFileName(
         'Guarantee Note',
-        displayPolicyNumber(policyNumber),
+        displayPolicyNumber(effectivePolicyNumber),
         riskTypeName,
-        title,
+        effectiveTitle,
         `to ${displayName}`,
       )}
       afterContent={
@@ -165,38 +189,54 @@ export function GuaranteeNoteModal({
 
         <DetailField inline label="Cover Type" value={classOfBusiness ?? '—'} />
         <DetailField inline label="Reinsured" value={cedant.name} />
-        <DetailField inline label="Policy Number" value={displayPolicyNumber(policyNumber)} />
-        <DetailField inline label="Original Insured" value={title} />
-        <DetailField inline label="Currency" value={currency ?? '—'} />
+        <DetailField
+          inline
+          label="Policy Number"
+          value={displayPolicyNumber(effectivePolicyNumber)}
+        />
+        <DetailField inline label="Original Insured" value={effectiveTitle} />
+        <DetailField inline label="Currency" value={effectiveCurrency ?? '—'} />
         <DetailField
           inline
           label="Insurance Period"
-          value={`${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`}
+          value={`${fmtDate(effectiveInceptionDate)} – ${fmtDate(effectiveExpiryDate)}`}
         />
 
         <hr className="border-gray-100 my-1" />
 
-        <DetailField inline label="Sum Insured" value={fmtAmount(effectiveSumInsured, currency)} />
-        <DetailField inline label="Premium" value={fmtAmount(effectivePremium, currency)} />
+        <DetailField
+          inline
+          label="Sum Insured"
+          value={fmtAmount(effectiveSumInsured, effectiveCurrency)}
+        />
+        <DetailField
+          inline
+          label="Premium"
+          value={fmtAmount(effectivePremium, effectiveCurrency)}
+        />
         <DetailField
           inline
           label="Facultative (Offer)"
           value={
             facSumInsured != null
-              ? `${fmtAmount(facSumInsured, currency)} (${facOffer}% of 100%)`
+              ? `${fmtAmount(facSumInsured, effectiveCurrency)} (${facOffer}% of 100%)`
               : '—'
           }
         />
-        <DetailField inline label="Facultative Premium" value={fmtAmount(facPremium, currency)} />
+        <DetailField
+          inline
+          label="Facultative Premium"
+          value={fmtAmount(facPremium, effectiveCurrency)}
+        />
         <DetailField
           inline
           label={`Commission (${effectiveCommission ?? 0}%)`}
-          value={fmtAmount(commissionAmount, currency)}
+          value={fmtAmount(commissionAmount, effectiveCurrency)}
         />
 
         <hr className="border-gray-100 my-1" />
 
-        <DetailField inline label="Net Premium" value={fmtAmount(netPremium, currency)} />
+        <DetailField inline label="Net Premium" value={fmtAmount(netPremium, effectiveCurrency)} />
 
         <hr className="border-gray-100 my-2" />
 
@@ -212,7 +252,7 @@ export function GuaranteeNoteModal({
             <DetailField
               key={p.id}
               inline
-              label={p.counterparty.name}
+              label={p.counterpartyName}
               value={`${p.displaySharePercent}% of 100%`}
             />
           ))

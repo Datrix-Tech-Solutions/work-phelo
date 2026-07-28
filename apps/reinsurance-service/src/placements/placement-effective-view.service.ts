@@ -582,6 +582,7 @@ export class PlacementEffectiveViewService {
         sources: Array<{
           sourceType: 'PLACEMENT_CLOSING' | 'ENDORSEMENT_CLOSING';
           closingId: string;
+          endorsementId?: string;
           participantId?: string;
           endorsementParticipantId?: string;
           originalParticipantId?: string | null;
@@ -616,6 +617,9 @@ export class PlacementEffectiveViewService {
       existing.sources.push({
         sourceType: snapshot.sourceType,
         closingId: snapshot.closingId,
+        ...(snapshot.endorsementId
+          ? { endorsementId: snapshot.endorsementId }
+          : {}),
         ...(snapshot.participantId
           ? { participantId: snapshot.participantId }
           : {}),

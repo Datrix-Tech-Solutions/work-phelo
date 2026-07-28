@@ -5,20 +5,32 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
 import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents/GuaranteeNoteModal';
 import { NoteDocumentModal } from '@/components/organisms/reinsurance/documents/NoteDocumentModal';
+import { PlacementClosingSnapshotModal } from '@/components/organisms/reinsurance/documents/PlacementClosingSnapshotModal';
+import { EndorsementClosingSnapshotModal } from '@/components/organisms/reinsurance/documents/EndorsementClosingSnapshotModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import {
   useCedants,
   useReinsurers,
   usePlacementClosings,
+  usePlacementEndorsements,
+  usePlacementEndorsementClosings,
   usePlacementDocuments,
   usePlacementNotes,
   useCreatePlacementDebitNote,
   useCreatePlacementCreditNote,
+  useCreatePlacementEndorsementCreditNote,
   usePlacementEffectiveView,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { Facultative, PlacementDocument, PlacementNote } from '@/types/reinsurance';
+import {
+  EndorsementParticipantClosing,
+  Facultative,
+  PlacementDocument,
+  PlacementEndorsement,
+  PlacementNote,
+  PlacementParticipantClosing,
+} from '@/types/reinsurance';
 
 interface ClosingRow {
   id: string;
@@ -34,12 +46,27 @@ interface ClosingRow {
 
 interface EffectivePositionRow {
   id: string;
+  counterpartyId: string;
   reinsurerCompany: string;
   signedShare: number;
   grossPremium: number;
   netPremium: number;
   currency: string | null;
   participationType: 'ORIGINAL' | 'REVISED' | 'ADDED';
+  sourceType: 'PLACEMENT_CLOSING' | 'ENDORSEMENT_CLOSING';
+  sourceClosingId: string;
+  sourceEndorsementId?: string;
+  sourceCount: number;
+}
+
+interface MailReinsurerRow {
+  counterpartyId: string;
+  brokerageFee: number;
+}
+
+interface EndorsementClosingPreviewState {
+  endorsement: PlacementEndorsement;
+  closing: EndorsementParticipantClosing;
 }
 
 function fmtPct(val: number) {
@@ -68,6 +95,14 @@ function isActiveCreditNote(note: PlacementNote, closingId: string) {
   return note.type === 'CREDIT_NOTE' && note.closingId === closingId && isActiveNote(note);
 }
 
+function isActiveEndorsementCreditNote(note: PlacementNote, endorsementClosingId: string) {
+  return (
+    note.type === 'ENDORSEMENT_CREDIT_NOTE' &&
+    note.endorsementClosingId === endorsementClosingId &&
+    isActiveNote(note)
+  );
+}
+
 interface PlacementClosingsTabProps {
   placement: Facultative;
 }
@@ -78,12 +113,19 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [debitNoteViewed, setDebitNoteViewed] = useState(false);
   const [noteDocumentPreview, setNoteDocumentPreview] = useState<PlacementDocument | null>(null);
   const [noteRecordPreview, setNoteRecordPreview] = useState<PlacementNote | null>(null);
+  const [placementClosingPreview, setPlacementClosingPreview] =
+    useState<PlacementParticipantClosing | null>(null);
+  const [endorsementClosingPreview, setEndorsementClosingPreview] =
+    useState<EndorsementClosingPreviewState | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
-  const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
+  const [mailToReinsurerRow, setMailToReinsurerRow] = useState<MailReinsurerRow | null>(null);
 
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
   const { data: closings = [], isLoading: isLoadingClosings } = usePlacementClosings(placement.id);
+  const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
+  const { data: endorsementClosings = [], isLoading: isLoadingEndorsementClosings } =
+    usePlacementEndorsementClosings(placement.id, endorsements);
   const { data: effectiveView, isLoading: isLoadingEffectiveView } = usePlacementEffectiveView(
     placement.id,
   );
@@ -93,6 +135,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   );
   const createDebitNote = useCreatePlacementDebitNote(placement.id);
   const createCreditNote = useCreatePlacementCreditNote(placement.id);
+  const createEndorsementCreditNote = useCreatePlacementEndorsementCreditNote(placement.id);
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
 
@@ -108,7 +151,12 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   );
 
   const isPlacementClosed = placement.status === 'CLOSED';
-  const isNoteBusy = createDebitNote.isPending || createCreditNote.isPending;
+  const hasAppliedEndorsements = (effectiveView?.appliedEndorsements.length ?? 0) > 0;
+  const isCurrentDebitNoteSupported = !hasAppliedEndorsements;
+  const isNoteBusy =
+    createDebitNote.isPending ||
+    createCreditNote.isPending ||
+    createEndorsementCreditNote.isPending;
 
   const rows: ClosingRow[] = closings
     .filter((closing) => closing.status === 'CONFIRMED')
@@ -125,15 +173,29 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     }));
 
   const effectiveRows: EffectivePositionRow[] =
-    effectiveView?.effectiveParticipants.map((participant) => ({
-      id: participant.counterpartyId,
-      reinsurerCompany: participant.counterparty.name,
-      signedShare: participant.signedLinePercent,
-      grossPremium: participant.grossPremium,
-      netPremium: participant.netPremium,
-      currency: effectiveView.effectiveTotals.currency,
-      participationType: participant.participationType,
-    })) ?? [];
+    effectiveView?.effectiveParticipants
+      .map((participant) => {
+        const currentSource =
+          participant.sources.find((source) => source.sourceType === 'ENDORSEMENT_CLOSING') ??
+          participant.sources[0];
+        if (!currentSource) return undefined;
+        const row: EffectivePositionRow = {
+          id: `${participant.counterpartyId}:${currentSource.sourceType}:${currentSource.closingId}`,
+          counterpartyId: participant.counterpartyId,
+          reinsurerCompany: participant.counterparty.name,
+          signedShare: participant.signedLinePercent,
+          grossPremium: participant.grossPremium,
+          netPremium: participant.netPremium,
+          currency: effectiveView.effectiveTotals.currency,
+          participationType: participant.participationType,
+          sourceType: currentSource.sourceType,
+          sourceClosingId: currentSource.closingId,
+          sourceEndorsementId: currentSource.endorsementId,
+          sourceCount: participant.sources.length,
+        };
+        return row;
+      })
+      .filter((row): row is EffectivePositionRow => Boolean(row)) ?? [];
 
   const effectiveColumns: Column<EffectivePositionRow>[] = [
     {
@@ -155,6 +217,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       render: (row) => (
         <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
           {row.participationType.toLowerCase()}
+          {row.sourceCount > 1 ? ` · ${row.sourceCount} snapshots` : ''}
         </span>
       ),
     },
@@ -174,6 +237,32 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         <span className="text-gray-700">{fmtAmount(row.netPremium, row.currency)}</span>
       ),
     },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 'minmax(240px, 1fr)',
+      render: (row) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <TableButton variant="green" onClick={() => handleViewEffectiveClosing(row)}>
+            View Closing
+          </TableButton>
+          <TableButton isLoading={isNoteBusy} onClick={() => handleOpenEffectiveCreditNote(row)}>
+            Credit Note
+          </TableButton>
+          <TableButton
+            variant="blue"
+            onClick={() =>
+              setMailToReinsurerRow({
+                counterpartyId: row.counterpartyId,
+                brokerageFee: 0,
+              })
+            }
+          >
+            Mail Reinsurer
+          </TableButton>
+        </div>
+      ),
+    },
   ];
 
   const openNoteDocument = async (note: PlacementNote) => {
@@ -187,6 +276,37 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const findActiveDebitNote = (notes = placementNotes) => notes.find(isActiveDebitNote);
   const findActiveCreditNote = (closingId: string, notes = placementNotes) =>
     notes.find((note) => isActiveCreditNote(note, closingId));
+  const findActiveEndorsementCreditNote = (endorsementClosingId: string, notes = placementNotes) =>
+    notes.find((note) => isActiveEndorsementCreditNote(note, endorsementClosingId));
+
+  const findEndorsementClosingContext = (endorsementId: string, closingId: string) => {
+    const endorsement = endorsements.find((item) => item.id === endorsementId);
+    const closing = endorsementClosings.find((item) => item.id === closingId);
+    return endorsement && closing ? { endorsement, closing } : null;
+  };
+
+  const handleViewEffectiveClosing = (row: EffectivePositionRow) => {
+    if (row.sourceType === 'PLACEMENT_CLOSING') {
+      const closing = closings.find((item) => item.id === row.sourceClosingId);
+      if (closing) {
+        setPlacementClosingPreview(closing);
+        return;
+      }
+    }
+
+    if (row.sourceType === 'ENDORSEMENT_CLOSING' && row.sourceEndorsementId) {
+      const context = findEndorsementClosingContext(row.sourceEndorsementId, row.sourceClosingId);
+      if (context) {
+        setEndorsementClosingPreview(context);
+        return;
+      }
+    }
+
+    useToastStore.getState().addToast({
+      message: 'Current closing snapshot could not be found. Refresh and try again.',
+      type: 'error',
+    });
+  };
 
   const handleOpenDebitNote = async () => {
     setDebitNoteViewed(true);
@@ -213,17 +333,17 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     }
   };
 
-  const handleOpenCreditNote = async (row: ClosingRow) => {
+  const handleOpenCreditNote = async (closingId: string) => {
     try {
-      let note = findActiveCreditNote(row.id);
+      let note = findActiveCreditNote(closingId);
       if (!note) {
         try {
-          note = await createCreditNote.mutateAsync({ closingId: row.id });
+          note = await createCreditNote.mutateAsync({ closingId });
         } catch (error) {
           const message = extractError(error);
           if (!message.toLowerCase().includes('active credit note')) throw error;
           const refreshed = await refetchPlacementNotes();
-          note = findActiveCreditNote(row.id, refreshed.data ?? []);
+          note = findActiveCreditNote(closingId, refreshed.data ?? []);
         }
       }
       if (!note) throw new Error('Active credit note could not be found.');
@@ -235,6 +355,45 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
     }
+  };
+
+  const handleOpenEndorsementCreditNote = async (endorsementId: string, closingId: string) => {
+    try {
+      let note = findActiveEndorsementCreditNote(closingId);
+      if (!note) {
+        try {
+          note = await createEndorsementCreditNote.mutateAsync({ endorsementId, closingId });
+        } catch (error) {
+          const message = extractError(error);
+          if (!message.toLowerCase().includes('active endorsement credit note')) throw error;
+          const refreshed = await refetchPlacementNotes();
+          note = findActiveEndorsementCreditNote(closingId, refreshed.data ?? []);
+        }
+      }
+      if (!note) throw new Error('Active endorsement credit note could not be found.');
+      await openNoteDocument(note);
+      useToastStore.getState().addToast({
+        message: 'Credit note ready',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleOpenEffectiveCreditNote = async (row: EffectivePositionRow) => {
+    if (row.sourceType === 'PLACEMENT_CLOSING') {
+      await handleOpenCreditNote(row.sourceClosingId);
+      return;
+    }
+    if (row.sourceType === 'ENDORSEMENT_CLOSING' && row.sourceEndorsementId) {
+      await handleOpenEndorsementCreditNote(row.sourceEndorsementId, row.sourceClosingId);
+      return;
+    }
+    useToastStore.getState().addToast({
+      message: 'Credit note source could not be resolved for this current position.',
+      type: 'error',
+    });
   };
 
   const columns: Column<ClosingRow>[] = [
@@ -277,7 +436,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       width: 'minmax(200px, 1fr)',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <TableButton isLoading={isNoteBusy} onClick={() => handleOpenCreditNote(row)}>
+          <TableButton isLoading={isNoteBusy} onClick={() => handleOpenCreditNote(row.id)}>
             View Closings
           </TableButton>
           <TableButton variant="blue" onClick={() => setMailToReinsurerRow(row)}>
@@ -291,25 +450,65 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   return (
     <>
       <section className="mb-5 flex flex-col gap-3">
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900">
-            Current Effective Closings / Position
-          </h4>
-          <p className="text-xs text-gray-500">
-            Latest confirmed placement position from original closings plus closed effective
-            endorsements. Historical original closings remain listed separately below.
-          </p>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900">
+              Current Effective Closings / Position
+            </h4>
+            <p className="text-xs text-gray-500">
+              Latest confirmed placement position from original closings plus closed effective
+              endorsements. Historical original closings remain listed separately below.
+            </p>
+          </div>
+          {isPlacementClosed && (
+            <div className="flex flex-wrap items-center gap-2">
+              <TableButton
+                variant="gray"
+                onClick={() => {
+                  setGuaranteeNoteOpen(true);
+                  setGuaranteeNoteViewed(true);
+                }}
+                className={guaranteeNoteViewed ? '' : 'btn-pulse'}
+              >
+                View Guarantee Note
+              </TableButton>
+              <TableButton
+                variant={isCurrentDebitNoteSupported ? 'green' : 'gray'}
+                disabled={!isCurrentDebitNoteSupported}
+                tooltip={
+                  isCurrentDebitNoteSupported
+                    ? undefined
+                    : 'Current effective debit note generation is not yet backend-supported after endorsements. Original debit notes remain historical.'
+                }
+                onClick={handleOpenDebitNote}
+                className={debitNoteViewed ? '' : 'btn-pulse'}
+              >
+                View Debit Note
+              </TableButton>
+              <TableButton variant="blue" onClick={() => setMailToCedantOpen(true)}>
+                Mail to Cedant
+              </TableButton>
+            </div>
+          )}
         </div>
         <DataTable
           columns={effectiveColumns}
           data={effectiveRows}
-          isLoading={isLoadingEffectiveView}
+          isLoading={isLoadingEffectiveView || isLoadingEndorsementClosings}
           emptyMessage="No confirmed effective placement position yet"
           currentPage={1}
           totalPages={1}
           onPageChange={() => {}}
           noInternalScroll
         />
+      </section>
+
+      <section className="mb-3">
+        <h4 className="text-sm font-semibold text-gray-900">Original Placement Closings</h4>
+        <p className="text-xs text-gray-500">
+          Historical original placement closing snapshots. These records are not rewritten by
+          endorsements.
+        </p>
       </section>
 
       <DataTable
@@ -321,35 +520,25 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         totalPages={1}
         onPageChange={() => {}}
         noInternalScroll
-        secondaryButtons={[
-          ...(isPlacementClosed
-            ? [
-                {
-                  label: 'View Guarantee Note',
-                  onClick: () => {
-                    setGuaranteeNoteOpen(true);
-                    setGuaranteeNoteViewed(true);
-                  },
-                  className: guaranteeNoteViewed ? 'mx-1' : 'btn-pulse mx-1',
-                },
-                {
-                  label: 'View Debit Note',
-                  onClick: handleOpenDebitNote,
-                  className: debitNoteViewed ? 'mx-1' : 'btn-pulse mx-1',
-                },
-              ]
-            : []),
-        ]}
-        actionButton={
-          isPlacementClosed
-            ? { label: 'Mail to cedant', onClick: () => setMailToCedantOpen(true) }
-            : undefined
-        }
       />
 
       <GuaranteeNoteModal
         isOpen={guaranteeNoteOpen}
         placement={placement}
+        facultativeOfferOverride={effectiveView?.effectiveTotals.facultativeOfferPercent}
+        sumInsuredOverride={effectiveView?.effectiveTotals.sumInsured}
+        premiumOverride={effectiveView?.effectiveTotals.premium}
+        commissionOverride={effectiveView?.effectiveTotals.commissionPercent}
+        currencyOverride={effectiveView?.effectiveTotals.currency}
+        titleOverride={effectiveView?.effectiveTerms.title}
+        policyNumberOverride={effectiveView?.effectiveTerms.policyNumber}
+        inceptionDateOverride={effectiveView?.effectiveTerms.inceptionDate}
+        expiryDateOverride={effectiveView?.effectiveTerms.expiryDate}
+        effectiveParticipantOverrides={effectiveView?.effectiveParticipants.map((participant) => ({
+          id: participant.counterpartyId,
+          counterpartyName: participant.counterparty.name,
+          displaySharePercent: participant.signedLinePercent,
+        }))}
         onPrint={() => setGuaranteeNoteOpen(false)}
         onClose={() => setGuaranteeNoteOpen(false)}
       />
@@ -373,6 +562,23 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         onSend={() => setMailToCedantOpen(false)}
         onClose={() => setMailToCedantOpen(false)}
       />
+
+      <PlacementClosingSnapshotModal
+        isOpen={!!placementClosingPreview}
+        placement={placement}
+        closing={placementClosingPreview}
+        onClose={() => setPlacementClosingPreview(null)}
+      />
+
+      {endorsementClosingPreview && (
+        <EndorsementClosingSnapshotModal
+          isOpen
+          placement={placement}
+          endorsement={endorsementClosingPreview.endorsement}
+          closing={endorsementClosingPreview.closing}
+          onClose={() => setEndorsementClosingPreview(null)}
+        />
+      )}
 
       {mailToReinsurerRow && (
         <MailPreviewModal

@@ -6,7 +6,6 @@ import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreview
 import { EndorsementDocumentModal } from '@/components/organisms/reinsurance/documents/EndorsementDocumentModal';
 import { EndorsementClosingSnapshotModal } from '@/components/organisms/reinsurance/documents/EndorsementClosingSnapshotModal';
 import { EndorsementSlipPreviewModal } from '@/components/organisms/reinsurance/documents/EndorsementSlipPreviewModal';
-import { NoteDocumentModal } from '@/components/organisms/reinsurance/documents/NoteDocumentModal';
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 import {
   EndorsementParticipantClosing,
@@ -52,10 +51,6 @@ interface EndorsementModalsProps {
 
   endorsementClosingPreview: EndorsementParticipantClosing | null;
   onCloseEndorsementClosingPreview: () => void;
-
-  noteDocumentPreview: PlacementDocument | null;
-  noteRecordPreview: PlacementNote | null;
-  onCloseNotePreview: () => void;
 }
 
 /** Bundles every modal/panel EndorsementCard can open, wired to its state via props. */
@@ -85,9 +80,6 @@ export function EndorsementModals({
   onCloseDocumentPreview,
   endorsementClosingPreview,
   onCloseEndorsementClosingPreview,
-  noteDocumentPreview,
-  noteRecordPreview,
-  onCloseNotePreview,
 }: EndorsementModalsProps) {
   return (
     <>
@@ -165,14 +157,6 @@ export function EndorsementModals({
         endorsement={endorsement}
         closing={endorsementClosingPreview}
         onClose={onCloseEndorsementClosingPreview}
-      />
-
-      <NoteDocumentModal
-        isOpen={!!noteDocumentPreview || !!noteRecordPreview}
-        document={noteDocumentPreview}
-        note={noteRecordPreview}
-        placement={placement}
-        onClose={onCloseNotePreview}
       />
     </>
   );

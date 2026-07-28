@@ -228,6 +228,7 @@ describe('PlacementEffectiveViewService', () => {
         {
           sourceType: 'ENDORSEMENT_CLOSING',
           closingId: 'endorsement-closing-1',
+          endorsementId: 'endorsement-1',
           endorsementParticipantId: 'endorsement-participant-1',
           counterpartyId: 'reinsurer-c',
           signedLinePercent: 10,
@@ -283,6 +284,15 @@ describe('PlacementEffectiveViewService', () => {
       id: 'endorsement-closing-1',
       counterpartyId: 'reinsurer-c',
       signedLinePercent: 10,
+    });
+    expect(
+      result.effectiveParticipants.find(
+        (participant) => participant.counterpartyId === 'reinsurer-c',
+      )?.sources[0],
+    ).toMatchObject({
+      sourceType: 'ENDORSEMENT_CLOSING',
+      closingId: 'endorsement-closing-1',
+      endorsementId: 'endorsement-1',
     });
   });
 

@@ -9,6 +9,7 @@ export type ClosingSnapshotSourceType =
 export type ClosingSnapshot = {
   sourceType: ClosingSnapshotSourceType;
   closingId: string;
+  endorsementId?: string;
   participantId?: string;
   endorsementParticipantId?: string;
   originalParticipantId?: string | null;
@@ -99,6 +100,7 @@ export class ClosingSnapshotReader {
       },
       select: {
         id: true,
+        endorsementId: true,
         endorsementParticipantId: true,
         signedLinePercent: true,
         premiumSnapshot: true,
@@ -120,6 +122,7 @@ export class ClosingSnapshotReader {
     return closings.map((closing) => ({
       sourceType: 'ENDORSEMENT_CLOSING',
       closingId: closing.id,
+      endorsementId: closing.endorsementId,
       endorsementParticipantId: closing.endorsementParticipantId,
       originalParticipantId:
         closing.endorsementParticipant.originalParticipantId,

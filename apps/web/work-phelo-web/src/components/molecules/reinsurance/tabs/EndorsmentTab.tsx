@@ -7,7 +7,6 @@ import {
   Facultative,
   PlacementEndorsement,
   PlacementDocument,
-  PlacementNote,
   ENDORSEMENT_STATUS_LABELS,
   ENDORSEMENT_STATUS_VARIANT,
 } from '@/types/reinsurance';
@@ -20,9 +19,6 @@ import {
   useEndorsementClosings,
   usePlacementDocuments,
   usePlacementEndorsementNotes,
-  useCreateEndorsementDebitNote,
-  useCreateEndorsementCreditNote,
-  useIssueEndorsementNote,
   useValidateAndConfirmEndorsementParticipant,
   usePlacementEndorsementSummary,
   usePlacementEffectiveView,
@@ -49,7 +45,6 @@ import { EndorsementHeader } from '@/components/molecules/reinsurance/endorsemen
 import { EndorsementSummaryLine } from '@/components/molecules/reinsurance/endorsement/EndorsementSummaryLine';
 import { EndorsementCapacitySection } from '@/components/molecules/reinsurance/endorsement/EndorsementCapacitySection';
 import { EndorsementParticipantsTable } from '@/components/molecules/reinsurance/endorsement/EndorsementParticipantsTable';
-import { EndorsementDocumentsSection } from '@/components/molecules/reinsurance/endorsement/EndorsementDocumentsSection';
 import { EndorsementCloseSection } from '@/components/molecules/reinsurance/endorsement/EndorsementCloseSection';
 import { EndorsementModals } from '@/components/molecules/reinsurance/endorsement/EndorsementModals';
 import {
@@ -88,8 +83,6 @@ function EndorsementCard({
   const [endorsementClosingPreview, setEndorsementClosingPreview] =
     useState<EndorsementParticipantClosing | null>(null);
   const [documentPreview, setDocumentPreview] = useState<PlacementDocument | null>(null);
-  const [noteDocumentPreview, setNoteDocumentPreview] = useState<PlacementDocument | null>(null);
-  const [noteRecordPreview, setNoteRecordPreview] = useState<PlacementNote | null>(null);
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [mailPreviewCounterpartyId, setMailPreviewCounterpartyId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
@@ -126,9 +119,6 @@ function EndorsementCard({
     endorsement.id,
   );
   const { data: placementDocuments = [] } = usePlacementDocuments(placement.id);
-  const createEndorsementDebitNote = useCreateEndorsementDebitNote(placement.id, endorsement.id);
-  const createEndorsementCreditNote = useCreateEndorsementCreditNote(placement.id, endorsement.id);
-  const issueEndorsementNote = useIssueEndorsementNote(placement.id, endorsement.id);
   const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
     placement.id,
     endorsement.id,
@@ -275,85 +265,12 @@ function EndorsementCard({
         document.type === 'ENDORSEMENT_CERTIFICATE' && document.endorsementClosingId === closingId,
     );
 
-  const findNoteDocument = (noteId: string) =>
-    activePlacementDocuments.find((document) => document.noteId === noteId);
-  const findEndorsementCreditNote = (closingId: string) =>
-    endorsementNotes.find(
-      (note) =>
-        note.type === 'ENDORSEMENT_CREDIT_NOTE' &&
-        note.endorsementClosingId === closingId &&
-        note.status !== 'VOID',
-    );
-  const endorsementDebitNotes = endorsementNotes.filter(
-    (note) => note.type === 'ENDORSEMENT_DEBIT_NOTE',
-  );
-  const activeEndorsementDebitNote = endorsementDebitNotes.find((note) => note.status !== 'VOID');
-  const canGenerateEndorsementDebitNote =
-    endorsement.status === 'CLOSED' || Boolean(activeEndorsementDebitNote);
-  const isNoteBusy =
-    createEndorsementDebitNote.isPending ||
-    createEndorsementCreditNote.isPending ||
-    issueEndorsementNote.isPending;
-
   const handleViewEndorsementSlip = () => {
     if (endorsementSlipDocument) {
       setDocumentPreview(endorsementSlipDocument);
       return;
     }
     setEndorsementSlipPreviewOpen(true);
-  };
-
-  const handleViewEndorsementNote = (note: PlacementNote) => {
-    const document = findNoteDocument(note.id);
-    setNoteDocumentPreview(document ?? null);
-    setNoteRecordPreview(document ? null : note);
-  };
-
-  const handleGenerateEndorsementDebitNote = async () => {
-    try {
-      const note = activeEndorsementDebitNote ?? (await createEndorsementDebitNote.mutateAsync());
-      handleViewEndorsementNote(note);
-      await invalidateEndorsementView();
-      useToastStore.getState().addToast({
-        message: 'Endorsement debit note ready',
-        type: 'success',
-      });
-    } catch (error) {
-      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
-    }
-  };
-
-  const handleGenerateEndorsementCreditNote = async (closing: EndorsementParticipantClosing) => {
-    try {
-      const existingNote = findEndorsementCreditNote(closing.id);
-      const note =
-        existingNote ??
-        (await createEndorsementCreditNote.mutateAsync({
-          closingId: closing.id,
-        }));
-      handleViewEndorsementNote(note);
-      await invalidateEndorsementView();
-      useToastStore.getState().addToast({
-        message: 'Endorsement credit note ready',
-        type: 'success',
-      });
-    } catch (error) {
-      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
-    }
-  };
-
-  const handleIssueEndorsementNote = async (note: PlacementNote) => {
-    try {
-      const issuedNote = await issueEndorsementNote.mutateAsync({ noteId: note.id });
-      handleViewEndorsementNote(issuedNote);
-      await invalidateEndorsementView();
-      useToastStore.getState().addToast({
-        message: 'Endorsement note issued',
-        type: 'success',
-      });
-    } catch (error) {
-      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
-    }
   };
 
   const handlePreviewMarketDocument = (row: EndorsementParticipantRow) => {
@@ -636,7 +553,6 @@ function EndorsementCard({
                   confirmedClosingByEndorsementParticipantId={
                     confirmedClosingByEndorsementParticipantId
                   }
-                  findEndorsementCreditNote={findEndorsementCreditNote}
                   findCertificateDocument={findCertificateDocument}
                   busyEPIds={busyEPIds}
                   mailedIds={mailedIds}
@@ -651,31 +567,17 @@ function EndorsementCard({
                   onReject={handleRejectEndorsementParticipant}
                   onValidate={handleValidateEndorsementParticipant}
                   onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
-                  onViewCreditNote={handleViewEndorsementNote}
-                  onGenerateCreditNote={handleGenerateEndorsementCreditNote}
-                  onIssueNote={handleIssueEndorsementNote}
                   onViewCertificate={(document) => setDocumentPreview(document)}
-                  isNoteBusy={isNoteBusy}
                 />
               )}
 
               {endorsement.status !== 'DRAFT' && (
-                <>
-                  <EndorsementDocumentsSection
-                    notes={endorsementDebitNotes}
-                    onViewNote={handleViewEndorsementNote}
-                    onGenerateDebitNote={handleGenerateEndorsementDebitNote}
-                    onIssueNote={handleIssueEndorsementNote}
-                    canGenerateDebitNote={canGenerateEndorsementDebitNote}
-                    isNoteBusy={isNoteBusy}
-                  />
-                  <EndorsementCloseSection
-                    isClosed={endorsement.status === 'CLOSED'}
-                    isUpdatingStatus={isUpdatingStatus}
-                    isReadyToClose={isReadyToClose}
-                    onClose={handleCloseEndorsement}
-                  />
-                </>
+                <EndorsementCloseSection
+                  isClosed={endorsement.status === 'CLOSED'}
+                  isUpdatingStatus={isUpdatingStatus}
+                  isReadyToClose={isReadyToClose}
+                  onClose={handleCloseEndorsement}
+                />
               )}
             </div>
           </div>
@@ -716,12 +618,6 @@ function EndorsementCard({
         onCloseDocumentPreview={() => setDocumentPreview(null)}
         endorsementClosingPreview={endorsementClosingPreview}
         onCloseEndorsementClosingPreview={() => setEndorsementClosingPreview(null)}
-        noteDocumentPreview={noteDocumentPreview}
-        noteRecordPreview={noteRecordPreview}
-        onCloseNotePreview={() => {
-          setNoteDocumentPreview(null);
-          setNoteRecordPreview(null);
-        }}
       />
     </>
   );

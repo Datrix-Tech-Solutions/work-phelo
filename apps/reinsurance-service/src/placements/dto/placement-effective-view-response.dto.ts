@@ -211,6 +211,13 @@ export class EffectiveParticipantSourceDto {
   @ApiProperty({ format: 'uuid' })
   closingId!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Present when sourceType is ENDORSEMENT_CLOSING; identifies the owning placement endorsement.',
+  })
+  endorsementId?: string;
+
   @ApiPropertyOptional({ format: 'uuid' })
   participantId?: string;
 
