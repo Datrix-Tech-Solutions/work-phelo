@@ -20,13 +20,13 @@ function buildColumns(classMap: Map<string, string>): Column<RiskType>[] {
     {
       key: 'name',
       label: 'Risk Type',
-      width: '2fr',
+      width: 'minmax(150px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
       key: 'riskClassId',
       label: 'Risk Class',
-      width: '2fr',
+      width: 'minmax(150px, 1fr)',
       render: (row) => (
         <span className="text-gray-700">{classMap.get(row.riskClassId) ?? '—'}</span>
       ),
@@ -34,7 +34,7 @@ function buildColumns(classMap: Map<string, string>): Column<RiskType>[] {
     {
       key: 'createdAt',
       label: 'Date Created',
-      width: '1.5fr',
+      width: '150px',
       render: (row) => (
         <span className="text-gray-600 text-sm">
           {new Date(row.createdAt).toLocaleDateString('en-GB', {

@@ -27,6 +27,7 @@ interface EndorsementParticipantsTableProps {
   onMailReinsurer: (counterpartyId: string) => void;
   onAccept: (row: EndorsementParticipantRow) => void;
   onReject: (row: EndorsementParticipantRow) => void;
+  onRevert: (row: EndorsementParticipantRow) => void;
   onValidate: (row: EndorsementParticipantRow) => void;
   onViewClosing: (closing: EndorsementParticipantClosing) => void;
   onViewCertificate: (document: PlacementDocument) => void;
@@ -47,6 +48,7 @@ export function EndorsementParticipantsTable({
   onMailReinsurer,
   onAccept,
   onReject,
+  onRevert,
   onValidate,
   onViewClosing,
   onViewCertificate,
@@ -85,6 +87,7 @@ export function EndorsementParticipantsTable({
             </span>
           );
         }
+        const mailed = mailedIds.has(row.counterpartyId);
         return (
           <input
             type="number"
@@ -92,7 +95,11 @@ export function EndorsementParticipantsTable({
             max={100}
             value={revisedShares[row.counterpartyId] ?? String(row.offeredShare)}
             onChange={(e) => onRevisedShareChange(row.counterpartyId, e.target.value)}
-            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-brand"
+            className={
+              mailed
+                ? 'w-20 px-2 py-1 text-sm border border-red-400 ring-1 ring-red-100 rounded bg-white text-red-700 focus:outline-none focus:border-red-500'
+                : 'w-20 px-2 py-1 text-sm border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-brand'
+            }
           />
         );
       },
@@ -192,26 +199,26 @@ export function EndorsementParticipantsTable({
               <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
                 Offer Slip
               </TableButton>
-              <button
-                type="button"
-                title="Share"
-                onClick={() => onMailReinsurer(row.counterpartyId)}
-                className="text-green-500 hover:text-green-700 transition-colors"
-              >
-                <Icons.Mail className="w-4 h-4" />
-              </button>
-              {mailed && !responded && (
+              {!mailed && (
                 <button
                   type="button"
-                  title={isBusy ? 'Accepting...' : 'Accept'}
+                  title="Share"
+                  onClick={() => onMailReinsurer(row.counterpartyId)}
+                  className="text-green-500 hover:text-green-700 transition-colors mail-pending-bounce"
+                >
+                  <Icons.Mail className="w-5 h-5" />
+                </button>
+              )}
+              {mailed && !responded && (
+                <TableButton
+                  variant="green"
+                  isLoading={isBusy}
                   onClick={() => {
                     if (!isBusy) onAccept(row);
                   }}
-                  disabled={isBusy}
-                  className={`text-green-500 hover:text-green-600 transition-colors ${isBusy ? 'opacity-50 cursor-wait' : ''}`}
                 >
-                  <Icons.Check className="w-4 h-4" />
-                </button>
+                  Accept
+                </TableButton>
               )}
               {mailed && !responded && (
                 <button
@@ -220,7 +227,7 @@ export function EndorsementParticipantsTable({
                   onClick={() => onReject(row)}
                   className="text-red-400 hover:text-red-600 transition-colors"
                 >
-                  <Icons.X className="w-4 h-4" />
+                  <Icons.X className="w-5 h-5" />
                 </button>
               )}
               {isDeclined && <Badge label="Declined" variant="danger" />}
@@ -228,15 +235,28 @@ export function EndorsementParticipantsTable({
                 (isValidated ? (
                   <Badge label="Confirmed" variant="success" />
                 ) : (
-                  <TableButton
-                    isLoading={isBusy}
-                    tooltip="Validate endorsement closing"
-                    onClick={() => {
-                      if (!isBusy) onValidate(row);
-                    }}
-                  >
-                    Validate
-                  </TableButton>
+                  <>
+                    <TableButton
+                      isLoading={isBusy}
+                      tooltip="Validate endorsement closing"
+                      onClick={() => {
+                        if (!isBusy) onValidate(row);
+                      }}
+                    >
+                      Validate
+                    </TableButton>
+                    <button
+                      type="button"
+                      title="Revert to pending"
+                      onClick={() => {
+                        if (!isBusy) onRevert(row);
+                      }}
+                      disabled={isBusy}
+                      className={`text-amber-500 hover:text-amber-600 transition-colors ${isBusy ? 'opacity-50 cursor-wait' : ''}`}
+                    >
+                      <Icons.RotateCcw className="w-5 h-5" />
+                    </button>
+                  </>
                 ))}
             </div>
           );
@@ -251,15 +271,28 @@ export function EndorsementParticipantsTable({
               {isValidated ? (
                 <Badge label="Confirmed" variant="success" />
               ) : (
-                <TableButton
-                  isLoading={isBusy}
-                  tooltip="Validate endorsement closing"
-                  onClick={() => {
-                    if (!isBusy) onValidate(row);
-                  }}
-                >
-                  Validate
-                </TableButton>
+                <>
+                  <TableButton
+                    isLoading={isBusy}
+                    tooltip="Validate endorsement closing"
+                    onClick={() => {
+                      if (!isBusy) onValidate(row);
+                    }}
+                  >
+                    Validate
+                  </TableButton>
+                  <button
+                    type="button"
+                    title="Revert to pending"
+                    onClick={() => {
+                      if (!isBusy) onRevert(row);
+                    }}
+                    disabled={isBusy}
+                    className={`text-amber-500 hover:text-amber-600 transition-colors ${isBusy ? 'opacity-50 cursor-wait' : ''}`}
+                  >
+                    <Icons.RotateCcw className="w-5 h-5" />
+                  </button>
+                </>
               )}
             </div>
           );
@@ -270,27 +303,27 @@ export function EndorsementParticipantsTable({
             <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
               Revised Offer
             </TableButton>
-            <button
-              type="button"
-              title="Send Endorsement Email"
-              onClick={() => onMailReinsurer(row.counterpartyId)}
-              className="text-green-500 hover:text-green-700 transition-colors"
-            >
-              <Icons.Mail className="w-4 h-4" />
-            </button>
-            {isDeclined && <Badge label="Declined" variant="danger" />}
-            {mailed && (
+            {!mailed && (
               <button
                 type="button"
-                title={isBusy ? 'Accepting...' : 'Accept'}
+                title="Send Endorsement Email"
+                onClick={() => onMailReinsurer(row.counterpartyId)}
+                className="text-green-500 hover:text-green-700 transition-colors mail-pending-bounce"
+              >
+                <Icons.Mail className="w-5 h-5" />
+              </button>
+            )}
+            {isDeclined && <Badge label="Declined" variant="danger" />}
+            {mailed && (
+              <TableButton
+                variant="green"
+                isLoading={isBusy}
                 onClick={() => {
                   if (!isBusy) onAccept(row);
                 }}
-                disabled={isBusy}
-                className={`text-green-500 hover:text-green-600 transition-colors ${isBusy ? 'opacity-50 cursor-wait' : ''}`}
               >
-                <Icons.Check className="w-4 h-4" />
-              </button>
+                Accept
+              </TableButton>
             )}
           </div>
         );

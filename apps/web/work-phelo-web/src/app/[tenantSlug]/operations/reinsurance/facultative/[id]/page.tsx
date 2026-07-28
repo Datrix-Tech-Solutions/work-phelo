@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
@@ -54,21 +54,12 @@ export default function FacultativeDetailPage({
     placement.status !== 'DECLINED' &&
     placement.status !== 'CANCELLED';
 
-  const allReinsurersResolved = useMemo(() => {
-    const reinsurers =
-      placement?.participants.filter(
-        (p) => p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER',
-      ) ?? [];
-    return (
-      reinsurers.length > 0 &&
-      reinsurers.every((p) => p.status === 'CLOSED' || p.status === 'DECLINED')
-    );
-  }, [placement?.participants]);
+  const shouldDefaultToClosings = placement?.status === 'CLOSING' || placement?.status === 'CLOSED';
 
-  const [prevAllResolved, setPrevAllResolved] = useState(false);
-  if (allReinsurersResolved !== prevAllResolved) {
-    setPrevAllResolved(allReinsurersResolved);
-    if (allReinsurersResolved) {
+  const [prevShouldDefaultToClosings, setPrevShouldDefaultToClosings] = useState(false);
+  if (shouldDefaultToClosings !== prevShouldDefaultToClosings) {
+    setPrevShouldDefaultToClosings(shouldDefaultToClosings);
+    if (shouldDefaultToClosings) {
       setActiveTab('closings');
     }
   }
@@ -107,7 +98,15 @@ export default function FacultativeDetailPage({
               </Button>
             )}
             {paymentStatus === 'Outstanding' && (
-              <Button size="sm" onClick={() => setEditOpen(true)}>
+              <Button
+                size="sm"
+                onClick={() => setEditOpen(true)}
+                className={
+                  showReopen
+                    ? 'bg-green-600 border-green-600 hover:bg-green-700 hover:border-green-700 focus:ring-green-600'
+                    : ''
+                }
+              >
                 {showReopen ? 'Reopen Offer' : 'Edit'}
               </Button>
             )}

@@ -12,6 +12,7 @@ import {
   FacultativeFormValues,
   FACULTATIVE_FORM_DEFAULTS,
   PlacementEndorsement,
+  RiskType,
 } from '@/types/reinsurance';
 import { useUpdateEndorsement, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
@@ -34,16 +35,22 @@ interface EditEndorsementPanelProps {
 function endorsementToFormValues(
   placement: Facultative,
   endorsement: PlacementEndorsement,
+  allRiskTypes: RiskType[],
 ): EditEndorsementFormValues {
   const snap = (endorsement.proposedSnapshot ?? {}) as Record<string, unknown>;
   const businessDetails =
     (snap.businessDetails as Record<string, unknown> | null) ?? placement.businessDetails;
   const offerDetails =
     (snap.offerDetails as Record<string, unknown> | null) ?? placement.offerDetails;
+  const riskTypeId = String(snap.riskTypeId ?? placement.riskTypeId ?? '');
+  const selectedRiskType = allRiskTypes.find((rt) => rt.id === riskTypeId);
+  const schemaKeys = new Set(
+    (selectedRiskType?.fields ?? []).filter((f) => f.isActive).map((f) => f.fieldKey),
+  );
   return {
     ...FACULTATIVE_FORM_DEFAULTS,
     insuranceCompany: placement.cedant.id,
-    riskType: String(snap.riskTypeId ?? placement.riskTypeId ?? ''),
+    riskType: riskTypeId,
     reference: String(snap.reference ?? placement.reference ?? ''),
     policyNumber: String(snap.policyNumber ?? placement.policyNumber ?? ''),
     title: String(snap.title ?? placement.title ?? ''),
@@ -56,7 +63,7 @@ function endorsementToFormValues(
     periodFrom: String(snap.inceptionDate ?? placement.inceptionDate ?? ''),
     periodTo: String(snap.expiryDate ?? placement.expiryDate ?? ''),
     riskDetails: mergePlacementRiskDetails(businessDetails, offerDetails),
-    extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, new Set()),
+    extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, schemaKeys),
     comment: endorsement.reason ?? '',
     effectiveDate: endorsement.effectiveDate
       ? endorsement.effectiveDate.split('T')[0]
@@ -75,7 +82,7 @@ export function EditEndorsementPanel({
   const toast = useToastStore.getState;
 
   const form = useForm<EditEndorsementFormValues>({
-    defaultValues: endorsementToFormValues(placement, endorsement),
+    defaultValues: endorsementToFormValues(placement, endorsement, allRiskTypes),
   });
 
   const {
@@ -91,10 +98,10 @@ export function EditEndorsementPanel({
   const wasOpen = useRef(false);
   useEffect(() => {
     if (isOpen && !wasOpen.current) {
-      reset(endorsementToFormValues(placement, endorsement));
+      reset(endorsementToFormValues(placement, endorsement, allRiskTypes));
     }
     wasOpen.current = isOpen;
-  }, [isOpen, placement, endorsement, reset]);
+  }, [isOpen, placement, endorsement, allRiskTypes, reset]);
 
   const handleClose = () => {
     reset();

@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Badge } from '@/components/atoms/Badge';
 import { AddFiscalPeriodPanel } from '@/components/organisms/accounting/panels/AddFiscalPeriodPanel';
 import { FiscalPeriod, FiscalPeriodStatus } from '@/types/accounting';
@@ -32,32 +33,62 @@ function fmtDate(iso: string) {
   });
 }
 
-const COLUMNS: Column<FiscalPeriod>[] = [
-  {
-    key: 'name',
-    label: 'Fiscal Year',
-    width: '1fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-  },
-  {
-    key: 'startDate',
-    label: 'Start Date',
-    width: '180px',
-    render: (row) => <span className="text-gray-700 text-sm">{fmtDate(row.startDate)}</span>,
-  },
-  {
-    key: 'endDate',
-    label: 'End Date',
-    width: '180px',
-    render: (row) => <span className="text-gray-700 text-sm">{fmtDate(row.endDate)}</span>,
-  },
-  {
-    key: 'status',
-    label: 'Status',
-    width: '150px',
-    render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
-  },
-];
+function buildColumns(
+  onClose: (row: FiscalPeriod) => void,
+  onReopen: (row: FiscalPeriod) => void,
+  onLock: (row: FiscalPeriod) => void,
+): Column<FiscalPeriod>[] {
+  return [
+    {
+      key: 'name',
+      label: 'Fiscal Year',
+      width: 'minmax(150px, 1fr)',
+      render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
+    },
+    {
+      key: 'startDate',
+      label: 'Start Date',
+      width: '180px',
+      render: (row) => <span className="text-gray-700 text-sm">{fmtDate(row.startDate)}</span>,
+    },
+    {
+      key: 'endDate',
+      label: 'End Date',
+      width: '180px',
+      render: (row) => <span className="text-gray-700 text-sm">{fmtDate(row.endDate)}</span>,
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      width: '150px',
+      render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
+    },
+    {
+      key: 'actions',
+      label: '',
+      width: '150px',
+      render: (row) => (
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          {row.status === 'OPEN' && (
+            <TableButton variant="orange" onClick={() => onClose(row)}>
+              Close
+            </TableButton>
+          )}
+          {row.status === 'CLOSED' && (
+            <>
+              <TableButton variant="green" onClick={() => onReopen(row)}>
+                Reopen
+              </TableButton>
+              <TableButton variant="red" onClick={() => onLock(row)}>
+                Lock
+              </TableButton>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
+}
 
 export function FiscalPeriodsTable() {
   const [search, setSearch] = useState('');
@@ -90,6 +121,8 @@ export function FiscalPeriodsTable() {
     });
   }
 
+  const columns = buildColumns(close, reopen, setLockTarget);
+
   const filtered = useMemo(() => {
     if (!search) return data;
     const q = search.toLowerCase();
@@ -102,7 +135,7 @@ export function FiscalPeriodsTable() {
   return (
     <>
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={paged}
         isLoading={isLoading}
         searchPlaceholder="Search fiscal years…"
@@ -114,18 +147,6 @@ export function FiscalPeriodsTable() {
         actionButton={{
           label: 'Add Fiscal Year',
           onClick: () => setPanelOpen(true),
-        }}
-        rowActions={(row) => {
-          if (row.status === 'OPEN') {
-            return [{ label: 'Close', onClick: () => close(row) }];
-          }
-          if (row.status === 'CLOSED') {
-            return [
-              { label: 'Reopen', onClick: () => reopen(row) },
-              { label: 'Lock', onClick: () => setLockTarget(row), danger: true },
-            ];
-          }
-          return [];
         }}
         emptyMessage="No fiscal years found"
         currentPage={page}

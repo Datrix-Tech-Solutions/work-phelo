@@ -69,14 +69,14 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
         {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
         <div
           className={cn(
-            'flex border rounded-input overflow-hidden bg-white transition-colors',
-            'focus-within:ring-1 focus-within:ring-gray-400 focus-within:border-gray-400',
-            error ? 'border-red-500' : 'border-gray-300',
+            'flex border rounded-input overflow-hidden bg-transparent transition-colors',
+            'focus-within:ring-2 focus-within:ring-(--module-btn-bg,var(--color-brand))/30 focus-within:border-(--module-btn-bg,var(--color-brand))',
+            error ? 'border-red-500' : 'border-gray-400',
             className,
           )}
         >
           {/* Country code selector */}
-          <div className="relative flex items-center border-r border-gray-300 px-3 bg-white shrink-0">
+          <div className="relative flex items-center border-r border-gray-300 px-3 bg-transparent shrink-0">
             <select
               value={countryCode}
               onChange={(e) => {

@@ -12,6 +12,7 @@ import {
   Facultative,
   FacultativeFormValues,
   FACULTATIVE_FORM_DEFAULTS,
+  RiskType,
 } from '@/types/reinsurance';
 import { useCreateEndorsement, usePlacementEffectiveView, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
@@ -32,16 +33,22 @@ interface EndorsementPanelProps {
 
 function placementToFormValues(
   placement: Facultative,
+  allRiskTypes: RiskType[],
   effectiveView?: EffectivePlacementView,
 ): EndorsementFormValues {
   const effectiveTerms = effectiveView?.effectiveTerms;
   const businessDetails = effectiveTerms?.businessDetails ?? placement.businessDetails;
   const offerDetails = effectiveTerms?.offerDetails ?? placement.offerDetails;
+  const riskTypeId = effectiveTerms?.riskTypeId ?? placement.riskTypeId ?? '';
+  const selectedRiskType = allRiskTypes.find((rt) => rt.id === riskTypeId);
+  const schemaKeys = new Set(
+    (selectedRiskType?.fields ?? []).filter((f) => f.isActive).map((f) => f.fieldKey),
+  );
 
   return {
     ...FACULTATIVE_FORM_DEFAULTS,
     insuranceCompany: effectiveTerms?.cedantId ?? placement.cedant.id,
-    riskType: effectiveTerms?.riskTypeId ?? placement.riskTypeId ?? '',
+    riskType: riskTypeId,
     reference: placement.reference,
     policyNumber: effectiveTerms?.policyNumber ?? placement.policyNumber ?? '',
     title: effectiveTerms?.title ?? placement.title,
@@ -54,7 +61,7 @@ function placementToFormValues(
     periodFrom: effectiveTerms?.inceptionDate ?? placement.inceptionDate ?? '',
     periodTo: effectiveTerms?.expiryDate ?? placement.expiryDate ?? '',
     riskDetails: mergePlacementRiskDetails(businessDetails, offerDetails),
-    extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, new Set()),
+    extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, schemaKeys),
     comment: '',
     effectiveDate: new Date().toISOString().split('T')[0],
   };
@@ -67,7 +74,7 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
   const toast = useToastStore.getState;
 
   const form = useForm<EndorsementFormValues>({
-    defaultValues: placementToFormValues(placement, effectiveView),
+    defaultValues: placementToFormValues(placement, allRiskTypes, effectiveView),
   });
 
   const {
@@ -83,12 +90,12 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
   const wasOpen = useRef(false);
   useEffect(() => {
     if (isOpen && !wasOpen.current) {
-      reset(placementToFormValues(placement, effectiveView));
+      reset(placementToFormValues(placement, allRiskTypes, effectiveView));
     } else if (isOpen && effectiveView && !isDirty) {
-      reset(placementToFormValues(placement, effectiveView));
+      reset(placementToFormValues(placement, allRiskTypes, effectiveView));
     }
     wasOpen.current = isOpen;
-  }, [effectiveView, isDirty, isOpen, placement, reset]);
+  }, [effectiveView, isDirty, isOpen, placement, allRiskTypes, reset]);
 
   const handleClose = () => {
     reset();

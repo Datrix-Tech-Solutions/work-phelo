@@ -37,6 +37,12 @@ export function DatePicker({
   const parsed = value ? new Date(value) : null;
 
   const [open, setOpen] = useState(false);
+  /* keeps the dropdown mounted through its closing transition — see showDropdown/expanded below */
+  const [showDropdown, setShowDropdown] = useState(false);
+  /* drives the actual grid-rows/opacity styles, one frame behind `open` on the
+     way in — mounting already-expanded gives the browser nothing to transition
+     from, so it just pops in instead of animating */
+  const [expanded, setExpanded] = useState(false);
   const [view, setView] = useState<'days' | 'months' | 'years'>('days');
   const [viewYear, setViewYear] = useState(parsed?.getFullYear() ?? today.getFullYear());
   const [viewMonth, setViewMonth] = useState(parsed?.getMonth() ?? today.getMonth());
@@ -50,11 +56,33 @@ export function DatePicker({
   const { pos: dropdownPos } = useDropdownPosition(open, containerRef);
 
   useEffect(() => {
+    if (!showDropdown || !open) return;
+    const raf = requestAnimationFrame(() => setExpanded(true));
+    return () => cancelAnimationFrame(raf);
+  }, [showDropdown, open]);
+
+  const openDropdown = () => {
+    setOpen(true);
+    setShowDropdown(true);
+    setView('days');
+  };
+
+  const closeDropdown = () => {
+    setOpen(false);
+    setExpanded(false);
+  };
+
+  /* keep the dropdown mounted until its closing transition finishes */
+  const handleDropdownTransitionEnd = (e: React.TransitionEvent) => {
+    if (!open && e.propertyName === 'grid-template-rows') setShowDropdown(false);
+  };
+
+  useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
       if (containerRef.current?.contains(target)) return;
       if (dropdownRef.current?.contains(target)) return;
-      setOpen(false);
+      closeDropdown();
       setView('days');
     };
     document.addEventListener('mousedown', handler);
@@ -95,7 +123,7 @@ export function DatePicker({
 
   const selectDay = (iso: string) => {
     onChange?.(iso);
-    setOpen(false);
+    closeDropdown();
     setView('days');
   };
 
@@ -121,10 +149,7 @@ export function DatePicker({
 
       <button
         type="button"
-        onClick={() => {
-          setOpen(!open);
-          setView('days');
-        }}
+        onClick={() => (open ? closeDropdown() : openDropdown())}
         className={cn(
           'w-full flex items-center justify-between border rounded-input text-sm transition-colors',
           size === 'sm' ? 'px-2 py-2' : 'px-4 py-3',
@@ -142,161 +167,167 @@ export function DatePicker({
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 
-      {open &&
+      {showDropdown &&
         typeof document !== 'undefined' &&
         createPortal(
           <div
             ref={dropdownRef}
+            onTransitionEnd={handleDropdownTransitionEnd}
             style={{
               position: 'fixed',
               top: dropdownPos.top,
               bottom: dropdownPos.bottom,
               left: dropdownPos.left,
               width: dropdownPos.width,
-              maxHeight: dropdownPos.maxHeight,
+              gridTemplateRows: expanded ? '1fr' : '0fr',
+              opacity: expanded ? 1 : 0,
             }}
-            className={popupClass('z-50 overflow-auto')}
+            className="z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
           >
-            {/* ── Days view ── */}
-            {view === 'days' && (
-              <>
-                <div className="flex items-center justify-between px-4 pt-4 pb-2">
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      onClick={() => setView('months')}
-                      className="flex items-center gap-1 text-sm font-bold text-brand hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
-                    >
-                      {MONTHS[viewMonth]}
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setYearPageStart(Math.floor(viewYear / 9) * 9);
-                        setView('years');
-                      }}
-                      className="flex items-center gap-1 text-sm font-bold text-brand hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
-                    >
-                      {viewYear}
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={prevMonth}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={nextMonth}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
+            <div className={popupClass('min-h-0 overflow-hidden')}>
+              <div className="overflow-y-auto" style={{ maxHeight: dropdownPos.maxHeight }}>
+                {/* ── Days view ── */}
+                {view === 'days' && (
+                  <>
+                    <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={() => setView('months')}
+                          className="flex items-center gap-1 text-sm font-bold text-brand hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
+                        >
+                          {MONTHS[viewMonth]}
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setYearPageStart(Math.floor(viewYear / 9) * 9);
+                            setView('years');
+                          }}
+                          className="flex items-center gap-1 text-sm font-bold text-brand hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
+                        >
+                          {viewYear}
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={prevMonth}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={nextMonth}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
 
-                <Calendar
-                  viewYear={viewYear}
-                  viewMonth={viewMonth}
-                  value={value}
-                  onSelectDay={selectDay}
-                  disableFuture={disableFuture}
-                  disablePast={disablePast}
-                  minDate={minDate}
-                />
-              </>
-            )}
+                    <Calendar
+                      viewYear={viewYear}
+                      viewMonth={viewMonth}
+                      value={value}
+                      onSelectDay={selectDay}
+                      disableFuture={disableFuture}
+                      disablePast={disablePast}
+                      minDate={minDate}
+                    />
+                  </>
+                )}
 
-            {/* ── Months view ── */}
-            {view === 'months' && (
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <button
-                    onClick={() => setView('days')}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <ChevronLeft className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <span className="text-sm font-bold text-brand">{viewYear}</span>
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {MONTHS.map((month, idx) => {
-                    const disabled = isDisabledMonth(idx);
-                    return (
+                {/* ── Months view ── */}
+                {view === 'months' && (
+                  <div className="p-4">
+                    <div className="flex items-center gap-2 mb-4">
                       <button
-                        key={month}
-                        onClick={() => {
-                          if (disabled) return;
-                          setViewMonth(idx);
-                          setView('days');
-                        }}
-                        disabled={disabled}
-                        className={cn(
-                          'py-3 text-sm rounded-lg transition-colors font-medium',
-                          disabled
-                            ? 'text-gray-400 cursor-not-allowed'
-                            : idx === viewMonth
-                              ? 'bg-brand text-white'
-                              : 'text-gray-700 hover:bg-gray-100',
-                        )}
+                        onClick={() => setView('days')}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                       >
-                        {month}
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                      <span className="text-sm font-bold text-brand">{viewYear}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {MONTHS.map((month, idx) => {
+                        const disabled = isDisabledMonth(idx);
+                        return (
+                          <button
+                            key={month}
+                            onClick={() => {
+                              if (disabled) return;
+                              setViewMonth(idx);
+                              setView('days');
+                            }}
+                            disabled={disabled}
+                            className={cn(
+                              'py-3 text-sm rounded-lg transition-colors font-medium',
+                              disabled
+                                ? 'text-gray-400 cursor-not-allowed'
+                                : idx === viewMonth
+                                  ? 'bg-brand text-white'
+                                  : 'text-gray-700 hover:bg-gray-100',
+                            )}
+                          >
+                            {month}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-            {/* ── Years view ── */}
-            {view === 'years' && (
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <button
-                    onClick={() => setYearPageStart((s) => s - 9)}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <ChevronLeft className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <span className="text-sm font-bold text-brand">
-                    {yearPageStart} – {yearPageStart + 8}
-                  </span>
-                  <button
-                    onClick={() => setYearPageStart((s) => s + 9)}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <ChevronRight className="w-4 h-4 text-gray-600" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {yearGrid.map((year) => {
-                    const disabled = isDisabledYear(year);
-                    return (
+                {/* ── Years view ── */}
+                {view === 'years' && (
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-4">
                       <button
-                        key={year}
-                        onClick={() => {
-                          if (disabled) return;
-                          setViewYear(year);
-                          setView('days');
-                        }}
-                        disabled={disabled}
-                        className={cn(
-                          'py-3 text-sm rounded-lg transition-colors font-medium',
-                          disabled
-                            ? 'text-gray-400 cursor-not-allowed'
-                            : year === viewYear
-                              ? 'bg-brand text-white'
-                              : 'text-gray-700 hover:bg-gray-100',
-                        )}
+                        onClick={() => setYearPageStart((s) => s - 9)}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                       >
-                        {year}
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
                       </button>
-                    );
-                  })}
-                </div>
+                      <span className="text-sm font-bold text-brand">
+                        {yearPageStart} – {yearPageStart + 8}
+                      </span>
+                      <button
+                        onClick={() => setYearPageStart((s) => s + 9)}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {yearGrid.map((year) => {
+                        const disabled = isDisabledYear(year);
+                        return (
+                          <button
+                            key={year}
+                            onClick={() => {
+                              if (disabled) return;
+                              setViewYear(year);
+                              setView('days');
+                            }}
+                            disabled={disabled}
+                            className={cn(
+                              'py-3 text-sm rounded-lg transition-colors font-medium',
+                              disabled
+                                ? 'text-gray-400 cursor-not-allowed'
+                                : year === viewYear
+                                  ? 'bg-brand text-white'
+                                  : 'text-gray-700 hover:bg-gray-100',
+                            )}
+                          >
+                            {year}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>,
           document.body,
         )}

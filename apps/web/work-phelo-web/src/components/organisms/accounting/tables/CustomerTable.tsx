@@ -52,13 +52,13 @@ export function CustomersTable() {
       {
         key: 'legalName',
         label: 'Customer Name',
-        width: '1fr',
+        width: 'minmax(150px, 1fr)',
         render: (row) => <span className="font-medium text-gray-900">{row.legalName}</span>,
       },
       {
         key: 'primaryContactName',
         label: 'Contact Person',
-        width: '1fr',
+        width: 'minmax(150px, 1fr)',
         render: (row) => (
           <span className="text-gray-700 text-sm">{row.primaryContactName ?? '—'}</span>
         ),
@@ -66,7 +66,7 @@ export function CustomersTable() {
       {
         key: 'email',
         label: 'Email',
-        width: '1fr',
+        width: 'minmax(100px, 0.7fr)',
         render: (row) => <span className="text-gray-600 text-sm">{row.email ?? '—'}</span>,
       },
       {
@@ -78,7 +78,7 @@ export function CustomersTable() {
       {
         key: 'balance',
         label: 'Outstanding Balance',
-        width: '1fr',
+        width: '150px',
         render: (row) => (
           <span className="text-sm text-gray-700">
             {fmtBalance(row.balance.baseBalance, baseCurrency ?? row.currency)}

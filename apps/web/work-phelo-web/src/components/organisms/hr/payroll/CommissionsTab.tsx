@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Pencil } from 'lucide-react';
 import { Column, DataTable } from '../../shared/DataTable';
 import { usePayrollSettings, usePayrollRuns, usePayrollRun, useUpdatePayrollItem } from '@/hooks';
@@ -13,6 +13,7 @@ import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { NumberField } from '@/components/atoms/NumberField';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -20,42 +21,6 @@ import { extractError } from '@/lib/extractError';
 const COMMISSION_TAX_RATE = 0.1;
 
 const PAYROLL_ELIGIBLE: Employee['employmentStatus'][] = ['ACTIVE', 'PROBATION', 'ON_LEAVE'];
-
-function CommissionCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
-  const [focused, setFocused] = useState(false);
-
-  useEffect(() => {
-    const numeric = local === '' ? 0 : Number(local);
-    if (value !== numeric) setLocal(value === 0 ? '' : String(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  const displayValue =
-    focused || local === ''
-      ? local
-      : Number(local).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
-
-  return (
-    <input
-      type="text"
-      inputMode="decimal"
-      value={displayValue}
-      placeholder="0.00"
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onChange={(e) => {
-        const raw = e.target.value.replace(/[^0-9.]/g, '');
-        setLocal(raw);
-        onChange(raw === '' ? 0 : Number(raw));
-      }}
-      className="w-28 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 cursor-text hover:border-brand/50 hover:bg-white focus:outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 transition-colors"
-    />
-  );
-}
 
 interface CommissionRow {
   id: string;
@@ -235,7 +200,7 @@ export function CommissionsTab() {
       key: 'commission',
       label: 'Commission',
       render: (row) => (
-        <CommissionCell
+        <NumberField
           value={row.commission}
           onChange={(n) => setCommissionMap((prev) => ({ ...prev, [row.id]: n }))}
         />

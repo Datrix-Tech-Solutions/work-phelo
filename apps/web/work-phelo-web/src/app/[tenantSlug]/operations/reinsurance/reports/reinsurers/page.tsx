@@ -20,12 +20,9 @@ export default function ReinsurersReportPage({
   const base = `/${tenantSlug}/operations/reinsurance/reports`;
   const [reportParams, setReportParams] = useState<ReinsurersReportParams | null>(null);
 
-  const { rows, summary, currencyTotals, isLoading } = useReinsurersReport(
-    reportParams ?? { years: [] },
-    {
-      enabled: reportParams !== null,
-    },
-  );
+  const { rows, summary, currencyTotals, isLoading } = useReinsurersReport(reportParams ?? {}, {
+    enabled: reportParams !== null,
+  });
 
   return (
     <TwoPanelShell
@@ -41,10 +38,14 @@ export default function ReinsurersReportPage({
       leftPanel={<ReinsurersReportFilters onGenerate={setReportParams} />}
       rightPanel={
         <>
-          <ReportHero title="Reinsurers" years={reportParams?.years ?? []} />
+          <ReportHero
+            title="Reinsurers"
+            startDate={reportParams?.startDate}
+            endDate={reportParams?.endDate}
+          />
           {!reportParams ? (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-sm text-gray-400">Select fiscal year to generate report</p>
+              <p className="text-sm text-gray-400">Select a date range to generate report</p>
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col gap-4">

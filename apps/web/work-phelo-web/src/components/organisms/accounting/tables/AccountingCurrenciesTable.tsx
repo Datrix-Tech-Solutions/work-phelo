@@ -53,19 +53,13 @@ export function AccountingCurrenciesTable() {
       {
         key: 'name',
         label: 'Currency',
-        width: '1fr',
+        width: 'minmax(150px, 1fr)',
         render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-      },
-      {
-        key: 'symbol',
-        label: 'Symbol',
-        width: '300px',
-        render: (row) => <span className="font-medium text-gray-900">{row.symbol ?? '—'}</span>,
       },
       {
         key: 'code',
         label: 'ISO Code',
-        width: '300px',
+        width: '150px',
         render: (row) => (
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
             {row.code}
@@ -75,7 +69,7 @@ export function AccountingCurrenciesTable() {
       {
         key: 'exchangeRate',
         label: 'Exchange Rate',
-        width: '300px',
+        width: '200px',
         render: (row) => {
           if (baseCurrency && row.code === baseCurrency) {
             return <span className="text-gray-700 text-sm font-medium">Base Currency</span>;
@@ -91,7 +85,7 @@ export function AccountingCurrenciesTable() {
       {
         key: 'isActive',
         label: 'Status',
-        width: '300px',
+        width: '100px',
         render: (row) => (
           <Badge
             label={row.isActive ? 'Active' : 'Inactive'}

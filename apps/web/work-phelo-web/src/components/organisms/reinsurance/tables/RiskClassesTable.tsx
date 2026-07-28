@@ -17,19 +17,19 @@ const COLUMNS: Column<RiskClass>[] = [
   {
     key: 'name',
     label: 'Class Name',
-    width: '2fr',
+    width: '150px',
     render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
   },
   {
     key: 'description',
     label: 'Description',
-    width: '3fr',
+    width: 'minmax(200px, 2.5fr)',
     render: (row) => <span className="text-gray-500 text-sm">{row.description ?? '—'}</span>,
   },
   {
     key: 'createdAt',
     label: 'Date Created',
-    width: '1.5fr',
+    width: '150px',
     render: (row) => (
       <span className="text-gray-600 text-sm">
         {new Date(row.createdAt).toLocaleDateString('en-GB', {

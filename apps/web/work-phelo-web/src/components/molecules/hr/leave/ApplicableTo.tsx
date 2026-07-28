@@ -55,7 +55,7 @@ export function ApplicableTo({ selected, onChange }: ApplicableToProps) {
       <div className="flex flex-col gap-1.5">
         <label
           className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors',
+            'relative flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors',
             allChecked || someChecked
               ? 'border-gray-400 bg-white'
               : 'border-gray-200 bg-white hover:border-gray-300',
@@ -71,7 +71,12 @@ export function ApplicableTo({ selected, onChange }: ApplicableToProps) {
             {someChecked && <MinusIcon className="w-2.5 h-2.5 text-white stroke-3" />}
           </span>
           <span className="text-sm font-medium text-gray-900">All employees</span>
-          <input type="checkbox" className="sr-only" checked={allChecked} onChange={toggleAll} />
+          <input
+            type="checkbox"
+            className="absolute inset-0 opacity-0 cursor-pointer"
+            checked={allChecked}
+            onChange={toggleAll}
+          />
         </label>
 
         <div className="flex flex-col gap-1.5 pl-2.5 border-l-2 border-gray-100 ml-1.5">
@@ -81,7 +86,7 @@ export function ApplicableTo({ selected, onChange }: ApplicableToProps) {
               <label
                 key={value}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors',
+                  'relative flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors',
                   on
                     ? 'border-gray-400 bg-white'
                     : 'border-gray-200 bg-white hover:border-gray-300',
@@ -98,7 +103,7 @@ export function ApplicableTo({ selected, onChange }: ApplicableToProps) {
                 <span className="text-sm text-gray-700">{label}</span>
                 <input
                   type="checkbox"
-                  className="sr-only"
+                  className="absolute inset-0 opacity-0 cursor-pointer"
                   checked={on}
                   onChange={() => toggleType(value)}
                 />

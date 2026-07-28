@@ -57,6 +57,7 @@ export function FacultativeReportTable({ rows, isLoading }: FacultativeReportTab
       {
         key: 'reference',
         label: 'Policy Number',
+        width: '150px',
         render: (row) => (
           <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
         ),
@@ -64,6 +65,7 @@ export function FacultativeReportTable({ rows, isLoading }: FacultativeReportTab
       {
         key: 'cedantName',
         label: 'Cedant / Risk Type',
+        width: 'minmax(120px, 0.8fr)',
         render: (row) => (
           <div className="flex flex-col gap-0.5">
             <span className="font-semibold text-gray-900 leading-tight">{row.cedantName}</span>
@@ -74,32 +76,38 @@ export function FacultativeReportTable({ rows, isLoading }: FacultativeReportTab
       {
         key: 'sumInsured',
         label: 'Sum Insured',
+        width: '150px',
         render: (row) => fmtAmount(row.sumInsured, row.currency),
       },
       {
         key: 'premium',
         label: 'Premium',
+        width: '150px',
         render: (row) => fmtAmount(row.premium, row.currency),
       },
       {
         key: 'totalAcceptedPercent',
-        label: 'Offered / Accepted',
-        render: (row) => `${row.totalOfferedPercent}% / ${row.totalAcceptedPercent}%`,
+        label: 'Accepted',
+        width: '100px',
+        render: (row) => `${row.totalAcceptedPercent}%`,
+      },
+
+      {
+        key: 'inceptionDate',
+        label: 'Inception',
+        width: '150px',
+        render: (row) => fmtDate(row.inceptionDate),
       },
       {
         key: 'status',
         label: 'Status',
+        width: '100px',
         render: (row) => (
           <Badge
             label={facultativeStatusLabel(row.status)}
             variant={STATUS_VARIANT_MAP[row.status]}
           />
         ),
-      },
-      {
-        key: 'inceptionDate',
-        label: 'Inception',
-        render: (row) => fmtDate(row.inceptionDate),
       },
     ],
     [],

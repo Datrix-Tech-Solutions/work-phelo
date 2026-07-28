@@ -146,6 +146,22 @@ function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] 
   );
 }
 
+// Risk/offer detail fields (schema-driven risk details + custom "extra" fields) aren't flat
+// scalars on the snapshot — they live nested under businessDetails/offerDetails, so they need
+// their own extraction/diff pass alongside CHANGE_FIELDS.
+function detailEntryMap(record: UnknownRecord): Map<string, { label: string; value: unknown }> {
+  const businessDetails = (record.businessDetails ?? null) as Record<string, unknown> | null;
+  const offerDetails = (record.offerDetails ?? null) as Record<string, unknown> | null;
+  const map = new Map<string, { label: string; value: unknown }>();
+  for (const entry of [
+    ...placementDetailEntries(businessDetails),
+    ...placementDetailEntries(offerDetails),
+  ]) {
+    map.set(entry.key, { label: entry.label, value: entry.value });
+  }
+  return map;
+}
+
 function ChangeTable({
   original,
   proposed,
@@ -160,7 +176,22 @@ function ChangeTable({
     return String(original[key] ?? '') !== String(proposed[key] ?? '');
   });
 
-  if (changed.length === 0) {
+  const originalDetails = detailEntryMap(original);
+  const proposedDetails = detailEntryMap(proposed);
+  const changedDetailFields = Array.from(
+    new Set([...originalDetails.keys(), ...proposedDetails.keys()]),
+  )
+    .map((key) => ({
+      key,
+      label: (proposedDetails.get(key) ?? originalDetails.get(key))!.label,
+    }))
+    .filter(
+      ({ key }) =>
+        String(originalDetails.get(key)?.value ?? '') !==
+        String(proposedDetails.get(key)?.value ?? ''),
+    );
+
+  if (changed.length === 0 && changedDetailFields.length === 0) {
     return <p className="text-sm text-gray-400 italic">No revised placement terms recorded.</p>;
   }
 
@@ -182,6 +213,15 @@ function ChangeTable({
             </td>
             <td className="py-1.5 pl-3 font-medium text-gray-900">
               {formatField(proposed[field.key], field.type, proposed.currency ?? currency)}
+            </td>
+          </tr>
+        ))}
+        {changedDetailFields.map(({ key, label }) => (
+          <tr key={key} className="border-b border-gray-50 last:border-0">
+            <td className="py-1.5 pr-3 text-gray-500">{label}</td>
+            <td className="px-3 py-1.5 text-gray-700">{text(originalDetails.get(key)?.value)}</td>
+            <td className="py-1.5 pl-3 font-medium text-gray-900">
+              {text(proposedDetails.get(key)?.value)}
             </td>
           </tr>
         ))}
@@ -311,11 +351,6 @@ function RevisedOfferContent({
   const commissionAmt = (((placement.commission ?? 0) + brokerageFee) / 100) * yourPremium;
   const netPremium = yourPremium - commissionAmt;
 
-  // Financial impact (deltas)
-  const additionalPremium = yourPremium - prevYourPremium;
-  const additionalCommission = commissionAmt - prevCommissionAmt;
-  const netAmountPayable = netPremium - prevNetPremium;
-
   const changedFields = proposed
     ? CHANGE_FIELDS.filter(({ key }) => {
         const prev = originalPlacement[key];
@@ -375,6 +410,13 @@ function RevisedOfferContent({
           <p className="text-gray-400 italic">No parameter changes recorded.</p>
         )}
       </div>
+
+      {proposed && (
+        <>
+          <SectionHeading>Original vs Proposed Business</SectionHeading>
+          <ChangeTable original={originalPlacement} proposed={proposed} currency={currency} />
+        </>
+      )}
 
       {/* REINSURER PARTICIPATION */}
       <SectionHeading>Reinsurer Participation</SectionHeading>
@@ -438,41 +480,6 @@ function RevisedOfferContent({
                 className={`py-1.5 pl-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
               >
                 {row.revised}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* FINANCIAL IMPACT */}
-      <SectionHeading>Financial Impact</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
-        <tbody>
-          {[
-            {
-              label: additionalPremium >= 0 ? 'Additional Premium Due' : 'Return Premium',
-              value: fmtMoney(Math.abs(additionalPremium), currency),
-            },
-            {
-              label: additionalCommission >= 0 ? 'Additional Commission' : 'Return Commission',
-              value: fmtMoney(Math.abs(additionalCommission), currency),
-            },
-            {
-              label: netAmountPayable >= 0 ? 'Net Amount Payable' : 'Net Amount Returnable',
-              value: fmtMoney(Math.abs(netAmountPayable), currency),
-              bold: true,
-            },
-          ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
-              <td
-                className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
-              >
-                {row.label}
-              </td>
-              <td
-                className={`py-1.5 pl-4 text-right ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
-              >
-                {row.value}
               </td>
             </tr>
           ))}

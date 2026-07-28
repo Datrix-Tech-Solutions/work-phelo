@@ -28,20 +28,23 @@ export function CedantsReportTable({ rows, currencySymbol, isLoading }: CedantsR
 
   const columns: Column<CedantReportRow & { id: string }>[] = useMemo(
     () => [
-      { key: 'name', label: 'Cedant' },
+      { key: 'name', label: 'Cedant', width: 'minmax(150px, 1fr)' },
       {
         key: 'placementCount',
-        label: 'Placements',
+        label: 'Offers',
+        width: '100px',
         render: (row) => row.placementCount.toLocaleString(),
       },
       {
         key: 'totalPremium',
         label: 'Total Premium',
+        width: '150px',
         render: (row) => fmtAmount(row.totalPremium, currencySymbol),
       },
       {
         key: 'outstanding',
         label: 'Outstanding',
+        width: '150px',
         render: (row) => fmtAmount(row.outstanding, currencySymbol),
       },
     ],

@@ -18,13 +18,13 @@ const COLUMNS: Column<Currency>[] = [
   {
     key: 'name',
     label: 'Currency',
-    width: '2fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
   },
   {
     key: 'isoCode',
     label: 'ISO Code',
-    width: '1fr',
+    width: '150px',
     render: (row) => (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
         {row.isoCode}
@@ -34,7 +34,7 @@ const COLUMNS: Column<Currency>[] = [
   {
     key: 'exchangeRateToBase',
     label: 'Exchange Rate',
-    width: '1fr',
+    width: '150px',
     render: (row) => (
       <span className="text-gray-700">
         {row.isBaseCurrency
