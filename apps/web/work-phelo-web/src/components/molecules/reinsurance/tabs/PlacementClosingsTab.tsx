@@ -18,7 +18,6 @@ import {
   usePlacementNotes,
   useCreatePlacementDebitNote,
   useCreatePlacementCreditNote,
-  useCreatePlacementEndorsementCreditNote,
   usePlacementEffectiveView,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
@@ -95,14 +94,6 @@ function isActiveCreditNote(note: PlacementNote, closingId: string) {
   return note.type === 'CREDIT_NOTE' && note.closingId === closingId && isActiveNote(note);
 }
 
-function isActiveEndorsementCreditNote(note: PlacementNote, endorsementClosingId: string) {
-  return (
-    note.type === 'ENDORSEMENT_CREDIT_NOTE' &&
-    note.endorsementClosingId === endorsementClosingId &&
-    isActiveNote(note)
-  );
-}
-
 interface PlacementClosingsTabProps {
   placement: Facultative;
 }
@@ -135,7 +126,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   );
   const createDebitNote = useCreatePlacementDebitNote(placement.id);
   const createCreditNote = useCreatePlacementCreditNote(placement.id);
-  const createEndorsementCreditNote = useCreatePlacementEndorsementCreditNote(placement.id);
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
 
@@ -153,10 +143,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const isPlacementClosed = placement.status === 'CLOSED';
   const hasAppliedEndorsements = (effectiveView?.appliedEndorsements.length ?? 0) > 0;
   const isCurrentDebitNoteSupported = !hasAppliedEndorsements;
-  const isNoteBusy =
-    createDebitNote.isPending ||
-    createCreditNote.isPending ||
-    createEndorsementCreditNote.isPending;
+  const isNoteBusy = createDebitNote.isPending || createCreditNote.isPending;
 
   const rows: ClosingRow[] = closings
     .filter((closing) => closing.status === 'CONFIRMED')
@@ -240,14 +227,11 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'actions',
       label: 'Actions',
-      width: 'minmax(240px, 1fr)',
+      width: 'minmax(200px, 1fr)',
       render: (row) => (
         <div className="flex flex-wrap items-center gap-2">
           <TableButton variant="green" onClick={() => handleViewEffectiveClosing(row)}>
             View Closing
-          </TableButton>
-          <TableButton isLoading={isNoteBusy} onClick={() => handleOpenEffectiveCreditNote(row)}>
-            Credit Note
           </TableButton>
           <TableButton
             variant="blue"
@@ -276,8 +260,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const findActiveDebitNote = (notes = placementNotes) => notes.find(isActiveDebitNote);
   const findActiveCreditNote = (closingId: string, notes = placementNotes) =>
     notes.find((note) => isActiveCreditNote(note, closingId));
-  const findActiveEndorsementCreditNote = (endorsementClosingId: string, notes = placementNotes) =>
-    notes.find((note) => isActiveEndorsementCreditNote(note, endorsementClosingId));
 
   const findEndorsementClosingContext = (endorsementId: string, closingId: string) => {
     const endorsement = endorsements.find((item) => item.id === endorsementId);
@@ -355,45 +337,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
     }
-  };
-
-  const handleOpenEndorsementCreditNote = async (endorsementId: string, closingId: string) => {
-    try {
-      let note = findActiveEndorsementCreditNote(closingId);
-      if (!note) {
-        try {
-          note = await createEndorsementCreditNote.mutateAsync({ endorsementId, closingId });
-        } catch (error) {
-          const message = extractError(error);
-          if (!message.toLowerCase().includes('active endorsement credit note')) throw error;
-          const refreshed = await refetchPlacementNotes();
-          note = findActiveEndorsementCreditNote(closingId, refreshed.data ?? []);
-        }
-      }
-      if (!note) throw new Error('Active endorsement credit note could not be found.');
-      await openNoteDocument(note);
-      useToastStore.getState().addToast({
-        message: 'Credit note ready',
-        type: 'success',
-      });
-    } catch (error) {
-      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
-    }
-  };
-
-  const handleOpenEffectiveCreditNote = async (row: EffectivePositionRow) => {
-    if (row.sourceType === 'PLACEMENT_CLOSING') {
-      await handleOpenCreditNote(row.sourceClosingId);
-      return;
-    }
-    if (row.sourceType === 'ENDORSEMENT_CLOSING' && row.sourceEndorsementId) {
-      await handleOpenEndorsementCreditNote(row.sourceEndorsementId, row.sourceClosingId);
-      return;
-    }
-    useToastStore.getState().addToast({
-      message: 'Credit note source could not be resolved for this current position.',
-      type: 'error',
-    });
   };
 
   const columns: Column<ClosingRow>[] = [
