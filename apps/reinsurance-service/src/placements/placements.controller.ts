@@ -96,6 +96,7 @@ import {
   ClosingSlipPreviewResponseDto,
   OfferSlipPreviewResponseDto,
 } from './dto/slip-preview-response.dto';
+import { AcceptPlacementParticipantResponseDto } from './dto/accept-placement-participant-response.dto';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
@@ -1591,6 +1592,51 @@ export class PlacementsController {
       id,
       participantId,
       dto,
+    );
+  }
+
+  @Post(':id/participants/:participantId/accept-and-confirm')
+  @ApiTags('Reinsurance - Placement Participants')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Accept a participant and confirm its closing atomically',
+    description:
+      'Runs the placement market acceptance workflow in one transactional backend operation: ' +
+      'validates the participant can move to ACCEPTED, marks it ACCEPTED, creates an active closing when none exists, ' +
+      'issues the closing and confirms it. Existing active DRAFT or ISSUED closings are advanced; existing CONFIRMED closings are reused. ' +
+      'The endpoint is idempotent for retries/double-clicks and leaves the individual participant and closing endpoints unchanged.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiCreatedResponse({ type: AcceptPlacementParticipantResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Invalid participant transition, missing signed line, missing placement premium, or invalid capacity.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is financially locked and participant changes require endorsement, or the workflow cannot be completed safely.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  acceptParticipantAndConfirm(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.acceptParticipantAndConfirm(
+      request.user,
+      id,
+      participantId,
     );
   }
 
