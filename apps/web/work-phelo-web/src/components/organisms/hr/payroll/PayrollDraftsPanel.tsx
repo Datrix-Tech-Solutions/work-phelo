@@ -270,7 +270,7 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
     <div className="flex items-center gap-2">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{title}</p>
-      <span className="text-xs text-gray-300 font-medium">{count}</span>
+      <span className="text-xs text-gray-400 font-medium">{count}</span>
     </div>
   );
 }

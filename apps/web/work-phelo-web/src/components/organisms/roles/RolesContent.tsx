@@ -85,7 +85,7 @@ export function RolesContent() {
           className="text-sm text-gray-500 block truncate max-w-xs lg:max-w-sm xl:max-w-md"
           title={row.description ?? undefined}
         >
-          {row.description || <span className="text-gray-300 italic">No description</span>}
+          {row.description || <span className="text-gray-400 italic">No description</span>}
         </span>
       ),
     },

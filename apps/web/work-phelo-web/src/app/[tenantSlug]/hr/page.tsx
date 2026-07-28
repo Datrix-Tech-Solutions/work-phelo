@@ -212,9 +212,9 @@ export default function EmployeeDashboardPage({
   const { mutate: clockIn, isPending: isClockingIn } = useClockIn();
   const { mutate: clockOut, isPending: isClockingOut } = useClockOut();
 
-  const handleClockIn = () => {
+  const handleClockIn = (location?: string) => {
     setOptimisticClockedIn(true);
-    clockIn(undefined, {
+    clockIn(location ? { location } : undefined, {
       onError: () => setOptimisticClockedIn(null),
       onSettled: () => setOptimisticClockedIn(null),
     });

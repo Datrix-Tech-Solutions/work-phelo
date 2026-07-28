@@ -3,6 +3,7 @@
 import { Badge } from '@/components/atoms/Badge';
 import { EffectivePlacementView, ENDORSEMENT_STATUS_LABELS } from '@/types/reinsurance';
 import { fmtMoney } from './formatters';
+import { cardClass } from '@/lib/utils';
 
 export function EffectivePlacementSection({
   view,
@@ -27,7 +28,7 @@ export function EffectivePlacementSection({
   const totals = view.effectiveTotals;
   const capacity = view.capacityBreakdown;
   return (
-    <details className="rounded-xl border border-gray-200 bg-white p-4">
+    <details className={cardClass('p-4')}>
       <summary className="cursor-pointer list-none">
         <div className="flex items-start justify-between gap-3">
           <div>

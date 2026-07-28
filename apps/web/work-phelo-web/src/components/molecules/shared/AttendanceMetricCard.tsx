@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Clock, CheckCircle2, LogIn, LogOut } from 'lucide-react';
+import { Clock, CheckCircle2, Loader2, LogIn, LogOut, MapPin } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { useClockInLocation } from '@/hooks';
 import { cardClass, waterIconStyle } from '@/lib/utils';
 
 interface AttendanceMetricCardProps {
@@ -11,7 +12,7 @@ interface AttendanceMetricCardProps {
   isDone: boolean;
   clockInTime?: string;
   hoursWorked?: string;
-  onClockIn: () => void;
+  onClockIn: (location?: string) => void;
   onClockOut: () => void;
   isLoading?: boolean;
 }
@@ -27,6 +28,12 @@ export function AttendanceMetricCard({
 }: AttendanceMetricCardProps) {
   const [confirmClockIn, setConfirmClockIn] = useState(false);
   const [confirmClockOut, setConfirmClockOut] = useState(false);
+  const location = useClockInLocation();
+
+  function openClockInConfirm() {
+    setConfirmClockIn(true);
+    location.capture();
+  }
 
   // Success green when done; otherwise no real semantic color, so fall back to the module color.
   const iconColor = isDone ? '#22c55e' : 'var(--module-btn-bg, var(--brand))';
@@ -96,7 +103,7 @@ export function AttendanceMetricCard({
             <Button
               variant="primary"
               size="sm"
-              onClick={() => setConfirmClockIn(true)}
+              onClick={openClockInConfirm}
               disabled={isLoading}
               //look for a better for clock in
               icon={<LogIn className="w-4 h-4" />}
@@ -123,7 +130,8 @@ export function AttendanceMetricCard({
               size="sm"
               onClick={() => {
                 setConfirmClockIn(false);
-                onClockIn();
+                onClockIn(location.status === 'ready' ? (location.label ?? undefined) : undefined);
+                location.reset();
               }}
               className="bg-brand hover:bg-brand-hover"
             >
@@ -131,7 +139,25 @@ export function AttendanceMetricCard({
             </Button>
           </>
         }
-      />
+      >
+        {location.status === 'loading' && (
+          <p className="flex items-center gap-1.5 mt-2 text-xs text-gray-400">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Detecting your location…
+          </p>
+        )}
+        {location.status === 'ready' && location.label && (
+          <p className="flex items-center gap-1.5 mt-2 text-xs text-gray-500">
+            <MapPin className="w-3.5 h-3.5 shrink-0" />
+            {location.label}
+          </p>
+        )}
+        {location.status === 'error' && (
+          <p className="mt-2 text-xs text-gray-400">
+            Location unavailable — you can still clock in.
+          </p>
+        )}
+      </Modal>
 
       <Modal
         isOpen={confirmClockOut}

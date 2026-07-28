@@ -20,6 +20,7 @@ interface RawAttendanceRecord {
   isLate?: boolean;
   isOutsideSchedule?: boolean;
   workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID' | null;
+  location?: string | null;
   employee?: {
     firstName: string;
     lastName: string;
@@ -73,6 +74,7 @@ function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
     isLate: Boolean(r.isLate),
     isOutsideSchedule: Boolean(r.isOutsideSchedule),
     workMode: r.workMode ?? null,
+    location: r.location ?? undefined,
   };
 }
 

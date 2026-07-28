@@ -406,7 +406,7 @@ export default function FacultativeFormFields({
               {durationDays !== null && durationDays >= 0 ? (
                 `${durationDays} days`
               ) : (
-                <span className="text-gray-300">—</span>
+                <span className="text-gray-400">—</span>
               )}
             </div>
           </div>

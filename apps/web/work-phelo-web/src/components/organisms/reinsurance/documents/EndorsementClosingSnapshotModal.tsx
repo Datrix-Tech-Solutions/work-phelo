@@ -115,8 +115,12 @@ export function EndorsementClosingSnapshotModal({
   const netPremium = toNum(closing.netPremium);
 
   const riskDetailRows: ClosingRow[] = [
-    ...placementDetailEntries(placement.businessDetails),
-    ...placementDetailEntries(placement.offerDetails),
+    ...placementDetailEntries(
+      pick<Record<string, unknown> | null>('businessDetails', placement.businessDetails),
+    ),
+    ...placementDetailEntries(
+      pick<Record<string, unknown> | null>('offerDetails', placement.offerDetails),
+    ),
   ].map((entry) => ({ label: entry.label, value: fmtFieldValue(entry.value) }));
 
   const descriptionRows: ClosingRow[] = [

@@ -97,12 +97,12 @@ function ClaimDetailsPanel({
             <span className="text-xs text-gray-600">{placement.cedant.name}</span>
           )}
           {placement.cedant?.name && placement.title && (
-            <span className="text-gray-300 text-xs">·</span>
+            <span className="text-gray-400 text-xs">·</span>
           )}
           {placement.title && <span className="text-xs text-gray-400">{placement.title}</span>}
           {placement.classOfBusiness && (
             <>
-              <span className="text-gray-300 text-xs">·</span>
+              <span className="text-gray-400 text-xs">·</span>
               <span className="text-xs text-gray-400">{placement.classOfBusiness}</span>
             </>
           )}

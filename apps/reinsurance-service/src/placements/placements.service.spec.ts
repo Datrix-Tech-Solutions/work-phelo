@@ -2580,6 +2580,91 @@ describe('PlacementsService', () => {
     expect(result.closing.status).toBe(PlacementClosingStatus.CONFIRMED);
   });
 
+  it('moves a placement to CLOSING when the sole invited reinsurer closes but capacity remains unfilled', async () => {
+    const existingPlacement = placementWithParticipant(
+      PlacementParticipantStatus.QUOTED,
+    );
+    const placementAfterWorkflow = {
+      ...existingPlacement,
+      status: PlacementStatus.PARTIALLY_PLACED,
+      participants: [acceptedParticipant],
+    };
+    const draftClosing = {
+      ...confirmedClosing,
+      status: PlacementClosingStatus.DRAFT,
+      issuedAt: null,
+      confirmedAt: null,
+    };
+    const issuedClosing = {
+      ...draftClosing,
+      status: PlacementClosingStatus.ISSUED,
+      issuedAt: new Date('2026-05-28T10:01:00.000Z'),
+    };
+
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placementAfterWorkflow)
+      .mockResolvedValueOnce(placementAfterWorkflow);
+    prisma.placementParticipant.update.mockResolvedValue(acceptedParticipant);
+    prisma.placement.update.mockResolvedValue(placementAfterWorkflow);
+    prisma.placementClosing.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.count.mockResolvedValue(0);
+    prisma.placementClosing.create.mockResolvedValue(draftClosing);
+    prisma.placementClosing.update
+      .mockResolvedValueOnce(issuedClosing)
+      .mockResolvedValueOnce(confirmedClosing);
+    // The one invited reinsurer now has a confirmed closing at 40%, short of the 60% offer —
+    // everyone invited has been resolved, but there's still capacity left on the offer.
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { participantId: 'participant-1', signedLinePercent: '40.0000' },
+    ]);
+    prisma.placementStatusHistory.create.mockResolvedValue({ id: 'sh-1' });
+
+    await service.acceptParticipantAndConfirm(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+
+    type StatusHistoryCreateCall = [
+      {
+        data: {
+          fromStatus: PlacementStatus;
+          toStatus: PlacementStatus;
+          note?: string;
+        };
+      },
+    ];
+    const statusHistoryCalls = prisma.placementStatusHistory.create.mock
+      .calls as unknown as StatusHistoryCreateCall[];
+    const closingTransition = statusHistoryCalls.find(
+      ([args]) => args.data.toStatus === PlacementStatus.CLOSING,
+    );
+    expect(closingTransition?.[0].data).toMatchObject({
+      fromStatus: PlacementStatus.PARTIALLY_PLACED,
+      toStatus: PlacementStatus.CLOSING,
+      note: 'All invited reinsurers have resolved their offers with capacity remaining',
+    });
+    expect(prisma.placement.update).toHaveBeenCalledWith({
+      where: { id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' } },
+      data: { status: PlacementStatus.CLOSING, updatedByUserId: 'user-1' },
+    });
+
+    const closedTransition = statusHistoryCalls.some(
+      ([args]) => args.data.toStatus === PlacementStatus.CLOSED,
+    );
+    expect(closedTransition).toBe(false);
+
+    type PlacementUpdateCall = [{ data: { status?: PlacementStatus } }];
+    const placementUpdateCalls = prisma.placement.update.mock
+      .calls as unknown as PlacementUpdateCall[];
+    const closedUpdate = placementUpdateCalls.some(
+      ([args]) => args.data.status === PlacementStatus.CLOSED,
+    );
+    expect(closedUpdate).toBe(false);
+  });
+
   it('auto closes a CLOSING placement when accept-and-confirm reaches the facultative offer', async () => {
     const existingPlacement = {
       ...placementWithParticipant(PlacementParticipantStatus.QUOTED),

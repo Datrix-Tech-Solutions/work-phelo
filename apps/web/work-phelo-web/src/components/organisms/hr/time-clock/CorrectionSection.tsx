@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { formatDate, formatTime } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { Column, DataTable } from '../../shared/DataTable';
+import { TableButton } from '@/components/atoms/TableButton';
 import { CorrectionRequestDetailPanel } from './CorrectionRequestDetailPanel';
 import type { CorrectionRequest } from '@/types/timeclock';
 
@@ -69,6 +70,17 @@ export function CorrectionsSection({
     //     return <Badge variant={map[r.status as keyof typeof map]} label={r.status} />;
     //   },
     // },
+    {
+      key: 'view' as keyof CorrectionRequest,
+      label: '',
+      width: '90px',
+      render: (r) =>
+        r.status === 'PENDING' ? null : (
+          <TableButton variant="blue" onClick={() => setViewTarget(r)}>
+            View
+          </TableButton>
+        ),
+    },
   ];
 
   return (
@@ -107,7 +119,7 @@ export function CorrectionsSection({
                 { label: 'Approve', onClick: () => onReview(row, 'APPROVED') },
                 { label: 'Reject', danger: true, onClick: () => onReview(row, 'REJECTED') },
               ]
-            : [{ label: 'View', onClick: () => setViewTarget(row) }]
+            : []
         }
       />
 

@@ -145,7 +145,7 @@ export function MailPreviewModal({
                 >
                   <Icons.X className="w-3 h-3" />
                 </button>
-                <span className="text-gray-300">,</span>
+                <span className="text-gray-400">,</span>
               </span>
             ))}
             {!addingRecipient && (
@@ -183,7 +183,7 @@ export function MailPreviewModal({
                   setAddingRecipient(false);
                   setRecipientDraft('');
                 }}
-                className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
+                className="shrink-0 text-gray-400 hover:text-gray-500 transition-colors"
               >
                 <Icons.X className="w-3.5 h-3.5" />
               </button>

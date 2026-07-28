@@ -96,7 +96,7 @@ function TaskCard({
               <span className="text-xs text-gray-600 truncate">{task.assignedEmployeeName}</span>
             </>
           ) : (
-            <span className="text-xs text-gray-300">Unassigned</span>
+            <span className="text-xs text-gray-400">Unassigned</span>
           )}
         </div>
         {task.dueDate && (
@@ -130,7 +130,7 @@ function TaskCardOverlay({ task }: { task: ProjectTask }) {
               <span className="text-xs text-gray-600 truncate">{task.assignedEmployeeName}</span>
             </>
           ) : (
-            <span className="text-xs text-gray-300">Unassigned</span>
+            <span className="text-xs text-gray-400">Unassigned</span>
           )}
         </div>
         {task.dueDate && (
@@ -176,7 +176,7 @@ function KanbanColumn({
         {tasks.length === 0 ? (
           <div
             className={`flex-1 rounded-lg border-2 border-dashed text-center py-8 text-xs transition-colors ${
-              isOver ? 'border-brand/40 text-brand/60' : 'border-gray-200 text-gray-300'
+              isOver ? 'border-brand/40 text-brand/60' : 'border-gray-200 text-gray-400'
             }`}
           >
             {isOver ? 'Drop here' : 'No tasks'}

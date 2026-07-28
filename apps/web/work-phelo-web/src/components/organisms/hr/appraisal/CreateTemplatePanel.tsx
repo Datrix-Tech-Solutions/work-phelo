@@ -285,7 +285,7 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
                 <button
                   type="button"
                   onClick={() => remove(index)}
-                  className="p-1 text-gray-300 hover:text-red-400 transition-colors"
+                  className="p-1 text-gray-400 hover:text-red-400 transition-colors"
                   aria-label="Remove KPI"
                 >
                   <Icons.X className="w-4 h-4" />

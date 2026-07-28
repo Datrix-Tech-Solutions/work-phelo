@@ -235,7 +235,7 @@ export function DatePicker({
                         className={cn(
                           'py-3 text-sm rounded-lg transition-colors font-medium',
                           disabled
-                            ? 'text-gray-300 cursor-not-allowed'
+                            ? 'text-gray-400 cursor-not-allowed'
                             : idx === viewMonth
                               ? 'bg-brand text-white'
                               : 'text-gray-700 hover:bg-gray-100',
@@ -284,7 +284,7 @@ export function DatePicker({
                         className={cn(
                           'py-3 text-sm rounded-lg transition-colors font-medium',
                           disabled
-                            ? 'text-gray-300 cursor-not-allowed'
+                            ? 'text-gray-400 cursor-not-allowed'
                             : year === viewYear
                               ? 'bg-brand text-white'
                               : 'text-gray-700 hover:bg-gray-100',

@@ -26,7 +26,7 @@ interface DashboardStatCardsProps {
   hoursWorked?: string;
   isClockLoading: boolean;
   onRequestLeave: () => void;
-  onClockIn: () => void;
+  onClockIn: (location?: string) => void;
   onClockOut: () => void;
 }
 

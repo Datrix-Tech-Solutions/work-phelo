@@ -93,7 +93,7 @@ export function Calendar({
               className={cn(
                 'relative h-9 w-full text-sm rounded-lg transition-all',
                 disabled
-                  ? 'text-gray-300 cursor-not-allowed'
+                  ? 'text-gray-400 cursor-not-allowed'
                   : isSelected
                     ? 'bg-brand text-white font-semibold shadow-sm'
                     : isCurrentDay

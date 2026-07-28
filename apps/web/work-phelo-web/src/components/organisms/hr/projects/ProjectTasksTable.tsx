@@ -82,7 +82,7 @@ const COLUMNS: Column<ProjectTask>[] = [
       row.assignedEmployeeName ? (
         <span>{row.assignedEmployeeName}</span>
       ) : (
-        <span className="text-gray-300">—</span>
+        <span className="text-gray-400">—</span>
       ),
   },
 ];

@@ -126,6 +126,12 @@ export function LiveAttendanceTable() {
       ),
     },
     {
+      key: 'location',
+      label: 'Location',
+      width: 'minmax(120px, 1.5fr)',
+      render: (entry) => <span className="text-gray-600 truncate">{entry.location ?? '—'}</span>,
+    },
+    {
       key: 'status',
       label: 'Status',
       width: '110px',

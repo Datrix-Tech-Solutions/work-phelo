@@ -12,6 +12,7 @@ export * from './useNotifications';
 export * from './hr/usePublicHolidays';
 export * from './hr/useEmployeeDashboard';
 export * from './hr/useTimeClock';
+export * from './hr/useClockInLocation';
 export * from './hr/useBranches';
 export * from './hr/useAppraisals';
 export * from './hr/useRoles';

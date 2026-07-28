@@ -3,6 +3,7 @@
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
+import { cn } from '@/lib/utils';
 import {
   ENDORSEMENT_TYPE_LABELS,
   PlacementDocument,
@@ -15,6 +16,7 @@ interface EndorsementHeaderProps {
   displayedStatusLabel: string;
   displayedStatusVariant: 'neutral' | 'warning' | 'success' | 'danger';
   isUpdatingStatus: boolean;
+  isOpen: boolean;
   onEdit: () => void;
   onSendToMarket: () => void;
   endorsementSlipDocument: PlacementDocument | undefined;
@@ -26,6 +28,7 @@ export function EndorsementHeader({
   displayedStatusLabel,
   displayedStatusVariant,
   isUpdatingStatus,
+  isOpen,
   onEdit,
   onSendToMarket,
   endorsementSlipDocument,
@@ -58,7 +61,12 @@ export function EndorsementHeader({
           )}
         </div>
         <span title="Toggle endorsement details">
-          <Icons.ChevronDown className="w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 group-open:rotate-180" />
+          <Icons.ChevronDown
+            className={cn(
+              'w-4 h-4 text-gray-400 shrink-0 transition-transform duration-600',
+              isOpen && 'rotate-180',
+            )}
+          />
         </span>
       </div>
     </div>

@@ -27,7 +27,7 @@ function ComputedField({ label, value }: { label: string; value: string }) {
     <div className="flex flex-col gap-1.5">
       <label className="text-sm font-bold text-gray-900">{label}</label>
       <div className={inputClass(undefined, 'bg-gray-50 text-gray-500 cursor-default select-none')}>
-        {value || <span className="text-gray-300">—</span>}
+        {value || <span className="text-gray-400">—</span>}
       </div>
       <p className="text-xs text-gray-400">Auto-calculated</p>
     </div>

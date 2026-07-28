@@ -172,7 +172,7 @@ export default function ReinsurerDetailPage({
               headerExtra={
                 acceptanceRate !== null ? (
                   <>
-                    <span className="text-sm text-gray-300">|</span>
+                    <span className="text-sm text-gray-400">|</span>
                     <span className="text-sm text-gray-400">
                       Acceptance Rate{' '}
                       <span className="font-bold text-gray-900">{acceptanceRate}%</span>

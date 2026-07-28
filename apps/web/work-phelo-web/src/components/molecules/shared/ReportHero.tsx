@@ -19,7 +19,7 @@ export function ReportHero({ title, years }: ReportHeroProps) {
       <h2 className="text-lg font-bold text-gray-900">{title}</h2>
       {subtitle && (
         <>
-          <span className="text-gray-300">·</span>
+          <span className="text-gray-400">·</span>
           <p className="text-sm text-gray-500">{subtitle}</p>
         </>
       )}

@@ -33,7 +33,7 @@ interface Props {
 
 export function ClockStatStrip({ session, isLoading, netMinutes }: Props) {
   return (
-    <div className="grid grid-cols-4 bg-white divide-x divide-gray-100">
+    <div className="grid grid-cols-4 bg-background divide-x divide-gray-100">
       <StatCell label="Clock In" value={session?.clockIn ? formatTime24(session.clockIn) : '—'} />
       <StatCell
         label="Clock Out"

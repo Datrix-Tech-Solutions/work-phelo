@@ -197,7 +197,7 @@ export function WeekDayCard({
       {/* Body */}
       {isEmpty ? (
         <div className="flex flex-col flex-1 p-4 min-h-36 bg-gray-50 items-center justify-center">
-          <p className="text-sm text-gray-300 font-medium">OFF</p>
+          <p className="text-sm text-gray-400 font-medium">OFF</p>
         </div>
       ) : isSingle ? (
         <SingleShift shift={shifts[0]} onSwapShift={onSwapShift} />

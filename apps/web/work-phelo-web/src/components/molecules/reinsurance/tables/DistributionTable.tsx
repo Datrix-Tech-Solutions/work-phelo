@@ -148,7 +148,11 @@ export function DistributionTable({
       label: 'Participant Share (%)',
       width: 'minmax(150px, 1fr)',
       render: (row) => {
-        const isPaid = isPlacementLocked || row.status === 'CLOSED' || row.status === 'DECLINED';
+        const isPaid =
+          isPlacementLocked ||
+          row.status === 'CLOSED' ||
+          row.status === 'DECLINED' ||
+          Boolean(row.hasConfirmedClosing);
         if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
         const shareVariant =
           row.status === 'OFFER_SENT' ? 'red' : row.status === 'ACCEPTED' ? 'green' : 'default';
@@ -198,7 +202,11 @@ export function DistributionTable({
       label: 'Brokerage Fee (%)',
       width: 'minmax(150px, 1fr)',
       render: (row) => {
-        const isPaid = isPlacementLocked || row.status === 'CLOSED' || row.status === 'DECLINED';
+        const isPaid =
+          isPlacementLocked ||
+          row.status === 'CLOSED' ||
+          row.status === 'DECLINED' ||
+          Boolean(row.hasConfirmedClosing);
         if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
         return editingBrokerageId === row.id ? (
           <input
@@ -282,7 +290,7 @@ export function DistributionTable({
           !isPlacementLocked &&
           (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
           !responded;
-        const showRevert = !isPlacementLocked && row.status === 'ACCEPTED';
+        const showRevert = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
         const showClose = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
         return (
           <div className="flex items-center gap-2">

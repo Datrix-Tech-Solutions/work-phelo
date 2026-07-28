@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm, UseFormReturn, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -16,6 +16,7 @@ import {
 import { useUpdateEndorsement, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import {
+  extractPlacementCustomFields,
   mergePlacementRiskDetails,
   splitPlacementDetails,
 } from '@/lib/reinsurance/placementFormDetails';
@@ -35,11 +36,16 @@ function endorsementToFormValues(
   endorsement: PlacementEndorsement,
 ): EditEndorsementFormValues {
   const snap = (endorsement.proposedSnapshot ?? {}) as Record<string, unknown>;
+  const businessDetails =
+    (snap.businessDetails as Record<string, unknown> | null) ?? placement.businessDetails;
+  const offerDetails =
+    (snap.offerDetails as Record<string, unknown> | null) ?? placement.offerDetails;
   return {
     ...FACULTATIVE_FORM_DEFAULTS,
     insuranceCompany: placement.cedant.id,
     riskType: String(snap.riskTypeId ?? placement.riskTypeId ?? ''),
     reference: String(snap.reference ?? placement.reference ?? ''),
+    policyNumber: String(snap.policyNumber ?? placement.policyNumber ?? ''),
     title: String(snap.title ?? placement.title ?? ''),
     sumInsured: (snap.sumInsured ?? placement.sumInsured ?? '') as number | '',
     rate: (snap.rate ?? placement.rate ?? '') as number | '',
@@ -49,10 +55,8 @@ function endorsementToFormValues(
     currency: String(snap.currency ?? placement.currency ?? ''),
     periodFrom: String(snap.inceptionDate ?? placement.inceptionDate ?? ''),
     periodTo: String(snap.expiryDate ?? placement.expiryDate ?? ''),
-    riskDetails: mergePlacementRiskDetails(
-      (snap.businessDetails as Record<string, unknown> | null) ?? placement.businessDetails,
-      (snap.offerDetails as Record<string, unknown> | null) ?? placement.offerDetails,
-    ),
+    riskDetails: mergePlacementRiskDetails(businessDetails, offerDetails),
+    extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, new Set()),
     comment: endorsement.reason ?? '',
     effectiveDate: endorsement.effectiveDate
       ? endorsement.effectiveDate.split('T')[0]
@@ -81,8 +85,15 @@ export function EditEndorsementPanel({
     formState: { errors, isSubmitting },
   } = form;
 
+  // Only reset when the panel transitions closed → open, not on every re-fetch of `placement`
+  // or `endorsement` while it's already open — otherwise unsaved edits (e.g. a newly added
+  // extra field) get silently wiped by background query invalidations on the same tab.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (isOpen) reset(endorsementToFormValues(placement, endorsement));
+    if (isOpen && !wasOpen.current) {
+      reset(endorsementToFormValues(placement, endorsement));
+    }
+    wasOpen.current = isOpen;
   }, [isOpen, placement, endorsement, reset]);
 
   const handleClose = () => {
@@ -107,6 +118,7 @@ export function EditEndorsementPanel({
         proposedSnapshot: {
           riskTypeId: values.riskType || undefined,
           reference: values.reference,
+          policyNumber: values.policyNumber,
           title: values.title,
           sumInsured: values.sumInsured as number,
           rate: values.rate as number,

@@ -165,7 +165,7 @@ export default function EmployeeAppraisalDetailPage({
               <span>{cycleTitle}</span>
               {resultItem?.department && (
                 <>
-                  <span className="text-gray-300">·</span>
+                  <span className="text-gray-400">·</span>
                   <span>{resultItem.department}</span>
                 </>
               )}

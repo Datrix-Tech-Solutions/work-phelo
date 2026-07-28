@@ -264,7 +264,7 @@ export function TopNav({
         {showMenuButton && (
           <button
             onClick={onMenuClick}
-            className="text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors"
+            className="text-(--topnav-icon-text,var(--module-btn-bg,var(--color-brand))) hover:text-(--topnav-icon-hover,var(--module-btn-bg-hover,var(--color-brand-hover))) transition-colors"
             aria-label="Toggle menu"
           >
             <Menu />
@@ -288,7 +288,7 @@ export function TopNav({
           {/* Bell */}
           <button
             onClick={() => setNotificationsOpen(true)}
-            className="relative text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors"
+            className="relative text-(--topnav-icon-text,var(--module-btn-bg,var(--color-brand))) hover:text-(--topnav-icon-hover,var(--module-btn-bg-hover,var(--color-brand-hover))) transition-colors"
             aria-label="Notifications"
           >
             <Bell className="w-5 h-5" />
@@ -304,7 +304,7 @@ export function TopNav({
 
           {/* Apps grid — back to module launcher */}
           <button
-            className="text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors"
+            className="text-(--topnav-icon-text,var(--module-btn-bg,var(--color-brand))) hover:text-(--topnav-icon-hover,var(--module-btn-bg-hover,var(--color-brand-hover))) transition-colors"
             aria-label="Apps"
             onClick={() => {
               if (user?.role === 'SUPER_ADMIN') {
@@ -344,7 +344,7 @@ export function TopNav({
         description="Stay up to date with what's happening."
       >
         <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-          <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
+          <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
             <Bell className="w-6 h-6" />
           </div>
           <p className="text-sm font-medium text-gray-500">No notifications yet</p>
