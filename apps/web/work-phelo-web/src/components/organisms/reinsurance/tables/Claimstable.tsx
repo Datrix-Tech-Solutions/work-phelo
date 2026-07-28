@@ -24,8 +24,10 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
   'CANCELLED',
 ];
 
-interface PlacementWithClaim extends Facultative {
-  latestClaim?: PlacementClaim;
+interface ClaimTableRow {
+  id: string;
+  placement: Facultative;
+  claim: PlacementClaim;
 }
 
 function fmtAmount(val: number | string | null | undefined, currency?: string | null) {
@@ -53,13 +55,16 @@ function NetPremiumCell({ row }: { row: Facultative }) {
   return <>{fmtAmount(netPremiumFor(row, deductionRate), row.currency)}</>;
 }
 
-const COLUMNS: Column<PlacementWithClaim>[] = [
+const COLUMNS: Column<ClaimTableRow>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
     width: 'minmax(190px, 1fr)',
     render: (row) => (
-      <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
+      <EndorsedReferencePill
+        id={row.placement.id}
+        reference={displayPolicyNumber(row.placement.policyNumber)}
+      />
     ),
   },
   {
@@ -68,29 +73,36 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
     width: 'minmax(150px, 1fr)',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
-        <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
-        <span className="text-xs text-gray-400">{row.classOfBusiness ?? '—'}</span>
+        <span className="font-semibold text-gray-900 leading-tight">{row.placement.title}</span>
+        <span className="text-xs text-gray-400">{row.placement.classOfBusiness ?? '—'}</span>
       </div>
     ),
+  },
+  {
+    key: 'claimNumber',
+    label: 'Claim Number',
+    width: '120px',
+    render: (row) => <span className="font-medium text-gray-900">{row.claim.claimNumber}</span>,
   },
   {
     key: 'cedant',
     label: 'Cedant',
     width: 'minmax(100px, 1fr)',
-    render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
+    render: (row) => <span className="text-gray-700">{row.placement.cedant.name}</span>,
   },
   {
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
     width: '150px',
     render: (row) => {
+      const placement = row.placement;
       const facSumInsured =
-        row.sumInsured != null && row.facultativeOffer != null
-          ? row.sumInsured * (row.facultativeOffer / 100)
+        placement.sumInsured != null && placement.facultativeOffer != null
+          ? placement.sumInsured * (placement.facultativeOffer / 100)
           : null;
       return (
         <span className="text-gray-900 whitespace-nowrap">
-          {facSumInsured != null ? `${row.currency ?? ''} ${fmtAmount(facSumInsured)}` : '—'}
+          {facSumInsured != null ? `${placement.currency ?? ''} ${fmtAmount(facSumInsured)}` : '—'}
         </span>
       );
     },
@@ -101,7 +113,7 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
     width: '150px',
     render: (row) => (
       <span className="font-medium text-gray-900 whitespace-nowrap">
-        <NetPremiumCell row={row} />
+        <NetPremiumCell row={row.placement} />
       </span>
     ),
   },
@@ -112,7 +124,7 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
     width: '150px',
     render: (row) => (
       <span className="text-gray-600">
-        {new Date(row.createdAt).toLocaleDateString('en-GB', {
+        {new Date(row.claim.occurrenceDate).toLocaleDateString('en-GB', {
           day: '2-digit',
           month: 'short',
           year: 'numeric',
@@ -128,7 +140,7 @@ export function ClaimsTable() {
   const [search, setSearch] = useState('');
   const [cedantFilter, setCedantFilter] = useState('');
   const [page, setPage] = useState(1);
-  const [panelTarget, setPanelTarget] = useState<PlacementWithClaim | null>(null);
+  const [panelTarget, setPanelTarget] = useState<ClaimTableRow | null>(null);
 
   const { data: allRows = [], isLoading } = useFacultatives();
 
@@ -146,43 +158,45 @@ export function ClaimsTable() {
       },
     })),
   });
+  const isLoadingClaims = claimQueries.some((query) => query.isLoading);
 
-  const tableRows = useMemo<PlacementWithClaim[]>(
+  const claimRows = useMemo<ClaimTableRow[]>(
     () =>
-      closingRows.map((placement, i) => ({
-        ...placement,
-        latestClaim: claimQueries[i]?.data?.[0],
-      })),
+      closingRows.flatMap((placement, i) =>
+        (claimQueries[i]?.data ?? []).map((claim) => ({
+          id: claim.id,
+          placement,
+          claim,
+        })),
+      ),
     [closingRows, claimQueries],
   );
 
-  const claimedRows = useMemo(() => tableRows.filter((r) => !!r.latestClaim), [tableRows]);
-
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of claimedRows) seen.set(r.cedant.id, r.cedant.name);
+    for (const r of claimRows) seen.set(r.placement.cedant.id, r.placement.cedant.name);
     return Array.from(seen.entries())
       .map(([id, name]) => ({ value: id, label: name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [claimedRows]);
+  }, [claimRows]);
 
   const filtered = useMemo(() => {
-    let rows = claimedRows;
+    let rows = claimRows;
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
         (r) =>
-          (r.policyNumber?.toLowerCase().includes(q) ?? false) ||
-          r.title.toLowerCase().includes(q) ||
-          (r.classOfBusiness?.toLowerCase().includes(q) ?? false) ||
-          (r.latestClaim?.claimNumber.toLowerCase().includes(q) ?? false),
+          (r.placement.policyNumber?.toLowerCase().includes(q) ?? false) ||
+          r.placement.title.toLowerCase().includes(q) ||
+          (r.placement.classOfBusiness?.toLowerCase().includes(q) ?? false) ||
+          r.claim.claimNumber.toLowerCase().includes(q),
       );
     }
     if (cedantFilter) {
-      rows = rows.filter((r) => r.cedant.id === cedantFilter);
+      rows = rows.filter((r) => r.placement.cedant.id === cedantFilter);
     }
     return rows;
-  }, [claimedRows, search, cedantFilter]);
+  }, [claimRows, search, cedantFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -192,10 +206,14 @@ export function ClaimsTable() {
       <DataTable
         columns={COLUMNS}
         data={paged}
-        isLoading={isLoading}
+        isLoading={isLoading || isLoadingClaims}
         searchPlaceholder="Search claims…"
         searchValue={search}
-        onRowClick={(row) => router.push(`/${tenantSlug}/operations/reinsurance/claims/${row.id}`)}
+        onRowClick={(row) =>
+          router.push(
+            `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}`,
+          )
+        }
         onSearch={(q) => {
           setSearch(q);
           setPage(1);
@@ -221,14 +239,17 @@ export function ClaimsTable() {
         rowActions={(row) => [
           {
             label: 'View',
-            onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/claims/${row.id}`),
+            onClick: () =>
+              router.push(
+                `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}`,
+              ),
           },
           {
-            label: row.latestClaim ? 'Edit Claim' : 'Make Claim',
+            label: 'Edit Claim',
             onClick: () => setPanelTarget(row),
           },
         ]}
-        emptyMessage="No placed offers found"
+        emptyMessage="No claims found"
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
@@ -237,8 +258,8 @@ export function ClaimsTable() {
 
       <MakeClaimPanel
         isOpen={!!panelTarget}
-        placement={panelTarget ?? undefined}
-        claim={panelTarget?.latestClaim}
+        placement={panelTarget?.placement}
+        claim={panelTarget?.claim}
         onClose={() => setPanelTarget(null)}
       />
     </>

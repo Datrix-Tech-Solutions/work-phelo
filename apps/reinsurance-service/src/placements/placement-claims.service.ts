@@ -17,6 +17,7 @@ import { CreatePlacementClaimDto } from './dto/create-placement-claim.dto';
 import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
 import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
 import { PlacementEffectivePositionService } from './placement-effective-position.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 
 const claimAllocationInclude = {
@@ -54,6 +55,7 @@ export class PlacementClaimsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly effectivePositionService: PlacementEffectivePositionService,
+    private readonly effectiveViewService: PlacementEffectiveViewService,
     private readonly claimAllocationCalculator: ClaimAllocationCalculator,
     private readonly money: ReinsuranceMoneyHelper,
   ) {}
@@ -89,7 +91,17 @@ export class PlacementClaimsService {
   ): Promise<PlacementClaimRecord> {
     const placement = await this.findPlacement(user.tenantId, placementId);
     const currency = this.cleanCurrency(dto.currency);
-    this.assertClaimCurrency(placement.currency, currency);
+    const occurrenceDate = new Date(dto.occurrenceDate);
+    await this.validateClaimAgainstEffectiveTerms({
+      tenantId: user.tenantId,
+      placementId,
+      placementCurrency: placement.currency,
+      occurrenceDate,
+      currency,
+      estimatedLossAmount: dto.estimatedLossAmount,
+      finalLossAmount:
+        dto.finalLossAmount === undefined ? null : dto.finalLossAmount,
+    });
 
     return this.prisma.$transaction(async (tx) => {
       const claimNumber = await this.nextClaimNumber(
@@ -107,7 +119,7 @@ export class PlacementClaimsService {
           placementId,
           claimNumber,
           status: PlacementClaimStatus.DRAFT,
-          occurrenceDate: new Date(dto.occurrenceDate),
+          occurrenceDate,
           reportedDate: new Date(dto.reportedDate),
           claimCause: this.cleanRequired(dto.claimCause),
           occurrenceDetails: this.cleanOptional(dto.occurrenceDetails),
@@ -134,21 +146,46 @@ export class PlacementClaimsService {
     const placement = await this.findPlacement(user.tenantId, placementId);
 
     const currency =
-      dto.currency === undefined ? undefined : this.cleanCurrency(dto.currency);
-    if (currency !== undefined) {
-      this.assertClaimCurrency(placement.currency, currency);
-    }
+      dto.currency === undefined
+        ? claim.currency
+        : this.cleanCurrency(dto.currency);
+    const occurrenceDate =
+      dto.occurrenceDate === undefined
+        ? claim.occurrenceDate
+        : new Date(dto.occurrenceDate);
+    const estimatedLossAmount =
+      dto.estimatedLossAmount === undefined
+        ? this.money.toNumber(claim.estimatedLossAmount)
+        : dto.estimatedLossAmount;
 
     const finalLossAmount =
       dto.finalLossAmount === undefined ? undefined : dto.finalLossAmount;
+    const effectiveFinalLossAmount =
+      finalLossAmount === undefined
+        ? this.money.toOptionalNumber(claim.finalLossAmount)
+        : finalLossAmount;
+
+    await this.assertNoAllocationSensitiveChanges(
+      user.tenantId,
+      placementId,
+      claimId,
+      dto,
+    );
+    await this.validateClaimAgainstEffectiveTerms({
+      tenantId: user.tenantId,
+      placementId,
+      placementCurrency: placement.currency,
+      occurrenceDate,
+      currency,
+      estimatedLossAmount,
+      finalLossAmount: effectiveFinalLossAmount,
+    });
     const now = new Date();
 
     return this.prisma.placementClaim.update({
       where: { id: claimId },
       data: {
-        ...(dto.occurrenceDate === undefined
-          ? {}
-          : { occurrenceDate: new Date(dto.occurrenceDate) }),
+        ...(dto.occurrenceDate === undefined ? {} : { occurrenceDate }),
         ...(dto.reportedDate === undefined
           ? {}
           : { reportedDate: new Date(dto.reportedDate) }),
@@ -158,7 +195,7 @@ export class PlacementClaimsService {
         ...(dto.occurrenceDetails === undefined
           ? {}
           : { occurrenceDetails: this.cleanOptional(dto.occurrenceDetails) }),
-        ...(currency === undefined ? {} : { currency }),
+        ...(dto.currency === undefined ? {} : { currency }),
         ...(dto.estimatedLossAmount === undefined
           ? {}
           : { estimatedLossAmount: dto.estimatedLossAmount }),
@@ -393,14 +430,123 @@ export class PlacementClaimsService {
   }
 
   private assertClaimCurrency(
+    effectiveCurrency: string | null,
     placementCurrency: string | null,
     claimCurrency: string,
   ): void {
-    if (placementCurrency && claimCurrency !== placementCurrency) {
+    const expectedCurrency = effectiveCurrency ?? placementCurrency;
+    if (expectedCurrency && claimCurrency !== expectedCurrency) {
       throw new BadRequestException(
-        'Claim currency must match placement currency',
+        'Claim currency must match the effective placement currency on the loss date',
       );
     }
+  }
+
+  private async assertNoAllocationSensitiveChanges(
+    tenantId: string,
+    placementId: string,
+    claimId: string,
+    dto: UpdatePlacementClaimDto,
+  ): Promise<void> {
+    const allocationSensitiveFields: Array<keyof UpdatePlacementClaimDto> = [
+      'occurrenceDate',
+      'currency',
+      'estimatedLossAmount',
+      'finalLossAmount',
+    ];
+    if (
+      !allocationSensitiveFields.some((field) =>
+        Object.prototype.hasOwnProperty.call(dto, field),
+      )
+    ) {
+      return;
+    }
+
+    const existingAllocation =
+      await this.prisma.placementClaimAllocation.findFirst({
+        where: { tenantId, placementId, claimId },
+        select: { id: true },
+      });
+    if (existingAllocation) {
+      throw new ConflictException(
+        'Claim occurrence date, currency and loss amounts cannot be changed after allocations have been generated. Void/reallocate through an explicit claims review workflow.',
+      );
+    }
+  }
+
+  private async validateClaimAgainstEffectiveTerms(input: {
+    tenantId: string;
+    placementId: string;
+    placementCurrency: string | null;
+    occurrenceDate: Date;
+    currency: string;
+    estimatedLossAmount: number;
+    finalLossAmount: number | null;
+  }): Promise<void> {
+    const effectiveView = await this.effectiveViewService.getEffectiveView(
+      input.tenantId,
+      input.placementId,
+      input.occurrenceDate,
+    );
+    const terms = effectiveView.effectiveTerms;
+    this.assertClaimCurrency(
+      terms.currency,
+      input.placementCurrency,
+      input.currency,
+    );
+
+    const occurrenceDay = this.toUtcDateKey(input.occurrenceDate);
+    if (terms.inceptionDate) {
+      const inceptionDay = this.toUtcDateKey(new Date(terms.inceptionDate));
+      if (occurrenceDay < inceptionDay) {
+        throw new BadRequestException(
+          'Claim occurrence date cannot be before the effective coverage inception date',
+        );
+      }
+    }
+    if (terms.expiryDate) {
+      const expiryDay = this.toUtcDateKey(new Date(terms.expiryDate));
+      if (occurrenceDay > expiryDay) {
+        throw new BadRequestException(
+          'Claim occurrence date cannot be after the effective coverage expiry date',
+        );
+      }
+    }
+
+    if (terms.sumInsured != null) {
+      this.assertLossAmountWithinEffectiveLimit(
+        input.estimatedLossAmount,
+        terms.sumInsured,
+        'Estimated loss amount',
+      );
+      if (input.finalLossAmount != null) {
+        this.assertLossAmountWithinEffectiveLimit(
+          input.finalLossAmount,
+          terms.sumInsured,
+          'Final loss amount',
+        );
+      }
+    }
+  }
+
+  private assertLossAmountWithinEffectiveLimit(
+    amount: number,
+    effectiveSumInsured: number,
+    label: string,
+  ): void {
+    if (amount > effectiveSumInsured) {
+      throw new BadRequestException(
+        `${label} cannot exceed the effective sum insured on the loss date`,
+      );
+    }
+  }
+
+  private toUtcDateKey(date: Date): number {
+    return Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+    );
   }
 
   private cleanCurrency(value: string): string {

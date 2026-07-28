@@ -47,7 +47,11 @@ export default function NewClaimPage({ params }: { params: Promise<{ tenantSlug:
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
         onPlacementChange={setPlacementId}
-        onSuccess={() => router.push(`/${tenantSlug}/operations/reinsurance/claims/${placementId}`)}
+        onSuccess={(claim) =>
+          router.push(
+            `/${tenantSlug}/operations/reinsurance/claims/${claim.id}?placementId=${claim.placementId}`,
+          )
+        }
       />
     </div>
   );

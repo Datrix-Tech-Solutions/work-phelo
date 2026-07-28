@@ -10,8 +10,12 @@ import {
   MakeClaimFormValues,
   MAKE_CLAIM_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
-import { useCreatePlacementClaim, useUpdatePlacementClaim, useFacultatives } from '@/hooks';
-import { api } from '@/lib/api';
+import {
+  useCreatePlacementClaim,
+  useGenerateClaimAllocationsMutation,
+  useUpdatePlacementClaim,
+  useFacultatives,
+} from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { Facultative, PlacementClaim } from '@/types/reinsurance';
@@ -22,7 +26,7 @@ interface MakeClaimPanelProps {
   onClose: () => void;
   placement?: Facultative;
   claim?: PlacementClaim;
-  onSuccess?: () => void;
+  onSuccess?: (claim: PlacementClaim) => void;
   /** Fires as the user narrows down a placement in the built-in picker (only used when `placement` isn't passed in). */
   onPlacementChange?: (placementId: string) => void;
 }
@@ -79,6 +83,7 @@ export function MakeClaimPanel({
 
   const createClaim = useCreatePlacementClaim();
   const updateClaim = useUpdatePlacementClaim(effectivePlacement?.id ?? '', claim?.id ?? '');
+  const generateClaimAllocations = useGenerateClaimAllocationsMutation();
   const addToast = useToastStore((s) => s.addToast);
 
   useEffect(() => {
@@ -124,24 +129,26 @@ export function MakeClaimPanel({
 
     try {
       if (isEditing) {
-        await updateClaim.mutateAsync({
+        const updatedClaim = await updateClaim.mutateAsync({
           ...payload,
           finalLossAmount: values.finalLossAmount ? parseFloat(values.finalLossAmount) : undefined,
         });
+        onSuccess?.(updatedClaim);
       } else {
         const newClaim = await createClaim.mutateAsync({
           placementId: effectivePlacement.id,
           ...payload,
         });
-        await api.post(
-          `/operations/reinsurance/placements/${effectivePlacement.id}/claims/${newClaim.id}/allocations/generate`,
-        );
+        await generateClaimAllocations.mutateAsync({
+          placementId: effectivePlacement.id,
+          claimId: newClaim.id,
+        });
+        onSuccess?.(newClaim);
       }
       addToast({
         message: `Claim ${isEditing ? 'updated' : 'submitted'} successfully`,
         type: 'success',
       });
-      onSuccess?.();
       handleClose();
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });

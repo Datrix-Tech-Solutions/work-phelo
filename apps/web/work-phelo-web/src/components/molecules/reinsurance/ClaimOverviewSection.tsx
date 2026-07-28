@@ -5,6 +5,7 @@ import {
   Facultative,
   PlacementClaim,
   PlacementClaimAllocation,
+  PlacementClaimCashCall,
   PlacementClaimStatus,
   PlacementParticipant,
 } from '@/types/reinsurance';
@@ -14,7 +15,7 @@ import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
-import { useReinsurers, useCedants, useClaimAllocations } from '@/hooks';
+import { useReinsurers, useCedants, useClaimAllocations, useClaimCashCalls } from '@/hooks';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import { cardClass } from '@/lib/utils';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
@@ -339,12 +340,79 @@ function ClaimReinsurersTable({
   );
 }
 
+function ClaimCashCallsTable({ cashCalls }: { cashCalls: PlacementClaimCashCall[] }) {
+  const columns: Column<PlacementClaimCashCall>[] = useMemo(
+    () => [
+      {
+        key: 'cashCallNumber',
+        label: 'Cash Call',
+        render: (row) => <span className="font-medium text-gray-900">{row.cashCallNumber}</span>,
+      },
+      {
+        key: 'counterparty',
+        label: 'Reinsurer',
+        render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
+      },
+      {
+        key: 'amount',
+        label: 'Amount',
+        width: '150px',
+        className: 'text-right pr-8',
+        render: (row) => (
+          <span className="text-gray-900 block text-right">{fmt(row.amount, row.currency)}</span>
+        ),
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        width: '110px',
+        render: (row) => (
+          <Badge
+            label={row.status.charAt(0) + row.status.slice(1).toLowerCase()}
+            variant={
+              row.status === 'VOID' ? 'danger' : row.status === 'ISSUED' ? 'warning' : 'neutral'
+            }
+          />
+        ),
+      },
+      {
+        key: 'issuedAt',
+        label: 'Issued',
+        width: '130px',
+        render: (row) => <span className="text-gray-600">{fmtDate(row.issuedAt)}</span>,
+      },
+    ],
+    [],
+  );
+
+  return (
+    <div className="flex flex-col gap-0">
+      <div className="px-4 pt-4 pb-2 bg-white rounded-t-xl border border-b-0 border-gray-200">
+        <span className="text-sm font-bold text-gray-900">Cash Calls</span>
+        <p className="text-xs text-gray-400 mt-1">
+          Backend cash-call records generated from this claim&apos;s allocation snapshots.
+        </p>
+      </div>
+      <DataTable
+        columns={columns}
+        data={cashCalls}
+        emptyMessage="No cash calls for this claim"
+        currentPage={1}
+        totalPages={0}
+        onPageChange={() => {}}
+        noInternalScroll
+      />
+    </div>
+  );
+}
+
 export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionProps) {
   const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
   const { data: reinsurers = [] } = useReinsurers();
   const { data: cedants = [] } = useCedants();
   const { data: allocations = [] } = useClaimAllocations(placement.id, claim?.id ?? '');
+  const { data: cashCalls = [] } = useClaimCashCalls(placement.id, claim?.id ?? '');
 
   const deductionRate = isForeignCedant(cedants.find((c) => c.id === placement.cedant.id))
     ? FOREIGN_CEDANT_DEDUCTION_RATE
@@ -420,6 +488,8 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
           {fmt(totalActualClaim, claim?.currency ?? placement.currency)}
         </span>
       </div>
+
+      {claim && <ClaimCashCallsTable cashCalls={cashCalls} />}
 
       {mailTarget && (
         <MailPreviewModal

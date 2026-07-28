@@ -1,11 +1,11 @@
 'use client';
 
-import { Controller, UseFormReturn } from 'react-hook-form';
+import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { cn, inputClass } from '@/lib/utils';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useCurrencyOptions } from '@/hooks';
+import { useCurrencyOptions, usePlacementEffectiveView } from '@/hooks';
 import { Facultative } from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
@@ -63,6 +63,18 @@ export function MakeClaimFormFields({
   } = form;
 
   const { data: currencyOptions = [] } = useCurrencyOptions();
+  const occurrenceDate = useWatch({ control, name: 'occurrenceDate' });
+  const effectiveAsOfDate = occurrenceDate ? new Date(occurrenceDate).toISOString() : undefined;
+  const { data: effectiveView, isFetching: isLoadingEffectiveTerms } = usePlacementEffectiveView(
+    placement.id,
+    !!placement.id && !!effectiveAsOfDate,
+    effectiveAsOfDate,
+  );
+  const effectiveTerms = effectiveView?.effectiveTerms;
+  const effectiveSumInsured = effectiveTerms?.sumInsured ?? placement.sumInsured;
+  const effectiveInceptionDate = effectiveTerms?.inceptionDate ?? placement.inceptionDate;
+  const effectiveExpiryDate = effectiveTerms?.expiryDate ?? placement.expiryDate;
+  const effectiveCurrency = effectiveTerms?.currency ?? placement.currency;
 
   return (
     <div className="flex flex-col gap-5">
@@ -87,8 +99,8 @@ export function MakeClaimFormFields({
           required: 'Estimated loss amount is required',
           validate: (value) => {
             const amount = parseFloat(value);
-            if (placement.sumInsured != null && amount > placement.sumInsured) {
-              return `Estimated loss amount cannot exceed the sum insured (${placement.sumInsured.toLocaleString()})`;
+            if (effectiveSumInsured != null && amount > effectiveSumInsured) {
+              return `Estimated loss amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
             }
             return true;
           },
@@ -106,8 +118,8 @@ export function MakeClaimFormFields({
             validate: (value) => {
               if (!value) return true;
               const amount = parseFloat(value);
-              if (placement.sumInsured != null && amount > placement.sumInsured) {
-                return `Actual claim amount cannot exceed the sum insured (${placement.sumInsured.toLocaleString()})`;
+              if (effectiveSumInsured != null && amount > effectiveSumInsured) {
+                return `Actual claim amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
               }
               return true;
             },
@@ -142,11 +154,11 @@ export function MakeClaimFormFields({
           required: 'Occurrence date is required',
           validate: (value) => {
             const date = new Date(value);
-            if (placement.inceptionDate && date < new Date(placement.inceptionDate)) {
-              return `Occurrence date cannot be before the inception date (${new Date(placement.inceptionDate).toLocaleDateString()})`;
+            if (effectiveInceptionDate && date < new Date(effectiveInceptionDate)) {
+              return `Occurrence date cannot be before the effective inception date (${new Date(effectiveInceptionDate).toLocaleDateString()})`;
             }
-            if (placement.expiryDate && date > new Date(placement.expiryDate)) {
-              return `Occurrence date cannot be after the end date (${new Date(placement.expiryDate).toLocaleDateString()})`;
+            if (effectiveExpiryDate && date > new Date(effectiveExpiryDate)) {
+              return `Occurrence date cannot be after the effective end date (${new Date(effectiveExpiryDate).toLocaleDateString()})`;
             }
             return true;
           },
@@ -160,6 +172,29 @@ export function MakeClaimFormFields({
           />
         )}
       />
+      {occurrenceDate && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-900">
+          <p className="font-semibold">Effective claim context</p>
+          <p className="mt-1">
+            {isLoadingEffectiveTerms
+              ? 'Loading effective terms for this loss date…'
+              : [
+                  effectiveCurrency ? `Currency ${effectiveCurrency}` : null,
+                  effectiveSumInsured != null
+                    ? `Sum insured ${effectiveSumInsured.toLocaleString()}`
+                    : null,
+                  effectiveInceptionDate
+                    ? `From ${new Date(effectiveInceptionDate).toLocaleDateString()}`
+                    : null,
+                  effectiveExpiryDate
+                    ? `to ${new Date(effectiveExpiryDate).toLocaleDateString()}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'No additional effective terms available.'}
+          </p>
+        </div>
+      )}
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-bold text-gray-900">Claim Details</label>
         <textarea

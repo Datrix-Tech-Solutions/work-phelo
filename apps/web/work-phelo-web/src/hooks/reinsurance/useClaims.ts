@@ -18,14 +18,28 @@ const BASE = '/operations/reinsurance/placements';
 export const claimsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'claims'] as const;
 
-const claimKey = (placementId: string, claimId: string) =>
+export const claimKey = (placementId: string, claimId: string) =>
   [...claimsKey(placementId), claimId] as const;
 
-const allocationsKey = (placementId: string, claimId: string) =>
+export const allocationsKey = (placementId: string, claimId: string) =>
   [...claimKey(placementId, claimId), 'allocations'] as const;
 
-const cashCallsKey = (placementId: string, claimId: string) =>
+export const cashCallsKey = (placementId: string, claimId: string) =>
   [...claimKey(placementId, claimId), 'cash-calls'] as const;
+
+function invalidateClaimWorkflow(
+  queryClient: ReturnType<typeof useQueryClient>,
+  placementId: string,
+  claimId?: string,
+) {
+  queryClient.invalidateQueries({ queryKey: claimsKey(placementId) });
+  if (claimId) {
+    queryClient.invalidateQueries({ queryKey: claimKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: allocationsKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
+  }
+  queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
+}
 
 export function usePlacementClaims(placementId: string) {
   return useQuery({
@@ -64,7 +78,7 @@ export function useCreatePlacementClaim() {
         claim,
         ...current.filter((item) => item.id !== claim.id),
       ]);
-      queryClient.invalidateQueries({ queryKey: claimsKey(claim.placementId) });
+      invalidateClaimWorkflow(queryClient, claim.placementId, claim.id);
     },
   });
 }
@@ -77,8 +91,7 @@ export function useUpdatePlacementClaim(placementId: string, claimId: string) {
       return res.data as PlacementClaim;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: claimsKey(placementId) });
-      queryClient.invalidateQueries({ queryKey: claimKey(placementId, claimId) });
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
     },
   });
 }
@@ -91,8 +104,7 @@ export function useUpdateClaimStatus(placementId: string, claimId: string) {
       return res.data as PlacementClaim;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: claimsKey(placementId) });
-      queryClient.invalidateQueries({ queryKey: claimKey(placementId, claimId) });
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
     },
   });
 }
@@ -116,7 +128,20 @@ export function useGenerateClaimAllocations(placementId: string, claimId: string
       return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: allocationsKey(placementId, claimId) });
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
+export function useGenerateClaimAllocationsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ placementId, claimId }: { placementId: string; claimId: string }) => {
+      const res = await api.post(`${BASE}/${placementId}/claims/${claimId}/allocations/generate`);
+      return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
+    },
+    onSuccess: (_allocations, variables) => {
+      invalidateClaimWorkflow(queryClient, variables.placementId, variables.claimId);
     },
   });
 }
@@ -142,7 +167,7 @@ export function useCreateClaimCashCall(placementId: string, claimId: string) {
       return res.data as PlacementClaimCashCall;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
     },
   });
 }
@@ -164,7 +189,7 @@ export function useUpdateClaimCashCallStatus(placementId: string, claimId: strin
       return res.data as PlacementClaimCashCall;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
     },
   });
 }
@@ -180,7 +205,7 @@ export function useVoidClaimCashCall(placementId: string, claimId: string) {
       return res.data as PlacementClaimCashCall;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
     },
   });
 }
