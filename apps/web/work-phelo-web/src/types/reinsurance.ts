@@ -354,7 +354,8 @@ export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStat
 }
 
 export function toStatusLabel(status: FacultativeStatus): string {
-  if (status === 'PARTIALLY_PLACED' || status === 'PLACED') return 'Closed';
+  if (status === 'PARTIALLY_PLACED') return 'Partially Placed';
+  if (status === 'PLACED') return 'Placed';
   if (status === 'MARKETING') return 'Open';
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
@@ -604,6 +605,7 @@ export type PlacementEndorsementParticipantStatus =
 
 export interface PlacementEndorsementParticipant {
   id: string;
+  tenantId?: string;
   placementId: string;
   endorsementId: string;
   originalParticipantId: string | null;
@@ -612,8 +614,10 @@ export interface PlacementEndorsementParticipant {
   sharePercent: string | null;
   signedLinePercent: string | null;
   notes: string | null;
+  createdByUserId?: string;
   createdAt: string;
   updatedAt: string;
+  counterparty?: { id: string; name: string; registrationNumber: string | null };
 }
 
 export interface CreateEndorsementParticipantPayload {
@@ -643,6 +647,33 @@ export interface PlacementParticipantClosing {
   closingNumber: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EndorsementParticipantClosing {
+  id: string;
+  placementId: string;
+  endorsementId: string;
+  endorsementParticipantId: string;
+  status: PlacementParticipantClosingStatus;
+  closingNumber: string;
+  signedLinePercent: string | null;
+  premiumSnapshot?: string | null;
+  netPremium?: string | null;
+  currency?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcceptPlacementParticipantResponse {
+  participant: PlacementParticipant;
+  closing: PlacementParticipantClosing;
+}
+
+export interface ValidateEndorsementParticipantResponse {
+  participant: PlacementEndorsementParticipant;
+  closing: EndorsementParticipantClosing;
+  summary: PlacementEndorsementSummary;
+  effectiveStatus: PlacementEndorsementStatus;
 }
 
 export type PlacementPaymentType =

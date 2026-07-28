@@ -18,14 +18,15 @@ import {
   useUpdateParticipantStatus,
   useUpdateFacultativeStatus,
   useDeleteParticipant,
-  useCreateClosing,
   useUpdateClosingStatus,
   usePlacementClosings,
   usePlacementPayments,
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
+  useAcceptAndConfirmPlacementParticipant,
   facultativePlacementKey,
+  placementClosingsKey,
 } from '@/hooks';
 import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
 import { extractError } from '@/lib/extractError';
@@ -78,8 +79,10 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const { mutateAsync: updateParticipantStatus } = useUpdateParticipantStatus(placement.id);
   const { mutateAsync: updatePlacementStatus } = useUpdateFacultativeStatus(placement.id);
   const { mutateAsync: deleteParticipant } = useDeleteParticipant(placement.id);
-  const { mutateAsync: createClosing } = useCreateClosing(placement.id);
   const { mutateAsync: updateClosingStatus } = useUpdateClosingStatus(placement.id);
+  const { mutateAsync: acceptAndConfirmParticipant } = useAcceptAndConfirmPlacementParticipant(
+    placement.id,
+  );
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
@@ -102,6 +105,16 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     endorsementParticipants
       .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
       .map((p) => p.counterpartyId),
+  );
+
+  const confirmedParticipantIds = useMemo(
+    () =>
+      new Set(
+        closings
+          .filter((closing) => closing.status === 'CONFIRMED')
+          .map((closing) => closing.participantId),
+      ),
+    [closings],
   );
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -167,7 +180,12 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
 
   const refreshPlacementAfterAccept = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
+        queryClient.invalidateQueries({ queryKey: placementClosingsKey(placement.id) }),
+        queryClient.invalidateQueries({ queryKey: ['reinsurance', 'placements'] }),
+      ]),
     [placement.id, queryClient],
   );
 
@@ -255,42 +273,12 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           signedLinePercent: row.shareLine,
           suppressInvalidation: true,
         });
-        await updateParticipantStatus({
-          participantId: row.id,
-          status: 'ACCEPTED',
-          suppressInvalidation: true,
-        });
-        let closingId = closingByParticipantId[row.id]?.id;
-        let closingStatus = closingByParticipantId[row.id]?.status;
-
-        if (!closingId) {
-          const createdClosing = await createClosing({
-            participantId: row.id,
-            suppressInvalidation: true,
-          });
-          closingId = createdClosing.id;
-          closingStatus = 'DRAFT';
-        }
-
-        if (closingStatus === 'DRAFT') {
-          await updateClosingStatus({
-            closingId,
-            status: 'ISSUED',
-            suppressInvalidation: true,
-          });
-          await updateClosingStatus({
-            closingId,
-            status: 'CONFIRMED',
-            suppressInvalidation: true,
-          });
-        } else if (closingStatus === 'ISSUED') {
-          await updateClosingStatus({
-            closingId,
-            status: 'CONFIRMED',
-            suppressInvalidation: true,
-          });
-        }
+        await acceptAndConfirmParticipant({ participantId: row.id });
       }
+      toast().addToast({
+        message: 'Participant accepted and closing confirmed.',
+        type: 'success',
+      });
     } catch (error) {
       if (isReconfirm) {
         toast().addToast({ message: extractError(error), type: 'error' });
@@ -440,6 +428,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           placement={placement}
           hasActiveEndorsement={hasActiveEndorsement}
           confirmedCounterpartyIds={confirmedCounterpartyIds}
+          confirmedParticipantIds={confirmedParticipantIds}
           isPlacementLocked={isPlacementLocked}
           busyIds={acceptingIds}
           onShareCommit={handleShareCommit}
