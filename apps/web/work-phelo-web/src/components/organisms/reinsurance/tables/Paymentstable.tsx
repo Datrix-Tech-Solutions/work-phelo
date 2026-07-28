@@ -332,12 +332,12 @@ export function PaymentsTable() {
       }}
       extraFilters={extraFilters}
       actionButton={{
-        label: 'Receive Premium',
+        label: 'Receive Cedant Premium',
         onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/new`),
       }}
       rowActions={(row) => [
         {
-          label: 'Receive Premium',
+          label: 'Receive Cedant Premium',
           onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
         },
       ]}

@@ -50,7 +50,11 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
 
   const handleReverse = async (payment: PlacementPayment) => {
-    if (!window.confirm('Reverse this payment? The original transaction will remain in history.')) {
+    if (
+      !window.confirm(
+        'Reverse this recorded transaction? The original payment will remain in history, be marked reversed, and a reversal entry will be created.',
+      )
+    ) {
       return;
     }
     try {
@@ -72,7 +76,14 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       key: 'type',
       label: 'Type',
       width: '1.4fr',
-      render: (row) => <span className="text-gray-700">{fmtType(row.type)}</span>,
+      render: (row) => (
+        <div className="flex flex-col">
+          <span className="text-gray-700">{fmtType(row.type)}</span>
+          <span className="text-xs text-gray-400">
+            {row.direction === 'INBOUND' ? 'Inbound' : 'Outbound'}
+          </span>
+        </div>
+      ),
     },
     {
       key: 'counterparty',
