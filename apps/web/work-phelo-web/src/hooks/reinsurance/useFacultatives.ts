@@ -461,8 +461,13 @@ function invalidateEndorsementWorkflow(
   placementId: string,
   endorsementId?: string,
 ) {
+  queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
   queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
   queryClient.invalidateQueries({ queryKey: placementEffectiveViewKey(placementId) });
+  queryClient.invalidateQueries({
+    queryKey: [...placementQueryKey(placementId), 'financial-position'],
+  });
+  queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
   if (endorsementId) {
     queryClient.invalidateQueries({ queryKey: endorsementSummaryKey(placementId, endorsementId) });
     queryClient.invalidateQueries({
@@ -513,7 +518,10 @@ export function useUpdateEndorsement(placementId: string) {
       const res = await api.patch(`${BASE}/${placementId}/endorsements/${endorsementId}`, payload);
       return res.data as PlacementEndorsement;
     },
-    onSuccess: (_endorsement, variables) => {
+    onSuccess: (endorsement, variables) => {
+      queryClient.setQueryData<PlacementEndorsement[]>(endorsementKey(placementId), (current) =>
+        current?.map((item) => (item.id === endorsement.id ? endorsement : item)),
+      );
       invalidateEndorsementWorkflow(queryClient, placementId, variables.endorsementId);
     },
   });

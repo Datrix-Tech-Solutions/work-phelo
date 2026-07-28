@@ -7,8 +7,13 @@ import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormSection } from '@/components/atoms/FormSection';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
-import { Facultative, FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@/types/reinsurance';
-import { useCreateEndorsement, useRiskTypes } from '@/hooks';
+import {
+  EffectivePlacementView,
+  Facultative,
+  FacultativeFormValues,
+  FACULTATIVE_FORM_DEFAULTS,
+} from '@/types/reinsurance';
+import { useCreateEndorsement, usePlacementEffectiveView, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import {
   extractPlacementCustomFields,
@@ -25,28 +30,31 @@ interface EndorsementPanelProps {
   onClose: () => void;
 }
 
-function placementToFormValues(placement: Facultative): EndorsementFormValues {
+function placementToFormValues(
+  placement: Facultative,
+  effectiveView?: EffectivePlacementView,
+): EndorsementFormValues {
+  const effectiveTerms = effectiveView?.effectiveTerms;
+  const businessDetails = effectiveTerms?.businessDetails ?? placement.businessDetails;
+  const offerDetails = effectiveTerms?.offerDetails ?? placement.offerDetails;
+
   return {
     ...FACULTATIVE_FORM_DEFAULTS,
-    insuranceCompany: placement.cedant.id,
-    riskType: placement.riskTypeId ?? '',
+    insuranceCompany: effectiveTerms?.cedantId ?? placement.cedant.id,
+    riskType: effectiveTerms?.riskTypeId ?? placement.riskTypeId ?? '',
     reference: placement.reference,
-    policyNumber: placement.policyNumber ?? '',
-    title: placement.title,
-    sumInsured: placement.sumInsured ?? '',
-    rate: placement.rate ?? '',
-    premium: placement.premium ?? '',
-    facultativeOffer: placement.facultativeOffer ?? '',
-    commission: placement.commission ?? '',
-    currency: placement.currency ?? '',
-    periodFrom: placement.inceptionDate ?? '',
-    periodTo: placement.expiryDate ?? '',
-    riskDetails: mergePlacementRiskDetails(placement.businessDetails, placement.offerDetails),
-    extraRiskFields: extractPlacementCustomFields(
-      placement.businessDetails,
-      placement.offerDetails,
-      new Set(),
-    ),
+    policyNumber: effectiveTerms?.policyNumber ?? placement.policyNumber ?? '',
+    title: effectiveTerms?.title ?? placement.title,
+    sumInsured: effectiveTerms?.sumInsured ?? placement.sumInsured ?? '',
+    rate: effectiveTerms?.rate ?? placement.rate ?? '',
+    premium: effectiveTerms?.premium ?? placement.premium ?? '',
+    facultativeOffer: effectiveTerms?.facultativeOfferPercent ?? placement.facultativeOffer ?? '',
+    commission: effectiveTerms?.commissionPercent ?? placement.commission ?? '',
+    currency: effectiveTerms?.currency ?? placement.currency ?? '',
+    periodFrom: effectiveTerms?.inceptionDate ?? placement.inceptionDate ?? '',
+    periodTo: effectiveTerms?.expiryDate ?? placement.expiryDate ?? '',
+    riskDetails: mergePlacementRiskDetails(businessDetails, offerDetails),
+    extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, new Set()),
     comment: '',
     effectiveDate: new Date().toISOString().split('T')[0],
   };
@@ -54,18 +62,19 @@ function placementToFormValues(placement: Facultative): EndorsementFormValues {
 
 export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPanelProps) {
   const { mutateAsync: createEndorsement, isPending } = useCreateEndorsement(placement.id);
+  const { data: effectiveView } = usePlacementEffectiveView(placement.id, isOpen);
   const { data: allRiskTypes = [] } = useRiskTypes();
   const toast = useToastStore.getState;
 
   const form = useForm<EndorsementFormValues>({
-    defaultValues: placementToFormValues(placement),
+    defaultValues: placementToFormValues(placement, effectiveView),
   });
 
   const {
     handleSubmit,
     reset,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = form;
 
   // Only reset when the panel transitions closed → open, not on every re-fetch of `placement`
@@ -74,10 +83,12 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
   const wasOpen = useRef(false);
   useEffect(() => {
     if (isOpen && !wasOpen.current) {
-      reset(placementToFormValues(placement));
+      reset(placementToFormValues(placement, effectiveView));
+    } else if (isOpen && effectiveView && !isDirty) {
+      reset(placementToFormValues(placement, effectiveView));
     }
     wasOpen.current = isOpen;
-  }, [isOpen, placement, reset]);
+  }, [effectiveView, isDirty, isOpen, placement, reset]);
 
   const handleClose = () => {
     reset();

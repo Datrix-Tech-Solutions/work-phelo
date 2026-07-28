@@ -178,9 +178,16 @@ function EndorsementCard({
       (item) => item.counterpartyId === cid,
     );
     const originalShare = parseFloat(String(p.signedLinePercent ?? p.sharePercent ?? '0'));
+    const originalParticipantId =
+      typeof p.originalParticipantId === 'string'
+        ? p.originalParticipantId
+        : typeof p.id === 'string' && p.sourceType !== 'ENDORSEMENT_CLOSING'
+          ? p.id
+          : null;
     return {
       id: endorsementParticipant?.id ?? cid,
       participantId: endorsementParticipant?.id,
+      originalParticipantId,
       counterpartyId: cid,
       reinsurerName: endorsementParticipant?.counterparty?.name ?? r?.name ?? cid,
       originalShare,
@@ -471,6 +478,7 @@ function EndorsementCard({
       const originalParticipant = placement.participants.find(
         (p) => p.counterpartyId === row.counterpartyId,
       );
+      const originalParticipantId = row.originalParticipantId ?? originalParticipant?.id;
 
       if (row.participantId) {
         await updateEndorsementParticipant.mutateAsync({
@@ -482,7 +490,7 @@ function EndorsementCard({
       } else {
         await createEndorsementParticipant({
           counterpartyId: row.counterpartyId,
-          originalParticipantId: originalParticipant?.id,
+          ...(originalParticipantId ? { originalParticipantId } : {}),
           sharePercent: share,
           signedLinePercent: share,
           status: 'ACCEPTED',
@@ -516,16 +524,22 @@ function EndorsementCard({
     !isReadyToClose &&
     endorsement.status !== 'CLOSED' &&
     (endorsementSummary?.closings.confirmed ?? 0) > 0;
-  const displayedStatusLabel = isReadyToClose
-    ? 'Ready to Close'
-    : isInClosingPhase
-      ? 'Closing'
-      : ENDORSEMENT_STATUS_LABELS[endorsement.status];
-  const displayedStatusVariant = isReadyToClose
-    ? 'success'
-    : isInClosingPhase
-      ? 'warning'
-      : ENDORSEMENT_STATUS_VARIANT[endorsement.status];
+  const displayedStatusLabel =
+    endorsement.status === 'CLOSED'
+      ? ENDORSEMENT_STATUS_LABELS[endorsement.status]
+      : isReadyToClose
+        ? 'Ready to Close'
+        : isInClosingPhase
+          ? 'Closing'
+          : ENDORSEMENT_STATUS_LABELS[endorsement.status];
+  const displayedStatusVariant =
+    endorsement.status === 'CLOSED'
+      ? ENDORSEMENT_STATUS_VARIANT[endorsement.status]
+      : isReadyToClose
+        ? 'success'
+        : isInClosingPhase
+          ? 'warning'
+          : ENDORSEMENT_STATUS_VARIANT[endorsement.status];
 
   const handleCloseEndorsement = async () => {
     if (!isReadyToClose || isUpdatingStatus) return;

@@ -12,6 +12,13 @@ export class EffectivePlacementBaseDto {
   @ApiProperty({ example: 'FAC/2026/001' })
   reference!: string;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'POL-2026-001',
+  })
+  policyNumber!: string | null;
+
   @ApiProperty({ example: 'Fire policy placement' })
   title!: string;
 
@@ -122,6 +129,13 @@ export class EffectivePlacementCapacityBreakdownDto {
 export class EffectivePlacementTermsDto {
   @ApiProperty({ example: 'Factory Fire' })
   title!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'POL-2026-001',
+  })
+  policyNumber!: string | null;
 
   @ApiProperty({ format: 'uuid' })
   cedantId!: string;

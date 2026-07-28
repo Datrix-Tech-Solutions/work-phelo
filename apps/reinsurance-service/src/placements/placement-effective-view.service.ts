@@ -23,6 +23,7 @@ import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 type PlacementForEffectiveView = {
   id: string;
   reference: string;
+  policyNumber: string | null;
   title: string;
   cedantId: string;
   riskTypeId: string | null;
@@ -76,6 +77,7 @@ type CounterpartySummary = {
 
 type MutableEffectiveTotals = {
   title: string;
+  policyNumber: string | null;
   cedantId: string;
   riskTypeId: string | null;
   businessDetails: Prisma.JsonValue | null;
@@ -222,6 +224,7 @@ export class PlacementEffectiveViewService {
         basePlacement: {
           id: placement.id,
           reference: placement.reference,
+          policyNumber: placement.policyNumber,
           title: placement.title,
           cedantId: placement.cedantId,
           currency: placement.currency,
@@ -267,6 +270,7 @@ export class PlacementEffectiveViewService {
         },
         effectiveTerms: {
           title: effectiveFinancials.title,
+          policyNumber: effectiveFinancials.policyNumber,
           cedantId: effectiveFinancials.cedantId,
           riskTypeId: effectiveFinancials.riskTypeId,
           businessDetails: this.toRecordOrNull(
@@ -308,6 +312,7 @@ export class PlacementEffectiveViewService {
       select: {
         id: true,
         reference: true,
+        policyNumber: true,
         title: true,
         cedantId: true,
         riskTypeId: true,
@@ -403,6 +408,7 @@ export class PlacementEffectiveViewService {
   ): MutableEffectiveTotals {
     return {
       title: placement.title,
+      policyNumber: placement.policyNumber,
       cedantId: placement.cedantId,
       riskTypeId: placement.riskTypeId,
       businessDetails: placement.businessDetails,
@@ -440,6 +446,12 @@ export class PlacementEffectiveViewService {
               proposedPlacement.title,
               current.title,
             ) ?? current.title,
+          policyNumber:
+            this.firstNullableString(
+              proposed.policyNumber,
+              proposedPlacement.policyNumber,
+              current.policyNumber,
+            ) ?? current.policyNumber,
           cedantId:
             this.firstString(
               proposed.cedantId,
@@ -540,6 +552,10 @@ export class PlacementEffectiveViewService {
             (current) =>
               current.participantId !== snapshot.originalParticipantId &&
               current.originalParticipantId !== snapshot.originalParticipantId,
+          );
+        } else if (snapshot.sourceType === 'ENDORSEMENT_CLOSING') {
+          effectiveSnapshots = effectiveSnapshots.filter(
+            (current) => current.counterpartyId !== snapshot.counterpartyId,
           );
         }
         effectiveSnapshots.push(snapshot);

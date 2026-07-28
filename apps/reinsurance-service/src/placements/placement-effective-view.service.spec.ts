@@ -18,6 +18,7 @@ describe('PlacementEffectiveViewService', () => {
   const placement = {
     id: placementId,
     reference: 'POL/UTC/MC/001',
+    policyNumber: 'POL-001',
     title: 'Factory Fire',
     cedantId: 'cedant-1',
     riskTypeId: 'risk-type-1',
@@ -192,6 +193,7 @@ describe('PlacementEffectiveViewService', () => {
     expect(result.viewAsOf).toEqual(expect.any(String));
     expect(result.effectiveTerms).toMatchObject({
       title: 'Factory Fire',
+      policyNumber: 'POL-001',
       cedantId: 'cedant-1',
       riskTypeId: 'risk-type-1',
       businessDetails: { occupancy: 'Factory' },
@@ -587,6 +589,93 @@ describe('PlacementEffectiveViewService', () => {
         ],
       }),
     );
+  });
+
+  it('replaces a prior endorsement-added participant for the same counterparty', async () => {
+    closingSnapshotReader.findConfirmedEndorsementClosingSnapshots.mockResolvedValue(
+      [
+        {
+          sourceType: 'ENDORSEMENT_CLOSING',
+          closingId: 'endorsement-closing-c1',
+          endorsementParticipantId: 'endorsement-participant-c1',
+          counterpartyId: 'reinsurer-c',
+          signedLinePercent: 10,
+          premium: 15000,
+          commissionPercent: 10,
+          commissionAmount: 1500,
+          brokeragePercent: 7.5,
+          brokerageAmount: 1125,
+          netPremium: 12375,
+          currency: 'USD',
+        },
+        {
+          sourceType: 'ENDORSEMENT_CLOSING',
+          closingId: 'endorsement-closing-c2',
+          endorsementParticipantId: 'endorsement-participant-c2',
+          counterpartyId: 'reinsurer-c',
+          signedLinePercent: 15,
+          premium: 22500,
+          commissionPercent: 10,
+          commissionAmount: 2250,
+          brokeragePercent: 7.5,
+          brokerageAmount: 1687.5,
+          netPremium: 18562.5,
+          currency: 'USD',
+        },
+      ],
+    );
+    tx.placementEndorsement.findMany.mockResolvedValue([
+      makeConfirmedEndorsement({
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        effectiveDate: new Date('2026-06-10T00:00:00.000Z'),
+        proposedSnapshot: {
+          facultativeOffer: '70.0000',
+        },
+        closings: [
+          {
+            id: 'endorsement-closing-c1',
+            closingNumber: 'ENC-001',
+            status: PlacementClosingStatus.CONFIRMED,
+            endorsementParticipantId: 'endorsement-participant-c1',
+            signedLinePercent: '10.0000',
+            endorsementParticipant: { counterpartyId: 'reinsurer-c' },
+          },
+        ],
+      }),
+      makeConfirmedEndorsement({
+        id: 'endorsement-2',
+        endorsementNumber: 'END-002',
+        effectiveDate: new Date('2026-06-20T00:00:00.000Z'),
+        proposedSnapshot: {
+          facultativeOffer: '75.0000',
+        },
+        closings: [
+          {
+            id: 'endorsement-closing-c2',
+            closingNumber: 'ENC-002',
+            status: PlacementClosingStatus.CONFIRMED,
+            endorsementParticipantId: 'endorsement-participant-c2',
+            signedLinePercent: '15.0000',
+            endorsementParticipant: { counterpartyId: 'reinsurer-c' },
+          },
+        ],
+      }),
+    ]);
+
+    const result = await service.getEffectiveView(tenantId, placementId);
+    const cedar = result.effectiveParticipants.find(
+      (participant) => participant.counterpartyId === 'reinsurer-c',
+    );
+
+    expect(cedar?.signedLinePercent).toBe(15);
+    expect(cedar?.grossPremium).toBe(22500);
+    expect(cedar?.sources).toEqual([
+      expect.objectContaining({
+        closingId: 'endorsement-closing-c2',
+        signedLinePercent: 15,
+      }),
+    ]);
   });
 
   it('applies multiple absolute endorsement revisions in effective-date order from the query result', async () => {

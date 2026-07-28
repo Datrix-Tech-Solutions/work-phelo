@@ -14,6 +14,7 @@ import {
   usePlacementNotes,
   useCreatePlacementDebitNote,
   useCreatePlacementCreditNote,
+  usePlacementEffectiveView,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
@@ -29,6 +30,16 @@ interface ClosingRow {
   status: string;
   netPremium: number | null;
   currency: string | null;
+}
+
+interface EffectivePositionRow {
+  id: string;
+  reinsurerCompany: string;
+  signedShare: number;
+  grossPremium: number;
+  netPremium: number;
+  currency: string | null;
+  participationType: 'ORIGINAL' | 'REVISED' | 'ADDED';
 }
 
 function fmtPct(val: number) {
@@ -73,6 +84,9 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
   const { data: closings = [], isLoading: isLoadingClosings } = usePlacementClosings(placement.id);
+  const { data: effectiveView, isLoading: isLoadingEffectiveView } = usePlacementEffectiveView(
+    placement.id,
+  );
   const { data: placementDocuments = [] } = usePlacementDocuments(placement.id);
   const { data: placementNotes = [], refetch: refetchPlacementNotes } = usePlacementNotes(
     placement.id,
@@ -109,6 +123,58 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       netPremium: toNumber(closing.netPremium),
       currency: closing.currency,
     }));
+
+  const effectiveRows: EffectivePositionRow[] =
+    effectiveView?.effectiveParticipants.map((participant) => ({
+      id: participant.counterpartyId,
+      reinsurerCompany: participant.counterparty.name,
+      signedShare: participant.signedLinePercent,
+      grossPremium: participant.grossPremium,
+      netPremium: participant.netPremium,
+      currency: effectiveView.effectiveTotals.currency,
+      participationType: participant.participationType,
+    })) ?? [];
+
+  const effectiveColumns: Column<EffectivePositionRow>[] = [
+    {
+      key: 'reinsurerCompany',
+      label: 'Current Reinsurer',
+      width: 'minmax(200px, 1fr)',
+      render: (row) => <span className="font-medium text-gray-900">{row.reinsurerCompany}</span>,
+    },
+    {
+      key: 'signedShare',
+      label: 'Current Signed Share',
+      width: '160px',
+      render: (row) => <span className="text-gray-700">{fmtPct(row.signedShare)}</span>,
+    },
+    {
+      key: 'participationType',
+      label: 'Source',
+      width: '140px',
+      render: (row) => (
+        <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          {row.participationType.toLowerCase()}
+        </span>
+      ),
+    },
+    {
+      key: 'grossPremium',
+      label: 'Current Gross Premium',
+      width: 'minmax(200px, 1fr)',
+      render: (row) => (
+        <span className="text-gray-700">{fmtAmount(row.grossPremium, row.currency)}</span>
+      ),
+    },
+    {
+      key: 'netPremium',
+      label: 'Current Net Premium',
+      width: 'minmax(200px, 1fr)',
+      render: (row) => (
+        <span className="text-gray-700">{fmtAmount(row.netPremium, row.currency)}</span>
+      ),
+    },
+  ];
 
   const openNoteDocument = async (note: PlacementNote) => {
     const document = placementDocuments.find(
@@ -224,6 +290,28 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
 
   return (
     <>
+      <section className="mb-5 flex flex-col gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900">
+            Current Effective Closings / Position
+          </h4>
+          <p className="text-xs text-gray-500">
+            Latest confirmed placement position from original closings plus closed effective
+            endorsements. Historical original closings remain listed separately below.
+          </p>
+        </div>
+        <DataTable
+          columns={effectiveColumns}
+          data={effectiveRows}
+          isLoading={isLoadingEffectiveView}
+          emptyMessage="No confirmed effective placement position yet"
+          currentPage={1}
+          totalPages={1}
+          onPageChange={() => {}}
+          noInternalScroll
+        />
+      </section>
+
       <DataTable
         columns={columns}
         data={rows}

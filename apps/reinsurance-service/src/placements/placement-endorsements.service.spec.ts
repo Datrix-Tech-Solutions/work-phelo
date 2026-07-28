@@ -16,6 +16,7 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 
 describe('PlacementEndorsementsService', () => {
@@ -45,6 +46,7 @@ describe('PlacementEndorsementsService', () => {
     tenantId: 'tenant-1',
     reference: 'FAC-001',
     normalizedReference: 'fac-001',
+    policyNumber: 'POL-001',
     title: 'Energy Risk',
     placementType: PlacementType.FACULTATIVE,
     status: PlacementStatus.CLOSED,
@@ -166,7 +168,98 @@ describe('PlacementEndorsementsService', () => {
     };
     $transaction: jest.Mock;
   };
+  let effectiveViewService: { getEffectiveView: jest.Mock };
   let service: PlacementEndorsementsService;
+
+  const effectiveView = {
+    viewAsOf: '2026-06-04T00:00:00.000Z',
+    basePlacement: {
+      id: 'placement-1',
+      reference: 'FAC-001',
+      policyNumber: 'POL-001',
+      title: 'Energy Risk',
+      cedantId: 'cedant-1',
+      currency: 'USD',
+      sumInsured: 100000,
+      premium: 2500,
+      rate: 2.5,
+      commissionPercent: 10,
+      brokeragePercent: 7.5,
+      facultativeOfferPercent: 70,
+    },
+    effectiveTotals: {
+      facultativeOfferPercent: 70,
+      originalFacultativeOfferPercent: 70,
+      acceptedEndorsementCapacityPercent: 0,
+      confirmedEndorsementCapacityPercent: 0,
+      remainingCapacityPercent: 40,
+      participantCount: 1,
+      sumInsured: 100000,
+      premium: 2500,
+      currency: 'USD',
+      rate: 2.5,
+      commissionPercent: 10,
+      brokeragePercent: 7.5,
+      grossPremium: 750,
+      commissionAmount: 75,
+      brokerageAmount: 56.25,
+      netPremium: 618.75,
+    },
+    capacityBreakdown: {
+      originalCapacityPercent: 70,
+      acceptedEndorsementCapacityPercent: 0,
+      confirmedEndorsementCapacityPercent: 0,
+      remainingCapacityPercent: 40,
+      effectiveTotalCapacityPercent: 70,
+    },
+    effectiveTerms: {
+      title: 'Energy Risk',
+      policyNumber: 'POL-001',
+      cedantId: 'cedant-1',
+      riskTypeId: 'risk-type-1',
+      businessDetails: { location: 'Accra' },
+      offerDetails: { notes: 'Original offer' },
+      description: 'Original placement',
+      inceptionDate: '2026-06-01T00:00:00.000Z',
+      expiryDate: '2027-06-01T00:00:00.000Z',
+      currency: 'USD',
+      sumInsured: 100000,
+      rate: 2.5,
+      premium: 2500,
+      commissionPercent: 10,
+      brokeragePercent: 7.5,
+      facultativeOfferPercent: 70,
+    },
+    effectiveParticipants: [
+      {
+        counterpartyId: 'reinsurer-1',
+        counterparty: {
+          id: 'reinsurer-1',
+          type: 'REINSURER',
+          name: 'Ghana Re',
+          registrationNumber: null,
+        },
+        signedLinePercent: 30,
+        participationType: 'ORIGINAL',
+        grossPremium: 750,
+        commissionAmount: 75,
+        brokerageAmount: 56.25,
+        netPremium: 618.75,
+        sources: [
+          {
+            sourceType: 'PLACEMENT_CLOSING',
+            closingId: 'closing-1',
+            participantId: 'participant-1',
+            signedLinePercent: 30,
+          },
+        ],
+      },
+    ],
+    appliedEndorsements: [],
+    scheduledEndorsements: [],
+    pendingEndorsements: [],
+    warnings: [],
+  };
 
   beforeEach(() => {
     prisma = {
@@ -185,8 +278,12 @@ describe('PlacementEndorsementsService', () => {
         callback(prisma),
       ),
     };
+    effectiveViewService = {
+      getEffectiveView: jest.fn().mockResolvedValue(effectiveView),
+    };
     service = new PlacementEndorsementsService(
       prisma as unknown as PrismaService,
+      effectiveViewService as unknown as PlacementEffectiveViewService,
     );
   });
 
@@ -217,15 +314,127 @@ describe('PlacementEndorsementsService', () => {
     expect(createArgs.data.originalSnapshot).toMatchObject({
       placement: {
         id: 'placement-1',
-        sumInsured: '100000',
-        premium: '2500',
+        policyNumber: 'POL-001',
+        sumInsured: 100000,
+        premium: 2500,
       },
       participants: [expect.objectContaining({ id: 'participant-1' })],
       closings: [expect.objectContaining({ id: 'closing-1' })],
       payments: [expect.objectContaining({ id: 'payment-1' })],
       notes: [expect.objectContaining({ id: 'note-1' })],
     });
+    expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      new Date('2026-06-04T00:00:00.000Z'),
+    );
     expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('uses the latest closed effective participant lines as the next endorsement baseline', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.count.mockResolvedValue(1);
+    prisma.placementEndorsement.create.mockResolvedValue({
+      ...endorsement,
+      endorsementNumber: 'END-002',
+    });
+    effectiveViewService.getEffectiveView.mockResolvedValue({
+      ...effectiveView,
+      effectiveTotals: {
+        ...effectiveView.effectiveTotals,
+        facultativeOfferPercent: 80,
+        remainingCapacityPercent: 0,
+        participantCount: 2,
+      },
+      effectiveTerms: {
+        ...effectiveView.effectiveTerms,
+        facultativeOfferPercent: 80,
+        premium: 3000,
+      },
+      effectiveParticipants: [
+        {
+          counterpartyId: 'reinsurer-a',
+          counterparty: {
+            id: 'reinsurer-a',
+            type: 'REINSURER',
+            name: 'A Re',
+            registrationNumber: null,
+          },
+          signedLinePercent: 45,
+          participationType: 'REVISED',
+          grossPremium: 1350,
+          commissionAmount: 135,
+          brokerageAmount: 101.25,
+          netPremium: 1113.75,
+          sources: [
+            {
+              sourceType: 'ENDORSEMENT_CLOSING',
+              closingId: 'endorsement-closing-a',
+              endorsementParticipantId: 'endorsement-participant-a',
+              originalParticipantId: 'participant-a',
+              signedLinePercent: 45,
+            },
+          ],
+        },
+        {
+          counterpartyId: 'reinsurer-b',
+          counterparty: {
+            id: 'reinsurer-b',
+            type: 'REINSURER',
+            name: 'B Re',
+            registrationNumber: null,
+          },
+          signedLinePercent: 35,
+          participationType: 'REVISED',
+          grossPremium: 1050,
+          commissionAmount: 105,
+          brokerageAmount: 78.75,
+          netPremium: 866.25,
+          sources: [
+            {
+              sourceType: 'ENDORSEMENT_CLOSING',
+              closingId: 'endorsement-closing-b',
+              endorsementParticipantId: 'endorsement-participant-b',
+              originalParticipantId: 'participant-b',
+              signedLinePercent: 35,
+            },
+          ],
+        },
+      ],
+    });
+
+    await service.create(user, 'placement-1', {
+      type: PlacementEndorsementType.POLICY_AMENDMENT,
+      effectiveDate: '2026-06-04T00:00:00.000Z',
+      reason: 'Add new capacity',
+      proposedSnapshot: { facultativeOffer: '90.0000', premium: '3500.00' },
+      targetPercent: 90,
+    });
+
+    const createArgs = firstCallArg<Prisma.PlacementEndorsementCreateArgs>(
+      prisma.placementEndorsement.create,
+    );
+    expect(createArgs.data.impactType).toBe(
+      PlacementEndorsementImpactType.CAPACITY_INCREASE,
+    );
+    expect(createArgs.data.originalSnapshot).toMatchObject({
+      placement: {
+        premium: 3000,
+        facultativeOffer: 80,
+      },
+      participants: [
+        expect.objectContaining({
+          counterpartyId: 'reinsurer-a',
+          signedLinePercent: 45,
+          originalParticipantId: 'participant-a',
+        }),
+        expect.objectContaining({
+          counterpartyId: 'reinsurer-b',
+          signedLinePercent: 35,
+          originalParticipantId: 'participant-b',
+        }),
+      ],
+    });
   });
 
   it('summarizes endorsement-only participant capacity, closings and notes', async () => {

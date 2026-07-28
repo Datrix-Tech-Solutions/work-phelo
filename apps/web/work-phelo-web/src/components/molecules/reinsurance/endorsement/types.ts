@@ -1,6 +1,7 @@
 export interface EndorsementParticipantRow {
   id: string;
   participantId?: string;
+  originalParticipantId?: string | null;
   counterpartyId: string;
   reinsurerName: string;
   originalShare: number;

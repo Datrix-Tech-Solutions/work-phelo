@@ -621,6 +621,7 @@ export interface EffectivePlacementView {
   basePlacement: {
     id: string;
     reference: string;
+    policyNumber: string | null;
     title: string;
     cedantId: string;
     currency: string | null;
@@ -658,6 +659,7 @@ export interface EffectivePlacementView {
   };
   effectiveTerms: {
     title: string;
+    policyNumber: string | null;
     cedantId: string;
     riskTypeId: string | null;
     businessDetails: Record<string, unknown> | null;

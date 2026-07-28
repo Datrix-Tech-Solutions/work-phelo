@@ -19,6 +19,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
 import { PlacementEndorsementSummaryResponseDto } from './dto/placement-endorsement-summary-response.dto';
+import { EffectivePlacementViewResponseDto } from './dto/placement-effective-view-response.dto';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
 
@@ -126,7 +128,10 @@ type PlacementSnapshotRecord = Prisma.PlacementGetPayload<{
 
 @Injectable()
 export class PlacementEndorsementsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly effectiveViewService: PlacementEffectiveViewService,
+  ) {}
 
   async findAll(
     tenantId: string,
@@ -180,6 +185,15 @@ export class PlacementEndorsementsService {
       user.tenantId,
       placementId,
     );
+    const effectiveBaseline = await this.effectiveViewService.getEffectiveView(
+      user.tenantId,
+      placementId,
+      new Date(dto.effectiveDate),
+    );
+    const originalSnapshot = this.buildEffectiveOriginalSnapshot(
+      placement,
+      effectiveBaseline,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const endorsementNumber = await this.nextEndorsementNumber(
@@ -197,7 +211,7 @@ export class PlacementEndorsementsService {
           impactType: this.deriveValidatedImpactType({
             requestedImpactType: dto.impactType,
             type: dto.type,
-            originalPlacement: placement,
+            originalSnapshot,
             proposedSnapshot: dto.proposedSnapshot,
             targetPercent: dto.targetPercent,
           }),
@@ -206,9 +220,7 @@ export class PlacementEndorsementsService {
           reason: this.cleanRequired(dto.reason, 'Reason is required'),
           description: this.cleanOptional(dto.description),
           changeSummary: this.toJsonInput(dto.changeSummary),
-          originalSnapshot: this.toJsonInput(
-            this.buildOriginalSnapshot(placement),
-          )!,
+          originalSnapshot: this.toJsonInput(originalSnapshot)!,
           proposedSnapshot: this.toJsonInput(dto.proposedSnapshot),
           targetPercent: this.toDecimalInput(dto.targetPercent),
           createdByUserId: user.id,
@@ -748,6 +760,100 @@ export class PlacementEndorsementsService {
       closings: placement.closings,
       payments: placement.payments,
       notes: placement.notes,
+    }) as Record<string, unknown>;
+  }
+
+  private buildEffectiveOriginalSnapshot(
+    placement: PlacementSnapshotRecord,
+    effectiveView: EffectivePlacementViewResponseDto,
+  ) {
+    const effectiveTerms = effectiveView.effectiveTerms;
+    const effectiveParticipants = effectiveView.effectiveParticipants.map(
+      (participant) => {
+        const primarySource = participant.sources[0];
+        const originalParticipantId =
+          primarySource?.originalParticipantId ??
+          primarySource?.participantId ??
+          null;
+
+        return {
+          id:
+            originalParticipantId ??
+            primarySource?.endorsementParticipantId ??
+            participant.counterpartyId,
+          counterpartyId: participant.counterpartyId,
+          role: 'REINSURER',
+          status: 'CLOSED',
+          sharePercent: participant.signedLinePercent,
+          signedLinePercent: participant.signedLinePercent,
+          brokerageFee:
+            effectiveTerms.brokeragePercent ??
+            participant.sources
+              .map((source) => source.signedLinePercent)
+              .find((value) => Number.isFinite(value)) ??
+            null,
+          notes: null,
+          originalParticipantId,
+          participationType: participant.participationType,
+          sourceType: primarySource?.sourceType ?? null,
+          sourceClosingId: primarySource?.closingId ?? null,
+        };
+      },
+    );
+
+    const effectiveClosings = effectiveView.effectiveParticipants.flatMap(
+      (participant) =>
+        participant.sources.map((source) => ({
+          id: source.closingId,
+          participantId: source.participantId ?? null,
+          endorsementParticipantId: source.endorsementParticipantId ?? null,
+          originalParticipantId: source.originalParticipantId ?? null,
+          counterpartyId: participant.counterpartyId,
+          closingNumber: null,
+          status: 'CONFIRMED',
+          signedLinePercent: source.signedLinePercent,
+          sharePercent: source.signedLinePercent,
+          grossPremium: participant.grossPremium,
+          commissionAmount: participant.commissionAmount,
+          brokerageAmount: participant.brokerageAmount,
+          netPremium: participant.netPremium,
+          currency: effectiveTerms.currency,
+        })),
+    );
+
+    return this.toPlainJson({
+      placement: {
+        id: placement.id,
+        reference: placement.reference,
+        policyNumber: placement.policyNumber,
+        title: effectiveTerms.title,
+        placementType: placement.placementType,
+        status: placement.status,
+        cedantId: effectiveTerms.cedantId,
+        riskTypeId: effectiveTerms.riskTypeId,
+        businessDetails: effectiveTerms.businessDetails,
+        offerDetails: effectiveTerms.offerDetails,
+        description: effectiveTerms.description,
+        inceptionDate: effectiveTerms.inceptionDate,
+        expiryDate: effectiveTerms.expiryDate,
+        currency: effectiveTerms.currency,
+        exchangeRateToBase: placement.exchangeRateToBase,
+        sumInsured: effectiveTerms.sumInsured,
+        rate: effectiveTerms.rate,
+        premium: effectiveTerms.premium,
+        commission: effectiveTerms.commissionPercent,
+        facultativeOffer: effectiveTerms.facultativeOfferPercent,
+        preliminaryBrokerage: effectiveTerms.brokeragePercent,
+        createdAt: placement.createdAt,
+        updatedAt: placement.updatedAt,
+      },
+      participants: effectiveParticipants,
+      closings: effectiveClosings,
+      payments: placement.payments,
+      notes: placement.notes,
+      effectiveViewAsOf: effectiveView.viewAsOf,
+      appliedEndorsements: effectiveView.appliedEndorsements,
+      scheduledEndorsements: effectiveView.scheduledEndorsements,
     }) as Record<string, unknown>;
   }
 
