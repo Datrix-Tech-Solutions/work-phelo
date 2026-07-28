@@ -110,7 +110,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
-    width: '140px',
+    width: '150px',
     render: (row) => (
       <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
     ),
@@ -118,7 +118,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'title',
     label: 'Insured / Risk Type',
-    width: 'minmax(150px, 0.8fr)',
+    width: 'minmax(150px, 1fr)',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>

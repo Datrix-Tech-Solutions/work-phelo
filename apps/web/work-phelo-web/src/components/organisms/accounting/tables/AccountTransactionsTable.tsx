@@ -43,7 +43,7 @@ const COLUMNS: Column<AccountTransaction>[] = [
   {
     key: 'description',
     label: 'Description',
-    width: '1fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="text-sm text-gray-800">{row.description}</span>,
   },
   {

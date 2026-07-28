@@ -559,6 +559,7 @@ export function FacultativeTable({
     if (tab === 'placements') {
       const paymentStatus = openPaymentStatusMap.get(row.id) ?? 'Outstanding';
       const canArchive = paymentStatus === 'Outstanding';
+      const isPartiallyClosed = row.status === 'PARTIALLY_PLACED' || row.status === 'CLOSING';
       const forceCloseAction: RowAction | null =
         row.status === 'CLOSING'
           ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
@@ -566,12 +567,17 @@ export function FacultativeTable({
       const archiveAction: RowAction | null = canArchive
         ? { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }
         : null;
-      const editAction: RowAction = hasPaymentMap.get(row.id)
-        ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
-        : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
+      const reopenAction: RowAction | null = isPartiallyClosed
+        ? { label: 'Reopen Offer', onClick: () => setReopenTarget(row) }
+        : null;
+      const editAction: RowAction =
+        isPartiallyClosed || hasPaymentMap.get(row.id)
+          ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
+          : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
 
       return [
         { label: 'View Offer', onClick: () => router.push(detailUrl) },
+        ...(reopenAction ? [reopenAction] : []),
         editAction,
         ...(forceCloseAction ? [forceCloseAction] : []),
         ...(archiveAction ? [archiveAction] : []),

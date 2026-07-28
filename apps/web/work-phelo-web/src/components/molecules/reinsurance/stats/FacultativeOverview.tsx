@@ -153,51 +153,40 @@ export function FacultativeOverview({
               </span>
             </>
           )}
-          {effectiveView && (
+          {appliedEndorsementCount > 0 && (
+            <>
+              <span className="text-sm text-gray-500">|</span>
+              <span className="text-xs text-green-600 font-medium">
+                {appliedEndorsementCount} active endorsement
+                {appliedEndorsementCount > 1 ? 's' : ''} as of{' '}
+                {fmtDate(effectiveView?.viewAsOf ?? '')}
+              </span>
+            </>
+          )}
+          {scheduledEndorsementCount > 0 && (
             <>
               <span className="text-sm text-gray-500">|</span>
               <span className="text-xs text-gray-600 font-medium">
-                Current effective as of {fmtDate(effectiveView.viewAsOf)}
+                {scheduledEndorsementCount} upcoming endorsement
+                {scheduledEndorsementCount > 1 ? 's' : ''}
+              </span>
+            </>
+          )}
+          {pendingEndorsementCount > 0 && (
+            <>
+              <span className="text-sm text-gray-500">|</span>
+              <span className="text-xs text-amber-700 font-medium">
+                {pendingEndorsementCount} pending endorsement
+                {pendingEndorsementCount > 1 ? 's' : ''}
               </span>
             </>
           )}
         </>
       }
     >
-      {(appliedEndorsementCount > 0 ||
-        scheduledEndorsementCount > 0 ||
-        pendingEndorsementCount > 0 ||
-        effectiveViewError) && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {appliedEndorsementCount > 0 && (
-            <Badge
-              label={`Includes ${appliedEndorsementCount} effective endorsement${
-                appliedEndorsementCount > 1 ? 's' : ''
-              }`}
-              variant="success"
-            />
-          )}
-          {scheduledEndorsementCount > 0 && (
-            <Badge
-              label={`${scheduledEndorsementCount} scheduled future endorsement${
-                scheduledEndorsementCount > 1 ? 's' : ''
-              }`}
-              variant="neutral"
-            />
-          )}
-          {pendingEndorsementCount > 0 && (
-            <Badge
-              label={`${pendingEndorsementCount} pending endorsement${
-                pendingEndorsementCount > 1 ? 's' : ''
-              }`}
-              variant="warning"
-            />
-          )}
-          {effectiveViewError && (
-            <span className="text-xs text-amber-700">
-              Current effective view could not be loaded; showing original placement terms.
-            </span>
-          )}
+      {effectiveViewError && (
+        <div className="mb-4 text-xs text-amber-700">
+          Current effective view could not be loaded; showing original placement terms.
         </div>
       )}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">

@@ -6,6 +6,7 @@ import { useQueries } from '@tanstack/react-query';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { NumberField } from '@/components/atoms/NumberField';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useFacultatives, useCurrencyOptions } from '@/hooks';
 import {
@@ -358,13 +359,19 @@ export function AddPaymentFormFields({
         )}
       </div>
       <div>
-        <FormField
-          label="Amount"
-          registration={register('amount', { required: 'Amount is required' })}
-          placeholder="0.00"
-          type="number"
-          step="any"
-          error={errors.amount}
+        <Controller
+          name="amount"
+          control={control}
+          rules={{ min: { value: 0.01, message: 'Amount is required' } }}
+          render={({ field }) => (
+            <NumberField
+              label="Amount"
+              value={field.value ? Number(field.value) : 0}
+              onChange={(n) => field.onChange(String(n))}
+              error={errors.amount?.message}
+              placeholder="0.00"
+            />
+          )}
         />
         {totalExpectedHint}
       </div>
@@ -423,13 +430,19 @@ export function AddPaymentFormFields({
         )}
       </div>
       <div>
-        <FormField
-          label="Amount"
-          registration={register('amount', { required: 'Amount is required' })}
-          placeholder="0.00"
-          type="number"
-          step="any"
-          error={errors.amount}
+        <Controller
+          name="amount"
+          control={control}
+          rules={{ min: { value: 0.01, message: 'Amount is required' } }}
+          render={({ field }) => (
+            <NumberField
+              label="Amount"
+              value={field.value ? Number(field.value) : 0}
+              onChange={(n) => field.onChange(String(n))}
+              error={errors.amount?.message}
+              placeholder="0.00"
+            />
+          )}
         />
         {totalExpectedHint}
       </div>

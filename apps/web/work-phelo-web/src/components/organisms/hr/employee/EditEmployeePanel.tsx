@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -16,7 +16,7 @@ import {
   Gender,
   EmployeeCompensationType,
 } from '@/types/hr';
-import { CurrencyInput } from '@/components/atoms/CurrencyInput';
+import { NumberField } from '@/components/atoms/NumberField';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 import { useBranchOptions } from '@/hooks/hr/useBranches';
@@ -47,8 +47,6 @@ export function EditEmployeePanel({
   const { data: departments = [] } = useDepartmentOptions(isOpen);
   const { data: branches = [] } = useBranchOptions(isOpen);
   const { currency: tenantCurrency } = useTenantConfig();
-
-  const [salaryCurrency, setSalaryCurrency] = useState(tenantCurrency);
 
   // Watch values for controlled components
   const editDobValue = useWatch({ control: editForm.control, name: 'dateOfBirth' });
@@ -296,14 +294,10 @@ export function EditEmployeePanel({
         />
         {(compensationTypeValue === 'SALARY' ||
           compensationTypeValue === 'SALARY_PLUS_COMMISSION') && (
-          <CurrencyInput
-            label="Basic Salary"
-            value={basicSalaryValue}
-            currency={salaryCurrency}
-            onValueChange={(v) =>
-              editForm.setValue('basicSalary', v === '' ? undefined : Number(v))
-            }
-            onCurrencyChange={setSalaryCurrency}
+          <NumberField
+            label={`Basic Salary (${tenantCurrency})`}
+            value={basicSalaryValue ?? 0}
+            onChange={(n) => editForm.setValue('basicSalary', n === 0 ? undefined : n)}
             placeholder="0.00"
           />
         )}

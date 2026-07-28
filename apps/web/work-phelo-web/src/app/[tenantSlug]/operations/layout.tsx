@@ -44,7 +44,7 @@ export default function OperationsLayout({
   return (
     <AppBackground className="h-dvh overflow-hidden flex layout-operations">
       <Sidebar groups={groups} collapsed={collapsed} />
-      <div className="flex flex-1 min-h-0 flex-col relative">
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col relative">
         <TopNav
           showMenuButton
           onMenuClick={() => setCollapsed((v) => !v)}

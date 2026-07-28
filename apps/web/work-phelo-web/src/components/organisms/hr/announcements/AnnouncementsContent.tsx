@@ -5,8 +5,10 @@ import { Megaphone } from 'lucide-react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateAnnouncementPanel } from '@/components/organisms/hr/announcements/CreateAnnouncementPanel';
+import { AnnouncementDetailPanel } from '@/components/organisms/hr/announcements/AnnouncementDetailPanel';
 import { useAnnouncementsPage, useDeleteAnnouncement } from '@/hooks';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -21,64 +23,89 @@ interface AnnouncementRow {
   expiresAt?: string | null;
   notifyEmail: boolean;
   notifySms: boolean;
+  raw: Announcement;
 }
 
-const COLUMNS: Column<AnnouncementRow>[] = [
-  {
-    key: 'title',
-    label: 'Title',
-    width: 'minmax(100px, 1fr)',
-    render: (row) => <span className="font-medium text-gray-900">{row.title}</span>,
-  },
-  {
-    key: 'message',
-    label: 'Message',
-    width: 'minmax(200px, 2.5fr)',
-    render: (row) => <span className="text-gray-500 line-clamp-1">{row.message}</span>,
-  },
-  {
-    key: 'expiresAt',
-    label: 'Expires',
-    width: '100px',
-    render: (row) => (
-      <span className="text-gray-600">
-        {row.expiresAt
-          ? new Date(row.expiresAt).toLocaleDateString('en-GB', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })
-          : 'No expiry'}
-      </span>
-    ),
-  },
-  {
-    key: 'notifyEmail',
-    label: 'Email',
-    width: '90px',
-    render: (row) =>
-      row.notifyEmail ? (
-        <Badge label="Yes" variant="success" />
-      ) : (
-        <Badge label="No" variant="neutral" />
+function buildColumns(
+  canManageAnnouncements: boolean,
+  onView: (row: AnnouncementRow) => void,
+  onDelete: (row: AnnouncementRow) => void,
+): Column<AnnouncementRow>[] {
+  return [
+    {
+      key: 'title',
+      label: 'Title',
+      width: 'minmax(100px, 1fr)',
+      render: (row) => <span className="font-medium text-gray-900">{row.title}</span>,
+    },
+    {
+      key: 'message',
+      label: 'Message',
+      width: 'minmax(200px, 2.5fr)',
+      render: (row) => <span className="text-gray-500 line-clamp-1">{row.message}</span>,
+    },
+    {
+      key: 'expiresAt',
+      label: 'Expires',
+      width: '100px',
+      render: (row) => (
+        <span className="text-gray-600">
+          {row.expiresAt
+            ? new Date(row.expiresAt).toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              })
+            : 'No expiry'}
+        </span>
       ),
-  },
-  {
-    key: 'notifySms',
-    label: 'SMS',
-    width: '90px',
-    render: (row) =>
-      row.notifySms ? (
-        <Badge label="Yes" variant="success" />
-      ) : (
-        <Badge label="No" variant="neutral" />
+    },
+    {
+      key: 'notifyEmail',
+      label: 'Email',
+      width: '90px',
+      render: (row) =>
+        row.notifyEmail ? (
+          <Badge label="Yes" variant="success" />
+        ) : (
+          <Badge label="No" variant="neutral" />
+        ),
+    },
+    {
+      key: 'notifySms',
+      label: 'SMS',
+      width: '90px',
+      render: (row) =>
+        row.notifySms ? (
+          <Badge label="Yes" variant="success" />
+        ) : (
+          <Badge label="No" variant="neutral" />
+        ),
+    },
+    {
+      key: 'actions' as keyof AnnouncementRow,
+      label: '',
+      width: canManageAnnouncements ? '150px' : '80px',
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <TableButton variant="blue" onClick={() => onView(row)}>
+            View
+          </TableButton>
+          {canManageAnnouncements && (
+            <TableButton variant="red" onClick={() => onDelete(row)}>
+              Delete
+            </TableButton>
+          )}
+        </div>
       ),
-  },
-];
+    },
+  ];
+}
 
 export function AnnouncementsContent() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [viewTarget, setViewTarget] = useState<Announcement | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const canReadAnnouncements = usePermission(Permission.READ_ANNOUNCEMENTS);
@@ -107,9 +134,20 @@ export function AnnouncementsContent() {
           expiresAt: announcement.expiresAt,
           notifyEmail: channels.includes('EMAIL') || announcement.sendEmail,
           notifySms: channels.includes('SMS'),
+          raw: announcement,
         };
       }),
     [items],
+  );
+
+  const columns = useMemo(
+    () =>
+      buildColumns(
+        canManageAnnouncements,
+        (row) => setViewTarget(row.raw),
+        (row) => setDeleteTarget({ id: row.id, title: row.title }),
+      ),
+    [canManageAnnouncements],
   );
 
   const handleDeleteConfirm = () => {
@@ -135,7 +173,7 @@ export function AnnouncementsContent() {
       </div>
 
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={rows}
         isLoading={isLoading}
         emptyMessage="No announcements yet"
@@ -155,17 +193,6 @@ export function AnnouncementsContent() {
             ? { label: 'New Announcement', onClick: () => setPanelOpen(true) }
             : undefined
         }
-        rowActions={
-          canManageAnnouncements
-            ? (row) => [
-                {
-                  label: 'Delete',
-                  onClick: () => setDeleteTarget({ id: row.id, title: row.title }),
-                  danger: true,
-                },
-              ]
-            : undefined
-        }
         currentPage={page}
         totalPages={Math.max(1, meta.totalPages)}
         onPageChange={setPage}
@@ -175,6 +202,12 @@ export function AnnouncementsContent() {
       {canAccessAnnouncements && canManageAnnouncements && (
         <CreateAnnouncementPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
       )}
+
+      <AnnouncementDetailPanel
+        isOpen={!!viewTarget}
+        onClose={() => setViewTarget(null)}
+        announcement={viewTarget}
+      />
 
       <Modal
         isOpen={!!deleteTarget}

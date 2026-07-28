@@ -17,7 +17,7 @@ import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 import { usePermissionSets, useAssignPermissionSet } from '@/hooks/hr/useRoles';
-import { CurrencyInput } from '@/components/atoms/CurrencyInput';
+import { NumberField } from '@/components/atoms/NumberField';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
 import type { EmployeeCompensationType } from '@/types/hr';
 
@@ -57,7 +57,6 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
   const { data: permissionSetsRaw = [] } = usePermissionSets();
   const { mutateAsync: assignPermissionSet } = useAssignPermissionSet();
   const [selectedPermissionSetId, setSelectedPermissionSetId] = useState('');
-  const [salaryCurrency, setSalaryCurrency] = useState(tenantCurrency);
 
   const {
     register,
@@ -327,12 +326,10 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
         />
         {(compensationTypeValue === 'SALARY' ||
           compensationTypeValue === 'SALARY_PLUS_COMMISSION') && (
-          <CurrencyInput
-            label="Basic Salary"
-            value={basicSalaryValue}
-            currency={salaryCurrency}
-            onValueChange={(v) => setValue('basicSalary', v === '' ? undefined : Number(v))}
-            onCurrencyChange={setSalaryCurrency}
+          <NumberField
+            label={`Basic Salary (${tenantCurrency})`}
+            value={basicSalaryValue ?? 0}
+            onChange={(n) => setValue('basicSalary', n === 0 ? undefined : n)}
             placeholder="0.00"
           />
         )}

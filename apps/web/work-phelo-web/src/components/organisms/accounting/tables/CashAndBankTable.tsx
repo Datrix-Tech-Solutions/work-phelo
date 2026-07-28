@@ -35,13 +35,13 @@ const COLUMNS: Column<CashBankAccount>[] = [
   {
     key: 'accountName',
     label: 'Account Name',
-    width: '1fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="text-sm font-medium text-gray-900">{row.accountName}</span>,
   },
   {
     key: 'bankName',
     label: 'Bank Name',
-    width: '1fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="text-sm text-gray-700">{row.bankName}</span>,
   },
   {

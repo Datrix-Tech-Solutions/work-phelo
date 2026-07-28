@@ -52,13 +52,13 @@ const COLUMNS: Column<JournalEntry>[] = [
   {
     key: 'createdBy',
     label: 'Created By',
-    width: '1fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="text-gray-700 text-sm">{row.createdBy}</span>,
   },
   {
     key: 'description',
     label: 'Description',
-    width: '1fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="text-gray-700 text-sm">{row.createdBy}</span>,
   },
   {
@@ -74,7 +74,7 @@ const COLUMNS: Column<JournalEntry>[] = [
   {
     key: 'debitTotal',
     label: 'Debit Total',
-    width: '170px',
+    width: '150px',
     render: (row) => (
       <span className="block text-right text-sm font-medium text-gray-900">
         {fmtAmount(row.debitTotal, row.currency)}
@@ -84,7 +84,7 @@ const COLUMNS: Column<JournalEntry>[] = [
   {
     key: 'creditTotal',
     label: 'Credit Total',
-    width: '170px',
+    width: '150px',
     render: (row) => (
       <span className="block text-right text-sm font-medium text-gray-900">
         {fmtAmount(row.creditTotal, row.currency)}

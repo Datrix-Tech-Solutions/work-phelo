@@ -353,6 +353,29 @@ function EndorsementCard({
     }
   };
 
+  const handleRevertEndorsementParticipant = async (row: EndorsementParticipantRow) => {
+    if (!row.participantId || busyEPIds.has(row.counterpartyId)) return;
+    setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
+    try {
+      await updateEndorsementParticipantStatus.mutateAsync({
+        participantId: row.participantId,
+        status: 'QUOTED',
+      });
+      useToastStore.getState().addToast({
+        message: `${row.reinsurerName} reverted to pending for this endorsement`,
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setBusyEPIds((prev) => {
+        const n = new Set(prev);
+        n.delete(row.counterpartyId);
+        return n;
+      });
+    }
+  };
+
   const handleValidateEndorsementParticipant = async (row: EndorsementParticipantRow) => {
     const participant = row.participantId
       ? endorsementParticipants.find((item) => item.id === row.participantId)
@@ -565,6 +588,7 @@ function EndorsementCard({
                   onMailReinsurer={(counterpartyId) => setMailPreviewCounterpartyId(counterpartyId)}
                   onAccept={handleAcceptEndorsement}
                   onReject={handleRejectEndorsementParticipant}
+                  onRevert={handleRevertEndorsementParticipant}
                   onValidate={handleValidateEndorsementParticipant}
                   onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
                   onViewCertificate={(document) => setDocumentPreview(document)}

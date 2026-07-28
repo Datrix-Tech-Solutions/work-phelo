@@ -33,7 +33,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       secondary:
         'bg-(--btn-secondary-bg,#f3f4f6) text-(--btn-secondary-text,#111827) border border-(--btn-secondary-border,#d1d5db) hover:bg-[color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_16%,transparent)] hover:text-(--btn-secondary-hover-text,var(--btn-secondary-text,#111827)) hover:border-(--module-btn-bg,var(--color-brand)) focus:ring-(--focus-ring,var(--color-gray-400))',
       outline:
-        'border border-(--glass-border,rgba(255,255,255,0.55)) text-gray-700 hover:bg-(--surface-hover-subtle,var(--color-gray-50)) focus:ring-(--focus-ring,var(--color-gray-400))',
+        'border border-(--module-btn-bg,var(--color-brand)) text-(--module-btn-bg,var(--color-brand)) bg-transparent hover:border-2 hover:bg-[color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_8%,transparent)] focus:ring-(--module-btn-bg,var(--color-brand)) transition-all',
       ghost:
         'text-gray-700 border border-(--glass-border,rgba(255,255,255,0.55)) hover:bg-(--surface-hover,var(--color-gray-100)) focus:ring-(--focus-ring,var(--color-gray-400)) shadow-none hover:shadow-none',
       danger:

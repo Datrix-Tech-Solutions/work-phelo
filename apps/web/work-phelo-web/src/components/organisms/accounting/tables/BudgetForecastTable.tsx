@@ -19,19 +19,19 @@ const COLUMNS: Column<BudgetForecast>[] = [
   {
     key: 'budgetName',
     label: 'Budget Name',
-    width: '1fr',
+    width: 'minmax(100px, 0.5fr)',
     render: (row) => <span className="font-medium text-gray-900">{row.budgetName}</span>,
   },
   {
     key: 'department',
     label: 'Department',
-    width: '1fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="text-sm text-gray-700">{row.department}</span>,
   },
   {
     key: 'fiscalYear',
     label: 'Fiscal Year',
-    width: '110px',
+    width: '100px',
     render: (row) => (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
         {row.fiscalYear}
@@ -47,7 +47,7 @@ const COLUMNS: Column<BudgetForecast>[] = [
   {
     key: 'amount',
     label: 'Amount',
-    width: '170px',
+    width: '150px',
     render: (row) => (
       <span className="block text-right text-sm font-medium text-gray-900">
         {fmtAmount(row.amount, row.currency)}
@@ -57,7 +57,7 @@ const COLUMNS: Column<BudgetForecast>[] = [
   {
     key: 'actualSpend',
     label: 'Actual Spend',
-    width: '170px',
+    width: '150px',
     render: (row) => (
       <span className="block text-right text-sm text-gray-700">
         {fmtAmount(row.actualSpend, row.currency)}
@@ -67,7 +67,7 @@ const COLUMNS: Column<BudgetForecast>[] = [
   {
     key: 'variance',
     label: 'Variance',
-    width: '170px',
+    width: '150px',
     render: (row) => {
       const variance = row.amount - row.actualSpend;
       return (

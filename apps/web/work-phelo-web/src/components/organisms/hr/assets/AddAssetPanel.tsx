@@ -4,6 +4,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
@@ -89,10 +90,6 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
       }
     >
       <div className="flex flex-col gap-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-          Asset Details
-        </p>
-
         <FormField
           label="Asset Name"
           registration={register('name', { required: 'Required' })}
@@ -167,15 +164,13 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
           options={branchOptions.map((b) => ({ value: b.id, label: b.name }))}
         />
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-bold text-gray-900">Notes</label>
-          <textarea
-            {...register('notes')}
-            rows={3}
-            placeholder="Any additional notes about this asset…"
-            className="w-full border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand resize-none"
-          />
-        </div>
+        <Input
+          label="Notes"
+          type="textarea"
+          rows={3}
+          placeholder="Any additional notes about this asset…"
+          {...register('notes')}
+        />
       </div>
     </SidePanel>
   );

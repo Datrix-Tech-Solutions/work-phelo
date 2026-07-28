@@ -48,7 +48,7 @@ const COLUMNS: Column<AccountsPayableInvoice>[] = [
   {
     key: 'vendor',
     label: 'Vendor',
-    width: '1fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="text-sm text-gray-800 font-medium">{row.vendor}</span>,
   },
   {
@@ -66,7 +66,7 @@ const COLUMNS: Column<AccountsPayableInvoice>[] = [
   {
     key: 'amount',
     label: 'Amount',
-    width: '170px',
+    width: '150px',
     render: (row) => (
       <span className="block text-right text-sm font-medium text-gray-900">
         {fmtAmount(row.amount, row.currency)}

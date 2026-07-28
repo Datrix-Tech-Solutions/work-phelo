@@ -1,16 +1,17 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { Avatar } from '@/components/atoms/Avatar';
+import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
+import { NumberField } from '@/components/atoms/NumberField';
 import { Column, DataTable } from '../../shared/DataTable';
 import { usePayrollSettings, usePayrollRuns } from '@/hooks';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem, Country } from '@/lib/payrollCalculations';
 import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
-import { cn } from '@/lib/utils';
 import { Employee, PayrollTaxPolicy } from '@/types/hr';
 import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
@@ -18,44 +19,6 @@ import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
 
 const COMMISSION_TAX_RATE = 0.1;
-
-function NumberCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
-  const [focused, setFocused] = useState(false);
-
-  useEffect(() => {
-    const localNumeric = local === '' ? 0 : Number(local);
-    if (value !== localNumeric) {
-      setLocal(value === 0 ? '' : String(value));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  const displayValue =
-    focused || local === ''
-      ? local
-      : Number(local).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
-
-  return (
-    <input
-      type="text"
-      inputMode="decimal"
-      value={displayValue}
-      placeholder="0.00"
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onChange={(e) => {
-        const raw = e.target.value.replace(/[^0-9.]/g, '');
-        setLocal(raw);
-        onChange(raw === '' ? 0 : Number(raw));
-      }}
-      className="w-28 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 cursor-text hover:border-brand/50 hover:bg-white focus:outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 transition-colors"
-    />
-  );
-}
 
 interface PayrollRow {
   id: string;
@@ -441,7 +404,7 @@ export function ManagePayrollTab() {
       label: 'Basic Salary',
       width: 'minmax(150px, 0.5fr)',
       render: (row) => (
-        <NumberCell value={row.basicSalary} onChange={(n) => handleBasicChange(row.id, n)} />
+        <NumberField value={row.basicSalary} onChange={(n) => handleBasicChange(row.id, n)} />
       ),
     },
     {
@@ -542,7 +505,7 @@ export function ManagePayrollTab() {
       label: 'Commission',
       width: 'minmax(150px, 1.5fr)',
       render: (row) => (
-        <NumberCell value={row.commission} onChange={(n) => handleCommissionChange(row.id, n)} />
+        <NumberField value={row.commission} onChange={(n) => handleCommissionChange(row.id, n)} />
       ),
     },
     {
@@ -614,6 +577,20 @@ export function ManagePayrollTab() {
   const hasSalaryEmployees = payrollRows.length > 0;
   const hasCommissionEmployees = commissionRows.length > 0;
 
+  const viewToggle = hasSalaryEmployees && hasCommissionEmployees && (
+    <SegmentedToggle
+      value={view}
+      onChange={(v) => {
+        setView(v);
+        setSearchQuery('');
+      }}
+      options={[
+        { label: 'Salary', value: 'salary' },
+        { label: 'Commission', value: 'commission' },
+      ]}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-6">
       {/* Metric cards — context-aware */}
@@ -673,40 +650,6 @@ export function ManagePayrollTab() {
         </div>
       )}
 
-      {/* Toggle — only shown when both types of employees exist */}
-      {hasSalaryEmployees && hasCommissionEmployees && (
-        <div className="flex p-1 bg-gray-100 rounded-lg w-fit gap-1">
-          <button
-            onClick={() => {
-              setView('salary');
-              setSearchQuery('');
-            }}
-            className={cn(
-              'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
-              view === 'salary'
-                ? 'bg-white shadow-sm text-gray-900'
-                : 'text-gray-500 hover:text-gray-700',
-            )}
-          >
-            Salary
-          </button>
-          <button
-            onClick={() => {
-              setView('commission');
-              setSearchQuery('');
-            }}
-            className={cn(
-              'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
-              view === 'commission'
-                ? 'bg-white shadow-sm text-gray-900'
-                : 'text-gray-500 hover:text-gray-700',
-            )}
-          >
-            Commission
-          </button>
-        </div>
-      )}
-
       {view === 'salary' ? (
         <DataTable
           columns={salaryColumns}
@@ -719,6 +662,7 @@ export function ManagePayrollTab() {
           }
           searchPlaceholder="Search employee name..."
           onSearch={setSearchQuery}
+          extraFilters={viewToggle}
           secondaryButton={{
             label: 'Drafts',
             badgeCount: rejectedDraftsCount,
@@ -738,6 +682,7 @@ export function ManagePayrollTab() {
           emptyMessage="No commission employees found."
           searchPlaceholder="Search employee name..."
           onSearch={setSearchQuery}
+          extraFilters={viewToggle}
           secondaryButton={{
             label: 'Drafts',
             badgeCount: rejectedDraftsCount,

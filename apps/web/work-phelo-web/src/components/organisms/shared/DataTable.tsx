@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { cn, cardClass, inputClass } from '@/lib/utils';
+import { cn, cardClass, inputClass, popupClass } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '../../atoms/NoSearchLogo';
@@ -50,6 +50,8 @@ interface DataTableProps<T extends { id: string | number }> {
     onClick: () => void;
     badgeCount?: number;
     className?: string;
+    disabled?: boolean;
+    title?: string;
   }[];
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
@@ -62,13 +64,39 @@ interface DataTableProps<T extends { id: string | number }> {
 
 function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
+  /* keeps the dropdown mounted through its closing transition — see expanded below */
+  const [showDropdown, setShowDropdown] = useState(false);
+  /* drives the actual grid-rows/opacity styles, one frame behind `open` on the
+     way in — mounting already-expanded gives the browser nothing to transition
+     from, so it just pops in instead of animating */
+  const [expanded, setExpanded] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, bottom: 0, right: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
 
+  useEffect(() => {
+    if (!showDropdown || !open) return;
+    const raf = requestAnimationFrame(() => setExpanded(true));
+    return () => cancelAnimationFrame(raf);
+  }, [showDropdown, open]);
+
+  const closeDropdown = () => {
+    setOpen(false);
+    setExpanded(false);
+  };
+
+  /* keep the dropdown mounted until its closing transition finishes */
+  const handleDropdownTransitionEnd = (e: React.TransitionEvent) => {
+    if (!open && e.propertyName === 'grid-template-rows') setShowDropdown(false);
+  };
+
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!open && buttonRef.current) {
+    if (open) {
+      closeDropdown();
+      return;
+    }
+    if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       setOpenUpward(window.innerHeight - rect.bottom < 200);
       setMenuPos({
@@ -77,7 +105,8 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
         right: window.innerWidth - rect.right,
       });
     }
-    setOpen((v) => !v);
+    setOpen(true);
+    setShowDropdown(true);
   };
 
   return (
@@ -90,7 +119,7 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
         <Icons.EllipsisVertical />
       </button>
 
-      {open &&
+      {showDropdown &&
         typeof document !== 'undefined' &&
         createPortal(
           <>
@@ -98,38 +127,45 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
               className="fixed inset-0 z-40"
               onClick={(e) => {
                 e.stopPropagation();
-                setOpen(false);
+                closeDropdown();
               }}
             />
             <div
+              onTransitionEnd={handleDropdownTransitionEnd}
               style={{
                 position: 'fixed',
                 right: menuPos.right,
                 ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
                 width: 176,
+                gridTemplateRows: expanded ? '1fr' : '0fr',
+                opacity: expanded ? 1 : 0,
               }}
-              className="z-50 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden"
+              className="z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
             >
-              {actions.map((action) => (
-                <button
-                  key={action.label}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    action.onClick();
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    'w-full text-left px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
-                    action.danger
-                      ? 'text-red-600'
-                      : action.variant === 'success'
-                        ? 'text-blue-600'
-                        : 'text-gray-700',
-                  )}
-                >
-                  {action.label}
-                </button>
-              ))}
+              <div className={popupClass('min-h-0 overflow-hidden')}>
+                <div className="py-1">
+                  {actions.map((action) => (
+                    <button
+                      key={action.label}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        action.onClick();
+                        closeDropdown();
+                      }}
+                      className={cn(
+                        'w-full text-left px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
+                        action.danger
+                          ? 'text-red-600'
+                          : action.variant === 'success'
+                            ? 'text-blue-600'
+                            : 'text-gray-700',
+                      )}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </>,
           document.body,
@@ -242,6 +278,8 @@ export function DataTable<T extends { id: string | number }>({
                 size="sm"
                 onClick={btn.onClick}
                 className={btn.className}
+                disabled={btn.disabled}
+                title={btn.title}
               >
                 {btn.label}
                 {(btn.badgeCount ?? 0) > 0 && (

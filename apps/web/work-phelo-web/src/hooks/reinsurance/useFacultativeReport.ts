@@ -1,15 +1,24 @@
 import { useMemo } from 'react';
 import { useFacultatives } from './useFacultatives';
 import { useReportCurrencyTotals, ReportCurrencyTotals } from './useReportCurrencyTotals';
-import { FacultativeStatus } from '@/types/reinsurance';
+import { Facultative, FacultativeStatus } from '@/types/reinsurance';
 
 const ACCEPTED_STATUSES = new Set(['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED']);
 const OPEN_STATUSES = new Set(['DRAFT', 'MARKETING']);
 const QUALIFYING_PARTICIPANT_STATUSES = new Set(['ACCEPTED', 'CLOSED']);
 
+/** Sums sharePercent for participants that have accepted or closed — a closed reinsurer still counts as accepted. */
+function acceptedPercentFor(p: Facultative): number {
+  const sum = p.participants
+    .filter((pt) => QUALIFYING_PARTICIPANT_STATUSES.has(pt.status))
+    .reduce((total, pt) => total + (pt.sharePercent ? parseFloat(pt.sharePercent) : 0), 0);
+  return Math.round(sum * 100) / 100;
+}
+
 export interface FacultativeReportParams {
-  /** Restricts to these years (by placement createdAt). Omitted/empty = all-time, no restriction. */
-  years?: string[];
+  /** Restricts to placements whose inceptionDate (period of insurance start) falls in [startDate, endDate]. */
+  startDate?: string;
+  endDate?: string;
   riskTypeId?: string;
   /** Exact match on the placement's own currency — rows aren't aggregated across currencies here. */
   currency?: string;
@@ -53,11 +62,18 @@ export function useFacultativeReport(
   const filtered = useMemo(() => {
     if (!enabled) return [];
 
-    const years = params.years?.length ? new Set(params.years) : null;
+    const from = params.startDate ? new Date(params.startDate) : null;
+    const to = params.endDate ? new Date(params.endDate) : null;
+    if (to) to.setHours(23, 59, 59, 999);
     const cedantIds = params.cedantIds?.length ? new Set(params.cedantIds) : null;
 
     return placements.filter((p) => {
-      if (years && !years.has(String(new Date(p.createdAt).getFullYear()))) return false;
+      if (from || to) {
+        if (!p.inceptionDate) return false;
+        const inception = new Date(p.inceptionDate);
+        if (from && inception < from) return false;
+        if (to && inception > to) return false;
+      }
       if (params.riskTypeId && p.riskTypeId !== params.riskTypeId) return false;
       if (params.currency && p.currency !== params.currency) return false;
       if (params.status && p.status !== params.status) return false;
@@ -67,7 +83,8 @@ export function useFacultativeReport(
   }, [
     placements,
     enabled,
-    params.years,
+    params.startDate,
+    params.endDate,
     params.riskTypeId,
     params.currency,
     params.status,
@@ -87,7 +104,7 @@ export function useFacultativeReport(
         premium: p.premium,
         currency: p.currency,
         totalOfferedPercent: p.totalOfferedPercent,
-        totalAcceptedPercent: p.totalAcceptedPercent,
+        totalAcceptedPercent: acceptedPercentFor(p),
         status: p.status,
         inceptionDate: p.inceptionDate,
       }));

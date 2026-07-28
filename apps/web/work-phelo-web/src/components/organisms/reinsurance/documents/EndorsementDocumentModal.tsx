@@ -427,10 +427,9 @@ function EndorsementSlipContent({ document }: { document: PlacementDocument }) {
 }
 
 /**
- * Reinsurer-facing endorsement certificate — layout matches the pre-existing
- * EndorsementReinsurerCertificateModal (Policy Information / Endorsement Summary narrative /
- * Original vs Revised participation / Financial Impact / Special Conditions), just sourced from
- * the persisted document snapshot instead of live placement props.
+ * Reinsurer-facing endorsement certificate — Policy Information / Endorsement Summary
+ * narrative / Original vs Revised participation (side by side) / Special Conditions,
+ * sourced from the persisted document snapshot.
  */
 function EndorsementCertificateContent({
   document,
@@ -483,10 +482,6 @@ function EndorsementCertificateContent({
   const yourPremium = numberValue(closing.premiumSnapshot) ?? 0;
   const commissionAmt = toNum(closing.commissionAmount) + toNum(closing.brokerageAmount);
   const netPremium = numberValue(closing.netPremium) ?? yourPremium - commissionAmt;
-
-  const additionalPremium = yourPremium - prevYourPremium;
-  const additionalCommission = commissionAmt - prevCommissionAmt;
-  const netAmountPayable = netPremium - prevNetPremium;
 
   const changedFields = proposed ? changedFieldRows(originalPlacement, proposed) : [];
   const narrative =
@@ -616,41 +611,6 @@ function EndorsementCertificateContent({
                     className={`py-1.5 pl-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
                   >
                     {row.revised}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* FINANCIAL IMPACT */}
-          <SectionHeading>Financial Impact</SectionHeading>
-          <table className="w-full text-sm border-collapse mb-2">
-            <tbody>
-              {[
-                {
-                  label: additionalPremium >= 0 ? 'Additional Premium Due' : 'Return Premium',
-                  value: fmtMoney(Math.abs(additionalPremium), currency),
-                },
-                {
-                  label: additionalCommission >= 0 ? 'Additional Commission' : 'Return Commission',
-                  value: fmtMoney(Math.abs(additionalCommission), currency),
-                },
-                {
-                  label: netAmountPayable >= 0 ? 'Net Amount Payable' : 'Net Amount Returnable',
-                  value: fmtMoney(Math.abs(netAmountPayable), currency),
-                  bold: true,
-                },
-              ].map((row) => (
-                <tr key={row.label} className="border-b border-gray-50 last:border-0">
-                  <td
-                    className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
-                  >
-                    {row.label}
-                  </td>
-                  <td
-                    className={`py-1.5 pl-4 text-right ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
-                  >
-                    {row.value}
                   </td>
                 </tr>
               ))}
