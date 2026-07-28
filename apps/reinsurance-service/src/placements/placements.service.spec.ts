@@ -2627,25 +2627,42 @@ describe('PlacementsService', () => {
       'participant-1',
     );
 
-    expect(prisma.placementStatusHistory.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        fromStatus: PlacementStatus.PARTIALLY_PLACED,
-        toStatus: PlacementStatus.CLOSING,
-        note: 'All invited reinsurers have resolved their offers with capacity remaining',
-      }),
+    type StatusHistoryCreateCall = [
+      {
+        data: {
+          fromStatus: PlacementStatus;
+          toStatus: PlacementStatus;
+          note?: string;
+        };
+      },
+    ];
+    const statusHistoryCalls = prisma.placementStatusHistory.create.mock
+      .calls as unknown as StatusHistoryCreateCall[];
+    const closingTransition = statusHistoryCalls.find(
+      ([args]) => args.data.toStatus === PlacementStatus.CLOSING,
+    );
+    expect(closingTransition?.[0].data).toMatchObject({
+      fromStatus: PlacementStatus.PARTIALLY_PLACED,
+      toStatus: PlacementStatus.CLOSING,
+      note: 'All invited reinsurers have resolved their offers with capacity remaining',
     });
     expect(prisma.placement.update).toHaveBeenCalledWith({
       where: { id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' } },
       data: { status: PlacementStatus.CLOSING, updatedByUserId: 'user-1' },
     });
-    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalledWith({
-      data: expect.objectContaining({ toStatus: PlacementStatus.CLOSED }),
-    });
-    expect(prisma.placement.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ status: PlacementStatus.CLOSED }),
-      }),
+
+    const closedTransition = statusHistoryCalls.some(
+      ([args]) => args.data.toStatus === PlacementStatus.CLOSED,
     );
+    expect(closedTransition).toBe(false);
+
+    type PlacementUpdateCall = [{ data: { status?: PlacementStatus } }];
+    const placementUpdateCalls = prisma.placement.update.mock
+      .calls as unknown as PlacementUpdateCall[];
+    const closedUpdate = placementUpdateCalls.some(
+      ([args]) => args.data.status === PlacementStatus.CLOSED,
+    );
+    expect(closedUpdate).toBe(false);
   });
 
   it('auto closes a CLOSING placement when accept-and-confirm reaches the facultative offer', async () => {
