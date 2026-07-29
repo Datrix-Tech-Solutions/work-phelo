@@ -168,6 +168,15 @@ enum PlacementClaimCedantSettlementStatus {
   @@schema("reinsurance")
 }
 
+enum ReinsuranceAccountingOutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+
+  @@schema("reinsurance")
+}
+
 enum PlacementDocumentType {
   OFFER_SLIP
   CLOSING_SLIP
@@ -834,6 +843,35 @@ model PlacementClaimCedantSettlement {
   @@index([tenantId, placementId, claimId, status, createdAt])
   @@index([tenantId, claimId, status, createdAt])
   @@index([tenantId, reversalOfSettlementId])
+  @@schema("reinsurance")
+}
+
+model ReinsuranceAccountingOutbox {
+  id                      String                           @id @default(uuid())
+  tenantId                String
+  sourceEventType         String
+  sourceRecordType        String
+  sourceRecordId          String
+  sourceDocumentId        String?
+  idempotencyKey          String
+  occurredAt              DateTime
+  currency                String
+  payload                 Json
+  status                  ReinsuranceAccountingOutboxStatus @default(PENDING)
+  attemptCount            Int                              @default(0)
+  lastAttemptAt           DateTime?
+  nextAttemptAt           DateTime?
+  lastError               String?
+  accountingSourceEventId String?
+  createdAt               DateTime                         @default(now())
+  updatedAt               DateTime                         @updatedAt
+  deliveredAt             DateTime?
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, nextAttemptAt, createdAt])
+  @@index([tenantId, sourceRecordType, sourceRecordId])
+  @@index([tenantId, sourceEventType, createdAt])
   @@schema("reinsurance")
 }
 
