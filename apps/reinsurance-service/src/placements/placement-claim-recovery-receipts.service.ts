@@ -310,7 +310,10 @@ export class PlacementClaimRecoveryReceiptsService {
         ),
       0,
     );
-    const totalCashCalled = cashCalls.reduce(
+    const effectiveCashCalls = cashCalls.filter((cashCall) =>
+      this.isRecoverableCashCallStatus(cashCall.status),
+    );
+    const totalCashCalled = effectiveCashCalls.reduce(
       (sum, cashCall) => sum + this.money.toNumber(cashCall.amount),
       0,
     );
@@ -413,6 +416,7 @@ export class PlacementClaimRecoveryReceiptsService {
 
   private calculateCashCallPosition(cashCall: CashCallWithRecoveryRecords) {
     const calledAmount = this.money.toNumber(cashCall.amount);
+    const isRecoverable = this.isRecoverableCashCallStatus(cashCall.status);
     const activeReceipts = cashCall.recoveryReceipts.filter(
       (receipt) =>
         receipt.status === PlacementClaimRecoveryReceiptStatus.RECORDED &&
@@ -435,7 +439,7 @@ export class PlacementClaimRecoveryReceiptsService {
     );
     const outstandingAmount = Math.max(
       0,
-      this.money.roundMoney(calledAmount - recoveredAmount),
+      this.money.roundMoney(isRecoverable ? calledAmount - recoveredAmount : 0),
     );
     const recoveryStatus: ClaimRecoveryStatus =
       recoveredAmount <= 0
@@ -450,6 +454,15 @@ export class PlacementClaimRecoveryReceiptsService {
       outstandingAmount,
       recoveryStatus,
     };
+  }
+
+  private isRecoverableCashCallStatus(
+    status: PlacementClaimCashCallStatus,
+  ): boolean {
+    return (
+      status === PlacementClaimCashCallStatus.ISSUED ||
+      status === PlacementClaimCashCallStatus.PAID
+    );
   }
 
   private formatMoney(value: Prisma.Decimal | number | string): string {

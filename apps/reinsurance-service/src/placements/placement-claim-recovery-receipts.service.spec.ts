@@ -360,4 +360,56 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       recoveryStatus: 'UNRECOVERED',
     });
   });
+
+  it('excludes draft and void cash calls from active recovery outstanding totals', async () => {
+    prisma.placementClaimCashCall.findMany.mockResolvedValue([
+      {
+        ...cashCall,
+        status: PlacementClaimCashCallStatus.DRAFT,
+      },
+      {
+        ...cashCall,
+        id: 'cash-call-void',
+        status: PlacementClaimCashCallStatus.VOID,
+        recoveryReceipts: [
+          {
+            ...receipt,
+            id: 'receipt-void-original',
+            status: PlacementClaimRecoveryReceiptStatus.REVERSED,
+          },
+          {
+            ...receipt,
+            id: 'receipt-void-reversal',
+            reversalOfReceiptId: 'receipt-void-original',
+          },
+        ],
+      },
+    ]);
+
+    const position = await service.getRecoveryPosition(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+    );
+
+    expect(position.recoveries).toEqual({
+      totalAllocated: '200000.00',
+      totalCashCalled: '0.00',
+      totalRecovered: '0.00',
+      totalReversed: '40000.00',
+      totalOutstanding: '0.00',
+    });
+    expect(position.perCashCall).toEqual([
+      expect.objectContaining({
+        cashCallStatus: PlacementClaimCashCallStatus.DRAFT,
+        outstandingAmount: '0.00',
+        recoveryStatus: 'UNRECOVERED',
+      }),
+      expect.objectContaining({
+        cashCallStatus: PlacementClaimCashCallStatus.VOID,
+        outstandingAmount: '0.00',
+        recoveryStatus: 'UNRECOVERED',
+      }),
+    ]);
+  });
 });
