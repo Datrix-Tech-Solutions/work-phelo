@@ -8,6 +8,7 @@ import { PlacementFinancialActivityReader } from './placement-financial-activity
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
+import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
 import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recovery-receipts.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementAttachmentsController } from './placement-attachments.controller';
@@ -44,6 +45,7 @@ import { TenantDocumentProfileClient } from './tenant-document-profile.client';
     PlacementAttachmentsService,
     PlacementClaimsService,
     PlacementClaimCashCallsService,
+    PlacementClaimCedantSettlementsService,
     PlacementClaimRecoveryReceiptsService,
     PlacementClosingsService,
     PlacementDocumentsService,

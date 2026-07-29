@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import {
   CounterpartyType,
+  PlacementClaimCedantSettlementStatus,
   PlacementClaimCashCallStatus,
   PlacementClaimRecoveryReceiptStatus,
   Prisma,
@@ -97,6 +98,9 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     placement: { findFirst: PrismaMethod };
     placementClaim: { findFirst: PrismaMethod };
     placementClaimCashCall: { findFirst: PrismaMethod; findMany: PrismaMethod };
+    placementClaimCedantSettlement: {
+      findMany: PrismaMethod;
+    };
     placementClaimRecoveryReceipt: {
       findMany: PrismaMethod;
       findFirst: PrismaMethod;
@@ -115,6 +119,9 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
+      placementClaimCedantSettlement: {
+        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+      },
       placementClaimRecoveryReceipt: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
@@ -130,7 +137,12 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       id: 'claim-1',
       placementId: 'placement-1',
       currency: 'GHS',
+      finalLossAmount: null,
+      approvedPayableAmount: null,
+      approvedAt: null,
+      approvedByUserId: null,
     });
+    prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([]);
     service = new PlacementClaimRecoveryReceiptsService(
       prisma as unknown as PrismaService,
       new ReinsuranceMoneyHelper(),
@@ -359,6 +371,13 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       outstandingAmount: '35000.00',
       recoveryStatus: 'UNRECOVERED',
     });
+    expect(position.cedantSettlement).toEqual({
+      approvedPayableAmount: null,
+      settledAmount: '0.00',
+      reversedAmount: '0.00',
+      outstandingAmount: '0.00',
+      settlementStatus: 'PENDING_APPROVAL',
+    });
   });
 
   it('excludes draft and void cash calls from active recovery outstanding totals', async () => {
@@ -411,5 +430,63 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
         recoveryStatus: 'UNRECOVERED',
       }),
     ]);
+  });
+
+  it('reports cedant settlement independently from reinsurer recoveries', async () => {
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      id: 'claim-1',
+      placementId: 'placement-1',
+      currency: 'GHS',
+      finalLossAmount: new Prisma.Decimal('120000.00'),
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+      approvedAt: new Date('2026-07-29T09:00:00.000Z'),
+      approvedByUserId: 'approver-1',
+    });
+    prisma.placementClaimCashCall.findMany.mockResolvedValue([
+      {
+        ...cashCall,
+        recoveryReceipts: [receipt],
+      },
+    ]);
+    prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([
+      {
+        amount: new Prisma.Decimal('50000.00'),
+        status: PlacementClaimCedantSettlementStatus.RECORDED,
+        reversalOfSettlementId: null,
+      },
+      {
+        amount: new Prisma.Decimal('10000.00'),
+        status: PlacementClaimCedantSettlementStatus.REVERSED,
+        reversalOfSettlementId: null,
+      },
+      {
+        amount: new Prisma.Decimal('10000.00'),
+        status: PlacementClaimCedantSettlementStatus.RECORDED,
+        reversalOfSettlementId: 'settlement-reversed',
+      },
+    ]);
+
+    const position = await service.getRecoveryPosition(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+    );
+
+    expect(position.claim).toMatchObject({
+      finalLossAmount: '120000.00',
+      approvedPayableAmount: '90000.00',
+      approvedByUserId: 'approver-1',
+    });
+    expect(position.cedantSettlement).toEqual({
+      approvedPayableAmount: '90000.00',
+      settledAmount: '50000.00',
+      reversedAmount: '10000.00',
+      outstandingAmount: '40000.00',
+      settlementStatus: 'PARTIALLY_SETTLED',
+    });
+    expect(position.funding).toEqual({
+      brokerFundedExposure: '10000.00',
+      recoveredMinusSettled: '0.00',
+    });
   });
 });

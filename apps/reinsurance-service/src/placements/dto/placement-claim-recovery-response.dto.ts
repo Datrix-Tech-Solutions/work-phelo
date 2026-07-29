@@ -144,6 +144,57 @@ export class PlacementClaimRecoveryPositionTotalsDto {
   totalOutstanding!: string;
 }
 
+export class PlacementClaimRecoveryPositionClaimDto {
+  @ApiPropertyOptional({ type: String, nullable: true, example: '37500.00' })
+  finalLossAmount!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '35000.00' })
+  approvedPayableAmount!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
+  approvedAt!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  approvedByUserId!: string | null;
+}
+
+export class PlacementClaimCedantSettlementPositionDto {
+  @ApiPropertyOptional({ type: String, nullable: true, example: '35000.00' })
+  approvedPayableAmount!: string | null;
+
+  @ApiProperty({ type: String, example: '25000.00' })
+  settledAmount!: string;
+
+  @ApiProperty({ type: String, example: '5000.00' })
+  reversedAmount!: string;
+
+  @ApiProperty({ type: String, example: '10000.00' })
+  outstandingAmount!: string;
+
+  @ApiProperty({
+    enum: [
+      'PENDING_APPROVAL',
+      'APPROVED_UNSETTLED',
+      'PARTIALLY_SETTLED',
+      'SETTLED',
+    ],
+    example: 'PARTIALLY_SETTLED',
+  })
+  settlementStatus!:
+    | 'PENDING_APPROVAL'
+    | 'APPROVED_UNSETTLED'
+    | 'PARTIALLY_SETTLED'
+    | 'SETTLED';
+}
+
+export class PlacementClaimFundingPositionDto {
+  @ApiProperty({ type: String, example: '10000.00' })
+  brokerFundedExposure!: string;
+
+  @ApiProperty({ type: String, example: '0.00' })
+  recoveredMinusSettled!: string;
+}
+
 export class PlacementClaimRecoveryPositionResponseDto {
   @ApiProperty({ format: 'uuid' })
   claimId!: string;
@@ -154,15 +205,23 @@ export class PlacementClaimRecoveryPositionResponseDto {
   @ApiProperty({ example: 'GHS' })
   currency!: string;
 
+  @ApiProperty({ type: PlacementClaimRecoveryPositionClaimDto })
+  claim!: PlacementClaimRecoveryPositionClaimDto;
+
   @ApiProperty({ type: PlacementClaimRecoveryPositionTotalsDto })
   recoveries!: PlacementClaimRecoveryPositionTotalsDto;
 
   @ApiProperty({ type: [PlacementClaimRecoveryPositionCashCallDto] })
   perCashCall!: PlacementClaimRecoveryPositionCashCallDto[];
 
+  @ApiProperty({ type: PlacementClaimCedantSettlementPositionDto })
+  cedantSettlement!: PlacementClaimCedantSettlementPositionDto;
+
+  @ApiProperty({ type: PlacementClaimFundingPositionDto })
+  funding!: PlacementClaimFundingPositionDto;
+
   @ApiProperty({
-    example:
-      'Cedant claim settlement is deferred pending approval of the settlement basis.',
+    example: 'PARTIALLY_SETTLED',
   })
   cedantSettlementStatus!: string;
 }

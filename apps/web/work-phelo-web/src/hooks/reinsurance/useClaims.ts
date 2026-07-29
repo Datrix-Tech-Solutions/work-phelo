@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
+  ApprovePlacementClaimPayablePayload,
+  CreatePlacementClaimCedantSettlementPayload,
   CreatePlacementClaimPayload,
   CreatePlacementClaimRecoveryReceiptPayload,
   Facultative,
@@ -9,6 +11,7 @@ import {
   PlacementClaimAllocation,
   PlacementClaimCashCall,
   PlacementClaimCashCallStatus,
+  PlacementClaimCedantSettlement,
   PlacementClaimRecoveryPosition,
   PlacementClaimRecoveryReceipt,
   PlacementClaimStatus,
@@ -33,6 +36,9 @@ export const cashCallsKey = (placementId: string, claimId: string) =>
 export const recoveryPositionKey = (placementId: string, claimId: string) =>
   [...claimKey(placementId, claimId), 'recovery-position'] as const;
 
+export const cedantSettlementsKey = (placementId: string, claimId: string) =>
+  [...claimKey(placementId, claimId), 'cedant-settlements'] as const;
+
 export const recoveryReceiptsKey = (placementId: string, claimId: string, cashCallId: string) =>
   [...claimKey(placementId, claimId), 'cash-calls', cashCallId, 'recovery-receipts'] as const;
 
@@ -47,6 +53,7 @@ function invalidateClaimWorkflow(
     queryClient.invalidateQueries({ queryKey: allocationsKey(placementId, claimId) });
     queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
     queryClient.invalidateQueries({ queryKey: recoveryPositionKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: cedantSettlementsKey(placementId, claimId) });
   }
   queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
 }
@@ -228,6 +235,65 @@ export function useClaimRecoveryPosition(placementId: string, claimId: string) {
       return res.data as PlacementClaimRecoveryPosition;
     },
     enabled: !!placementId && !!claimId,
+  });
+}
+
+export function useApproveClaimPayable(placementId: string, claimId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ApprovePlacementClaimPayablePayload) => {
+      const res = await api.patch(
+        `${BASE}/${placementId}/claims/${claimId}/approve-payable`,
+        payload,
+      );
+      return res.data as PlacementClaim;
+    },
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
+export function useClaimCedantSettlements(placementId: string, claimId: string) {
+  return useQuery({
+    queryKey: cedantSettlementsKey(placementId, claimId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/claims/${claimId}/cedant-settlements`);
+      return (res.data?.items ?? res.data ?? []) as PlacementClaimCedantSettlement[];
+    },
+    enabled: !!placementId && !!claimId,
+  });
+}
+
+export function useCreateClaimCedantSettlement(placementId: string, claimId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreatePlacementClaimCedantSettlementPayload) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/cedant-settlements`,
+        payload,
+      );
+      return res.data as PlacementClaimCedantSettlement;
+    },
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
+export function useReverseClaimCedantSettlement(placementId: string, claimId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ settlementId, notes }: { settlementId: string; notes?: string }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/cedant-settlements/${settlementId}/reverse`,
+        { notes },
+      );
+      return res.data as PlacementClaimCedantSettlement;
+    },
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
   });
 }
 

@@ -161,6 +161,13 @@ enum PlacementClaimRecoveryReceiptStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementClaimCedantSettlementStatus {
+  RECORDED
+  REVERSED
+
+  @@schema("reinsurance")
+}
+
 enum PlacementDocumentType {
   OFFER_SLIP
   CLOSING_SLIP
@@ -443,6 +450,7 @@ model Placement {
   claimAllocations        PlacementClaimAllocation[]
   claimCashCalls          PlacementClaimCashCall[]
   claimRecoveryReceipts   PlacementClaimRecoveryReceipt[]
+  claimCedantSettlements  PlacementClaimCedantSettlement[]
   documents               PlacementDocument[]
   attachments             PlacementAttachment[]
   endorsements            PlacementEndorsement[]
@@ -666,6 +674,9 @@ model PlacementClaim {
   finalLossAmount     Decimal?                   @db.Decimal(18, 2)
   finalizedAt         DateTime?
   finalizedByUserId   String?
+  approvedPayableAmount Decimal?                 @db.Decimal(18, 2)
+  approvedAt          DateTime?
+  approvedByUserId    String?
   createdByUserId     String
   updatedByUserId     String?
   closedAt            DateTime?
@@ -676,6 +687,7 @@ model PlacementClaim {
   allocations         PlacementClaimAllocation[]
   cashCalls           PlacementClaimCashCall[]
   recoveryReceipts    PlacementClaimRecoveryReceipt[]
+  cedantSettlements   PlacementClaimCedantSettlement[]
   documents           PlacementDocument[]
   attachments         PlacementAttachment[]
 
@@ -795,6 +807,33 @@ model PlacementClaimRecoveryReceipt {
   @@index([tenantId, allocationId, status, createdAt])
   @@index([tenantId, counterpartyId, createdAt])
   @@index([tenantId, reversalOfReceiptId])
+  @@schema("reinsurance")
+}
+
+model PlacementClaimCedantSettlement {
+  id                       String                              @id @default(uuid())
+  tenantId                 String
+  placementId              String
+  claimId                  String
+  currency                 String
+  amount                   Decimal                             @db.Decimal(18, 2)
+  settlementDate           DateTime
+  reference                String?
+  notes                    String?
+  status                   PlacementClaimCedantSettlementStatus @default(RECORDED)
+  reversalOfSettlementId   String?
+  createdByUserId          String
+  createdAt                DateTime                            @default(now())
+  updatedAt                DateTime                            @updatedAt
+  placement                Placement                           @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claim                    PlacementClaim                      @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  reversalOfSettlement     PlacementClaimCedantSettlement?     @relation("PlacementClaimCedantSettlementReversal", fields: [reversalOfSettlementId], references: [id], onDelete: Restrict)
+  reversalSettlements      PlacementClaimCedantSettlement[]    @relation("PlacementClaimCedantSettlementReversal")
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, claimId, status, createdAt])
+  @@index([tenantId, claimId, status, createdAt])
+  @@index([tenantId, reversalOfSettlementId])
   @@schema("reinsurance")
 }
 

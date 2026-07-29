@@ -16,6 +16,7 @@ import {
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
+import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
 import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recovery-receipts.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementClosingsService } from './placement-closings.service';
@@ -137,6 +138,12 @@ describe('PlacementsController', () => {
     changeStatus: jest.fn(),
     void: jest.fn(),
   };
+  const claimCedantSettlementsService = {
+    approvePayable: jest.fn(),
+    findAll: jest.fn(),
+    create: jest.fn(),
+    reverse: jest.fn(),
+  };
   const claimRecoveryReceiptsService = {
     findAll: jest.fn(),
     create: jest.fn(),
@@ -165,6 +172,7 @@ describe('PlacementsController', () => {
       financialPositionService as unknown as PlacementFinancialPositionService,
       claimsService as unknown as PlacementClaimsService,
       claimCashCallsService as unknown as PlacementClaimCashCallsService,
+      claimCedantSettlementsService as unknown as PlacementClaimCedantSettlementsService,
       claimRecoveryReceiptsService as unknown as PlacementClaimRecoveryReceiptsService,
     );
 
@@ -209,6 +217,7 @@ describe('PlacementsController', () => {
     ['findClaimAllocations', PlacementPermission.VIEW],
     ['findClaimCashCalls', PlacementPermission.VIEW],
     ['findClaimCashCall', PlacementPermission.VIEW],
+    ['findClaimCedantSettlements', PlacementPermission.VIEW],
     ['getClaimRecoveryPosition', PlacementPermission.VIEW],
     ['findClaimRecoveryReceipts', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
@@ -257,6 +266,9 @@ describe('PlacementsController', () => {
     ['createClaimCashCall', PlacementPermission.EDIT],
     ['changeClaimCashCallStatus', PlacementPermission.EDIT],
     ['voidClaimCashCall', PlacementPermission.EDIT],
+    ['approveClaimPayable', PlacementPermission.EDIT],
+    ['createClaimCedantSettlement', PlacementPermission.EDIT],
+    ['reverseClaimCedantSettlement', PlacementPermission.EDIT],
     ['createClaimRecoveryReceipt', PlacementPermission.EDIT],
     ['reverseClaimRecoveryReceipt', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],

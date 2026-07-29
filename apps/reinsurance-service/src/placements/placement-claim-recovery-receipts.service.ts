@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  PlacementClaimCedantSettlementStatus,
   PlacementClaimCashCallStatus,
   PlacementClaimRecoveryReceiptStatus,
   Prisma,
@@ -68,6 +69,12 @@ export interface ClaimRecoveryPosition {
   claimId: string;
   placementId: string;
   currency: string;
+  claim: {
+    finalLossAmount: string | null;
+    approvedPayableAmount: string | null;
+    approvedAt: Date | null;
+    approvedByUserId: string | null;
+  };
   recoveries: {
     totalAllocated: string;
     totalCashCalled: string;
@@ -90,6 +97,21 @@ export interface ClaimRecoveryPosition {
     recoveryStatus: ClaimRecoveryStatus;
     receipts: RecoveryReceiptRecord[];
   }>;
+  cedantSettlement: {
+    approvedPayableAmount: string | null;
+    settledAmount: string;
+    reversedAmount: string;
+    outstandingAmount: string;
+    settlementStatus:
+      | 'PENDING_APPROVAL'
+      | 'APPROVED_UNSETTLED'
+      | 'PARTIALLY_SETTLED'
+      | 'SETTLED';
+  };
+  funding: {
+    brokerFundedExposure: string;
+    recoveredMinusSettled: string;
+  };
   cedantSettlementStatus: string;
 }
 
@@ -272,7 +294,15 @@ export class PlacementClaimRecoveryReceiptsService {
   ): Promise<ClaimRecoveryPosition> {
     const claim = await this.prisma.placementClaim.findFirst({
       where: { id: claimId, tenantId, placementId },
-      select: { id: true, placementId: true, currency: true },
+      select: {
+        id: true,
+        placementId: true,
+        currency: true,
+        finalLossAmount: true,
+        approvedPayableAmount: true,
+        approvedAt: true,
+        approvedByUserId: true,
+      },
     });
     if (!claim) throw new NotFoundException('Placement claim not found');
 
@@ -329,11 +359,37 @@ export class PlacementClaimRecoveryReceiptsService {
       (sum, row) => sum + Number(row.outstandingAmount),
       0,
     );
+    const cedantSettlement = await this.calculateCedantSettlementPosition(
+      tenantId,
+      placementId,
+      claimId,
+      this.money.toOptionalNumber(claim.approvedPayableAmount),
+    );
+    const brokerFundedExposure = Math.max(
+      0,
+      this.money.roundMoney(
+        Number(cedantSettlement.settledAmount) - totalRecovered,
+      ),
+    );
+    const recoveredMinusSettled = Math.max(
+      0,
+      this.money.roundMoney(
+        totalRecovered - Number(cedantSettlement.settledAmount),
+      ),
+    );
 
     return {
       claimId: claim.id,
       placementId: claim.placementId,
       currency: claim.currency,
+      claim: {
+        finalLossAmount: this.formatOptionalMoney(claim.finalLossAmount),
+        approvedPayableAmount: this.formatOptionalMoney(
+          claim.approvedPayableAmount,
+        ),
+        approvedAt: claim.approvedAt,
+        approvedByUserId: claim.approvedByUserId,
+      },
       recoveries: {
         totalAllocated: this.formatMoney(totalAllocated),
         totalCashCalled: this.formatMoney(totalCashCalled),
@@ -342,8 +398,12 @@ export class PlacementClaimRecoveryReceiptsService {
         totalOutstanding: this.formatMoney(totalOutstanding),
       },
       perCashCall,
-      cedantSettlementStatus:
-        'Cedant claim settlement is deferred pending approval of the settlement basis.',
+      cedantSettlement,
+      funding: {
+        brokerFundedExposure: this.formatMoney(brokerFundedExposure),
+        recoveredMinusSettled: this.formatMoney(recoveredMinusSettled),
+      },
+      cedantSettlementStatus: cedantSettlement.settlementStatus,
     };
   }
 
@@ -467,6 +527,76 @@ export class PlacementClaimRecoveryReceiptsService {
 
   private formatMoney(value: Prisma.Decimal | number | string): string {
     return this.money.roundMoney(this.money.toNumber(value)).toFixed(2);
+  }
+
+  private formatOptionalMoney(
+    value: Prisma.Decimal | number | string | null,
+  ): string | null {
+    return value === null ? null : this.formatMoney(value);
+  }
+
+  private async calculateCedantSettlementPosition(
+    tenantId: string,
+    placementId: string,
+    claimId: string,
+    approvedPayableAmount: number | null,
+  ): Promise<ClaimRecoveryPosition['cedantSettlement']> {
+    const settlements =
+      await this.prisma.placementClaimCedantSettlement.findMany({
+        where: { tenantId, placementId, claimId },
+        select: {
+          amount: true,
+          status: true,
+          reversalOfSettlementId: true,
+        },
+      });
+    const settledAmount = this.money.roundMoney(
+      settlements
+        .filter(
+          (settlement) =>
+            settlement.status ===
+              PlacementClaimCedantSettlementStatus.RECORDED &&
+            !settlement.reversalOfSettlementId,
+        )
+        .reduce(
+          (sum, settlement) => sum + this.money.toNumber(settlement.amount),
+          0,
+        ),
+    );
+    const reversedAmount = this.money.roundMoney(
+      settlements
+        .filter((settlement) => !!settlement.reversalOfSettlementId)
+        .reduce(
+          (sum, settlement) => sum + this.money.toNumber(settlement.amount),
+          0,
+        ),
+    );
+    const outstandingAmount =
+      approvedPayableAmount === null
+        ? 0
+        : Math.max(
+            0,
+            this.money.roundMoney(approvedPayableAmount - settledAmount),
+          );
+    const settlementStatus =
+      approvedPayableAmount === null
+        ? 'PENDING_APPROVAL'
+        : settledAmount <= 0
+          ? 'APPROVED_UNSETTLED'
+          : outstandingAmount <= 0
+            ? 'SETTLED'
+            : 'PARTIALLY_SETTLED';
+
+    return {
+      approvedPayableAmount:
+        approvedPayableAmount === null
+          ? null
+          : this.formatMoney(approvedPayableAmount),
+      settledAmount: this.formatMoney(settledAmount),
+      reversedAmount: this.formatMoney(reversedAmount),
+      outstandingAmount: this.formatMoney(outstandingAmount),
+      settlementStatus,
+    };
   }
 
   private cleanCurrency(value: string): string {
