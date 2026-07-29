@@ -999,6 +999,72 @@ export interface PlacementPayment {
   endorsementClosing: { id: string; closingNumber: string } | null;
 }
 
+export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'REVERSED';
+export type PlacementClaimRecoveryStatus =
+  | 'UNRECOVERED'
+  | 'PARTIALLY_RECOVERED'
+  | 'FULLY_RECOVERED';
+
+export interface PlacementClaimRecoveryReceipt {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  allocationId: string;
+  cashCallId: string;
+  counterpartyId: string;
+  currency: string;
+  amount: string;
+  paymentDate: string;
+  reference: string | null;
+  notes: string | null;
+  status: PlacementClaimRecoveryReceiptStatus;
+  reversalOfReceiptId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
+}
+
+export interface PlacementClaimRecoveryPositionCashCall {
+  cashCallId: string;
+  allocationId: string;
+  counterpartyId: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
+  cashCallNumber: string;
+  cashCallStatus: PlacementClaimCashCallStatus;
+  currency: string;
+  calledAmount: string;
+  recoveredAmount: string;
+  reversedAmount: string;
+  outstandingAmount: string;
+  recoveryStatus: PlacementClaimRecoveryStatus;
+  receipts: PlacementClaimRecoveryReceipt[];
+}
+
+export interface PlacementClaimRecoveryPosition {
+  claimId: string;
+  placementId: string;
+  currency: string;
+  recoveries: {
+    totalAllocated: string;
+    totalCashCalled: string;
+    totalRecovered: string;
+    totalReversed: string;
+    totalOutstanding: string;
+  };
+  perCashCall: PlacementClaimRecoveryPositionCashCall[];
+  cedantSettlementStatus: string;
+}
+
+export interface CreatePlacementClaimRecoveryReceiptPayload {
+  currency: string;
+  amount: number;
+  paymentDate: string;
+  reference?: string;
+  notes?: string;
+}
+
 export interface CreatePlacementPaymentPayload {
   type: PlacementPaymentType;
   direction: PlacementPaymentDirection;
