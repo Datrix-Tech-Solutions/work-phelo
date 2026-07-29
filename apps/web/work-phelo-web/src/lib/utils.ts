@@ -32,7 +32,7 @@ export function cardClass(extra?: string, border?: 'module' | 'glass') {
   return cn(
     'bg-(--glass-subtle,rgba(255,255,255,0.3)) backdrop-blur-xl backdrop-saturate-150 rounded-xl',
     'border border-(--glass-border,rgba(255,255,255,0.55))',
-    'shadow-[0_20px_40px_-16px_rgba(0,0,0,0.22),0_2px_8px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))]',
+    'shadow-[0_20px_40px_-40px_rgba(0,0,0,0.12),0_2px_8px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))]',
     extra,
   );
 }

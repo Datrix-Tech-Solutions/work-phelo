@@ -259,12 +259,6 @@ function EndorsementCard({
     (document) => document.type === 'ENDORSEMENT_SLIP' && document.endorsementId === endorsement.id,
   );
 
-  const findCertificateDocument = (closingId: string) =>
-    activePlacementDocuments.find(
-      (document) =>
-        document.type === 'ENDORSEMENT_CERTIFICATE' && document.endorsementClosingId === closingId,
-    );
-
   const handleViewEndorsementSlip = () => {
     if (endorsementSlipDocument) {
       setDocumentPreview(endorsementSlipDocument);
@@ -291,9 +285,6 @@ function EndorsementCard({
       documentTitle: isExistingPlacementParticipant
         ? 'Revised Endorsement Offer Preview'
         : 'Offer Slip',
-      previewNotice: isExistingPlacementParticipant
-        ? 'Backend endorsement preview for revised terms. This is not an ENDORSEMENT_CERTIFICATE and no immutable official revised-offer document has been generated yet.'
-        : 'Backend endorsement preview for a new market participant. This is not the original placement Offer Slip and no immutable official endorsement offer document has been generated yet.',
       recipientName: row.reinsurerName,
       relationship: isExistingPlacementParticipant
         ? 'Existing placement participant reviewing revised endorsement terms'
@@ -407,6 +398,29 @@ function EndorsementCard({
         return n;
       });
     }
+  };
+
+  // Endorsement certificates are only meaningful for original/revised participants whose
+  // terms actually changed — a brand-new participant's confirmed closing already reflects
+  // their agreed offer, with nothing "endorsed" to certify against. Rendered live from the
+  // confirmed closing's own figures, the same way the pre-close "Endorsement Offer Slip"
+  // preview is computed — no backend document generation involved.
+  const handleViewCertificate = (
+    row: EndorsementParticipantRow,
+    closing: EndorsementParticipantClosing,
+  ) => {
+    if (row.isNew) return;
+    setMarketPreview({
+      counterpartyId: row.counterpartyId,
+      documentTitle: 'Endorsement Certificate',
+      recipientName: row.reinsurerName,
+      relationship: 'Existing placement participant with a confirmed endorsement closing',
+      offeredLinePercent: Number(closing.signedLinePercent),
+      status: 'CLOSED',
+      brokerageFee: row.brokerageFee,
+      previewFormat: 'REVISED_CERTIFICATE',
+      confirmedClosing: closing,
+    });
   };
 
   const handleAcceptEndorsement = async (row: EndorsementParticipantRow) => {
@@ -564,6 +578,7 @@ function EndorsementCard({
                 proposed={proposed}
                 endorsementSummary={endorsementSummary}
                 summaryTargetPercent={summaryTargetPercent}
+                originalPercent={snapshotFacOffer}
                 acceptedCapacityRows={acceptedCapacityRows}
                 capacityColorMap={capacityColorMap}
               />
@@ -576,7 +591,6 @@ function EndorsementCard({
                   confirmedClosingByEndorsementParticipantId={
                     confirmedClosingByEndorsementParticipantId
                   }
-                  findCertificateDocument={findCertificateDocument}
                   busyEPIds={busyEPIds}
                   mailedIds={mailedIds}
                   revisedShares={revisedShares}
@@ -591,7 +605,7 @@ function EndorsementCard({
                   onRevert={handleRevertEndorsementParticipant}
                   onValidate={handleValidateEndorsementParticipant}
                   onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
-                  onViewCertificate={(document) => setDocumentPreview(document)}
+                  onViewCertificate={handleViewCertificate}
                 />
               )}
 

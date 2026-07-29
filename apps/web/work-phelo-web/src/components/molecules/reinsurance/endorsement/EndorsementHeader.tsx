@@ -54,7 +54,7 @@ export function EndorsementHeader({
               </Button>
             </>
           )}
-          {endorsement.status !== 'DRAFT' && (
+          {endorsement.status === 'CLOSED' && (
             <Button size="sm" variant="secondary" onClick={onViewEndorsementSlip}>
               {endorsementSlipDocument ? 'View Endorsement Slip' : 'Preview Endorsement Slip'}
             </Button>
