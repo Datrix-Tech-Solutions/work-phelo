@@ -7,7 +7,6 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import {
   EndorsementParticipantClosing,
-  PlacementDocument,
   PlacementEndorsementParticipant,
 } from '@/types/reinsurance';
 import { EndorsementParticipantRow } from './types';
@@ -17,7 +16,6 @@ interface EndorsementParticipantsTableProps {
   endorsementParticipants: PlacementEndorsementParticipant[];
   acceptedCounterpartyIds: Set<string>;
   confirmedClosingByEndorsementParticipantId: Record<string, EndorsementParticipantClosing>;
-  findCertificateDocument: (closingId: string) => PlacementDocument | undefined;
   busyEPIds: Set<string>;
   mailedIds: Set<string>;
   revisedShares: Record<string, string>;
@@ -30,7 +28,10 @@ interface EndorsementParticipantsTableProps {
   onRevert: (row: EndorsementParticipantRow) => void;
   onValidate: (row: EndorsementParticipantRow) => void;
   onViewClosing: (closing: EndorsementParticipantClosing) => void;
-  onViewCertificate: (document: PlacementDocument) => void;
+  onViewCertificate: (
+    row: EndorsementParticipantRow,
+    closing: EndorsementParticipantClosing,
+  ) => void;
 }
 
 export function EndorsementParticipantsTable({
@@ -38,7 +39,6 @@ export function EndorsementParticipantsTable({
   endorsementParticipants,
   acceptedCounterpartyIds,
   confirmedClosingByEndorsementParticipantId,
-  findCertificateDocument,
   busyEPIds,
   mailedIds,
   revisedShares,
@@ -61,14 +61,14 @@ export function EndorsementParticipantsTable({
       render: (row) => (
         <div className="flex flex-col gap-1">
           <span className="font-medium text-gray-900">{row.reinsurerName}</span>
-          <Badge label={row.isNew ? 'Added' : 'Revised'} variant="neutral" />
+          <Badge label={row.isNew ? 'Added' : 'Endorsed'} variant="neutral" />
         </div>
       ),
     },
     {
       key: 'originalShare',
       label: 'Original',
-      width: '150px',
+      width: '100px',
       render: (row) => (
         <span className="text-gray-700">{row.isNew ? '—' : `${row.originalShare}%`}</span>
       ),
@@ -76,7 +76,7 @@ export function EndorsementParticipantsTable({
     {
       key: 'counterpartyId',
       label: 'Revised',
-      width: '150px',
+      width: '100px',
       render: (row) => {
         const isAccepted = acceptedCounterpartyIds.has(row.counterpartyId);
         if (isAccepted) {
@@ -107,13 +107,13 @@ export function EndorsementParticipantsTable({
     {
       key: 'netPremium' as unknown as keyof EndorsementParticipantRow,
       label: 'Net Premium',
-      width: 'minmax(150px, 1fr)',
+      width: '150px',
       render: (row) => {
         const confirmedClosing = row.participantId
           ? confirmedClosingByEndorsementParticipantId[row.participantId]
           : undefined;
         if (!confirmedClosing) {
-          return <span className="text-xs text-gray-400">Pending Validation</span>;
+          return <span className="text-xs text-gray-400">Awaiting Validation</span>;
         }
         const netPremium =
           confirmedClosing.netPremium === null ? null : Number(confirmedClosing.netPremium);
@@ -133,7 +133,7 @@ export function EndorsementParticipantsTable({
     {
       key: 'response' as unknown as keyof EndorsementParticipantRow,
       label: 'Response',
-      width: '150px',
+      width: '100px',
       render: (row) => {
         const endorsementParticipant = endorsementParticipants.find(
           (item) => item.id === row.participantId || item.counterpartyId === row.counterpartyId,
@@ -150,7 +150,7 @@ export function EndorsementParticipantsTable({
         if (endorsementParticipant?.status === 'OFFER_SENT') {
           return <Badge label="Sent" variant="warning" />;
         }
-        return <span className="text-xs text-gray-400">Pending</span>;
+        return <span className="text-xs text-gray-400">Awaiting</span>;
       },
     },
     {
@@ -171,9 +171,6 @@ export function EndorsementParticipantsTable({
         const confirmedClosing = row.participantId
           ? confirmedClosingByEndorsementParticipantId[row.participantId]
           : undefined;
-        const certificateDocument = confirmedClosing
-          ? findCertificateDocument(confirmedClosing.id)
-          : null;
         const isBusy = busyEPIds.has(row.counterpartyId);
         const mailed = mailedIds.has(row.counterpartyId);
 
@@ -183,8 +180,14 @@ export function EndorsementParticipantsTable({
               <TableButton variant="green" onClick={() => onViewClosing(confirmedClosing)}>
                 View Closing
               </TableButton>
-              {certificateDocument && (
-                <TableButton variant="blue" onClick={() => onViewCertificate(certificateDocument)}>
+              {!row.isNew && (
+                <TableButton
+                  variant="blue"
+                  isLoading={isBusy}
+                  onClick={() => {
+                    if (!isBusy) onViewCertificate(row, confirmedClosing);
+                  }}
+                >
                   Certificate
                 </TableButton>
               )}

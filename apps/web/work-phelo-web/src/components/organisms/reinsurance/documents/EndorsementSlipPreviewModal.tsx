@@ -27,7 +27,6 @@ interface EndorsementSlipPreviewModalProps {
   notes: PlacementNote[];
   summary?: PlacementEndorsementSummary;
   documentTitle?: string;
-  previewNotice?: string;
   focusedCounterpartyId?: string | null;
   focusedRecipient?: {
     name: string;
@@ -36,12 +35,18 @@ interface EndorsementSlipPreviewModalProps {
     status: string;
   } | null;
   /** 'OFFER_SLIP' — brand-new market participant, rendered like the original placement's
-   *  Offer Slip. 'REVISED_CERTIFICATE' — existing participant reviewing revised terms,
-   *  rendered like the endorsement certificate (Original vs Revised participation/impact),
-   *  computed live since no closing has been confirmed yet. Omitted for the whole-endorsement
-   *  overview, which keeps the generic layout. */
+   *  Offer Slip. 'REVISED_CERTIFICATE' — existing participant reviewing revised terms
+   *  (Original vs Proposed/Revised participation), computed live. Titled "Endorsement Offer
+   *  Slip" pre-close, or "Endorsement Certificate" once `confirmedClosing` is supplied — same
+   *  live rendering either way, just sourced from confirmed closing figures instead of the
+   *  in-flight offer. Not to be confused with the whole-endorsement "Endorsement Slip"
+   *  overview document (EndorsementHeader/generic branch below), which covers every
+   *  participant rather than one reinsurer. */
   previewFormat?: 'OFFER_SLIP' | 'REVISED_CERTIFICATE';
   brokerageFee?: number;
+  /** Confirmed closing for this participant — when set, REVISED_CERTIFICATE renders as the
+   *  post-close "Endorsement Certificate" using these authoritative figures. */
+  confirmedClosing?: EndorsementParticipantClosing | null;
   onClose: () => void;
 }
 
@@ -301,9 +306,10 @@ function buildChangeSentence(
 }
 
 /**
- * Content for an existing participant reviewing revised endorsement terms — mirrors the
- * pre-existing EndorsementReinsurerCertificateModal layout exactly, computed live since no
- * closing has been confirmed for this endorsement yet.
+ * Content for an existing participant reviewing revised endorsement terms — a live-computed
+ * "Endorsement Offer Slip" pre-close pitch, or an "Endorsement Certificate" once
+ * `confirmedClosing` is supplied, in which case the "Revised" figures come straight from that
+ * closing's authoritative numbers instead of being estimated from the in-flight offer.
  */
 function RevisedOfferContent({
   placement,
@@ -312,6 +318,7 @@ function RevisedOfferContent({
   reinsurerName,
   sharePercent,
   brokerageFee,
+  confirmedClosing,
 }: {
   placement: Facultative;
   endorsement: PlacementEndorsement;
@@ -319,6 +326,7 @@ function RevisedOfferContent({
   reinsurerName: string;
   sharePercent: number;
   brokerageFee: number;
+  confirmedClosing?: EndorsementParticipantClosing | null;
 }) {
   const originalPlacement = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = endorsement.proposedSnapshot
@@ -344,12 +352,26 @@ function RevisedOfferContent({
   const prevCommissionAmt = ((prevCommission + prevBrokerage) / 100) * prevYourPremium;
   const prevNetPremium = prevYourPremium - prevCommissionAmt;
 
-  // Revised values — live, since this endorsement hasn't been confirmed/closed yet
-  const currency = placement.currency;
-  const yourPremium = (sharePercent / 100) * (placement.premium ?? 0);
-  const yourSumInsured = (sharePercent / 100) * (placement.sumInsured ?? 0);
-  const commissionAmt = (((placement.commission ?? 0) + brokerageFee) / 100) * yourPremium;
-  const netPremium = yourPremium - commissionAmt;
+  // Revised values — once the participant's closing is confirmed, its own figures are
+  // authoritative (this is the "Endorsement Certificate" case). Until then, estimate from
+  // this endorsement's proposed terms (not the live placement record, which won't reflect
+  // the endorsement's figures until it's actually closed), falling back to the current
+  // placement only if there's no proposed snapshot at all.
+  const currency = confirmedClosing
+    ? text(confirmedClosing.currency ?? placement.currency)
+    : text(proposed?.currency ?? placement.currency);
+  const yourPremium = confirmedClosing
+    ? toNum(confirmedClosing.premiumSnapshot)
+    : (sharePercent / 100) * toNum(proposed?.premium ?? placement.premium);
+  const yourSumInsured = confirmedClosing
+    ? toNum(confirmedClosing.sumInsuredSnapshot)
+    : (sharePercent / 100) * toNum(proposed?.sumInsured ?? placement.sumInsured);
+  const commissionAmt = confirmedClosing
+    ? toNum(confirmedClosing.commissionAmount) + toNum(confirmedClosing.brokerageAmount)
+    : ((toNum(proposed?.commission ?? placement.commission) + brokerageFee) / 100) * yourPremium;
+  const netPremium = confirmedClosing
+    ? toNum(confirmedClosing.netPremium)
+    : yourPremium - commissionAmt;
 
   const changedFields = proposed
     ? CHANGE_FIELDS.filter(({ key }) => {
@@ -423,23 +445,29 @@ function RevisedOfferContent({
       <table className="w-full text-sm border-collapse mb-2">
         <thead>
           <tr className="border-b border-gray-200">
-            <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/3" />
+            <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/3">
+              {confirmedClosing ? '' : `Your Participation (${prevShare}%)`}
+            </th>
             <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
               Original
             </th>
             <th className="py-1.5 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
-              Revised
+              {confirmedClosing ? 'Revised' : 'Proposed'}
             </th>
           </tr>
         </thead>
         <tbody>
           {[
-            {
-              label: 'Your Participation %',
-              previous: prevShare ? `${prevShare}%` : 'no change',
-              revised: `${sharePercent}%`,
-              bold: false,
-            },
+            ...(confirmedClosing
+              ? [
+                  {
+                    label: 'Your Participation %',
+                    previous: `${prevShare}%`,
+                    revised: `${toNum(confirmedClosing.signedLinePercent)}%`,
+                    bold: false,
+                  },
+                ]
+              : []),
             {
               label: 'Your Share SI',
               previous: fmtMoney(prevYourSumInsured || null, prevCurrency),
@@ -673,11 +701,11 @@ export function EndorsementSlipPreviewModal({
   notes,
   summary,
   documentTitle = 'Endorsement Slip Preview',
-  previewNotice = 'Backend record preview. No immutable official endorsement slip snapshot has been generated yet.',
   focusedCounterpartyId,
   focusedRecipient,
   previewFormat,
   brokerageFee = 0,
+  confirmedClosing,
   onClose,
 }: EndorsementSlipPreviewModalProps) {
   const { data: riskTypes = [] } = useRiskTypes();
@@ -725,13 +753,14 @@ export function EndorsementSlipPreviewModal({
   if (previewFormat === 'REVISED_CERTIFICATE') {
     const riskTypeName = riskTypes.find((rt) => rt.id === placement.riskTypeId)?.name ?? null;
     const sharePercent = Number(focusedRecipient?.offeredLinePercent ?? 0);
+    const docTitle = confirmedClosing ? 'Endorsement Certificate' : 'Endorsement Offer Slip';
     return (
       <DocumentPreviewModal
         isOpen={isOpen}
-        title={`Endorsement Certificate — ${endorsement.endorsementNumber}`}
-        documentTitle="Endorsement Certificate"
+        title={`${docTitle} — ${endorsement.endorsementNumber}`}
+        documentTitle={docTitle}
         fileName={buildDocumentFileName(
-          'Endorsement Certificate',
+          docTitle,
           displayPolicyNumber(placement.policyNumber),
           riskTypeName,
           placement.title,
@@ -747,6 +776,7 @@ export function EndorsementSlipPreviewModal({
           reinsurerName={focusedReinsurerName ?? ''}
           sharePercent={Number.isFinite(sharePercent) ? sharePercent : 0}
           brokerageFee={brokerageFee}
+          confirmedClosing={confirmedClosing}
         />
       </DocumentPreviewModal>
     );
@@ -767,19 +797,15 @@ export function EndorsementSlipPreviewModal({
       onPrint={() => {}}
       onClose={onClose}
     >
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
-        {previewNotice}
-      </div>
-
       <SectionHeading>Endorsement</SectionHeading>
       <InfoRows
         rows={[
-          { label: 'Placement Reference', value: placement.reference },
+          { label: 'Policy Number', value: displayPolicyNumber(placement.policyNumber) },
           { label: 'Insured', value: placement.title },
           { label: 'Endorsement Number', value: endorsement.endorsementNumber },
-          { label: 'Endorsement Type', value: endorsement.type },
-          { label: 'Impact Type', value: text(endorsement.impactType) },
-          { label: 'Status', value: endorsement.status },
+          // { label: 'Endorsement Type', value: endorsement.type },
+          // { label: 'Impact Type', value: text(endorsement.impactType) },
+          // { label: 'Status', value: endorsement.status },
           { label: 'Effective Date', value: fmtDate(endorsement.effectiveDate) },
           { label: 'Reason', value: text(endorsement.reason) },
         ]}
@@ -846,28 +872,47 @@ export function EndorsementSlipPreviewModal({
       {participants.length === 0 ? (
         <p className="text-sm text-gray-400 italic">No endorsement participants recorded.</p>
       ) : (
-        <InfoRows
-          rows={participants.map((participant) => ({
-            label: participant.counterparty?.name ?? participant.counterpartyId,
-            value: `${participant.originalParticipantId ? 'REVISED' : 'ADDED'} · ${participant.status} · ${fmtPct(
-              participant.signedLinePercent ?? participant.sharePercent,
-            )}`,
-          }))}
-        />
-      )}
-
-      <SectionHeading>Confirmed Closings</SectionHeading>
-      {confirmedClosings.length === 0 ? (
-        <p className="text-sm text-gray-400 italic">No confirmed endorsement closings yet.</p>
-      ) : (
-        <InfoRows
-          rows={confirmedClosings.map((closing) => ({
-            label: closing.closingNumber,
-            value: `${closing.endorsementParticipant.counterparty.name} · ${fmtPct(
-              closing.signedLinePercent,
-            )} · Net ${fmtMoney(closing.netPremium, closing.currency)}`,
-          }))}
-        />
+        <table className="w-full text-sm border-collapse mb-2">
+          <thead>
+            <tr className="border-b border-gray-200">
+              <th className="py-1.5 pr-3 text-left text-xs font-semibold text-gray-500">
+                Reinsurer
+              </th>
+              <th className="py-1.5 px-3 text-left text-xs font-semibold text-gray-500">
+                Offer Share
+              </th>
+              <th className="py-1.5 px-3 text-left text-xs font-semibold text-gray-500">
+                Net Premium
+              </th>
+              <th className="py-1.5 pl-3 text-left text-xs font-semibold text-gray-500">
+                Added/Revised
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {participants.map((participant) => {
+              const closing = confirmedClosings.find(
+                (item) => item.endorsementParticipant.counterpartyId === participant.counterpartyId,
+              );
+              return (
+                <tr key={participant.id} className="border-b border-gray-50 last:border-0">
+                  <td className="py-1.5 pr-3 text-gray-900 font-medium">
+                    {participant.counterparty?.name ?? participant.counterpartyId}
+                  </td>
+                  <td className="py-1.5 px-3 text-gray-700">
+                    {fmtPct(participant.signedLinePercent ?? participant.sharePercent)}
+                  </td>
+                  <td className="py-1.5 px-3 text-gray-700">
+                    {closing ? fmtMoney(closing.netPremium, closing.currency) : '—'}
+                  </td>
+                  <td className="py-1.5 pl-3 text-gray-700">
+                    {participant.originalParticipantId ? 'Revised' : 'Added'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       )}
 
       {notes.length > 0 && (

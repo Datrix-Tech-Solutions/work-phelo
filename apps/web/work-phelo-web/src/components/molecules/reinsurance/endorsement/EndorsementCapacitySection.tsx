@@ -17,6 +17,7 @@ interface EndorsementCapacitySectionProps {
   proposed: Record<string, unknown> | null;
   endorsementSummary: PlacementEndorsementSummary | undefined;
   summaryTargetPercent: number;
+  originalPercent: number;
   acceptedCapacityRows: CapacityRow[];
   capacityColorMap: Record<string, string>;
 }
@@ -27,6 +28,7 @@ export function EndorsementCapacitySection({
   proposed,
   endorsementSummary,
   summaryTargetPercent,
+  originalPercent,
   acceptedCapacityRows,
   capacityColorMap,
 }: EndorsementCapacitySectionProps) {
@@ -41,6 +43,7 @@ export function EndorsementCapacitySection({
           <CapacityBar
             acceptedPercent={endorsementSummary.acceptedPercent}
             targetPercent={endorsementSummary.targetPercent ?? summaryTargetPercent}
+            originalPercent={originalPercent}
             rows={acceptedCapacityRows}
             colorMap={capacityColorMap}
           />

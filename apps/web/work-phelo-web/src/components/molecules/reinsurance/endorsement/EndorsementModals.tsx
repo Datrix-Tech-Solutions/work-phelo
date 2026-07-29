@@ -111,7 +111,6 @@ export function EndorsementModals({
           notes={endorsementNotes}
           summary={endorsementSummary}
           documentTitle={marketPreview.documentTitle}
-          previewNotice={marketPreview.previewNotice}
           focusedCounterpartyId={marketPreview.counterpartyId}
           focusedRecipient={{
             name: marketPreview.recipientName,
@@ -121,6 +120,7 @@ export function EndorsementModals({
           }}
           previewFormat={marketPreview.previewFormat}
           brokerageFee={marketPreview.brokerageFee}
+          confirmedClosing={marketPreview.confirmedClosing}
           onClose={onCloseMarketPreview}
         />
       )}

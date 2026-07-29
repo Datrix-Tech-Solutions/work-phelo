@@ -21,21 +21,28 @@ export function CollapsibleOverview({
 
   return (
     <div className={cardClass('p-3 flex flex-col')}>
-      <div className="flex items-center justify-between">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setCollapsed((c) => !c)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setCollapsed((c) => !c);
+          }
+        }}
+        aria-label={collapsed ? 'Expand overview' : 'Collapse overview'}
+        className="flex items-center justify-between cursor-pointer"
+      >
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
           {headerExtra}
         </div>
-        <button
-          type="button"
-          onClick={() => setCollapsed((c) => !c)}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-          aria-label={collapsed ? 'Expand overview' : 'Collapse overview'}
-        >
+        <span className="text-gray-400">
           <Icons.ChevronDown
             className={`w-4 h-4 transition-transform duration-600 ${collapsed ? '-rotate-90' : ''}`}
           />
-        </button>
+        </span>
       </div>
 
       <div

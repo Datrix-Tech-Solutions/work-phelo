@@ -46,7 +46,7 @@ export default function FacultativeDetailPage({
   const [editOpen, setEditOpen] = useState(false);
   const [endorsementOpen, setEndorsementOpen] = useState(false);
   const [forceCloseOpen, setForceCloseOpen] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding Payment');
   const canForceClose = placement?.status === 'CLOSING';
   const showReopen =
     !!placement &&
@@ -97,7 +97,7 @@ export default function FacultativeDetailPage({
                 Endorse Policy
               </Button>
             )}
-            {paymentStatus === 'Outstanding' && (
+            {paymentStatus === 'Outstanding Payment' && (
               <Button
                 size="sm"
                 onClick={() => setEditOpen(true)}

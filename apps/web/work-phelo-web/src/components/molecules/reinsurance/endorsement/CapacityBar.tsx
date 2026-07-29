@@ -9,21 +9,43 @@ interface CapacityBarRow {
 interface CapacityBarProps {
   acceptedPercent: number;
   targetPercent: number;
+  /** The offer % before this endorsement, so the target can be shown as "original + added". */
+  originalPercent?: number;
   rows: CapacityBarRow[];
   colorMap: Record<string, string>;
 }
 
 /** Segmented capacity bar — one colored segment per accepted reinsurer, with a legend below. */
-export function CapacityBar({ acceptedPercent, targetPercent, rows, colorMap }: CapacityBarProps) {
+export function CapacityBar({
+  acceptedPercent,
+  targetPercent,
+  originalPercent,
+  rows,
+  colorMap,
+}: CapacityBarProps) {
   if (targetPercent <= 0) return null;
+
+  const delta = originalPercent != null ? +(targetPercent - originalPercent).toFixed(4) : 0;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between text-xs font-medium text-gray-500">
         <span>Accepted Capacity</span>
         <span>
-          <span className="text-gray-700">{acceptedPercent}%</span>
-          <span className="text-gray-400"> / {targetPercent}%</span>
+          <span className="text-gray-700 text-[13px] font-bold">{acceptedPercent}%</span>
+          <span className="text-gray-400 text-[13px] font-bold"> / {targetPercent}%</span>
+          {delta !== 0 && (
+            <span className="text-gray-400 text-[10px] font-bold">
+              {' '}
+              ({originalPercent}%
+              <span className={delta > 0 ? 'text-green-600' : 'text-red-500'}>
+                {' '}
+                {delta > 0 ? '+' : ''}
+                {delta}%
+              </span>
+              )
+            </span>
+          )}
         </span>
       </div>
 
@@ -39,6 +61,13 @@ export function CapacityBar({ acceptedPercent, targetPercent, rows, colorMap }: 
           />
         ))}
       </div>
+
+      <p className="text-xs text-gray-400">
+        Available:{' '}
+        <span className="text-[13px] font-bold text-gray-600">
+          {Math.max(0, +(targetPercent - acceptedPercent).toFixed(4))}%
+        </span>
+      </p>
 
       {rows.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1.5">
