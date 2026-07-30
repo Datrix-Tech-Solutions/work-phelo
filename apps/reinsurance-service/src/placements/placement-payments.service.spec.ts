@@ -122,6 +122,10 @@ describe('PlacementPaymentsService', () => {
   let financialEvents: {
     preparePremiumPaymentReceived: jest.Mock<unknown, [unknown, unknown]>;
     preparePaymentReversed: jest.Mock<unknown, [unknown, unknown]>;
+    prepareReinsurerDisbursementRecorded: jest.Mock<
+      unknown,
+      [unknown, unknown]
+    >;
     enqueuePreparedEvent: jest.Mock;
   };
   let service: PlacementPaymentsService;
@@ -169,6 +173,9 @@ describe('PlacementPaymentsService', () => {
         .fn<unknown, [unknown, unknown]>()
         .mockReturnValue(null),
       preparePaymentReversed: jest
+        .fn<unknown, [unknown, unknown]>()
+        .mockReturnValue(null),
+      prepareReinsurerDisbursementRecorded: jest
         .fn<unknown, [unknown, unknown]>()
         .mockReturnValue(null),
       enqueuePreparedEvent: jest.fn(),
@@ -509,6 +516,148 @@ describe('PlacementPaymentsService', () => {
     expect(
       financialEvents.preparePremiumPaymentReceived,
     ).not.toHaveBeenCalled();
+    expect(
+      financialEvents.prepareReinsurerDisbursementRecorded,
+    ).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({
+        id: 'payment-2',
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
+        placement,
+      }),
+    );
+  });
+
+  it('captures a bank-confirmed reinsurer disbursement accounting event atomically when Accounting is enabled', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+    });
+    prisma.placementNote.findMany.mockResolvedValue([issuedCreditNote()]);
+    prisma.placementPayment.create.mockResolvedValue({
+      ...payment,
+      id: 'payment-disbursement-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+    });
+    financialEvents.prepareReinsurerDisbursementRecorded.mockReturnValue({
+      tenantId: 'tenant-1',
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-disbursement-1',
+      sourceDocumentId: 'payment-disbursement-1',
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+      occurredAt: '2026-06-04T12:05:00.000Z',
+      currency: 'USD',
+      payload: { amounts: { paymentAmount: 500 } },
+    });
+
+    await service.create(user, 'placement-1', {
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      counterpartyId: 'reinsurer-1',
+      amount: 500,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+      bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+      bankReference: 'BANK-CONF-001',
+      allocations: [{ noteId: 'credit-note-1', allocatedAmount: 500 }],
+    });
+
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({
+        sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+        idempotencyKey:
+          'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+      }),
+    );
+  });
+
+  it('rolls back bank-confirmed reinsurer disbursement creation when required accounting capture fails', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+    });
+    prisma.placementNote.findMany.mockResolvedValue([issuedCreditNote()]);
+    prisma.placementPayment.create.mockResolvedValue({
+      ...payment,
+      id: 'payment-disbursement-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+    });
+    financialEvents.prepareReinsurerDisbursementRecorded.mockReturnValue({
+      tenantId: 'tenant-1',
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-disbursement-1',
+      sourceDocumentId: 'payment-disbursement-1',
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+      occurredAt: '2026-06-04T12:05:00.000Z',
+      currency: 'USD',
+      payload: { amounts: { paymentAmount: 500 } },
+    });
+    financialEvents.enqueuePreparedEvent.mockRejectedValue(
+      new Error('outbox unavailable'),
+    );
+
+    await expect(
+      service.create(user, 'placement-1', {
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        direction: PlacementPaymentDirection.OUTBOUND,
+        counterpartyId: 'reinsurer-1',
+        amount: 500,
+        currency: 'USD',
+        paymentDate: '2026-06-04T12:00:00.000Z',
+        bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+        bankReference: 'BANK-CONF-001',
+        allocations: [{ noteId: 'credit-note-1', allocatedAmount: 500 }],
+      }),
+    ).rejects.toThrow('outbox unavailable');
+  });
+
+  it('does not enqueue a reinsurer disbursement event when Accounting is disabled', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+    });
+    prisma.placementNote.findMany.mockResolvedValue([issuedCreditNote()]);
+    prisma.placementPayment.create.mockResolvedValue({
+      ...payment,
+      id: 'payment-disbursement-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+    });
+    financialEvents.prepareReinsurerDisbursementRecorded.mockReturnValue(null);
+
+    await service.create(
+      { ...user, moduleConfig: { operations: true, accounting: false } },
+      'placement-1',
+      {
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        direction: PlacementPaymentDirection.OUTBOUND,
+        counterpartyId: 'reinsurer-1',
+        amount: 500,
+        currency: 'USD',
+        paymentDate: '2026-06-04T12:00:00.000Z',
+        bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+        bankReference: 'BANK-CONF-001',
+        allocations: [{ noteId: 'credit-note-1', allocatedAmount: 500 }],
+      },
+    );
+
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('allows one reinsurer payment to settle multiple issued credit notes', async () => {

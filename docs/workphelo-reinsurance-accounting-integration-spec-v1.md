@@ -128,17 +128,18 @@ Readiness sync is allowed before real financial event publishing. It MUST NOT cr
 
 Operational endpoints:
 
-| Endpoint                                                                     | Purpose                                                                                                     |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `GET /accounting-integration/status`                                         | Reports entitlement/configuration readiness.                                                                |
-| `POST /accounting-integration/counterparties/:counterpartyId/subledger/sync` | Ensures one Cedant/Reinsurer subledger.                                                                     |
-| `POST /accounting-integration/outbox/process-pending`                        | Dispatches already-enqueued outbox rows.                                                                    |
-| `POST /accounting-integration/reconciliation/debit-note-issued`              | Dry-runs or explicitly enqueues missing `DEBIT_NOTE_ISSUED` outbox rows for issued placement debit notes.   |
-| `POST /accounting-integration/reconciliation/credit-note-issued`             | Dry-runs or explicitly enqueues missing `CREDIT_NOTE_ISSUED` outbox rows for issued placement credit notes. |
-| `POST /accounting-integration/reconciliation/endorsement-debit-note-issued`  | Dry-runs or explicitly enqueues missing `ENDORSEMENT_DEBIT_NOTE_ISSUED` outbox rows.                        |
-| `POST /accounting-integration/reconciliation/endorsement-credit-note-issued` | Dry-runs or explicitly enqueues missing `ENDORSEMENT_CREDIT_NOTE_ISSUED` outbox rows.                       |
-| `POST /accounting-integration/reconciliation/premium-payment-received`       | Dry-runs or explicitly enqueues missing `PREMIUM_PAYMENT_RECEIVED` outbox rows for premium receipt rows.    |
-| `POST /accounting-integration/reconciliation/payment-reversed`               | Dry-runs or explicitly enqueues missing `PAYMENT_REVERSED` outbox rows for premium payment reversal rows.   |
+| Endpoint                                                                      | Purpose                                                                                                     |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `GET /accounting-integration/status`                                          | Reports entitlement/configuration readiness.                                                                |
+| `POST /accounting-integration/counterparties/:counterpartyId/subledger/sync`  | Ensures one Cedant/Reinsurer subledger.                                                                     |
+| `POST /accounting-integration/outbox/process-pending`                         | Dispatches already-enqueued outbox rows.                                                                    |
+| `POST /accounting-integration/reconciliation/debit-note-issued`               | Dry-runs or explicitly enqueues missing `DEBIT_NOTE_ISSUED` outbox rows for issued placement debit notes.   |
+| `POST /accounting-integration/reconciliation/credit-note-issued`              | Dry-runs or explicitly enqueues missing `CREDIT_NOTE_ISSUED` outbox rows for issued placement credit notes. |
+| `POST /accounting-integration/reconciliation/endorsement-debit-note-issued`   | Dry-runs or explicitly enqueues missing `ENDORSEMENT_DEBIT_NOTE_ISSUED` outbox rows.                        |
+| `POST /accounting-integration/reconciliation/endorsement-credit-note-issued`  | Dry-runs or explicitly enqueues missing `ENDORSEMENT_CREDIT_NOTE_ISSUED` outbox rows.                       |
+| `POST /accounting-integration/reconciliation/premium-payment-received`        | Dry-runs or explicitly enqueues missing `PREMIUM_PAYMENT_RECEIVED` outbox rows for premium receipt rows.    |
+| `POST /accounting-integration/reconciliation/payment-reversed`                | Dry-runs or explicitly enqueues missing `PAYMENT_REVERSED` outbox rows for premium payment reversal rows.   |
+| `POST /accounting-integration/reconciliation/reinsurer-disbursement-recorded` | Dry-runs or explicitly enqueues missing `REINSURER_DISBURSEMENT_RECORDED` outbox rows.                      |
 
 Accounting internal endpoint:
 
@@ -162,7 +163,7 @@ Reinsurance source events SHOULD be activated incrementally.
 | `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Active                  | Issued endorsement credit note snapshot.              |
 | `PREMIUM_PAYMENT_RECEIVED`        | Active                  | Recorded premium payment row.                         |
 | `PAYMENT_REVERSED`                | Active                  | Reversal payment row linked to original payment.      |
-| `REINSURER_DISBURSEMENT_RECORDED` | Proposed                | Recorded outbound reinsurer payment row.              |
+| `REINSURER_DISBURSEMENT_RECORDED` | Active                  | Bank-confirmed outbound reinsurer payment allocation. |
 | `REINSURER_DISBURSEMENT_REVERSED` | Proposed                | Reversal payment row linked to original disbursement. |
 
 ### 6.2 Claims family
@@ -193,7 +194,7 @@ Lifecycle events such as `ENDORSEMENT_CLOSED` MAY be useful for audit or reporti
 | `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | `PlacementNote.id`             | `issuedAt`             | `reinsurance:endorsement-credit-note:<noteId>:issued:v1`             |
 | `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment.id`          | `paymentDate`          | `reinsurance:payment:<paymentId>:recorded:v1`                        |
 | `PAYMENT_REVERSED`                | reversal `PlacementPayment.id` | reversal `paymentDate` | `reinsurance:payment:<reversalPaymentId>:reversal:v1`                |
-| `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment.id`          | `paymentDate`          | `reinsurance:reinsurer-disbursement:<paymentId>:recorded:v1`         |
+| `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment.id`          | `bankConfirmedAt`      | `reinsurance:reinsurer-disbursement:<paymentId>:recorded:v1`         |
 | `REINSURER_DISBURSEMENT_REVERSED` | reversal `PlacementPayment.id` | reversal `paymentDate` | `reinsurance:reinsurer-disbursement:<reversalPaymentId>:reversal:v1` |
 | `CLAIM_CASH_CALL_ISSUED`          | `ClaimCashCall.id`             | `issuedAt`             | `reinsurance:claim-cash-call:<cashCallId>:issued:v1`                 |
 | `CLAIM_RECOVERY_RECEIPT_RECORDED` | `RecoveryReceipt.id`           | `receiptDate`          | `reinsurance:recovery-receipt:<receiptId>:recorded:v1`               |
@@ -590,25 +591,25 @@ readiness concerns.
 
 ---
 
-## 10.2 Future Reinsurer Settlement Activation
+## 10.2 Reinsurer Disbursement Recognition
 
-Reinsurer settlement accounting is intentionally not active in the current implementation baseline.
+`REINSURER_DISBURSEMENT_RECORDED` is active for bank-confirmed Reinsurer
+settlement payments.
 
-Current Reinsurance operations can record outbound settlement payments with:
+Eligibility:
 
 - `PlacementPayment.type = REINSURER_DISBURSEMENT`
 - `PlacementPayment.direction = OUTBOUND`
-- `PlacementPayment.status = RECORDED`
-- one confirmed closing source through `closingId` or `endorsementClosingId`
+- `PlacementPayment.status = BANK_CONFIRMED`
+- `PlacementPayment.reversalOfPaymentId = null`
+- `PlacementPayment.bankConfirmedAt` is present
+- the counterparty is a Reinsurer
+- one or more `PlacementPaymentAllocation` rows exist
+- allocations reference issued `CREDIT_NOTE` or `ENDORSEMENT_CREDIT_NOTE`
+- allocated payment-currency amount equals the payment amount
+- cross-currency allocations carry a persisted agreed exchange rate
 
-The payment service enforces tenant scope, reinsurer counterparty type, placement currency, confirmed closing state and overpayment prevention against the current effective reinsurer position. It does not yet enqueue Accounting events for disbursement records.
-
-Before activation, engineers MUST consult:
-
-- [Reinsurance Settlement Architecture Audit v1](./accounting/reinsurance-settlement-architecture-audit-v1.md)
-- [Reinsurance Settlement Policy Decision Register v1](./accounting/reinsurance-settlement-policy-decision-register-v1.md)
-
-Candidate recorded event:
+Recorded event:
 
 ```text
 sourceEventType = REINSURER_DISBURSEMENT_RECORDED
@@ -616,8 +617,30 @@ sourceRecordType = PlacementPayment
 sourceRecordId = <paymentId>
 sourceDocumentId = <paymentId>
 idempotencyKey = reinsurance:reinsurer-disbursement:<paymentId>:recorded:v1
-occurredAt = PlacementPayment.paymentDate
+occurredAt = PlacementPayment.bankConfirmedAt
 ```
+
+Payloads use `allocation.model = CREDIT_NOTE_ALLOCATIONS` and include:
+
+- placement and payment references;
+- Reinsurer counterparty and `subledgerExternalRef`;
+- payment date, bank-confirmation date and bank reference;
+- settlement reference where present;
+- positive `paymentAmount`, `allocatedAmount`, `bankCharges` and
+  `withholdingTax` facts;
+- `unallocatedAmount = 0`;
+- `signedCashImpact < 0`;
+- `signedPayableImpact < 0`;
+- allocation IDs, Credit Note IDs/numbers/types, obligation currency,
+  obligation amount, payment-currency amount and persisted agreed FX rate where
+  applicable.
+
+Reinsurance MUST NOT publish GL account IDs or journal directions. Accounting
+posting rules clear the existing payable and resolve cash, bank charges,
+withholding tax and FX treatment per tenant.
+
+Unallocated payments, failed payments, cancelled payments, approval-only states
+and reversal rows MUST NOT emit this event.
 
 Candidate reversal event:
 
@@ -630,7 +653,8 @@ idempotencyKey = reinsurance:reinsurer-disbursement:<reversalPaymentId>:reversal
 occurredAt = reversal PlacementPayment.paymentDate
 ```
 
-V1 settlement payloads SHOULD use a `SINGLE_CLOSING` allocation model. They MUST NOT claim support for note-level settlement allocation, payment batches, bank confirmation, approvals, unallocated advances, partial reversals or FX until those capabilities exist as durable Reinsurance source records.
+`REINSURER_DISBURSEMENT_REVERSED` remains planned and MUST be implemented from
+the linked reversal payment row in a separate milestone.
 
 ---
 

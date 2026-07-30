@@ -55,6 +55,9 @@ const paymentInclude = {
           noteNumber: true,
           type: true,
           currency: true,
+          status: true,
+          direction: true,
+          netAmount: true,
         },
       },
     },
@@ -239,6 +242,17 @@ export class PlacementPaymentsService {
           ...payment,
           placement,
         });
+        if (event) {
+          await this.financialEvents.enqueuePreparedEvent(tx, event);
+        }
+      } else if (dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT) {
+        const event = this.financialEvents.prepareReinsurerDisbursementRecorded(
+          user,
+          {
+            ...payment,
+            placement,
+          },
+        );
         if (event) {
           await this.financialEvents.enqueuePreparedEvent(tx, event);
         }

@@ -105,6 +105,12 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     currency: 'GHS',
     paymentDate: new Date('2026-06-05T10:30:00.000Z'),
     reference: 'BANK-001',
+    settlementReference: null,
+    bankReference: null,
+    bankConfirmedAt: null,
+    agreedExchangeRate: null,
+    bankChargeAmount: new Prisma.Decimal('0.00'),
+    withholdingTaxAmount: new Prisma.Decimal('0.00'),
     notes: 'Bank transfer',
     status: PlacementPaymentStatus.RECORDED,
     reversalOfPaymentId: null,
@@ -121,6 +127,70 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       title: 'Xpress Group',
       cedantId: 'cedant-1',
     },
+    allocations: [],
+  };
+
+  const reinsurerDisbursement = {
+    ...payment,
+    id: 'payment-disbursement-1',
+    counterpartyId: 'reinsurer-1',
+    type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+    direction: PlacementPaymentDirection.OUTBOUND,
+    amount: new Prisma.Decimal('750.00'),
+    currency: 'USD',
+    paymentDate: new Date('2026-06-07T09:30:00.000Z'),
+    reference: 'PAY-REF-001',
+    settlementReference: 'SETTLE-001',
+    bankReference: 'BANK-CONF-001',
+    bankConfirmedAt: new Date('2026-06-07T10:00:00.000Z'),
+    agreedExchangeRate: new Prisma.Decimal('12.50000000'),
+    bankChargeAmount: new Prisma.Decimal('12.50'),
+    withholdingTaxAmount: new Prisma.Decimal('25.00'),
+    status: PlacementPaymentStatus.BANK_CONFIRMED,
+    counterparty: {
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+      name: 'Reliable Re',
+      registrationNumber: 'RE-001',
+    },
+    allocations: [
+      {
+        id: 'allocation-1',
+        noteId: 'credit-note-1',
+        allocatedAmount: new Prisma.Decimal('500.00'),
+        allocatedCurrency: 'USD',
+        obligationAmount: new Prisma.Decimal('500.00'),
+        obligationCurrency: 'USD',
+        agreedExchangeRate: null,
+        note: {
+          id: 'credit-note-1',
+          noteNumber: 'CN-001',
+          type: PlacementNoteType.CREDIT_NOTE,
+          direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+          status: PlacementNoteStatus.ISSUED,
+          currency: 'USD',
+          netAmount: new Prisma.Decimal('500.00'),
+        },
+      },
+      {
+        id: 'allocation-2',
+        noteId: 'endorsement-credit-note-1',
+        allocatedAmount: new Prisma.Decimal('250.00'),
+        allocatedCurrency: 'USD',
+        obligationAmount: new Prisma.Decimal('3125.00'),
+        obligationCurrency: 'GHS',
+        agreedExchangeRate: new Prisma.Decimal('12.50000000'),
+        note: {
+          id: 'endorsement-credit-note-1',
+          noteNumber: 'ECN-001',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+          status: PlacementNoteStatus.ISSUED,
+          currency: 'GHS',
+          netAmount: new Prisma.Decimal('3125.00'),
+        },
+      },
+    ],
   };
 
   const makeService = (overrides?: { accountingEnabled?: boolean }) => {
@@ -630,6 +700,173 @@ describe('ReinsuranceFinancialEventPublisher', () => {
         },
       },
     });
+  });
+
+  it('classifies a valid bank-confirmed reinsurer disbursement as eligible', () => {
+    const { actor, service } = makeService();
+
+    const eligibility = service.classifyReinsurerDisbursementRecorded(
+      actor,
+      reinsurerDisbursement,
+    );
+
+    expect(eligibility).toEqual({
+      accountingEnabled: true,
+      eligible: true,
+      exclusionReasons: [],
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+    });
+  });
+
+  it('prepares REINSURER_DISBURSEMENT_RECORDED from a bank-confirmed allocation snapshot', () => {
+    const { actor, service } = makeService();
+
+    const event = service.prepareReinsurerDisbursementRecorded(
+      actor,
+      reinsurerDisbursement,
+    );
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-disbursement-1',
+      sourceDocumentId: 'payment-disbursement-1',
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+      occurredAt: '2026-06-07T10:00:00.000Z',
+      currency: 'USD',
+      payload: {
+        transactionDate: '2026-06-07T10:00:00.000Z',
+        currency: 'USD',
+        exchangeRate: 12.5,
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          paymentId: 'payment-disbursement-1',
+          paymentReference: 'PAY-REF-001',
+          settlementReference: 'SETTLE-001',
+        },
+        counterparty: {
+          id: 'reinsurer-1',
+          type: CounterpartyType.REINSURER,
+          name: 'Reliable Re',
+          subledgerExternalRef: 'reinsurer-1',
+        },
+        payment: {
+          status: PlacementPaymentStatus.BANK_CONFIRMED,
+          bankConfirmedAt: '2026-06-07T10:00:00.000Z',
+          bankReference: 'BANK-CONF-001',
+        },
+        amounts: {
+          paymentAmount: 750,
+          allocatedAmount: 750,
+          unallocatedAmount: 0,
+          bankCharges: 12.5,
+          withholdingTax: 25,
+          signedCashImpact: -750,
+          signedPayableImpact: -750,
+        },
+        allocation: {
+          model: 'CREDIT_NOTE_ALLOCATIONS',
+          allocationCount: 2,
+        },
+      },
+    });
+    const payload = event?.payload as { allocations: Array<unknown> };
+    expect(payload.allocations).toEqual([
+      expect.objectContaining({
+        allocationId: 'allocation-1',
+        creditNoteId: 'credit-note-1',
+        creditNoteNumber: 'CN-001',
+        obligationType: PlacementNoteType.CREDIT_NOTE,
+        obligationCurrency: 'USD',
+        allocatedAmount: 500,
+        paymentCurrencyAmount: 500,
+        agreedExchangeRate: null,
+      }),
+      expect.objectContaining({
+        allocationId: 'allocation-2',
+        creditNoteId: 'endorsement-credit-note-1',
+        creditNoteNumber: 'ECN-001',
+        obligationType: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+        obligationCurrency: 'GHS',
+        allocatedAmount: 3125,
+        paymentCurrencyAmount: 250,
+        agreedExchangeRate: 12.5,
+      }),
+    ]);
+  });
+
+  it('skips reinsurer disbursement events when Accounting is disabled', () => {
+    const { actor, service } = makeService({ accountingEnabled: false });
+
+    const event = service.prepareReinsurerDisbursementRecorded(
+      actor,
+      reinsurerDisbursement,
+    );
+
+    expect(event).toBeNull();
+  });
+
+  it('reports controlled exclusion reasons for ineligible disbursement rows', () => {
+    const { actor, service } = makeService();
+
+    const eligibility = service.classifyReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      status: PlacementPaymentStatus.FAILED,
+      reversalOfPaymentId: 'payment-original',
+      allocations: [],
+      bankConfirmedAt: null,
+    });
+
+    expect(eligibility.eligible).toBe(false);
+    expect(eligibility.exclusionReasons).toEqual(
+      expect.arrayContaining([
+        'failed payment',
+        'reversal row',
+        'missing bank confirmation date',
+        'no allocations',
+      ]),
+    );
+  });
+
+  it('does not require FX for same-currency disbursement allocations', () => {
+    const { actor, service } = makeService();
+
+    const event = service.prepareReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      agreedExchangeRate: null,
+      allocations: [
+        {
+          ...reinsurerDisbursement.allocations[0],
+          allocatedAmount: new Prisma.Decimal('750.00'),
+          obligationAmount: new Prisma.Decimal('750.00'),
+        },
+      ],
+    });
+
+    expect(event?.payload).not.toHaveProperty('exchangeRate');
+  });
+
+  it('requires persisted FX for cross-currency disbursement allocations', () => {
+    const { actor, service } = makeService();
+
+    const eligibility = service.classifyReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      agreedExchangeRate: null,
+      allocations: [
+        {
+          ...reinsurerDisbursement.allocations[1],
+          agreedExchangeRate: null,
+          allocatedAmount: new Prisma.Decimal('750.00'),
+        },
+      ],
+    });
+
+    expect(eligibility.eligible).toBe(false);
+    expect(eligibility.exclusionReasons).toContain('missing agreed FX rate');
   });
 
   it('enqueues prepared events through the transactional outbox', async () => {

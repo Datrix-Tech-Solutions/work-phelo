@@ -866,6 +866,132 @@ describe('SourceEventsService', () => {
     );
   });
 
+  it('posts REINSURANCE REINSURER_DISBURSEMENT_RECORDED using tenant-configured payable and cash accounts', async () => {
+    const disbursementDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      sourceRecordId: 'payment-disbursement-1',
+      sourceDocumentId: 'payment-disbursement-1',
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+      payload: {
+        transactionDate: '2026-07-07T10:00:00.000Z',
+        currency: 'USD',
+        exchangeRate: 12.5,
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          paymentId: 'payment-disbursement-1',
+          settlementReference: 'SETTLE-001',
+        },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: {
+          paymentAmount: 750,
+          allocatedAmount: 750,
+          unallocatedAmount: 0,
+          bankCharges: 12.5,
+          withholdingTax: 25,
+          signedCashImpact: -750,
+          signedPayableImpact: -750,
+        },
+        allocations: [
+          {
+            allocationId: 'allocation-1',
+            creditNoteId: 'credit-note-1',
+            creditNoteNumber: 'CN-001',
+            obligationType: 'CREDIT_NOTE',
+            obligationCurrency: 'USD',
+            allocatedAmount: 500,
+            paymentCurrencyAmount: 500,
+          },
+          {
+            allocationId: 'allocation-2',
+            creditNoteId: 'endorsement-credit-note-1',
+            creditNoteNumber: 'ECN-001',
+            obligationType: 'ENDORSEMENT_CREDIT_NOTE',
+            obligationCurrency: 'GHS',
+            allocatedAmount: 3125,
+            paymentCurrencyAmount: 250,
+            agreedExchangeRate: 12.5,
+          },
+        ],
+      },
+    };
+    const disbursementRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'reinsurer-premium-payable',
+          subledgerType: SubledgerType.REINSURER,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.allocatedAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Clear reinsurer payable {{payload.references.paymentId}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.allocatedAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Bank-confirmed reinsurer payment {{payload.references.paymentId}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      disbursementDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(disbursementRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'reinsurer-subledger-1',
+    });
+
+    const result = await service.receive(actor, disbursementDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+        status: 'ACTIVE',
+      },
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'REINSURER_DISBURSEMENT_RECORDED',
+        sourceRecordId: 'payment-disbursement-1',
+        transactionCurrency: 'USD',
+        exchangeRate: 12.5,
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'reinsurer-premium-payable',
+            subledgerAccountId: 'reinsurer-subledger-1',
+            debit: 750,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'bank-clearing',
+            debit: 0,
+            credit: 750,
+          }),
+        ],
+      }),
+    );
+  });
+
   it('rejects a duplicate tenant idempotency key safely', async () => {
     const { prisma, service } = setup();
     prisma.sourceEventInbox.create.mockRejectedValue(

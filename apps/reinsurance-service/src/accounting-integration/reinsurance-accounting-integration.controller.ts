@@ -163,4 +163,21 @@ export class ReinsuranceAccountingIntegrationController {
   ) {
     return this.readiness.reconcilePaymentReversedEvents(request.user, query);
   }
+
+  @Post('reconciliation/reinsurer-disbursement-recorded')
+  @ApiOperation({
+    summary:
+      'Reconcile bank-confirmed reinsurer disbursements with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets bank-confirmed outbound reinsurer payments missing their deterministic REINSURER_DISBURSEMENT_RECORDED outbox row.',
+  })
+  reconcileReinsurerDisbursementRecordedEvents(
+    @Query() query: ReconcilePaymentAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileReinsurerDisbursementRecordedEvents(
+      request.user,
+      query,
+    );
+  }
 }

@@ -8,6 +8,11 @@ Related audit: [Reinsurance Settlement Architecture Audit v1](./reinsurance-sett
 
 Approval note: Finance/Product policies in this register were approved for implementation on 2026-07-30. Engineering MUST first ensure the Reinsurance domain can represent the complete approved business facts before activating `REINSURER_DISBURSEMENT_RECORDED`.
 
+Implementation evidence:
+
+- `a0a212ee` added the approved settlement accounting domain foundation.
+- `CURRENT_COMMIT` activates `REINSURER_DISBURSEMENT_RECORDED` using that foundation.
+
 ## 1. Decision Summary
 
 | ID      | Decision                                        | Recommended Default                                                                                                                 | Status   | Owner                  | Blocks                 |

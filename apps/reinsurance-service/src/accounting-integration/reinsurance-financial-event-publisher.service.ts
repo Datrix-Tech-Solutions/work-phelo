@@ -81,6 +81,12 @@ type PaymentForEvent = {
   currency: string;
   paymentDate: Date;
   reference: string | null;
+  settlementReference?: string | null;
+  bankReference?: string | null;
+  bankConfirmedAt?: Date | null;
+  agreedExchangeRate?: Prisma.Decimal | number | string | null;
+  bankChargeAmount?: Prisma.Decimal | number | string | null;
+  withholdingTaxAmount?: Prisma.Decimal | number | string | null;
   notes: string | null;
   status: PlacementPaymentStatus;
   reversalOfPaymentId: string | null;
@@ -105,6 +111,31 @@ type PaymentForEvent = {
     reference: string | null;
     status: PlacementPaymentStatus;
   } | null;
+  allocations?: Array<{
+    id: string;
+    noteId: string;
+    allocatedAmount: Prisma.Decimal | number | string;
+    allocatedCurrency: string;
+    obligationAmount: Prisma.Decimal | number | string;
+    obligationCurrency: string;
+    agreedExchangeRate: Prisma.Decimal | number | string | null;
+    note?: {
+      id: string;
+      noteNumber: string;
+      type: PlacementNoteType;
+      currency: string;
+      status?: PlacementNoteStatus;
+      direction?: PlacementNoteDirection;
+      netAmount?: Prisma.Decimal | number | string;
+    };
+  }>;
+};
+
+export type ReinsurerDisbursementRecordedEligibility = {
+  accountingEnabled: boolean;
+  eligible: boolean;
+  exclusionReasons: string[];
+  idempotencyKey: string;
 };
 
 @Injectable()
@@ -797,6 +828,231 @@ export class ReinsuranceFinancialEventPublisher {
     };
   }
 
+  prepareReinsurerDisbursementRecorded(
+    user: RequestUser,
+    payment: PaymentForEvent,
+  ): ReinsuranceAccountingEventInput | null {
+    const eligibility = this.classifyReinsurerDisbursementRecorded(
+      user,
+      payment,
+    );
+    if (!eligibility.accountingEnabled) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; REINSURER_DISBURSEMENT_RECORDED not enqueued for payment ${payment.id}`,
+      );
+      return null;
+    }
+    if (!eligibility.eligible) {
+      throw new Error(
+        `Payment ${payment.id} is not eligible for REINSURER_DISBURSEMENT_RECORDED: ${eligibility.exclusionReasons.join(', ')}`,
+      );
+    }
+
+    const placement = this.requirePlacement(payment);
+    const counterparty = this.requireReinsurerCounterparty(payment);
+    const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
+    const allocatedAmount = this.roundMoney(
+      (payment.allocations ?? []).reduce(
+        (total, allocation) =>
+          total + Math.abs(this.decimalNumber(allocation.allocatedAmount)),
+        0,
+      ),
+    );
+    const unallocatedAmount = this.roundMoney(paymentAmount - allocatedAmount);
+    const bankCharges = Math.abs(
+      this.optionalDecimalNumber(payment.bankChargeAmount) ?? 0,
+    );
+    const withholdingTax = Math.abs(
+      this.optionalDecimalNumber(payment.withholdingTaxAmount) ?? 0,
+    );
+    const occurredAt = payment.bankConfirmedAt?.toISOString();
+    if (!occurredAt) {
+      throw new Error(
+        `Payment ${payment.id} is missing bankConfirmedAt for REINSURER_DISBURSEMENT_RECORDED`,
+      );
+    }
+    const exchangeRate = this.optionalDecimalNumber(payment.agreedExchangeRate);
+
+    return {
+      tenantId: payment.tenantId,
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: payment.id,
+      sourceDocumentId: payment.id,
+      idempotencyKey: this.reinsurerDisbursementRecordedIdempotencyKey(
+        payment.id,
+      ),
+      occurredAt,
+      currency: payment.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: payment.currency,
+        ...(exchangeRate ? { exchangeRate } : {}),
+        references: {
+          placementId: placement.id,
+          placementReference: placement.reference,
+          policyNumber: placement.policyNumber,
+          placementTitle: placement.title,
+          paymentId: payment.id,
+          paymentReference: payment.reference,
+          settlementReference: payment.settlementReference ?? null,
+        },
+        counterparty: {
+          id: counterparty.id,
+          type: counterparty.type,
+          name: counterparty.name,
+          registrationNumber: counterparty.registrationNumber ?? null,
+          subledgerExternalRef: counterparty.id,
+        },
+        payment: {
+          id: payment.id,
+          status: payment.status,
+          type: payment.type,
+          direction: payment.direction,
+          paymentDate: payment.paymentDate.toISOString(),
+          bankConfirmedAt: occurredAt,
+          paymentReference: payment.reference,
+          settlementReference: payment.settlementReference ?? null,
+          bankReference: payment.bankReference,
+          method: null,
+          currency: payment.currency,
+          agreedExchangeRate: exchangeRate,
+          isReversal: false,
+          reversalOfPaymentId: null,
+          notes: payment.notes,
+        },
+        amounts: {
+          paymentAmount,
+          allocatedAmount,
+          unallocatedAmount,
+          bankCharges,
+          withholdingTax,
+          signedCashImpact: -paymentAmount,
+          signedPayableImpact: -allocatedAmount,
+        },
+        allocations: (payment.allocations ?? []).map((allocation) => ({
+          allocationId: allocation.id,
+          creditNoteId: allocation.noteId,
+          creditNoteNumber: allocation.note?.noteNumber ?? null,
+          obligationType: allocation.note?.type ?? null,
+          obligationCurrency: allocation.obligationCurrency,
+          allocatedAmount: this.decimalNumber(allocation.obligationAmount),
+          paymentCurrencyAmount: this.decimalNumber(allocation.allocatedAmount),
+          agreedExchangeRate: this.optionalDecimalNumber(
+            allocation.agreedExchangeRate,
+          ),
+        })),
+        allocation: {
+          model: 'CREDIT_NOTE_ALLOCATIONS',
+          allocationCount: payment.allocations?.length ?? 0,
+          supportsOnePaymentToManyCreditNotes: true,
+          supportsManyPaymentsToOneCreditNote: true,
+          unallocatedPaymentsSupported: false,
+        },
+        documents: {
+          sourceDocumentId: payment.id,
+          paymentDocumentId: null,
+        },
+      },
+    };
+  }
+
+  classifyReinsurerDisbursementRecorded(
+    user: RequestUser,
+    payment: PaymentForEvent,
+  ): ReinsurerDisbursementRecordedEligibility {
+    const exclusionReasons: string[] = [];
+    if (!user.moduleConfig?.accounting) {
+      exclusionReasons.push('accounting disabled');
+    }
+    if (payment.type !== PlacementPaymentType.REINSURER_DISBURSEMENT) {
+      exclusionReasons.push('wrong payment type');
+    }
+    if (payment.direction !== PlacementPaymentDirection.OUTBOUND) {
+      exclusionReasons.push('wrong direction');
+    }
+    if (payment.status === PlacementPaymentStatus.FAILED) {
+      exclusionReasons.push('failed payment');
+    } else if (payment.status === PlacementPaymentStatus.CANCELLED) {
+      exclusionReasons.push('cancelled payment');
+    } else if (payment.status !== PlacementPaymentStatus.BANK_CONFIRMED) {
+      exclusionReasons.push('unsupported status');
+    }
+    if (payment.reversalOfPaymentId) {
+      exclusionReasons.push('reversal row');
+    }
+    if (!payment.counterparty) {
+      exclusionReasons.push('missing reinsurer');
+    } else if (payment.counterparty.type !== CounterpartyType.REINSURER) {
+      exclusionReasons.push('missing reinsurer');
+    }
+    if (!payment.bankConfirmedAt) {
+      exclusionReasons.push('missing bank confirmation date');
+    }
+    if (!payment.currency?.trim()) {
+      exclusionReasons.push('missing payment currency');
+    }
+
+    const allocations = payment.allocations ?? [];
+    if (allocations.length === 0) {
+      exclusionReasons.push('no allocations');
+    } else {
+      const paymentCurrency = payment.currency?.trim().toUpperCase();
+      let allocatedTotal = 0;
+      for (const allocation of allocations) {
+        allocatedTotal = this.roundMoney(
+          allocatedTotal + this.decimalNumber(allocation.allocatedAmount),
+        );
+        if (!allocation.note) {
+          exclusionReasons.push('missing credit note');
+          continue;
+        }
+        if (
+          allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
+          allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+        ) {
+          exclusionReasons.push('unsupported obligation type');
+        }
+        if (
+          allocation.note.status !== undefined &&
+          allocation.note.status !== PlacementNoteStatus.ISSUED
+        ) {
+          exclusionReasons.push('missing credit note');
+        }
+        if (
+          allocation.note.direction !== undefined &&
+          allocation.note.direction !==
+            PlacementNoteDirection.BROKER_TO_REINSURER
+        ) {
+          exclusionReasons.push('unsupported obligation type');
+        }
+        if (
+          paymentCurrency &&
+          allocation.obligationCurrency.trim().toUpperCase() !==
+            paymentCurrency &&
+          !allocation.agreedExchangeRate &&
+          !payment.agreedExchangeRate
+        ) {
+          exclusionReasons.push('missing agreed FX rate');
+        }
+      }
+      const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
+      if (this.roundMoney(allocatedTotal) !== this.roundMoney(paymentAmount)) {
+        exclusionReasons.push('incomplete allocation');
+      }
+    }
+
+    const uniqueReasons = [...new Set(exclusionReasons)];
+    return {
+      accountingEnabled: Boolean(user.moduleConfig?.accounting),
+      eligible: uniqueReasons.length === 0,
+      exclusionReasons: uniqueReasons,
+      idempotencyKey: this.reinsurerDisbursementRecordedIdempotencyKey(
+        payment.id,
+      ),
+    };
+  }
+
   enqueuePreparedEvent(
     tx: Prisma.TransactionClient,
     event: ReinsuranceAccountingEventInput,
@@ -1018,6 +1274,22 @@ export class ReinsuranceFinancialEventPublisher {
       );
     }
     return payment.counterparty;
+  }
+
+  private requireReinsurerCounterparty(payment: PaymentForEvent) {
+    if (
+      !payment.counterparty ||
+      payment.counterparty.type !== CounterpartyType.REINSURER
+    ) {
+      throw new Error(
+        `Reinsurer counterparty ${payment.counterpartyId} not available for payment ${payment.id}`,
+      );
+    }
+    return payment.counterparty;
+  }
+
+  private reinsurerDisbursementRecordedIdempotencyKey(paymentId: string) {
+    return `reinsurance:reinsurer-disbursement:${paymentId}:recorded:v1`;
   }
 
   private optionalDecimalNumber(

@@ -52,6 +52,22 @@ const paymentReconciliationInclude = {
       status: true,
     },
   },
+  allocations: {
+    include: {
+      note: {
+        select: {
+          id: true,
+          noteNumber: true,
+          type: true,
+          direction: true,
+          status: true,
+          currency: true,
+          netAmount: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  },
 } satisfies Prisma.PlacementPaymentInclude;
 
 type AccountingSubledgerSyncResult =
@@ -106,13 +122,14 @@ export class ReinsuranceAccountingReadinessService {
             'ENDORSEMENT_CREDIT_NOTE_ISSUED',
             'PREMIUM_PAYMENT_RECEIVED',
             'PAYMENT_REVERSED',
+            'REINSURER_DISBURSEMENT_RECORDED',
           ]
         : [],
       readinessMode:
         'Debit-note, credit-note and premium-payment source-event capture, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes and premium payment lifecycle records.'
+          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records and bank-confirmed reinsurer disbursements.'
           : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
@@ -872,6 +889,36 @@ export class ReinsuranceAccountingReadinessService {
     });
   }
 
+  async reconcileReinsurerDisbursementRecordedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    return this.reconcilePaymentEvents(user, options, {
+      disabledMessage:
+        'Accounting module is not enabled for this tenant; no reinsurer disbursement events are captured.',
+      eventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      idempotencyKey: (paymentId) =>
+        this.reinsurerDisbursementRecordedIdempotencyKey(paymentId),
+      missingStatus: 'MISSING',
+      presentStatus: 'PRESENT',
+      enqueuedStatus: 'ENQUEUED',
+      where: {
+        tenantId: user.tenantId,
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        direction: PlacementPaymentDirection.OUTBOUND,
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
+        reversalOfPaymentId: null,
+        bankConfirmedAt: { not: null },
+        placement: { archivedAt: null },
+      },
+      prepare: (payment) =>
+        this.financialEvents.prepareReinsurerDisbursementRecorded(
+          user,
+          payment,
+        ),
+    });
+  }
+
   private debitNoteIdempotencyKey(noteId: string) {
     return `reinsurance:debit-note:${noteId}:issued:v1`;
   }
@@ -896,12 +943,19 @@ export class ReinsuranceAccountingReadinessService {
     return `reinsurance:payment:${paymentId}:reversal:v1`;
   }
 
+  private reinsurerDisbursementRecordedIdempotencyKey(paymentId: string) {
+    return `reinsurance:reinsurer-disbursement:${paymentId}:recorded:v1`;
+  }
+
   private async reconcilePaymentEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
     config: {
       disabledMessage: string;
-      eventType: 'PREMIUM_PAYMENT_RECEIVED' | 'PAYMENT_REVERSED';
+      eventType:
+        | 'PREMIUM_PAYMENT_RECEIVED'
+        | 'PAYMENT_REVERSED'
+        | 'REINSURER_DISBURSEMENT_RECORDED';
       idempotencyKey: (paymentId: string) => string;
       missingStatus: 'MISSING';
       presentStatus: 'PRESENT';

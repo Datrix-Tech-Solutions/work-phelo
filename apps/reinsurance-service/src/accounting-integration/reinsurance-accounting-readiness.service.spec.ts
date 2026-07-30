@@ -163,6 +163,70 @@ describe('ReinsuranceAccountingReadinessService', () => {
       cedantId: 'cedant-1',
     },
     reversalOfPayment: null,
+    allocations: [],
+  };
+
+  const reinsurerDisbursement = {
+    ...payment,
+    id: 'payment-disbursement-1',
+    counterpartyId: 'reinsurer-1',
+    type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+    direction: PlacementPaymentDirection.OUTBOUND,
+    amount: new Prisma.Decimal('750.00'),
+    currency: 'USD',
+    paymentDate: new Date('2026-06-07T09:30:00.000Z'),
+    reference: 'PAY-001',
+    settlementReference: 'SETTLE-001',
+    bankReference: 'BANK-CONF-001',
+    bankConfirmedAt: new Date('2026-06-07T10:00:00.000Z'),
+    agreedExchangeRate: new Prisma.Decimal('12.50000000'),
+    bankChargeAmount: new Prisma.Decimal('12.50'),
+    withholdingTaxAmount: new Prisma.Decimal('25.00'),
+    status: PlacementPaymentStatus.BANK_CONFIRMED,
+    counterparty: {
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+      name: 'Reliable Re',
+      registrationNumber: null,
+    },
+    allocations: [
+      {
+        id: 'allocation-1',
+        noteId: 'credit-note-1',
+        allocatedAmount: new Prisma.Decimal('500.00'),
+        allocatedCurrency: 'USD',
+        obligationAmount: new Prisma.Decimal('500.00'),
+        obligationCurrency: 'USD',
+        agreedExchangeRate: null,
+        note: {
+          id: 'credit-note-1',
+          noteNumber: 'CN-001',
+          type: PlacementNoteType.CREDIT_NOTE,
+          direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+          status: PlacementNoteStatus.ISSUED,
+          currency: 'USD',
+          netAmount: new Prisma.Decimal('500.00'),
+        },
+      },
+      {
+        id: 'allocation-2',
+        noteId: 'endorsement-credit-note-1',
+        allocatedAmount: new Prisma.Decimal('250.00'),
+        allocatedCurrency: 'USD',
+        obligationAmount: new Prisma.Decimal('3125.00'),
+        obligationCurrency: 'GHS',
+        agreedExchangeRate: new Prisma.Decimal('12.50000000'),
+        note: {
+          id: 'endorsement-credit-note-1',
+          noteNumber: 'ECN-001',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+          status: PlacementNoteStatus.ISSUED,
+          currency: 'GHS',
+          netAmount: new Prisma.Decimal('3125.00'),
+        },
+      },
+    ],
   };
 
   const reversalPayment = {
@@ -294,6 +358,18 @@ describe('ReinsuranceAccountingReadinessService', () => {
         occurredAt: '2026-06-06T10:30:00.000Z',
         currency: 'GHS',
         payload: { amounts: { paymentAmount: 1000 } },
+      }),
+      prepareReinsurerDisbursementRecorded: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+        sourceRecordType: 'PlacementPayment',
+        sourceRecordId: 'payment-disbursement-1',
+        sourceDocumentId: 'payment-disbursement-1',
+        idempotencyKey:
+          'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+        occurredAt: '2026-06-07T10:00:00.000Z',
+        currency: 'USD',
+        payload: { amounts: { paymentAmount: 750 } },
       }),
       enqueuePreparedEvent: jest.fn().mockResolvedValue({
         id: 'outbox-1',
@@ -828,6 +904,122 @@ describe('ReinsuranceAccountingReadinessService', () => {
         expect.objectContaining({
           paymentId: 'payment-reversal-1',
           status: 'ENQUEUED',
+        }),
+      ],
+    });
+  });
+
+  it('dry-runs bank-confirmed reinsurer disbursements missing their deterministic outbox row', async () => {
+    const { financialEvents, prisma, service } = makeService(
+      [],
+      [],
+      [reinsurerDisbursement],
+    );
+
+    const result = await service.reconcileReinsurerDisbursementRecordedEvents(
+      user,
+      { dryRun: true, limit: 10 },
+    );
+
+    const findManyArg = prisma.placementPayment.findMany.mock.calls[0]?.[0];
+    if (!findManyArg) {
+      throw new Error('Expected placementPayment.findMany to be called');
+    }
+    expect(findManyArg.take).toBe(10);
+    expect(findManyArg.where).toMatchObject({
+      tenantId: 'tenant-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      reversalOfPaymentId: null,
+      bankConfirmedAt: { not: null },
+    });
+    expect(result).toMatchObject({
+      accountingEnabled: true,
+      dryRun: true,
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-disbursement-1',
+          eventType: 'REINSURER_DISBURSEMENT_RECORDED',
+          status: 'MISSING',
+          idempotencyKey:
+            'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing reinsurer disbursement events through the shared builder', async () => {
+    const { financialEvents, service } = makeService(
+      [],
+      [],
+      [reinsurerDisbursement],
+    );
+
+    const result = await service.reconcileReinsurerDisbursementRecordedEvents(
+      user,
+      { dryRun: false },
+    );
+
+    expect(
+      financialEvents.prepareReinsurerDisbursementRecorded,
+    ).toHaveBeenCalledWith(user, reinsurerDisbursement);
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+        idempotencyKey:
+          'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+        occurredAt: '2026-06-07T10:00:00.000Z',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      missingCount: 0,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-disbursement-1',
+          status: 'ENQUEUED',
+          outboxId: 'outbox-1',
+        }),
+      ],
+    });
+  });
+
+  it('does not report reinsurer disbursements that already have matching outbox events', async () => {
+    const { service } = makeService(
+      [],
+      [
+        {
+          id: 'outbox-1',
+          idempotencyKey:
+            'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+          status: ReinsuranceAccountingOutboxStatus.DELIVERED,
+          accountingSourceEventId: 'accounting-event-1',
+        },
+      ],
+      [reinsurerDisbursement],
+    );
+
+    const result = await service.reconcileReinsurerDisbursementRecordedEvents(
+      user,
+      { dryRun: true },
+    );
+
+    expect(result).toMatchObject({
+      missingCount: 0,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-disbursement-1',
+          status: 'PRESENT',
+          outboxId: 'outbox-1',
+          accountingSourceEventId: 'accounting-event-1',
         }),
       ],
     });

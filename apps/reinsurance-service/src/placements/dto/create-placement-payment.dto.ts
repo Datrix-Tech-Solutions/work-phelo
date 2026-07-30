@@ -81,7 +81,7 @@ export class CreatePlacementPaymentDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Original placement closing source for REINSURER_DISBURSEMENT. Omit for placement-level cedant premium received and endorsement-closing disbursements.',
+      'Legacy original placement closing source. Reinsurer disbursements must now use allocations instead.',
   })
   @IsOptional()
   @IsUUID()
@@ -90,7 +90,7 @@ export class CreatePlacementPaymentDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Endorsement closing source for REINSURER_DISBURSEMENT. Omit for placement-level cedant premium received and original-closing disbursements.',
+      'Legacy endorsement closing source. Reinsurer disbursements must now use allocations instead.',
   })
   @IsOptional()
   @IsUUID()
@@ -99,7 +99,7 @@ export class CreatePlacementPaymentDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Required only when REINSURER_DISBURSEMENT references an original placement closing. Omit for endorsement-closing disbursements and placement-level cedant premium received.',
+      'Legacy original participant source. Reinsurer disbursements must now use allocations instead.',
   })
   @IsOptional()
   @IsUUID()
