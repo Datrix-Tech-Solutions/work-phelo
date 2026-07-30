@@ -14,10 +14,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ReinsuranceAccountingEventInput } from './reinsurance-accounting-event.builder';
 import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
 
-type DebitNoteForEvent = {
+type PlacementNoteForEvent = {
   id: string;
   tenantId: string;
   placementId: string;
+  closingId?: string | null;
+  participantId?: string | null;
   counterpartyId: string;
   type: PlacementNoteType;
   direction: PlacementNoteDirection;
@@ -43,6 +45,10 @@ type DebitNoteForEvent = {
     name: string;
     registrationNumber?: string | null;
   };
+  closing?: {
+    id: string;
+    closingNumber: string;
+  } | null;
 };
 
 type PaymentForEvent = {
@@ -96,7 +102,7 @@ export class ReinsuranceFinancialEventPublisher {
 
   async prepareDebitNoteIssued(
     user: RequestUser,
-    note: DebitNoteForEvent,
+    note: PlacementNoteForEvent,
     issuedAt: Date,
   ): Promise<ReinsuranceAccountingEventInput | null> {
     if (!user.moduleConfig?.accounting) {
@@ -213,6 +219,154 @@ export class ReinsuranceFinancialEventPublisher {
           noteDate: note.noteDate.toISOString(),
           issuedAt: occurredAt,
           appliedCharges: note.appliedCharges,
+        },
+      },
+    };
+  }
+
+  async prepareCreditNoteIssued(
+    user: RequestUser,
+    note: PlacementNoteForEvent,
+    issuedAt: Date,
+  ): Promise<ReinsuranceAccountingEventInput | null> {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; CREDIT_NOTE_ISSUED not enqueued for note ${note.id}`,
+      );
+      return null;
+    }
+
+    if (!this.isIssuedPlacementCreditNote(note, issuedAt)) {
+      throw new Error(
+        `Note ${note.id} is not a valid issued placement credit note`,
+      );
+    }
+
+    const [placement, fetchedCounterparty] = await Promise.all([
+      this.prisma.placement.findFirst({
+        where: {
+          id: note.placementId,
+          tenantId: note.tenantId,
+        },
+        select: {
+          id: true,
+          reference: true,
+          policyNumber: true,
+          title: true,
+          cedantId: true,
+        },
+      }),
+      note.counterparty
+        ? Promise.resolve(null)
+        : this.prisma.counterparty.findFirst({
+            where: {
+              id: note.counterpartyId,
+              tenantId: note.tenantId,
+              archivedAt: null,
+            },
+          }),
+    ]);
+
+    if (!placement) {
+      throw new Error(
+        `Placement ${note.placementId} not found for issued credit note ${note.id}`,
+      );
+    }
+    const counterparty = note.counterparty ?? fetchedCounterparty;
+    if (!counterparty || counterparty.type !== CounterpartyType.REINSURER) {
+      throw new Error(
+        `Reinsurer counterparty ${note.counterpartyId} not found for issued credit note ${note.id}`,
+      );
+    }
+
+    const occurredAt = issuedAt.toISOString();
+    const grossPremium = Math.abs(this.decimalNumber(note.grossAmount));
+    const commissionAmount = Math.abs(
+      this.optionalDecimalNumber(note.commissionAmount) ?? 0,
+    );
+    const brokerageAmount = Math.abs(
+      this.optionalDecimalNumber(note.brokerageAmount) ?? 0,
+    );
+    const nicLevyAmount = Math.abs(
+      this.optionalDecimalNumber(note.nicLevyAmount) ?? 0,
+    );
+    const withholdingTaxAmount = Math.abs(
+      this.optionalDecimalNumber(note.withholdingTaxAmount) ?? 0,
+    );
+    const totalCharges = this.roundMoney(nicLevyAmount + withholdingTaxAmount);
+    const creditMagnitude = Math.abs(this.decimalNumber(note.netAmount));
+
+    return {
+      tenantId: note.tenantId,
+      sourceEventType: 'CREDIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: note.id,
+      sourceDocumentId: note.id,
+      idempotencyKey: `reinsurance:credit-note:${note.id}:issued:v1`,
+      occurredAt,
+      currency: note.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: note.currency,
+        references: {
+          placementId: placement.id,
+          placementReference: placement.reference,
+          policyNumber: placement.policyNumber,
+          placementTitle: placement.title,
+          closingId: note.closingId ?? note.closing?.id ?? null,
+          closingNumber: note.closing?.closingNumber ?? null,
+          participantId: note.participantId ?? null,
+          noteId: note.id,
+          noteNumber: note.noteNumber,
+          noteDate: note.noteDate.toISOString(),
+          issuedAt: occurredAt,
+        },
+        counterparty: {
+          id: counterparty.id,
+          type: counterparty.type,
+          name: counterparty.name,
+          registrationNumber: counterparty.registrationNumber ?? null,
+          subledgerExternalRef: counterparty.id,
+        },
+        amounts: {
+          grossPremium,
+          grossAmount: grossPremium,
+          commissionPercent: this.optionalDecimalNumber(note.commissionPercent),
+          commission: commissionAmount,
+          commissionAmount,
+          brokeragePercent: this.optionalDecimalNumber(note.brokeragePercent),
+          brokerage: brokerageAmount,
+          brokerageAmount,
+          nicLevyPercent: this.optionalDecimalNumber(note.nicLevyPercent) ?? 0,
+          nicLevy: nicLevyAmount,
+          nicLevyAmount,
+          withholdingTaxPercent:
+            this.optionalDecimalNumber(note.withholdingTaxPercent) ?? 0,
+          withholdingTax: withholdingTaxAmount,
+          withholdingTaxAmount,
+          charges: totalCharges,
+          totalCharges,
+          netAmount: creditMagnitude,
+          creditMagnitude,
+          signedReceivableImpact: 0,
+          signedPayableImpact: creditMagnitude,
+        },
+        documents: {
+          placementNoteId: note.id,
+          placementNoteNumber: note.noteNumber,
+          sourceDocumentId: note.id,
+        },
+        note: {
+          id: note.id,
+          type: note.type,
+          direction: note.direction,
+          number: note.noteNumber,
+          status: PlacementNoteStatus.ISSUED,
+          noteDate: note.noteDate.toISOString(),
+          issuedAt: occurredAt,
+          currency: note.currency,
+          appliedCharges: note.appliedCharges,
+          amountRepresentation: 'POSITIVE_MAGNITUDE_WITH_SIGNED_IMPACTS',
         },
       },
     };
@@ -401,12 +555,28 @@ export class ReinsuranceFinancialEventPublisher {
   }
 
   private isIssuedPlacementDebitNote(
-    note: DebitNoteForEvent,
+    note: PlacementNoteForEvent,
     issuedAt: Date,
   ): boolean {
     return (
       note.type === PlacementNoteType.DEBIT_NOTE &&
       note.direction === PlacementNoteDirection.CEDANT_TO_BROKER &&
+      (note.status === PlacementNoteStatus.DRAFT ||
+        note.status === PlacementNoteStatus.ISSUED) &&
+      issuedAt instanceof Date &&
+      !Number.isNaN(issuedAt.getTime()) &&
+      note.currency.trim().length === 3 &&
+      this.decimalNumber(note.netAmount) > 0
+    );
+  }
+
+  private isIssuedPlacementCreditNote(
+    note: PlacementNoteForEvent,
+    issuedAt: Date,
+  ): boolean {
+    return (
+      note.type === PlacementNoteType.CREDIT_NOTE &&
+      note.direction === PlacementNoteDirection.BROKER_TO_REINSURER &&
       (note.status === PlacementNoteStatus.DRAFT ||
         note.status === PlacementNoteStatus.ISSUED) &&
       issuedAt instanceof Date &&
@@ -483,5 +653,9 @@ export class ReinsuranceFinancialEventPublisher {
       throw new Error(`Invalid monetary value ${raw}`);
     }
     return parsed;
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 }

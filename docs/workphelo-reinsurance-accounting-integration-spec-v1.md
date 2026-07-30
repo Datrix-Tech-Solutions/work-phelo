@@ -37,8 +37,11 @@ As of this draft, Reinsurance has:
 - Counterparty to Accounting subledger readiness sync/check for Cedants and Reinsurers.
 - Operational outbox dispatcher endpoint for already-enqueued rows.
 - Activated `DEBIT_NOTE_ISSUED` capture when placement debit notes are issued for Accounting-enabled tenants.
+- Activated `CREDIT_NOTE_ISSUED` capture when placement credit notes are issued for Accounting-enabled tenants.
+- Activated `PREMIUM_PAYMENT_RECEIVED` and `PAYMENT_REVERSED` capture for premium receipt lifecycle records.
 
-No other real financial source-event family is active yet.
+Endorsement notes, note voiding, reinsurer disbursements, claims, recoveries and
+settlements remain inactive until explicitly approved and implemented.
 
 ---
 
@@ -123,14 +126,15 @@ Readiness sync is allowed before real financial event publishing. It MUST NOT cr
 
 Operational endpoints:
 
-| Endpoint                                                                     | Purpose                                                                                                   |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `GET /accounting-integration/status`                                         | Reports entitlement/configuration readiness.                                                              |
-| `POST /accounting-integration/counterparties/:counterpartyId/subledger/sync` | Ensures one Cedant/Reinsurer subledger.                                                                   |
-| `POST /accounting-integration/outbox/process-pending`                        | Dispatches already-enqueued outbox rows.                                                                  |
-| `POST /accounting-integration/reconciliation/debit-note-issued`              | Dry-runs or explicitly enqueues missing `DEBIT_NOTE_ISSUED` outbox rows for issued placement debit notes. |
-| `POST /accounting-integration/reconciliation/premium-payment-received`       | Dry-runs or explicitly enqueues missing `PREMIUM_PAYMENT_RECEIVED` outbox rows for premium receipt rows.  |
-| `POST /accounting-integration/reconciliation/payment-reversed`               | Dry-runs or explicitly enqueues missing `PAYMENT_REVERSED` outbox rows for premium payment reversal rows. |
+| Endpoint                                                                     | Purpose                                                                                                     |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `GET /accounting-integration/status`                                         | Reports entitlement/configuration readiness.                                                                |
+| `POST /accounting-integration/counterparties/:counterpartyId/subledger/sync` | Ensures one Cedant/Reinsurer subledger.                                                                     |
+| `POST /accounting-integration/outbox/process-pending`                        | Dispatches already-enqueued outbox rows.                                                                    |
+| `POST /accounting-integration/reconciliation/debit-note-issued`              | Dry-runs or explicitly enqueues missing `DEBIT_NOTE_ISSUED` outbox rows for issued placement debit notes.   |
+| `POST /accounting-integration/reconciliation/credit-note-issued`             | Dry-runs or explicitly enqueues missing `CREDIT_NOTE_ISSUED` outbox rows for issued placement credit notes. |
+| `POST /accounting-integration/reconciliation/premium-payment-received`       | Dry-runs or explicitly enqueues missing `PREMIUM_PAYMENT_RECEIVED` outbox rows for premium receipt rows.    |
+| `POST /accounting-integration/reconciliation/payment-reversed`               | Dry-runs or explicitly enqueues missing `PAYMENT_REVERSED` outbox rows for premium payment reversal rows.   |
 
 Accounting internal endpoint:
 
@@ -149,7 +153,7 @@ Reinsurance source events SHOULD be activated incrementally.
 | Event                             | Status                  | Source truth                                     |
 | --------------------------------- | ----------------------- | ------------------------------------------------ |
 | `DEBIT_NOTE_ISSUED`               | Active first activation | Issued placement debit note snapshot.            |
-| `CREDIT_NOTE_ISSUED`              | Proposed                | Issued placement credit note snapshot.           |
+| `CREDIT_NOTE_ISSUED`              | Active                  | Issued placement credit note snapshot.           |
 | `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Proposed                | Issued endorsement debit note snapshot.          |
 | `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Proposed                | Issued endorsement credit note snapshot.         |
 | `PREMIUM_PAYMENT_RECEIVED`        | Active                  | Recorded premium payment row.                    |
@@ -338,6 +342,72 @@ Exact GL accounts remain tenant-configured in Accounting.
 
 ---
 
+## 10.0.1 Credit Note Issued Activation
+
+`CREDIT_NOTE_ISSUED` is recognized when a placement credit note is officially
+issued:
+
+- `PlacementNote.type = CREDIT_NOTE`
+- `PlacementNote.direction = BROKER_TO_REINSURER`
+- `PlacementNote.status` transitions from `DRAFT` to `ISSUED`
+- `PlacementNote.issuedAt` is populated
+
+The issued `PlacementNote` is the immutable source financial record.
+Recognition MUST NOT occur from draft note creation, closing confirmation,
+payments, document previews or frontend-only actions.
+
+The event uses:
+
+```text
+sourceRecordType = PlacementNote
+sourceRecordId = <credit-note-id>
+sourceDocumentId = <credit-note-id>
+idempotencyKey = reinsurance:credit-note:<credit-note-id>:issued:v1
+occurredAt = PlacementNote.issuedAt
+```
+
+Credit-note payloads use the Reinsurer counterparty from the note:
+
+```json
+{
+  "counterparty": {
+    "id": "<reinsurer-counterparty-id>",
+    "type": "REINSURER",
+    "subledgerExternalRef": "<reinsurer-counterparty-id>"
+  }
+}
+```
+
+Current Reinsurance credit-note amount fields are positive source-note
+magnitudes. Payloads therefore expose positive display values plus explicit
+signed impact facts:
+
+```json
+{
+  "amounts": {
+    "creditMagnitude": 3712.5,
+    "netAmount": 3712.5,
+    "signedReceivableImpact": 0,
+    "signedPayableImpact": 3712.5
+  }
+}
+```
+
+Accounting posting rules own the final GL treatment. Finance may configure this
+event as a receivable reduction, reinsurer payable, clearing-liability movement
+or another approved tenant treatment. Reinsurance MUST NOT hardcode that policy.
+
+Reconciliation endpoint:
+
+```http
+POST /api/v1/operations/reinsurance/accounting-integration/reconciliation/credit-note-issued?dryRun=true&limit=50
+```
+
+The endpoint is tenant scoped and targets only issued placement credit notes
+missing `reinsurance:credit-note:<noteId>:issued:v1`.
+
+---
+
 ## 10.1 Premium Payment and Reversal Activation
 
 `PREMIUM_PAYMENT_RECEIVED` is recognized when a valid
@@ -494,7 +564,22 @@ If support finds an issued placement debit note without a matching
 4. Dispatch the created outbox row.
 5. Process the Accounting source event after delivery.
 
-### 13.5 Missing premium payment or reversal outbox row
+### 13.5 Missing credit-note outbox row
+
+If support finds an issued placement credit note without a matching
+`CREDIT_NOTE_ISSUED` outbox row:
+
+1. Run the credit-note reconciliation endpoint with `dryRun=true`.
+2. Confirm the note is genuinely missing
+   `reinsurance:credit-note:<noteId>:issued:v1`.
+3. Run the endpoint with `dryRun=false` only for explicit recovery.
+4. Dispatch the created outbox row.
+5. Process the Accounting source event after delivery.
+
+The credit-note source event remains a business-fact event. Posting treatment is
+resolved by the tenant's Accounting posting rule.
+
+### 13.6 Missing premium payment or reversal outbox row
 
 If support finds a recorded premium receipt without a matching
 `PREMIUM_PAYMENT_RECEIVED` outbox row:
@@ -580,7 +665,8 @@ Recommended incremental rollout:
 2. Activate `DEBIT_NOTE_ISSUED`.
 3. Activate `PREMIUM_PAYMENT_RECEIVED`.
 4. Activate payment reversal.
-5. Activate endorsement debit/credit notes.
-6. Activate reinsurer disbursements.
-7. Activate claim cash calls and recoveries after claims policy approval.
-8. Add reconciliation/backfill tooling.
+5. Activate `CREDIT_NOTE_ISSUED`.
+6. Activate endorsement debit/credit notes.
+7. Activate reinsurer disbursements.
+8. Activate claim cash calls and recoveries after claims policy approval.
+9. Add reconciliation/backfill tooling.

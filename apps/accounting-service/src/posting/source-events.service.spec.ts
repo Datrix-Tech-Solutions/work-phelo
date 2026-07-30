@@ -391,6 +391,103 @@ describe('SourceEventsService', () => {
     expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
   });
 
+  it('posts REINSURANCE CREDIT_NOTE_ISSUED using tenant-configured policy and reinsurer subledger', async () => {
+    const creditNoteDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'CREDIT_NOTE_ISSUED',
+      sourceRecordId: 'credit-note-1',
+      sourceDocumentId: 'credit-note-1',
+      idempotencyKey: 'reinsurance:credit-note:credit-note-1:issued:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          closingId: 'closing-1',
+          noteNumber: 'CN-001',
+        },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: {
+          creditMagnitude: 3712.5,
+          signedReceivableImpact: 0,
+          signedPayableImpact: 3712.5,
+        },
+      },
+    };
+    const creditNoteRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'CREDIT_NOTE_ISSUED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'premium-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.creditMagnitude',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Credit note {{payload.references.noteNumber}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'reinsurer-premium-payable',
+          subledgerType: SubledgerType.REINSURER,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.creditMagnitude',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Reinsurer credit {{payload.references.noteNumber}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      creditNoteDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(creditNoteRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'reinsurer-subledger-1',
+    });
+
+    const result = await service.receive(actor, creditNoteDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+        status: 'ACTIVE',
+      },
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'CREDIT_NOTE_ISSUED',
+        sourceRecordId: 'credit-note-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'premium-clearing',
+            debit: 3712.5,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'reinsurer-premium-payable',
+            subledgerAccountId: 'reinsurer-subledger-1',
+            debit: 0,
+            credit: 3712.5,
+          }),
+        ],
+      }),
+    );
+  });
+
   it('posts REINSURANCE PREMIUM_PAYMENT_RECEIVED using tenant-configured cash and receivable accounts', async () => {
     const paymentDto: CreateSourceEventDto = {
       sourceModule: 'REINSURANCE',

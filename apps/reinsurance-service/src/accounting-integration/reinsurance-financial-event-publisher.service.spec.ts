@@ -221,6 +221,104 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     expect(event).toBeNull();
   });
 
+  it('prepares a WFIS-compliant CREDIT_NOTE_ISSUED event from the note snapshot', async () => {
+    const { actor, service } = makeService();
+    const creditNote = {
+      ...note,
+      id: 'credit-note-1',
+      closingId: 'closing-1',
+      participantId: 'participant-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementNoteType.CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      noteNumber: 'CN-001',
+      grossAmount: new Prisma.Decimal('4500.00'),
+      commissionAmount: new Prisma.Decimal('450.00'),
+      brokerageAmount: new Prisma.Decimal('337.50'),
+      netAmount: new Prisma.Decimal('3712.50'),
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: 'RE-001',
+      },
+      closing: {
+        id: 'closing-1',
+        closingNumber: 'CLO-001',
+      },
+    };
+
+    const event = await service.prepareCreditNoteIssued(
+      actor,
+      creditNote,
+      new Date('2026-06-04T13:00:00.000Z'),
+    );
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'CREDIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: 'credit-note-1',
+      sourceDocumentId: 'credit-note-1',
+      idempotencyKey: 'reinsurance:credit-note:credit-note-1:issued:v1',
+      occurredAt: '2026-06-04T13:00:00.000Z',
+      currency: 'GHS',
+    });
+    if (!event) throw new Error('Expected CREDIT_NOTE_ISSUED event');
+
+    const payload = event.payload as {
+      references: Record<string, unknown>;
+      counterparty: Record<string, unknown>;
+      amounts: Record<string, unknown>;
+      note: Record<string, unknown>;
+    };
+    expect(payload.references).toMatchObject({
+      placementId: 'placement-1',
+      placementReference: 'FAC-2026-001',
+      closingId: 'closing-1',
+      closingNumber: 'CLO-001',
+      participantId: 'participant-1',
+      noteNumber: 'CN-001',
+    });
+    expect(payload.counterparty).toEqual({
+      id: 'reinsurer-1',
+      type: 'REINSURER',
+      name: 'Reliable Re',
+      registrationNumber: 'RE-001',
+      subledgerExternalRef: 'reinsurer-1',
+    });
+    expect(payload.amounts).toMatchObject({
+      grossPremium: 4500,
+      commissionAmount: 450,
+      brokerageAmount: 337.5,
+      charges: 150,
+      netAmount: 3712.5,
+      creditMagnitude: 3712.5,
+      signedReceivableImpact: 0,
+      signedPayableImpact: 3712.5,
+    });
+    expect(payload.note).toMatchObject({
+      type: PlacementNoteType.CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      status: PlacementNoteStatus.ISSUED,
+      amountRepresentation: 'POSITIVE_MAGNITUDE_WITH_SIGNED_IMPACTS',
+    });
+  });
+
+  it('does not prepare CREDIT_NOTE_ISSUED for the wrong note type', async () => {
+    const { actor, service } = makeService();
+
+    await expect(
+      service.prepareCreditNoteIssued(
+        actor,
+        note,
+        new Date('2026-06-04T13:00:00.000Z'),
+      ),
+    ).rejects.toThrow(
+      'Note note-1 is not a valid issued placement credit note',
+    );
+  });
+
   it('captures the event even when delivery configuration is missing', async () => {
     const { actor, service } = makeService();
 

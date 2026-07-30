@@ -470,11 +470,20 @@ export class PlacementNotesService {
     }
 
     const issuedAt = new Date();
-    const accountingEvent = await this.financialEvents.prepareDebitNoteIssued(
-      user,
-      note,
-      issuedAt,
-    );
+    const accountingEvent =
+      note.type === PlacementNoteType.DEBIT_NOTE
+        ? await this.financialEvents.prepareDebitNoteIssued(
+            user,
+            note,
+            issuedAt,
+          )
+        : note.type === PlacementNoteType.CREDIT_NOTE
+          ? await this.financialEvents.prepareCreditNoteIssued(
+              user,
+              note,
+              issuedAt,
+            )
+          : null;
 
     return this.prisma.$transaction(async (tx) => {
       const issuedNote = await tx.placementNote.update({

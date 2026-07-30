@@ -197,6 +197,7 @@ describe('PlacementNotesService', () => {
   };
   let financialEvents: {
     prepareDebitNoteIssued: jest.Mock;
+    prepareCreditNoteIssued: jest.Mock;
     enqueuePreparedEvent: jest.Mock;
   };
 
@@ -253,6 +254,7 @@ describe('PlacementNotesService', () => {
     };
     financialEvents = {
       prepareDebitNoteIssued: jest.fn().mockResolvedValue(null),
+      prepareCreditNoteIssued: jest.fn().mockResolvedValue(null),
       enqueuePreparedEvent: jest.fn(),
     };
     service = new PlacementNotesService(
@@ -927,6 +929,71 @@ describe('PlacementNotesService', () => {
     );
   });
 
+  it('enqueues CREDIT_NOTE_ISSUED in the same transaction when prepared', async () => {
+    const creditNote = {
+      ...note,
+      id: 'credit-note-1',
+      closingId: 'closing-1',
+      participantId: 'participant-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementNoteType.CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      noteNumber: 'CN-001',
+      grossAmount: new Prisma.Decimal('4500.00'),
+      commissionAmount: new Prisma.Decimal('450.00'),
+      brokerageAmount: new Prisma.Decimal('337.50'),
+      netAmount: new Prisma.Decimal('3712.50'),
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: null,
+      },
+      closing: {
+        id: 'closing-1',
+        closingNumber: 'CLO-001',
+      },
+    };
+    const preparedEvent = {
+      tenantId: 'tenant-1',
+      sourceEventType: 'CREDIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: 'credit-note-1',
+      sourceDocumentId: 'credit-note-1',
+      idempotencyKey: 'reinsurance:credit-note:credit-note-1:issued:v1',
+      occurredAt: '2026-06-04T13:00:00.000Z',
+      currency: 'USD',
+      payload: {
+        references: { placementId: 'placement-1', noteNumber: 'CN-001' },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: { creditMagnitude: 3712.5 },
+      },
+    };
+    financialEvents.prepareCreditNoteIssued.mockResolvedValue(preparedEvent);
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(creditNote);
+    prisma.placementNote.update.mockResolvedValue({
+      ...creditNote,
+      status: PlacementNoteStatus.ISSUED,
+      issuedAt: new Date('2026-06-04T13:00:00.000Z'),
+    });
+
+    await service.issue(user, 'placement-1', 'credit-note-1', {
+      status: PlacementNoteStatus.ISSUED,
+    });
+
+    expect(financialEvents.prepareCreditNoteIssued).toHaveBeenCalledWith(
+      user,
+      creditNote,
+      expect.any(Date),
+    );
+    expect(financialEvents.prepareDebitNoteIssued).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      prisma,
+      preparedEvent,
+    );
+  });
+
   it('rolls back note issuance when required outbox capture fails', async () => {
     const mutableNote = { ...note };
     const preparedEvent = {
@@ -945,6 +1012,62 @@ describe('PlacementNotesService', () => {
       },
     };
     financialEvents.prepareDebitNoteIssued.mockResolvedValue(preparedEvent);
+    financialEvents.enqueuePreparedEvent.mockRejectedValue(
+      new Error('Outbox insert failed'),
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(mutableNote);
+    prisma.placementNote.update.mockImplementation((args: unknown) => {
+      const { data } = args as Prisma.PlacementNoteUpdateArgs;
+      Object.assign(mutableNote, data);
+      return Promise.resolve(mutableNote);
+    });
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const before = { ...mutableNote };
+        try {
+          return await callback(prisma);
+        } catch (error) {
+          Object.assign(mutableNote, before);
+          throw error;
+        }
+      },
+    );
+
+    await expect(
+      service.issue(user, 'placement-1', 'note-1', {
+        status: PlacementNoteStatus.ISSUED,
+      }),
+    ).rejects.toThrow('Outbox insert failed');
+
+    expect(mutableNote.status).toBe(PlacementNoteStatus.DRAFT);
+    expect(mutableNote.issuedAt).toBeNull();
+  });
+
+  it('rolls back credit note issuance when required outbox capture fails', async () => {
+    const mutableNote = {
+      ...note,
+      type: PlacementNoteType.CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      noteNumber: 'CN-001',
+      counterpartyId: 'reinsurer-1',
+    };
+    const preparedEvent = {
+      tenantId: 'tenant-1',
+      sourceEventType: 'CREDIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: 'note-1',
+      sourceDocumentId: 'note-1',
+      idempotencyKey: 'reinsurance:credit-note:note-1:issued:v1',
+      occurredAt: '2026-06-04T13:00:00.000Z',
+      currency: 'USD',
+      payload: {
+        references: { placementId: 'placement-1', noteNumber: 'CN-001' },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: { creditMagnitude: 6750 },
+      },
+    };
+    financialEvents.prepareCreditNoteIssued.mockResolvedValue(preparedEvent);
     financialEvents.enqueuePreparedEvent.mockRejectedValue(
       new Error('Outbox insert failed'),
     );

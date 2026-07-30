@@ -99,13 +99,18 @@ export class ReinsuranceAccountingReadinessService {
       serviceAuthSecretConfigured: configuration.serviceAuthSecretConfigured,
       sourceEventsActive: accountingEnabled,
       activeSourceEvents: accountingEnabled
-        ? ['DEBIT_NOTE_ISSUED', 'PREMIUM_PAYMENT_RECEIVED', 'PAYMENT_REVERSED']
+        ? [
+            'DEBIT_NOTE_ISSUED',
+            'CREDIT_NOTE_ISSUED',
+            'PREMIUM_PAYMENT_RECEIVED',
+            'PAYMENT_REVERSED',
+          ]
         : [],
       readinessMode:
-        'Debit-note and premium-payment source-event capture, counterparty subledger readiness and outbox dispatch.',
+        'Debit-note, credit-note and premium-payment source-event capture, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement debit notes and premium payment lifecycle records.'
+          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement debit/credit notes and premium payment lifecycle records.'
           : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
@@ -337,6 +342,151 @@ export class ReinsuranceAccountingReadinessService {
     };
   }
 
+  async reconcileCreditNoteIssuedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
+    const dryRun = options.dryRun ?? true;
+    const limit = Math.min(options.limit ?? 50, 100);
+    if (!accountingEnabled) {
+      return {
+        accountingEnabled,
+        dryRun,
+        inspectedCount: 0,
+        missingCount: 0,
+        enqueuedCount: 0,
+        items: [],
+        message:
+          'Accounting module is not enabled for this tenant; no credit-note events are captured in Phase 1.',
+      };
+    }
+
+    const notes = await this.prisma.placementNote.findMany({
+      where: {
+        tenantId: user.tenantId,
+        type: PlacementNoteType.CREDIT_NOTE,
+        direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+        status: PlacementNoteStatus.ISSUED,
+        issuedAt: { not: null },
+        placement: { archivedAt: null },
+      },
+      include: {
+        counterparty: {
+          select: {
+            id: true,
+            type: true,
+            name: true,
+            registrationNumber: true,
+          },
+        },
+        closing: {
+          select: {
+            id: true,
+            closingNumber: true,
+          },
+        },
+      },
+      orderBy: { issuedAt: 'asc' },
+      take: limit,
+    });
+    const keys = notes.map((note) => this.creditNoteIdempotencyKey(note.id));
+    const existing = keys.length
+      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
+          where: {
+            tenantId: user.tenantId,
+            idempotencyKey: { in: keys },
+          },
+          select: {
+            id: true,
+            idempotencyKey: true,
+            status: true,
+            accountingSourceEventId: true,
+          },
+        })
+      : [];
+    const existingByKey = new Map(
+      existing.map((event) => [event.idempotencyKey, event]),
+    );
+
+    const items: Array<{
+      noteId: string;
+      noteNumber: string;
+      placementId: string;
+      issuedAt: string;
+      idempotencyKey: string;
+      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
+      outboxId?: string;
+      outboxStatus?: string;
+      accountingSourceEventId?: string | null;
+    }> = [];
+    let enqueuedCount = 0;
+
+    for (const note of notes) {
+      const idempotencyKey = this.creditNoteIdempotencyKey(note.id);
+      const existingEvent = existingByKey.get(idempotencyKey);
+      if (existingEvent) {
+        items.push({
+          noteId: note.id,
+          noteNumber: note.noteNumber,
+          placementId: note.placementId,
+          issuedAt: note.issuedAt?.toISOString() ?? '',
+          idempotencyKey,
+          status: 'PRESENT',
+          outboxId: existingEvent.id,
+          outboxStatus: existingEvent.status,
+          accountingSourceEventId: existingEvent.accountingSourceEventId,
+        });
+        continue;
+      }
+
+      if (dryRun) {
+        items.push({
+          noteId: note.id,
+          noteNumber: note.noteNumber,
+          placementId: note.placementId,
+          issuedAt: note.issuedAt?.toISOString() ?? '',
+          idempotencyKey,
+          status: 'MISSING',
+        });
+        continue;
+      }
+
+      const issuedAt = note.issuedAt;
+      if (!issuedAt) continue;
+      const event = await this.financialEvents.prepareCreditNoteIssued(
+        user,
+        note,
+        issuedAt,
+      );
+      if (!event) continue;
+      const outboxRow = await this.prisma.$transaction((tx) =>
+        this.financialEvents.enqueuePreparedEvent(tx, event),
+      );
+      enqueuedCount += 1;
+      items.push({
+        noteId: note.id,
+        noteNumber: note.noteNumber,
+        placementId: note.placementId,
+        issuedAt: issuedAt.toISOString(),
+        idempotencyKey,
+        status: 'ENQUEUED',
+        outboxId: outboxRow.id,
+        outboxStatus: outboxRow.status,
+        accountingSourceEventId: outboxRow.accountingSourceEventId,
+      });
+    }
+
+    return {
+      accountingEnabled,
+      dryRun,
+      inspectedCount: notes.length,
+      missingCount: items.filter((item) => item.status === 'MISSING').length,
+      enqueuedCount,
+      items,
+    };
+  }
+
   async reconcilePremiumPaymentReceivedEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
@@ -396,6 +546,10 @@ export class ReinsuranceAccountingReadinessService {
 
   private debitNoteIdempotencyKey(noteId: string) {
     return `reinsurance:debit-note:${noteId}:issued:v1`;
+  }
+
+  private creditNoteIdempotencyKey(noteId: string) {
+    return `reinsurance:credit-note:${noteId}:issued:v1`;
   }
 
   private premiumPaymentReceivedIdempotencyKey(paymentId: string) {

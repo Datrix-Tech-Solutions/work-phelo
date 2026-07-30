@@ -70,6 +70,27 @@ describe('ReinsuranceAccountingReadinessService', () => {
     },
   };
 
+  const issuedCreditNote = {
+    ...issuedNote,
+    id: 'credit-note-1',
+    closingId: 'closing-1',
+    participantId: 'participant-1',
+    counterpartyId: 'reinsurer-1',
+    type: PlacementNoteType.CREDIT_NOTE,
+    direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+    noteNumber: 'CN-001',
+    counterparty: {
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+      name: 'Reliable Re',
+      registrationNumber: null,
+    },
+    closing: {
+      id: 'closing-1',
+      closingNumber: 'CLO-001',
+    },
+  };
+
   const payment = {
     id: 'payment-1',
     tenantId: 'tenant-1',
@@ -175,6 +196,17 @@ describe('ReinsuranceAccountingReadinessService', () => {
         occurredAt: '2026-06-04T13:00:00.000Z',
         currency: 'GHS',
         payload: { amounts: { netPremium: 8500 } },
+      }),
+      prepareCreditNoteIssued: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CREDIT_NOTE_ISSUED',
+        sourceRecordType: 'PlacementNote',
+        sourceRecordId: 'credit-note-1',
+        sourceDocumentId: 'credit-note-1',
+        idempotencyKey: 'reinsurance:credit-note:credit-note-1:issued:v1',
+        occurredAt: '2026-06-04T13:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { creditMagnitude: 8500 } },
       }),
       preparePremiumPaymentReceived: jest.fn().mockResolvedValue({
         tenantId: 'tenant-1',
@@ -328,6 +360,110 @@ describe('ReinsuranceAccountingReadinessService', () => {
     });
     expect(prisma.placementNote.findMany).not.toHaveBeenCalled();
     expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('dry-runs issued credit notes missing their deterministic outbox row', async () => {
+    const { financialEvents, prisma, service } = makeService([
+      issuedCreditNote,
+    ]);
+
+    const result = await service.reconcileCreditNoteIssuedEvents(user, {
+      dryRun: true,
+      limit: 10,
+    });
+
+    const findManyArg = prisma.placementNote.findMany.mock.calls[0]?.[0];
+    if (!findManyArg) {
+      throw new Error('Expected placementNote.findMany to be called');
+    }
+    expect(findManyArg.take).toBe(10);
+    expect(findManyArg.where).toMatchObject({
+      tenantId: 'tenant-1',
+      type: PlacementNoteType.CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      status: PlacementNoteStatus.ISSUED,
+      issuedAt: { not: null },
+    });
+    expect(result).toMatchObject({
+      accountingEnabled: true,
+      dryRun: true,
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          noteId: 'credit-note-1',
+          noteNumber: 'CN-001',
+          status: 'MISSING',
+          idempotencyKey: 'reinsurance:credit-note:credit-note-1:issued:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing credit-note events explicitly with the original business date', async () => {
+    const { financialEvents, service } = makeService([issuedCreditNote]);
+
+    const result = await service.reconcileCreditNoteIssuedEvents(user, {
+      dryRun: false,
+    });
+
+    expect(financialEvents.prepareCreditNoteIssued).toHaveBeenCalledWith(
+      user,
+      issuedCreditNote,
+      issuedCreditNote.issuedAt,
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        idempotencyKey: 'reinsurance:credit-note:credit-note-1:issued:v1',
+        occurredAt: '2026-06-04T13:00:00.000Z',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      missingCount: 0,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          noteId: 'credit-note-1',
+          status: 'ENQUEUED',
+          outboxId: 'outbox-1',
+        }),
+      ],
+    });
+  });
+
+  it('does not report credit notes that already have matching outbox events', async () => {
+    const { service } = makeService(
+      [issuedCreditNote],
+      [
+        {
+          id: 'outbox-1',
+          idempotencyKey: 'reinsurance:credit-note:credit-note-1:issued:v1',
+          status: ReinsuranceAccountingOutboxStatus.DELIVERED,
+          accountingSourceEventId: 'accounting-event-1',
+        },
+      ],
+    );
+
+    const result = await service.reconcileCreditNoteIssuedEvents(user, {
+      dryRun: true,
+    });
+
+    expect(result).toMatchObject({
+      missingCount: 0,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          noteId: 'credit-note-1',
+          status: 'PRESENT',
+          outboxId: 'outbox-1',
+          accountingSourceEventId: 'accounting-event-1',
+        }),
+      ],
+    });
   });
 
   it('dry-runs recorded premium payments missing their deterministic outbox row', async () => {

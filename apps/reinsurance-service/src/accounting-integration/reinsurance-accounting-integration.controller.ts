@@ -90,6 +90,19 @@ export class ReinsuranceAccountingIntegrationController {
     return this.readiness.reconcileDebitNoteIssuedEvents(request.user, query);
   }
 
+  @Post('reconciliation/credit-note-issued')
+  @ApiOperation({
+    summary: 'Reconcile issued placement credit notes with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets issued placement credit notes missing their deterministic CREDIT_NOTE_ISSUED outbox row.',
+  })
+  reconcileCreditNoteIssuedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileCreditNoteIssuedEvents(request.user, query);
+  }
+
   @Post('reconciliation/premium-payment-received')
   @ApiOperation({
     summary: 'Reconcile recorded premium payments with Accounting outbox',
