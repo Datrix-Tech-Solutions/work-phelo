@@ -45,6 +45,26 @@ This document requests decisions on:
 
 No events are activated by this document. Approval of this pack gives Engineering a controlled scope for the next implementation milestone.
 
+### 1.1 Approval Addendum - 2026-07-30
+
+Finance/Product approved the settlement policies below for implementation readiness:
+
+- Reinsurer payable is recognized from issued Credit Notes or Endorsement Credit Notes.
+- A reinsurer payment clears an existing payable; it does not create the payable.
+- Bank confirmation or successful payment completion is the accounting recognition boundary.
+- Bank approval is operational only and does not emit accounting.
+- One payment may settle many Credit Notes, and one Credit Note may receive many payments.
+- Partial settlement is supported.
+- Overpayments are allowed and corrected through Journal Voucher or approved accounting correction; the original payment remains immutable.
+- Unallocated reinsurer payments are not allowed.
+- Payment currency may differ from Credit Note currency only when the agreed transaction exchange rate is persisted and reused.
+- Live FX lookup is prohibited during accounting recognition.
+- Bank charges and withholding tax are captured on the transaction for Accounting posting decisions.
+- Failed and cancelled payments do not emit accounting events.
+- Settlement write-offs require accountant approval and are not automatic.
+
+Engineering MUST first harden the Reinsurance settlement domain to represent these approved facts before activating `REINSURER_DISBURSEMENT_RECORDED`.
+
 ## 2. Current Platform Status
 
 ### 2.1 Implemented Financial Platform
@@ -1192,26 +1212,26 @@ Why this order minimizes risk:
 
 ## 6. Approval Matrix
 
-| Decision                                                           | Recommended Option                                                        | Owner                             | Status           | Approval Date | Comments |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------- | --------------------------------- | ---------------- | ------------- | -------- |
-| When is a Reinsurer payable recognized?                            | Credit Note for documented return premiums; settlement approval deferred. | Finance                           | Pending approval |               |          |
-| Does payment clear an existing payable or create liability itself? | Clear existing payable or clearing balance.                               | Finance                           | Pending approval |               |          |
-| Can one payment settle multiple obligations?                       | No for v1.                                                                | Product and Finance               | Pending approval |               |          |
-| Can one obligation receive multiple payments?                      | Yes.                                                                      | Product and Finance               | Pending approval |               |          |
-| Are partial settlements supported?                                 | Yes.                                                                      | Finance                           | Pending approval |               |          |
-| How should overpayments be treated?                                | Reject overpayments in v1.                                                | Finance and Product               | Pending approval |               |          |
-| How should underpayments be treated?                               | Treat as partial settlement.                                              | Finance and Product               | Pending approval |               |          |
-| How should unallocated payments be treated?                        | Not supported in v1; use manual Accounting for exceptions.                | Finance and Product               | Pending approval |               |          |
-| Is bank approval operational or financial?                         | Operational only for v1.                                                  | Finance and Product               | Pending approval |               |          |
-| Is bank confirmation operational or financial?                     | Operational metadata in v1; defer bank confirmation.                      | Finance and Product               | Pending approval |               |          |
-| When should payment become irreversible?                           | Immediately on recording.                                                 | Finance and Solution Architecture | Pending approval |               |          |
-| Must corrections use reversal entries?                             | Reversal only.                                                            | Finance and Solution Architecture | Pending approval |               |          |
-| How should FX differences be recognized?                           | Defer FX for v1.                                                          | Finance and Product               | Pending approval |               |          |
-| How should bank charges be recognized?                             | Defer automated bank charges; use manual entries where required.          | Finance                           | Pending approval |               |          |
-| Are withholding taxes supported?                                   | Not supported in payment v1.                                              | Finance and Product               | Pending approval |               |          |
-| Should cancelled payments produce journals?                        | No journal for cancelled instructions; reversal for recorded payments.    | Finance and Product               | Pending approval |               |          |
-| Should failed payments produce journals?                           | No journal in v1.                                                         | Finance and Product               | Pending approval |               |          |
-| How should settlement write-offs work?                             | Defer automated write-offs; use manual Accounting handling.               | Finance and Product               | Pending approval |               |          |
+| Decision                                                           | Recommended Option                                                           | Owner                             | Status   | Approval Date | Comments |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------- | --------------------------------- | -------- | ------------- | -------- |
+| When is a Reinsurer payable recognized?                            | Credit Note or Endorsement Credit Note issued.                               | Finance                           | Approved | 2026-07-30    |          |
+| Does payment clear an existing payable or create liability itself? | Clear existing payable or clearing balance.                                  | Finance                           | Approved | 2026-07-30    |          |
+| Can one payment settle multiple obligations?                       | Yes, via explicit allocation records.                                        | Product and Finance               | Approved | 2026-07-30    |          |
+| Can one obligation receive multiple payments?                      | Yes.                                                                         | Product and Finance               | Approved | 2026-07-30    |          |
+| Are partial settlements supported?                                 | Yes.                                                                         | Finance                           | Approved | 2026-07-30    |          |
+| How should overpayments be treated?                                | Allow and correct through Journal Voucher or approved accounting correction. | Finance and Product               | Approved | 2026-07-30    |          |
+| How should underpayments be treated?                               | Treat as partial settlement.                                                 | Finance and Product               | Approved | 2026-07-30    |          |
+| How should unallocated payments be treated?                        | Not supported.                                                               | Finance and Product               | Approved | 2026-07-30    |          |
+| Is bank approval operational or financial?                         | Operational only.                                                            | Finance and Product               | Approved | 2026-07-30    |          |
+| Is bank confirmation operational or financial?                     | Financial recognition boundary.                                              | Finance and Product               | Approved | 2026-07-30    |          |
+| When should payment become irreversible?                           | Once bank-confirmed/successful and recorded.                                 | Finance and Solution Architecture | Approved | 2026-07-30    |          |
+| Must corrections use reversal entries?                             | Reversal and/or Journal Voucher; never edit posted payments.                 | Finance and Solution Architecture | Approved | 2026-07-30    |          |
+| How should FX differences be recognized?                           | Use agreed persisted transaction exchange rate; never live FX.               | Finance and Product               | Approved | 2026-07-30    |          |
+| How should bank charges be recognized?                             | Capture on transaction; Accounting determines posting.                       | Finance                           | Approved | 2026-07-30    |          |
+| Are withholding taxes supported?                                   | Capture transaction withholding tax for Accounting posting decisions.        | Finance and Product               | Approved | 2026-07-30    |          |
+| Should cancelled payments produce journals?                        | No accounting event.                                                         | Finance and Product               | Approved | 2026-07-30    |          |
+| Should failed payments produce journals?                           | No accounting event.                                                         | Finance and Product               | Approved | 2026-07-30    |          |
+| How should settlement write-offs work?                             | Accountant-approved write-off or JV workflow; not automatic.                 | Finance and Product               | Approved | 2026-07-30    |          |
 
 ## 7. Appendix
 
@@ -1232,16 +1252,17 @@ For implementation detail, refer to:
 
 - Premium and endorsement-note accounting events are already implemented.
 - Reinsurer settlement accounting events are not active.
-- The current operational system supports recorded Reinsurer disbursements linked to one confirmed closing source.
+- The prior operational system supported recorded Reinsurer disbursements linked to one confirmed closing source.
+- The approved policy requires explicit credit-note allocation, bank confirmation, persisted agreed FX, bank charges and withholding tax before accounting event activation.
 - The current operational system supports linked payment reversals.
-- The current operational system does not support FX, bank confirmation, approvals, payment batches, unallocated payments or multi-obligation allocation.
+- Payment approvals and payment batches remain out of scope for this milestone.
 
 ### Recommendations
 
 - Treat Reinsurer disbursement as settlement of an existing payable or clearing balance.
-- Keep v1 settlement limited to one payment source linked to one confirmed closing.
-- Implement recorded disbursement and reversal together as a controlled pair.
-- Defer FX, bank charges, withholding-at-payment, write-offs, unallocated advances and batch allocation.
+- Use explicit Credit Note allocation rows as settlement truth.
+- Implement recorded disbursement only after the domain can represent bank confirmation, agreed FX, bank charges and withholding tax.
+- Defer payment batches, automatic write-offs, claim settlement accounting and partial reversals.
 
 ### Assumptions
 
@@ -1251,4 +1272,4 @@ For implementation detail, refer to:
 
 ### Pending Decisions
 
-All 18 decisions in this pack remain pending until Finance/Product approval is recorded in the approval matrix.
+All 18 decisions in this pack are approved as of 2026-07-30. Accounting event activation remains blocked until the Reinsurance domain readiness changes are implemented and validated.

@@ -5,8 +5,9 @@ import {
 } from '@nestjs/common';
 import {
   CounterpartyType,
-  PlacementClosingStatus,
-  PlacementEndorsementStatus,
+  PlacementNoteDirection,
+  PlacementNoteStatus,
+  PlacementNoteType,
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
@@ -22,11 +23,6 @@ describe('PlacementPaymentsService', () => {
 
   const firstCallArg = <TArgs>(mock: PrismaMethod): TArgs => {
     const call = mock.mock.calls[0];
-    if (!call) throw new Error('Expected Prisma mock to be called');
-    return call[0] as TArgs;
-  };
-  const lastCallArg = <TArgs>(mock: PrismaMethod): TArgs => {
-    const call = mock.mock.calls.at(-1);
     if (!call) throw new Error('Expected Prisma mock to be called');
     return call[0] as TArgs;
   };
@@ -68,6 +64,13 @@ describe('PlacementPaymentsService', () => {
     currency: 'USD',
     paymentDate: new Date('2026-06-04T12:00:00.000Z'),
     reference: 'BANK-001',
+    settlementReference: null,
+    bankReference: null,
+    bankConfirmedAt: null,
+    bankConfirmedByUserId: null,
+    agreedExchangeRate: null,
+    bankChargeAmount: new Prisma.Decimal('0.00'),
+    withholdingTaxAmount: new Prisma.Decimal('0.00'),
     notes: null,
     status: PlacementPaymentStatus.RECORDED,
     reversalOfPaymentId: null,
@@ -83,11 +86,26 @@ describe('PlacementPaymentsService', () => {
     participant: null,
     closing: null,
     endorsementClosing: null,
+    allocations: [],
   };
+
+  const issuedCreditNote = (overrides: Record<string, unknown> = {}) => ({
+    id: 'credit-note-1',
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    counterpartyId: 'reinsurer-1',
+    type: PlacementNoteType.CREDIT_NOTE,
+    direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+    status: PlacementNoteStatus.ISSUED,
+    currency: 'USD',
+    netAmount: new Prisma.Decimal('500.00'),
+    ...overrides,
+  });
 
   let prisma: {
     placement: { findFirst: PrismaMethod };
     counterparty: { findFirst: PrismaMethod };
+    placementNote: { findMany: PrismaMethod };
     placementClosing: { findFirst: PrismaMethod; findMany: PrismaMethod };
     placementEndorsementClosing: { findFirst: PrismaMethod };
     placementPayment: {
@@ -112,6 +130,7 @@ describe('PlacementPaymentsService', () => {
     prisma = {
       placement: { findFirst: jest.fn<Promise<unknown>, [unknown]>() },
       counterparty: { findFirst: jest.fn<Promise<unknown>, [unknown]>() },
+      placementNote: { findMany: jest.fn<Promise<unknown>, [unknown]>() },
       placementClosing: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
@@ -420,209 +439,204 @@ describe('PlacementPaymentsService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('creates reinsurer disbursement only with matching confirmed closing and participant', async () => {
+  it('creates a bank-confirmed reinsurer disbursement with one credit-note allocation', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.counterparty.findFirst.mockResolvedValue({
       id: 'reinsurer-1',
       type: CounterpartyType.REINSURER,
     });
-    prisma.placementClosing.findFirst.mockResolvedValue({
-      id: 'closing-1',
-      netPremium: new Prisma.Decimal('500.00'),
-      currency: 'USD',
-      participant: {
-        id: 'participant-1',
-        counterpartyId: 'reinsurer-1',
-      },
-    });
+    prisma.placementNote.findMany.mockResolvedValue([issuedCreditNote()]);
     prisma.placementPayment.create.mockResolvedValue({
       ...payment,
       id: 'payment-2',
       counterpartyId: 'reinsurer-1',
       type: PlacementPaymentType.REINSURER_DISBURSEMENT,
       direction: PlacementPaymentDirection.OUTBOUND,
-      closingId: 'closing-1',
-      endorsementClosingId: null,
-      participantId: 'participant-1',
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
     });
 
     await service.create(user, 'placement-1', {
       type: PlacementPaymentType.REINSURER_DISBURSEMENT,
       direction: PlacementPaymentDirection.OUTBOUND,
       counterpartyId: 'reinsurer-1',
-      closingId: 'closing-1',
-      participantId: 'participant-1',
       amount: 500,
       currency: 'USD',
       paymentDate: '2026-06-04T12:00:00.000Z',
+      bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+      bankReference: 'BANK-CONF-001',
+      settlementReference: 'SETTLE-001',
+      bankChargeAmount: 12.5,
+      withholdingTaxAmount: 25,
+      allocations: [{ noteId: 'credit-note-1', allocatedAmount: 500 }],
     });
 
-    const closingLookup = lastCallArg<Prisma.PlacementClosingFindFirstArgs>(
-      prisma.placementClosing.findFirst,
+    const noteLookup = firstCallArg<Prisma.PlacementNoteFindManyArgs>(
+      prisma.placementNote.findMany,
     );
-    expect(closingLookup.where).toMatchObject({
-      id: 'closing-1',
+    expect(noteLookup.where).toMatchObject({
+      id: { in: ['credit-note-1'] },
       tenantId: 'tenant-1',
       placementId: 'placement-1',
-      participantId: 'participant-1',
-      status: PlacementClosingStatus.CONFIRMED,
-    });
-
-    const createArgs = firstCallArg<Prisma.PlacementPaymentCreateArgs>(
-      prisma.placementPayment.create,
-    );
-    expect(createArgs.data).toMatchObject({
-      closingId: 'closing-1',
-      participantId: 'participant-1',
       counterpartyId: 'reinsurer-1',
-    });
-  });
-
-  it('creates an endorsement-closing reinsurer disbursement for an added reinsurer', async () => {
-    prisma.placement.findFirst.mockResolvedValue(placement);
-    prisma.counterparty.findFirst.mockResolvedValue({
-      id: 'reinsurer-c',
-      type: CounterpartyType.REINSURER,
-    });
-    prisma.placementEndorsementClosing.findFirst.mockResolvedValue({
-      id: 'endorsement-closing-c',
-      netPremium: new Prisma.Decimal('250.00'),
-      currency: 'USD',
-      endorsementParticipant: {
-        id: 'endorsement-participant-c',
-        counterpartyId: 'reinsurer-c',
-      },
-    });
-    financialPositionService.getFinancialPosition.mockResolvedValue({
-      currency: 'USD',
-      isMultiCurrency: false,
-      cedant: {
-        currentObligation: 1250,
-        outstanding: 250,
-      },
-      reinsurers: [
-        {
-          counterpartyId: 'reinsurer-c',
-          outstanding: 250,
-        },
-      ],
-    });
-    prisma.placementPayment.create.mockResolvedValue({
-      ...payment,
-      id: 'payment-endorsement-c',
-      counterpartyId: 'reinsurer-c',
-      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
-      direction: PlacementPaymentDirection.OUTBOUND,
-      closingId: null,
-      endorsementClosingId: 'endorsement-closing-c',
-      participantId: null,
-    });
-
-    await service.create(user, 'placement-1', {
-      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
-      direction: PlacementPaymentDirection.OUTBOUND,
-      counterpartyId: 'reinsurer-c',
-      endorsementClosingId: 'endorsement-closing-c',
-      amount: 250,
-      currency: 'USD',
-      paymentDate: '2026-08-01T12:00:00.000Z',
-    });
-
-    const closingLookup =
-      firstCallArg<Prisma.PlacementEndorsementClosingFindFirstArgs>(
-        prisma.placementEndorsementClosing.findFirst,
-      );
-    expect(closingLookup.where).toMatchObject({
-      id: 'endorsement-closing-c',
-      tenantId: 'tenant-1',
-      placementId: 'placement-1',
-      status: PlacementClosingStatus.CONFIRMED,
-      endorsement: {
-        tenantId: 'tenant-1',
-        placementId: 'placement-1',
-        status: PlacementEndorsementStatus.CLOSED,
-        effectiveDate: { lte: new Date('2026-08-01T12:00:00.000Z') },
-      },
+      status: PlacementNoteStatus.ISSUED,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
     });
 
     const createArgs = firstCallArg<Prisma.PlacementPaymentCreateArgs>(
       prisma.placementPayment.create,
     );
     expect(createArgs.data).toMatchObject({
-      closingId: undefined,
-      endorsementClosingId: 'endorsement-closing-c',
-      participantId: undefined,
-      counterpartyId: 'reinsurer-c',
+      counterpartyId: 'reinsurer-1',
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      bankReference: 'BANK-CONF-001',
+      settlementReference: 'SETTLE-001',
+      bankConfirmedAt: new Date('2026-06-04T12:05:00.000Z'),
+      bankConfirmedByUserId: 'user-1',
+      bankChargeAmount: 12.5,
+      withholdingTaxAmount: 25,
+      allocations: {
+        create: [
+          expect.objectContaining({
+            noteId: 'credit-note-1',
+            allocatedAmount: new Prisma.Decimal('500'),
+            allocatedCurrency: 'USD',
+            obligationAmount: new Prisma.Decimal('500'),
+            obligationCurrency: 'USD',
+          }),
+        ],
+      },
     });
+    expect(
+      financialEvents.preparePremiumPaymentReceived,
+    ).not.toHaveBeenCalled();
   });
 
-  it('caps replacement endorsement disbursement at the incremental outstanding position', async () => {
+  it('allows one reinsurer payment to settle multiple issued credit notes', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.counterparty.findFirst.mockResolvedValue({
       id: 'reinsurer-1',
       type: CounterpartyType.REINSURER,
     });
-    prisma.placementEndorsementClosing.findFirst.mockResolvedValue({
-      id: 'endorsement-closing-1',
-      netPremium: new Prisma.Decimal('500.00'),
-      currency: 'USD',
-      endorsementParticipant: {
-        id: 'endorsement-participant-1',
-        counterpartyId: 'reinsurer-1',
-      },
+    prisma.placementNote.findMany.mockResolvedValue([
+      issuedCreditNote(),
+      issuedCreditNote({
+        id: 'endorsement-credit-note-1',
+        type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+        netAmount: new Prisma.Decimal('250.00'),
+      }),
+    ]);
+    prisma.placementPayment.create.mockResolvedValue({
+      ...payment,
+      id: 'payment-multi-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
     });
-    financialPositionService.getFinancialPosition.mockResolvedValue({
+
+    await service.create(user, 'placement-1', {
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      counterpartyId: 'reinsurer-1',
+      amount: 750,
       currency: 'USD',
-      isMultiCurrency: false,
-      cedant: {
-        currentObligation: 1100,
-        outstanding: 100,
-      },
-      reinsurers: [
+      paymentDate: '2026-06-04T12:00:00.000Z',
+      bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+      bankReference: 'BANK-CONF-001',
+      allocations: [
+        { noteId: 'credit-note-1', allocatedAmount: 500 },
+        { noteId: 'endorsement-credit-note-1', allocatedAmount: 250 },
+      ],
+    });
+
+    const createArgs = firstCallArg<Prisma.PlacementPaymentCreateArgs>(
+      prisma.placementPayment.create,
+    );
+    const create = createArgs.data as { allocations?: { create?: unknown[] } };
+    expect(create.allocations?.create).toHaveLength(2);
+  });
+
+  it('persists the agreed exchange rate when payment currency differs from credit-note currency', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+    });
+    prisma.placementNote.findMany.mockResolvedValue([
+      issuedCreditNote({
+        currency: 'EUR',
+        netAmount: new Prisma.Decimal('80'),
+      }),
+    ]);
+    prisma.placementPayment.create.mockResolvedValue({
+      ...payment,
+      id: 'payment-fx-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      currency: 'USD',
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+    });
+
+    await service.create(user, 'placement-1', {
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      counterpartyId: 'reinsurer-1',
+      amount: 100,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+      bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+      bankReference: 'BANK-CONF-001',
+      agreedExchangeRate: 1.25,
+      allocations: [
         {
-          counterpartyId: 'reinsurer-1',
-          outstanding: 100,
+          noteId: 'credit-note-1',
+          allocatedAmount: 100,
+          obligationAmount: 80,
         },
       ],
     });
 
+    const createArgs = firstCallArg<Prisma.PlacementPaymentCreateArgs>(
+      prisma.placementPayment.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      agreedExchangeRate: 1.25,
+      allocations: {
+        create: [
+          expect.objectContaining({
+            allocatedCurrency: 'USD',
+            obligationCurrency: 'EUR',
+            agreedExchangeRate: new Prisma.Decimal('1.25'),
+          }),
+        ],
+      },
+    });
+  });
+
+  it('rejects reinsurer disbursement without bank confirmation', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+    });
+
     await expect(
       service.create(user, 'placement-1', {
         type: PlacementPaymentType.REINSURER_DISBURSEMENT,
         direction: PlacementPaymentDirection.OUTBOUND,
         counterpartyId: 'reinsurer-1',
-        endorsementClosingId: 'endorsement-closing-1',
         amount: 500,
         currency: 'USD',
-        paymentDate: '2026-08-01T12:00:00.000Z',
-      }),
-    ).rejects.toThrow(ConflictException);
-    expect(prisma.placementPayment.create).not.toHaveBeenCalled();
-  });
-
-  it('rejects wrong, unconfirmed or future endorsement closings for disbursement', async () => {
-    prisma.placement.findFirst.mockResolvedValue(placement);
-    prisma.counterparty.findFirst.mockResolvedValue({
-      id: 'reinsurer-c',
-      type: CounterpartyType.REINSURER,
-    });
-    prisma.placementEndorsementClosing.findFirst.mockResolvedValue(null);
-
-    await expect(
-      service.create(user, 'placement-1', {
-        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
-        direction: PlacementPaymentDirection.OUTBOUND,
-        counterpartyId: 'reinsurer-c',
-        endorsementClosingId: 'endorsement-closing-c',
-        amount: 250,
-        currency: 'USD',
-        paymentDate: '2026-08-01T12:00:00.000Z',
+        paymentDate: '2026-06-04T12:00:00.000Z',
+        bankReference: 'BANK-CONF-001',
+        allocations: [{ noteId: 'credit-note-1', allocatedAmount: 500 }],
       }),
     ).rejects.toThrow(BadRequestException);
     expect(prisma.placementPayment.create).not.toHaveBeenCalled();
   });
 
-  it('rejects setting both original and endorsement closing sources', async () => {
+  it('rejects unallocated reinsurer disbursements', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.counterparty.findFirst.mockResolvedValue({
       id: 'reinsurer-1',
@@ -634,12 +648,11 @@ describe('PlacementPaymentsService', () => {
         type: PlacementPaymentType.REINSURER_DISBURSEMENT,
         direction: PlacementPaymentDirection.OUTBOUND,
         counterpartyId: 'reinsurer-1',
-        closingId: 'closing-1',
-        endorsementClosingId: 'endorsement-closing-1',
-        participantId: 'participant-1',
-        amount: 100,
+        amount: 500,
         currency: 'USD',
-        paymentDate: '2026-08-01T12:00:00.000Z',
+        paymentDate: '2026-06-04T12:00:00.000Z',
+        bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+        bankReference: 'BANK-CONF-001',
       }),
     ).rejects.toThrow(BadRequestException);
   });
@@ -728,58 +741,65 @@ describe('PlacementPaymentsService', () => {
     expect(prisma.placementPayment.create).toHaveBeenCalled();
   });
 
-  it('rejects reinsurer disbursement over the closing outstanding amount', async () => {
+  it('allows reinsurer overpayment when the full amount is allocated for JV correction', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.counterparty.findFirst.mockResolvedValue({
       id: 'reinsurer-1',
       type: CounterpartyType.REINSURER,
     });
-    prisma.placementClosing.findFirst.mockResolvedValue({
-      id: 'closing-1',
-      netPremium: new Prisma.Decimal('500.00'),
-      currency: 'USD',
-      participant: {
-        id: 'participant-1',
-        counterpartyId: 'reinsurer-1',
-      },
-    });
-    prisma.placementPayment.findMany.mockResolvedValue([
-      { amount: new Prisma.Decimal('450.00') },
+    prisma.placementNote.findMany.mockResolvedValue([
+      issuedCreditNote({ netAmount: new Prisma.Decimal('500.00') }),
     ]);
+    prisma.placementPayment.create.mockResolvedValue({
+      ...payment,
+      id: 'payment-overpay-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      amount: new Prisma.Decimal('575.00'),
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+    });
 
-    await expect(
-      service.create(user, 'placement-1', {
-        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
-        direction: PlacementPaymentDirection.OUTBOUND,
-        counterpartyId: 'reinsurer-1',
-        closingId: 'closing-1',
-        participantId: 'participant-1',
-        amount: 75,
-        currency: 'USD',
-        paymentDate: '2026-06-04T12:00:00.000Z',
-      }),
-    ).rejects.toThrow(ConflictException);
-    expect(prisma.placementPayment.create).not.toHaveBeenCalled();
+    await service.create(user, 'placement-1', {
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      counterpartyId: 'reinsurer-1',
+      amount: 575,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+      bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+      bankReference: 'BANK-CONF-001',
+      allocations: [
+        {
+          noteId: 'credit-note-1',
+          allocatedAmount: 575,
+          obligationAmount: 575,
+        },
+      ],
+    });
+
+    expect(prisma.placementPayment.create).toHaveBeenCalled();
   });
 
-  it('rejects wrong-tenant or mismatched closing/participant for reinsurer disbursement', async () => {
+  it('rejects wrong-tenant or mismatched credit-note allocations for reinsurer disbursement', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.counterparty.findFirst.mockResolvedValue({
       id: 'reinsurer-1',
       type: CounterpartyType.REINSURER,
     });
-    prisma.placementClosing.findFirst.mockResolvedValue(null);
+    prisma.placementNote.findMany.mockResolvedValue([]);
 
     await expect(
       service.create(user, 'placement-1', {
         type: PlacementPaymentType.REINSURER_DISBURSEMENT,
         direction: PlacementPaymentDirection.OUTBOUND,
         counterpartyId: 'reinsurer-1',
-        closingId: 'closing-1',
-        participantId: 'participant-1',
         amount: 500,
         currency: 'USD',
         paymentDate: '2026-06-04T12:00:00.000Z',
+        bankConfirmedAt: '2026-06-04T12:05:00.000Z',
+        bankReference: 'BANK-CONF-001',
+        allocations: [{ noteId: 'wrong-note-1', allocatedAmount: 500 }],
       }),
     ).rejects.toThrow(BadRequestException);
   });

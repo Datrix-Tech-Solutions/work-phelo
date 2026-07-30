@@ -19,7 +19,7 @@ This audit documents the current Reinsurance settlement architecture before acti
 - `REINSURER_DISBURSEMENT_RECORDED`
 - `REINSURER_DISBURSEMENT_REVERSED`
 
-The audit is documentation-only. It does not activate events, add posting rules, alter schemas, change APIs, or modify production behavior.
+The original audit was documentation-only. The 2026-07-30 addendum below records the minimum domain-readiness changes required after Finance/Product approved the settlement policy.
 
 ## 2. Executive Verdict
 
@@ -35,9 +35,26 @@ The Reinsurance domain already supports operational capture of reinsurer disburs
 - overpayment prevention against current effective financial position
 - immutable reversal through a linked reversal `PlacementPayment`
 
-However, `REINSURER_DISBURSEMENT_RECORDED` is not ready for broad accounting activation until Finance/Product confirm the settlement policy decisions in the companion decision register.
+However, `REINSURER_DISBURSEMENT_RECORDED` is not ready for broad accounting activation until the Reinsurance domain can represent the approved allocation, bank-confirmation, FX, bank-charge and withholding facts.
 
-The narrow technical event is implementable, but the accounting policy is not fully settled.
+The narrow technical event is implementable, but event activation must wait until those domain facts are persisted and validated.
+
+### 2.1 Post-Approval Domain Readiness Addendum - 2026-07-30
+
+Finance/Product approved a richer settlement model than the original narrow single-closing event:
+
+- payable recognition comes from issued Credit Notes and Endorsement Credit Notes;
+- payment clears existing payable balances;
+- bank confirmation or successful payment completion is the recognition boundary;
+- one payment may settle many Credit Notes;
+- one Credit Note may receive many payments;
+- overpayments are allowed and corrected through Journal Voucher or approved accounting correction;
+- unallocated payments are not allowed;
+- cross-currency payment is allowed only with a persisted agreed exchange rate;
+- bank charges and withholding tax must be captured on the transaction;
+- failed and cancelled payments do not emit accounting.
+
+Therefore, the next implementation milestone MUST add the minimum settlement domain foundation before activating `REINSURER_DISBURSEMENT_RECORDED`. The prior single-closing/same-currency findings remain useful historical audit context, but they are no longer sufficient for the approved policy.
 
 ## 3. Source Review
 
