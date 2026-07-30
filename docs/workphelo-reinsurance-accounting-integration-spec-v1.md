@@ -40,7 +40,9 @@ As of this draft, Reinsurance has:
 - Activated `CREDIT_NOTE_ISSUED` capture when placement credit notes are issued for Accounting-enabled tenants.
 - Activated `PREMIUM_PAYMENT_RECEIVED` and `PAYMENT_REVERSED` capture for premium receipt lifecycle records.
 
-Endorsement notes, note voiding, reinsurer disbursements, claims, recoveries and
+Endorsement notes are active through issued endorsement-note records.
+
+Note voiding, reinsurer disbursement accounting, claims, recoveries and
 settlements remain inactive until explicitly approved and implemented.
 
 ---
@@ -152,15 +154,16 @@ Reinsurance source events SHOULD be activated incrementally.
 
 ### 6.1 Premium family
 
-| Event                             | Status                  | Source truth                                     |
-| --------------------------------- | ----------------------- | ------------------------------------------------ |
-| `DEBIT_NOTE_ISSUED`               | Active first activation | Issued placement debit note snapshot.            |
-| `CREDIT_NOTE_ISSUED`              | Active                  | Issued placement credit note snapshot.           |
-| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Active                  | Issued endorsement debit note snapshot.          |
-| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Active                  | Issued endorsement credit note snapshot.         |
-| `PREMIUM_PAYMENT_RECEIVED`        | Active                  | Recorded premium payment row.                    |
-| `PAYMENT_REVERSED`                | Active                  | Reversal payment row linked to original payment. |
-| `REINSURER_DISBURSEMENT_RECORDED` | Proposed                | Recorded outbound reinsurer payment row.         |
+| Event                             | Status                  | Source truth                                          |
+| --------------------------------- | ----------------------- | ----------------------------------------------------- |
+| `DEBIT_NOTE_ISSUED`               | Active first activation | Issued placement debit note snapshot.                 |
+| `CREDIT_NOTE_ISSUED`              | Active                  | Issued placement credit note snapshot.                |
+| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Active                  | Issued endorsement debit note snapshot.               |
+| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Active                  | Issued endorsement credit note snapshot.              |
+| `PREMIUM_PAYMENT_RECEIVED`        | Active                  | Recorded premium payment row.                         |
+| `PAYMENT_REVERSED`                | Active                  | Reversal payment row linked to original payment.      |
+| `REINSURER_DISBURSEMENT_RECORDED` | Proposed                | Recorded outbound reinsurer payment row.              |
+| `REINSURER_DISBURSEMENT_REVERSED` | Proposed                | Reversal payment row linked to original disbursement. |
 
 ### 6.2 Claims family
 
@@ -182,16 +185,18 @@ Lifecycle events such as `ENDORSEMENT_CLOSED` MAY be useful for audit or reporti
 
 ## 7. Source Records and Business Dates
 
-| Event                             | Immutable source record        | Business date          | Idempotency key                                          |
-| --------------------------------- | ------------------------------ | ---------------------- | -------------------------------------------------------- |
-| `DEBIT_NOTE_ISSUED`               | `PlacementNote.id`             | `issuedAt`             | `reinsurance:debit-note:<noteId>:issued:v1`              |
-| `CREDIT_NOTE_ISSUED`              | `PlacementNote.id`             | `issuedAt`             | `reinsurance:credit-note:<noteId>:issued:v1`             |
-| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | `PlacementNote.id`             | `issuedAt`             | `reinsurance:endorsement-debit-note:<noteId>:issued:v1`  |
-| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | `PlacementNote.id`             | `issuedAt`             | `reinsurance:endorsement-credit-note:<noteId>:issued:v1` |
-| `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment.id`          | `paymentDate`          | `reinsurance:payment:<paymentId>:recorded:v1`            |
-| `PAYMENT_REVERSED`                | reversal `PlacementPayment.id` | reversal `paymentDate` | `reinsurance:payment:<reversalPaymentId>:reversal:v1`    |
-| `CLAIM_CASH_CALL_ISSUED`          | `ClaimCashCall.id`             | `issuedAt`             | `reinsurance:claim-cash-call:<cashCallId>:issued:v1`     |
-| `CLAIM_RECOVERY_RECEIPT_RECORDED` | `RecoveryReceipt.id`           | `receiptDate`          | `reinsurance:recovery-receipt:<receiptId>:recorded:v1`   |
+| Event                             | Immutable source record        | Business date          | Idempotency key                                                      |
+| --------------------------------- | ------------------------------ | ---------------------- | -------------------------------------------------------------------- |
+| `DEBIT_NOTE_ISSUED`               | `PlacementNote.id`             | `issuedAt`             | `reinsurance:debit-note:<noteId>:issued:v1`                          |
+| `CREDIT_NOTE_ISSUED`              | `PlacementNote.id`             | `issuedAt`             | `reinsurance:credit-note:<noteId>:issued:v1`                         |
+| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | `PlacementNote.id`             | `issuedAt`             | `reinsurance:endorsement-debit-note:<noteId>:issued:v1`              |
+| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | `PlacementNote.id`             | `issuedAt`             | `reinsurance:endorsement-credit-note:<noteId>:issued:v1`             |
+| `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment.id`          | `paymentDate`          | `reinsurance:payment:<paymentId>:recorded:v1`                        |
+| `PAYMENT_REVERSED`                | reversal `PlacementPayment.id` | reversal `paymentDate` | `reinsurance:payment:<reversalPaymentId>:reversal:v1`                |
+| `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment.id`          | `paymentDate`          | `reinsurance:reinsurer-disbursement:<paymentId>:recorded:v1`         |
+| `REINSURER_DISBURSEMENT_REVERSED` | reversal `PlacementPayment.id` | reversal `paymentDate` | `reinsurance:reinsurer-disbursement:<reversalPaymentId>:reversal:v1` |
+| `CLAIM_CASH_CALL_ISSUED`          | `ClaimCashCall.id`             | `issuedAt`             | `reinsurance:claim-cash-call:<cashCallId>:issued:v1`                 |
+| `CLAIM_RECOVERY_RECEIPT_RECORDED` | `RecoveryReceipt.id`           | `receiptDate`          | `reinsurance:recovery-receipt:<receiptId>:recorded:v1`               |
 
 Reinsurance MUST use business dates from source records, not outbox creation timestamps, for Accounting event `occurredAt`.
 
@@ -582,6 +587,50 @@ the payment transaction when Accounting is enabled. The capture step MUST NOT
 require Accounting URL/HMAC configuration, service reachability, posting rules,
 subledger readiness or fiscal-period status. Those remain delivery/posting
 readiness concerns.
+
+---
+
+## 10.2 Future Reinsurer Settlement Activation
+
+Reinsurer settlement accounting is intentionally not active in the current implementation baseline.
+
+Current Reinsurance operations can record outbound settlement payments with:
+
+- `PlacementPayment.type = REINSURER_DISBURSEMENT`
+- `PlacementPayment.direction = OUTBOUND`
+- `PlacementPayment.status = RECORDED`
+- one confirmed closing source through `closingId` or `endorsementClosingId`
+
+The payment service enforces tenant scope, reinsurer counterparty type, placement currency, confirmed closing state and overpayment prevention against the current effective reinsurer position. It does not yet enqueue Accounting events for disbursement records.
+
+Before activation, engineers MUST consult:
+
+- [Reinsurance Settlement Architecture Audit v1](./accounting/reinsurance-settlement-architecture-audit-v1.md)
+- [Reinsurance Settlement Policy Decision Register v1](./accounting/reinsurance-settlement-policy-decision-register-v1.md)
+
+Candidate recorded event:
+
+```text
+sourceEventType = REINSURER_DISBURSEMENT_RECORDED
+sourceRecordType = PlacementPayment
+sourceRecordId = <paymentId>
+sourceDocumentId = <paymentId>
+idempotencyKey = reinsurance:reinsurer-disbursement:<paymentId>:recorded:v1
+occurredAt = PlacementPayment.paymentDate
+```
+
+Candidate reversal event:
+
+```text
+sourceEventType = REINSURER_DISBURSEMENT_REVERSED
+sourceRecordType = PlacementPayment
+sourceRecordId = <reversalPaymentId>
+sourceDocumentId = <reversalPaymentId>
+idempotencyKey = reinsurance:reinsurer-disbursement:<reversalPaymentId>:reversal:v1
+occurredAt = reversal PlacementPayment.paymentDate
+```
+
+V1 settlement payloads SHOULD use a `SINGLE_CLOSING` allocation model. They MUST NOT claim support for note-level settlement allocation, payment batches, bank confirmation, approvals, unallocated advances, partial reversals or FX until those capabilities exist as durable Reinsurance source records.
 
 ---
 

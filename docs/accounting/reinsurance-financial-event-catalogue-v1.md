@@ -20,15 +20,15 @@ configuration.
 
 ## Planned Events
 
-| Event                              | Status  | Recognition Boundary                            | Source Record                  | Notes                                                      |
-| ---------------------------------- | ------- | ----------------------------------------------- | ------------------------------ | ---------------------------------------------------------- |
-| `REINSURER_DISBURSEMENT_RECORDED`  | PLANNED | Outbound reinsurer disbursement recorded        | `PlacementPayment.id`          | Not active in this milestone.                              |
-| `REINSURER_DISBURSEMENT_REVERSED`  | PLANNED | Linked reinsurer disbursement reversal recorded | Reversal `PlacementPayment.id` | Not active in this milestone.                              |
-| `CLAIM_REGISTERED`                 | PLANNED | Claim registration accepted                     | `PlacementClaim.id`            | Recognition policy pending.                                |
-| `CLAIM_CASH_CALL_ISSUED`           | PLANNED | Claim cash-call issued                          | `ClaimCashCall.id`             | Recognition policy pending.                                |
-| `CLAIM_RECOVERY_RECEIPT_RECORDED`  | PLANNED | Recovery receipt recorded                       | Recovery receipt record        | Recognition policy pending.                                |
-| `CLAIM_CEDANT_SETTLEMENT_RECORDED` | PLANNED | Cedant settlement recorded                      | Settlement record              | Recognition policy pending.                                |
-| `CLAIM_CLOSED`                     | PLANNED | Claim lifecycle closed                          | `PlacementClaim.id`            | Reporting/audit use only unless Finance approves postings. |
+| Event                              | Status  | Recognition Boundary                                               | Source Record                  | Business Date                           | Idempotency Key                                                      | Policy Dependency                                     | Notes                                                      |
+| ---------------------------------- | ------- | ------------------------------------------------------------------ | ------------------------------ | --------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------- |
+| `REINSURER_DISBURSEMENT_RECORDED`  | PLANNED | Outbound reinsurer disbursement `PlacementPayment` row recorded    | `PlacementPayment.id`          | `PlacementPayment.paymentDate`          | `reinsurance:reinsurer-disbursement:<paymentId>:recorded:v1`         | Settlement policy decisions RSD-001, RSD-003, RSD-008 | See settlement architecture audit before implementation.   |
+| `REINSURER_DISBURSEMENT_REVERSED`  | PLANNED | Linked reinsurer disbursement reversal `PlacementPayment` recorded | Reversal `PlacementPayment.id` | Reversal `PlacementPayment.paymentDate` | `reinsurance:reinsurer-disbursement:<reversalPaymentId>:reversal:v1` | Settlement policy decisions RSD-002, RSD-011          | Reversal source record must be the reversal payment row.   |
+| `CLAIM_REGISTERED`                 | PLANNED | Claim registration accepted                                        | `PlacementClaim.id`            | Claim date                              | `reinsurance:claim:<claimId>:registered:v1`                          | Recognition policy pending                            | Recognition policy pending.                                |
+| `CLAIM_CASH_CALL_ISSUED`           | PLANNED | Claim cash-call issued                                             | `ClaimCashCall.id`             | Cash-call issued date                   | `reinsurance:claim-cash-call:<cashCallId>:issued:v1`                 | Recognition policy pending                            | Recognition policy pending.                                |
+| `CLAIM_RECOVERY_RECEIPT_RECORDED`  | PLANNED | Recovery receipt recorded                                          | Recovery receipt record        | Receipt date                            | `reinsurance:recovery-receipt:<receiptId>:recorded:v1`               | Recognition policy pending                            | Recognition policy pending.                                |
+| `CLAIM_CEDANT_SETTLEMENT_RECORDED` | PLANNED | Cedant settlement recorded                                         | Settlement record              | Settlement date                         | `reinsurance:claim-cedant-settlement:<settlementId>:recorded:v1`     | Recognition policy pending                            | Recognition policy pending.                                |
+| `CLAIM_CLOSED`                     | PLANNED | Claim lifecycle closed                                             | `PlacementClaim.id`            | Claim closed date                       | `reinsurance:claim:<claimId>:closed:v1`                              | Reporting/audit policy pending                        | Reporting/audit use only unless Finance approves postings. |
 
 ## Standard Notes
 
@@ -41,3 +41,8 @@ configuration.
 - `CURRENT_COMMIT` should be replaced with the final implementation commit only
   if that can be done without rewriting published history. Otherwise the commit
   SHA should be reported in the release summary.
+- Reinsurer settlement events are intentionally planned only. The governing
+  audit is
+  [Reinsurance Settlement Architecture Audit v1](./reinsurance-settlement-architecture-audit-v1.md)
+  and the required Finance decisions are tracked in
+  [Reinsurance Settlement Policy Decision Register v1](./reinsurance-settlement-policy-decision-register-v1.md).
