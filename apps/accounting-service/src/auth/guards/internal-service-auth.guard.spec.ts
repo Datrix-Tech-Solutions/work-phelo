@@ -51,7 +51,7 @@ describe('InternalServiceAuthGuard', () => {
     process.env.INTERNAL_SERVICE_AUTH_MAX_CLOCK_SKEW_SECONDS = '300';
   });
 
-  afterAll(() => {
+  afterEach(() => {
     if (originalSecret === undefined) {
       delete process.env.INTERNAL_SERVICE_AUTH_SECRET;
     } else {

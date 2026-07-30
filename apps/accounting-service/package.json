@@ -12,7 +12,7 @@
     "prelint": "npm run db:generate",
     "lint": "eslint \"src/**/*.ts\"",
     "pretest": "npm run db:generate",
-    "test": "jest",
+    "test": "jest --maxWorkers=50%",
     "pretest:unit": "npm run db:generate",
     "test:unit": "jest",
     "db:generate": "prisma generate",

@@ -3,6 +3,10 @@ import { SwaggerModule } from '@nestjs/swagger';
 import { setupSwagger } from './swagger.config';
 
 describe('setupSwagger', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('registers Swagger routes under the service global prefix', () => {
     const app = {} as INestApplication;
     const document = { openapi: '3.0.0' };
