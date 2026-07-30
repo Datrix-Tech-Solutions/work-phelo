@@ -222,16 +222,16 @@ export function EndorsementCertificateModal({
       {/* ENDORSEMENT SUMMARY */}
       <SectionHeading>Endorsement Summary</SectionHeading>
       <div className="text-sm mb-2 space-y-2">
-        {endorsement.reason && (
-          <div>
-            <span className="text-gray-500">Reason:</span>
-            <p className="text-gray-900 font-medium mt-0.5">{endorsement.reason}</p>
-          </div>
-        )}
         {narrative ? (
           <p className="text-gray-800 leading-relaxed">{narrative}</p>
         ) : (
           <p className="text-gray-400 italic">No parameter changes recorded.</p>
+        )}
+        {endorsement.reason && (
+          <div>
+            <span className="text-gray-500">Comment:</span>
+            <p className="text-gray-900 font-medium mt-0.5">{endorsement.reason}</p>
+          </div>
         )}
       </div>
 

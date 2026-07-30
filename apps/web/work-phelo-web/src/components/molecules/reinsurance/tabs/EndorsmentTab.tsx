@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, Ref, MutableRefObject } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   EndorsementParticipantClosing,
@@ -70,12 +70,16 @@ const SEGMENT_COLORS = [
 function EndorsementCard({
   endorsement,
   placement,
+  defaultOpen = false,
+  cardRef,
 }: {
   endorsement: PlacementEndorsement;
   placement: Facultative;
+  defaultOpen?: boolean;
+  cardRef?: Ref<HTMLDivElement>;
 }) {
   const [editPanelOpen, setEditPanelOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(defaultOpen);
   const [revisedShares, setRevisedShares] = useState<Record<string, string>>({});
   const [busyEPIds, setBusyEPIds] = useState<Set<string>>(new Set());
   const [marketPreview, setMarketPreview] = useState<EndorsementMarketPreviewState | null>(null);
@@ -86,6 +90,13 @@ function EndorsementCard({
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [mailPreviewCounterpartyId, setMailPreviewCounterpartyId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+
+  const cardElRef = useRef<HTMLDivElement | null>(null);
+  const setCardRef = (node: HTMLDivElement | null) => {
+    cardElRef.current = node;
+    if (typeof cardRef === 'function') cardRef(node);
+    else if (cardRef) (cardRef as MutableRefObject<HTMLDivElement | null>).current = node;
+  };
 
   const { data: reinsurers = [] } = useReinsurers();
 
@@ -136,6 +147,19 @@ function EndorsementCard({
     endorsement.id,
   );
   const queryClient = useQueryClient();
+
+  const prevStatusRef = useRef(endorsement.status);
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current;
+    prevStatusRef.current = endorsement.status;
+    // Leaving DRAFT reveals the participants table and close section, growing the
+    // card — scroll the newly added content into view the same way tab-selection does.
+    if (prevStatus === 'DRAFT' && endorsement.status !== 'DRAFT' && detailsOpen) {
+      requestAnimationFrame(() => {
+        cardElRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      });
+    }
+  }, [endorsement.status, detailsOpen]);
 
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = endorsement.proposedSnapshot
@@ -424,36 +448,52 @@ function EndorsementCard({
   };
 
   const handleAcceptEndorsement = async (row: EndorsementParticipantRow) => {
+    const revised = parseFloat(revisedShares[row.counterpartyId] ?? String(row.offeredShare));
+    const share = isNaN(revised) ? row.offeredShare : revised;
+
+    if (share > leftoverFacOffer) {
+      useToastStore.getState().addToast({
+        message: `${row.reinsurerName}'s share (${share}%) exceeds the ${leftoverFacOffer}% still available on this endorsement.`,
+        type: 'error',
+      });
+      return;
+    }
+
     setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
     try {
-      const revised = parseFloat(revisedShares[row.counterpartyId] ?? String(row.offeredShare));
-      const share = isNaN(revised) ? row.offeredShare : revised;
-
       const originalParticipant = placement.participants.find(
         (p) => p.counterpartyId === row.counterpartyId,
       );
       const originalParticipantId = row.originalParticipantId ?? originalParticipant?.id;
 
-      if (row.participantId) {
+      let participantId = row.participantId;
+      if (participantId) {
         await updateEndorsementParticipant.mutateAsync({
-          participantId: row.participantId,
+          participantId,
           sharePercent: row.offeredShare,
           signedLinePercent: share,
           status: 'ACCEPTED',
+          suppressInvalidation: true,
         });
       } else {
-        await createEndorsementParticipant({
+        const created = await createEndorsementParticipant({
           counterpartyId: row.counterpartyId,
           ...(originalParticipantId ? { originalParticipantId } : {}),
           sharePercent: share,
           signedLinePercent: share,
           status: 'ACCEPTED',
         });
+        participantId = created.id;
       }
+
+      // Accept and validate are collapsed into a single step — an accepted
+      // participant's closing is confirmed immediately rather than waiting
+      // for a separate "Validate" click.
+      await validateAndConfirmEndorsementParticipant.mutateAsync({ participantId });
 
       await invalidateEndorsementView();
       useToastStore.getState().addToast({
-        message: `${row.reinsurerName} accepted for this endorsement`,
+        message: `${row.reinsurerName} accepted and validated for this endorsement`,
         type: 'success',
       });
     } catch (error) {
@@ -516,7 +556,7 @@ function EndorsementCard({
 
   return (
     <>
-      <div className={cardClass('p-5 flex flex-col gap-4')}>
+      <div ref={setCardRef} className={cardClass('p-5 flex flex-col gap-4')}>
         <div
           role="button"
           tabIndex={0}
@@ -597,6 +637,7 @@ function EndorsementCard({
                   onRevisedShareChange={(counterpartyId, value) =>
                     setRevisedShares((prev) => ({ ...prev, [counterpartyId]: value }))
                   }
+                  hasAvailableCapacity={leftoverFacOffer > 0}
                   onAddParticipant={() => setAddPanelOpen(true)}
                   onPreviewMarketDocument={handlePreviewMarketDocument}
                   onMailReinsurer={(counterpartyId) => setMailPreviewCounterpartyId(counterpartyId)}
@@ -669,6 +710,24 @@ export function EndorsementTab({ placement }: EndorsementTabProps) {
     isError: effectiveViewError,
   } = usePlacementEffectiveView(placement.id, endorsements.length > 0);
 
+  const openCardRef = useRef<HTMLDivElement>(null);
+  const latestEndorsementId =
+    endorsements.length > 0
+      ? endorsements.reduce((latest, e) =>
+          new Date(e.createdAt) > new Date(latest.createdAt) ? e : latest,
+        ).id
+      : null;
+
+  // Scroll to the bottom of the open (latest) endorsement card whenever this tab
+  // is selected — with a single endorsement that lands at the page bottom anyway.
+  useEffect(() => {
+    if (!latestEndorsementId) return;
+    const raf = requestAnimationFrame(() => {
+      openCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [latestEndorsementId]);
+
   return (
     <div className="flex flex-col gap-5">
       <h3 className="text-base font-semibold text-gray-900">Policy Endorsement</h3>
@@ -687,7 +746,13 @@ export function EndorsementTab({ placement }: EndorsementTabProps) {
         <p className="text-sm text-gray-400">No endorsements have been made on this policy.</p>
       ) : (
         endorsements.map((e) => (
-          <EndorsementCard key={e.id} endorsement={e} placement={placement} />
+          <EndorsementCard
+            key={e.id}
+            endorsement={e}
+            placement={placement}
+            defaultOpen={e.id === latestEndorsementId}
+            cardRef={e.id === latestEndorsementId ? openCardRef : undefined}
+          />
         ))
       )}
     </div>

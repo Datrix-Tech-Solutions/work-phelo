@@ -20,6 +20,7 @@ interface EndorsementParticipantsTableProps {
   mailedIds: Set<string>;
   revisedShares: Record<string, string>;
   onRevisedShareChange: (counterpartyId: string, value: string) => void;
+  hasAvailableCapacity: boolean;
   onAddParticipant: () => void;
   onPreviewMarketDocument: (row: EndorsementParticipantRow) => void;
   onMailReinsurer: (counterpartyId: string) => void;
@@ -43,6 +44,7 @@ export function EndorsementParticipantsTable({
   mailedIds,
   revisedShares,
   onRevisedShareChange,
+  hasAvailableCapacity,
   onAddParticipant,
   onPreviewMarketDocument,
   onMailReinsurer,
@@ -50,7 +52,7 @@ export function EndorsementParticipantsTable({
   onReject,
   onRevert,
   onValidate,
-  onViewClosing,
+  // onViewClosing,
   onViewCertificate,
 }: EndorsementParticipantsTableProps) {
   const columns: Column<EndorsementParticipantRow>[] = [
@@ -87,6 +89,12 @@ export function EndorsementParticipantsTable({
             </span>
           );
         }
+        const endorsementParticipant = endorsementParticipants.find(
+          (p) => p.id === row.participantId || p.counterpartyId === row.counterpartyId,
+        );
+        if (endorsementParticipant?.status === 'DECLINED') {
+          return <span className="text-gray-400">0%</span>;
+        }
         const mailed = mailedIds.has(row.counterpartyId);
         return (
           <input
@@ -95,6 +103,12 @@ export function EndorsementParticipantsTable({
             max={100}
             value={revisedShares[row.counterpartyId] ?? String(row.offeredShare)}
             onChange={(e) => onRevisedShareChange(row.counterpartyId, e.target.value)}
+            onBlur={(e) => {
+              const parsed = parseFloat(e.target.value);
+              if (Number.isNaN(parsed)) return;
+              const clamped = Math.min(100, Math.max(0, parsed));
+              if (clamped !== parsed) onRevisedShareChange(row.counterpartyId, String(clamped));
+            }}
             className={
               mailed
                 ? 'w-20 px-2 py-1 text-sm border border-red-400 ring-1 ring-red-100 rounded bg-white text-red-700 focus:outline-none focus:border-red-500'
@@ -105,10 +119,23 @@ export function EndorsementParticipantsTable({
       },
     },
     {
-      key: 'netPremium' as unknown as keyof EndorsementParticipantRow,
+      key: 'netPremium',
       label: 'Net Premium',
       width: '150px',
       render: (row) => {
+        const endorsementParticipant = endorsementParticipants.find(
+          (item) => item.id === row.participantId || item.counterpartyId === row.counterpartyId,
+        );
+        if (endorsementParticipant?.status === 'DECLINED') {
+          return (
+            <span className="text-gray-400">
+              {(0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </span>
+          );
+        }
         const confirmedClosing = row.participantId
           ? confirmedClosingByEndorsementParticipantId[row.participantId]
           : undefined;
@@ -131,7 +158,7 @@ export function EndorsementParticipantsTable({
       },
     },
     {
-      key: 'response' as unknown as keyof EndorsementParticipantRow,
+      key: 'response',
       label: 'Response',
       width: '100px',
       render: (row) => {
@@ -154,7 +181,7 @@ export function EndorsementParticipantsTable({
       },
     },
     {
-      key: 'id' as keyof EndorsementParticipantRow,
+      key: 'id',
       label: 'Actions',
       width: 'minmax(200px, 1fr)',
       render: (row) => {
@@ -177,9 +204,9 @@ export function EndorsementParticipantsTable({
         if (confirmedClosing) {
           return (
             <div className="flex flex-wrap items-center gap-2">
-              <TableButton variant="green" onClick={() => onViewClosing(confirmedClosing)}>
+              {/* <TableButton variant="green" onClick={() => onViewClosing(confirmedClosing)}>
                 View Closing
-              </TableButton>
+              </TableButton> */}
               {!row.isNew && (
                 <TableButton
                   variant="blue"
@@ -199,10 +226,7 @@ export function EndorsementParticipantsTable({
           const responded = isAccepted || isDeclined;
           return (
             <div className="flex items-center gap-2">
-              <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
-                Offer Slip
-              </TableButton>
-              {!mailed && (
+              {!mailed && !responded && (
                 <button
                   type="button"
                   title="Share"
@@ -233,7 +257,6 @@ export function EndorsementParticipantsTable({
                   <Icons.X className="w-5 h-5" />
                 </button>
               )}
-              {isDeclined && <Badge label="Declined" variant="danger" />}
               {isAccepted &&
                 (isValidated ? (
                   <Badge label="Confirmed" variant="success" />
@@ -265,13 +288,13 @@ export function EndorsementParticipantsTable({
           );
         }
 
-        if (isAccepted) {
-          return (
-            <div className="flex items-center gap-2">
-              <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
-                Revised Offer
-              </TableButton>
-              {isValidated ? (
+        return (
+          <div className="flex items-center gap-2">
+            <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
+              Endorsement
+            </TableButton>
+            {isAccepted ? (
+              isValidated ? (
                 <Badge label="Confirmed" variant="success" />
               ) : (
                 <>
@@ -296,37 +319,31 @@ export function EndorsementParticipantsTable({
                     <Icons.RotateCcw className="w-5 h-5" />
                   </button>
                 </>
-              )}
-            </div>
-          );
-        }
-
-        return (
-          <div className="flex items-center gap-2">
-            <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
-              Revised Offer
-            </TableButton>
-            {!mailed && (
-              <button
-                type="button"
-                title="Send Endorsement Email"
-                onClick={() => onMailReinsurer(row.counterpartyId)}
-                className="text-green-500 hover:text-green-700 transition-colors mail-pending-bounce"
-              >
-                <Icons.Mail className="w-5 h-5" />
-              </button>
-            )}
-            {isDeclined && <Badge label="Declined" variant="danger" />}
-            {mailed && (
-              <TableButton
-                variant="green"
-                isLoading={isBusy}
-                onClick={() => {
-                  if (!isBusy) onAccept(row);
-                }}
-              >
-                Accept
-              </TableButton>
+              )
+            ) : isDeclined ? null : (
+              <>
+                {!mailed && (
+                  <button
+                    type="button"
+                    title="Send Endorsement Email"
+                    onClick={() => onMailReinsurer(row.counterpartyId)}
+                    className="text-green-500 hover:text-green-700 transition-colors mail-pending-bounce"
+                  >
+                    <Icons.Mail className="w-5 h-5" />
+                  </button>
+                )}
+                {mailed && (
+                  <TableButton
+                    variant="green"
+                    isLoading={isBusy}
+                    onClick={() => {
+                      if (!isBusy) onAccept(row);
+                    }}
+                  >
+                    Accept
+                  </TableButton>
+                )}
+              </>
             )}
           </div>
         );
@@ -342,9 +359,11 @@ export function EndorsementParticipantsTable({
             Endorsement Participants
           </p>
         </div>
-        <Button size="sm" onClick={onAddParticipant}>
-          Add Endorsement Participant
-        </Button>
+        {hasAvailableCapacity && (
+          <Button size="sm" onClick={onAddParticipant}>
+            Add Endorsement Participant
+          </Button>
+        )}
       </div>
       <DataTable
         columns={columns}

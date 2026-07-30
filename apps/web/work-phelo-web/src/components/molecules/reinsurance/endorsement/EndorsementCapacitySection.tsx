@@ -1,7 +1,7 @@
 'use client';
 
 import { PlacementEndorsementSummary } from '@/types/reinsurance';
-import { ParameterCards } from './ParameterCards';
+import { ParameterChangesTable } from './ParameterChangesTable';
 import { CapacityBar } from './CapacityBar';
 import { cardClass } from '@/lib/utils';
 
@@ -37,7 +37,11 @@ export function EndorsementCapacitySection({
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
         Endorsement Summary
       </p>
-      {proposed && <ParameterCards original={original} proposed={proposed} />}
+      {proposed && (
+        <div className={cardClass('p-3')}>
+          <ParameterChangesTable original={original} proposed={proposed} />
+        </div>
+      )}
       {!isDraft && endorsementSummary && (
         <div className={cardClass('p-3 flex flex-col gap-3')}>
           <CapacityBar

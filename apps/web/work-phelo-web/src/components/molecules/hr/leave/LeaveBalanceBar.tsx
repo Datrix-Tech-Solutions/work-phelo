@@ -35,12 +35,18 @@ export function LeaveBalanceBar({ balance, overBy, className }: LeaveBalanceBarP
       <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden flex">
         {/* Used */}
         <div
-          className="h-full bg-brand rounded-l-full transition-all"
+          className={cn(
+            'h-full bg-brand rounded-l-full transition-all',
+            pendingPct === 0 && 'rounded-r-full',
+          )}
           style={{ width: `${usedPct}%` }}
         />
         {/* Pending */}
         {pendingPct > 0 && (
-          <div className="h-full bg-amber-400 transition-all" style={{ width: `${pendingPct}%` }} />
+          <div
+            className="h-full bg-amber-400 rounded-r-full transition-all"
+            style={{ width: `${pendingPct}%` }}
+          />
         )}
       </div>
 

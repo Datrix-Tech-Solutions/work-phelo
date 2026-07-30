@@ -157,7 +157,7 @@ export function DatePicker({
             ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
             : error
               ? 'bg-transparent border-red-500'
-              : 'bg-transparent border-gray-400',
+              : 'bg-transparent border-(--input-border,var(--color-gray-400))',
           displayValue ? 'text-gray-900' : 'text-gray-400',
         )}
       >
