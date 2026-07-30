@@ -27,3 +27,5 @@ export class ReconcileDebitNoteAccountingEventsDto extends ProcessReinsuranceAcc
   @IsBoolean()
   dryRun?: boolean = true;
 }
+
+export class ReconcilePaymentAccountingEventsDto extends ReconcileDebitNoteAccountingEventsDto {}

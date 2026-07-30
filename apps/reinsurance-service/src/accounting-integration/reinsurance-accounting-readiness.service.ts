@@ -5,9 +5,13 @@ import {
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
+  PlacementPaymentDirection,
+  PlacementPaymentStatus,
+  PlacementPaymentType,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReinsuranceAccountingEventInput } from './reinsurance-accounting-event.builder';
 import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-event-publisher.service';
 import {
   ReinsuranceAccountingClient,
@@ -19,6 +23,36 @@ import {
 } from './reinsurance-accounting-outbox.service';
 
 type CounterpartyRecord = Prisma.CounterpartyGetPayload<object>;
+
+const paymentReconciliationInclude = {
+  counterparty: {
+    select: {
+      id: true,
+      type: true,
+      name: true,
+      registrationNumber: true,
+    },
+  },
+  placement: {
+    select: {
+      id: true,
+      reference: true,
+      policyNumber: true,
+      title: true,
+      cedantId: true,
+    },
+  },
+  reversalOfPayment: {
+    select: {
+      id: true,
+      amount: true,
+      currency: true,
+      paymentDate: true,
+      reference: true,
+      status: true,
+    },
+  },
+} satisfies Prisma.PlacementPaymentInclude;
 
 type AccountingSubledgerSyncResult =
   | {
@@ -64,13 +98,15 @@ export class ReinsuranceAccountingReadinessService {
       baseUrlConfigured: configuration.baseUrlConfigured,
       serviceAuthSecretConfigured: configuration.serviceAuthSecretConfigured,
       sourceEventsActive: accountingEnabled,
-      activeSourceEvents: accountingEnabled ? ['DEBIT_NOTE_ISSUED'] : [],
+      activeSourceEvents: accountingEnabled
+        ? ['DEBIT_NOTE_ISSUED', 'PREMIUM_PAYMENT_RECEIVED', 'PAYMENT_REVERSED']
+        : [],
       readinessMode:
-        'Debit-note source-event capture, counterparty subledger readiness and outbox dispatch.',
+        'Debit-note and premium-payment source-event capture, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. DEBIT_NOTE_ISSUED capture is active for issued placement debit notes.'
-          : 'Accounting is enabled. DEBIT_NOTE_ISSUED capture is active, but delivery is missing Accounting integration configuration.'
+          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement debit notes and premium payment lifecycle records.'
+          : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
   }
@@ -301,8 +337,210 @@ export class ReinsuranceAccountingReadinessService {
     };
   }
 
+  async reconcilePremiumPaymentReceivedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    return this.reconcilePaymentEvents(user, options, {
+      disabledMessage:
+        'Accounting module is not enabled for this tenant; no premium payment events are captured in Phase 1.',
+      eventType: 'PREMIUM_PAYMENT_RECEIVED',
+      idempotencyKey: (paymentId) =>
+        this.premiumPaymentReceivedIdempotencyKey(paymentId),
+      missingStatus: 'MISSING',
+      presentStatus: 'PRESENT',
+      enqueuedStatus: 'ENQUEUED',
+      where: {
+        tenantId: user.tenantId,
+        type: PlacementPaymentType.PREMIUM_RECEIVED,
+        direction: PlacementPaymentDirection.INBOUND,
+        status: {
+          in: [
+            PlacementPaymentStatus.RECORDED,
+            PlacementPaymentStatus.REVERSED,
+          ],
+        },
+        reversalOfPaymentId: null,
+        placement: { archivedAt: null },
+      },
+      prepare: (payment) =>
+        this.financialEvents.preparePremiumPaymentReceived(user, payment),
+    });
+  }
+
+  async reconcilePaymentReversedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    return this.reconcilePaymentEvents(user, options, {
+      disabledMessage:
+        'Accounting module is not enabled for this tenant; no payment reversal events are captured in Phase 1.',
+      eventType: 'PAYMENT_REVERSED',
+      idempotencyKey: (paymentId) =>
+        this.paymentReversedIdempotencyKey(paymentId),
+      missingStatus: 'MISSING',
+      presentStatus: 'PRESENT',
+      enqueuedStatus: 'ENQUEUED',
+      where: {
+        tenantId: user.tenantId,
+        type: PlacementPaymentType.PREMIUM_RECEIVED,
+        direction: PlacementPaymentDirection.INBOUND,
+        status: PlacementPaymentStatus.RECORDED,
+        reversalOfPaymentId: { not: null },
+        placement: { archivedAt: null },
+      },
+      prepare: (payment) =>
+        this.financialEvents.preparePaymentReversed(user, payment),
+    });
+  }
+
   private debitNoteIdempotencyKey(noteId: string) {
     return `reinsurance:debit-note:${noteId}:issued:v1`;
+  }
+
+  private premiumPaymentReceivedIdempotencyKey(paymentId: string) {
+    return `reinsurance:payment:${paymentId}:recorded:v1`;
+  }
+
+  private paymentReversedIdempotencyKey(paymentId: string) {
+    return `reinsurance:payment:${paymentId}:reversal:v1`;
+  }
+
+  private async reconcilePaymentEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+    config: {
+      disabledMessage: string;
+      eventType: 'PREMIUM_PAYMENT_RECEIVED' | 'PAYMENT_REVERSED';
+      idempotencyKey: (paymentId: string) => string;
+      missingStatus: 'MISSING';
+      presentStatus: 'PRESENT';
+      enqueuedStatus: 'ENQUEUED';
+      where: Prisma.PlacementPaymentWhereInput;
+      prepare: (
+        payment: Prisma.PlacementPaymentGetPayload<{
+          include: typeof paymentReconciliationInclude;
+        }>,
+      ) =>
+        | ReinsuranceAccountingEventInput
+        | null
+        | Promise<ReinsuranceAccountingEventInput | null>;
+    },
+  ) {
+    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
+    const dryRun = options.dryRun ?? true;
+    const limit = Math.min(options.limit ?? 50, 100);
+    if (!accountingEnabled) {
+      return {
+        accountingEnabled,
+        dryRun,
+        inspectedCount: 0,
+        missingCount: 0,
+        enqueuedCount: 0,
+        items: [],
+        message: config.disabledMessage,
+      };
+    }
+
+    const payments = await this.prisma.placementPayment.findMany({
+      where: config.where,
+      include: paymentReconciliationInclude,
+      orderBy: { paymentDate: 'asc' },
+      take: limit,
+    });
+    const keys = payments.map((payment) => config.idempotencyKey(payment.id));
+    const existing = keys.length
+      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
+          where: {
+            tenantId: user.tenantId,
+            idempotencyKey: { in: keys },
+          },
+          select: {
+            id: true,
+            idempotencyKey: true,
+            status: true,
+            accountingSourceEventId: true,
+          },
+        })
+      : [];
+    const existingByKey = new Map(
+      existing.map((event) => [event.idempotencyKey, event]),
+    );
+
+    const items: Array<{
+      paymentId: string;
+      originalPaymentId?: string | null;
+      placementId: string;
+      paymentDate: string;
+      eventType: string;
+      idempotencyKey: string;
+      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
+      outboxId?: string;
+      outboxStatus?: string;
+      accountingSourceEventId?: string | null;
+    }> = [];
+    let enqueuedCount = 0;
+
+    for (const payment of payments) {
+      const idempotencyKey = config.idempotencyKey(payment.id);
+      const existingEvent = existingByKey.get(idempotencyKey);
+      if (existingEvent) {
+        items.push({
+          paymentId: payment.id,
+          originalPaymentId: payment.reversalOfPaymentId,
+          placementId: payment.placementId,
+          paymentDate: payment.paymentDate.toISOString(),
+          eventType: config.eventType,
+          idempotencyKey,
+          status: config.presentStatus,
+          outboxId: existingEvent.id,
+          outboxStatus: existingEvent.status,
+          accountingSourceEventId: existingEvent.accountingSourceEventId,
+        });
+        continue;
+      }
+
+      if (dryRun) {
+        items.push({
+          paymentId: payment.id,
+          originalPaymentId: payment.reversalOfPaymentId,
+          placementId: payment.placementId,
+          paymentDate: payment.paymentDate.toISOString(),
+          eventType: config.eventType,
+          idempotencyKey,
+          status: config.missingStatus,
+        });
+        continue;
+      }
+
+      const event = await config.prepare(payment);
+      if (!event) continue;
+      const outboxRow = await this.prisma.$transaction((tx) =>
+        this.financialEvents.enqueuePreparedEvent(tx, event),
+      );
+      enqueuedCount += 1;
+      items.push({
+        paymentId: payment.id,
+        originalPaymentId: payment.reversalOfPaymentId,
+        placementId: payment.placementId,
+        paymentDate: payment.paymentDate.toISOString(),
+        eventType: config.eventType,
+        idempotencyKey,
+        status: config.enqueuedStatus,
+        outboxId: outboxRow.id,
+        outboxStatus: outboxRow.status,
+        accountingSourceEventId: outboxRow.accountingSourceEventId,
+      });
+    }
+
+    return {
+      accountingEnabled,
+      dryRun,
+      inspectedCount: payments.length,
+      missingCount: items.filter((item) => item.status === 'MISSING').length,
+      enqueuedCount,
+      items,
+    };
   }
 
   private subledgerType(

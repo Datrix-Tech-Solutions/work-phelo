@@ -14,6 +14,7 @@ import {
   PlacementPaymentType,
   Prisma,
 } from '../../prisma/generated/client';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
@@ -47,6 +48,14 @@ const paymentInclude = {
   },
 } satisfies Prisma.PlacementPaymentInclude;
 
+const paymentEventPlacementSelect = {
+  id: true,
+  reference: true,
+  policyNumber: true,
+  title: true,
+  cedantId: true,
+} satisfies Prisma.PlacementSelect;
+
 type PlacementPaymentRecord = Prisma.PlacementPaymentGetPayload<{
   include: typeof paymentInclude;
 }>;
@@ -56,6 +65,7 @@ export class PlacementPaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly financialPositionService: PlacementFinancialPositionService,
+    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async findAll(
@@ -96,6 +106,9 @@ export class PlacementPaymentsService {
         tenantId: true,
         cedantId: true,
         currency: true,
+        reference: true,
+        policyNumber: true,
+        title: true,
       },
     });
     if (!placement) throw new NotFoundException('Placement not found');
@@ -144,25 +157,39 @@ export class PlacementPaymentsService {
       );
     }
 
-    return this.prisma.placementPayment.create({
-      data: {
-        tenantId: user.tenantId,
-        placementId,
-        closingId: dto.closingId,
-        endorsementClosingId: dto.endorsementClosingId,
-        participantId: dto.participantId,
-        counterpartyId: dto.counterpartyId,
-        type: dto.type,
-        direction: dto.direction,
-        amount: dto.amount,
-        currency,
-        paymentDate: new Date(dto.paymentDate),
-        reference: this.cleanOptional(dto.reference),
-        notes: this.cleanOptional(dto.notes),
-        status: PlacementPaymentStatus.RECORDED,
-        createdByUserId: user.id,
-      },
-      include: paymentInclude,
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.placementPayment.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId,
+          closingId: dto.closingId,
+          endorsementClosingId: dto.endorsementClosingId,
+          participantId: dto.participantId,
+          counterpartyId: dto.counterpartyId,
+          type: dto.type,
+          direction: dto.direction,
+          amount: dto.amount,
+          currency,
+          paymentDate: new Date(dto.paymentDate),
+          reference: this.cleanOptional(dto.reference),
+          notes: this.cleanOptional(dto.notes),
+          status: PlacementPaymentStatus.RECORDED,
+          createdByUserId: user.id,
+        },
+        include: paymentInclude,
+      });
+
+      if (dto.type === PlacementPaymentType.PREMIUM_RECEIVED) {
+        const event = this.financialEvents.preparePremiumPaymentReceived(user, {
+          ...payment,
+          placement,
+        });
+        if (event) {
+          await this.financialEvents.enqueuePreparedEvent(tx, event);
+        }
+      }
+
+      return payment;
     });
   }
 
@@ -180,13 +207,19 @@ export class PlacementPaymentsService {
       throw new ConflictException('Payment has already been reversed');
     }
 
+    const placement = await this.prisma.placement.findFirst({
+      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
+      select: paymentEventPlacementSelect,
+    });
+    if (!placement) throw new NotFoundException('Placement not found');
+
     return this.prisma.$transaction(async (tx) => {
       await tx.placementPayment.update({
         where: { id: payment.id },
         data: { status: PlacementPaymentStatus.REVERSED },
       });
 
-      return tx.placementPayment.create({
+      const reversal = await tx.placementPayment.create({
         data: {
           tenantId: user.tenantId,
           placementId,
@@ -209,6 +242,26 @@ export class PlacementPaymentsService {
         },
         include: paymentInclude,
       });
+
+      if (payment.type === PlacementPaymentType.PREMIUM_RECEIVED) {
+        const event = this.financialEvents.preparePaymentReversed(user, {
+          ...reversal,
+          placement,
+          reversalOfPayment: {
+            id: payment.id,
+            amount: payment.amount,
+            currency: payment.currency,
+            paymentDate: payment.paymentDate,
+            reference: payment.reference,
+            status: PlacementPaymentStatus.REVERSED,
+          },
+        });
+        if (event) {
+          await this.financialEvents.enqueuePreparedEvent(tx, event);
+        }
+      }
+
+      return reversal;
     });
   }
 

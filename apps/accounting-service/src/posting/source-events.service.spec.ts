@@ -391,6 +391,184 @@ describe('SourceEventsService', () => {
     expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
   });
 
+  it('posts REINSURANCE PREMIUM_PAYMENT_RECEIVED using tenant-configured cash and receivable accounts', async () => {
+    const paymentDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordId: 'payment-1',
+      sourceDocumentId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          paymentId: 'payment-1',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: {
+          paymentAmount: 8500,
+          signedCashImpact: 8500,
+          signedReceivableImpact: -8500,
+        },
+      },
+    };
+    const paymentRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Premium payment {{payload.references.paymentId}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Clear cedant receivable {{payload.references.paymentId}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      paymentDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(paymentRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, paymentDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PREMIUM_PAYMENT_RECEIVED',
+        sourceRecordId: 'payment-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'bank-clearing',
+            debit: 8500,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 0,
+            credit: 8500,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('posts REINSURANCE PAYMENT_REVERSED as a separate reversing journal', async () => {
+    const reversalDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PAYMENT_REVERSED',
+      sourceRecordId: 'payment-reversal-1',
+      sourceDocumentId: 'payment-reversal-1',
+      idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
+      payload: {
+        transactionDate: '2026-07-06T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          originalPaymentId: 'payment-1',
+          reversalPaymentId: 'payment-reversal-1',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: {
+          paymentAmount: 8500,
+          signedCashImpact: -8500,
+          signedReceivableImpact: 8500,
+        },
+      },
+    };
+    const reversalRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PAYMENT_REVERSED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Reverse payment {{payload.references.reversalPaymentId}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Reverse cash {{payload.references.originalPaymentId}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      reversalDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(reversalRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, reversalDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PAYMENT_REVERSED',
+        sourceRecordId: 'payment-reversal-1',
+        idempotencyKey: 'source-event:event-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 8500,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'bank-clearing',
+            debit: 0,
+            credit: 8500,
+          }),
+        ],
+      }),
+    );
+  });
+
   it('rejects a duplicate tenant idempotency key safely', async () => {
     const { prisma, service } = setup();
     prisma.sourceEventInbox.create.mockRejectedValue(

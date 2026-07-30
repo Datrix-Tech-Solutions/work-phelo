@@ -129,6 +129,8 @@ Operational endpoints:
 | `POST /accounting-integration/counterparties/:counterpartyId/subledger/sync` | Ensures one Cedant/Reinsurer subledger.                                                                   |
 | `POST /accounting-integration/outbox/process-pending`                        | Dispatches already-enqueued outbox rows.                                                                  |
 | `POST /accounting-integration/reconciliation/debit-note-issued`              | Dry-runs or explicitly enqueues missing `DEBIT_NOTE_ISSUED` outbox rows for issued placement debit notes. |
+| `POST /accounting-integration/reconciliation/premium-payment-received`       | Dry-runs or explicitly enqueues missing `PREMIUM_PAYMENT_RECEIVED` outbox rows for premium receipt rows.  |
+| `POST /accounting-integration/reconciliation/payment-reversed`               | Dry-runs or explicitly enqueues missing `PAYMENT_REVERSED` outbox rows for premium payment reversal rows. |
 
 Accounting internal endpoint:
 
@@ -150,8 +152,8 @@ Reinsurance source events SHOULD be activated incrementally.
 | `CREDIT_NOTE_ISSUED`              | Proposed                | Issued placement credit note snapshot.           |
 | `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Proposed                | Issued endorsement debit note snapshot.          |
 | `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Proposed                | Issued endorsement credit note snapshot.         |
-| `PREMIUM_PAYMENT_RECEIVED`        | Proposed                | Recorded premium payment row.                    |
-| `PAYMENT_REVERSED`                | Proposed                | Reversal payment row linked to original payment. |
+| `PREMIUM_PAYMENT_RECEIVED`        | Active                  | Recorded premium payment row.                    |
+| `PAYMENT_REVERSED`                | Active                  | Reversal payment row linked to original payment. |
 | `REINSURER_DISBURSEMENT_RECORDED` | Proposed                | Recorded outbound reinsurer payment row.         |
 
 ### 6.2 Claims family
@@ -336,6 +338,79 @@ Exact GL accounts remain tenant-configured in Accounting.
 
 ---
 
+## 10.1 Premium Payment and Reversal Activation
+
+`PREMIUM_PAYMENT_RECEIVED` is recognized when a valid
+`PlacementPayment` premium receipt row is officially recorded with:
+
+- `type = PREMIUM_RECEIVED`
+- `direction = INBOUND`
+- `status = RECORDED`
+- `reversalOfPaymentId = null`
+- a valid `paymentDate`
+
+Current Reinsurance payment allocation is placement-level. The payment create
+workflow does not allocate a premium receipt to one or more specific
+`PlacementNote` records. Therefore, payloads MUST state:
+
+```json
+{
+  "allocation": {
+    "model": "PLACEMENT_LEVEL_RECEIVABLE",
+    "noteAllocationSupported": false
+  }
+}
+```
+
+Accounting posting rules MAY use `amounts.paymentAmount` with tenant-configured
+accounts. A typical conceptual rule is:
+
+```text
+DR Bank / Cash / Undeposited Funds
+CR Cedant Premium Receivable
+```
+
+`PAYMENT_REVERSED` is recognized when Reinsurance creates the reversal
+`PlacementPayment` row and links it to the original payment through
+`reversalOfPaymentId`.
+
+The reversal event uses the reversal row as its source record, not the original
+payment row:
+
+```text
+sourceRecordId = <reversal PlacementPayment.id>
+idempotencyKey = reinsurance:payment:<reversalPaymentId>:reversal:v1
+```
+
+Reversal payloads expose both a positive display magnitude and signed impact
+facts:
+
+```json
+{
+  "amounts": {
+    "paymentAmount": 1000,
+    "signedCashImpact": -1000,
+    "signedReceivableImpact": 1000
+  }
+}
+```
+
+Accounting posting rules SHOULD still use the positive `paymentAmount` path and
+reverse the DR/CR lines through tenant configuration:
+
+```text
+DR Cedant Premium Receivable
+CR Bank / Cash / Undeposited Funds
+```
+
+Reinsurance MUST capture premium payment and reversal events atomically with
+the payment transaction when Accounting is enabled. The capture step MUST NOT
+require Accounting URL/HMAC configuration, service reachability, posting rules,
+subledger readiness or fiscal-period status. Those remain delivery/posting
+readiness concerns.
+
+---
+
 ## 11. Reversal and Correction Semantics
 
 Reinsurance MUST NOT ask Accounting to mutate posted journals.
@@ -418,6 +493,32 @@ If support finds an issued placement debit note without a matching
 3. Run the endpoint with `dryRun=false` only for explicit recovery.
 4. Dispatch the created outbox row.
 5. Process the Accounting source event after delivery.
+
+### 13.5 Missing premium payment or reversal outbox row
+
+If support finds a recorded premium receipt without a matching
+`PREMIUM_PAYMENT_RECEIVED` outbox row:
+
+1. Run the premium-payment reconciliation endpoint with `dryRun=true`.
+2. Confirm the payment is genuinely missing
+   `reinsurance:payment:<paymentId>:recorded:v1`.
+3. Run the endpoint with `dryRun=false` only for explicit recovery.
+4. Dispatch the created outbox row.
+5. Process the Accounting source event after delivery.
+
+If support finds a reversal payment row without a matching `PAYMENT_REVERSED`
+outbox row:
+
+1. Run the payment-reversal reconciliation endpoint with `dryRun=true`.
+2. Confirm the reversal row is genuinely missing
+   `reinsurance:payment:<reversalPaymentId>:reversal:v1`.
+3. Run the endpoint with `dryRun=false` only for explicit recovery.
+4. Dispatch the created outbox row.
+5. Process the Accounting source event after delivery.
+
+The original premium-payment event and original Accounting journal MUST remain
+auditable. Reversal recovery creates or recovers a separate reversal event; it
+must not mutate the original event.
 
 ---
 

@@ -1,8 +1,12 @@
 import { RequestUser } from '@work-phelo/types';
 import {
+  CounterpartyType,
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
+  PlacementPaymentDirection,
+  PlacementPaymentStatus,
+  PlacementPaymentType,
   Prisma,
   ReinsuranceAccountingOutboxStatus,
 } from '../../prisma/generated/client';
@@ -14,6 +18,10 @@ import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-even
 
 describe('ReinsuranceAccountingReadinessService', () => {
   type PlacementNoteFindManyArg = {
+    take?: number;
+    where?: Record<string, unknown>;
+  };
+  type PlacementPaymentFindManyArg = {
     take?: number;
     where?: Record<string, unknown>;
   };
@@ -62,13 +70,68 @@ describe('ReinsuranceAccountingReadinessService', () => {
     },
   };
 
+  const payment = {
+    id: 'payment-1',
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    closingId: null,
+    endorsementClosingId: null,
+    participantId: null,
+    counterpartyId: 'cedant-1',
+    type: PlacementPaymentType.PREMIUM_RECEIVED,
+    direction: PlacementPaymentDirection.INBOUND,
+    amount: new Prisma.Decimal('1000.00'),
+    currency: 'GHS',
+    paymentDate: new Date('2026-06-05T10:30:00.000Z'),
+    reference: 'BANK-001',
+    notes: null,
+    status: PlacementPaymentStatus.RECORDED,
+    reversalOfPaymentId: null,
+    counterparty: {
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+      name: 'Acme Insurance',
+      registrationNumber: null,
+    },
+    placement: {
+      id: 'placement-1',
+      reference: 'FAC-001',
+      policyNumber: 'POL-001',
+      title: 'Xpress Group',
+      cedantId: 'cedant-1',
+    },
+    reversalOfPayment: null,
+  };
+
+  const reversalPayment = {
+    ...payment,
+    id: 'payment-reversal-1',
+    amount: new Prisma.Decimal('-1000.00'),
+    paymentDate: new Date('2026-06-06T10:30:00.000Z'),
+    reference: 'REVERSAL-BANK-001',
+    status: PlacementPaymentStatus.RECORDED,
+    reversalOfPaymentId: 'payment-1',
+    reversalOfPayment: {
+      id: 'payment-1',
+      amount: payment.amount,
+      currency: payment.currency,
+      paymentDate: payment.paymentDate,
+      reference: payment.reference,
+      status: PlacementPaymentStatus.REVERSED,
+    },
+  };
+
   const makeService = (
     notes: unknown[] = [issuedNote],
     existingOutbox: unknown[] = [],
+    payments: unknown[] = [payment],
   ) => {
     const prisma: {
       placementNote: {
         findMany: jest.Mock<Promise<unknown[]>, [PlacementNoteFindManyArg]>;
+      };
+      placementPayment: {
+        findMany: jest.Mock<Promise<unknown[]>, [PlacementPaymentFindManyArg]>;
       };
       reinsuranceAccountingOutbox: { findMany: jest.Mock };
       $transaction: jest.Mock;
@@ -77,6 +140,11 @@ describe('ReinsuranceAccountingReadinessService', () => {
         findMany: jest
           .fn<Promise<unknown[]>, [PlacementNoteFindManyArg]>()
           .mockResolvedValue(notes),
+      },
+      placementPayment: {
+        findMany: jest
+          .fn<Promise<unknown[]>, [PlacementPaymentFindManyArg]>()
+          .mockResolvedValue(payments),
       },
       reinsuranceAccountingOutbox: {
         findMany: jest.fn().mockResolvedValue(existingOutbox),
@@ -107,6 +175,28 @@ describe('ReinsuranceAccountingReadinessService', () => {
         occurredAt: '2026-06-04T13:00:00.000Z',
         currency: 'GHS',
         payload: { amounts: { netPremium: 8500 } },
+      }),
+      preparePremiumPaymentReceived: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+        sourceRecordType: 'PlacementPayment',
+        sourceRecordId: 'payment-1',
+        sourceDocumentId: 'payment-1',
+        idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+        occurredAt: '2026-06-05T10:30:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { paymentAmount: 1000 } },
+      }),
+      preparePaymentReversed: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'PAYMENT_REVERSED',
+        sourceRecordType: 'PlacementPayment',
+        sourceRecordId: 'payment-reversal-1',
+        sourceDocumentId: 'payment-reversal-1',
+        idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
+        occurredAt: '2026-06-06T10:30:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { paymentAmount: 1000 } },
       }),
       enqueuePreparedEvent: jest.fn().mockResolvedValue({
         id: 'outbox-1',
@@ -238,5 +328,135 @@ describe('ReinsuranceAccountingReadinessService', () => {
     });
     expect(prisma.placementNote.findMany).not.toHaveBeenCalled();
     expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('dry-runs recorded premium payments missing their deterministic outbox row', async () => {
+    const { financialEvents, prisma, service } = makeService();
+
+    const result = await service.reconcilePremiumPaymentReceivedEvents(user, {
+      dryRun: true,
+      limit: 10,
+    });
+
+    const findManyArg = prisma.placementPayment.findMany.mock.calls[0]?.[0];
+    if (!findManyArg) {
+      throw new Error('Expected placementPayment.findMany to be called');
+    }
+    expect(findManyArg.take).toBe(10);
+    expect(findManyArg.where).toMatchObject({
+      tenantId: 'tenant-1',
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      direction: PlacementPaymentDirection.INBOUND,
+      reversalOfPaymentId: null,
+    });
+    expect(result).toMatchObject({
+      accountingEnabled: true,
+      dryRun: true,
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-1',
+          eventType: 'PREMIUM_PAYMENT_RECEIVED',
+          status: 'MISSING',
+          idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing premium payment events with their payment date', async () => {
+    const { financialEvents, service } = makeService();
+
+    const result = await service.reconcilePremiumPaymentReceivedEvents(user, {
+      dryRun: false,
+    });
+
+    expect(financialEvents.preparePremiumPaymentReceived).toHaveBeenCalledWith(
+      user,
+      payment,
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+        occurredAt: '2026-06-05T10:30:00.000Z',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-1',
+          status: 'ENQUEUED',
+          outboxId: 'outbox-1',
+        }),
+      ],
+    });
+  });
+
+  it('dry-runs reversal payment rows missing their deterministic outbox row', async () => {
+    const { financialEvents, service } = makeService(
+      [issuedNote],
+      [],
+      [reversalPayment],
+    );
+
+    const result = await service.reconcilePaymentReversedEvents(user, {
+      dryRun: true,
+    });
+
+    expect(result).toMatchObject({
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-reversal-1',
+          originalPaymentId: 'payment-1',
+          eventType: 'PAYMENT_REVERSED',
+          status: 'MISSING',
+          idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing reversal events with their reversal payment date', async () => {
+    const { financialEvents, service } = makeService(
+      [issuedNote],
+      [],
+      [reversalPayment],
+    );
+
+    const result = await service.reconcilePaymentReversedEvents(user, {
+      dryRun: false,
+    });
+
+    expect(financialEvents.preparePaymentReversed).toHaveBeenCalledWith(
+      user,
+      reversalPayment,
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
+        occurredAt: '2026-06-06T10:30:00.000Z',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-reversal-1',
+          status: 'ENQUEUED',
+        }),
+      ],
+    });
   });
 });

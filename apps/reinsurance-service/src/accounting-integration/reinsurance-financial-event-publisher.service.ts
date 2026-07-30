@@ -5,6 +5,9 @@ import {
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
+  PlacementPaymentDirection,
+  PlacementPaymentStatus,
+  PlacementPaymentType,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -40,6 +43,46 @@ type DebitNoteForEvent = {
     name: string;
     registrationNumber?: string | null;
   };
+};
+
+type PaymentForEvent = {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  closingId: string | null;
+  endorsementClosingId: string | null;
+  participantId: string | null;
+  counterpartyId: string;
+  type: PlacementPaymentType;
+  direction: PlacementPaymentDirection;
+  amount: Prisma.Decimal | number | string;
+  currency: string;
+  paymentDate: Date;
+  reference: string | null;
+  notes: string | null;
+  status: PlacementPaymentStatus;
+  reversalOfPaymentId: string | null;
+  counterparty?: {
+    id: string;
+    type: CounterpartyType;
+    name: string;
+    registrationNumber?: string | null;
+  };
+  placement?: {
+    id: string;
+    reference: string;
+    policyNumber?: string | null;
+    title: string;
+    cedantId: string;
+  };
+  reversalOfPayment?: {
+    id: string;
+    amount: Prisma.Decimal | number | string;
+    currency: string;
+    paymentDate: Date;
+    reference: string | null;
+    status: PlacementPaymentStatus;
+  } | null;
 };
 
 @Injectable()
@@ -175,6 +218,181 @@ export class ReinsuranceFinancialEventPublisher {
     };
   }
 
+  preparePremiumPaymentReceived(
+    user: RequestUser,
+    payment: PaymentForEvent,
+  ): ReinsuranceAccountingEventInput | null {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; PREMIUM_PAYMENT_RECEIVED not enqueued for payment ${payment.id}`,
+      );
+      return null;
+    }
+
+    if (!this.isRecordedPremiumPayment(payment)) {
+      throw new Error(
+        `Payment ${payment.id} is not a valid recorded premium receipt`,
+      );
+    }
+
+    const placement = this.requirePlacement(payment);
+    const counterparty = this.requireCedantCounterparty(payment);
+    const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
+    const occurredAt = payment.paymentDate.toISOString();
+
+    return {
+      tenantId: payment.tenantId,
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: payment.id,
+      sourceDocumentId: payment.id,
+      idempotencyKey: `reinsurance:payment:${payment.id}:recorded:v1`,
+      occurredAt,
+      currency: payment.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: payment.currency,
+        references: {
+          placementId: placement.id,
+          placementReference: placement.reference,
+          policyNumber: placement.policyNumber,
+          placementTitle: placement.title,
+          paymentId: payment.id,
+        },
+        counterparty: {
+          id: counterparty.id,
+          type: counterparty.type,
+          name: counterparty.name,
+          registrationNumber: counterparty.registrationNumber ?? null,
+          subledgerExternalRef: counterparty.id,
+        },
+        amounts: {
+          paymentAmount,
+          signedCashImpact: paymentAmount,
+          signedReceivableImpact: -paymentAmount,
+        },
+        payment: {
+          id: payment.id,
+          paymentDate: occurredAt,
+          paymentMethod: null,
+          paymentReference: payment.reference,
+          bankReference: payment.reference,
+          status: payment.status,
+          type: payment.type,
+          direction: payment.direction,
+          isReversal: false,
+          reversalOfPaymentId: null,
+          notes: payment.notes,
+        },
+        allocation: {
+          model: 'PLACEMENT_LEVEL_RECEIVABLE',
+          noteAllocationSupported: false,
+          noteId: null,
+          noteNumber: null,
+        },
+        documents: {
+          sourceDocumentId: payment.id,
+          paymentReceiptDocumentId: null,
+        },
+      },
+    };
+  }
+
+  preparePaymentReversed(
+    user: RequestUser,
+    reversalPayment: PaymentForEvent,
+  ): ReinsuranceAccountingEventInput | null {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; PAYMENT_REVERSED not enqueued for payment ${reversalPayment.id}`,
+      );
+      return null;
+    }
+
+    if (!this.isRecordedPaymentReversal(reversalPayment)) {
+      throw new Error(
+        `Payment ${reversalPayment.id} is not a valid recorded payment reversal`,
+      );
+    }
+
+    const placement = this.requirePlacement(reversalPayment);
+    const counterparty = this.requireCedantCounterparty(reversalPayment);
+    const originalPayment = reversalPayment.reversalOfPayment;
+    if (!originalPayment) {
+      throw new Error(
+        `Reversal payment ${reversalPayment.id} is missing its original payment reference`,
+      );
+    }
+    const paymentAmount = Math.abs(this.decimalNumber(reversalPayment.amount));
+    const occurredAt = reversalPayment.paymentDate.toISOString();
+
+    return {
+      tenantId: reversalPayment.tenantId,
+      sourceEventType: 'PAYMENT_REVERSED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: reversalPayment.id,
+      sourceDocumentId: reversalPayment.id,
+      idempotencyKey: `reinsurance:payment:${reversalPayment.id}:reversal:v1`,
+      occurredAt,
+      currency: reversalPayment.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: reversalPayment.currency,
+        references: {
+          placementId: placement.id,
+          placementReference: placement.reference,
+          policyNumber: placement.policyNumber,
+          placementTitle: placement.title,
+          originalPaymentId: originalPayment.id,
+          reversalPaymentId: reversalPayment.id,
+          paymentId: reversalPayment.id,
+        },
+        counterparty: {
+          id: counterparty.id,
+          type: counterparty.type,
+          name: counterparty.name,
+          registrationNumber: counterparty.registrationNumber ?? null,
+          subledgerExternalRef: counterparty.id,
+        },
+        amounts: {
+          paymentAmount,
+          originalPaymentAmount: Math.abs(
+            this.decimalNumber(originalPayment.amount),
+          ),
+          signedCashImpact: -paymentAmount,
+          signedReceivableImpact: paymentAmount,
+        },
+        payment: {
+          id: reversalPayment.id,
+          originalPaymentId: originalPayment.id,
+          reversalPaymentId: reversalPayment.id,
+          paymentDate: occurredAt,
+          originalPaymentDate: originalPayment.paymentDate.toISOString(),
+          paymentMethod: null,
+          paymentReference: reversalPayment.reference,
+          originalPaymentReference: originalPayment.reference,
+          bankReference: reversalPayment.reference,
+          status: reversalPayment.status,
+          originalPaymentStatus: originalPayment.status,
+          type: reversalPayment.type,
+          direction: reversalPayment.direction,
+          isReversal: true,
+          notes: reversalPayment.notes,
+        },
+        allocation: {
+          model: 'PLACEMENT_LEVEL_RECEIVABLE',
+          noteAllocationSupported: false,
+          noteId: null,
+          noteNumber: null,
+        },
+        documents: {
+          sourceDocumentId: reversalPayment.id,
+          paymentReceiptDocumentId: null,
+        },
+      },
+    };
+  }
+
   enqueuePreparedEvent(
     tx: Prisma.TransactionClient,
     event: ReinsuranceAccountingEventInput,
@@ -196,6 +414,54 @@ export class ReinsuranceFinancialEventPublisher {
       note.currency.trim().length === 3 &&
       this.decimalNumber(note.netAmount) > 0
     );
+  }
+
+  private isRecordedPremiumPayment(payment: PaymentForEvent): boolean {
+    return (
+      payment.type === PlacementPaymentType.PREMIUM_RECEIVED &&
+      payment.direction === PlacementPaymentDirection.INBOUND &&
+      payment.status === PlacementPaymentStatus.RECORDED &&
+      payment.reversalOfPaymentId === null &&
+      payment.paymentDate instanceof Date &&
+      !Number.isNaN(payment.paymentDate.getTime()) &&
+      payment.currency.trim().length === 3 &&
+      this.decimalNumber(payment.amount) > 0
+    );
+  }
+
+  private isRecordedPaymentReversal(payment: PaymentForEvent): boolean {
+    return (
+      payment.type === PlacementPaymentType.PREMIUM_RECEIVED &&
+      payment.direction === PlacementPaymentDirection.INBOUND &&
+      payment.status === PlacementPaymentStatus.RECORDED &&
+      typeof payment.reversalOfPaymentId === 'string' &&
+      payment.reversalOfPaymentId.trim().length > 0 &&
+      payment.paymentDate instanceof Date &&
+      !Number.isNaN(payment.paymentDate.getTime()) &&
+      payment.currency.trim().length === 3 &&
+      this.decimalNumber(payment.amount) < 0
+    );
+  }
+
+  private requirePlacement(payment: PaymentForEvent) {
+    if (!payment.placement) {
+      throw new Error(
+        `Placement ${payment.placementId} not available for payment ${payment.id}`,
+      );
+    }
+    return payment.placement;
+  }
+
+  private requireCedantCounterparty(payment: PaymentForEvent) {
+    if (
+      !payment.counterparty ||
+      payment.counterparty.type !== CounterpartyType.CEDANT
+    ) {
+      throw new Error(
+        `Cedant counterparty ${payment.counterpartyId} not available for payment ${payment.id}`,
+      );
+    }
+    return payment.counterparty;
   }
 
   private optionalDecimalNumber(

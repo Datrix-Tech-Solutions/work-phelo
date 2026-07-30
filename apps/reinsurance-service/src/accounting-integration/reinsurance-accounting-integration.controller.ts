@@ -26,6 +26,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
   ProcessReinsuranceAccountingOutboxDto,
   ReconcileDebitNoteAccountingEventsDto,
+  ReconcilePaymentAccountingEventsDto,
 } from './reinsurance-accounting-readiness.dto';
 import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
 
@@ -87,5 +88,34 @@ export class ReinsuranceAccountingIntegrationController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.readiness.reconcileDebitNoteIssuedEvents(request.user, query);
+  }
+
+  @Post('reconciliation/premium-payment-received')
+  @ApiOperation({
+    summary: 'Reconcile recorded premium payments with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets premium receipt payment rows missing their deterministic PREMIUM_PAYMENT_RECEIVED outbox row.',
+  })
+  reconcilePremiumPaymentReceivedEvents(
+    @Query() query: ReconcilePaymentAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcilePremiumPaymentReceivedEvents(
+      request.user,
+      query,
+    );
+  }
+
+  @Post('reconciliation/payment-reversed')
+  @ApiOperation({
+    summary: 'Reconcile premium payment reversals with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets reversal payment rows missing their deterministic PAYMENT_REVERSED outbox row.',
+  })
+  reconcilePaymentReversedEvents(
+    @Query() query: ReconcilePaymentAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcilePaymentReversedEvents(request.user, query);
   }
 }

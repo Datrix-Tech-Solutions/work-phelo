@@ -5,6 +5,9 @@ import {
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
+  PlacementPaymentDirection,
+  PlacementPaymentStatus,
+  PlacementPaymentType,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -86,6 +89,38 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     ] as Prisma.JsonArray,
     noteDate: new Date('2026-06-04T12:00:00.000Z'),
     issuedAt: null,
+  };
+
+  const payment = {
+    id: 'payment-1',
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    closingId: null,
+    endorsementClosingId: null,
+    participantId: null,
+    counterpartyId: 'cedant-1',
+    type: PlacementPaymentType.PREMIUM_RECEIVED,
+    direction: PlacementPaymentDirection.INBOUND,
+    amount: new Prisma.Decimal('1000.00'),
+    currency: 'GHS',
+    paymentDate: new Date('2026-06-05T10:30:00.000Z'),
+    reference: 'BANK-001',
+    notes: 'Bank transfer',
+    status: PlacementPaymentStatus.RECORDED,
+    reversalOfPaymentId: null,
+    counterparty: {
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+      name: 'Acme Insurance',
+      registrationNumber: 'ACME-001',
+    },
+    placement: {
+      id: 'placement-1',
+      reference: 'FAC-2026-001',
+      policyNumber: 'POL-001',
+      title: 'Xpress Group',
+      cedantId: 'cedant-1',
+    },
   };
 
   const makeService = (overrides?: { accountingEnabled?: boolean }) => {
@@ -199,6 +234,101 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     expect(event?.idempotencyKey).toBe(
       'reinsurance:debit-note:note-1:issued:v1',
     );
+  });
+
+  it('prepares a PREMIUM_PAYMENT_RECEIVED event from the recorded payment row', () => {
+    const { actor, service } = makeService();
+
+    const event = service.preparePremiumPaymentReceived(actor, payment);
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-1',
+      sourceDocumentId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      occurredAt: '2026-06-05T10:30:00.000Z',
+      currency: 'GHS',
+      payload: {
+        transactionDate: '2026-06-05T10:30:00.000Z',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          policyNumber: 'POL-001',
+          paymentId: 'payment-1',
+        },
+        counterparty: {
+          id: 'cedant-1',
+          type: CounterpartyType.CEDANT,
+          name: 'Acme Insurance',
+          subledgerExternalRef: 'cedant-1',
+        },
+        amounts: {
+          paymentAmount: 1000,
+          signedCashImpact: 1000,
+          signedReceivableImpact: -1000,
+        },
+        allocation: {
+          model: 'PLACEMENT_LEVEL_RECEIVABLE',
+          noteAllocationSupported: false,
+          noteId: null,
+          noteNumber: null,
+        },
+      },
+    });
+  });
+
+  it('prepares a PAYMENT_REVERSED event from the reversal payment row', () => {
+    const { actor, service } = makeService();
+    const reversal = {
+      ...payment,
+      id: 'payment-reversal-1',
+      amount: new Prisma.Decimal('-1000.00'),
+      paymentDate: new Date('2026-06-06T10:30:00.000Z'),
+      reference: 'REVERSAL-BANK-001',
+      notes: 'Payment reversal',
+      reversalOfPaymentId: 'payment-1',
+      reversalOfPayment: {
+        id: 'payment-1',
+        amount: payment.amount,
+        currency: payment.currency,
+        paymentDate: payment.paymentDate,
+        reference: payment.reference,
+        status: PlacementPaymentStatus.REVERSED,
+      },
+    };
+
+    const event = service.preparePaymentReversed(actor, reversal);
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'PAYMENT_REVERSED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-reversal-1',
+      sourceDocumentId: 'payment-reversal-1',
+      idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
+      occurredAt: '2026-06-06T10:30:00.000Z',
+      currency: 'GHS',
+      payload: {
+        references: {
+          originalPaymentId: 'payment-1',
+          reversalPaymentId: 'payment-reversal-1',
+        },
+        amounts: {
+          paymentAmount: 1000,
+          originalPaymentAmount: 1000,
+          signedCashImpact: -1000,
+          signedReceivableImpact: 1000,
+        },
+        payment: {
+          id: 'payment-reversal-1',
+          originalPaymentId: 'payment-1',
+          reversalPaymentId: 'payment-reversal-1',
+          isReversal: true,
+        },
+      },
+    });
   });
 
   it('enqueues prepared events through the transactional outbox', async () => {

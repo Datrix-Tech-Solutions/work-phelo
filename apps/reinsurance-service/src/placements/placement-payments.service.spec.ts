@@ -12,6 +12,7 @@ import {
   PlacementPaymentType,
   Prisma,
 } from '../../prisma/generated/client';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
 import { PlacementPaymentsService } from './placement-payments.service';
@@ -38,7 +39,7 @@ describe('PlacementPaymentsService', () => {
     tenantSlug: 'broker',
     tenantName: 'Broker',
     firstName: 'Ama',
-    moduleConfig: { operations: true },
+    moduleConfig: { operations: true, accounting: true },
     featureConfig: { operations: { reinsurance: true } },
     permissions: [] as string[],
   };
@@ -48,6 +49,9 @@ describe('PlacementPaymentsService', () => {
     tenantId: 'tenant-1',
     cedantId: 'cedant-1',
     currency: 'USD',
+    reference: 'FAC-001',
+    policyNumber: 'POL-001',
+    title: 'Xpress Group',
   };
 
   const payment = {
@@ -97,6 +101,11 @@ describe('PlacementPaymentsService', () => {
   let financialPositionService: {
     getFinancialPosition: jest.Mock;
   };
+  let financialEvents: {
+    preparePremiumPaymentReceived: jest.Mock<unknown, [unknown, unknown]>;
+    preparePaymentReversed: jest.Mock<unknown, [unknown, unknown]>;
+    enqueuePreparedEvent: jest.Mock;
+  };
   let service: PlacementPaymentsService;
 
   beforeEach(() => {
@@ -136,6 +145,15 @@ describe('PlacementPaymentsService', () => {
         ],
       }),
     };
+    financialEvents = {
+      preparePremiumPaymentReceived: jest
+        .fn<unknown, [unknown, unknown]>()
+        .mockReturnValue(null),
+      preparePaymentReversed: jest
+        .fn<unknown, [unknown, unknown]>()
+        .mockReturnValue(null),
+      enqueuePreparedEvent: jest.fn(),
+    };
     prisma.placementClosing.findMany.mockResolvedValue([
       {
         id: 'closing-1',
@@ -148,6 +166,7 @@ describe('PlacementPaymentsService', () => {
     service = new PlacementPaymentsService(
       prisma as unknown as PrismaService,
       financialPositionService as unknown as PlacementFinancialPositionService,
+      financialEvents as unknown as ReinsuranceFinancialEventPublisher,
     );
   });
 
@@ -206,7 +225,137 @@ describe('PlacementPaymentsService', () => {
         status: PlacementPaymentStatus.RECORDED,
       }),
     );
+    const paymentEventArg = financialEvents.preparePremiumPaymentReceived.mock
+      .calls[0]?.[1] as
+      | { id?: string; placement?: { id?: string; reference?: string } }
+      | undefined;
+    if (!paymentEventArg) {
+      throw new Error('Expected premium payment event preparation');
+    }
+    expect(paymentEventArg.id).toBe('payment-1');
+    expect(paymentEventArg.placement).toMatchObject({
+      id: 'placement-1',
+      reference: 'FAC-001',
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
     expect(result.id).toBe('payment-1');
+  });
+
+  it('captures a premium received accounting event atomically when Accounting is enabled', async () => {
+    const preparedEvent = {
+      tenantId: 'tenant-1',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-1',
+      sourceDocumentId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      occurredAt: '2026-06-04T12:00:00.000Z',
+      currency: 'USD',
+      payload: { amounts: { paymentAmount: 1000 } },
+    };
+    financialEvents.preparePremiumPaymentReceived.mockReturnValue(
+      preparedEvent,
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+    });
+    prisma.placementPayment.create.mockResolvedValue(payment);
+
+    await service.create(user, 'placement-1', {
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      direction: PlacementPaymentDirection.INBOUND,
+      counterpartyId: 'cedant-1',
+      amount: 1000,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+    });
+
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      prisma,
+      preparedEvent,
+    );
+  });
+
+  it('rolls back premium payment creation when required accounting capture fails', async () => {
+    const mutablePayments: unknown[] = [];
+    const preparedEvent = {
+      tenantId: 'tenant-1',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-1',
+      sourceDocumentId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      occurredAt: '2026-06-04T12:00:00.000Z',
+      currency: 'USD',
+      payload: { amounts: { paymentAmount: 1000 } },
+    };
+    financialEvents.preparePremiumPaymentReceived.mockReturnValue(
+      preparedEvent,
+    );
+    financialEvents.enqueuePreparedEvent.mockRejectedValue(
+      new Error('Outbox insert failed'),
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+    });
+    prisma.placementPayment.create.mockImplementation(() => {
+      mutablePayments.push(payment);
+      return Promise.resolve(payment);
+    });
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const before = [...mutablePayments];
+        try {
+          return await callback(prisma);
+        } catch (error) {
+          mutablePayments.splice(0, mutablePayments.length, ...before);
+          throw error;
+        }
+      },
+    );
+
+    await expect(
+      service.create(user, 'placement-1', {
+        type: PlacementPaymentType.PREMIUM_RECEIVED,
+        direction: PlacementPaymentDirection.INBOUND,
+        counterpartyId: 'cedant-1',
+        amount: 1000,
+        currency: 'USD',
+        paymentDate: '2026-06-04T12:00:00.000Z',
+      }),
+    ).rejects.toThrow('Outbox insert failed');
+
+    expect(mutablePayments).toHaveLength(0);
+  });
+
+  it('does not enqueue a premium received event when Accounting is disabled', async () => {
+    const disabledUser = {
+      ...user,
+      moduleConfig: { operations: true, accounting: false },
+    };
+    financialEvents.preparePremiumPaymentReceived.mockReturnValue(null);
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+    });
+    prisma.placementPayment.create.mockResolvedValue(payment);
+
+    await service.create(disabledUser, 'placement-1', {
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      direction: PlacementPaymentDirection.INBOUND,
+      counterpartyId: 'cedant-1',
+      amount: 1000,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+    });
+
+    expect(financialEvents.preparePremiumPaymentReceived).toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('rejects payment before any confirmed closing exists', async () => {
@@ -685,6 +834,121 @@ describe('PlacementPaymentsService', () => {
       status: PlacementPaymentStatus.RECORDED,
     });
     expect(result.reversalOfPaymentId).toBe('payment-1');
+  });
+
+  it('captures a payment reversal accounting event atomically', async () => {
+    const preparedEvent = {
+      tenantId: 'tenant-1',
+      sourceEventType: 'PAYMENT_REVERSED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-reversal-1',
+      sourceDocumentId: 'payment-reversal-1',
+      idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
+      occurredAt: '2026-06-04T13:00:00.000Z',
+      currency: 'USD',
+      payload: { amounts: { paymentAmount: 1000 } },
+    };
+    financialEvents.preparePaymentReversed.mockReturnValue(preparedEvent);
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementPayment.findFirst.mockResolvedValue(payment);
+    prisma.placementPayment.update.mockResolvedValue({
+      ...payment,
+      status: PlacementPaymentStatus.REVERSED,
+    });
+    prisma.placementPayment.create.mockResolvedValue({
+      ...payment,
+      id: 'payment-reversal-1',
+      amount: new Prisma.Decimal('-1000.00'),
+      reversalOfPaymentId: 'payment-1',
+    });
+
+    await service.reverse(user, 'placement-1', 'payment-1');
+
+    const reversalEventArg = financialEvents.preparePaymentReversed.mock
+      .calls[0]?.[1] as
+      | {
+          id?: string;
+          reversalOfPayment?: { id?: string; status?: PlacementPaymentStatus };
+          placement?: { id?: string; reference?: string };
+        }
+      | undefined;
+    if (!reversalEventArg) {
+      throw new Error('Expected reversal event preparation');
+    }
+    expect(reversalEventArg.id).toBe('payment-reversal-1');
+    expect(reversalEventArg.reversalOfPayment).toMatchObject({
+      id: 'payment-1',
+      status: PlacementPaymentStatus.REVERSED,
+    });
+    expect(reversalEventArg.placement).toMatchObject({
+      id: 'placement-1',
+      reference: 'FAC-001',
+    });
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      prisma,
+      preparedEvent,
+    );
+  });
+
+  it('rolls back payment reversal when required accounting capture fails', async () => {
+    const mutableOriginal = { ...payment };
+    const mutableReversals: unknown[] = [];
+    const preparedEvent = {
+      tenantId: 'tenant-1',
+      sourceEventType: 'PAYMENT_REVERSED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-reversal-1',
+      sourceDocumentId: 'payment-reversal-1',
+      idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
+      occurredAt: '2026-06-04T13:00:00.000Z',
+      currency: 'USD',
+      payload: { amounts: { paymentAmount: 1000 } },
+    };
+    financialEvents.preparePaymentReversed.mockReturnValue(preparedEvent);
+    financialEvents.enqueuePreparedEvent.mockRejectedValue(
+      new Error('Outbox insert failed'),
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementPayment.findFirst.mockResolvedValue(mutableOriginal);
+    prisma.placementPayment.update.mockImplementation((args: unknown) => {
+      const { data } = args as Prisma.PlacementPaymentUpdateArgs;
+      Object.assign(mutableOriginal, data);
+      return Promise.resolve(mutableOriginal);
+    });
+    prisma.placementPayment.create.mockImplementation(() => {
+      const reversal = {
+        ...payment,
+        id: 'payment-reversal-1',
+        amount: new Prisma.Decimal('-1000.00'),
+        reversalOfPaymentId: 'payment-1',
+      };
+      mutableReversals.push(reversal);
+      return Promise.resolve(reversal);
+    });
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const beforeOriginal = { ...mutableOriginal };
+        const beforeReversals = [...mutableReversals];
+        try {
+          return await callback(prisma);
+        } catch (error) {
+          Object.assign(mutableOriginal, beforeOriginal);
+          mutableReversals.splice(
+            0,
+            mutableReversals.length,
+            ...beforeReversals,
+          );
+          throw error;
+        }
+      },
+    );
+
+    await expect(
+      service.reverse(user, 'placement-1', 'payment-1'),
+    ).rejects.toThrow('Outbox insert failed');
+
+    expect(mutableOriginal.status).toBe(PlacementPaymentStatus.RECORDED);
+    expect(mutableReversals).toHaveLength(0);
   });
 
   it('preserves endorsement closing source when reversing an endorsement disbursement', async () => {
