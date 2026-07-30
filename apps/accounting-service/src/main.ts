@@ -23,6 +23,10 @@ async function bootstrap() {
         path: 'internal/source-events',
         method: RequestMethod.POST,
       },
+      {
+        path: 'internal/subledgers/ensure',
+        method: RequestMethod.POST,
+      },
     ],
   });
   if (isSwaggerEnabled()) setupSwagger(app);

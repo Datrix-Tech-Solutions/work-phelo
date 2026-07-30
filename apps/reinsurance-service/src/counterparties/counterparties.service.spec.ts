@@ -4,6 +4,7 @@ import {
   CounterpartyOrigin,
   CounterpartyType,
 } from '../../prisma/generated/client';
+import { ReinsuranceAccountingReadinessService } from '../accounting-integration/reinsurance-accounting-readiness.service';
 import { CounterpartyEventPublisher } from '../messaging/counterparty-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { CounterpartiesService } from './counterparties.service';
@@ -62,6 +63,9 @@ describe('CounterpartiesService', () => {
     updated: jest.Mock;
     deleted: jest.Mock;
   };
+  let accountingReadiness: {
+    syncCounterpartyBestEffort: jest.Mock;
+  };
   let service: CounterpartiesService;
 
   beforeEach(() => {
@@ -79,9 +83,15 @@ describe('CounterpartiesService', () => {
       updated: jest.fn().mockResolvedValue(undefined),
       deleted: jest.fn().mockResolvedValue(undefined),
     };
+    accountingReadiness = {
+      syncCounterpartyBestEffort: jest.fn().mockResolvedValue({
+        status: 'DISABLED',
+      }),
+    };
     service = new CounterpartiesService(
       prisma as unknown as PrismaService,
       publisher as unknown as CounterpartyEventPublisher,
+      accountingReadiness as unknown as ReinsuranceAccountingReadinessService,
     );
   });
 
@@ -181,6 +191,10 @@ describe('CounterpartiesService', () => {
         actorUserId: 'user-1',
         counterpartyId: 'counterparty-1',
       }),
+    );
+    expect(accountingReadiness.syncCounterpartyBestEffort).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({ id: 'counterparty-1' }),
     );
   });
 
@@ -326,6 +340,10 @@ describe('CounterpartiesService', () => {
       }),
     );
     expect(publisher.updated).toHaveBeenCalled();
+    expect(accountingReadiness.syncCounterpartyBestEffort).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({ id: 'counterparty-1', name: 'Updated Cedant' }),
+    );
   });
 
   it('rejects changing a local counterparty to foreign without country', async () => {

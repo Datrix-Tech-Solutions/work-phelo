@@ -10,6 +10,7 @@ import {
   ReinsuranceCounterpartyAuditEvent,
 } from '@work-phelo/types';
 import { CounterpartyOrigin, Prisma } from '../../prisma/generated/client';
+import { ReinsuranceAccountingReadinessService } from '../accounting-integration/reinsurance-accounting-readiness.service';
 import { CounterpartyEventPublisher } from '../messaging/counterparty-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCounterpartyAddressDto } from './dto/create-counterparty-address.dto';
@@ -38,6 +39,7 @@ export class CounterpartiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly publisher: CounterpartyEventPublisher,
+    private readonly accountingReadiness: ReinsuranceAccountingReadinessService,
   ) {}
 
   async findAll(tenantId: string, query: QueryCounterpartiesDto) {
@@ -149,6 +151,7 @@ export class CounterpartiesService {
         'create',
         created.id,
       );
+      await this.accountingReadiness.syncCounterpartyBestEffort(user, created);
       return created;
     } catch (error) {
       this.rethrowWriteError(error);
@@ -236,6 +239,7 @@ export class CounterpartiesService {
         'update',
         updated.id,
       );
+      await this.accountingReadiness.syncCounterpartyBestEffort(user, updated);
       return updated;
     } catch (error) {
       this.rethrowWriteError(error);

@@ -64,6 +64,55 @@ describe('ReinsuranceAccountingClient', () => {
     expect(headers['x-workphelo-signature']).toBe(expectedSignature);
   });
 
+  it('ensures an Accounting subledger with the expected HMAC path', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 'subledger-1',
+          code: 'CED-ABC123',
+          type: 'CEDANT',
+          externalRef: 'counterparty-1',
+          status: 'ACTIVE',
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const client = new ReinsuranceAccountingClient();
+    const result = await client.ensureSubledger({
+      tenantId: 'tenant-1',
+      type: 'CEDANT',
+      externalRef: 'counterparty-1',
+      name: 'Acme Cedant',
+    });
+
+    const expectedSignature = createHmac(
+      'sha256',
+      process.env.INTERNAL_SERVICE_AUTH_SECRET!,
+    )
+      .update('reinsurance-service:1710000000:POST:/internal/subledgers/ensure')
+      .digest('hex');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+
+    expect(result.id).toBe('subledger-1');
+    expect(url).toBe(
+      'http://accounting-service:4008/internal/subledgers/ensure',
+    );
+    expect(headers['x-workphelo-signature']).toBe(expectedSignature);
+  });
+
+  it('reports Accounting configuration readiness without making a request', () => {
+    const client = new ReinsuranceAccountingClient();
+
+    expect(client.configurationStatus()).toEqual({
+      configured: true,
+      baseUrlConfigured: true,
+      serviceAuthSecretConfigured: true,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('classifies 5xx responses as retryable and 4xx validation as permanent', async () => {
     const client = new ReinsuranceAccountingClient();
     const event = {
