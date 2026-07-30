@@ -75,7 +75,7 @@ export function DocumentPreviewModal({
                 alt={companyName ?? 'Company logo'}
                 width={120}
                 height={60}
-                className="object-contain justify-self-start max-h-[60px]"
+                className="object-contain justify-self-start max-h-15"
                 unoptimized
               />
             ) : (

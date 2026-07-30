@@ -211,7 +211,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'grossPremium',
       label: 'Current Gross Premium',
-      width: 'minmax(200px, 1fr)',
+      width: '200px',
       render: (row) => (
         <span className="text-gray-700">{fmtAmount(row.grossPremium, row.currency)}</span>
       ),
@@ -219,7 +219,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'netPremium',
       label: 'Current Net Premium',
-      width: 'minmax(200px, 1fr)',
+      width: '200px',
       render: (row) => (
         <span className="text-gray-700">{fmtAmount(row.netPremium, row.currency)}</span>
       ),
@@ -461,12 +461,12 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
                       debitNoteViewed ? '' : 'btn-pulse',
                     ),
                   },
-                  {
-                    label: 'Mail to Cedant',
-                    onClick: () => setMailToCedantOpen(true),
-                    className:
-                      'ml-3 bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700 focus:ring-blue-600',
-                  },
+                  // {
+                  //   label: 'Mail to Cedant',
+                  //   onClick: () => setMailToCedantOpen(true),
+                  //   className:
+                  //     'ml-3 bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700 focus:ring-blue-600',
+                  // },
                 ]
               : undefined
           }

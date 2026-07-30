@@ -40,6 +40,14 @@
   --text-hover-muted:     var(--color-gray-600);
   --focus-ring:           var(--color-gray-400);
 
+  /* Idle border for text inputs/pickers/comboboxes (Input, DatePicker, SearchSelect,
+     PhoneInput, CurrencyInput, MultiSelect, RichTextEditor). Light mode matches the
+     plain border-gray-400 this replaced. Dark mode deliberately does NOT reuse the
+     inverted --color-gray-400 (#A3A3A3, tuned to hit 4.5:1 text contrast) — at that
+     brightness a 1px border reads as a harsh glowing outline against the dark navy
+     background. A soft translucent white keeps the field visibly bounded instead. */
+  --input-border: var(--color-gray-400);
+
   /* "Strong" glass surfaces (Sidebar, TopNav, ContactCard, DataCard, ModuleButton) —
      kept more opaque than cardClass's own glass for legibility. Dark mode needs a much
      lower opacity here, or a 60%-white wash over a dark backdrop just reads as flat gray. */
@@ -104,6 +112,7 @@
   --text-hover-strong:    #f5f5f5;
   --text-hover-muted:     #cbd5e1;
   --focus-ring:           rgba(255, 255, 255, 0.35);
+  --input-border:         rgba(255, 255, 255, 0.18);
   --glass-strong:         rgba(255, 255, 255, 0.08);
   --glass-subtle:         rgba(255, 255, 255, 0.05);
   --qa-tile-bg:           rgba(255, 255, 255, 0.08);

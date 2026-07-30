@@ -406,8 +406,8 @@ export function RichTextEditor({
       <div
         className={cn(
           'border rounded-input bg-transparent overflow-visible',
-          error ? 'border-red-500' : 'border-gray-400',
-          'focus-within:ring-1 focus-within:ring-gray-400 focus-within:border-gray-400',
+          error ? 'border-red-500' : 'border-(--input-border,var(--color-gray-400))',
+          'focus-within:ring-1 focus-within:ring-(--input-border,var(--color-gray-400)) focus-within:border-(--input-border,var(--color-gray-400))',
         )}
       >
         {/* ── Tab bar + toolbar ─────────────────────────────────────── */}

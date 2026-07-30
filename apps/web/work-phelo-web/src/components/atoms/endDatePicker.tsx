@@ -139,7 +139,7 @@ export function MonthPicker({
           'focus:outline-none',
           isOpen
             ? 'border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
-            : 'border-gray-400',
+            : 'border-(--input-border,var(--color-gray-400))',
           disabled && 'opacity-60 cursor-not-allowed',
         )}
       >

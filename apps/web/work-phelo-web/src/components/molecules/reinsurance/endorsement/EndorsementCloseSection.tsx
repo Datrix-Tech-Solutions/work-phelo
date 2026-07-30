@@ -21,8 +21,14 @@ export function EndorsementCloseSection({
   return (
     <section className="flex flex-col gap-3 border-t border-gray-100 pt-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" isLoading={isUpdatingStatus} disabled={!isReadyToClose} onClick={onClose}>
-          Close Endorsement
+        <Button
+          variant="danger"
+          size="sm"
+          isLoading={isUpdatingStatus}
+          disabled={!isReadyToClose}
+          onClick={onClose}
+        >
+          Validate Endorsement
         </Button>
       </div>
     </section>

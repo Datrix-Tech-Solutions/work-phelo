@@ -192,9 +192,14 @@ export function ClosingLetterModal({
         {reinsurerCity && <p className="text-gray-600">{reinsurerCity}</p>}
         {reinsurerRegionCountry && <p className="text-gray-600">{reinsurerRegionCountry}</p>}
         <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
+        <p className="font-bold text-gray-900 mt-3 leading-relaxed">
+          Facultative Reinsurance Application
+        </p>
         <p className="text-gray-700 mt-3 leading-relaxed">
-          We refer to the risk below and your confirmed participation in this risk. Kindly find the
-          confirmed closing particulars below.
+          We refer to the risk below and your subsequent acceptance of a share of the same risk.
+        </p>
+        <p className="text-gray-700 mt-1 leading-relaxed">
+          Kindly issue your guarantee in accordance with the information below.
         </p>
       </div>
 

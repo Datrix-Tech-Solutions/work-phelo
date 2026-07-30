@@ -13,7 +13,7 @@ export function inputClass(error?: string, extra?: string) {
     'focus:outline-none',
     error
       ? 'border-red-500 focus:ring-2 focus:ring-red-500/30 focus:border-red-500'
-      : 'border-gray-400 focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',
+      : 'border-(--input-border,var(--color-gray-400)) focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',
     extra,
   );
 }

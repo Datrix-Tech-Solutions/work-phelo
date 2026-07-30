@@ -16,8 +16,9 @@ import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panel
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { PartialEditFacultativePanel } from '@/components/organisms/reinsurance/panels/PartialEditFacultativePanel';
 import { RenewFacultativePanel } from '@/components/organisms/reinsurance/panels/RenewFacultativePanel';
-import { Facultative, PlacementPayment } from '@/types/reinsurance';
+import { Facultative, PlacementEndorsement, PlacementPayment } from '@/types/reinsurance';
 import {
+  endorsementKey,
   useArchivedFacultatives,
   useCedants,
   useDeleteFacultative,
@@ -421,6 +422,37 @@ export function FacultativeTable({
     return map;
   }, [paged, openPaymentQueries, tab, cedants]);
 
+  // Reopen Offer is only valid once no endorsement has been made on the placement —
+  // reopening after an endorsement would let the original offer diverge from what's
+  // since been endorsed. Excludes VOID endorsements, same as EndorsedReferencePill.
+  const endorsementQueries = useQueries({
+    queries:
+      tab === 'archived'
+        ? []
+        : paged.map((row) => ({
+            queryKey: endorsementKey(row.id),
+            queryFn: async () => {
+              const res = await api.get(
+                `/operations/reinsurance/placements/${row.id}/endorsements`,
+              );
+              return (res.data?.items ?? res.data ?? []) as PlacementEndorsement[];
+            },
+          })),
+  });
+
+  const hasEndorsementMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    if (tab === 'archived') return map;
+    paged.forEach((row, i) => {
+      const endorsements = endorsementQueries[i]?.data ?? [];
+      map.set(
+        row.id,
+        endorsements.some((e) => e.status !== 'VOID'),
+      );
+    });
+    return map;
+  }, [paged, endorsementQueries, tab]);
+
   const columns = useMemo<Column<Facultative>[]>(() => {
     const userNameById = new Map(
       (Array.isArray(tenantUsers) ? (tenantUsers as TenantUser[]) : []).map((user) => [
@@ -547,9 +579,11 @@ export function FacultativeTable({
         ];
       }
 
+      const hasEndorsement = hasEndorsementMap.get(row.id) ?? false;
+
       return [
         { label: 'View Offer Details', onClick: () => router.push(detailUrl) },
-        { label: 'Reopen Offer', onClick: () => setReopenTarget(row) },
+        ...(hasEndorsement ? [] : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
         partialEditAction,
         { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
         renewAction,
@@ -560,6 +594,7 @@ export function FacultativeTable({
       const paymentStatus = openPaymentStatusMap.get(row.id) ?? 'Outstanding';
       const canArchive = paymentStatus === 'Outstanding';
       const isPartiallyClosed = row.status === 'PARTIALLY_PLACED' || row.status === 'CLOSING';
+      const hasEndorsement = hasEndorsementMap.get(row.id) ?? false;
       const forceCloseAction: RowAction | null =
         row.status === 'CLOSING'
           ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
@@ -567,9 +602,10 @@ export function FacultativeTable({
       const archiveAction: RowAction | null = canArchive
         ? { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }
         : null;
-      const reopenAction: RowAction | null = isPartiallyClosed
-        ? { label: 'Reopen Offer', onClick: () => setReopenTarget(row) }
-        : null;
+      const reopenAction: RowAction | null =
+        isPartiallyClosed && !hasEndorsement
+          ? { label: 'Reopen Offer', onClick: () => setReopenTarget(row) }
+          : null;
       const editAction: RowAction =
         isPartiallyClosed || hasPaymentMap.get(row.id)
           ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }

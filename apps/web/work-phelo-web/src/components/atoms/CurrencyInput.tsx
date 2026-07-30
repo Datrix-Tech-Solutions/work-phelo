@@ -57,7 +57,7 @@ export function CurrencyInput({
         className={cn(
           'flex border rounded-input overflow-hidden bg-transparent transition-colors',
           'focus-within:ring-2 focus-within:ring-(--module-btn-bg,var(--color-brand))/30 focus-within:border-(--module-btn-bg,var(--color-brand))',
-          error ? 'border-red-500' : 'border-gray-400',
+          error ? 'border-red-500' : 'border-(--input-border,var(--color-gray-400))',
         )}
       >
         {/* Currency selector */}

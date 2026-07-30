@@ -1,8 +1,6 @@
 'use client';
 
 import { fmtDate, fmtVal } from './formatters';
-import { cardClass } from '@/lib/utils';
-import { useThemeStore } from '@/store/theme.store';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 
 const PARAM_FIELDS: { key: string; label: string }[] = [
@@ -39,14 +37,13 @@ function detailEntryMap(
   return map;
 }
 
-export function ParameterCards({
+export function ParameterChangesTable({
   original,
   proposed,
 }: {
   original: Record<string, unknown>;
   proposed: Record<string, unknown>;
 }) {
-  const isDark = useThemeStore((s) => s.theme === 'dark');
   const changedFields = PARAM_FIELDS.filter(({ key }) => {
     const b = proposed[key];
     return b !== undefined && String(original[key] ?? '') !== String(b ?? '');
@@ -73,54 +70,37 @@ export function ParameterCards({
     return <p className="text-xs text-gray-400 italic">No parameter changes recorded.</p>;
   }
 
-  const revisedLabelColor = isDark ? '#4ade80' : '#16a34a';
-  const revisedValueColor = isDark ? '#86efac' : '#15803d';
-
   const originalValue = (key: string) =>
     originalDetails.has(key) ? originalDetails.get(key)!.value : original[key];
   const proposedValue = (key: string) =>
     proposedDetails.has(key) ? proposedDetails.get(key)!.value : proposed[key];
 
   return (
-    <div className="flex gap-4">
-      <div className={cardClass('flex-1 flex flex-col gap-3 p-4')}>
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Previous Parameters
-        </p>
-        <div className="flex flex-col gap-2">
-          {allChanged.map(({ key, label }) => (
-            <div key={key} className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500 shrink-0">{label}</span>
-              <span className="text-xs font-medium text-gray-700 text-right">
-                {DATE_KEYS.has(key)
-                  ? fmtDate(originalValue(key) as string)
-                  : fmtVal(originalValue(key))}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex-1 rounded-xl border border-green-500/30 bg-green-500/10 p-4 flex flex-col gap-3">
-        <p
-          className="text-xs font-semibold uppercase tracking-wide"
-          style={{ color: revisedLabelColor }}
-        >
-          Revised Parameters
-        </p>
-        <div className="flex flex-col gap-2">
-          {allChanged.map(({ key, label }) => (
-            <div key={key} className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500 shrink-0">{label}</span>
-              <span className="text-xs font-medium text-right" style={{ color: revisedValueColor }}>
-                {DATE_KEYS.has(key)
-                  ? fmtDate(proposedValue(key) as string)
-                  : fmtVal(proposedValue(key))}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <table className="w-full text-sm border-collapse">
+      <thead>
+        <tr className="border-b border-gray-200">
+          <th className="py-1.5 pr-3 text-left text-xs font-semibold text-gray-500">Field</th>
+          <th className="py-1.5 px-3 text-left text-xs font-semibold text-gray-500">Original</th>
+          <th className="py-1.5 pl-3 text-left text-xs font-semibold text-gray-500">Revised</th>
+        </tr>
+      </thead>
+      <tbody>
+        {allChanged.map(({ key, label }) => (
+          <tr key={key} className="border-b border-gray-50 last:border-0">
+            <td className="py-0.5 pr-3 text-gray-500">{label}</td>
+            <td className="py-0.5 px-3 text-gray-700">
+              {DATE_KEYS.has(key)
+                ? fmtDate(originalValue(key) as string)
+                : fmtVal(originalValue(key))}
+            </td>
+            <td className="py-0.5 pl-3 font-medium text-green-700">
+              {DATE_KEYS.has(key)
+                ? fmtDate(proposedValue(key) as string)
+                : fmtVal(proposedValue(key))}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
