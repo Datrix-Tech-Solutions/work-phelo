@@ -272,6 +272,27 @@ describe('ReinsuranceAccountingOutboxService', () => {
     expect(rows[0].nextAttemptAt).toBeNull();
   });
 
+  it('preserves events with clear diagnostics when delivery configuration is missing', async () => {
+    const rows = [makeRow()];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockRejectedValueOnce(
+      new ReinsuranceAccountingClientError(
+        'ACCOUNTING_SERVICE_URL is not configured',
+        false,
+      ),
+    );
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    await service.processPending(prisma, { tenantId: 'tenant-1' });
+
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.FAILED);
+    expect(rows[0].lastError).toBe('ACCOUNTING_SERVICE_URL is not configured');
+    expect(rows[0].nextAttemptAt).toBeNull();
+    expect(rows[0].idempotencyKey).toBe(
+      'reinsurance:payment:payment-1:recorded:v1',
+    );
+  });
+
   it('retries eligible failures and treats Accounting idempotent responses as delivery', async () => {
     const rows = [
       makeRow({

@@ -23,7 +23,10 @@ import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { ProcessReinsuranceAccountingOutboxDto } from './reinsurance-accounting-readiness.dto';
+import {
+  ProcessReinsuranceAccountingOutboxDto,
+  ReconcileDebitNoteAccountingEventsDto,
+} from './reinsurance-accounting-readiness.dto';
 import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
 
 @Controller('accounting-integration')
@@ -71,5 +74,18 @@ export class ReinsuranceAccountingIntegrationController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.readiness.processPending(request.user, query);
+  }
+
+  @Post('reconciliation/debit-note-issued')
+  @ApiOperation({
+    summary: 'Reconcile issued placement debit notes with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets issued placement debit notes missing their deterministic DEBIT_NOTE_ISSUED outbox row.',
+  })
+  reconcileDebitNoteIssuedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileDebitNoteIssuedEvents(request.user, query);
   }
 }

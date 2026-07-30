@@ -8,9 +8,7 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceAccountingClient } from './reinsurance-accounting-client';
 import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
-import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
 import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-event-publisher.service';
 
 describe('ReinsuranceFinancialEventPublisher', () => {
@@ -90,11 +88,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     issuedAt: null,
   };
 
-  const makeService = (overrides?: {
-    accountingConfigured?: boolean;
-    accountingEnabled?: boolean;
-    readinessStatus?: 'SYNCED' | 'FAILED';
-  }) => {
+  const makeService = (overrides?: { accountingEnabled?: boolean }) => {
     const prisma = {
       placement: {
         findFirst: jest.fn().mockResolvedValue(placement),
@@ -102,30 +96,6 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       counterparty: {
         findFirst: jest.fn().mockResolvedValue(counterparty),
       },
-    };
-    const accountingClient = {
-      configurationStatus: jest.fn().mockReturnValue({
-        configured: overrides?.accountingConfigured ?? true,
-        baseUrlConfigured: overrides?.accountingConfigured ?? true,
-        serviceAuthSecretConfigured: overrides?.accountingConfigured ?? true,
-      }),
-    };
-    const readiness = {
-      syncCounterparty: jest.fn().mockResolvedValue(
-        overrides?.readinessStatus === 'FAILED'
-          ? {
-              status: 'FAILED',
-              accountingEnabled: true,
-              retryable: true,
-              message: 'Accounting unavailable',
-            }
-          : {
-              status: 'SYNCED',
-              accountingEnabled: true,
-              subledgerId: 'subledger-1',
-              externalRef: 'cedant-1',
-            },
-      ),
     };
     const outbox = {
       enqueueAccountingEvent: jest.fn(),
@@ -136,18 +106,16 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     } as RequestUser;
     const service = new ReinsuranceFinancialEventPublisher(
       prisma as unknown as PrismaService,
-      accountingClient as unknown as ReinsuranceAccountingClient,
-      readiness as unknown as ReinsuranceAccountingReadinessService,
       outbox as unknown as ReinsuranceAccountingOutboxService,
     );
 
-    return { accountingClient, actor, outbox, prisma, readiness, service };
+    return { actor, outbox, prisma, service };
   };
 
   it('prepares a WFIS-compliant DEBIT_NOTE_ISSUED event from the note snapshot', async () => {
     const { actor, service } = makeService();
 
-    const event = await service.prepareDebitNoteIssuedBestEffort(
+    const event = await service.prepareDebitNoteIssued(
       actor,
       note,
       new Date('2026-06-04T13:00:00.000Z'),
@@ -205,45 +173,32 @@ describe('ReinsuranceFinancialEventPublisher', () => {
   });
 
   it('skips publishing when Accounting is disabled for the tenant', async () => {
-    const { actor, readiness, service } = makeService({
+    const { actor, service } = makeService({
       accountingEnabled: false,
     });
 
-    const event = await service.prepareDebitNoteIssuedBestEffort(
+    const event = await service.prepareDebitNoteIssued(
       actor,
       note,
       new Date('2026-06-04T13:00:00.000Z'),
     );
 
     expect(event).toBeNull();
-    expect(readiness.syncCounterparty).not.toHaveBeenCalled();
   });
 
-  it('skips publishing when Accounting is not configured', async () => {
-    const { actor, readiness, service } = makeService({
-      accountingConfigured: false,
-    });
+  it('captures the event even when delivery configuration is missing', async () => {
+    const { actor, service } = makeService();
 
-    const event = await service.prepareDebitNoteIssuedBestEffort(
+    const event = await service.prepareDebitNoteIssued(
       actor,
       note,
       new Date('2026-06-04T13:00:00.000Z'),
     );
 
-    expect(event).toBeNull();
-    expect(readiness.syncCounterparty).not.toHaveBeenCalled();
-  });
-
-  it('skips publishing when cedant subledger readiness fails', async () => {
-    const { actor, service } = makeService({ readinessStatus: 'FAILED' });
-
-    const event = await service.prepareDebitNoteIssuedBestEffort(
-      actor,
-      note,
-      new Date('2026-06-04T13:00:00.000Z'),
+    expect(event?.sourceEventType).toBe('DEBIT_NOTE_ISSUED');
+    expect(event?.idempotencyKey).toBe(
+      'reinsurance:debit-note:note-1:issued:v1',
     );
-
-    expect(event).toBeNull();
   });
 
   it('enqueues prepared events through the transactional outbox', async () => {

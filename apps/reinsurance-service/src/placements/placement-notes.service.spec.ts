@@ -196,7 +196,7 @@ describe('PlacementNotesService', () => {
     calculateCharges: jest.Mock;
   };
   let financialEvents: {
-    prepareDebitNoteIssuedBestEffort: jest.Mock;
+    prepareDebitNoteIssued: jest.Mock;
     enqueuePreparedEvent: jest.Mock;
   };
 
@@ -252,7 +252,7 @@ describe('PlacementNotesService', () => {
       ),
     };
     financialEvents = {
-      prepareDebitNoteIssuedBestEffort: jest.fn().mockResolvedValue(null),
+      prepareDebitNoteIssued: jest.fn().mockResolvedValue(null),
       enqueuePreparedEvent: jest.fn(),
     };
     service = new PlacementNotesService(
@@ -883,7 +883,7 @@ describe('PlacementNotesService', () => {
     expect(updateArgs.data).toMatchObject({
       status: PlacementNoteStatus.ISSUED,
     });
-    expect(financialEvents.prepareDebitNoteIssuedBestEffort).toHaveBeenCalled();
+    expect(financialEvents.prepareDebitNoteIssued).toHaveBeenCalled();
     expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
@@ -903,9 +903,7 @@ describe('PlacementNotesService', () => {
         amounts: { netPremium: 6750 },
       },
     };
-    financialEvents.prepareDebitNoteIssuedBestEffort.mockResolvedValue(
-      preparedEvent,
-    );
+    financialEvents.prepareDebitNoteIssued.mockResolvedValue(preparedEvent);
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementNote.findFirst.mockResolvedValue(note);
     prisma.placementNote.update.mockResolvedValue({
@@ -918,13 +916,65 @@ describe('PlacementNotesService', () => {
       status: PlacementNoteStatus.ISSUED,
     });
 
-    expect(
-      financialEvents.prepareDebitNoteIssuedBestEffort,
-    ).toHaveBeenCalledWith(user, note, expect.any(Date));
+    expect(financialEvents.prepareDebitNoteIssued).toHaveBeenCalledWith(
+      user,
+      note,
+      expect.any(Date),
+    );
     expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
       prisma,
       preparedEvent,
     );
+  });
+
+  it('rolls back note issuance when required outbox capture fails', async () => {
+    const mutableNote = { ...note };
+    const preparedEvent = {
+      tenantId: 'tenant-1',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: 'note-1',
+      sourceDocumentId: 'note-1',
+      idempotencyKey: 'reinsurance:debit-note:note-1:issued:v1',
+      occurredAt: '2026-06-04T13:00:00.000Z',
+      currency: 'USD',
+      payload: {
+        references: { placementId: 'placement-1', noteNumber: 'DN-001' },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: { netPremium: 6750 },
+      },
+    };
+    financialEvents.prepareDebitNoteIssued.mockResolvedValue(preparedEvent);
+    financialEvents.enqueuePreparedEvent.mockRejectedValue(
+      new Error('Outbox insert failed'),
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(mutableNote);
+    prisma.placementNote.update.mockImplementation((args: unknown) => {
+      const { data } = args as Prisma.PlacementNoteUpdateArgs;
+      Object.assign(mutableNote, data);
+      return Promise.resolve(mutableNote);
+    });
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const before = { ...mutableNote };
+        try {
+          return await callback(prisma);
+        } catch (error) {
+          Object.assign(mutableNote, before);
+          throw error;
+        }
+      },
+    );
+
+    await expect(
+      service.issue(user, 'placement-1', 'note-1', {
+        status: PlacementNoteStatus.ISSUED,
+      }),
+    ).rejects.toThrow('Outbox insert failed');
+
+    expect(mutableNote.status).toBe(PlacementNoteStatus.DRAFT);
+    expect(mutableNote.issuedAt).toBeNull();
   });
 
   it('issues a draft endorsement note', async () => {

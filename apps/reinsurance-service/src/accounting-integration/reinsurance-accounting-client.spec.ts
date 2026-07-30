@@ -146,4 +146,74 @@ describe('ReinsuranceAccountingClient', () => {
       statusCode: 400,
     });
   });
+
+  it('reports missing Accounting URL as a permanent configuration failure', async () => {
+    delete process.env.ACCOUNTING_SERVICE_URL;
+
+    const client = new ReinsuranceAccountingClient();
+
+    await expect(
+      client.enqueueSourceEvent({
+        tenantId: 'tenant-1',
+        sourceModule: 'REINSURANCE',
+        sourceEventType: 'TEST_EVENT',
+        sourceRecordId: 'record-1',
+        idempotencyKey: 'reinsurance:test:1:v1',
+        occurredAt: '2026-07-29T10:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { value: 100 } },
+      }),
+    ).rejects.toMatchObject({
+      message: 'ACCOUNTING_SERVICE_URL is not configured',
+      retryable: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reports invalid Accounting URL as a permanent configuration failure', async () => {
+    process.env.ACCOUNTING_SERVICE_URL = 'not a url';
+
+    const client = new ReinsuranceAccountingClient();
+
+    await expect(
+      client.enqueueSourceEvent({
+        tenantId: 'tenant-1',
+        sourceModule: 'REINSURANCE',
+        sourceEventType: 'TEST_EVENT',
+        sourceRecordId: 'record-1',
+        idempotencyKey: 'reinsurance:test:1:v1',
+        occurredAt: '2026-07-29T10:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { value: 100 } },
+      }),
+    ).rejects.toMatchObject({
+      message: 'ACCOUNTING_SERVICE_URL is invalid',
+      retryable: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reports missing HMAC secret as a permanent configuration failure', async () => {
+    process.env.INTERNAL_SERVICE_AUTH_SECRET = 'short';
+
+    const client = new ReinsuranceAccountingClient();
+
+    await expect(
+      client.enqueueSourceEvent({
+        tenantId: 'tenant-1',
+        sourceModule: 'REINSURANCE',
+        sourceEventType: 'TEST_EVENT',
+        sourceRecordId: 'record-1',
+        idempotencyKey: 'reinsurance:test:1:v1',
+        occurredAt: '2026-07-29T10:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { value: 100 } },
+      }),
+    ).rejects.toMatchObject({
+      message:
+        'INTERNAL_SERVICE_AUTH_SECRET is not configured or shorter than 32 characters',
+      retryable: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

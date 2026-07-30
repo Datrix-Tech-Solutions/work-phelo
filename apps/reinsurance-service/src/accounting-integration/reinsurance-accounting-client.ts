@@ -124,9 +124,23 @@ export class ReinsuranceAccountingClient {
       '',
     );
     const secret = process.env.INTERNAL_SERVICE_AUTH_SECRET?.trim();
-    if (!baseUrl || !secret || secret.length < 32) {
+    if (!baseUrl) {
       throw new ReinsuranceAccountingClientError(
-        'Accounting integration service is not configured',
+        'ACCOUNTING_SERVICE_URL is not configured',
+        false,
+      );
+    }
+    try {
+      new URL(baseUrl);
+    } catch {
+      throw new ReinsuranceAccountingClientError(
+        'ACCOUNTING_SERVICE_URL is invalid',
+        false,
+      );
+    }
+    if (!secret || secret.length < 32) {
+      throw new ReinsuranceAccountingClientError(
+        'INTERNAL_SERVICE_AUTH_SECRET is not configured or shorter than 32 characters',
         false,
       );
     }

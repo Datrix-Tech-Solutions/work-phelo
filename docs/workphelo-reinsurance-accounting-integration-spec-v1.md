@@ -36,7 +36,7 @@ As of this draft, Reinsurance has:
 - Accounting readiness/status endpoints.
 - Counterparty to Accounting subledger readiness sync/check for Cedants and Reinsurers.
 - Operational outbox dispatcher endpoint for already-enqueued rows.
-- Activated `DEBIT_NOTE_ISSUED` publishing when placement debit notes are issued and Accounting readiness passes.
+- Activated `DEBIT_NOTE_ISSUED` capture when placement debit notes are issued for Accounting-enabled tenants.
 
 No other real financial source-event family is active yet.
 
@@ -54,8 +54,9 @@ If Accounting is disabled for a tenant:
 
 If Accounting is enabled:
 
-- Reinsurance SHOULD run counterparty/subledger readiness.
-- Reinsurance MAY enqueue Accounting events only after the relevant event family is approved and activated.
+- Reinsurance MUST durably capture activated source events in its outbox at the financial recognition boundary.
+- Reinsurance SHOULD run counterparty/subledger readiness as a setup and support workflow.
+- Delivery and posting readiness failures MUST NOT silently discard activated source events.
 
 ---
 
@@ -122,11 +123,12 @@ Readiness sync is allowed before real financial event publishing. It MUST NOT cr
 
 Operational endpoints:
 
-| Endpoint                                                                     | Purpose                                      |
-| ---------------------------------------------------------------------------- | -------------------------------------------- |
-| `GET /accounting-integration/status`                                         | Reports entitlement/configuration readiness. |
-| `POST /accounting-integration/counterparties/:counterpartyId/subledger/sync` | Ensures one Cedant/Reinsurer subledger.      |
-| `POST /accounting-integration/outbox/process-pending`                        | Dispatches already-enqueued outbox rows.     |
+| Endpoint                                                                     | Purpose                                                                                                   |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `GET /accounting-integration/status`                                         | Reports entitlement/configuration readiness.                                                              |
+| `POST /accounting-integration/counterparties/:counterpartyId/subledger/sync` | Ensures one Cedant/Reinsurer subledger.                                                                   |
+| `POST /accounting-integration/outbox/process-pending`                        | Dispatches already-enqueued outbox rows.                                                                  |
+| `POST /accounting-integration/reconciliation/debit-note-issued`              | Dry-runs or explicitly enqueues missing `DEBIT_NOTE_ISSUED` outbox rows for issued placement debit notes. |
 
 Accounting internal endpoint:
 
@@ -289,7 +291,7 @@ The first real Reinsurance event is `DEBIT_NOTE_ISSUED`, because:
 - It can be demonstrated through existing Accounting posting rules.
 - It does not require payment reversal complexity.
 
-Activation prerequisites:
+Delivery/posting prerequisites:
 
 1. Accounting module enabled for tenant.
 2. Accounting tenant config complete.
@@ -300,10 +302,28 @@ Activation prerequisites:
 7. Outbox dispatcher available.
 8. Duplicate event tests passing.
 
-If Accounting is disabled or integration readiness cannot be established at the
-moment of issue, Reinsurance MUST still issue the valid debit note and MUST NOT
-create a partial Accounting journal. Operational support can reconcile/backfill
-explicitly once Accounting readiness is restored.
+Capture readiness is intentionally narrower than posting readiness.
+
+For `DEBIT_NOTE_ISSUED`, Reinsurance MUST capture the event when:
+
+1. Accounting is enabled for the tenant.
+2. The source record is an issued placement debit note.
+3. The event can be built from immutable Reinsurance note, placement and Cedant data.
+
+The capture step MUST NOT require:
+
+- `ACCOUNTING_SERVICE_URL`
+- HMAC service secret
+- Accounting service reachability
+- Accounting tenant config
+- Cedant subledger
+- Posting rule
+- Fiscal period status
+
+Those are delivery/posting readiness concerns handled by the dispatcher and
+Accounting `SourceEventInbox` processing. If Accounting is disabled,
+Reinsurance MUST still issue the valid debit note and SHOULD NOT create an
+outbox row in Phase 1.
 
 Example posting rule:
 
@@ -387,6 +407,17 @@ If Reinsurance outbox delivery fails:
 3. Check HMAC configuration.
 4. Check tenant Accounting setup.
 5. Retry through outbox dispatcher.
+
+### 13.4 Missing debit-note outbox row
+
+If support finds an issued placement debit note without a matching
+`DEBIT_NOTE_ISSUED` outbox row:
+
+1. Run the debit-note reconciliation endpoint with `dryRun=true`.
+2. Confirm the note is genuinely missing the deterministic idempotency key.
+3. Run the endpoint with `dryRun=false` only for explicit recovery.
+4. Dispatch the created outbox row.
+5. Process the Accounting source event after delivery.
 
 ---
 

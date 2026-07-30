@@ -1,7 +1,14 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
-import { CounterpartyType, Prisma } from '../../prisma/generated/client';
+import {
+  CounterpartyType,
+  PlacementNoteDirection,
+  PlacementNoteStatus,
+  PlacementNoteType,
+  Prisma,
+} from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-event-publisher.service';
 import {
   ReinsuranceAccountingClient,
   ReinsuranceAccountingClientError,
@@ -45,6 +52,7 @@ export class ReinsuranceAccountingReadinessService {
     private readonly prisma: PrismaService,
     private readonly client: ReinsuranceAccountingClient,
     private readonly outbox: ReinsuranceAccountingOutboxService,
+    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   status(user: RequestUser) {
@@ -55,17 +63,14 @@ export class ReinsuranceAccountingReadinessService {
       integrationConfigured: configuration.configured,
       baseUrlConfigured: configuration.baseUrlConfigured,
       serviceAuthSecretConfigured: configuration.serviceAuthSecretConfigured,
-      sourceEventsActive: accountingEnabled && configuration.configured,
-      activeSourceEvents:
-        accountingEnabled && configuration.configured
-          ? ['DEBIT_NOTE_ISSUED']
-          : [],
+      sourceEventsActive: accountingEnabled,
+      activeSourceEvents: accountingEnabled ? ['DEBIT_NOTE_ISSUED'] : [],
       readinessMode:
-        'Counterparty subledger readiness, debit-note source-event publishing and outbox dispatch.',
+        'Debit-note source-event capture, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. DEBIT_NOTE_ISSUED is active for issued placement debit notes.'
-          : 'Accounting is enabled, but Reinsurance is missing Accounting integration configuration.'
+          ? 'Accounting integration is configured. DEBIT_NOTE_ISSUED capture is active for issued placement debit notes.'
+          : 'Accounting is enabled. DEBIT_NOTE_ISSUED capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
   }
@@ -155,6 +160,149 @@ export class ReinsuranceAccountingReadinessService {
       tenantId: user.tenantId,
       limit: options.limit,
     });
+  }
+
+  async reconcileDebitNoteIssuedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
+    const dryRun = options.dryRun ?? true;
+    const limit = Math.min(options.limit ?? 50, 100);
+    if (!accountingEnabled) {
+      return {
+        accountingEnabled,
+        dryRun,
+        inspectedCount: 0,
+        missingCount: 0,
+        enqueuedCount: 0,
+        items: [],
+        message:
+          'Accounting module is not enabled for this tenant; no debit-note events are captured in Phase 1.',
+      };
+    }
+
+    const notes = await this.prisma.placementNote.findMany({
+      where: {
+        tenantId: user.tenantId,
+        type: PlacementNoteType.DEBIT_NOTE,
+        direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+        status: PlacementNoteStatus.ISSUED,
+        issuedAt: { not: null },
+        placement: { archivedAt: null },
+      },
+      include: {
+        counterparty: {
+          select: {
+            id: true,
+            type: true,
+            name: true,
+            registrationNumber: true,
+          },
+        },
+      },
+      orderBy: { issuedAt: 'asc' },
+      take: limit,
+    });
+    const keys = notes.map((note) => this.debitNoteIdempotencyKey(note.id));
+    const existing = keys.length
+      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
+          where: {
+            tenantId: user.tenantId,
+            idempotencyKey: { in: keys },
+          },
+          select: {
+            id: true,
+            idempotencyKey: true,
+            status: true,
+            accountingSourceEventId: true,
+          },
+        })
+      : [];
+    const existingByKey = new Map(
+      existing.map((event) => [event.idempotencyKey, event]),
+    );
+
+    const items: Array<{
+      noteId: string;
+      noteNumber: string;
+      placementId: string;
+      issuedAt: string;
+      idempotencyKey: string;
+      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
+      outboxId?: string;
+      outboxStatus?: string;
+      accountingSourceEventId?: string | null;
+    }> = [];
+    let enqueuedCount = 0;
+
+    for (const note of notes) {
+      const idempotencyKey = this.debitNoteIdempotencyKey(note.id);
+      const existingEvent = existingByKey.get(idempotencyKey);
+      if (existingEvent) {
+        items.push({
+          noteId: note.id,
+          noteNumber: note.noteNumber,
+          placementId: note.placementId,
+          issuedAt: note.issuedAt?.toISOString() ?? '',
+          idempotencyKey,
+          status: 'PRESENT',
+          outboxId: existingEvent.id,
+          outboxStatus: existingEvent.status,
+          accountingSourceEventId: existingEvent.accountingSourceEventId,
+        });
+        continue;
+      }
+
+      if (dryRun) {
+        items.push({
+          noteId: note.id,
+          noteNumber: note.noteNumber,
+          placementId: note.placementId,
+          issuedAt: note.issuedAt?.toISOString() ?? '',
+          idempotencyKey,
+          status: 'MISSING',
+        });
+        continue;
+      }
+
+      const issuedAt = note.issuedAt;
+      if (!issuedAt) continue;
+      const event = await this.financialEvents.prepareDebitNoteIssued(
+        user,
+        note,
+        issuedAt,
+      );
+      if (!event) continue;
+      const outboxRow = await this.prisma.$transaction((tx) =>
+        this.financialEvents.enqueuePreparedEvent(tx, event),
+      );
+      enqueuedCount += 1;
+      items.push({
+        noteId: note.id,
+        noteNumber: note.noteNumber,
+        placementId: note.placementId,
+        issuedAt: issuedAt.toISOString(),
+        idempotencyKey,
+        status: 'ENQUEUED',
+        outboxId: outboxRow.id,
+        outboxStatus: outboxRow.status,
+        accountingSourceEventId: outboxRow.accountingSourceEventId,
+      });
+    }
+
+    return {
+      accountingEnabled,
+      dryRun,
+      inspectedCount: notes.length,
+      missingCount: items.filter((item) => item.status === 'MISSING').length,
+      enqueuedCount,
+      items,
+    };
+  }
+
+  private debitNoteIdempotencyKey(noteId: string) {
+    return `reinsurance:debit-note:${noteId}:issued:v1`;
   }
 
   private subledgerType(

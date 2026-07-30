@@ -8,13 +8,8 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceAccountingClient } from './reinsurance-accounting-client';
-import {
-  ReinsuranceAccountingEventInput,
-  REINSURANCE_ACCOUNTING_SOURCE_MODULE,
-} from './reinsurance-accounting-event.builder';
+import { ReinsuranceAccountingEventInput } from './reinsurance-accounting-event.builder';
 import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
-import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
 
 type DebitNoteForEvent = {
   id: string;
@@ -53,34 +48,10 @@ export class ReinsuranceFinancialEventPublisher {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly accountingClient: ReinsuranceAccountingClient,
-    private readonly readiness: ReinsuranceAccountingReadinessService,
     private readonly outbox: ReinsuranceAccountingOutboxService,
   ) {}
 
-  async prepareDebitNoteIssuedBestEffort(
-    user: RequestUser,
-    note: DebitNoteForEvent,
-    issuedAt: Date,
-  ): Promise<ReinsuranceAccountingEventInput | null> {
-    try {
-      return await this.prepareDebitNoteIssued(user, note, issuedAt);
-    } catch (error) {
-      this.logger.warn(
-        `Skipped ${REINSURANCE_ACCOUNTING_SOURCE_MODULE} DEBIT_NOTE_ISSUED preparation for note ${note.id}: ${this.message(error)}`,
-      );
-      return null;
-    }
-  }
-
-  enqueuePreparedEvent(
-    tx: Prisma.TransactionClient,
-    event: ReinsuranceAccountingEventInput,
-  ) {
-    return this.outbox.enqueueAccountingEvent(tx, event);
-  }
-
-  private async prepareDebitNoteIssued(
+  async prepareDebitNoteIssued(
     user: RequestUser,
     note: DebitNoteForEvent,
     issuedAt: Date,
@@ -92,19 +63,10 @@ export class ReinsuranceFinancialEventPublisher {
       return null;
     }
 
-    const configuration = this.accountingClient.configurationStatus();
-    if (!configuration.configured) {
-      this.logger.warn(
-        `Accounting integration is not configured for tenant ${user.tenantId}; DEBIT_NOTE_ISSUED not enqueued for note ${note.id}`,
-      );
-      return null;
-    }
-
     if (!this.isIssuedPlacementDebitNote(note, issuedAt)) {
-      this.logger.warn(
-        `Note ${note.id} is not a valid issued placement debit note; DEBIT_NOTE_ISSUED not enqueued`,
+      throw new Error(
+        `Note ${note.id} is not a valid issued placement debit note`,
       );
-      return null;
     }
 
     const [placement, counterparty] = await Promise.all([
@@ -131,24 +93,14 @@ export class ReinsuranceFinancialEventPublisher {
     ]);
 
     if (!placement) {
-      this.logger.warn(
-        `Placement ${note.placementId} not found for issued debit note ${note.id}; DEBIT_NOTE_ISSUED not enqueued`,
+      throw new Error(
+        `Placement ${note.placementId} not found for issued debit note ${note.id}`,
       );
-      return null;
     }
     if (!counterparty || counterparty.type !== CounterpartyType.CEDANT) {
-      this.logger.warn(
-        `Cedant counterparty ${note.counterpartyId} not found for issued debit note ${note.id}; DEBIT_NOTE_ISSUED not enqueued`,
+      throw new Error(
+        `Cedant counterparty ${note.counterpartyId} not found for issued debit note ${note.id}`,
       );
-      return null;
-    }
-
-    const readiness = await this.readiness.syncCounterparty(user, counterparty);
-    if (readiness.status !== 'SYNCED') {
-      this.logger.warn(
-        `Cedant subledger readiness did not complete for issued debit note ${note.id}; status=${readiness.status} message=${readiness.message}`,
-      );
-      return null;
     }
 
     const occurredAt = issuedAt.toISOString();
@@ -223,6 +175,13 @@ export class ReinsuranceFinancialEventPublisher {
     };
   }
 
+  enqueuePreparedEvent(
+    tx: Prisma.TransactionClient,
+    event: ReinsuranceAccountingEventInput,
+  ) {
+    return this.outbox.enqueueAccountingEvent(tx, event);
+  }
+
   private isIssuedPlacementDebitNote(
     note: DebitNoteForEvent,
     issuedAt: Date,
@@ -258,9 +217,5 @@ export class ReinsuranceFinancialEventPublisher {
       throw new Error(`Invalid monetary value ${raw}`);
     }
     return parsed;
-  }
-
-  private message(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
   }
 }
