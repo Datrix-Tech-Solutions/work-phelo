@@ -28,6 +28,7 @@ import {
   ChargeCalculationInput,
   ReinsuranceChargeSettingsService,
 } from '../settings/reinsurance-charge-settings.service';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 
 describe('PlacementNotesService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
@@ -194,6 +195,10 @@ describe('PlacementNotesService', () => {
   let chargeSettings: {
     calculateCharges: jest.Mock;
   };
+  let financialEvents: {
+    prepareDebitNoteIssuedBestEffort: jest.Mock;
+    enqueuePreparedEvent: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = {
@@ -246,9 +251,14 @@ describe('PlacementNotesService', () => {
         },
       ),
     };
+    financialEvents = {
+      prepareDebitNoteIssuedBestEffort: jest.fn().mockResolvedValue(null),
+      enqueuePreparedEvent: jest.fn(),
+    };
     service = new PlacementNotesService(
       prisma as unknown as PrismaService,
       chargeSettings as unknown as ReinsuranceChargeSettingsService,
+      financialEvents as unknown as ReinsuranceFinancialEventPublisher,
     );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
@@ -873,6 +883,48 @@ describe('PlacementNotesService', () => {
     expect(updateArgs.data).toMatchObject({
       status: PlacementNoteStatus.ISSUED,
     });
+    expect(financialEvents.prepareDebitNoteIssuedBestEffort).toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues DEBIT_NOTE_ISSUED in the same transaction when prepared', async () => {
+    const preparedEvent = {
+      tenantId: 'tenant-1',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: 'note-1',
+      sourceDocumentId: 'note-1',
+      idempotencyKey: 'reinsurance:debit-note:note-1:issued:v1',
+      occurredAt: '2026-06-04T13:00:00.000Z',
+      currency: 'USD',
+      payload: {
+        references: { placementId: 'placement-1', noteNumber: 'DN-001' },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: { netPremium: 6750 },
+      },
+    };
+    financialEvents.prepareDebitNoteIssuedBestEffort.mockResolvedValue(
+      preparedEvent,
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(note);
+    prisma.placementNote.update.mockResolvedValue({
+      ...note,
+      status: PlacementNoteStatus.ISSUED,
+      issuedAt: new Date('2026-06-04T13:00:00.000Z'),
+    });
+
+    await service.issue(user, 'placement-1', 'note-1', {
+      status: PlacementNoteStatus.ISSUED,
+    });
+
+    expect(
+      financialEvents.prepareDebitNoteIssuedBestEffort,
+    ).toHaveBeenCalledWith(user, note, expect.any(Date));
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      prisma,
+      preparedEvent,
+    );
   });
 
   it('issues a draft endorsement note', async () => {

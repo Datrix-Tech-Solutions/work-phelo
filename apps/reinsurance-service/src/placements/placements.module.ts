@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
+import { ReinsuranceAccountingIntegrationModule } from '../accounting-integration/reinsurance-accounting-integration.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ReinsuranceChargeSettingsModule } from '../settings/reinsurance-charge-settings.module';
 import { ClaimAllocationCalculator } from './claim-allocation.calculator';
@@ -33,7 +34,12 @@ import { S3DocumentStorageService } from './storage/s3-document-storage.service'
 import { TenantDocumentProfileClient } from './tenant-document-profile.client';
 
 @Module({
-  imports: [PrismaModule, RabbitMQModule, ReinsuranceChargeSettingsModule],
+  imports: [
+    PrismaModule,
+    RabbitMQModule,
+    ReinsuranceChargeSettingsModule,
+    ReinsuranceAccountingIntegrationModule,
+  ],
   controllers: [
     PlacementsController,
     PlacementAttachmentsController,

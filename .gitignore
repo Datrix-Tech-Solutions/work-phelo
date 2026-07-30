@@ -78,6 +78,8 @@ roles-ui-spec/
 docs/
 !docs/
 docs/*
+!docs/workphelo-financial-integration-standard-v1.md
+!docs/workphelo-reinsurance-accounting-integration-spec-v1.md
 
 .compose.local.env
 .env.dev

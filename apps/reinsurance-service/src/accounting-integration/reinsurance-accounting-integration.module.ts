@@ -6,6 +6,7 @@ import { ReinsuranceAccountingEventBuilder } from './reinsurance-accounting-even
 import { ReinsuranceAccountingIntegrationController } from './reinsurance-accounting-integration.controller';
 import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
 import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
+import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-event-publisher.service';
 
 @Module({
   imports: [PrismaModule, AuthModule],
@@ -15,12 +16,14 @@ import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-
     ReinsuranceAccountingEventBuilder,
     ReinsuranceAccountingOutboxService,
     ReinsuranceAccountingReadinessService,
+    ReinsuranceFinancialEventPublisher,
   ],
   exports: [
     ReinsuranceAccountingClient,
     ReinsuranceAccountingEventBuilder,
     ReinsuranceAccountingOutboxService,
     ReinsuranceAccountingReadinessService,
+    ReinsuranceFinancialEventPublisher,
   ],
 })
 export class ReinsuranceAccountingIntegrationModule {}

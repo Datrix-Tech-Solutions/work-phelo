@@ -5,6 +5,7 @@ import {
   PostingDirection,
   Prisma,
   SourceEventStatus,
+  SubledgerType,
 } from '../../prisma/generated/client';
 import { JournalsService } from '../ledger/journals.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -91,16 +92,17 @@ describe('SourceEventsService', () => {
 
   function setup(
     initialStatus: SourceEventStatus = SourceEventStatus.RECEIVED,
+    seedDto: CreateSourceEventDto = dto,
   ) {
     const event = {
       id: 'event-1',
       tenantId: actor.tenantId,
-      sourceModule: dto.sourceModule,
-      sourceEventType: dto.sourceEventType,
-      sourceRecordId: dto.sourceRecordId,
-      sourceDocumentId: dto.sourceDocumentId ?? null,
-      idempotencyKey: dto.idempotencyKey,
-      payload: dto.payload as Prisma.JsonObject,
+      sourceModule: seedDto.sourceModule,
+      sourceEventType: seedDto.sourceEventType,
+      sourceRecordId: seedDto.sourceRecordId,
+      sourceDocumentId: seedDto.sourceDocumentId ?? null,
+      idempotencyKey: seedDto.idempotencyKey,
+      payload: seedDto.payload as Prisma.JsonObject,
       status: initialStatus,
       failureReason:
         initialStatus === SourceEventStatus.FAILED ? 'Previous failure' : null,
@@ -245,6 +247,148 @@ describe('SourceEventsService', () => {
         ],
       }),
     );
+  });
+
+  it('posts REINSURANCE DEBIT_NOTE_ISSUED using the cedant subledger reference', async () => {
+    const reinsuranceDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      sourceRecordId: 'note-1',
+      sourceDocumentId: 'note-1',
+      idempotencyKey: 'reinsurance:debit-note:note-1:issued:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          noteNumber: 'DN-001',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: { netPremium: 8550 },
+      },
+    };
+    const reinsuranceRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.netPremium',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Debit note {{payload.references.noteNumber}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'premium-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.netPremium',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Premium clearing {{payload.references.noteNumber}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      reinsuranceDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(reinsuranceRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, reinsuranceDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.CEDANT,
+        externalRef: 'cedant-1',
+        status: 'ACTIVE',
+      },
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'DEBIT_NOTE_ISSUED',
+        sourceRecordId: 'note-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 8550,
+            credit: 0,
+            description: 'Debit note DN-001 for FAC-2026-001',
+          }),
+          expect.objectContaining({
+            glAccountId: 'premium-clearing',
+            debit: 0,
+            credit: 8550,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('fails REINSURANCE DEBIT_NOTE_ISSUED cleanly when the cedant subledger is missing', async () => {
+    const reinsuranceDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      sourceRecordId: 'note-1',
+      sourceDocumentId: 'note-1',
+      idempotencyKey: 'reinsurance:debit-note:note-1:issued:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: { netPremium: 8550 },
+      },
+    };
+    const reinsuranceRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      lines: [
+        {
+          ...rule.lines[0],
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.netPremium',
+          currencySource: 'currency',
+        },
+        {
+          ...rule.lines[1],
+          amountSource: 'amounts.netPremium',
+          currencySource: 'currency',
+        },
+      ],
+    };
+    const { event, journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      reinsuranceDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(reinsuranceRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue(null);
+
+    const result = await service.receive(actor, reinsuranceDto);
+
+    expect(result.status).toBe(SourceEventStatus.FAILED);
+    expect(event.failureReason).toBe(
+      'Active cedant subledger not found for rule line 1',
+    );
+    expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
   });
 
   it('rejects a duplicate tenant idempotency key safely', async () => {

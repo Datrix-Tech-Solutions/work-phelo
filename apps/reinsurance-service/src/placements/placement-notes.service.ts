@@ -17,6 +17,7 @@ import {
   ReinsuranceChargeRateType,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import {
   AppliedChargeSnapshot,
   ChargeCalculationResult,
@@ -81,6 +82,7 @@ export class PlacementNotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chargeSettings: ReinsuranceChargeSettingsService,
+    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async findAll(
@@ -467,13 +469,29 @@ export class PlacementNotesService {
       );
     }
 
-    return this.prisma.placementNote.update({
-      where: { id: noteId },
-      data: {
-        status: PlacementNoteStatus.ISSUED,
-        issuedAt: new Date(),
-      },
-      include: noteInclude,
+    const issuedAt = new Date();
+    const accountingEvent =
+      await this.financialEvents.prepareDebitNoteIssuedBestEffort(
+        user,
+        note,
+        issuedAt,
+      );
+
+    return this.prisma.$transaction(async (tx) => {
+      const issuedNote = await tx.placementNote.update({
+        where: { id: noteId },
+        data: {
+          status: PlacementNoteStatus.ISSUED,
+          issuedAt,
+        },
+        include: noteInclude,
+      });
+
+      if (accountingEvent) {
+        await this.financialEvents.enqueuePreparedEvent(tx, accountingEvent);
+      }
+
+      return issuedNote;
     });
   }
 

@@ -55,12 +55,16 @@ export class ReinsuranceAccountingReadinessService {
       integrationConfigured: configuration.configured,
       baseUrlConfigured: configuration.baseUrlConfigured,
       serviceAuthSecretConfigured: configuration.serviceAuthSecretConfigured,
-      sourceEventsActive: false,
+      sourceEventsActive: accountingEnabled && configuration.configured,
+      activeSourceEvents:
+        accountingEnabled && configuration.configured
+          ? ['DEBIT_NOTE_ISSUED']
+          : [],
       readinessMode:
-        'Counterparty subledger readiness and outbox dispatch only. Financial events are not activated.',
+        'Counterparty subledger readiness, debit-note source-event publishing and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured for readiness checks.'
+          ? 'Accounting integration is configured. DEBIT_NOTE_ISSUED is active for issued placement debit notes.'
           : 'Accounting is enabled, but Reinsurance is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
