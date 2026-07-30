@@ -128,6 +128,16 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       placement: {
         findFirst: jest.fn().mockResolvedValue(placement),
       },
+      placementEndorsement: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'endorsement-1',
+          endorsementNumber: 'END-001',
+          type: 'CAPACITY_CHANGE',
+          impactType: 'CAPACITY_INCREASE',
+          effectiveDate: new Date('2026-06-10T00:00:00.000Z'),
+          status: 'CLOSING',
+        }),
+      },
       counterparty: {
         findFirst: jest.fn().mockResolvedValue(counterparty),
       },
@@ -316,6 +326,199 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       ),
     ).rejects.toThrow(
       'Note note-1 is not a valid issued placement credit note',
+    );
+  });
+
+  it('prepares ENDORSEMENT_DEBIT_NOTE_ISSUED from an issued endorsement debit note snapshot', async () => {
+    const { actor, service } = makeService();
+    const endorsementDebitNote = {
+      ...note,
+      id: 'endorsement-debit-note-1',
+      endorsementId: 'endorsement-1',
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+      noteNumber: 'EDN-001',
+      grossAmount: new Prisma.Decimal('2500.00'),
+      commissionAmount: new Prisma.Decimal('250.00'),
+      brokerageAmount: new Prisma.Decimal('0.00'),
+      netAmount: new Prisma.Decimal('2250.00'),
+      endorsement: {
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        type: 'CAPACITY_CHANGE',
+        impactType: 'CAPACITY_INCREASE',
+        effectiveDate: new Date('2026-06-10T00:00:00.000Z'),
+        status: 'CLOSING',
+      },
+    };
+
+    const event = await service.prepareEndorsementDebitNoteIssued(
+      actor,
+      endorsementDebitNote,
+      new Date('2026-06-11T13:00:00.000Z'),
+    );
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: 'endorsement-debit-note-1',
+      sourceDocumentId: 'endorsement-debit-note-1',
+      idempotencyKey:
+        'reinsurance:endorsement-debit-note:endorsement-debit-note-1:issued:v1',
+      occurredAt: '2026-06-11T13:00:00.000Z',
+      currency: 'GHS',
+    });
+    if (!event) throw new Error('Expected ENDORSEMENT_DEBIT_NOTE_ISSUED event');
+    const payload = event.payload as {
+      references: Record<string, unknown>;
+      counterparty: Record<string, unknown>;
+      amounts: Record<string, unknown>;
+      endorsement: Record<string, unknown>;
+      note: Record<string, unknown>;
+    };
+    expect(payload.references).toMatchObject({
+      placementId: 'placement-1',
+      endorsementId: 'endorsement-1',
+      endorsementReference: 'END-001',
+      noteNumber: 'EDN-001',
+    });
+    expect(payload.counterparty).toMatchObject({
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+      subledgerExternalRef: 'cedant-1',
+    });
+    expect(payload.amounts).toMatchObject({
+      grossPremiumAdjustment: 2500,
+      commissionAdjustment: 250,
+      netPremiumAdjustment: 2250,
+      adjustmentMagnitude: 2250,
+      signedReceivableImpact: 2250,
+      signedPayableImpact: 0,
+    });
+    expect(payload.endorsement).toMatchObject({
+      id: 'endorsement-1',
+      reference: 'END-001',
+      effectiveDate: '2026-06-10T00:00:00.000Z',
+    });
+    expect(payload.note).toMatchObject({
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+      status: PlacementNoteStatus.ISSUED,
+    });
+  });
+
+  it('prepares ENDORSEMENT_CREDIT_NOTE_ISSUED from a return-premium endorsement credit note snapshot', async () => {
+    const { actor, service } = makeService();
+    const endorsementCreditNote = {
+      ...note,
+      id: 'endorsement-credit-note-1',
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      noteNumber: 'ECN-001',
+      grossAmount: new Prisma.Decimal('-1800.00'),
+      commissionAmount: new Prisma.Decimal('-180.00'),
+      brokerageAmount: new Prisma.Decimal('0.00'),
+      netAmount: new Prisma.Decimal('-1620.00'),
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: 'RE-001',
+      },
+      endorsement: {
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        type: 'CAPACITY_CHANGE',
+        impactType: 'DECREASE_OR_CANCELLATION',
+        effectiveDate: new Date('2026-06-10T00:00:00.000Z'),
+        status: 'CLOSING',
+      },
+      endorsementClosing: {
+        id: 'endorsement-closing-1',
+        closingNumber: 'ECLO-001',
+        endorsementParticipantId: 'endorsement-participant-1',
+      },
+    };
+
+    const event = await service.prepareEndorsementCreditNoteIssued(
+      actor,
+      endorsementCreditNote,
+      new Date('2026-06-11T13:00:00.000Z'),
+    );
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: 'endorsement-credit-note-1',
+      sourceDocumentId: 'endorsement-credit-note-1',
+      idempotencyKey:
+        'reinsurance:endorsement-credit-note:endorsement-credit-note-1:issued:v1',
+      occurredAt: '2026-06-11T13:00:00.000Z',
+      currency: 'GHS',
+    });
+    if (!event) {
+      throw new Error('Expected ENDORSEMENT_CREDIT_NOTE_ISSUED event');
+    }
+    const payload = event.payload as {
+      references: Record<string, unknown>;
+      counterparty: Record<string, unknown>;
+      amounts: Record<string, unknown>;
+      note: Record<string, unknown>;
+    };
+    expect(payload.references).toMatchObject({
+      endorsementId: 'endorsement-1',
+      endorsementReference: 'END-001',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementClosingNumber: 'ECLO-001',
+      endorsementParticipantId: 'endorsement-participant-1',
+      noteNumber: 'ECN-001',
+    });
+    expect(payload.counterparty).toMatchObject({
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+      subledgerExternalRef: 'reinsurer-1',
+    });
+    expect(payload.amounts).toMatchObject({
+      rawGrossPremiumAdjustment: -1800,
+      rawCommissionAdjustment: -180,
+      rawNetPremiumAdjustment: -1620,
+      grossPremiumAdjustment: 1800,
+      commissionAdjustment: 180,
+      netPremiumAdjustment: -1620,
+      adjustmentMagnitude: 1620,
+      returnPremiumMagnitude: 1620,
+      signedReceivableImpact: 0,
+      signedPayableImpact: 1620,
+    });
+    expect(payload.note).toMatchObject({
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      amountRepresentation: 'POSITIVE_MAGNITUDE_WITH_SIGNED_IMPACTS',
+    });
+  });
+
+  it('rejects endorsement events when the note has no endorsement association', async () => {
+    const { actor, service } = makeService();
+
+    await expect(
+      service.prepareEndorsementDebitNoteIssued(
+        actor,
+        {
+          ...note,
+          type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+          direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+          endorsementId: null,
+        },
+        new Date('2026-06-11T13:00:00.000Z'),
+      ),
+    ).rejects.toThrow(
+      'Note note-1 is not a valid issued endorsement debit note',
     );
   });
 

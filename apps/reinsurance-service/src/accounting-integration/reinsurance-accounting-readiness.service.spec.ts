@@ -91,6 +91,47 @@ describe('ReinsuranceAccountingReadinessService', () => {
     },
   };
 
+  const issuedEndorsementDebitNote = {
+    ...issuedNote,
+    id: 'endorsement-debit-note-1',
+    endorsementId: 'endorsement-1',
+    type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+    direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+    noteNumber: 'EDN-001',
+    endorsement: {
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      type: 'CAPACITY_CHANGE',
+      impactType: 'CAPACITY_INCREASE',
+      effectiveDate: new Date('2026-06-10T00:00:00.000Z'),
+      status: 'CLOSING',
+    },
+  };
+
+  const issuedEndorsementCreditNote = {
+    ...issuedCreditNote,
+    id: 'endorsement-credit-note-1',
+    endorsementId: 'endorsement-1',
+    endorsementClosingId: 'endorsement-closing-1',
+    endorsementParticipantId: 'endorsement-participant-1',
+    type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+    direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+    noteNumber: 'ECN-001',
+    endorsement: {
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      type: 'CAPACITY_CHANGE',
+      impactType: 'DECREASE_OR_CANCELLATION',
+      effectiveDate: new Date('2026-06-10T00:00:00.000Z'),
+      status: 'CLOSING',
+    },
+    endorsementClosing: {
+      id: 'endorsement-closing-1',
+      closingNumber: 'ECLO-001',
+      endorsementParticipantId: 'endorsement-participant-1',
+    },
+  };
+
   const payment = {
     id: 'payment-1',
     tenantId: 'tenant-1',
@@ -207,6 +248,30 @@ describe('ReinsuranceAccountingReadinessService', () => {
         occurredAt: '2026-06-04T13:00:00.000Z',
         currency: 'GHS',
         payload: { amounts: { creditMagnitude: 8500 } },
+      }),
+      prepareEndorsementDebitNoteIssued: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+        sourceRecordType: 'PlacementNote',
+        sourceRecordId: 'endorsement-debit-note-1',
+        sourceDocumentId: 'endorsement-debit-note-1',
+        idempotencyKey:
+          'reinsurance:endorsement-debit-note:endorsement-debit-note-1:issued:v1',
+        occurredAt: '2026-06-04T13:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { adjustmentMagnitude: 8500 } },
+      }),
+      prepareEndorsementCreditNoteIssued: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+        sourceRecordType: 'PlacementNote',
+        sourceRecordId: 'endorsement-credit-note-1',
+        sourceDocumentId: 'endorsement-credit-note-1',
+        idempotencyKey:
+          'reinsurance:endorsement-credit-note:endorsement-credit-note-1:issued:v1',
+        occurredAt: '2026-06-04T13:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { returnPremiumMagnitude: 8500 } },
       }),
       preparePremiumPaymentReceived: jest.fn().mockResolvedValue({
         tenantId: 'tenant-1',
@@ -461,6 +526,178 @@ describe('ReinsuranceAccountingReadinessService', () => {
           status: 'PRESENT',
           outboxId: 'outbox-1',
           accountingSourceEventId: 'accounting-event-1',
+        }),
+      ],
+    });
+  });
+
+  it('dry-runs issued endorsement debit notes missing their deterministic outbox row', async () => {
+    const { financialEvents, prisma, service } = makeService([
+      issuedEndorsementDebitNote,
+    ]);
+
+    const result = await service.reconcileEndorsementDebitNoteIssuedEvents(
+      user,
+      {
+        dryRun: true,
+        limit: 10,
+      },
+    );
+
+    const findManyArg = prisma.placementNote.findMany.mock.calls[0]?.[0];
+    if (!findManyArg) {
+      throw new Error('Expected placementNote.findMany to be called');
+    }
+    expect(findManyArg.take).toBe(10);
+    expect(findManyArg.where).toMatchObject({
+      tenantId: 'tenant-1',
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+      status: PlacementNoteStatus.ISSUED,
+      issuedAt: { not: null },
+      endorsementId: { not: null },
+    });
+    expect(result).toMatchObject({
+      accountingEnabled: true,
+      dryRun: true,
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          noteId: 'endorsement-debit-note-1',
+          noteNumber: 'EDN-001',
+          endorsementId: 'endorsement-1',
+          status: 'MISSING',
+          idempotencyKey:
+            'reinsurance:endorsement-debit-note:endorsement-debit-note-1:issued:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing endorsement debit-note events with the original business date', async () => {
+    const { financialEvents, service } = makeService([
+      issuedEndorsementDebitNote,
+    ]);
+
+    const result = await service.reconcileEndorsementDebitNoteIssuedEvents(
+      user,
+      { dryRun: false },
+    );
+
+    expect(
+      financialEvents.prepareEndorsementDebitNoteIssued,
+    ).toHaveBeenCalledWith(
+      user,
+      issuedEndorsementDebitNote,
+      issuedEndorsementDebitNote.issuedAt,
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        idempotencyKey:
+          'reinsurance:endorsement-debit-note:endorsement-debit-note-1:issued:v1',
+        occurredAt: '2026-06-04T13:00:00.000Z',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      missingCount: 0,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          noteId: 'endorsement-debit-note-1',
+          status: 'ENQUEUED',
+          outboxId: 'outbox-1',
+        }),
+      ],
+    });
+  });
+
+  it('dry-runs issued endorsement credit notes missing their deterministic outbox row', async () => {
+    const { financialEvents, prisma, service } = makeService([
+      issuedEndorsementCreditNote,
+    ]);
+
+    const result = await service.reconcileEndorsementCreditNoteIssuedEvents(
+      user,
+      {
+        dryRun: true,
+        limit: 10,
+      },
+    );
+
+    const findManyArg = prisma.placementNote.findMany.mock.calls[0]?.[0];
+    if (!findManyArg) {
+      throw new Error('Expected placementNote.findMany to be called');
+    }
+    expect(findManyArg.take).toBe(10);
+    expect(findManyArg.where).toMatchObject({
+      tenantId: 'tenant-1',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      status: PlacementNoteStatus.ISSUED,
+      issuedAt: { not: null },
+      endorsementId: { not: null },
+      endorsementClosingId: { not: null },
+    });
+    expect(result).toMatchObject({
+      accountingEnabled: true,
+      dryRun: true,
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          noteId: 'endorsement-credit-note-1',
+          noteNumber: 'ECN-001',
+          endorsementId: 'endorsement-1',
+          endorsementClosingId: 'endorsement-closing-1',
+          status: 'MISSING',
+          idempotencyKey:
+            'reinsurance:endorsement-credit-note:endorsement-credit-note-1:issued:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing endorsement credit-note events with the original business date', async () => {
+    const { financialEvents, service } = makeService([
+      issuedEndorsementCreditNote,
+    ]);
+
+    const result = await service.reconcileEndorsementCreditNoteIssuedEvents(
+      user,
+      { dryRun: false },
+    );
+
+    expect(
+      financialEvents.prepareEndorsementCreditNoteIssued,
+    ).toHaveBeenCalledWith(
+      user,
+      issuedEndorsementCreditNote,
+      issuedEndorsementCreditNote.issuedAt,
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        idempotencyKey:
+          'reinsurance:endorsement-credit-note:endorsement-credit-note-1:issued:v1',
+        occurredAt: '2026-06-04T13:00:00.000Z',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      missingCount: 0,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          noteId: 'endorsement-credit-note-1',
+          status: 'ENQUEUED',
+          outboxId: 'outbox-1',
         }),
       ],
     });

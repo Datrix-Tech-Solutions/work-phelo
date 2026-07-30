@@ -103,6 +103,38 @@ export class ReinsuranceAccountingIntegrationController {
     return this.readiness.reconcileCreditNoteIssuedEvents(request.user, query);
   }
 
+  @Post('reconciliation/endorsement-debit-note-issued')
+  @ApiOperation({
+    summary: 'Reconcile issued endorsement debit notes with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets issued endorsement debit notes missing their deterministic ENDORSEMENT_DEBIT_NOTE_ISSUED outbox row.',
+  })
+  reconcileEndorsementDebitNoteIssuedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileEndorsementDebitNoteIssuedEvents(
+      request.user,
+      query,
+    );
+  }
+
+  @Post('reconciliation/endorsement-credit-note-issued')
+  @ApiOperation({
+    summary: 'Reconcile issued endorsement credit notes with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets issued endorsement credit notes missing their deterministic ENDORSEMENT_CREDIT_NOTE_ISSUED outbox row.',
+  })
+  reconcileEndorsementCreditNoteIssuedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileEndorsementCreditNoteIssuedEvents(
+      request.user,
+      query,
+    );
+  }
+
   @Post('reconciliation/premium-payment-received')
   @ApiOperation({
     summary: 'Reconcile recorded premium payments with Accounting outbox',

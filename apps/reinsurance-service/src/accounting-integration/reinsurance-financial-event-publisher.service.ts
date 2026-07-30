@@ -20,6 +20,9 @@ type PlacementNoteForEvent = {
   placementId: string;
   closingId?: string | null;
   participantId?: string | null;
+  endorsementId?: string | null;
+  endorsementClosingId?: string | null;
+  endorsementParticipantId?: string | null;
   counterpartyId: string;
   type: PlacementNoteType;
   direction: PlacementNoteDirection;
@@ -48,6 +51,19 @@ type PlacementNoteForEvent = {
   closing?: {
     id: string;
     closingNumber: string;
+  } | null;
+  endorsement?: {
+    id: string;
+    endorsementNumber: string;
+    type: string;
+    impactType: string;
+    effectiveDate: Date;
+    status: string;
+  } | null;
+  endorsementClosing?: {
+    id: string;
+    closingNumber: string;
+    endorsementParticipantId: string;
   } | null;
 };
 
@@ -372,6 +388,240 @@ export class ReinsuranceFinancialEventPublisher {
     };
   }
 
+  async prepareEndorsementDebitNoteIssued(
+    user: RequestUser,
+    note: PlacementNoteForEvent,
+    issuedAt: Date,
+  ): Promise<ReinsuranceAccountingEventInput | null> {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; ENDORSEMENT_DEBIT_NOTE_ISSUED not enqueued for note ${note.id}`,
+      );
+      return null;
+    }
+
+    if (!this.isIssuedEndorsementDebitNote(note, issuedAt)) {
+      throw new Error(
+        `Note ${note.id} is not a valid issued endorsement debit note`,
+      );
+    }
+
+    const placement = await this.findPlacementForNote(note);
+    const counterparty = await this.findOrUseCounterparty(note);
+    if (!counterparty || counterparty.type !== CounterpartyType.CEDANT) {
+      throw new Error(
+        `Cedant counterparty ${note.counterpartyId} not found for issued endorsement debit note ${note.id}`,
+      );
+    }
+    const endorsement = await this.findEndorsementForNote(note);
+
+    const occurredAt = issuedAt.toISOString();
+    const grossPremiumAdjustment = this.decimalNumber(note.grossAmount);
+    const commissionAdjustment =
+      this.optionalDecimalNumber(note.commissionAmount) ?? 0;
+    const brokerageAdjustment =
+      this.optionalDecimalNumber(note.brokerageAmount) ?? 0;
+    const chargesAdjustment = this.roundMoney(
+      (this.optionalDecimalNumber(note.nicLevyAmount) ?? 0) +
+        (this.optionalDecimalNumber(note.withholdingTaxAmount) ?? 0),
+    );
+    const netPremiumAdjustment = this.decimalNumber(note.netAmount);
+    const adjustmentMagnitude = Math.abs(netPremiumAdjustment);
+
+    return {
+      tenantId: note.tenantId,
+      sourceEventType: 'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: note.id,
+      sourceDocumentId: note.id,
+      idempotencyKey: `reinsurance:endorsement-debit-note:${note.id}:issued:v1`,
+      occurredAt,
+      currency: note.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: note.currency,
+        references: {
+          placementId: placement.id,
+          placementReference: placement.reference,
+          policyNumber: placement.policyNumber,
+          placementTitle: placement.title,
+          endorsementId: endorsement.id,
+          endorsementReference: endorsement.endorsementNumber,
+          endorsementClosingId: note.endorsementClosingId ?? null,
+          endorsementParticipantId: note.endorsementParticipantId ?? null,
+          noteId: note.id,
+          noteNumber: note.noteNumber,
+          noteDate: note.noteDate.toISOString(),
+          issuedAt: occurredAt,
+        },
+        counterparty: {
+          id: counterparty.id,
+          type: counterparty.type,
+          name: counterparty.name,
+          registrationNumber: counterparty.registrationNumber ?? null,
+          subledgerExternalRef: counterparty.id,
+        },
+        amounts: {
+          grossPremiumAdjustment,
+          grossAmount: grossPremiumAdjustment,
+          commissionPercent: this.optionalDecimalNumber(note.commissionPercent),
+          commissionAdjustment,
+          commissionAmount: commissionAdjustment,
+          brokeragePercent: this.optionalDecimalNumber(note.brokeragePercent),
+          brokerageAdjustment,
+          brokerageAmount: brokerageAdjustment,
+          nicLevyPercent: this.optionalDecimalNumber(note.nicLevyPercent) ?? 0,
+          nicLevyAdjustment:
+            this.optionalDecimalNumber(note.nicLevyAmount) ?? 0,
+          withholdingTaxPercent:
+            this.optionalDecimalNumber(note.withholdingTaxPercent) ?? 0,
+          withholdingTaxAdjustment:
+            this.optionalDecimalNumber(note.withholdingTaxAmount) ?? 0,
+          chargesAdjustment,
+          netPremiumAdjustment,
+          netAmount: netPremiumAdjustment,
+          adjustmentMagnitude,
+          signedReceivableImpact: netPremiumAdjustment,
+          signedPayableImpact: 0,
+        },
+        endorsement: this.endorsementPayload(endorsement),
+        documents: {
+          placementNoteId: note.id,
+          placementNoteNumber: note.noteNumber,
+          sourceDocumentId: note.id,
+        },
+        note: this.notePayload(note, occurredAt),
+      },
+    };
+  }
+
+  async prepareEndorsementCreditNoteIssued(
+    user: RequestUser,
+    note: PlacementNoteForEvent,
+    issuedAt: Date,
+  ): Promise<ReinsuranceAccountingEventInput | null> {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; ENDORSEMENT_CREDIT_NOTE_ISSUED not enqueued for note ${note.id}`,
+      );
+      return null;
+    }
+
+    if (!this.isIssuedEndorsementCreditNote(note, issuedAt)) {
+      throw new Error(
+        `Note ${note.id} is not a valid issued endorsement credit note`,
+      );
+    }
+
+    const placement = await this.findPlacementForNote(note);
+    const counterparty = await this.findOrUseCounterparty(note);
+    if (!counterparty || counterparty.type !== CounterpartyType.REINSURER) {
+      throw new Error(
+        `Reinsurer counterparty ${note.counterpartyId} not found for issued endorsement credit note ${note.id}`,
+      );
+    }
+    const endorsement = await this.findEndorsementForNote(note);
+
+    const occurredAt = issuedAt.toISOString();
+    const rawGrossPremiumAdjustment = this.decimalNumber(note.grossAmount);
+    const rawCommissionAdjustment =
+      this.optionalDecimalNumber(note.commissionAmount) ?? 0;
+    const rawBrokerageAdjustment =
+      this.optionalDecimalNumber(note.brokerageAmount) ?? 0;
+    const rawNetPremiumAdjustment = this.decimalNumber(note.netAmount);
+    const grossPremiumAdjustment = Math.abs(rawGrossPremiumAdjustment);
+    const commissionAdjustment = Math.abs(rawCommissionAdjustment);
+    const brokerageAdjustment = Math.abs(rawBrokerageAdjustment);
+    const nicLevyAdjustment = Math.abs(
+      this.optionalDecimalNumber(note.nicLevyAmount) ?? 0,
+    );
+    const withholdingTaxAdjustment = Math.abs(
+      this.optionalDecimalNumber(note.withholdingTaxAmount) ?? 0,
+    );
+    const chargesAdjustment = this.roundMoney(
+      nicLevyAdjustment + withholdingTaxAdjustment,
+    );
+    const adjustmentMagnitude = Math.abs(rawNetPremiumAdjustment);
+
+    return {
+      tenantId: note.tenantId,
+      sourceEventType: 'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+      sourceRecordType: 'PlacementNote',
+      sourceRecordId: note.id,
+      sourceDocumentId: note.id,
+      idempotencyKey: `reinsurance:endorsement-credit-note:${note.id}:issued:v1`,
+      occurredAt,
+      currency: note.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: note.currency,
+        references: {
+          placementId: placement.id,
+          placementReference: placement.reference,
+          policyNumber: placement.policyNumber,
+          placementTitle: placement.title,
+          endorsementId: endorsement.id,
+          endorsementReference: endorsement.endorsementNumber,
+          endorsementClosingId:
+            note.endorsementClosingId ?? note.endorsementClosing?.id ?? null,
+          endorsementClosingNumber:
+            note.endorsementClosing?.closingNumber ?? null,
+          endorsementParticipantId:
+            note.endorsementParticipantId ??
+            note.endorsementClosing?.endorsementParticipantId ??
+            null,
+          noteId: note.id,
+          noteNumber: note.noteNumber,
+          noteDate: note.noteDate.toISOString(),
+          issuedAt: occurredAt,
+        },
+        counterparty: {
+          id: counterparty.id,
+          type: counterparty.type,
+          name: counterparty.name,
+          registrationNumber: counterparty.registrationNumber ?? null,
+          subledgerExternalRef: counterparty.id,
+        },
+        amounts: {
+          rawGrossPremiumAdjustment,
+          rawCommissionAdjustment,
+          rawBrokerageAdjustment,
+          rawNetPremiumAdjustment,
+          grossPremiumAdjustment,
+          grossAmount: grossPremiumAdjustment,
+          commissionPercent: this.optionalDecimalNumber(note.commissionPercent),
+          commissionAdjustment,
+          commissionAmount: commissionAdjustment,
+          brokeragePercent: this.optionalDecimalNumber(note.brokeragePercent),
+          brokerageAdjustment,
+          brokerageAmount: brokerageAdjustment,
+          nicLevyPercent: this.optionalDecimalNumber(note.nicLevyPercent) ?? 0,
+          nicLevyAdjustment,
+          withholdingTaxPercent:
+            this.optionalDecimalNumber(note.withholdingTaxPercent) ?? 0,
+          withholdingTaxAdjustment,
+          chargesAdjustment,
+          netPremiumAdjustment: rawNetPremiumAdjustment,
+          netAmount: adjustmentMagnitude,
+          adjustmentMagnitude,
+          returnPremiumMagnitude: adjustmentMagnitude,
+          signedReceivableImpact: 0,
+          signedPayableImpact: adjustmentMagnitude,
+        },
+        endorsement: this.endorsementPayload(endorsement),
+        documents: {
+          placementNoteId: note.id,
+          placementNoteNumber: note.noteNumber,
+          sourceDocumentId: note.id,
+        },
+        note: {
+          ...this.notePayload(note, occurredAt),
+          amountRepresentation: 'POSITIVE_MAGNITUDE_WITH_SIGNED_IMPACTS',
+        },
+      },
+    };
+  }
+
   preparePremiumPaymentReceived(
     user: RequestUser,
     payment: PaymentForEvent,
@@ -584,6 +834,142 @@ export class ReinsuranceFinancialEventPublisher {
       note.currency.trim().length === 3 &&
       this.decimalNumber(note.netAmount) > 0
     );
+  }
+
+  private isIssuedEndorsementDebitNote(
+    note: PlacementNoteForEvent,
+    issuedAt: Date,
+  ): boolean {
+    return (
+      note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE &&
+      note.direction === PlacementNoteDirection.CEDANT_TO_BROKER &&
+      typeof note.endorsementId === 'string' &&
+      note.endorsementId.trim().length > 0 &&
+      (note.status === PlacementNoteStatus.DRAFT ||
+        note.status === PlacementNoteStatus.ISSUED) &&
+      issuedAt instanceof Date &&
+      !Number.isNaN(issuedAt.getTime()) &&
+      note.currency.trim().length === 3 &&
+      this.decimalNumber(note.netAmount) > 0
+    );
+  }
+
+  private isIssuedEndorsementCreditNote(
+    note: PlacementNoteForEvent,
+    issuedAt: Date,
+  ): boolean {
+    return (
+      note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE &&
+      note.direction === PlacementNoteDirection.BROKER_TO_REINSURER &&
+      typeof note.endorsementId === 'string' &&
+      note.endorsementId.trim().length > 0 &&
+      typeof note.endorsementClosingId === 'string' &&
+      note.endorsementClosingId.trim().length > 0 &&
+      (note.status === PlacementNoteStatus.DRAFT ||
+        note.status === PlacementNoteStatus.ISSUED) &&
+      issuedAt instanceof Date &&
+      !Number.isNaN(issuedAt.getTime()) &&
+      note.currency.trim().length === 3 &&
+      Math.abs(this.decimalNumber(note.netAmount)) > 0
+    );
+  }
+
+  private async findPlacementForNote(note: PlacementNoteForEvent) {
+    const placement = await this.prisma.placement.findFirst({
+      where: {
+        id: note.placementId,
+        tenantId: note.tenantId,
+      },
+      select: {
+        id: true,
+        reference: true,
+        policyNumber: true,
+        title: true,
+        cedantId: true,
+      },
+    });
+    if (!placement) {
+      throw new Error(
+        `Placement ${note.placementId} not found for issued note ${note.id}`,
+      );
+    }
+    return placement;
+  }
+
+  private async findOrUseCounterparty(note: PlacementNoteForEvent) {
+    return (
+      note.counterparty ??
+      (await this.prisma.counterparty.findFirst({
+        where: {
+          id: note.counterpartyId,
+          tenantId: note.tenantId,
+          archivedAt: null,
+        },
+        select: {
+          id: true,
+          type: true,
+          name: true,
+          registrationNumber: true,
+        },
+      }))
+    );
+  }
+
+  private async findEndorsementForNote(note: PlacementNoteForEvent) {
+    if (note.endorsement) return note.endorsement;
+    const endorsement = await this.prisma.placementEndorsement.findFirst({
+      where: {
+        id: note.endorsementId ?? '',
+        tenantId: note.tenantId,
+        placementId: note.placementId,
+      },
+      select: {
+        id: true,
+        endorsementNumber: true,
+        type: true,
+        impactType: true,
+        effectiveDate: true,
+        status: true,
+      },
+    });
+    if (!endorsement) {
+      throw new Error(
+        `Endorsement ${note.endorsementId ?? ''} not found for issued endorsement note ${note.id}`,
+      );
+    }
+    return endorsement;
+  }
+
+  private endorsementPayload(endorsement: {
+    id: string;
+    endorsementNumber: string;
+    type: string;
+    impactType: string;
+    effectiveDate: Date;
+    status: string;
+  }) {
+    return {
+      id: endorsement.id,
+      reference: endorsement.endorsementNumber,
+      type: endorsement.type,
+      impactType: endorsement.impactType,
+      effectiveDate: endorsement.effectiveDate.toISOString(),
+      status: endorsement.status,
+    };
+  }
+
+  private notePayload(note: PlacementNoteForEvent, issuedAt: string) {
+    return {
+      id: note.id,
+      type: note.type,
+      direction: note.direction,
+      number: note.noteNumber,
+      status: PlacementNoteStatus.ISSUED,
+      noteDate: note.noteDate.toISOString(),
+      issuedAt,
+      currency: note.currency,
+      appliedCharges: note.appliedCharges,
+    };
   }
 
   private isRecordedPremiumPayment(payment: PaymentForEvent): boolean {

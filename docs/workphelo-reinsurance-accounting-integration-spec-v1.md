@@ -133,6 +133,8 @@ Operational endpoints:
 | `POST /accounting-integration/outbox/process-pending`                        | Dispatches already-enqueued outbox rows.                                                                    |
 | `POST /accounting-integration/reconciliation/debit-note-issued`              | Dry-runs or explicitly enqueues missing `DEBIT_NOTE_ISSUED` outbox rows for issued placement debit notes.   |
 | `POST /accounting-integration/reconciliation/credit-note-issued`             | Dry-runs or explicitly enqueues missing `CREDIT_NOTE_ISSUED` outbox rows for issued placement credit notes. |
+| `POST /accounting-integration/reconciliation/endorsement-debit-note-issued`  | Dry-runs or explicitly enqueues missing `ENDORSEMENT_DEBIT_NOTE_ISSUED` outbox rows.                        |
+| `POST /accounting-integration/reconciliation/endorsement-credit-note-issued` | Dry-runs or explicitly enqueues missing `ENDORSEMENT_CREDIT_NOTE_ISSUED` outbox rows.                       |
 | `POST /accounting-integration/reconciliation/premium-payment-received`       | Dry-runs or explicitly enqueues missing `PREMIUM_PAYMENT_RECEIVED` outbox rows for premium receipt rows.    |
 | `POST /accounting-integration/reconciliation/payment-reversed`               | Dry-runs or explicitly enqueues missing `PAYMENT_REVERSED` outbox rows for premium payment reversal rows.   |
 
@@ -154,8 +156,8 @@ Reinsurance source events SHOULD be activated incrementally.
 | --------------------------------- | ----------------------- | ------------------------------------------------ |
 | `DEBIT_NOTE_ISSUED`               | Active first activation | Issued placement debit note snapshot.            |
 | `CREDIT_NOTE_ISSUED`              | Active                  | Issued placement credit note snapshot.           |
-| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Proposed                | Issued endorsement debit note snapshot.          |
-| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Proposed                | Issued endorsement credit note snapshot.         |
+| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Active                  | Issued endorsement debit note snapshot.          |
+| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Active                  | Issued endorsement credit note snapshot.         |
 | `PREMIUM_PAYMENT_RECEIVED`        | Active                  | Recorded premium payment row.                    |
 | `PAYMENT_REVERSED`                | Active                  | Reversal payment row linked to original payment. |
 | `REINSURER_DISBURSEMENT_RECORDED` | Proposed                | Recorded outbound reinsurer payment row.         |
@@ -405,6 +407,108 @@ POST /api/v1/operations/reinsurance/accounting-integration/reconciliation/credit
 
 The endpoint is tenant scoped and targets only issued placement credit notes
 missing `reinsurance:credit-note:<noteId>:issued:v1`.
+
+---
+
+## 10.0.2 Endorsement Note Issued Activation
+
+Endorsement note accounting is recognized only when an official endorsement
+note is issued. Endorsement creation, participant response, closing
+confirmation, document preview and endorsement closure are not accounting
+boundaries by themselves.
+
+`ENDORSEMENT_DEBIT_NOTE_ISSUED` is recognized when:
+
+- `PlacementNote.type = ENDORSEMENT_DEBIT_NOTE`
+- `PlacementNote.direction = CEDANT_TO_BROKER`
+- `PlacementNote.endorsementId` is present
+- `PlacementNote.status` transitions from `DRAFT` to `ISSUED`
+- `PlacementNote.issuedAt` is populated
+
+`ENDORSEMENT_CREDIT_NOTE_ISSUED` is recognized when:
+
+- `PlacementNote.type = ENDORSEMENT_CREDIT_NOTE`
+- `PlacementNote.direction = BROKER_TO_REINSURER`
+- `PlacementNote.endorsementId` is present
+- `PlacementNote.endorsementClosingId` is present
+- `PlacementNote.status` transitions from `DRAFT` to `ISSUED`
+- `PlacementNote.issuedAt` is populated
+
+The issued `PlacementNote` is the immutable source financial record for both
+events. Payloads include placement, endorsement, note and, for credit notes,
+endorsement-closing references where available.
+
+Event identity:
+
+```text
+ENDORSEMENT_DEBIT_NOTE_ISSUED
+sourceRecordType = PlacementNote
+sourceRecordId = <endorsement-debit-note-id>
+sourceDocumentId = <endorsement-debit-note-id>
+idempotencyKey = reinsurance:endorsement-debit-note:<noteId>:issued:v1
+occurredAt = PlacementNote.issuedAt
+
+ENDORSEMENT_CREDIT_NOTE_ISSUED
+sourceRecordType = PlacementNote
+sourceRecordId = <endorsement-credit-note-id>
+sourceDocumentId = <endorsement-credit-note-id>
+idempotencyKey = reinsurance:endorsement-credit-note:<noteId>:issued:v1
+occurredAt = PlacementNote.issuedAt
+```
+
+Endorsement debit-note payloads are Cedant-facing and expose additional-premium
+facts:
+
+```json
+{
+  "counterparty": {
+    "id": "<cedant-counterparty-id>",
+    "type": "CEDANT",
+    "subledgerExternalRef": "<cedant-counterparty-id>"
+  },
+  "amounts": {
+    "adjustmentMagnitude": 2250,
+    "signedReceivableImpact": 2250,
+    "signedPayableImpact": 0
+  }
+}
+```
+
+Endorsement credit-note payloads are Reinsurer-facing and expose return-premium
+facts. Raw signed source-note values are preserved where useful, while
+Accounting rules can use positive magnitudes:
+
+```json
+{
+  "counterparty": {
+    "id": "<reinsurer-counterparty-id>",
+    "type": "REINSURER",
+    "subledgerExternalRef": "<reinsurer-counterparty-id>"
+  },
+  "amounts": {
+    "rawNetPremiumAdjustment": -1620,
+    "returnPremiumMagnitude": 1620,
+    "adjustmentMagnitude": 1620,
+    "signedReceivableImpact": 0,
+    "signedPayableImpact": 1620
+  }
+}
+```
+
+Accounting posting rules own the final GL treatment. Finance may configure
+endorsement debit notes as additional receivables and endorsement credit notes
+as payable, contra-receivable, clearing or another approved tenant treatment.
+Reinsurance MUST NOT hardcode those GL policies.
+
+Reconciliation endpoints:
+
+```http
+POST /api/v1/operations/reinsurance/accounting-integration/reconciliation/endorsement-debit-note-issued?dryRun=true&limit=50
+POST /api/v1/operations/reinsurance/accounting-integration/reconciliation/endorsement-credit-note-issued?dryRun=true&limit=50
+```
+
+The endpoints are tenant scoped, duplicate safe and preserve original
+`PlacementNote.issuedAt` as the event business date.
 
 ---
 
