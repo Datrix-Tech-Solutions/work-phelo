@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -179,6 +188,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-app);
+  
   --radius-card: var(--radius-card);
   --radius-input: var(--radius-input);
 
@@ -413,6 +423,12 @@ body {
 }
 
 @media print {
+  /* Base rem unit for printed documents — Tailwind's text-sm (0.875rem),
+     the dominant body/table text size in these documents, resolves to 14pt.
+     Other Tailwind text sizes scale proportionally, preserving hierarchy. */
+  html {
+    font-size: 20px;
+  }
   body > *:not(#irisk-print-root) {
     display: none !important;
   }
@@ -424,6 +440,7 @@ body {
     width: 100%;
     min-height: 100%;
     background: white;
+    font-family: Arial, Helvetica, sans-serif;
   }
 }
 

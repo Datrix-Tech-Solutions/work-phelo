@@ -141,7 +141,7 @@ function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] 
     <table className="w-full border-collapse text-sm">
       <tbody>
         {rows.map((row) => (
-          <tr key={row.label} className="border-b border-gray-50 last:border-0">
+          <tr key={row.label}>
             <td className="w-2/5 py-1.5 pr-4 text-gray-500">{row.label}</td>
             <td className="py-1.5 pl-4 font-medium text-gray-900">{row.value}</td>
           </tr>
@@ -211,7 +211,7 @@ function ChangeTable({
       </thead>
       <tbody>
         {changed.map((field) => (
-          <tr key={field.key} className="border-b border-gray-50 last:border-0">
+          <tr key={field.key}>
             <td className="py-1.5 pr-3 text-gray-500">{field.label}</td>
             <td className="px-3 py-1.5 text-gray-700">
               {formatField(original[field.key], field.type, original.currency ?? currency)}
@@ -222,7 +222,7 @@ function ChangeTable({
           </tr>
         ))}
         {changedDetailFields.map(({ key, label }) => (
-          <tr key={key} className="border-b border-gray-50 last:border-0">
+          <tr key={key}>
             <td className="py-1.5 pr-3 text-gray-500">{label}</td>
             <td className="px-3 py-1.5 text-gray-700">{text(originalDetails.get(key)?.value)}</td>
             <td className="py-1.5 pl-3 font-medium text-gray-900">
@@ -409,7 +409,7 @@ function RevisedOfferContent({
             { label: 'Currency', value: text(placement.currency) },
             { label: 'Class of Business', value: text(placement.classOfBusiness) },
           ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
+            <tr key={row.label}>
               <td className="py-1.5 pr-4 text-gray-500 w-2/5">{row.label}</td>
               <td className="py-1.5 pl-4 text-gray-900 font-medium">{row.value}</td>
             </tr>
@@ -493,7 +493,7 @@ function RevisedOfferContent({
               bold: true,
             },
           ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
+            <tr key={row.label}>
               <td
                 className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
               >
@@ -895,7 +895,7 @@ export function EndorsementSlipPreviewModal({
                 (item) => item.endorsementParticipant.counterpartyId === participant.counterpartyId,
               );
               return (
-                <tr key={participant.id} className="border-b border-gray-50 last:border-0">
+                <tr key={participant.id}>
                   <td className="py-1.5 pr-3 text-gray-900 font-medium">
                     {participant.counterparty?.name ?? participant.counterpartyId}
                   </td>

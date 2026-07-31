@@ -179,7 +179,7 @@ function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] 
     <table className="w-full text-sm border-collapse">
       <tbody>
         {rows.map((row) => (
-          <tr key={row.label} className="border-b border-gray-50 last:border-0">
+          <tr key={row.label}>
             <td className="py-1.5 pr-4 text-gray-500 w-2/5">{row.label}</td>
             <td className="py-1.5 pl-4 text-gray-900 font-medium">{row.value}</td>
           </tr>
@@ -253,7 +253,7 @@ function ChangeTable({
       </thead>
       <tbody>
         {changed.map((field) => (
-          <tr key={field.key} className="border-b border-gray-50 last:border-0">
+          <tr key={field.key}>
             <td className="py-1.5 pr-3 text-gray-500">{field.label}</td>
             <td className="py-1.5 px-3 text-gray-700">
               {formatField(original[field.key], field.type, original.currency ?? currency)}
@@ -291,7 +291,7 @@ function ParticipationTable({ participants }: { participants: UnknownRecord[] })
           const originalParticipant = record(participant.originalParticipant);
           const classification = originalParticipant.id ? 'REVISED' : 'ADDED';
           return (
-            <tr key={text(participant.id)} className="border-b border-gray-50 last:border-0">
+            <tr key={text(participant.id)}>
               <td className="py-1.5 pr-3 text-gray-900 font-medium">
                 {text(counterparty.name || participant.counterpartyId)}
               </td>
@@ -331,7 +331,7 @@ function ConfirmedClosingsTable({ closings }: { closings: UnknownRecord[] }) {
           const endorsementParticipant = record(closing.endorsementParticipant);
           const counterparty = record(endorsementParticipant.counterparty);
           return (
-            <tr key={text(closing.id)} className="border-b border-gray-50 last:border-0">
+            <tr key={text(closing.id)}>
               <td className="py-1.5 pr-3 text-gray-900 font-medium">
                 {text(closing.closingNumber)}
               </td>
@@ -523,7 +523,7 @@ function EndorsementCertificateContent({
             { label: 'Currency', value: currency || '—' },
             { label: 'Class of Business', value: classOfBusiness },
           ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
+            <tr key={row.label}>
               <td className="py-1.5 pr-4 text-gray-500 w-2/5">{row.label}</td>
               <td className="py-1.5 pl-4 text-gray-900 font-medium">{row.value}</td>
             </tr>
@@ -596,7 +596,7 @@ function EndorsementCertificateContent({
                   bold: true,
                 },
               ].map((row) => (
-                <tr key={row.label} className="border-b border-gray-50 last:border-0">
+                <tr key={row.label}>
                   <td
                     className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
                   >

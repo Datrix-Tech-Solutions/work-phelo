@@ -124,7 +124,11 @@ export function MonthPicker({
 
   return (
     <div className={cn('relative', className)} ref={containerRef}>
-      {label && <label className="block text-sm font-bold text-gray-900 mb-1.5">{label}</label>}
+      {label && (
+        <label className="block truncate text-sm font-bold text-gray-900 mb-1.5" title={label}>
+          {label}
+        </label>
+      )}
 
       <button
         type="button"

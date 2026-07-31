@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
@@ -16,6 +17,7 @@ import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panel
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { PartialEditFacultativePanel } from '@/components/organisms/reinsurance/panels/PartialEditFacultativePanel';
 import { RenewFacultativePanel } from '@/components/organisms/reinsurance/panels/RenewFacultativePanel';
+import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
 import { Facultative, PlacementEndorsement, PlacementPayment } from '@/types/reinsurance';
 import {
   endorsementKey,
@@ -267,6 +269,7 @@ export function FacultativeTable({
   const [reopenTarget, setReopenTarget] = useState<Facultative | null>(null);
   const [partialEditTarget, setPartialEditTarget] = useState<Facultative | null>(null);
   const [renewTarget, setRenewTarget] = useState<Facultative | null>(null);
+  const [endorseTarget, setEndorseTarget] = useState<Facultative | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
   const [forceCloseTarget, setForceCloseTarget] = useState<Facultative | null>(null);
 
@@ -558,11 +561,16 @@ export function FacultativeTable({
       tab === 'closing' ? '?from=closing' : ''
     }`;
 
-    const renewAction: RowAction = {
-      label: 'Renew Offer',
-      onClick: () => setRenewTarget(row),
-      variant: 'success',
-    };
+    // Renewing only makes sense once an offer has left the draft/open stages; endorsing only
+    // applies to an offer that has actually closed (a policy is in force to amend).
+    const rowIsClosed = isEffectivelyClosed(row);
+    const renewAction: RowAction | null = rowIsClosed
+      ? { label: 'Renew Offer', onClick: () => setRenewTarget(row), variant: 'success' }
+      : null;
+    const endorseAction: RowAction | null =
+      row.status === 'CLOSED'
+        ? { label: 'Endorse Policy', onClick: () => setEndorseTarget(row) }
+        : null;
 
     if (tab === 'closing' && row.status !== 'DECLINED' && row.status !== 'CANCELLED') {
       const paymentStatus = paymentStatusMap.get(row.id) ?? 'Outstanding';
@@ -575,7 +583,8 @@ export function FacultativeTable({
         return [
           { label: 'View Offer', onClick: () => router.push(detailUrl) },
           partialEditAction,
-          renewAction,
+          ...(endorseAction ? [endorseAction] : []),
+          ...(renewAction ? [renewAction] : []),
         ];
       }
 
@@ -586,7 +595,8 @@ export function FacultativeTable({
         ...(hasEndorsement ? [] : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
         partialEditAction,
         { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
-        renewAction,
+        ...(endorseAction ? [endorseAction] : []),
+        ...(renewAction ? [renewAction] : []),
       ];
     }
 
@@ -611,13 +621,14 @@ export function FacultativeTable({
           ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
           : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
 
+      // Rows in this tab are, by definition, not yet effectively closed (draft/open statuses),
+      // so neither Renew nor Endorse Policy applies here.
       return [
         { label: 'View Offer', onClick: () => router.push(detailUrl) },
         ...(reopenAction ? [reopenAction] : []),
         editAction,
         ...(forceCloseAction ? [forceCloseAction] : []),
         ...(archiveAction ? [archiveAction] : []),
-        renewAction,
       ];
     }
 
@@ -630,7 +641,8 @@ export function FacultativeTable({
       ...(canArchiveFallback
         ? [{ label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }]
         : []),
-      renewAction,
+      ...(endorseAction ? [endorseAction] : []),
+      ...(renewAction ? [renewAction] : []),
     ];
   };
 
@@ -742,6 +754,19 @@ export function FacultativeTable({
           isOpen={!!renewTarget}
           placement={renewTarget}
           onClose={() => setRenewTarget(null)}
+        />
+      )}
+
+      {endorseTarget && (
+        <EndorsementPanel
+          isOpen={!!endorseTarget}
+          placement={endorseTarget}
+          onClose={() => setEndorseTarget(null)}
+          onCreated={() =>
+            router.push(
+              `/${tenantSlug}/operations/reinsurance/facultative/${endorseTarget.id}?tab=endorsement`,
+            )
+          }
         />
       )}
 

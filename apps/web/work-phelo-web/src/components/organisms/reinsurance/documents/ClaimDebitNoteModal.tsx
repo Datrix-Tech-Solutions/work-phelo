@@ -152,7 +152,7 @@ export function ClaimDebitNoteModal({
               },
               { label: 'Currency', value: currency ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -167,7 +167,7 @@ export function ClaimDebitNoteModal({
             </tr>
 
             {/* Your reinsurance participation */}
-            <tr className="border-b border-gray-200">
+            <tr>
               <td className="py-2.5 px-4 text-gray-600 w-1/2">Your reinsurance participation :</td>
               <td className="py-2.5 px-4 text-right text-gray-700">{sharePercent}% of 100%</td>
             </tr>

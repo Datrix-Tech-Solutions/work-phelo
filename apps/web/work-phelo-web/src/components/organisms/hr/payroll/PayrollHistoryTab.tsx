@@ -2,7 +2,8 @@
 
 import { useState, useRef, useMemo } from 'react';
 import { Download, Loader2 } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { TableButton } from '@/components/atoms/TableButton';
 import { SearchSelect } from '@/components/atoms/SearchSelect';

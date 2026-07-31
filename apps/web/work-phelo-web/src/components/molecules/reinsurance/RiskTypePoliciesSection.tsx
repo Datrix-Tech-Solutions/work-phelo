@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { Badge } from '@/components/atoms/Badge';
 import { StatCard } from '@/components/atoms/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';

@@ -215,7 +215,7 @@ function CreditNoteContent({
       <table className="w-full text-sm border-collapse">
         <tbody>
           {descriptionRows.map((row, i) => (
-            <tr key={i} className="border-b border-gray-50 last:border-0">
+            <tr key={i}>
               <td className="py-2 pr-4 text-gray-500 w-1/2">{row.label}</td>
               <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
                 {row.pct ?? ''}
@@ -238,7 +238,7 @@ function CreditNoteContent({
                 </td>
               </tr>
             ) : (
-              <tr key={i} className="border-b border-gray-50 last:border-0">
+              <tr key={i}>
                 <td
                   className={`py-2 pr-4 text-gray-500 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : ''}`}
                 >
@@ -374,7 +374,7 @@ function DebitNoteContent({
               { label: 'Reinsured', value: cedantName },
               { label: 'Policy Type', value: text(placement?.classOfBusiness) },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -389,7 +389,7 @@ function DebitNoteContent({
               },
               { label: 'Currency', value: currency ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -420,7 +420,7 @@ function DebitNoteContent({
                 bold: true,
               },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td
                   className={`py-2 px-4 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
                 >

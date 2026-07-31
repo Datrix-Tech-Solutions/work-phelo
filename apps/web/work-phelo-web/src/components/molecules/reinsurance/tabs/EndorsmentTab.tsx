@@ -329,7 +329,6 @@ function EndorsementCard({
           createEndorsementParticipant({
             counterpartyId: entry.id,
             sharePercent: leftoverFacOffer > 0 ? leftoverFacOffer : undefined,
-            status: 'OFFER_SENT',
           }),
         ),
       );
@@ -378,6 +377,29 @@ function EndorsementCard({
       });
       useToastStore.getState().addToast({
         message: `${row.reinsurerName} reverted to pending for this endorsement`,
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setBusyEPIds((prev) => {
+        const n = new Set(prev);
+        n.delete(row.counterpartyId);
+        return n;
+      });
+    }
+  };
+
+  const handleReopenEndorsementParticipant = async (row: EndorsementParticipantRow) => {
+    if (!row.participantId || busyEPIds.has(row.counterpartyId)) return;
+    setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
+    try {
+      await updateEndorsementParticipantStatus.mutateAsync({
+        participantId: row.participantId,
+        status: 'OFFER_SENT',
+      });
+      useToastStore.getState().addToast({
+        message: `${row.reinsurerName} reopened for this endorsement`,
         type: 'success',
       });
     } catch (error) {
@@ -644,6 +666,7 @@ function EndorsementCard({
                   onAccept={handleAcceptEndorsement}
                   onReject={handleRejectEndorsementParticipant}
                   onRevert={handleRevertEndorsementParticipant}
+                  onReopen={handleReopenEndorsementParticipant}
                   onValidate={handleValidateEndorsementParticipant}
                   onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
                   onViewCertificate={handleViewCertificate}
@@ -684,6 +707,18 @@ function EndorsementCard({
         mailRecipients={reinsurerEmails[mailPreviewCounterpartyId ?? ''] ?? []}
         onSendMail={() => {
           if (mailPreviewCounterpartyId) {
+            const participant = endorsementParticipants.find(
+              (item) => item.counterpartyId === mailPreviewCounterpartyId,
+            );
+            if (participant) {
+              updateEndorsementParticipantStatus
+                .mutateAsync({ participantId: participant.id, status: 'OFFER_SENT' })
+                .catch((error) => {
+                  useToastStore
+                    .getState()
+                    .addToast({ message: extractError(error), type: 'error' });
+                });
+            }
             setMailedIds((prev) => new Set([...prev, mailPreviewCounterpartyId]));
           }
           setMailPreviewCounterpartyId(null);

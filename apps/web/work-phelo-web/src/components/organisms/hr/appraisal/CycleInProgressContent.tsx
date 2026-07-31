@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { Users, User, CalendarCheck, BarChart2 } from 'lucide-react';
 import { Icons } from '@/components/atoms/icons';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';

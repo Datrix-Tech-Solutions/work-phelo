@@ -211,7 +211,7 @@ export function EndorsementCertificateModal({
             { label: 'Currency', value: fmtVal(placement.currency) },
             { label: 'Class of Business', value: fmtVal(placement.classOfBusiness) },
           ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
+            <tr key={row.label}>
               <td className="py-1.5 pr-4 text-gray-500 w-2/5">{row.label}</td>
               <td className="py-1.5 pl-4 text-gray-900 font-medium">{row.value}</td>
             </tr>

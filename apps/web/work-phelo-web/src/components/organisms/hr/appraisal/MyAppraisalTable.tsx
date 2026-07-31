@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { useMyAppraisals, useAppraisalCycles } from '@/hooks/hr/useAppraisals';
 import { Column, DataTable } from '../../shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';

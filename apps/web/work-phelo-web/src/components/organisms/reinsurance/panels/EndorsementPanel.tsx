@@ -29,6 +29,7 @@ interface EndorsementPanelProps {
   isOpen: boolean;
   placement: Facultative;
   onClose: () => void;
+  onCreated?: () => void;
 }
 
 function placementToFormValues(
@@ -67,7 +68,7 @@ function placementToFormValues(
   };
 }
 
-export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPanelProps) {
+export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: EndorsementPanelProps) {
   const { mutateAsync: createEndorsement, isPending } = useCreateEndorsement(placement.id);
   const { data: effectiveView } = usePlacementEffectiveView(placement.id, isOpen);
   const { data: allRiskTypes = [] } = useRiskTypes();
@@ -157,10 +158,10 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
       });
 
       toast().addToast({
-        message:
-          'Endorsement created. The original placement remains unchanged until the endorsement is completed.',
+        message: 'Endorsement successfully created created.',
         type: 'success',
       });
+      onCreated?.();
       handleClose();
     } catch (error) {
       toast().addToast({ message: extractError(error), type: 'error' });

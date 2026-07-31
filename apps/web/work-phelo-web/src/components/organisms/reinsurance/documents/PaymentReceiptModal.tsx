@@ -38,7 +38,7 @@ function SectionHeader({ label }: { label: string }) {
 
 function TableRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <tr className="border-b border-gray-100 last:border-b-0">
+    <tr>
       <td className={`py-2 px-4 w-1/2 ${bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
         {label}
       </td>

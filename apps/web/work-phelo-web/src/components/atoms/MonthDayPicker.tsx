@@ -93,7 +93,11 @@ export function MonthDayPicker({
 
   return (
     <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
-      {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
+      {label && (
+        <label className="block truncate text-sm font-bold text-gray-900" title={label}>
+          {label}
+        </label>
+      )}
 
       <button
         type="button"

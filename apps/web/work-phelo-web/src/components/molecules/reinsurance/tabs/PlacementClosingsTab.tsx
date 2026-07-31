@@ -313,7 +313,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     }
 
     useToastStore.getState().addToast({
-      message: 'Current closing snapshot could not be found. Refresh and try again.',
+      message: 'Current details could not be found. Refresh and try again.',
       type: 'error',
     });
   };
