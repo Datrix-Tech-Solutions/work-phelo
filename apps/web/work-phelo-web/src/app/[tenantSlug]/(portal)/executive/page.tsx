@@ -36,8 +36,8 @@ export default function ExecutiveDashboardPage({
 
   return (
     <main className="flex-1 min-h-0 overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 gap-6">
+      <div className="px-3 py-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
           <HrOverviewCard />
           {OVERVIEW_MODULES.map((mod) => (
             <ModuleOverviewCard

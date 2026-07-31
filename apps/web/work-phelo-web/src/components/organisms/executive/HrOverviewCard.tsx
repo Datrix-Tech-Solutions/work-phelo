@@ -3,15 +3,15 @@
 import {
   useEmployeeOptions,
   useAssets,
-  usePayrollRuns,
-  useAttendanceStats,
+  // usePayrollRuns,
+  // useAttendanceStats,
   useDepartments,
   useBranches,
   useProjects,
   useLeaveRequests,
 } from '@/hooks';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
-import { formatPayrollMoney } from '@/lib/payrollDisplay';
+// import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { ModuleOverviewCard } from '@/components/molecules/executive/ModuleOverviewCard';
 import { BentoTile, TileLabel, TileValue } from '@/components/molecules/executive/BentoTile';
 
@@ -19,10 +19,10 @@ import { BentoTile, TileLabel, TileValue } from '@/components/molecules/executiv
 const RESTRICTED_STATUSES = ['SUSPENDED', 'OFFBOARDED'];
 
 /** Most recently run payroll — used for the "Payroll (employer)" tile. */
-function useLatestPayrollRun() {
-  const { data: runs } = usePayrollRuns();
-  return [...(runs ?? [])].sort((a, b) => b.year - a.year || b.month - a.month)[0];
-}
+// function useLatestPayrollRun() {
+//   const { data: runs } = usePayrollRuns();
+//   return [...(runs ?? [])].sort((a, b) => b.year - a.year || b.month - a.month)[0];
+// }
 
 function useOnLeaveToday() {
   const { data: approved } = useLeaveRequests('APPROVED');
@@ -34,8 +34,8 @@ export function HrOverviewCard() {
   const color = MODULE_COLORS.hr;
   const { data: employees } = useEmployeeOptions();
   const { data: assets } = useAssets();
-  const payrollRun = useLatestPayrollRun();
-  const { data: attendance } = useAttendanceStats();
+  // const payrollRun = useLatestPayrollRun();
+  // const { data: attendance } = useAttendanceStats();
   const { data: departments } = useDepartments();
   const { data: branches } = useBranches();
   const { data: projects } = useProjects();
@@ -53,17 +53,17 @@ export function HrOverviewCard() {
       icon={<ModuleIcons.hr className="w-4 h-4" />}
       color={color}
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         {/* Row 1 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <BentoTile color={color}>
             <TileLabel color={color}>Employees</TileLabel>
             <TileValue color={color} value={employeeCount} />
           </BentoTile>
-          <BentoTile color={color}>
+          {/* <BentoTile color={color}>
             <TileLabel color={color}>Clocked in today</TileLabel>
             <TileValue color={color} value={attendance?.clockedIn} total={attendance?.total} />
-          </BentoTile>
+          </BentoTile> */}
           <BentoTile color={color}>
             <TileLabel color={color}>On leave today</TileLabel>
             <TileValue color={color} value={onLeaveToday} />
@@ -75,8 +75,8 @@ export function HrOverviewCard() {
         </div>
 
         {/* Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <BentoTile color={color} className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
+          {/* <BentoTile color={color} className="lg:col-span-2">
             <TileLabel color={color}>Payroll</TileLabel>
             <div className="flex divide-x divide-gray-200 mt-2">
               <div className="pr-4">
@@ -116,15 +116,11 @@ export function HrOverviewCard() {
                 </p>
               </div>
             </div>
-          </BentoTile>
+          </BentoTile> */}
           <BentoTile color={color}>
             <TileLabel color={color}>Assets assigned</TileLabel>
             <TileValue color={color} value={assignedAssets} total={assets?.length} />
           </BentoTile>
-        </div>
-
-        {/* Row 3 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <BentoTile color={color}>
             <div className="flex divide-x divide-gray-200">
               <div className="pr-4">
@@ -137,6 +133,22 @@ export function HrOverviewCard() {
               </div>
             </div>
           </BentoTile>
+        </div>
+
+        {/* Row 3 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* <BentoTile color={color}>
+            <div className="flex divide-x divide-gray-200">
+              <div className="pr-4">
+                <p className="text-xs text-gray-500 mb-1">Departments</p>
+                <p className="text-2xl font-bold text-gray-900">{departments?.length ?? '—'}</p>
+              </div>
+              <div className="pl-4">
+                <p className="text-xs text-gray-500 mb-1">Branches</p>
+                <p className="text-2xl font-bold text-gray-900">{branches?.length ?? '—'}</p>
+              </div>
+            </div>
+          </BentoTile> */}
         </div>
       </div>
     </ModuleOverviewCard>
