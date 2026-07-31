@@ -34,9 +34,7 @@ export function useCreateRiskType() {
       const res = await api.post<RiskType>(BASE, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY }),
   });
 }
 
@@ -47,9 +45,7 @@ export function useUpdateRiskType() {
       const res = await api.patch<RiskType>(`${BASE}/${id}`, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY }),
   });
 }
 
@@ -59,9 +55,7 @@ export function useDeleteRiskType() {
     mutationFn: async (id: string) => {
       await api.delete(`${BASE}/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY }),
   });
 }
 
@@ -71,9 +65,7 @@ export function useDeleteRiskTypeField() {
     mutationFn: async ({ riskTypeId, fieldId }: { riskTypeId: string; fieldId: string }) => {
       await api.delete(`${BASE}/${riskTypeId}/fields/${fieldId}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY }),
   });
 }
 
@@ -87,9 +79,7 @@ export function useCreateRiskTypeField() {
       const res = await api.post(`${BASE}/${riskTypeId}/fields`, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY }),
   });
 }
 

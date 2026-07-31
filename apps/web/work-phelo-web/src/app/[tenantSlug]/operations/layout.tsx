@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { REINSURANCE_NAV_GROUPS } from '@/config/reinsurance-nav';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function OperationsLayout({
   children,
@@ -41,16 +42,16 @@ export default function OperationsLayout({
   }));
 
   return (
-    <div className="h-screen overflow-hidden bg-app-bg-operations flex flex-col layout-operations">
-      <TopNav
-        showMenuButton
-        onMenuClick={() => setCollapsed((v) => !v)}
-        userInitials={initials}
-        notificationCount={0}
-        logoVariant="image"
-        logoSrc="/iriskre.png"
-      />
-      <div className="flex flex-1 min-h-0 relative">
+    <AppBackground className="h-dvh overflow-hidden flex layout-operations">
+      <Sidebar groups={groups} collapsed={collapsed} />
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col relative">
+        <TopNav
+          showMenuButton
+          onMenuClick={() => setCollapsed((v) => !v)}
+          userInitials={initials}
+          notificationCount={0}
+          logoVariant="image"
+        />
         {/* Mobile backdrop */}
         {!collapsed && (
           <div
@@ -58,9 +59,8 @@ export default function OperationsLayout({
             onClick={() => setCollapsed(true)}
           />
         )}
-        <Sidebar groups={groups} collapsed={collapsed} />
         <main
-          className="flex-1 min-h-0 overflow-hidden flex flex-col"
+          className="flex-1 min-h-0 overflow-y-auto flex flex-col"
           onClick={() => {
             if (!collapsed) setCollapsed(true);
           }}
@@ -68,6 +68,6 @@ export default function OperationsLayout({
           {children}
         </main>
       </div>
-    </div>
+    </AppBackground>
   );
 }

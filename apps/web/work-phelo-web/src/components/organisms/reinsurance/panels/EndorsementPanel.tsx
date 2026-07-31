@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm, UseFormReturn, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -8,13 +8,19 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormSection } from '@/components/atoms/FormSection';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import {
+  EffectivePlacementView,
   Facultative,
   FacultativeFormValues,
   FACULTATIVE_FORM_DEFAULTS,
-  RiskTypeField,
+  RiskType,
 } from '@/types/reinsurance';
-import { useCreateEndorsement, useUpdateFacultative, useRiskTypes } from '@/hooks';
+import { useCreateEndorsement, usePlacementEffectiveView, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import {
+  extractPlacementCustomFields,
+  mergePlacementRiskDetails,
+  splitPlacementDetails,
+} from '@/lib/reinsurance/placementFormDetails';
 import { useToastStore } from '@/store/toast.store';
 
 type EndorsementFormValues = FacultativeFormValues & { effectiveDate: string };
@@ -23,80 +29,74 @@ interface EndorsementPanelProps {
   isOpen: boolean;
   placement: Facultative;
   onClose: () => void;
+  onCreated?: () => void;
 }
 
-function mergeRiskDetails(
-  businessDetails: Record<string, unknown> | null,
-  offerDetails: Record<string, unknown> | null,
-): Record<string, string> {
-  const merged: Record<string, string> = {};
-  for (const [k, v] of Object.entries(businessDetails ?? {})) merged[k] = String(v ?? '');
-  for (const [k, v] of Object.entries(offerDetails ?? {})) merged[k] = String(v ?? '');
-  return merged;
-}
+function placementToFormValues(
+  placement: Facultative,
+  allRiskTypes: RiskType[],
+  effectiveView?: EffectivePlacementView,
+): EndorsementFormValues {
+  const effectiveTerms = effectiveView?.effectiveTerms;
+  const businessDetails = effectiveTerms?.businessDetails ?? placement.businessDetails;
+  const offerDetails = effectiveTerms?.offerDetails ?? placement.offerDetails;
+  const riskTypeId = effectiveTerms?.riskTypeId ?? placement.riskTypeId ?? '';
+  const selectedRiskType = allRiskTypes.find((rt) => rt.id === riskTypeId);
+  const schemaKeys = new Set(
+    (selectedRiskType?.fields ?? []).filter((f) => f.isActive).map((f) => f.fieldKey),
+  );
 
-function splitRiskDetails(
-  riskDetails: Record<string, string>,
-  fields: RiskTypeField[],
-): {
-  businessDetails: Record<string, unknown> | undefined;
-  offerDetails: Record<string, unknown> | undefined;
-} {
-  const businessDetails: Record<string, unknown> = {};
-  const offerDetails: Record<string, unknown> = {};
-  for (const field of fields.filter((f) => f.isActive)) {
-    const val = riskDetails[field.fieldKey];
-    if (val === undefined || val === '') continue;
-    if (field.section === 'BUSINESS_DETAILS') businessDetails[field.fieldKey] = val;
-    else if (field.section === 'OFFER_DETAILS') offerDetails[field.fieldKey] = val;
-  }
-  return {
-    businessDetails: Object.keys(businessDetails).length ? businessDetails : undefined,
-    offerDetails: Object.keys(offerDetails).length ? offerDetails : undefined,
-  };
-}
-
-function placementToFormValues(placement: Facultative): EndorsementFormValues {
   return {
     ...FACULTATIVE_FORM_DEFAULTS,
-    insuranceCompany: placement.cedant.id,
-    riskType: placement.riskTypeId ?? '',
+    insuranceCompany: effectiveTerms?.cedantId ?? placement.cedant.id,
+    riskType: riskTypeId,
     reference: placement.reference,
-    title: placement.title,
-    sumInsured: placement.sumInsured ?? '',
-    rate: placement.rate ?? '',
-    premium: placement.premium ?? '',
-    facultativeOffer: placement.facultativeOffer ?? '',
-    commission: placement.commission ?? '',
-    currency: placement.currency ?? '',
-    periodFrom: placement.inceptionDate ?? '',
-    periodTo: placement.expiryDate ?? '',
-    riskDetails: mergeRiskDetails(placement.businessDetails, placement.offerDetails),
+    policyNumber: effectiveTerms?.policyNumber ?? placement.policyNumber ?? '',
+    title: effectiveTerms?.title ?? placement.title,
+    sumInsured: effectiveTerms?.sumInsured ?? placement.sumInsured ?? '',
+    rate: effectiveTerms?.rate ?? placement.rate ?? '',
+    premium: effectiveTerms?.premium ?? placement.premium ?? '',
+    facultativeOffer: effectiveTerms?.facultativeOfferPercent ?? placement.facultativeOffer ?? '',
+    commission: effectiveTerms?.commissionPercent ?? placement.commission ?? '',
+    currency: effectiveTerms?.currency ?? placement.currency ?? '',
+    periodFrom: effectiveTerms?.inceptionDate ?? placement.inceptionDate ?? '',
+    periodTo: effectiveTerms?.expiryDate ?? placement.expiryDate ?? '',
+    riskDetails: mergePlacementRiskDetails(businessDetails, offerDetails),
+    extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, schemaKeys),
     comment: '',
     effectiveDate: new Date().toISOString().split('T')[0],
   };
 }
 
-export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPanelProps) {
+export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: EndorsementPanelProps) {
   const { mutateAsync: createEndorsement, isPending } = useCreateEndorsement(placement.id);
-  const { mutateAsync: updateFacultative } = useUpdateFacultative();
+  const { data: effectiveView } = usePlacementEffectiveView(placement.id, isOpen);
   const { data: allRiskTypes = [] } = useRiskTypes();
   const toast = useToastStore.getState;
 
   const form = useForm<EndorsementFormValues>({
-    defaultValues: placementToFormValues(placement),
+    defaultValues: placementToFormValues(placement, allRiskTypes, effectiveView),
   });
 
   const {
     handleSubmit,
     reset,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = form;
 
+  // Only reset when the panel transitions closed → open, not on every re-fetch of `placement`
+  // while it's already open — otherwise unsaved edits (e.g. a newly added extra field) get
+  // silently wiped by background query invalidations that happen on the same tab.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (isOpen) reset(placementToFormValues(placement));
-  }, [isOpen, placement, reset]);
+    if (isOpen && !wasOpen.current) {
+      reset(placementToFormValues(placement, allRiskTypes, effectiveView));
+    } else if (isOpen && effectiveView && !isDirty) {
+      reset(placementToFormValues(placement, allRiskTypes, effectiveView));
+    }
+    wasOpen.current = isOpen;
+  }, [effectiveView, isDirty, isOpen, placement, allRiskTypes, reset]);
 
   const handleClose = () => {
     reset();
@@ -106,15 +106,17 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
   const onSubmit = async (values: EndorsementFormValues) => {
     try {
       const selectedRiskType = allRiskTypes.find((rt) => rt.id === values.riskType);
-      const { businessDetails, offerDetails } = splitRiskDetails(
+      const { businessDetails, offerDetails } = splitPlacementDetails(
         values.riskDetails,
         selectedRiskType?.fields ?? [],
+        values.extraRiskFields ?? [],
       );
 
-      const placementUpdate = {
-        id: placement.id,
+      const proposedSnapshot = {
+        cedantId: values.insuranceCompany || undefined,
         riskTypeId: values.riskType || undefined,
         reference: values.reference,
+        policyNumber: values.policyNumber,
         title: values.title,
         sumInsured: values.sumInsured as number,
         rate: values.rate as number,
@@ -133,25 +135,33 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
         effectiveDate: new Date(values.effectiveDate).toISOString(),
         reason: values.comment?.trim() || 'Policy endorsement',
         proposedSnapshot: {
-          riskTypeId: placementUpdate.riskTypeId,
-          reference: placementUpdate.reference,
-          title: placementUpdate.title,
-          sumInsured: placementUpdate.sumInsured,
-          rate: placementUpdate.rate,
-          premium: placementUpdate.premium,
-          facultativeOffer: placementUpdate.facultativeOffer,
-          commission: placementUpdate.commission,
-          currency: placementUpdate.currency,
-          inceptionDate: placementUpdate.inceptionDate,
-          expiryDate: placementUpdate.expiryDate,
+          riskTypeId: proposedSnapshot.riskTypeId,
+          cedantId: proposedSnapshot.cedantId,
+          reference: proposedSnapshot.reference,
+          policyNumber: proposedSnapshot.policyNumber,
+          title: proposedSnapshot.title,
+          sumInsured: proposedSnapshot.sumInsured,
+          rate: proposedSnapshot.rate,
+          premium: proposedSnapshot.premium,
+          facultativeOffer: proposedSnapshot.facultativeOffer,
+          commission: proposedSnapshot.commission,
+          currency: proposedSnapshot.currency,
+          inceptionDate: proposedSnapshot.inceptionDate,
+          expiryDate: proposedSnapshot.expiryDate,
           ...(businessDetails ? { businessDetails } : {}),
           ...(offerDetails ? { offerDetails } : {}),
         },
+        targetPercent:
+          values.facultativeOffer === '' || values.facultativeOffer == null
+            ? undefined
+            : Number(values.facultativeOffer),
       });
 
-      await updateFacultative(placementUpdate);
-
-      toast().addToast({ message: 'Endorsement created successfully', type: 'success' });
+      toast().addToast({
+        message: 'Endorsement successfully created created.',
+        type: 'success',
+      });
+      onCreated?.();
       handleClose();
     } catch (error) {
       toast().addToast({ message: extractError(error), type: 'error' });

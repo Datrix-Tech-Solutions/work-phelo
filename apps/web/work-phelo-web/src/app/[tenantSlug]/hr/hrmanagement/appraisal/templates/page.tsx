@@ -3,7 +3,7 @@
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { AppraisalTemplatesList } from '@/components/organisms/appraisal/AppraisalTemplatesList';
+import { AppraisalTemplatesList } from '@/components/organisms/hr/appraisal/AppraisalTemplatesList';
 import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 
 export default function AppraisalTemplatesPage({

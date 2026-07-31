@@ -4,9 +4,10 @@ import { use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAppraisal, useCycleKpis, useAppraisalCycles } from '@/hooks';
-import { SelfAssessmentForm } from '@/components/organisms/appraisal/SelfAssessmentForm';
+import { SelfAssessmentForm } from '@/components/organisms/hr/appraisal/SelfAssessmentForm';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { AppBackground } from '@/components/atoms/AppBackground';
 import { cn } from '@/lib/utils';
 
 function formatDeadline(d?: string | null): string {
@@ -73,13 +74,16 @@ export default function SelfAssessmentPage({
   return (
     <div className="flex flex-col gap-6">
       {/* Breadcrumb */}
-      <nav className="sticky top-0 z-10 bg-app-bg-hr flex items-center gap-2 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50">
+      <AppBackground
+        as="nav"
+        className="sticky top-0 z-10 flex items-center gap-2 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50"
+      >
         <Link href={backHref} className="hover:text-gray-600 transition-colors">
           Appraisal
         </Link>
         <span>›</span>
         <span className="text-gray-600">{cycleTitle}</span>
-      </nav>
+      </AppBackground>
 
       {/* Page body */}
       <div className="px-4 sm:px-6 lg:px-8 pb-8 flex flex-col gap-6">

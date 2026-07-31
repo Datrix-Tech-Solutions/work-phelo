@@ -11,6 +11,7 @@ import {
   AtSign,
   Landmark,
   Handshake,
+  Banknote,
 } from 'lucide-react';
 
 /* ── Icons ── */
@@ -19,7 +20,8 @@ const TreatyIcon = () => <ScrollText className="w-5 h-5" />;
 const FacultativeIcon = () => <ShieldCheck className="w-5 h-5" />;
 const EmailIcon = () => <AtSign className="w-5 h-5" />;
 const PaymentIcon = () => <BanknoteArrowDown className="w-5 h-5" />;
-const ClaimsIcon = () => <BanknoteArrowUp className="w-5 h-5" />;
+const ClaimsIcon = () => <Banknote className="w-5 h-5" />;
+const RecoveriesIcon = () => <BanknoteArrowUp className="w-5 h-5" />;
 const CedantIcon = () => <Landmark className="w-5 h-5" />;
 const ReinsurerIcon = () => <Handshake className="w-5 h-5" />;
 const ReportsIcon = () => <BarChart3 className="w-5 h-5" />;
@@ -87,6 +89,14 @@ export const REINSURANCE_NAV_GROUPS: NavGroup[] = [
         label: 'Claims',
         icon: <ClaimsIcon />,
         href: 'claims',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'recoveries',
+        label: 'Recoveries',
+        icon: <RecoveriesIcon />,
+        href: 'recoveries',
         enabled: true,
         active: true,
       },

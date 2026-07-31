@@ -36,6 +36,7 @@ function toFormValues(r: Counterparty): ReinsurerFormValues {
     address: {
       country: primary ? codeToCountry(primary.country) : '',
       state: primary?.state ?? '',
+      streetName: primary?.country === 'GH' ? (primary?.line1 ?? '') : '',
       city: primary?.city ?? '',
     },
   };
@@ -55,7 +56,7 @@ function buildPayload(data: ReinsurerFormValues): UpdateCounterpartyPayload {
     ? addr.country === 'Ghana' && addr.city
       ? [
           {
-            line1: [addr.city, addr.state].filter(Boolean).join(', '),
+            line1: addr.streetName.trim() ? addr.streetName : addr.city,
             city: addr.city,
             country: 'GH',
             ...(addr.state && { state: addr.state }),

@@ -7,6 +7,7 @@ import { useForgotPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { extractError } from '@/lib/extractError';
+import { cardClass } from '@/lib/utils';
 
 interface ForgotPasswordForm {
   email: string;
@@ -46,7 +47,7 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
 
   if (submitted) {
     return (
-      <div className="w-full max-w-sm px-8 py-10">
+      <div className={cardClass('w-full max-w-sm px-8 py-10')}>
         <div className="flex justify-center mb-6">
           <AppLogo />
         </div>
@@ -89,7 +90,7 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
   }
 
   return (
-    <div className="w-full max-w-sm px-8 py-10">
+    <div className={cardClass('w-full max-w-sm px-8 py-10')}>
       <div className="flex justify-center mb-6">
         <AppLogo />
       </div>

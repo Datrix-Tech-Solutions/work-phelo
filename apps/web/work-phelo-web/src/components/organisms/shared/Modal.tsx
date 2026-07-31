@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { cn } from '@/lib/utils';
+import { createPortal } from 'react-dom';
+import { cn, popupClass } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
 interface ModalProps {
@@ -16,6 +17,9 @@ interface ModalProps {
   height?: string;
   hideClose?: boolean;
   fullScreenMobile?: boolean;
+  panelClassName?: string;
+  titleClassName?: string;
+  closeButtonClassName?: string;
 }
 
 export function Modal({
@@ -30,6 +34,9 @@ export function Modal({
   height = 'max-h-[80vh]',
   hideClose = false,
   fullScreenMobile = false,
+  panelClassName = popupClass('shadow-2xl'),
+  titleClassName = 'text-gray-800',
+  closeButtonClassName = 'text-gray-400 hover:text-gray-600',
 }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -46,9 +53,9 @@ export function Modal({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       className={cn(
         'fixed inset-0 z-50',
@@ -63,7 +70,8 @@ export function Modal({
       {/* Dialog */}
       <div
         className={cn(
-          'z-10 bg-white shadow-2xl flex flex-col',
+          'z-10 flex flex-col',
+          panelClassName,
           fullScreenMobile
             ? cn(
                 // mobile: truly full screen
@@ -78,11 +86,11 @@ export function Modal({
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-3 shrink-0">
-          <h2 className="text-lg font-bold text-gray-800">{title}</h2>
+          <h2 className={cn('text-lg font-bold', titleClassName)}>{title}</h2>
           {!hideClose && (
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors mt-0.5 shrink-0"
+              className={cn('transition-colors mt-0.5 shrink-0', closeButtonClassName)}
               aria-label="Close"
             >
               <Icons.X className="w-5 h-5" />
@@ -102,6 +110,7 @@ export function Modal({
           <div className="mt-auto pt-6 shrink-0 flex items-center justify-end gap-3">{footer}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -66,12 +66,14 @@ export interface PaginatedCounterparties {
 export interface AddressFormValues {
   country: string; // 'Ghana' | 'Africa' | 'Europe' | 'Asia' | 'Rest of the World'
   state: string; // Ghana region — only relevant when country === 'Ghana'
+  streetName: string; // Ghana only
   city: string; // only relevant when country === 'Ghana'
 }
 
 export const ADDRESS_FORM_DEFAULTS: AddressFormValues = {
   country: '',
   state: '',
+  streetName: '',
   city: '',
 };
 
@@ -356,7 +358,8 @@ export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStat
 export function toStatusLabel(status: FacultativeStatus): string {
   if (status === 'PARTIALLY_PLACED') return 'Partially Placed';
   if (status === 'PLACED') return 'Placed';
-  if (status === 'MARKETING') return 'Open';
+  if (status === 'CLOSING') return 'Partially Closed';
+  if (status === 'MARKETING') return 'On Market';
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 
@@ -415,6 +418,7 @@ export interface Facultative {
   cedant: { id: string; name: string };
   businessDetails: Record<string, unknown> | null;
   offerDetails: Record<string, unknown> | null;
+  description: string | null;
   sumInsured: number | null;
   rate: number | null;
   commission: number | null;
@@ -424,6 +428,14 @@ export interface Facultative {
   inceptionDate: string | null;
   expiryDate: string | null;
   createdAt: string;
+  updatedAt: string;
+  archivedByUserId: string | null;
+  archiveReason: string | null;
+  archivedAt: string | null;
+  closeMode?: 'NORMAL' | 'FORCED' | string | null;
+  forceClosed?: boolean;
+  forceClosedAt?: string | null;
+  forceClosedByUserId?: string | null;
   status: FacultativeStatus;
   participants: PlacementParticipant[];
   totalOfferedPercent: number;
@@ -436,7 +448,9 @@ export interface CreateFacultativePayload {
   cedantId: string;
   riskTypeId: string;
   reference: string;
+  policyNumber?: string | null;
   title: string;
+  description?: string;
   sumInsured: number;
   rate: number;
   premium: number;
@@ -519,11 +533,17 @@ export const TERMINAL_ENDORSEMENT_STATUSES: PlacementEndorsementStatus[] = [
   'VOID',
 ];
 
+/** True once an endorsement has been sent to market (past DRAFT) and hasn't been withdrawn. */
+export function isEndorsementSentToMarket(status: PlacementEndorsementStatus): boolean {
+  return status !== 'DRAFT' && status !== 'VOID' && status !== 'DECLINED';
+}
+
 export interface PlacementEndorsement {
   id: string;
   placementId: string;
   endorsementNumber: string;
   type: PlacementEndorsementType;
+  impactType?: PlacementEndorsementImpactType;
   status: PlacementEndorsementStatus;
   effectiveDate: string;
   reason: string;
@@ -531,6 +551,7 @@ export interface PlacementEndorsement {
   changeSummary: Record<string, unknown> | null;
   originalSnapshot: Record<string, unknown>;
   proposedSnapshot: Record<string, unknown> | null;
+  targetPercent?: string | number | null;
   createdByUserId: string;
   closedAt: string | null;
   voidedAt: string | null;
@@ -595,6 +616,125 @@ export interface PlacementEndorsementSummary {
   isComplete: boolean;
 }
 
+export interface EffectivePlacementView {
+  viewAsOf: string;
+  basePlacement: {
+    id: string;
+    reference: string;
+    policyNumber: string | null;
+    title: string;
+    cedantId: string;
+    currency: string | null;
+    sumInsured: number | null;
+    premium: number | null;
+    rate: number | null;
+    commissionPercent: number | null;
+    brokeragePercent: number | null;
+    facultativeOfferPercent: number | null;
+  };
+  effectiveTotals: {
+    facultativeOfferPercent: number;
+    originalFacultativeOfferPercent: number | null;
+    acceptedEndorsementCapacityPercent: number;
+    confirmedEndorsementCapacityPercent: number;
+    remainingCapacityPercent: number;
+    participantCount: number;
+    sumInsured: number | null;
+    premium: number | null;
+    currency: string | null;
+    rate: number | null;
+    commissionPercent: number | null;
+    brokeragePercent: number | null;
+    grossPremium: number;
+    commissionAmount: number;
+    brokerageAmount: number;
+    netPremium: number;
+  };
+  capacityBreakdown: {
+    originalCapacityPercent: number | null;
+    acceptedEndorsementCapacityPercent: number;
+    confirmedEndorsementCapacityPercent: number;
+    remainingCapacityPercent: number;
+    effectiveTotalCapacityPercent: number;
+  };
+  effectiveTerms: {
+    title: string;
+    policyNumber: string | null;
+    cedantId: string;
+    riskTypeId: string | null;
+    businessDetails: Record<string, unknown> | null;
+    offerDetails: Record<string, unknown> | null;
+    description: string | null;
+    inceptionDate: string | null;
+    expiryDate: string | null;
+    currency: string | null;
+    sumInsured: number | null;
+    rate: number | null;
+    premium: number | null;
+    commissionPercent: number | null;
+    brokeragePercent: number | null;
+    facultativeOfferPercent: number | null;
+  };
+  effectiveParticipants: Array<{
+    counterpartyId: string;
+    counterparty: {
+      id: string;
+      type: string;
+      name: string;
+      registrationNumber: string | null;
+    };
+    signedLinePercent: number;
+    participationType: 'ORIGINAL' | 'REVISED' | 'ADDED';
+    grossPremium: number;
+    commissionAmount: number;
+    brokerageAmount: number;
+    netPremium: number;
+    sources: Array<{
+      sourceType: 'PLACEMENT_CLOSING' | 'ENDORSEMENT_CLOSING';
+      closingId: string;
+      endorsementId?: string;
+      participantId?: string;
+      endorsementParticipantId?: string;
+      originalParticipantId?: string | null;
+      signedLinePercent: number;
+    }>;
+  }>;
+  appliedEndorsements: Array<{
+    id: string;
+    endorsementNumber: string;
+    type: PlacementEndorsementType;
+    status: PlacementEndorsementStatus;
+    effectiveDate: string;
+    targetPercent: number | null;
+    confirmedClosings: Array<{
+      id: string;
+      closingNumber: string;
+      endorsementParticipantId: string;
+      counterpartyId: string;
+      signedLinePercent: number;
+    }>;
+  }>;
+  pendingEndorsements: Array<{
+    id: string;
+    endorsementNumber: string;
+    type: PlacementEndorsementType;
+    status: PlacementEndorsementStatus;
+    effectiveDate: string;
+    targetPercent: number | null;
+    confirmedClosingCount: number;
+  }>;
+  scheduledEndorsements: Array<{
+    id: string;
+    endorsementNumber: string;
+    type: PlacementEndorsementType;
+    status: PlacementEndorsementStatus;
+    effectiveDate: string;
+    targetPercent: number | null;
+    confirmedClosingCount: number;
+  }>;
+  warnings: string[];
+}
+
 export type PlacementEndorsementParticipantStatus =
   | 'INVITED'
   | 'OFFER_SENT'
@@ -605,7 +745,6 @@ export type PlacementEndorsementParticipantStatus =
 
 export interface PlacementEndorsementParticipant {
   id: string;
-  tenantId?: string;
   placementId: string;
   endorsementId: string;
   originalParticipantId: string | null;
@@ -614,10 +753,13 @@ export interface PlacementEndorsementParticipant {
   sharePercent: string | null;
   signedLinePercent: string | null;
   notes: string | null;
-  createdByUserId?: string;
+  counterparty?: {
+    id: string;
+    name: string;
+    registrationNumber: string | null;
+  };
   createdAt: string;
   updatedAt: string;
-  counterparty?: { id: string; name: string; registrationNumber: string | null };
 }
 
 export interface CreateEndorsementParticipantPayload {
@@ -628,12 +770,18 @@ export interface CreateEndorsementParticipantPayload {
   status?: PlacementEndorsementParticipantStatus;
 }
 
+export interface UpdateEndorsementParticipantPayload extends Partial<CreateEndorsementParticipantPayload> {
+  participantId: string;
+}
+
 export interface CreateEndorsementPayload {
   type: PlacementEndorsementType;
+  impactType?: PlacementEndorsementImpactType;
   effectiveDate: string;
   reason: string;
   description?: string;
   proposedSnapshot?: Record<string, unknown>;
+  targetPercent?: number;
 }
 
 /* ── Placement Payments ── */
@@ -641,25 +789,35 @@ export type PlacementParticipantClosingStatus = 'DRAFT' | 'ISSUED' | 'CONFIRMED'
 
 export interface PlacementParticipantClosing {
   id: string;
+  tenantId: string;
   placementId: string;
   participantId: string;
-  status: PlacementParticipantClosingStatus;
   closingNumber: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface EndorsementParticipantClosing {
-  id: string;
-  placementId: string;
-  endorsementId: string;
-  endorsementParticipantId: string;
   status: PlacementParticipantClosingStatus;
-  closingNumber: string;
-  signedLinePercent: string | null;
-  premiumSnapshot?: string | null;
-  netPremium?: string | null;
-  currency?: string | null;
+  signedLinePercent: string;
+  sharePercent: string | null;
+  grossPremium: string | null;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  netPremium: string | null;
+  currency: string | null;
+  issuedAt: string | null;
+  confirmedAt: string | null;
+  createdByUserId: string;
+  participant: {
+    id: string;
+    counterpartyId: string;
+    role: string;
+    status: string;
+    counterparty: {
+      id: string;
+      type: string;
+      name: string;
+      registrationNumber: string | null;
+    };
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -669,11 +827,142 @@ export interface AcceptPlacementParticipantResponse {
   closing: PlacementParticipantClosing;
 }
 
+export type PlacementNoteType =
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE';
+
+export type PlacementNoteStatus = 'DRAFT' | 'ISSUED' | 'VOID';
+
+export type PlacementNoteDirection = 'CEDANT_TO_BROKER' | 'BROKER_TO_REINSURER';
+
+export interface PlacementNote {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  closingId: string | null;
+  participantId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  endorsementParticipantId: string | null;
+  counterpartyId: string;
+  settledByPaymentId: string | null;
+  type: PlacementNoteType;
+  direction: PlacementNoteDirection;
+  noteNumber: string;
+  status: PlacementNoteStatus;
+  currency: string;
+  grossAmount: string;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  nicLevyPercent: string;
+  nicLevyAmount: string;
+  withholdingTaxPercent: string;
+  withholdingTaxAmount: string;
+  netAmount: string;
+  appliedCharges: Record<string, unknown> | null;
+  noteDate: string;
+  issuedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: {
+    id: string;
+    type: string;
+    name: string;
+    registrationNumber: string | null;
+  };
+  participant: { id: string; counterpartyId: string } | null;
+  closing: { id: string; closingNumber: string } | null;
+  endorsementParticipant: { id: string; counterpartyId: string } | null;
+  endorsementClosing: { id: string; closingNumber: string } | null;
+}
+
+export interface EndorsementParticipantClosing {
+  id: string;
+  placementId: string;
+  endorsementId: string;
+  endorsementParticipantId: string;
+  status: PlacementParticipantClosingStatus;
+  closingNumber: string;
+  signedLinePercent: string;
+  sharePercent: string | null;
+  sumInsuredSnapshot: string | null;
+  premiumSnapshot: string;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  netPremium: string | null;
+  currency: string | null;
+  issuedAt: string | null;
+  confirmedAt: string | null;
+  endorsementParticipant: {
+    id: string;
+    counterpartyId: string;
+    originalParticipantId?: string | null;
+    status: PlacementEndorsementParticipantStatus;
+    counterparty: {
+      id: string;
+      name: string;
+      registrationNumber: string | null;
+    };
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ValidateEndorsementParticipantResponse {
   participant: PlacementEndorsementParticipant;
   closing: EndorsementParticipantClosing;
   summary: PlacementEndorsementSummary;
   effectiveStatus: PlacementEndorsementStatus;
+}
+
+export type PlacementDocumentType =
+  | 'OFFER_SLIP'
+  | 'CLOSING_SLIP'
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_SLIP'
+  | 'ENDORSEMENT_CERTIFICATE'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE'
+  | 'CLAIM_CASH_CALL'
+  | 'CLAIM_NOTICE';
+
+export type PlacementDocumentStatus = 'DRAFT' | 'GENERATED' | 'FAILED' | 'VOID';
+
+export interface PlacementDocument {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  participantId: string | null;
+  closingId: string | null;
+  noteId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  claimId: string | null;
+  claimCashCallId: string | null;
+  type: PlacementDocumentType;
+  status: PlacementDocumentStatus;
+  documentNumber: string;
+  version: number;
+  title: string;
+  currency: string | null;
+  generatedAt: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+  sourceSnapshot?: Record<string, unknown> | null;
+  renderPayload?: Record<string, unknown> | null;
 }
 
 export type PlacementPaymentType =
@@ -689,6 +978,7 @@ export interface PlacementPayment {
   tenantId: string;
   placementId: string;
   closingId: string | null;
+  endorsementClosingId: string | null;
   participantId: string | null;
   counterpartyId: string;
   type: PlacementPaymentType;
@@ -706,6 +996,7 @@ export interface PlacementPayment {
   counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
   participant: { id: string; counterpartyId: string } | null;
   closing: { id: string; closingNumber: string } | null;
+  endorsementClosing: { id: string; closingNumber: string } | null;
 }
 
 export interface CreatePlacementPaymentPayload {
@@ -713,12 +1004,71 @@ export interface CreatePlacementPaymentPayload {
   direction: PlacementPaymentDirection;
   counterpartyId: string;
   closingId?: string;
+  endorsementClosingId?: string;
   participantId?: string;
   amount: number;
   currency: string;
   paymentDate: string;
   reference?: string;
   notes?: string;
+}
+
+export type PlacementFinancialPositionState =
+  | 'RECEIVABLE'
+  | 'PAYABLE'
+  | 'SETTLED'
+  | 'CREDIT_BALANCE';
+
+export interface PlacementFinancialPositionAdjustment {
+  sourceType: 'PLACEMENT_CLOSING' | 'ENDORSEMENT_CLOSING';
+  closingId: string;
+  endorsementId: string | null;
+  endorsementNumber: string | null;
+  counterpartyId: string | null;
+  originalParticipantId: string | null;
+  amount: number;
+  currency: string;
+  effectiveDate: string | null;
+}
+
+export interface PlacementCedantFinancialPosition {
+  originalObligation: number;
+  endorsementAdjustments: number;
+  currentObligation: number;
+  received: number;
+  refunded: number;
+  grossRecorded: number;
+  reversed: number;
+  netSettled: number;
+  outstanding: number;
+  position: PlacementFinancialPositionState;
+}
+
+export interface PlacementReinsurerFinancialPosition {
+  counterpartyId: string;
+  counterpartyName: string;
+  originalPayable: number;
+  endorsementAdjustments: number;
+  currentEffectivePayable: number;
+  paid: number;
+  refunded: number;
+  grossRecorded: number;
+  reversed: number;
+  netSettled: number;
+  outstanding: number;
+  position: PlacementFinancialPositionState;
+  adjustments: PlacementFinancialPositionAdjustment[];
+}
+
+export interface PlacementFinancialPosition {
+  placementId: string;
+  asOfDate: string;
+  currency: string | null;
+  isMultiCurrency: boolean;
+  cedant: PlacementCedantFinancialPosition;
+  reinsurers: PlacementReinsurerFinancialPosition[];
+  adjustments: PlacementFinancialPositionAdjustment[];
+  warnings: string[];
 }
 
 /* ── Placement Claims ── */
@@ -844,6 +1194,7 @@ export interface FacultativeFormValues {
   riskClassId: string;
   riskType: string;
   reference: string;
+  policyNumber: string;
   title: string;
   insured: string;
   sumInsured: number | '';
@@ -855,8 +1206,14 @@ export interface FacultativeFormValues {
   periodFrom: string;
   periodTo: string;
   comment: string;
-  riskDetails: Record<string, string>;
-  extraRiskFields: { label: string; value: string }[];
+  riskDetails: Record<string, unknown>;
+  extraRiskFields: {
+    id?: string;
+    label: string;
+    value: string;
+    type?: 'TEXT';
+    displayOrder?: number;
+  }[];
 }
 
 export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
@@ -864,6 +1221,7 @@ export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   riskClassId: '',
   riskType: '',
   reference: '',
+  policyNumber: '',
   title: '',
   insured: '',
   sumInsured: '',
@@ -899,6 +1257,7 @@ export interface Treaty {
   classofBusiness: string;
   cedant: string;
   share: number; // reinsurer's share 0-100
+  accountingArrangement: string;
   periodStart: string; // ISO date
   periodEnd: string; // ISO date
   year: number;
@@ -1140,14 +1499,124 @@ export interface BankFormValues {
 }
 
 /* ── Levy & Tax ── */
+export type ReinsuranceChargeCode = 'NIC_LEVY' | 'WITHHOLDING_TAX';
+export type ReinsuranceChargeType = 'TAX' | 'LEVY' | 'FEE' | 'DUTY' | 'OTHER';
+export type ReinsuranceChargeRateType = 'PERCENTAGE' | 'FIXED_AMOUNT';
+export type ReinsuranceChargeCalculationBasis =
+  | 'GROSS_AMOUNT'
+  | 'COMMISSION_AMOUNT'
+  | 'BROKERAGE_AMOUNT'
+  | 'NET_BEFORE_CHARGES';
+export type ReinsuranceChargeDirection = 'ADDITION' | 'DEDUCTION';
+export type ReinsuranceChargeRoundingMode = 'HALF_UP' | 'UP' | 'DOWN';
+
+export interface ReinsuranceChargeConfiguration {
+  id: string;
+  tenantId: string;
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  rate: string;
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  currency: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  roundingMode: ReinsuranceChargeRoundingMode;
+  decimalPlaces: number;
+  isEnabled: boolean;
+  displayOrder: number;
+}
+
+export interface ReinsuranceChargeTemplate {
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  description: string;
+}
+
+export interface ReinsuranceChargePayload {
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  rate: number;
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  currency?: string | null;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  roundingMode?: ReinsuranceChargeRoundingMode;
+  decimalPlaces?: number;
+  isEnabled?: boolean;
+  displayOrder?: number;
+}
+
+export type ReinsuranceChargeUpdatePayload = Omit<ReinsuranceChargePayload, 'code'>;
+
+export interface ReinsuranceChargePreviewLine {
+  configurationId: string;
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  rate: string;
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  currency: string | null;
+  basisAmount: number;
+  amount: number;
+}
+
+export interface ReinsuranceChargePreviewResult {
+  currency: string;
+  grossAmount: number;
+  commissionAmount: number;
+  brokerageAmount: number;
+  netBeforeCharges: number;
+  additions: number;
+  deductions: number;
+  netAmount: number;
+  charges: ReinsuranceChargePreviewLine[];
+}
+
 export interface LevyTaxFormValues {
-  nicLevy: number | '';
-  withholdingTax: number | '';
+  id?: string;
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  rate: number | '';
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  currency: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  roundingMode: ReinsuranceChargeRoundingMode;
+  decimalPlaces: number;
+  isEnabled: boolean;
+  displayOrder: number;
 }
 
 export const LEVY_TAX_FORM_DEFAULTS: LevyTaxFormValues = {
-  nicLevy: '',
-  withholdingTax: '',
+  code: 'NIC_LEVY',
+  name: 'NIC Levy',
+  chargeType: 'LEVY',
+  rateType: 'PERCENTAGE',
+  rate: '',
+  calculationBasis: 'NET_BEFORE_CHARGES',
+  direction: 'DEDUCTION',
+  currency: '',
+  effectiveFrom: new Date().toISOString().slice(0, 10),
+  effectiveTo: '',
+  roundingMode: 'HALF_UP',
+  decimalPlaces: 4,
+  isEnabled: true,
+  displayOrder: 0,
 };
 
 export const BANK_FORM_DEFAULTS: BankFormValues = {

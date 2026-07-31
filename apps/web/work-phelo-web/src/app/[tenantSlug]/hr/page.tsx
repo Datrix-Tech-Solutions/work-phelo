@@ -1,47 +1,54 @@
-// EMPLOYEE DASHBOARD //
-
 'use client';
 
-import { use, useMemo, useState, useRef } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { useUpcomingBirthdays, useEmployeeDashboard, useMyTasks } from '@/hooks';
-import { useMyProfile } from '@/hooks';
+import {
+  useMyProfile,
+  useEmployeeOptions,
+  useMyTasks,
+  useEmployeeDashboard,
+  useClockIn,
+  useClockOut,
+  useUpcomingBirthdays,
+} from '@/hooks';
 import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/hr/useLeave';
 import { useMyPayslips } from '@/hooks/hr/usePayroll';
 import { usePublicHolidays } from '@/hooks/hr/usePublicHolidays';
-import { useClockIn, useClockOut } from '@/hooks/hr/useTimeClock';
-import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
-import { DashboardWelcomeBanner } from '@/components/molecules/dashboard/DashboardWelcomeBanner';
+import { formatTime, formatMinutes, resolveHolidayUpcomingDate } from '@/lib/formatters';
+import { EmployeeWelcomeCard } from '@/components/molecules/dashboard/EmployeeWelcomeCard';
 import { QuickActionsCard } from '@/components/molecules/dashboard/QuickActionsCard';
-import { UpcomingHolidaysCard } from '@/components/molecules/dashboard/UpcomingHolidaysCard';
+import { AttendanceMetricCard } from '@/components/molecules/shared/AttendanceMetricCard';
 import { AnnouncementCard } from '@/components/molecules/dashboard/announcmentCard';
 import { BirthdaysCard } from '@/components/molecules/dashboard/birthdayCard';
-import { DashboardStatCards } from '@/components/organisms/dashboard/DashboardStatCards';
+import { UpcomingHolidaysCard } from '@/components/molecules/dashboard/UpcomingHolidaysCard';
 import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
 import { MySchedulesPanel } from '@/components/organisms/dashboard/MySchedulesPanel';
 import { MyProjectsPanel } from '@/components/organisms/dashboard/MyProjectsPanel';
-import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
-import { formatTime, resolveHolidayUpcomingDate } from '@/lib/formatters';
+import { ApplyLeavePanel } from '@/components/organisms/hr/leave/ApplyLeavePanel';
 
-/* ── Avatar colour picker ──
-   Intentional variety palette for employee initials.
-   First two mirror --brand and --brand-gradient-end from globals.css. */
+interface Attendance {
+  status?: 'CLOCKED_IN' | 'CLOCKED_OUT';
+  clockedInAt?: string;
+  totalMinutes?: number;
+}
+
+// Same color identities used by ContactCard's avatar.
 const AVATAR_COLORS = [
-  '#0D2244' /* = --brand */,
-  '#1E3A8A' /* = --brand-gradient-end */,
-  '#6D28D9',
-  '#B45309',
-  '#047857',
-  '#0369A1',
-  '#9D174D',
-  '#374151',
+  '#8b5cf6', // violet-500
+  '#3b82f6', // blue-500
+  '#10b981', // emerald-500
+  '#f97316', // orange-500
+  '#ec4899', // pink-500
+  '#14b8a6', // teal-500
+  '#f59e0b', // amber-500
+  '#ef4444', // red-500
 ];
 function avatarColor(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  const hash = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
 export default function EmployeeDashboardPage({
@@ -50,146 +57,51 @@ export default function EmployeeDashboardPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  const router = useRouter();
 
-  /* ── Identity ── */
   const user = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN';
+
+  // The dashboard is a self-service "my" view — not available to tenant admins,
+  // send them to the employees list instead.
+  useEffect(() => {
+    if (isTenantAdmin) {
+      router.replace(`/${tenantSlug}/hr/employees`);
+    }
+  }, [isTenantAdmin, router, tenantSlug]);
+
   const fullName = !authLoading
     ? [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Employee'
     : '';
-  const tenantName = user?.tenantName ?? 'Your Company';
 
-  /* ── Remote data ── */
   const { data: myProfile } = useMyProfile();
-  const department = myProfile?.department?.name;
-  const branch = myProfile?.branch?.name;
-
-  const { data: dashboard, isLoading: isDashboardLoading } = useEmployeeDashboard();
+  const { data: employeeOptions = [] } = useEmployeeOptions();
   const { data: balancesRaw } = useLeaveBalances();
   const { data: myLeaveRaw } = useMyLeaveRequests();
   const { data: myPayslipsRaw } = useMyPayslips();
+  const { data: myTasksRaw = [] } = useMyTasks();
+  const { data: dashboard } = useEmployeeDashboard();
   const { data: holidaysRaw } = usePublicHolidays();
   const { data: birthdaysRaw } = useUpcomingBirthdays();
 
-  /* ── Derived: leave balances ── */
+  const managerName = (() => {
+    if (!myProfile?.managerId) return undefined;
+    const mgr = employeeOptions.find((e) => e.id === myProfile.managerId);
+    return mgr ? `${mgr.firstName} ${mgr.lastName}` : undefined;
+  })();
+
   const leaveBalances = Array.isArray(balancesRaw) ? balancesRaw : [];
-  const annualBalance =
-    leaveBalances.find((b: { leaveTypeName?: string }) =>
-      b.leaveTypeName?.toLowerCase().includes('annual'),
-    ) ?? null;
-
-  /* ── Derived: my leave requests ── */
   const myLeave = useMemo(() => (Array.isArray(myLeaveRaw) ? myLeaveRaw : []), [myLeaveRaw]);
-
-  /* ── Derived: upcoming leave ── */
-  const today = new Date().toISOString().slice(0, 10);
-  const nextLeave =
-    myLeave
-      .filter((r) => (r.status === 'APPROVED' || r.status === 'PENDING') && r.endDate >= today)
-      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null;
-  const upcomingLeave = nextLeave
-    ? {
-        leaveType: nextLeave.leaveTypeName,
-        startDate: nextLeave.startDate,
-        endDate: nextLeave.endDate,
-        status: nextLeave.status,
-      }
-    : null;
-
-  /* ── Derived: my payslips ── */
   const myPayslips = Array.isArray(myPayslipsRaw) ? myPayslipsRaw : [];
 
-  /* ── Derived: announcements ── */
-  const announcements = (dashboard?.announcements ?? []).map(
-    (a: {
-      id: string;
-      title: string;
-      publishedAt: string;
-      body?: string;
-      preview?: string;
-      isRead?: boolean;
-    }) => ({
-      id: a.id,
-      title: a.title,
-      date: new Date(a.publishedAt).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      }),
-      body: a.body ?? a.preview ?? '',
-      isRead: a.isRead,
-    }),
-  );
-
-  /* ── Derived: upcoming holidays (future only, first 5) ── */
-  const now = new Date();
-  const holidays = (Array.isArray(holidaysRaw) ? holidaysRaw : [])
-    .filter(
-      (h: { date: string; observedDate?: string }) =>
-        resolveHolidayUpcomingDate(h.observedDate ?? h.date) >= now,
-    )
-    .sort(
-      (a: { date: string; observedDate?: string }, b: { date: string; observedDate?: string }) =>
-        resolveHolidayUpcomingDate(a.observedDate ?? a.date).getTime() -
-        resolveHolidayUpcomingDate(b.observedDate ?? b.date).getTime(),
-    )
-    .slice(0, 5);
-
-  /* ── Derived: birthdays ── */
-  const rawBirthdays = birthdaysRaw?.birthdays ?? [];
-  const birthdays = (Array.isArray(rawBirthdays) ? rawBirthdays : []).map((b) => {
-    const name = b.name;
-    const initials = name
-      .split(' ')
-      .map((part) => part[0] ?? '')
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
-    return {
-      id: b.id,
-      name,
-      date: new Date(b.dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
-      initials,
-      color: avatarColor(name),
-    };
-  });
-
-  /* ── Attendance ── */
-  const attendance = dashboard?.attendance;
-  const [optimisticClockedIn, setOptimisticClockedIn] = useState<boolean | null>(null);
-  const clockedIn =
-    optimisticClockedIn === true ||
-    (optimisticClockedIn === null && attendance?.status === 'CLOCKED_IN');
-  const isDone =
-    optimisticClockedIn === false ||
-    (optimisticClockedIn === null && attendance?.status === 'CLOCKED_OUT');
-  const clockInTime = attendance?.clockedInAt ? formatTime(attendance.clockedInAt) : undefined;
-  const hoursWorked = attendance?.totalMinutes
-    ? (() => {
-        const h = Math.floor(attendance.totalMinutes / 60);
-        const m = attendance.totalMinutes % 60;
-        return h > 0 && m > 0 ? `${h}h ${m}m` : h > 0 ? `${h}h` : `${m}m`;
-      })()
-    : undefined;
-
-  const { mutate: clockIn, isPending: isClockinIn } = useClockIn();
-  const { mutate: clockOut, isPending: isClockingOut } = useClockOut();
-
-  const handleClockIn = () => {
-    setOptimisticClockedIn(true);
-    clockIn(undefined, {
-      onError: () => setOptimisticClockedIn(null),
-      onSettled: () => setOptimisticClockedIn(null),
-    });
-  };
-
-  const handleClockOut = () => {
-    setOptimisticClockedIn(false);
-    clockOut(undefined, {
-      onError: () => setOptimisticClockedIn(null),
-      onSettled: () => setOptimisticClockedIn(null),
-    });
-  };
+  /* ── Panel states ── */
+  const [applyLeaveOpen, setApplyLeaveOpen] = useState(false);
+  const [payslipsOpen, setPayslipsOpen] = useState(false);
+  const [assetsOpen, setAssetsOpen] = useState(false);
+  const [myLeaveOpen, setMyLeaveOpen] = useState(false);
+  const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
 
   /* ── Leave notification badge ── */
   const [seenLeaveIds, setSeenLeaveIds] = useState<Set<string>>(() => {
@@ -209,19 +121,112 @@ export default function EmployeeDashboardPage({
     [myLeave, seenLeaveIds],
   );
 
-  const { data: myTasksRaw = [] } = useMyTasks();
   const projectsBadgeCount = useMemo(
     () => myTasksRaw.filter((t) => t.status !== 'DONE').length,
     [myTasksRaw],
   );
 
-  /* ── Panel states ── */
-  const [applyLeaveOpen, setApplyLeaveOpen] = useState(false);
-  const [payslipsOpen, setPayslipsOpen] = useState(false);
-  const [assetsOpen, setAssetsOpen] = useState(false);
-  const [myLeaveOpen, setMyLeaveOpen] = useState(false);
-  const [schedulesOpen, setSchedulesOpen] = useState(false);
-  const [projectsOpen, setProjectsOpen] = useState(false);
+  const announcements = useMemo(
+    () =>
+      (dashboard?.announcements ?? []).map(
+        (a: {
+          id: string;
+          title: string;
+          publishedAt: string;
+          body?: string;
+          preview?: string;
+          isRead?: boolean;
+        }) => ({
+          id: a.id,
+          title: a.title,
+          date: new Date(a.publishedAt).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          }),
+          body: a.body ?? a.preview ?? '',
+          isRead: a.isRead,
+        }),
+      ),
+    [dashboard?.announcements],
+  );
+
+  /* ── Upcoming holidays (future only, first 5) ── */
+  const holidays = useMemo(() => {
+    const now = new Date();
+    return (Array.isArray(holidaysRaw) ? holidaysRaw : [])
+      .filter(
+        (h: { date: string; observedDate?: string }) =>
+          resolveHolidayUpcomingDate(h.observedDate ?? h.date) >= now,
+      )
+      .sort(
+        (a: { date: string; observedDate?: string }, b: { date: string; observedDate?: string }) =>
+          resolveHolidayUpcomingDate(a.observedDate ?? a.date).getTime() -
+          resolveHolidayUpcomingDate(b.observedDate ?? b.date).getTime(),
+      )
+      .slice(0, 5);
+  }, [holidaysRaw]);
+
+  /* ── Birthdays ── */
+  const birthdays = useMemo(() => {
+    const rawBirthdays = birthdaysRaw?.birthdays ?? [];
+    return (Array.isArray(rawBirthdays) ? rawBirthdays : []).map((b) => {
+      const name = b.name;
+      const initials = name
+        .split(' ')
+        .map((part) => part[0] ?? '')
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
+      return {
+        id: b.id,
+        name,
+        date: new Date(b.dateOfBirth).toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+        }),
+        initials,
+        color: avatarColor(name),
+        avatarUrl: b.avatarUrl,
+      };
+    });
+  }, [birthdaysRaw]);
+
+  const birthdayRef = useRef<HTMLDivElement>(null);
+  const scrollBirthdays = (dir: 'left' | 'right') => {
+    birthdayRef.current?.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
+  };
+
+  /* ── Attendance ── */
+  const attendance = dashboard?.attendance as Attendance | undefined;
+  const [optimisticClockedIn, setOptimisticClockedIn] = useState<boolean | null>(null);
+  const clockedIn =
+    optimisticClockedIn === true ||
+    (optimisticClockedIn === null && attendance?.status === 'CLOCKED_IN');
+  const isDone =
+    optimisticClockedIn === false ||
+    (optimisticClockedIn === null && attendance?.status === 'CLOCKED_OUT');
+  const clockInTime = attendance?.clockedInAt ? formatTime(attendance.clockedInAt) : undefined;
+  const hoursWorked = attendance?.totalMinutes ? formatMinutes(attendance.totalMinutes) : undefined;
+
+  const { mutate: clockIn, isPending: isClockingIn } = useClockIn();
+  const { mutate: clockOut, isPending: isClockingOut } = useClockOut();
+
+  const handleClockIn = (location?: string) => {
+    setOptimisticClockedIn(true);
+    clockIn(location ? { location } : undefined, {
+      onError: () => setOptimisticClockedIn(null),
+      onSettled: () => setOptimisticClockedIn(null),
+    });
+  };
+
+  const handleClockOut = () => {
+    setOptimisticClockedIn(false);
+    clockOut(undefined, {
+      onError: () => setOptimisticClockedIn(null),
+      onSettled: () => setOptimisticClockedIn(null),
+    });
+  };
 
   const handleOpenMyLeave = () => {
     setMyLeaveOpen(true);
@@ -232,75 +237,53 @@ export default function EmployeeDashboardPage({
     localStorage.setItem('dashboard_leave_seen_ids', JSON.stringify(ids));
   };
 
-  /* ── Birthday scroll ── */
-  const birthdayRef = useRef<HTMLDivElement>(null);
-  const scrollBirthdays = (dir: 'left' | 'right') => {
-    birthdayRef.current?.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
-  };
+  if (isTenantAdmin) return null;
 
-  if (authLoading || isDashboardLoading) return <DashboardSkeleton />;
-
-  /* ── Render ── */
   return (
-    <div className="pl-6 pr-6 pt-0 pb-6 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
-      <div
-        className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-3"
-        style={{
-          backgroundColor: 'rgba(249, 250, 251, 0.55)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-        }}
-      >
-        <DashboardWelcomeBanner
-          tenantName={tenantName}
-          fullName={fullName}
-          department={department}
-          branch={branch}
-        />
-      </div>
+    <div className="p-6 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <div className="flex flex-col gap-6">
+          <EmployeeWelcomeCard
+            fullName={fullName}
+            avatarUrl={myProfile?.avatarUrl}
+            jobTitle={myProfile?.jobTitle}
+            department={myProfile?.department?.name}
+            branch={myProfile?.branch?.name}
+            managerName={managerName}
+            companyName={user?.tenantName}
+          />
+          <QuickActionsCard
+            onApplyLeave={() => setApplyLeaveOpen(true)}
+            onLeave={handleOpenMyLeave}
+            onPayslips={() => setPayslipsOpen(true)}
+            onAssets={() => setAssetsOpen(true)}
+            onSchedules={() => setSchedulesOpen(true)}
+            onProjects={() => setProjectsOpen(true)}
+            leaveBadge={leaveBadgeCount}
+            projectsBadge={projectsBadgeCount}
+          />
+        </div>
 
-      <DashboardStatCards
-        annualBalance={annualBalance}
-        upcomingLeave={upcomingLeave}
-        clockedIn={clockedIn}
-        isDone={isDone}
-        clockInTime={clockInTime}
-        hoursWorked={hoursWorked}
-        isClockLoading={isClockinIn || isClockingOut}
-        onRequestLeave={() => setApplyLeaveOpen(true)}
-        onClockIn={handleClockIn}
-        onClockOut={handleClockOut}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
-        {/* Left column */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
+          <AttendanceMetricCard
+            clockedIn={clockedIn}
+            isDone={isDone}
+            clockInTime={clockInTime}
+            hoursWorked={hoursWorked}
+            onClockIn={handleClockIn}
+            onClockOut={handleClockOut}
+            isLoading={isClockingIn || isClockingOut}
+          />
           <AnnouncementCard announcements={announcements} />
+        </div>
+
+        <div className="flex flex-col gap-6">
           <BirthdaysCard
             birthdays={birthdays}
             scrollRef={birthdayRef}
             onScrollLeft={() => scrollBirthdays('left')}
             onScrollRight={() => scrollBirthdays('right')}
           />
-        </div>
-
-        {/* Right column */}
-        <div className="flex flex-col gap-4">
-          <QuickActionsCard
-            onPayslips={() => setPayslipsOpen(true)}
-            onAssets={() => setAssetsOpen(true)}
-            onLeave={handleOpenMyLeave}
-            onSchedules={() => setSchedulesOpen(true)}
-            onProjects={() => setProjectsOpen(true)}
-            leaveBadge={leaveBadgeCount}
-            projectsBadge={projectsBadgeCount}
-          />
-          {/* <BirthdaysCard
-            birthdays={birthdays}
-            scrollRef={birthdayRef}
-            onScrollLeft={() => scrollBirthdays('left')}
-            onScrollRight={() => scrollBirthdays('right')}
-          /> */}
           <UpcomingHolidaysCard holidays={holidays} />
         </div>
       </div>

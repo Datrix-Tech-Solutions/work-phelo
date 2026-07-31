@@ -5,6 +5,7 @@ import { DataList, Column } from '@/components/organisms/shared/DataList';
 import { Period } from '@/components/atoms/PeriodToggle';
 import { useFacultatives, useCurrencies } from '@/hooks';
 import { Currency } from '@/types/reinsurance';
+import { transparentCardClass } from '@/lib/utils';
 
 interface CedantRow {
   id: string;
@@ -49,10 +50,10 @@ function buildColumns(symbol: string): Column<CedantRow>[] {
     {
       key: 'name',
       label: 'Cedant',
-      width: '1fr',
+      width: '0.5fr',
       render: (row) => (
         <div className="flex flex-col gap-0.5">
-          <span className="font-medium text-gray-900">{row.name}</span>
+          <span className="text-xs font-medium text-gray-900">{row.name}</span>
           <span className="text-xs text-gray-400">
             {row.offerCount} {row.offerCount === 1 ? 'offer' : 'offers'}
           </span>
@@ -115,14 +116,16 @@ export function TopCedantsList({ period, currency }: TopCedantsListProps) {
   }, [all, currencies, period, currency]);
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 flex flex-col gap-3">
+    <div className={transparentCardClass('flex flex-col gap-3 py-5 h-80')}>
       <h3 className="text-sm font-semibold text-gray-900">Top 5 Cedants</h3>
-      <DataList
-        columns={buildColumns(symbol)}
-        data={rows}
-        isLoading={loadingFac || loadingCur}
-        emptyMessage="No cedant data for this period"
-      />
+      <div className="flex-1 min-h-0 overflow-y-auto -mx-3 px-3">
+        <DataList
+          columns={buildColumns(symbol)}
+          data={rows}
+          isLoading={loadingFac || loadingCur}
+          emptyMessage="No cedant data for this period"
+        />
+      </div>
     </div>
   );
 }

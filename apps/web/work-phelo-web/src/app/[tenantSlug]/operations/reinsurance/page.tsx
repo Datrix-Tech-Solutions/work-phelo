@@ -15,7 +15,7 @@ export default function ReinsurancePage({ params }: { params: Promise<{ tenantSl
 
   useEffect(() => {
     if (!authLoading && !hasAccess) {
-      router.replace(`/${tenantSlug}/dashboard`);
+      router.replace(`/${tenantSlug}/modules`);
     }
   }, [authLoading, hasAccess, router, tenantSlug]);
 

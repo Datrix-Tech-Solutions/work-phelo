@@ -1,7 +1,7 @@
 'use client';
 
 import { use } from 'react';
-import { CycleResultsContent } from '@/components/organisms/appraisal/CycleResultsContent';
+import { CycleResultsContent } from '@/components/organisms/hr/appraisal/CycleResultsContent';
 
 export default function CycleResultsPage({
   params,

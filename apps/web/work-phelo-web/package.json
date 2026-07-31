@@ -23,10 +23,12 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^1.7.0",
+    "maplibre-gl": "^5.24.0",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.72.1",
+    "react-map-gl": "^8.1.1",
     "react-qr-code": "^2.0.21",
     "tailwind-merge": "^3.5.0",
     "zustand": "^5.0.12"

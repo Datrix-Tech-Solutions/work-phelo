@@ -2,14 +2,16 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button } from '@/components/atoms/Button';
 import { CreateDistributionPanel } from '@/components/organisms/reinsurance/panels/CreateDistributionPanel';
+import {
+  PlacementShareBreakdown,
+  ShareBreakdownEntry,
+} from '@/components/molecules/reinsurance/PlacementShareBreakdown';
 import {
   DistributionTable,
   DistributionEntry,
-  DistributionStatus,
 } from '@/components/molecules/reinsurance/tables/DistributionTable';
-import { Facultative, PlacementParticipant, PlacementParticipantStatus } from '@/types/reinsurance';
+import { Facultative, PlacementParticipant } from '@/types/reinsurance';
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 import {
   useReinsurers,
@@ -19,16 +21,11 @@ import {
   useUpdateFacultativeStatus,
   useDeleteParticipant,
   useUpdateClosingStatus,
+  useAcceptAndConfirmPlacementParticipant,
   usePlacementClosings,
   usePlacementPayments,
-  usePlacementEndorsements,
-  usePlacementEndorsementParticipants,
-  useCreateEndorsementParticipant,
-  useAcceptAndConfirmPlacementParticipant,
   facultativePlacementKey,
-  placementClosingsKey,
 } from '@/hooks';
-import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -47,12 +44,6 @@ interface DistributionListTabProps {
   placement: Facultative;
 }
 
-function participantStatus(s: PlacementParticipantStatus): DistributionStatus {
-  if (s === 'ACCEPTED' || s === 'CLOSED') return 'Accepted';
-  if (s === 'DECLINED') return 'Declined';
-  return 'Pending';
-}
-
 function participantToEntry(
   p: PlacementParticipant,
   reinsurerEmails: Record<string, string[]>,
@@ -64,7 +55,7 @@ function participantToEntry(
     emails: reinsurerEmails[p.counterpartyId] ?? [],
     shareLine: parseFloat(p.sharePercent ?? '0'),
     brokerageFee: parseFloat(p.brokerageFee ?? '0'),
-    status: participantStatus(p.status),
+    status: p.status,
   };
 }
 
@@ -85,38 +76,6 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   );
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
-  const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
-
-  const activeEndorsement = endorsements.find(
-    (e) => !TERMINAL_ENDORSEMENT_STATUSES.includes(e.status),
-  );
-  const hasActiveEndorsement = !!activeEndorsement;
-
-  const { data: endorsementParticipants = [] } = usePlacementEndorsementParticipants(
-    placement.id,
-    activeEndorsement?.id,
-  );
-  const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
-    placement.id,
-    activeEndorsement?.id,
-  );
-
-  const confirmedCounterpartyIds = new Set(
-    endorsementParticipants
-      .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
-      .map((p) => p.counterpartyId),
-  );
-
-  const confirmedParticipantIds = useMemo(
-    () =>
-      new Set(
-        closings
-          .filter((closing) => closing.status === 'CONFIRMED')
-          .map((closing) => closing.participantId),
-      ),
-    [closings],
-  );
-
   const [panelOpen, setPanelOpen] = useState(false);
 
   const reinsurerEmails = useMemo<Record<string, string[]>>(
@@ -144,9 +103,23 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     [reinsurerEmails],
   );
 
+  const confirmedClosingParticipantIds = useMemo(
+    () =>
+      new Set(
+        closings
+          .filter((closing) => closing.status === 'CONFIRMED')
+          .map((closing) => closing.participantId),
+      ),
+    [closings],
+  );
+
   const serverEntries = useMemo(
-    () => toEntries(placement.participants),
-    [placement.participants, toEntries],
+    () =>
+      toEntries(placement.participants).map((entry) => ({
+        ...entry,
+        hasConfirmedClosing: confirmedClosingParticipantIds.has(entry.id),
+      })),
+    [confirmedClosingParticipantIds, placement.participants, toEntries],
   );
 
   const [patches, setPatches] = useState<Record<string, Partial<DistributionEntry>>>({});
@@ -179,13 +152,19 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const patch = (id: string, update: Partial<DistributionEntry>) =>
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
 
+  // Optimistic status patches only exist to bridge the gap until the server round-trip lands —
+  // once it does, drop them so a leftover patch (e.g. 'ACCEPTED') can't mask a later real status
+  // (e.g. 'CLOSED') that the server returns for the same row.
+  const clearStatusPatch = (id: string) =>
+    setPatches((prev) => {
+      if (!prev[id] || !('status' in prev[id])) return prev;
+      const rest = { ...prev[id] };
+      delete rest.status;
+      return { ...prev, [id]: rest };
+    });
+
   const refreshPlacementAfterAccept = useCallback(
-    () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
-        queryClient.invalidateQueries({ queryKey: placementClosingsKey(placement.id) }),
-        queryClient.invalidateQueries({ queryKey: ['reinsurance', 'placements'] }),
-      ]),
+    () => queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
     [placement.id, queryClient],
   );
 
@@ -238,7 +217,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleMailSent = (row: DistributionEntry) => {
     // Skip status update when already accepted — ACCEPTED → OFFER_SENT is not a valid transition
-    if (row.status === 'Accepted') return;
+    if (row.status === 'ACCEPTED') return;
     updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) =>
       toast().addToast({ message: extractError(error), type: 'error' }),
     );
@@ -247,50 +226,39 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const handleAccept = async (row: DistributionEntry) => {
     if (acceptingIds.has(row.id)) return;
 
-    const isReconfirm = row.status === 'Accepted';
+    const placedPct = entries
+      .filter((e) => e.id !== row.id && (e.status === 'ACCEPTED' || e.status === 'CLOSED'))
+      .reduce((sum, e) => sum + e.shareLine, 0);
+    const availablePct = Math.max(0, +(facOffer - placedPct).toFixed(4));
+    if (row.shareLine > availablePct) {
+      toast().addToast({
+        message: `${row.reinsurerCompany}'s share (${row.shareLine}%) exceeds the ${availablePct}% still available on this placement.`,
+        type: 'error',
+      });
+      return;
+    }
+
     setAcceptingIds((prev) => new Set([...prev, row.id]));
-    patch(row.id, { status: 'Accepted' });
+    patch(row.id, { status: 'ACCEPTED' });
 
     try {
-      if (isReconfirm) {
-        await updateParticipant({
-          participantId: row.id,
-          sharePercent: row.shareLine,
-          signedLinePercent: row.shareLine,
-          suppressInvalidation: true,
-        });
-        await createEndorsementParticipant({
-          counterpartyId: row.counterpartyId,
-          originalParticipantId: row.id,
-          sharePercent: row.shareLine,
-          signedLinePercent: row.shareLine,
-          status: 'ACCEPTED',
-        });
-      } else {
-        await updateParticipant({
-          participantId: row.id,
-          sharePercent: row.shareLine,
-          signedLinePercent: row.shareLine,
-          suppressInvalidation: true,
-        });
-        await acceptAndConfirmParticipant({ participantId: row.id });
-      }
-      toast().addToast({
-        message: 'Participant accepted and closing confirmed.',
-        type: 'success',
+      await updateParticipant({
+        participantId: row.id,
+        sharePercent: row.shareLine,
+        signedLinePercent: row.shareLine,
+        suppressInvalidation: true,
+      });
+      await updateParticipantStatus({
+        participantId: row.id,
+        status: 'ACCEPTED',
+        suppressInvalidation: true,
       });
     } catch (error) {
-      if (isReconfirm) {
-        toast().addToast({ message: extractError(error), type: 'error' });
-      } else {
-        patch(row.id, { status: 'Pending' });
-        toast().addToast({
-          message: `Participant acceptance did not fully complete. Refreshing placement state. ${extractError(error)}`,
-          type: 'error',
-        });
-      }
+      patch(row.id, { status: row.status });
+      toast().addToast({ message: extractError(error), type: 'error' });
     } finally {
       await refreshPlacementAfterAccept();
+      clearStatusPatch(row.id);
       setAcceptingIds((prev) => {
         const next = new Set(prev);
         next.delete(row.id);
@@ -299,14 +267,31 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     }
   };
 
-  const handleClosePlacement = () => {
-    updatePlacementStatus({ status: 'CLOSING' })
-      .then(() => updatePlacementStatus({ status: 'CLOSED' }))
-      .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
+  const handleClose = async (row: DistributionEntry) => {
+    if (acceptingIds.has(row.id)) return;
+    setAcceptingIds((prev) => new Set([...prev, row.id]));
+
+    try {
+      await acceptAndConfirmParticipant({ participantId: row.id });
+      toast().addToast({
+        message: `A closing for ${row.reinsurerCompany} with ${row.shareLine}% has been created`,
+        type: 'success',
+      });
+    } catch (error) {
+      toast().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      await refreshPlacementAfterAccept();
+      clearStatusPatch(row.id);
+      setAcceptingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
+    }
   };
 
   const handleRevert = (row: DistributionEntry) => {
-    patch(row.id, { status: 'Pending' });
+    patch(row.id, { status: 'QUOTED' });
     const closing = closingByParticipantId[row.id];
     // Confirmed closings are immutable backend snapshots; do not void from frontend revert flow.
     const canVoidClosing = closing?.status === 'DRAFT' || closing?.status === 'ISSUED';
@@ -316,19 +301,29 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     voidClosing
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'QUOTED' }))
       .catch((error) => {
-        patch(row.id, { status: 'Accepted' });
+        patch(row.id, { status: 'ACCEPTED' });
         toast().addToast({ message: extractError(error), type: 'error' });
       });
   };
 
   const handleDecline = (row: DistributionEntry) => {
-    patch(row.id, { status: 'Declined', shareLine: 0 });
-    updateParticipant({ participantId: row.id, sharePercent: 0 })
+    patch(row.id, { status: 'DECLINED', shareLine: 0 });
+    // Also reset signedLinePercent so a previously-accepted (then reverted) participant
+    // doesn't leave a stale signed line that exceeds the new sharePercent.
+    updateParticipant({ participantId: row.id, sharePercent: 0, signedLinePercent: 0 })
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'DECLINED' }))
       .catch((error) => {
-        patch(row.id, { status: 'Pending', shareLine: row.shareLine });
+        patch(row.id, { status: row.status, shareLine: row.shareLine });
         toast().addToast({ message: extractError(error), type: 'error' });
       });
+  };
+
+  const handleReopen = (row: DistributionEntry) => {
+    patch(row.id, { status: 'OFFER_SENT' });
+    updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) => {
+      patch(row.id, { status: 'DECLINED' });
+      toast().addToast({ message: extractError(error), type: 'error' });
+    });
   };
 
   const handleDelete = (row: DistributionEntry) => {
@@ -343,92 +338,29 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     });
   };
 
-  const acceptedEntries = entries.filter((e) => e.status === 'Accepted');
-  const placedPct = +acceptedEntries.reduce((sum, e) => sum + e.shareLine, 0).toFixed(4);
-  const availablePct = Math.max(0, +(facOffer - placedPct).toFixed(4));
-
-  const colorMap = Object.fromEntries(
-    entries.map((e, i) => [e.id, SEGMENT_COLORS[i % SEGMENT_COLORS.length]]),
-  );
+  const breakdownEntries: ShareBreakdownEntry[] = entries.map((e, i) => ({
+    id: e.id,
+    label: e.reinsurerCompany,
+    value: e.shareLine,
+    color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+    isPlaced: e.status === 'ACCEPTED' || e.status === 'CLOSED',
+  }));
 
   return (
     <>
-      <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-0.5">
-            <h3 className="text-sm font-semibold text-gray-900">Placement Share Breakdown</h3>
-            <p className="text-xs text-gray-400">
-              Distributed offers of the Fac. Offer{' '}
-              <span className="font-semibold text-gray-600">{facOffer}%</span>
-            </p>
-          </div>
-          <Button size="sm" onClick={() => setPanelOpen(true)} isLoading={isAdding}>
-            Add Reinsurers
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between text-xs font-medium text-gray-500">
-            <span>Placed Capacity</span>
-            <span>
-              <span className="text-gray-700">{placedPct}%</span>
-              <span className="text-gray-400"> / {facOffer}%</span>
-            </span>
-          </div>
-
-          <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
-            {acceptedEntries.map((entry) => (
-              <div
-                key={entry.id}
-                style={{
-                  width: `${(entry.shareLine / facOffer) * 100}%`,
-                  backgroundColor: colorMap[entry.id],
-                }}
-                className="h-full transition-all duration-500"
-              />
-            ))}
-          </div>
-
-          <p className="text-xs text-gray-400">
-            Available: <span className="font-semibold text-gray-600">{availablePct}%</span>
-          </p>
-
-          {entries.length > 0 && (
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1">
-              {entries.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-1.5">
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: colorMap[entry.id] }}
-                  />
-                  <span
-                    className="text-xs"
-                    style={{
-                      color: entry.status === 'Accepted' ? colorMap[entry.id] : undefined,
-                    }}
-                  >
-                    <span className={entry.status !== 'Accepted' ? 'text-gray-400' : 'font-medium'}>
-                      {entry.reinsurerCompany}
-                    </span>
-                    {entry.status === 'Accepted' && (
-                      <span className="text-gray-400 font-normal"> · {entry.shareLine}%</span>
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <PlacementShareBreakdown
+        total={facOffer}
+        totalLabel="Fac. Offer"
+        entries={breakdownEntries}
+        onAddReinsurers={() => setPanelOpen(true)}
+        isAdding={isAdding}
+      />
 
       <div className="mt-4">
         <DistributionTable
           entries={entries}
           premium={premium}
           placement={placement}
-          hasActiveEndorsement={hasActiveEndorsement}
-          confirmedCounterpartyIds={confirmedCounterpartyIds}
-          confirmedParticipantIds={confirmedParticipantIds}
           isPlacementLocked={isPlacementLocked}
           busyIds={acceptingIds}
           onShareCommit={handleShareCommit}
@@ -436,9 +368,10 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           onMailSent={handleMailSent}
           onAccept={handleAccept}
           onDecline={handleDecline}
+          onClose={handleClose}
           onDelete={handleDelete}
           onRevert={handleRevert}
-          onClosePlacement={placement.status === 'PLACED' ? handleClosePlacement : undefined}
+          onReopen={handleReopen}
         />
       </div>
 

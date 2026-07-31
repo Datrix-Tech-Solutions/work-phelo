@@ -4,7 +4,7 @@
 
 import { useState, useMemo } from 'react';
 import { useTenants, useDeleteTenant } from '@/hooks/useTenants';
-import { useRouter } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { WelcomeBanner } from '@/components/molecules/shared/WelcomeBanner';
 import { StatCard } from '@/components/molecules/shared/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -178,40 +178,38 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Companies table */}
-        <div className="flex flex-col gap-4 flex-1 min-h-0">
-          <h2 className="text-xl font-bold text-gray-900">Companies</h2>
-          <DataTable
-            columns={COLUMNS}
-            data={pageData}
-            isLoading={isLoading}
-            searchPlaceholder="Search company name, phone, or industry..."
-            onSearch={(q) => {
-              setSearch(q);
-              setPage(1);
-            }}
-            onRowClick={(row) => router.push(`/dashboard/${row.id}`)}
-            filterOptions={[
-              { value: 'ACTIVE', label: 'Active' },
-              { value: 'INACTIVE', label: 'Inactive' },
-              { value: 'SUSPENDED', label: 'Suspended' },
-              { value: 'PENDING', label: 'Pending' },
-            ]}
-            onFilter={(v) => {
-              setFilter(v);
-              setPage(1);
-            }}
-            onExport={() => console.log('export')}
-            actionButton={{ label: 'New Company', onClick: () => setPanelOpen(true) }}
-            rowActions={(row) => [
-              { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
-              { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
-            ]}
-            emptyMessage="No companies onboarded"
-            currentPage={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-          />
-        </div>
+        {/* <h2 className="text-xl font-bold text-gray-900">Companies</h2> */}
+        <DataTable
+          columns={COLUMNS}
+          data={pageData}
+          isLoading={isLoading}
+          searchPlaceholder="Search company name, phone, or industry..."
+          onSearch={(q) => {
+            setSearch(q);
+            setPage(1);
+          }}
+          onRowClick={(row) => router.push(`/dashboard/${row.id}`)}
+          filterOptions={[
+            { value: 'ACTIVE', label: 'Active' },
+            { value: 'INACTIVE', label: 'Inactive' },
+            { value: 'SUSPENDED', label: 'Suspended' },
+            { value: 'PENDING', label: 'Pending' },
+          ]}
+          onFilter={(v) => {
+            setFilter(v);
+            setPage(1);
+          }}
+          onExport={() => console.log('export')}
+          actionButton={{ label: 'New Company', onClick: () => setPanelOpen(true) }}
+          rowActions={(row) => [
+            { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
+            { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
+          ]}
+          emptyMessage="No companies onboarded"
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
       </main>
 
       {/* Add Company side panel */}

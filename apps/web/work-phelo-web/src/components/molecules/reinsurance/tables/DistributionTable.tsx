@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
+import { TableButton } from '@/components/atoms/TableButton';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
-import { Facultative } from '@/types/reinsurance';
+import { Facultative, PlacementParticipantStatus, toDisplayStatus } from '@/types/reinsurance';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
-
-export type DistributionStatus = 'Pending' | 'Accepted' | 'Declined';
+import { cn } from '@/lib/utils';
 
 export interface DistributionEntry {
   id: string; // participant record ID
@@ -17,14 +17,29 @@ export interface DistributionEntry {
   emails: string[];
   shareLine: number;
   brokerageFee: number;
-  status: DistributionStatus;
+  status: PlacementParticipantStatus;
+  hasConfirmedClosing?: boolean;
 }
 
-const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'danger'> = {
-  Pending: 'warning',
-  Accepted: 'success',
-  Declined: 'danger',
+const STATUS_VARIANT: Record<
+  PlacementParticipantStatus,
+  'warning' | 'success' | 'neutral' | 'danger'
+> = {
+  INVITED: 'neutral',
+  OFFER_SENT: 'warning',
+  QUOTED: 'warning',
+  ACCEPTED: 'neutral',
+  DECLINED: 'danger',
+  CLOSED: 'success',
 };
+
+function statusLabel(status: PlacementParticipantStatus): string {
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 function fmtAmount(val: number) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,9 +49,6 @@ interface DistributionTableProps {
   entries: DistributionEntry[];
   premium: number;
   placement: Facultative;
-  hasActiveEndorsement?: boolean;
-  confirmedCounterpartyIds?: Set<string>;
-  confirmedParticipantIds?: Set<string>;
   isPlacementLocked?: boolean;
   busyIds?: Set<string>;
   onShareCommit: (row: DistributionEntry, share: number) => void;
@@ -44,18 +56,16 @@ interface DistributionTableProps {
   onMailSent: (row: DistributionEntry) => void;
   onAccept: (row: DistributionEntry) => void;
   onDecline: (row: DistributionEntry) => void;
+  onClose?: (row: DistributionEntry) => void;
   onDelete?: (row: DistributionEntry) => void;
   onRevert?: (row: DistributionEntry) => void;
-  onClosePlacement?: () => void;
+  onReopen?: (row: DistributionEntry) => void;
 }
 
 export function DistributionTable({
   entries,
   premium,
   placement,
-  hasActiveEndorsement = false,
-  confirmedCounterpartyIds,
-  confirmedParticipantIds,
   isPlacementLocked = false,
   busyIds,
   onShareCommit,
@@ -63,12 +73,12 @@ export function DistributionTable({
   onMailSent,
   onAccept,
   onDecline,
+  onClose,
   onDelete,
   onRevert,
-  onClosePlacement,
+  onReopen,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
-  const [reconfirmedIds, setReconfirmedIds] = useState<Set<string>>(new Set());
   const [mailPreviewId, setMailPreviewId] = useState<string | null>(null);
   const [slipPreviewId, setSlipPreviewId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -112,7 +122,6 @@ export function DistributionTable({
 
   const handleAccept = (row: DistributionEntry) => {
     onAccept(row);
-    setReconfirmedIds((prev) => new Set([...prev, row.id]));
     setMailedIds((prev) => {
       const n = new Set(prev);
       n.delete(row.id);
@@ -133,16 +142,22 @@ export function DistributionTable({
     {
       key: 'reinsurerCompany',
       label: 'Reinsurer Company',
-      width: '1.8fr',
+      width: 'minmax(200px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.reinsurerCompany}</span>,
     },
     {
       key: 'shareLine',
       label: 'Participant Share (%)',
-      width: '1fr',
+      width: 'minmax(150px, 1fr)',
       render: (row) => {
-        const isPaid = isPlacementLocked;
+        const isPaid =
+          isPlacementLocked ||
+          row.status === 'CLOSED' ||
+          row.status === 'DECLINED' ||
+          Boolean(row.hasConfirmedClosing);
         if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
+        const shareVariant =
+          row.status === 'OFFER_SENT' ? 'red' : row.status === 'ACCEPTED' ? 'green' : 'default';
         return editingId === row.id ? (
           <input
             type="number"
@@ -153,16 +168,33 @@ export function DistributionTable({
             onBlur={() => commitEdit(row)}
             onKeyDown={(e) => e.key === 'Enter' && commitEdit(row)}
             autoFocus
-            className="w-20 px-2 py-1 text-sm border border-brand ring-1 ring-brand/20 rounded-input bg-white focus:outline-none text-gray-900"
+            className={cn(
+              'w-20 px-2 py-1 text-sm border rounded-input bg-white focus:outline-none',
+              shareVariant === 'red' && 'border-red-400 ring-1 ring-red-100 text-red-700',
+              shareVariant === 'green' && 'border-green-400 ring-1 ring-green-100 text-green-700',
+              shareVariant === 'default' && 'border-brand ring-1 ring-brand/20 text-gray-900',
+            )}
           />
         ) : (
           <button
             type="button"
             onClick={() => startEdit(row)}
-            className="w-20 flex items-center justify-between px-2 py-1 text-sm border border-gray-300 rounded-input bg-white text-gray-700 hover:border-brand transition-colors"
+            className={cn(
+              'w-20 flex items-center justify-between px-2 py-1 text-sm border rounded-input bg-white transition-colors',
+              shareVariant === 'red' && 'border-red-300 text-red-700 hover:border-red-400',
+              shareVariant === 'green' && 'border-green-300 text-green-700 hover:border-green-400',
+              shareVariant === 'default' && 'border-gray-300 text-gray-700 hover:border-brand',
+            )}
           >
             <span>{row.shareLine}%</span>
-            <Icons.Pencil className="w-3 h-3 text-gray-400 shrink-0" />
+            <Icons.Pencil
+              className={cn(
+                'w-3 h-3 shrink-0',
+                shareVariant === 'red' && 'text-red-400',
+                shareVariant === 'green' && 'text-green-400',
+                shareVariant === 'default' && 'text-gray-400',
+              )}
+            />
           </button>
         );
       },
@@ -170,9 +202,13 @@ export function DistributionTable({
     {
       key: 'brokerageFee',
       label: 'Brokerage Fee (%)',
-      width: '1fr',
+      width: 'minmax(150px, 1fr)',
       render: (row) => {
-        const isPaid = isPlacementLocked;
+        const isPaid =
+          isPlacementLocked ||
+          row.status === 'CLOSED' ||
+          row.status === 'DECLINED' ||
+          Boolean(row.hasConfirmedClosing);
         if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
         return editingBrokerageId === row.id ? (
           <input
@@ -201,7 +237,7 @@ export function DistributionTable({
     {
       key: 'premiumShare',
       label: 'Premium Share',
-      width: '1.2fr',
+      width: '150px',
       render: (row) => (
         <span className="text-gray-700">{fmtAmount((row.shareLine / 100) * premium)}</span>
       ),
@@ -209,7 +245,7 @@ export function DistributionTable({
     {
       key: 'brokerageAmount',
       label: 'Brokerage Amount',
-      width: '1.2fr',
+      width: '150px',
       render: (row) => {
         const premiumShare = (row.shareLine / 100) * premium;
         return (
@@ -223,7 +259,12 @@ export function DistributionTable({
       key: 'status',
       label: 'Status',
       width: '110px',
-      render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
+      render: (row) => (
+        <Badge
+          label={row.hasConfirmedClosing ? 'Closed' : statusLabel(row.status)}
+          variant={row.hasConfirmedClosing ? 'success' : STATUS_VARIANT[row.status]}
+        />
+      ),
     },
     {
       key: 'actions',
@@ -231,68 +272,96 @@ export function DistributionTable({
       width: '150px',
       render: (row) => {
         const mailed = mailedIds.has(row.id);
-        const hasReconfirmed =
-          confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
-        const hasConfirmedClosing = confirmedParticipantIds?.has(row.id) ?? false;
-        const responded = row.status === 'Declined' || row.status === 'Accepted';
-        const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
+        const isFinalized = row.status === 'CLOSED' || Boolean(row.hasConfirmedClosing);
+        const responded = row.status === 'DECLINED' || row.status === 'ACCEPTED' || isFinalized;
         const isBusy = busyIds?.has(row.id) ?? false;
         const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
+        const showPreviewIcon = row.status !== 'DECLINED' && !isFinalized;
+        const showPreviewButton = isFinalized;
+        const showMail =
+          row.status !== 'OFFER_SENT' &&
+          row.status !== 'QUOTED' &&
+          row.status !== 'ACCEPTED' &&
+          row.status !== 'DECLINED' &&
+          !isFinalized;
         const showAccept =
           !isPlacementLocked &&
-          (isReconfirming ||
-            (mailed && !responded) ||
-            (row.status === 'Accepted' && !hasConfirmedClosing));
-        const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
-        const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
+          (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
+          !responded;
+        const showDecline =
+          !isPlacementLocked &&
+          (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
+          !responded;
+        const showRevert = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
+        const showClose = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
+        const showReopen =
+          !isPlacementLocked &&
+          row.status === 'DECLINED' &&
+          toDisplayStatus(placement.status) !== 'Closed';
         return (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              title="Preview Slip"
-              onClick={() => setSlipPreviewId(row.id)}
-              className="text-blue-500 hover:text-blue-600 transition-colors"
-            >
-              <Icons.Eye className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              title="Send mail"
-              onClick={() => setMailPreviewId(row.id)}
-              className="text-green-500 hover:text-green-700 transition-colors"
-            >
-              <Icons.Mail className="w-4 h-4" />
-            </button>
+            {showPreviewIcon && (
+              <button
+                type="button"
+                title="Preview Slip"
+                onClick={() => setSlipPreviewId(row.id)}
+                className="text-blue-500 hover:text-blue-600 transition-colors"
+              >
+                <Icons.Eye className="w-5 h-5" />
+              </button>
+            )}
+            {showPreviewButton && (
+              <TableButton variant="blue" onClick={() => setSlipPreviewId(row.id)}>
+                Preview Slip
+              </TableButton>
+            )}
+            {showMail && (
+              <button
+                type="button"
+                title="Send mail"
+                onClick={() => setMailPreviewId(row.id)}
+                className={`text-green-500 hover:text-green-700 transition-colors ${row.status === 'INVITED' ? 'mail-pending-bounce' : ''}`}
+              >
+                <Icons.Mail className="w-5 h-5" />
+              </button>
+            )}
             {showAccept && (
               <button
                 type="button"
-                title={
-                  isBusy
-                    ? 'Validating line...'
-                    : row.status === 'Accepted'
-                      ? 'Validate and confirm closing'
-                      : 'Accept'
-                }
+                title={isBusy ? 'Accepting line...' : 'Accept Offer'}
                 onClick={() => {
                   if (!isBusy) handleAccept(row);
                 }}
                 disabled={isBusy}
                 className={`text-green-500 hover:text-green-600 transition-colors ${disabledActionClass}`}
               >
-                <Icons.Check className="w-4 h-4" />
+                <Icons.Check className="w-5 h-5" />
               </button>
             )}
             {showDecline && (
               <button
                 type="button"
-                title="Decline"
+                title="Decline Offer"
                 onClick={() => {
                   if (!isBusy) handleDecline(row);
                 }}
                 disabled={isBusy}
                 className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
-                <Icons.X className="w-4 h-4" />
+                <Icons.X className="w-5 h-5" />
+              </button>
+            )}
+            {showReopen && (
+              <button
+                type="button"
+                title={isBusy ? 'Reopening...' : 'Reopen'}
+                onClick={() => {
+                  if (!isBusy) onReopen?.(row);
+                }}
+                disabled={isBusy}
+                className={`text-amber-500 hover:text-amber-600 transition-colors ${disabledActionClass}`}
+              >
+                <Icons.RotateCcw className="w-5 h-5" />
               </button>
             )}
             {showRevert && (
@@ -305,10 +374,22 @@ export function DistributionTable({
                 disabled={isBusy}
                 className={`text-amber-500 hover:text-amber-600 transition-colors ${disabledActionClass}`}
               >
-                <Icons.RotateCcw className="w-4 h-4" />
+                <Icons.RotateCcw className="w-5 h-5" />
               </button>
             )}
-            {!responded && (
+            {showClose && (
+              <TableButton
+                isLoading={isBusy}
+                variant="red"
+                tooltip="Validate to close the offer"
+                onClick={() => {
+                  if (!isBusy) onClose?.(row);
+                }}
+              >
+                Close
+              </TableButton>
+            )}
+            {!responded && row.status !== 'QUOTED' && row.status !== 'OFFER_SENT' && (
               <button
                 type="button"
                 title="Delete"
@@ -318,7 +399,7 @@ export function DistributionTable({
                 disabled={isBusy}
                 className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
-                <Icons.Trash2 className="w-4 h-4" />
+                <Icons.Trash2 className="w-5 h-5" />
               </button>
             )}
           </div>
@@ -350,13 +431,13 @@ export function DistributionTable({
         recipients={mailPreviewEntry?.emails ?? []}
         onSend={handleSend}
         onClose={() => setMailPreviewId(null)}
-        onClosePlacement={onClosePlacement}
       />
 
       <SlipPreviewModal
         isOpen={!!slipPreviewId}
         placement={placement}
         brokerageFee={slipPreviewEntry?.brokerageFee ?? 0}
+        counterpartyId={slipPreviewEntry?.counterpartyId}
         onPrint={() => setSlipPreviewId(null)}
         onClose={() => setSlipPreviewId(null)}
       />

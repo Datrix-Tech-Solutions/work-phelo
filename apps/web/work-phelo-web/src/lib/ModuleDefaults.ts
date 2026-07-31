@@ -58,6 +58,11 @@ export const DEFAULT_MODULES: Module[] = [
         label: 'Projects',
         description: 'Project and task management',
       },
+      {
+        key: 'smsAnnouncement',
+        label: 'SMS Announcement',
+        description: 'Allow announcements to be sent via SMS to employee phone numbers',
+      },
     ],
   },
   {

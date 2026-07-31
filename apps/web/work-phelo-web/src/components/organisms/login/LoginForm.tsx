@@ -5,13 +5,16 @@ import { extractError } from '@/lib/extractError';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AppLogo } from '@/components/atoms/AppLogo';
+import { WorkPheloWordmark } from '@/components/atoms/WorkPheloWordmark';
 import { LoginPayload } from '@/types/auth';
 import { useLogin, useSuperAdminLogin } from '@/hooks/useAuth';
+import { usePublicTenantBranding } from '@/hooks/useTenants';
 import { useToast } from '@/hooks/useToast';
 import { Button } from '@/components/atoms/Button';
 // import { GoogleButton } from '@/components/atoms/GoogleButton';
 // import { MicrosoftButton } from '@/components/atoms/MicrosoftButton';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { cardClass } from '@/lib/utils';
 
 interface LoginFormProps {
   showSocialLogin?: boolean;
@@ -37,13 +40,15 @@ export function LoginForm({
 
   const isTenantLogin = !!tenantSlug;
 
+  const { data: branding, isError: isBrandingError } = usePublicTenantBranding(tenantSlug);
+
   const { mutate: login, isPending: isTenantPending } = useLogin();
   const { mutate: adminLogin, isPending: isAdminPending } = useSuperAdminLogin();
   const isPending = isTenantPending || isAdminPending;
 
   const onSubmit = (data: LoginPayload) => {
     const onSuccess = () => {
-      const destination = isTenantLogin ? `/${tenantSlug}/dashboard` : (redirectTo ?? '/dashboard');
+      const destination = isTenantLogin ? `/${tenantSlug}/modules` : (redirectTo ?? '/dashboard');
       router.push(destination);
     };
     const onError = (err: unknown) => {
@@ -58,12 +63,28 @@ export function LoginForm({
   };
 
   return (
-    <div className="w-full max-w-sm px-8 py-10">
-      <div className="flex justify-center mb-6">
-        <AppLogo />
-      </div>
+    <div className={cardClass('w-full max-w-sm px-8 py-10')}>
+      {isTenantLogin ? (
+        <div className="text-center mb-3">
+          <p className="text-sm text-gray-500">
+            Welcome to <WorkPheloWordmark />
+          </p>
+          {branding?.tenantName && (
+            <p className="text-2xl font-bold text-gray-900 mt-2">{branding.tenantName}</p>
+          )}
+          {isBrandingError && (
+            <p className="text-sm text-red-500 mt-2">
+              We couldn&apos;t find this organization. Please check the link and try again.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="flex justify-center mb-3">
+          <AppLogo />
+        </div>
+      )}
 
-      <h1 className="text-2xl font-semibold text-gray-900 text-center mb-6">Sign in</h1>
+      <h1 className="text-xl font-semibold text-gray-900 text-center mb-3">Sign in</h1>
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
         <FormField

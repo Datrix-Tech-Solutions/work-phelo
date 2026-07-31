@@ -45,10 +45,10 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
       className={cn(
         'shrink-0 flex items-center justify-center',
         isDeactivated
-          ? 'text-gray-300'
+          ? 'text-white/30'
           : isCurrent
-            ? 'text-(--module-btn-bg,var(--color-brand))'
-            : 'text-gray-400',
+            ? 'text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand)))'
+            : 'text-white/70',
       )}
     >
       {item.icon}
@@ -73,7 +73,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
 
   const baseRow = cn(
     'relative flex items-center rounded-input transition-colors w-full',
-    collapsed ? 'justify-center px-0 py-2.5 gap-0' : 'px-3 py-2.5 gap-3',
+    collapsed ? 'justify-center px-0 py-2 gap-0' : 'px-2 py-2 gap-3',
   );
 
   return (
@@ -81,14 +81,14 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
     <div className="relative group/tip px-2">
       {/* Active left-bar accent */}
       {isCurrent && !isDeactivated && (
-        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-(--module-btn-bg,var(--color-brand)) rounded-r-full" />
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-white rounded-r-full" />
       )}
 
       {isDeactivated ? (
         /* Deactivated — visible but non-clickable, grayed out */
         <div
           title={collapsed ? item.label : undefined}
-          className={cn(baseRow, 'cursor-not-allowed text-gray-300')}
+          className={cn(baseRow, 'cursor-not-allowed text-white/30')}
         >
           {inner}
         </div>
@@ -99,8 +99,8 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
           className={cn(
             baseRow,
             isCurrent
-              ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
-              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+              ? 'bg-(--sidebar-active-bg,white) text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand))) font-semibold shadow-sm border border-(--glass-border,rgba(255,255,255,0.55))'
+              : 'text-white/80 hover:bg-white/10 hover:text-white',
           )}
         >
           {inner}
@@ -112,12 +112,12 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
         <div
           className={cn(
             'pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50',
-            'px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap',
+            'px-2.5 py-1.5 bg-(--chip-dark,#111827) text-white text-xs rounded-lg whitespace-nowrap',
             'opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150',
           )}
         >
           {item.label}
-          {isDeactivated && <span className="ml-1.5 text-gray-400 text-[10px]">(inactive)</span>}
+          {isDeactivated && <span className="ml-1.5 text-[#9ca3af] text-[10px]">(inactive)</span>}
         </div>
       )}
     </div>
@@ -126,16 +126,29 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
 
 /* ──────────────────────── Child Item ───────────────────────── */
 
-function SidebarChildItem({ item }: { item: NavItem }) {
+function SidebarChildItem({
+  item,
+  variant = 'light',
+}: {
+  item: NavItem;
+  /** 'light' — inside the white flyout popup (collapsed mode). 'onColor' — inline in the module-colored sidebar. */
+  variant?: 'light' | 'onColor';
+}) {
   const pathname = usePathname();
   const isCurrent = pathname === item.href || pathname.startsWith(item.href + '/');
   const isDeactivated = item.active === false;
 
-  const baseRow = 'flex items-center px-3 py-2 rounded-input transition-colors w-full text-sm';
+  const baseRow = 'flex items-center px-2 py-2 rounded-input transition-colors w-full text-sm';
 
   if (isDeactivated) {
     return (
-      <div className={cn(baseRow, 'cursor-not-allowed text-gray-300')}>
+      <div
+        className={cn(
+          baseRow,
+          'cursor-not-allowed',
+          variant === 'onColor' ? 'text-white/30' : 'text-gray-400',
+        )}
+      >
         <span className="truncate">{item.label}</span>
       </div>
     );
@@ -147,8 +160,12 @@ function SidebarChildItem({ item }: { item: NavItem }) {
       className={cn(
         baseRow,
         isCurrent
-          ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
-          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+          ? variant === 'onColor'
+            ? 'bg-(--sidebar-active-bg,white) text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand))) font-semibold'
+            : 'bg-(--module-btn-bg,var(--color-brand)) text-white font-semibold'
+          : variant === 'onColor'
+            ? 'text-white/70 hover:bg-white/10 hover:text-white'
+            : 'text-gray-500 hover:bg-(--surface-hover-subtle,var(--color-gray-50)) hover:text-(--text-hover-strong,var(--color-gray-900))',
       )}
     >
       <span className="truncate">{item.label}</span>
@@ -175,14 +192,14 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
 
   const baseRow = cn(
     'relative flex items-center rounded-input transition-colors w-full',
-    collapsed ? 'justify-center px-0 py-2.5 gap-0' : 'px-3 py-2.5 gap-3',
+    collapsed ? 'justify-center px-0 py-2 gap-0' : 'px-2 py-2 gap-3',
   );
 
   return (
     <div className="relative group/tip px-2">
       {/* Highlight bar when a child is active */}
       {isAnyChildActive && !isDeactivated && !collapsed && (
-        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-(--module-btn-bg,var(--color-brand)) rounded-r-full" />
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-white rounded-r-full" />
       )}
 
       <button
@@ -194,20 +211,20 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
         className={cn(
           baseRow,
           isDeactivated
-            ? 'cursor-not-allowed text-gray-300'
+            ? 'cursor-not-allowed text-white/30'
             : isAnyChildActive
-              ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
-              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+              ? 'bg-(--sidebar-active-bg,white) text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand))) font-semibold shadow-sm border border-(--glass-border,rgba(255,255,255,0.55))'
+              : 'text-white/80 hover:bg-white/10 hover:text-white',
         )}
       >
         <span
           className={cn(
             'shrink-0 flex items-center justify-center',
             isDeactivated
-              ? 'text-gray-300'
+              ? 'text-white/30'
               : isAnyChildActive
-                ? 'text-(--module-btn-bg,var(--color-brand))'
-                : 'text-gray-400',
+                ? 'text-(--sidebar-active-text,var(--module-btn-bg,var(--color-brand)))'
+                : 'text-white/70',
           )}
         >
           {item.icon}
@@ -271,11 +288,11 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
           )}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="mt-0.5 ml-3 flex flex-col gap-0.5 border-l border-gray-100 pl-2">
+            <div className="mt-0.5 ml-3 flex flex-col gap-0.5 border-l border-white/20 pl-2">
               {item.children
                 ?.filter((child) => child.enabled !== false)
                 .map((child) => (
-                  <SidebarChildItem key={child.key} item={child} />
+                  <SidebarChildItem key={child.key} item={child} variant="onColor" />
                 ))}
             </div>
           </div>
@@ -296,15 +313,15 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
       onMouseEnter={() => collapsed && setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       className={cn(
-        'bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-hidden',
+        'bg-(--sidebar-bg,var(--module-btn-bg,var(--color-brand))) border-r border-(--sidebar-border,rgba(255,255,255,0.1)) shadow-lg flex flex-col shrink-0 overflow-hidden',
         // Mobile: absolute drawer that slides over content (below the top nav)
-        'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
+        'absolute inset-y-0 left-0 z-40 w-60 transition-transform duration-200',
         // Desktop: static in flex flow with width animation (spring curve)
         'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-350 md:ease-[cubic-bezier(0.34,1.8,0.64,1)]',
-        effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-56',
+        effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-50',
       )}
     >
-      <nav className="flex-1 overflow-y-auto py-3 flex flex-col">
+      <nav className="flex-1 overflow-y-auto pt-10 pb-2 flex flex-col">
         {groups.map((group) => {
           const visibleItems = group.items.filter((item) => item.enabled !== false);
           if (visibleItems.length === 0) return null;
@@ -313,9 +330,9 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
             <div key={group.label} className="mb-1">
               {/* Group label / divider */}
               {effectiveCollapsed ? (
-                <div className="mx-3 my-2 h-px bg-gray-200" />
+                <div className="mx-3 my-2 h-px bg-white/20" />
               ) : (
-                <p className="px-5 pt-5 pb-1.5 text-[10px] font-semibold tracking-widest text-gray-400 uppercase select-none">
+                <p className="px-5 pt-3 pb-1.5 text-[10px] font-semibold tracking-widest text-white/50 uppercase select-none">
                   {group.label}
                 </p>
               )}

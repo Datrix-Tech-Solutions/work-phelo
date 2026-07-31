@@ -1,15 +1,16 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement, usePlacementPayments } from '@/hooks';
+import { useFacultativePlacement } from '@/hooks';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
 import { PaymentHistoryTab } from '@/components/molecules/reinsurance/tabs/PaymentHistoryTab';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 type PaymentTab = 'overview' | 'history';
 
@@ -27,16 +28,7 @@ export default function PaymentDetailPage({
   const searchParams = useSearchParams();
   const fromClosing = searchParams.get('from') === 'closing';
   const { data: placement } = useFacultativePlacement(id);
-  const { data: payments = [] } = usePlacementPayments(id);
   const [activeTab, setActiveTab] = useState<PaymentTab>('overview');
-
-  const paidAmount = useMemo(
-    () =>
-      payments
-        .filter((p) => p.status === 'RECORDED')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-    [payments],
-  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -67,13 +59,15 @@ export default function PaymentDetailPage({
             </Link>
           )}
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
+          <span className="text-gray-700 font-medium">
+            {displayPolicyNumber(placement?.policyNumber)}
+          </span>
         </nav>
 
         {placement && <AddPaymentForm placementId={id} />}
       </div>
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         {placement ? (
           <div className="flex flex-col gap-6">
             <div className="flex flex-col">
@@ -84,9 +78,7 @@ export default function PaymentDetailPage({
               />
 
               <div className="pt-5">
-                {activeTab === 'overview' && (
-                  <BusinessPaymentSection placement={placement} paidAmount={paidAmount} />
-                )}
+                {activeTab === 'overview' && <BusinessPaymentSection placement={placement} />}
                 {activeTab === 'history' && (
                   <PaymentHistoryTab placementId={id} placement={placement} />
                 )}

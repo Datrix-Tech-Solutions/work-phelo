@@ -88,12 +88,12 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
           placeholder="e.g. GHS"
         />
 
-        <FormField
+        {/* <FormField
           label="Symbol"
           registration={register('symbol')}
           error={errors.symbol}
           placeholder="e.g. ₵"
-        />
+        /> */}
 
         <div className="flex items-center gap-2">
           <input

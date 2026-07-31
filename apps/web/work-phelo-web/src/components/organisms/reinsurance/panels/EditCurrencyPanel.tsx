@@ -101,12 +101,12 @@ export function EditCurrencyPanel({ currency, onClose }: EditCurrencyPanelProps)
           <p className="text-xs text-gray-400">ISO code cannot be changed after creation.</p>
         </div>
 
-        <FormField
+        {/* <FormField
           label="Symbol"
           registration={register('symbol')}
           error={errors.symbol}
           placeholder="e.g. ₵"
-        />
+        /> */}
 
         <div className="flex items-center gap-2">
           <input

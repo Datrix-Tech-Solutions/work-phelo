@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { pageBreadcrumb, pagePx } from '@/lib/layout';
-import { ProjectBanner } from '@/components/molecules/projects/ProjectBanner';
+import { ProjectBanner } from '@/components/molecules/hr/projects/ProjectBanner';
 import { useProject } from '@/hooks';
 
 const TAB_ACTIVE =

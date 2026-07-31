@@ -138,7 +138,7 @@ export function AddContactPanel({ counterparty, onClose }: AddContactPanelProps)
                     type="button"
                     onClick={() => handleRemove(contact.id)}
                     disabled={deletingId === contact.id || isRemoving}
-                    className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="shrink-0 p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     aria-label={`Remove ${contact.fullName}`}
                   >
                     <Icons.Trash2 className="w-4 h-4" />

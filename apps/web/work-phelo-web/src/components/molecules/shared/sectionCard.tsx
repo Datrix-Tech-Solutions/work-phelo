@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 
 export function SectionCard({
   title,
@@ -16,7 +16,7 @@ export function SectionCard({
   headerAction?: React.ReactNode;
 }) {
   return (
-    <div className={cn('bg-white border border-gray-200 rounded-card overflow-hidden', className)}>
+    <div className={cardClass(cn('overflow-hidden', className))}>
       <div className="px-6 py-4 border-b border-gray-100 shrink-0 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         {headerAction}

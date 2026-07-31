@@ -33,7 +33,7 @@ interface RawBalance {
 interface RawLeaveRequest {
   id: string;
   employeeId: string;
-  employee?: { firstName: string; lastName: string };
+  employee?: { firstName: string; lastName: string; avatarUrl?: string };
   leaveTypeId: string;
   leaveType?: { name: string; isPaid: boolean };
   startDate: string;
@@ -82,6 +82,7 @@ function transformRequest(r: RawLeaveRequest): LeaveRequest {
     tenantSlug: '',
     employeeId: r.employeeId,
     employeeName: r.employee ? `${r.employee.firstName} ${r.employee.lastName}` : '',
+    employeeAvatarUrl: r.employee?.avatarUrl,
     leaveTypeId: r.leaveTypeId,
     leaveTypeName: r.leaveType?.name ?? '',
     isPaid: r.leaveType?.isPaid ?? false,

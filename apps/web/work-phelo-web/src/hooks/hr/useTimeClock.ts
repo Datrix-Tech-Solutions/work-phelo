@@ -20,6 +20,7 @@ interface RawAttendanceRecord {
   isLate?: boolean;
   isOutsideSchedule?: boolean;
   workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID' | null;
+  location?: string | null;
   employee?: {
     firstName: string;
     lastName: string;
@@ -43,6 +44,10 @@ interface RawCorrectionRequest {
     firstName: string;
     lastName: string;
   };
+  reviewedBy?: {
+    firstName: string;
+    lastName: string;
+  } | null;
 }
 
 function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
@@ -69,6 +74,7 @@ function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
     isLate: Boolean(r.isLate),
     isOutsideSchedule: Boolean(r.isOutsideSchedule),
     workMode: r.workMode ?? null,
+    location: r.location ?? undefined,
   };
 }
 
@@ -89,6 +95,7 @@ function transformCorrectionRequest(r: RawCorrectionRequest): CorrectionRequest 
     status: r.status,
     reviewNote: r.reviewNote ?? undefined,
     reviewedAt: toIsoString(r.reviewedAt),
+    reviewedByName: r.reviewedBy ? `${r.reviewedBy.firstName} ${r.reviewedBy.lastName}` : undefined,
     createdAt: new Date(r.createdAt).toISOString(),
   };
 }

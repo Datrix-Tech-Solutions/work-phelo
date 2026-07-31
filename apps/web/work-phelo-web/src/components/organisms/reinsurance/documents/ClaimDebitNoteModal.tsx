@@ -1,8 +1,11 @@
 'use client';
 
+import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative, PlacementParticipant } from '@/types/reinsurance';
-import { useReinsurers } from '@/hooks';
+import { useReinsurers, useRiskTypes } from '@/hooks';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -40,6 +43,7 @@ export function ClaimDebitNoteModal({
   onClose,
 }: ClaimDebitNoteModalProps) {
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: riskTypes = [] } = useRiskTypes();
   const reinsurer = reinsurers.find((r) => r.id === participant.counterpartyId);
   const addr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
   const reinsurerCity = addr?.city ?? null;
@@ -49,12 +53,14 @@ export function ClaimDebitNoteModal({
     currency,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
     cedant,
+    riskTypeId,
   } = placement;
+
+  const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
   const sharePercent = parseFloat(participant.sharePercent ?? '0');
   const amountDue = claimAmount != null ? (sharePercent / 100) * claimAmount : null;
@@ -71,7 +77,14 @@ export function ClaimDebitNoteModal({
     >
       <p style={{ margin: 0 }}>Thank You.</p>
       <p style={{ margin: 0 }}>Yours faithfully,</p>
-      <div style={{ marginTop: '64px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <Image
+        src="/signature.png"
+        alt="Signature"
+        width={160}
+        height={80}
+        style={{ objectFit: 'contain', marginTop: '8px', marginBottom: '4px' }}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
         <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>
         <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director (AG)</p>
       </div>
@@ -81,13 +94,20 @@ export function ClaimDebitNoteModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Claim Debit Note — ${reference}`}
+      title={`Claim Debit Note — ${displayPolicyNumber(policyNumber)}`}
       documentTitle="Claim Debit Note"
+      fileName={buildDocumentFileName(
+        'Claim Debit Note',
+        displayPolicyNumber(policyNumber),
+        riskTypeName,
+        title,
+        `to ${participant.counterparty.name}`,
+      )}
       onPrint={onPrint}
       onClose={onClose}
       afterContent={afterContent}
     >
-      <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-4 text-base">
         {/* Address block */}
         <div className="flex flex-col gap-0.5 mb-2">
           <p className="text-gray-500">
@@ -109,13 +129,13 @@ export function ClaimDebitNoteModal({
         </div>
 
         {/* Table */}
-        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-sm">
+        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-base">
           <tbody>
             {/* Description heading */}
             <tr className="bg-blue-900">
               <td
                 colSpan={2}
-                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
+                className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
               >
                 Description
               </td>
@@ -125,14 +145,14 @@ export function ClaimDebitNoteModal({
               { label: 'Reinsured', value: cedant.name },
               { label: 'Policy Type', value: classOfBusiness ?? '—' },
               { label: 'Insured', value: title ?? '—' },
-              { label: 'Policy Number', value: policyNumber ?? reference },
+              { label: 'Policy Number', value: displayPolicyNumber(policyNumber) },
               {
                 label: 'Policy Period',
                 value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`,
               },
               { label: 'Currency', value: currency ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -147,7 +167,7 @@ export function ClaimDebitNoteModal({
             </tr>
 
             {/* Your reinsurance participation */}
-            <tr className="border-b border-gray-200">
+            <tr>
               <td className="py-2.5 px-4 text-gray-600 w-1/2">Your reinsurance participation :</td>
               <td className="py-2.5 px-4 text-right text-gray-700">{sharePercent}% of 100%</td>
             </tr>

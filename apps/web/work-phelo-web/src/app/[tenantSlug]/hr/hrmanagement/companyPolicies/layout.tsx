@@ -1,18 +1,17 @@
 'use client';
 
 import { useEffect } from 'react';
-import Link from 'next/link';
 import { usePathname, useParams, useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
 import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import { TabBar } from '@/components/molecules/shared/TabBar';
 
 const TABS = [
-  { label: 'Employment & Resignation', slug: 'employment' },
-  { label: 'Company Agreements', slug: 'agreements' },
-  { label: 'Finances', slug: 'finances' },
+  { key: 'employment', label: 'Employment & Resignation', slug: 'employment' },
+  { key: 'agreements', label: 'Company Agreements', slug: 'agreements' },
+  { key: 'finances', label: 'Finances', slug: 'finances' },
 ];
 
 export default function CompanyPoliciesLayout({ children }: { children: React.ReactNode }) {
@@ -44,33 +43,13 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
         </p>
       </div>
 
-      {/* Tab bar — horizontally scrollable on mobile, scrollbar hidden */}
-      <div className="border-b border-gray-200 shrink-0 mt-4">
-        <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-          <div className="flex items-end gap-1 min-w-max">
-            {TABS.filter((tab) =>
-              tab.slug === 'finances' ? canManagePayroll || canReadHrSettings : true,
-            ).map((tab) => {
-              const href = `${base}/${tab.slug}`;
-              const isActive = pathname === href || pathname.startsWith(href + '/');
-              return (
-                <Link
-                  key={tab.slug}
-                  href={href}
-                  className={cn(
-                    'relative px-4 py-3 text-sm transition-colors whitespace-nowrap',
-                    isActive
-                      ? 'text-brand font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand after:rounded-t-full'
-                      : 'text-gray-500 hover:text-gray-800',
-                  )}
-                >
-                  {tab.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      {/* Tab bar */}
+      <TabBar
+        className="mt-4"
+        tabs={TABS.filter((tab) =>
+          tab.slug === 'finances' ? canManagePayroll || canReadHrSettings : true,
+        ).map(({ key, label, slug }) => ({ key, label, href: `${base}/${slug}` }))}
+      />
 
       <div className="flex flex-col pt-6">{children}</div>
     </div>

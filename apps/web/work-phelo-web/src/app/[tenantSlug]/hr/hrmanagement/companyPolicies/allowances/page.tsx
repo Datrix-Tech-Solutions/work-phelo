@@ -7,7 +7,7 @@ import {
   AddAllowancePanel,
   CompanyAllowance,
   AllowanceFormValues,
-} from '@/components/organisms/companyPolicies/AddAllowancePanel';
+} from '@/components/organisms/hr/companyPolicies/AddAllowancePanel';
 import { ALLOWANCE_TYPE_LABEL } from '@/lib/payrollUtils';
 
 const COLUMNS: Column<CompanyAllowance>[] = [
