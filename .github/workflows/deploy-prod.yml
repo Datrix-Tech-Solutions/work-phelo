@@ -191,6 +191,7 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ env.WEB_PUBLIC_API_URL }}
             NEXT_PUBLIC_APP_BASE_URL=${{ env.WEB_PUBLIC_APP_BASE_URL }}
             NEXT_PUBLIC_ENABLE_ANNOUNCEMENT_SMS=true
+            NEXT_PUBLIC_MAPTILER_KEY=${{ secrets.PROD_MAPTILER_KEY }}
 
   deploy:
     name: Deploy to Production
