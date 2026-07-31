@@ -992,6 +992,125 @@ describe('SourceEventsService', () => {
     );
   });
 
+  it('posts REINSURANCE REINSURER_DISBURSEMENT_REVERSED as the reversing payable and cash journal', async () => {
+    const reversalDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+      sourceRecordId: 'payment-disbursement-reversal-1',
+      sourceDocumentId: 'payment-disbursement-reversal-1',
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-reversal-1:reversal:v1',
+      payload: {
+        transactionDate: '2026-07-08T10:00:00.000Z',
+        currency: 'USD',
+        exchangeRate: 12.5,
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          originalPaymentId: 'payment-disbursement-1',
+          reversalPaymentId: 'payment-disbursement-reversal-1',
+          paymentId: 'payment-disbursement-reversal-1',
+          settlementReference: 'REVERSAL-SETTLE-001',
+        },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: {
+          paymentAmount: 750,
+          allocatedAmount: 750,
+          bankCharges: 12.5,
+          withholdingTax: 25,
+          signedCashImpact: 750,
+          signedPayableImpact: 750,
+        },
+        allocations: [
+          {
+            allocationId: 'allocation-1-reversal',
+            creditNoteId: 'credit-note-1',
+            creditNoteNumber: 'CN-001',
+            obligationType: 'CREDIT_NOTE',
+            obligationCurrency: 'USD',
+            allocatedAmount: 500,
+            paymentCurrencyAmount: 500,
+          },
+          {
+            allocationId: 'allocation-2-reversal',
+            creditNoteId: 'endorsement-credit-note-1',
+            creditNoteNumber: 'ECN-001',
+            obligationType: 'ENDORSEMENT_CREDIT_NOTE',
+            obligationCurrency: 'GHS',
+            allocatedAmount: 3125,
+            paymentCurrencyAmount: 250,
+            agreedExchangeRate: 12.5,
+          },
+        ],
+      },
+    };
+    const reversalRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.allocatedAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Reverse bank-confirmed reinsurer payment {{payload.references.originalPaymentId}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'reinsurer-premium-payable',
+          subledgerType: SubledgerType.REINSURER,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.allocatedAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Restore reinsurer payable {{payload.references.reversalPaymentId}} for {{payload.references.placementReference}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      reversalDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(reversalRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'reinsurer-subledger-1',
+    });
+
+    const result = await service.receive(actor, reversalDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'REINSURER_DISBURSEMENT_REVERSED',
+        sourceRecordId: 'payment-disbursement-reversal-1',
+        transactionCurrency: 'USD',
+        exchangeRate: 12.5,
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'bank-clearing',
+            debit: 750,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'reinsurer-premium-payable',
+            subledgerAccountId: 'reinsurer-subledger-1',
+            debit: 0,
+            credit: 750,
+          }),
+        ],
+      }),
+    );
+  });
+
   it('rejects a duplicate tenant idempotency key safely', async () => {
     const { prisma, service } = setup();
     prisma.sourceEventInbox.create.mockRejectedValue(

@@ -1060,6 +1060,147 @@ export class ReinsuranceFinancialEventPublisher {
     return this.outbox.enqueueAccountingEvent(tx, event);
   }
 
+  prepareReinsurerDisbursementReversed(
+    user: RequestUser,
+    reversalPayment: PaymentForEvent,
+  ): ReinsuranceAccountingEventInput | null {
+    const eligibility = this.classifyReinsurerDisbursementReversed(
+      user,
+      reversalPayment,
+    );
+    if (!eligibility.accountingEnabled) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; REINSURER_DISBURSEMENT_REVERSED not enqueued for payment ${reversalPayment.id}`,
+      );
+      return null;
+    }
+    if (!eligibility.eligible) {
+      throw new Error(
+        `Payment ${reversalPayment.id} is not eligible for REINSURER_DISBURSEMENT_REVERSED: ${eligibility.exclusionReasons.join(', ')}`,
+      );
+    }
+
+    const placement = this.requirePlacement(reversalPayment);
+    const counterparty = this.requireReinsurerCounterparty(reversalPayment);
+    const originalPayment = reversalPayment.reversalOfPayment;
+    if (!originalPayment) {
+      throw new Error(
+        `Reversal payment ${reversalPayment.id} is missing its original payment reference`,
+      );
+    }
+
+    const paymentAmount = Math.abs(this.decimalNumber(reversalPayment.amount));
+    const allocatedAmount = this.roundMoney(
+      (reversalPayment.allocations ?? []).reduce(
+        (total, allocation) =>
+          total + Math.abs(this.decimalNumber(allocation.allocatedAmount)),
+        0,
+      ),
+    );
+    const bankCharges = Math.abs(
+      this.optionalDecimalNumber(reversalPayment.bankChargeAmount) ?? 0,
+    );
+    const withholdingTax = Math.abs(
+      this.optionalDecimalNumber(reversalPayment.withholdingTaxAmount) ?? 0,
+    );
+    const occurredAt = reversalPayment.paymentDate.toISOString();
+    const exchangeRate = this.optionalDecimalNumber(
+      reversalPayment.agreedExchangeRate,
+    );
+
+    return {
+      tenantId: reversalPayment.tenantId,
+      sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: reversalPayment.id,
+      sourceDocumentId: reversalPayment.id,
+      idempotencyKey: this.reinsurerDisbursementReversedIdempotencyKey(
+        reversalPayment.id,
+      ),
+      occurredAt,
+      currency: reversalPayment.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: reversalPayment.currency,
+        ...(exchangeRate ? { exchangeRate } : {}),
+        references: {
+          placementId: placement.id,
+          placementReference: placement.reference,
+          policyNumber: placement.policyNumber,
+          placementTitle: placement.title,
+          originalPaymentId: originalPayment.id,
+          reversalPaymentId: reversalPayment.id,
+          paymentId: reversalPayment.id,
+          settlementReference: reversalPayment.settlementReference ?? null,
+        },
+        counterparty: {
+          id: counterparty.id,
+          type: counterparty.type,
+          name: counterparty.name,
+          registrationNumber: counterparty.registrationNumber ?? null,
+          subledgerExternalRef: counterparty.id,
+        },
+        payment: {
+          id: reversalPayment.id,
+          originalPaymentId: originalPayment.id,
+          reversalPaymentId: reversalPayment.id,
+          status: reversalPayment.status,
+          originalPaymentStatus: originalPayment.status,
+          type: reversalPayment.type,
+          direction: reversalPayment.direction,
+          paymentDate: occurredAt,
+          originalPaymentDate: originalPayment.paymentDate.toISOString(),
+          paymentReference: reversalPayment.reference,
+          originalPaymentReference: originalPayment.reference,
+          settlementReference: reversalPayment.settlementReference ?? null,
+          bankReference: reversalPayment.bankReference,
+          method: null,
+          currency: reversalPayment.currency,
+          agreedExchangeRate: exchangeRate,
+          isReversal: true,
+          reversalOfPaymentId: originalPayment.id,
+          notes: reversalPayment.notes,
+        },
+        amounts: {
+          paymentAmount,
+          originalPaymentAmount: Math.abs(
+            this.decimalNumber(originalPayment.amount),
+          ),
+          allocatedAmount,
+          bankCharges,
+          withholdingTax,
+          signedCashImpact: paymentAmount,
+          signedPayableImpact: allocatedAmount,
+        },
+        allocations: (reversalPayment.allocations ?? []).map((allocation) => ({
+          allocationId: allocation.id,
+          creditNoteId: allocation.noteId,
+          creditNoteNumber: allocation.note?.noteNumber ?? null,
+          obligationType: allocation.note?.type ?? null,
+          obligationCurrency: allocation.obligationCurrency,
+          allocatedAmount: Math.abs(
+            this.decimalNumber(allocation.obligationAmount),
+          ),
+          paymentCurrencyAmount: Math.abs(
+            this.decimalNumber(allocation.allocatedAmount),
+          ),
+          agreedExchangeRate: this.optionalDecimalNumber(
+            allocation.agreedExchangeRate,
+          ),
+        })),
+        allocation: {
+          model: 'CREDIT_NOTE_ALLOCATIONS',
+          allocationCount: reversalPayment.allocations?.length ?? 0,
+          reversesRecognizedDisbursement: true,
+        },
+        documents: {
+          sourceDocumentId: reversalPayment.id,
+          paymentDocumentId: null,
+        },
+      },
+    };
+  }
+
   private isIssuedPlacementDebitNote(
     note: PlacementNoteForEvent,
     issuedAt: Date,
@@ -1255,6 +1396,98 @@ export class ReinsuranceFinancialEventPublisher {
     );
   }
 
+  classifyReinsurerDisbursementReversed(
+    user: RequestUser,
+    payment: PaymentForEvent,
+  ): ReinsurerDisbursementRecordedEligibility {
+    const exclusionReasons: string[] = [];
+    if (!user.moduleConfig?.accounting) {
+      exclusionReasons.push('accounting disabled');
+    }
+    if (payment.type !== PlacementPaymentType.REINSURER_DISBURSEMENT) {
+      exclusionReasons.push('wrong payment type');
+    }
+    if (payment.direction !== PlacementPaymentDirection.OUTBOUND) {
+      exclusionReasons.push('wrong direction');
+    }
+    if (payment.status !== PlacementPaymentStatus.RECORDED) {
+      exclusionReasons.push('unsupported status');
+    }
+    if (
+      typeof payment.reversalOfPaymentId !== 'string' ||
+      payment.reversalOfPaymentId.trim().length === 0
+    ) {
+      exclusionReasons.push('not a reversal row');
+    }
+    if (!payment.reversalOfPayment) {
+      exclusionReasons.push('missing original payment');
+    }
+    if (!payment.counterparty) {
+      exclusionReasons.push('missing reinsurer');
+    } else if (payment.counterparty.type !== CounterpartyType.REINSURER) {
+      exclusionReasons.push('missing reinsurer');
+    }
+    if (
+      !(payment.paymentDate instanceof Date) ||
+      Number.isNaN(payment.paymentDate.getTime())
+    ) {
+      exclusionReasons.push('missing reversal date');
+    }
+    if (!payment.currency?.trim()) {
+      exclusionReasons.push('missing payment currency');
+    }
+    if (this.decimalNumber(payment.amount) >= 0) {
+      exclusionReasons.push('not a reversing amount');
+    }
+
+    const allocations = payment.allocations ?? [];
+    if (allocations.length === 0) {
+      exclusionReasons.push('no allocations');
+    } else {
+      const paymentCurrency = payment.currency?.trim().toUpperCase();
+      let allocatedTotal = 0;
+      for (const allocation of allocations) {
+        allocatedTotal = this.roundMoney(
+          allocatedTotal +
+            Math.abs(this.decimalNumber(allocation.allocatedAmount)),
+        );
+        if (!allocation.note) {
+          exclusionReasons.push('missing credit note');
+          continue;
+        }
+        if (
+          allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
+          allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+        ) {
+          exclusionReasons.push('unsupported obligation type');
+        }
+        if (
+          paymentCurrency &&
+          allocation.obligationCurrency.trim().toUpperCase() !==
+            paymentCurrency &&
+          !allocation.agreedExchangeRate &&
+          !payment.agreedExchangeRate
+        ) {
+          exclusionReasons.push('missing agreed FX rate');
+        }
+      }
+      const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
+      if (this.roundMoney(allocatedTotal) !== this.roundMoney(paymentAmount)) {
+        exclusionReasons.push('incomplete allocation');
+      }
+    }
+
+    const uniqueReasons = [...new Set(exclusionReasons)];
+    return {
+      accountingEnabled: Boolean(user.moduleConfig?.accounting),
+      eligible: uniqueReasons.length === 0,
+      exclusionReasons: uniqueReasons,
+      idempotencyKey: this.reinsurerDisbursementReversedIdempotencyKey(
+        payment.id,
+      ),
+    };
+  }
+
   private requirePlacement(payment: PaymentForEvent) {
     if (!payment.placement) {
       throw new Error(
@@ -1290,6 +1523,10 @@ export class ReinsuranceFinancialEventPublisher {
 
   private reinsurerDisbursementRecordedIdempotencyKey(paymentId: string) {
     return `reinsurance:reinsurer-disbursement:${paymentId}:recorded:v1`;
+  }
+
+  private reinsurerDisbursementReversedIdempotencyKey(paymentId: string) {
+    return `reinsurance:reinsurer-disbursement:${paymentId}:reversal:v1`;
   }
 
   private optionalDecimalNumber(

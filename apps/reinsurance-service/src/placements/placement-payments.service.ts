@@ -356,6 +356,25 @@ export class PlacementPaymentsService {
         if (event) {
           await this.financialEvents.enqueuePreparedEvent(tx, event);
         }
+      } else if (payment.type === PlacementPaymentType.REINSURER_DISBURSEMENT) {
+        const event = this.financialEvents.prepareReinsurerDisbursementReversed(
+          user,
+          {
+            ...reversal,
+            placement,
+            reversalOfPayment: {
+              id: payment.id,
+              amount: payment.amount,
+              currency: payment.currency,
+              paymentDate: payment.paymentDate,
+              reference: payment.reference,
+              status: PlacementPaymentStatus.REVERSED,
+            },
+          },
+        );
+        if (event) {
+          await this.financialEvents.enqueuePreparedEvent(tx, event);
+        }
       }
 
       return reversal;

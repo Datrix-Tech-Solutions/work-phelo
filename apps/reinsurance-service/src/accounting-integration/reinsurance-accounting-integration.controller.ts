@@ -180,4 +180,21 @@ export class ReinsuranceAccountingIntegrationController {
       query,
     );
   }
+
+  @Post('reconciliation/reinsurer-disbursement-reversed')
+  @ApiOperation({
+    summary:
+      'Reconcile reversed reinsurer disbursements with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable outbound reinsurer disbursement reversal rows missing their deterministic REINSURER_DISBURSEMENT_REVERSED outbox row.',
+  })
+  reconcileReinsurerDisbursementReversedEvents(
+    @Query() query: ReconcilePaymentAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileReinsurerDisbursementReversedEvents(
+      request.user,
+      query,
+    );
+  }
 }

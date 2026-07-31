@@ -123,13 +123,14 @@ export class ReinsuranceAccountingReadinessService {
             'PREMIUM_PAYMENT_RECEIVED',
             'PAYMENT_REVERSED',
             'REINSURER_DISBURSEMENT_RECORDED',
+            'REINSURER_DISBURSEMENT_REVERSED',
           ]
         : [],
       readinessMode:
         'Debit-note, credit-note and premium-payment source-event capture, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records and bank-confirmed reinsurer disbursements.'
+          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records and bank-confirmed reinsurer disbursements including reversals.'
           : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
@@ -919,6 +920,35 @@ export class ReinsuranceAccountingReadinessService {
     });
   }
 
+  async reconcileReinsurerDisbursementReversedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    return this.reconcilePaymentEvents(user, options, {
+      disabledMessage:
+        'Accounting module is not enabled for this tenant; no reinsurer disbursement reversal events are captured.',
+      eventType: 'REINSURER_DISBURSEMENT_REVERSED',
+      idempotencyKey: (paymentId) =>
+        this.reinsurerDisbursementReversedIdempotencyKey(paymentId),
+      missingStatus: 'MISSING',
+      presentStatus: 'PRESENT',
+      enqueuedStatus: 'ENQUEUED',
+      where: {
+        tenantId: user.tenantId,
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        direction: PlacementPaymentDirection.OUTBOUND,
+        status: PlacementPaymentStatus.RECORDED,
+        reversalOfPaymentId: { not: null },
+        placement: { archivedAt: null },
+      },
+      prepare: (payment) =>
+        this.financialEvents.prepareReinsurerDisbursementReversed(
+          user,
+          payment,
+        ),
+    });
+  }
+
   private debitNoteIdempotencyKey(noteId: string) {
     return `reinsurance:debit-note:${noteId}:issued:v1`;
   }
@@ -947,6 +977,10 @@ export class ReinsuranceAccountingReadinessService {
     return `reinsurance:reinsurer-disbursement:${paymentId}:recorded:v1`;
   }
 
+  private reinsurerDisbursementReversedIdempotencyKey(paymentId: string) {
+    return `reinsurance:reinsurer-disbursement:${paymentId}:reversal:v1`;
+  }
+
   private async reconcilePaymentEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
@@ -955,7 +989,8 @@ export class ReinsuranceAccountingReadinessService {
       eventType:
         | 'PREMIUM_PAYMENT_RECEIVED'
         | 'PAYMENT_REVERSED'
-        | 'REINSURER_DISBURSEMENT_RECORDED';
+        | 'REINSURER_DISBURSEMENT_RECORDED'
+        | 'REINSURER_DISBURSEMENT_REVERSED';
       idempotencyKey: (paymentId: string) => string;
       missingStatus: 'MISSING';
       presentStatus: 'PRESENT';

@@ -229,6 +229,35 @@ describe('ReinsuranceAccountingReadinessService', () => {
     ],
   };
 
+  const reinsurerDisbursementReversal = {
+    ...reinsurerDisbursement,
+    id: 'payment-disbursement-reversal-1',
+    amount: new Prisma.Decimal('-750.00'),
+    paymentDate: new Date('2026-06-08T10:00:00.000Z'),
+    reference: 'REVERSAL-PAY-001',
+    settlementReference: 'REVERSAL-SETTLE-001',
+    bankReference: 'REVERSAL-BANK-CONF-001',
+    bankConfirmedAt: null,
+    bankChargeAmount: new Prisma.Decimal('-12.50'),
+    withholdingTaxAmount: new Prisma.Decimal('-25.00'),
+    status: PlacementPaymentStatus.RECORDED,
+    reversalOfPaymentId: 'payment-disbursement-1',
+    reversalOfPayment: {
+      id: 'payment-disbursement-1',
+      amount: reinsurerDisbursement.amount,
+      currency: reinsurerDisbursement.currency,
+      paymentDate: reinsurerDisbursement.paymentDate,
+      reference: reinsurerDisbursement.reference,
+      status: PlacementPaymentStatus.REVERSED,
+    },
+    allocations: reinsurerDisbursement.allocations.map((allocation) => ({
+      ...allocation,
+      id: `${allocation.id}-reversal`,
+      allocatedAmount: allocation.allocatedAmount.negated(),
+      obligationAmount: allocation.obligationAmount.negated(),
+    })),
+  };
+
   const reversalPayment = {
     ...payment,
     id: 'payment-reversal-1',
@@ -368,6 +397,18 @@ describe('ReinsuranceAccountingReadinessService', () => {
         idempotencyKey:
           'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
         occurredAt: '2026-06-07T10:00:00.000Z',
+        currency: 'USD',
+        payload: { amounts: { paymentAmount: 750 } },
+      }),
+      prepareReinsurerDisbursementReversed: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+        sourceRecordType: 'PlacementPayment',
+        sourceRecordId: 'payment-disbursement-reversal-1',
+        sourceDocumentId: 'payment-disbursement-reversal-1',
+        idempotencyKey:
+          'reinsurance:reinsurer-disbursement:payment-disbursement-reversal-1:reversal:v1',
+        occurredAt: '2026-06-08T10:00:00.000Z',
         currency: 'USD',
         payload: { amounts: { paymentAmount: 750 } },
       }),
@@ -1020,6 +1061,89 @@ describe('ReinsuranceAccountingReadinessService', () => {
           status: 'PRESENT',
           outboxId: 'outbox-1',
           accountingSourceEventId: 'accounting-event-1',
+        }),
+      ],
+    });
+  });
+
+  it('dry-runs reversed reinsurer disbursements missing their deterministic outbox row', async () => {
+    const { financialEvents, prisma, service } = makeService(
+      [],
+      [],
+      [reinsurerDisbursementReversal],
+    );
+
+    const result = await service.reconcileReinsurerDisbursementReversedEvents(
+      user,
+      { dryRun: true, limit: 10 },
+    );
+
+    const findManyArg = prisma.placementPayment.findMany.mock.calls[0]?.[0];
+    if (!findManyArg) {
+      throw new Error('Expected placementPayment.findMany to be called');
+    }
+    expect(findManyArg.take).toBe(10);
+    expect(findManyArg.where).toMatchObject({
+      tenantId: 'tenant-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.RECORDED,
+      reversalOfPaymentId: { not: null },
+    });
+    expect(result).toMatchObject({
+      accountingEnabled: true,
+      dryRun: true,
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-disbursement-reversal-1',
+          originalPaymentId: 'payment-disbursement-1',
+          eventType: 'REINSURER_DISBURSEMENT_REVERSED',
+          status: 'MISSING',
+          idempotencyKey:
+            'reinsurance:reinsurer-disbursement:payment-disbursement-reversal-1:reversal:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing reversed reinsurer disbursement events through the shared builder', async () => {
+    const { financialEvents, service } = makeService(
+      [],
+      [],
+      [reinsurerDisbursementReversal],
+    );
+
+    const result = await service.reconcileReinsurerDisbursementReversedEvents(
+      user,
+      { dryRun: false },
+    );
+
+    expect(
+      financialEvents.prepareReinsurerDisbursementReversed,
+    ).toHaveBeenCalledWith(user, reinsurerDisbursementReversal);
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+        idempotencyKey:
+          'reinsurance:reinsurer-disbursement:payment-disbursement-reversal-1:reversal:v1',
+        occurredAt: '2026-06-08T10:00:00.000Z',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      missingCount: 0,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          paymentId: 'payment-disbursement-reversal-1',
+          originalPaymentId: 'payment-disbursement-1',
+          status: 'ENQUEUED',
+          outboxId: 'outbox-1',
         }),
       ],
     });

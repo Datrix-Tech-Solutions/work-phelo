@@ -126,6 +126,10 @@ describe('PlacementPaymentsService', () => {
       unknown,
       [unknown, unknown]
     >;
+    prepareReinsurerDisbursementReversed: jest.Mock<
+      unknown,
+      [unknown, unknown]
+    >;
     enqueuePreparedEvent: jest.Mock;
   };
   let service: PlacementPaymentsService;
@@ -176,6 +180,9 @@ describe('PlacementPaymentsService', () => {
         .fn<unknown, [unknown, unknown]>()
         .mockReturnValue(null),
       prepareReinsurerDisbursementRecorded: jest
+        .fn<unknown, [unknown, unknown]>()
+        .mockReturnValue(null),
+      prepareReinsurerDisbursementReversed: jest
         .fn<unknown, [unknown, unknown]>()
         .mockReturnValue(null),
       enqueuePreparedEvent: jest.fn(),
@@ -1121,6 +1128,10 @@ describe('PlacementPaymentsService', () => {
   });
 
   it('preserves endorsement closing source when reversing an endorsement disbursement', async () => {
+    const preparedEvent = {
+      sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+      sourceRecordId: 'payment-endorsement-reversal-1',
+    };
     const endorsementPayment = {
       ...payment,
       id: 'payment-endorsement-1',
@@ -1130,8 +1141,17 @@ describe('PlacementPaymentsService', () => {
       closingId: null,
       endorsementClosingId: 'endorsement-closing-c',
       participantId: null,
+      counterparty: {
+        id: 'reinsurer-c',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: null,
+      },
     };
-    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    financialEvents.prepareReinsurerDisbursementReversed.mockReturnValue(
+      preparedEvent,
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementPayment.findFirst.mockResolvedValue(endorsementPayment);
     prisma.placementPayment.update.mockResolvedValue({
       ...endorsementPayment,
@@ -1155,6 +1175,29 @@ describe('PlacementPaymentsService', () => {
       participantId: null,
       reversalOfPaymentId: 'payment-endorsement-1',
     });
+    expect(
+      financialEvents.prepareReinsurerDisbursementReversed,
+    ).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({
+        id: 'payment-endorsement-reversal-1',
+        placement,
+        endorsementClosingId: 'endorsement-closing-c',
+        reversalOfPaymentId: 'payment-endorsement-1',
+      }),
+    );
+    const reversalEventArg = financialEvents
+      .prepareReinsurerDisbursementReversed.mock.calls[0]?.[1] as
+      | { reversalOfPayment?: { id: string; status: PlacementPaymentStatus } }
+      | undefined;
+    expect(reversalEventArg?.reversalOfPayment).toMatchObject({
+      id: 'payment-endorsement-1',
+      status: PlacementPaymentStatus.REVERSED,
+    });
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      preparedEvent,
+    );
   });
 
   it('rejects reversing an already reversed payment', async () => {

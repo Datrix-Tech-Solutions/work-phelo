@@ -799,6 +799,109 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     ]);
   });
 
+  it('prepares REINSURER_DISBURSEMENT_REVERSED from the immutable reversal row', () => {
+    const { actor, service } = makeService();
+    const reversal = {
+      ...reinsurerDisbursement,
+      id: 'payment-disbursement-reversal-1',
+      amount: new Prisma.Decimal('-750.00'),
+      paymentDate: new Date('2026-06-08T10:00:00.000Z'),
+      reference: 'REVERSAL-PAY-REF-001',
+      settlementReference: 'REVERSAL-SETTLE-001',
+      bankReference: 'REVERSAL-BANK-CONF-001',
+      bankConfirmedAt: null,
+      bankChargeAmount: new Prisma.Decimal('-12.50'),
+      withholdingTaxAmount: new Prisma.Decimal('-25.00'),
+      status: PlacementPaymentStatus.RECORDED,
+      reversalOfPaymentId: 'payment-disbursement-1',
+      reversalOfPayment: {
+        id: 'payment-disbursement-1',
+        amount: reinsurerDisbursement.amount,
+        currency: reinsurerDisbursement.currency,
+        paymentDate: reinsurerDisbursement.paymentDate,
+        reference: reinsurerDisbursement.reference,
+        status: PlacementPaymentStatus.REVERSED,
+      },
+      allocations: reinsurerDisbursement.allocations.map((allocation) => ({
+        ...allocation,
+        id: `${allocation.id}-reversal`,
+        allocatedAmount: allocation.allocatedAmount.negated(),
+        obligationAmount: allocation.obligationAmount.negated(),
+      })),
+    };
+
+    const event = service.prepareReinsurerDisbursementReversed(actor, reversal);
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-disbursement-reversal-1',
+      sourceDocumentId: 'payment-disbursement-reversal-1',
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-reversal-1:reversal:v1',
+      occurredAt: '2026-06-08T10:00:00.000Z',
+      currency: 'USD',
+      payload: {
+        transactionDate: '2026-06-08T10:00:00.000Z',
+        currency: 'USD',
+        exchangeRate: 12.5,
+        references: {
+          placementId: 'placement-1',
+          originalPaymentId: 'payment-disbursement-1',
+          reversalPaymentId: 'payment-disbursement-reversal-1',
+          settlementReference: 'REVERSAL-SETTLE-001',
+        },
+        counterparty: {
+          id: 'reinsurer-1',
+          type: CounterpartyType.REINSURER,
+          subledgerExternalRef: 'reinsurer-1',
+        },
+        payment: {
+          id: 'payment-disbursement-reversal-1',
+          originalPaymentId: 'payment-disbursement-1',
+          reversalPaymentId: 'payment-disbursement-reversal-1',
+          isReversal: true,
+          reversalOfPaymentId: 'payment-disbursement-1',
+          bankReference: 'REVERSAL-BANK-CONF-001',
+        },
+        amounts: {
+          paymentAmount: 750,
+          originalPaymentAmount: 750,
+          allocatedAmount: 750,
+          bankCharges: 12.5,
+          withholdingTax: 25,
+          signedCashImpact: 750,
+          signedPayableImpact: 750,
+        },
+        allocation: {
+          model: 'CREDIT_NOTE_ALLOCATIONS',
+          allocationCount: 2,
+          reversesRecognizedDisbursement: true,
+        },
+      },
+    });
+    const payload = event?.payload as { allocations: Array<unknown> };
+    expect(payload.allocations).toEqual([
+      expect.objectContaining({
+        allocationId: 'allocation-1-reversal',
+        creditNoteId: 'credit-note-1',
+        obligationType: PlacementNoteType.CREDIT_NOTE,
+        allocatedAmount: 500,
+        paymentCurrencyAmount: 500,
+      }),
+      expect.objectContaining({
+        allocationId: 'allocation-2-reversal',
+        creditNoteId: 'endorsement-credit-note-1',
+        obligationType: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+        obligationCurrency: 'GHS',
+        allocatedAmount: 3125,
+        paymentCurrencyAmount: 250,
+        agreedExchangeRate: 12.5,
+      }),
+    ]);
+  });
+
   it('skips reinsurer disbursement events when Accounting is disabled', () => {
     const { actor, service } = makeService({ accountingEnabled: false });
 
