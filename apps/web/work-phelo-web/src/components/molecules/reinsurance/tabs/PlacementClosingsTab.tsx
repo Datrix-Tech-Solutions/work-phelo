@@ -452,7 +452,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
                     disabled: !isCurrentDebitNoteSupported,
                     title: isCurrentDebitNoteSupported
                       ? undefined
-                      : 'Current effective debit note generation is not yet backend-supported after endorsements. Original debit notes remain historical.',
+                      : 'debit note generation is not yet backend-supported after endorsements. Original debit notes remain historical.',
                     className: cn(
                       'ml-3 bg-transparent',
                       isCurrentDebitNoteSupported

@@ -129,6 +129,9 @@ export function SlipPreviewModal({
       onPrint={onPrint}
       onClose={onClose}
     >
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-3 text-center">
+        Facultative Reinsurance Slip
+      </p>
       <div className="flex flex-col gap-3">
         <div className="mb-4">
           <Field label="Date" value={today()} />
@@ -146,7 +149,7 @@ export function SlipPreviewModal({
 
         {(businessEntries.length > 0 || offerEntries.length > 0) && (
           <>
-            <hr className="border-gray-100 my-1" />
+            {/* <hr className="border-gray-100 my-1" /> */}
             {businessEntries.map((entry) => {
               const formatted = fmtFieldValue(entry.value);
               return formatted === '—' ? null : (
@@ -168,7 +171,7 @@ export function SlipPreviewModal({
           facSumInsured != null ||
           reinsurancePremium != null) && (
           <>
-            <hr className="border-gray-100 my-1" />
+            {/* <hr className="border-gray-100 my-1" /> */}
             <Field
               label="100% Sum Insured"
               value={sumInsured != null ? fmtAmount(sumInsured, currency) : null}
@@ -212,15 +215,15 @@ export function SlipPreviewModal({
 
         {netPremiumPayable != null && (
           <>
-            <hr className="border-gray-100 my-1" />
+            {/* <hr className="border-gray-100 my-1" /> */}
 
             <Field label="Net Premium" value={fmtAmount(netPremiumPayable, currency)} />
           </>
         )}
         {description && (
           <>
-            <hr className="border-gray-100 my-1" />
-            <p className="text-xs font-semibold text-gray-400 tracking-wide">Kindly Refer:</p>
+            {/* <hr className="border-gray-100 my-1" /> */}
+            <p className="text-sm font-semibold text-gray-400 tracking-wide">Kindly Refer:</p>
             <div
               className="text-sm text-gray-700"
               dangerouslySetInnerHTML={{ __html: description }}

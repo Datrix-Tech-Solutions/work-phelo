@@ -166,7 +166,7 @@ function buildChangeSentence(
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3 mt-6 first:mt-0">
-      <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1">
+      <p className="text-sm font-semibold uppercase tracking-widest text-gray-500 mb-1">
         {children}
       </p>
       <div className="border-t border-gray-300" />
@@ -176,7 +176,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
   return (
-    <table className="w-full text-sm border-collapse">
+    <table className="w-full text-base border-collapse">
       <tbody>
         {rows.map((row) => (
           <tr key={row.label}>
@@ -210,7 +210,7 @@ function profileFromPayload(payload: UnknownRecord) {
 function DocumentFooter({ payload }: { payload: UnknownRecord }) {
   const profile = profileFromPayload(payload);
   return (
-    <div className="mt-8 border-t border-gray-200 pt-4 text-xs text-gray-500">
+    <div className="mt-8 border-t border-gray-200 pt-4 text-sm text-gray-500">
       <div className="grid grid-cols-2 gap-4">
         <div>
           <p className="font-semibold text-gray-700">Authorized Signatory</p>
@@ -239,16 +239,16 @@ function ChangeTable({
 }) {
   const changed = changedFieldRows(original, proposed);
   if (changed.length === 0) {
-    return <p className="text-sm text-gray-400 italic">No revised placement terms recorded.</p>;
+    return <p className="text-base text-gray-400 italic">No revised placement terms recorded.</p>;
   }
 
   return (
-    <table className="w-full text-sm border-collapse">
+    <table className="w-full text-base border-collapse">
       <thead>
         <tr className="border-b border-gray-200">
-          <th className="py-1.5 pr-3 text-left text-xs font-semibold text-gray-500">Field</th>
-          <th className="py-1.5 px-3 text-left text-xs font-semibold text-gray-500">Original</th>
-          <th className="py-1.5 pl-3 text-left text-xs font-semibold text-gray-500">Proposed</th>
+          <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">Field</th>
+          <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">Original</th>
+          <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">Proposed</th>
         </tr>
       </thead>
       <tbody>
@@ -270,17 +270,17 @@ function ChangeTable({
 
 function ParticipationTable({ participants }: { participants: UnknownRecord[] }) {
   if (participants.length === 0) {
-    return <p className="text-sm text-gray-400 italic">No endorsement participants recorded.</p>;
+    return <p className="text-base text-gray-400 italic">No endorsement participants recorded.</p>;
   }
 
   return (
-    <table className="w-full text-sm border-collapse">
+    <table className="w-full text-base border-collapse">
       <thead>
         <tr className="border-b border-gray-200">
-          <th className="py-1.5 pr-3 text-left text-xs font-semibold text-gray-500">Reinsurer</th>
-          <th className="py-1.5 px-3 text-left text-xs font-semibold text-gray-500">Class</th>
-          <th className="py-1.5 px-3 text-left text-xs font-semibold text-gray-500">Status</th>
-          <th className="py-1.5 pl-3 text-right text-xs font-semibold text-gray-500">
+          <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">Reinsurer</th>
+          <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">Class</th>
+          <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">Status</th>
+          <th className="py-1.5 pl-3 text-right text-sm font-semibold text-gray-500">
             Accepted Line
           </th>
         </tr>
@@ -311,17 +311,17 @@ function ParticipationTable({ participants }: { participants: UnknownRecord[] })
 function ConfirmedClosingsTable({ closings }: { closings: UnknownRecord[] }) {
   const confirmed = closings.filter((closing) => closing.status === 'CONFIRMED');
   if (confirmed.length === 0) {
-    return <p className="text-sm text-gray-400 italic">No confirmed endorsement closings yet.</p>;
+    return <p className="text-base text-gray-400 italic">No confirmed endorsement closings yet.</p>;
   }
 
   return (
-    <table className="w-full text-sm border-collapse">
+    <table className="w-full text-base border-collapse">
       <thead>
         <tr className="border-b border-gray-200">
-          <th className="py-1.5 pr-3 text-left text-xs font-semibold text-gray-500">Closing</th>
-          <th className="py-1.5 px-3 text-left text-xs font-semibold text-gray-500">Reinsurer</th>
-          <th className="py-1.5 px-3 text-right text-xs font-semibold text-gray-500">Line</th>
-          <th className="py-1.5 pl-3 text-right text-xs font-semibold text-gray-500">
+          <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">Closing</th>
+          <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">Reinsurer</th>
+          <th className="py-1.5 px-3 text-right text-sm font-semibold text-gray-500">Line</th>
+          <th className="py-1.5 pl-3 text-right text-sm font-semibold text-gray-500">
             Net Premium
           </th>
         </tr>
@@ -511,7 +511,7 @@ function EndorsementCertificateContent({
 
       {/* POLICY INFORMATION */}
       <SectionHeading>Policy Information</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
+      <table className="w-full text-base border-collapse mb-2">
         <tbody>
           {[
             { label: 'Cedant', value: text(record(payloadPlacement.cedant).name) },
@@ -533,7 +533,7 @@ function EndorsementCertificateContent({
 
       {/* ENDORSEMENT SUMMARY */}
       <SectionHeading>Endorsement Summary</SectionHeading>
-      <div className="text-sm mb-2 space-y-2">
+      <div className="text-base mb-2 space-y-2">
         {Boolean(endorsement.reason) && (
           <div>
             <span className="text-gray-500">Reason:</span>
@@ -551,14 +551,14 @@ function EndorsementCertificateContent({
         <>
           {/* REINSURER PARTICIPATION */}
           <SectionHeading>Reinsurer Participation</SectionHeading>
-          <table className="w-full text-sm border-collapse mb-2">
+          <table className="w-full text-base border-collapse mb-2">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/3" />
-                <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
+                <th className="py-1.5 pr-4 text-left text-sm font-semibold text-gray-500 w-1/3" />
+                <th className="py-1.5 px-4 text-left text-sm font-semibold text-gray-500 w-1/3">
                   Original
                 </th>
-                <th className="py-1.5 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
+                <th className="py-1.5 pl-4 text-left text-sm font-semibold text-gray-500 w-1/3">
                   Revised
                 </th>
               </tr>
@@ -621,7 +621,7 @@ function EndorsementCertificateContent({
 
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
+      <ul className="text-base text-gray-700 space-y-1 list-none mb-2">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>

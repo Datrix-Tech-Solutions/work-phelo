@@ -649,6 +649,7 @@ function EndorsementCard({
                 <EndorsementParticipantsTable
                   rows={endorsementRows}
                   endorsementParticipants={endorsementParticipants}
+                  isEndorsementClosed={endorsement.status === 'CLOSED'}
                   acceptedCounterpartyIds={acceptedCounterpartyIds}
                   confirmedClosingByEndorsementParticipantId={
                     confirmedClosingByEndorsementParticipantId

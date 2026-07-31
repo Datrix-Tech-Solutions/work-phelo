@@ -86,7 +86,7 @@ export function DocumentPreviewModal({
                 priority
               />
             )}
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide text-center">
+            <h2 className="text-base font-bold text-gray-900 uppercase tracking-wide text-center">
               {documentTitle}
             </h2>
             <div className="flex flex-col items-center gap-1 justify-self-end">

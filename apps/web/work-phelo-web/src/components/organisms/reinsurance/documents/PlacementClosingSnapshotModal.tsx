@@ -69,7 +69,7 @@ function fmtDate(value: unknown): string {
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3 mt-6 first:mt-0">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-500">
+      <p className="mb-1 text-sm font-semibold uppercase tracking-widest text-gray-500">
         {children}
       </p>
       <div className="border-t border-gray-300" />
@@ -79,7 +79,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
   return (
-    <table className="w-full border-collapse text-sm">
+    <table className="w-full border-collapse text-base">
       <tbody>
         {rows.map((row) => (
           <tr key={row.label}>
@@ -122,7 +122,7 @@ export function PlacementClosingSnapshotModal({
       onPrint={() => {}}
       onClose={onClose}
     >
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
+      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
         Backend closing snapshot. Values are read from the confirmed placement closing record.
       </div>
 

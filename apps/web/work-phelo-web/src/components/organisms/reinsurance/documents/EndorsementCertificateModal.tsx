@@ -111,7 +111,7 @@ function buildChangeSentence(
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3 mt-6 first:mt-0">
-      <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1">
+      <p className="text-sm font-semibold uppercase tracking-widest text-gray-500 mb-1">
         {children}
       </p>
       <div className="border-t border-gray-300" />
@@ -185,7 +185,7 @@ export function EndorsementCertificateModal({
       onClose={onClose}
     >
       {/* Letter header */}
-      <div className="flex flex-col gap-0.5 text-sm mb-6">
+      <div className="flex flex-col gap-0.5 text-base mb-6">
         <p className="text-gray-400 mb-3">{fmtDate(new Date().toISOString())}</p>
         <p className="font-semibold text-gray-900">The Managing Director</p>
         <p className="text-gray-800">{placement.cedant.name}</p>
@@ -200,7 +200,7 @@ export function EndorsementCertificateModal({
 
       {/* POLICY INFORMATION */}
       <SectionHeading>Policy Information</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
+      <table className="w-full text-base border-collapse mb-2">
         <tbody>
           {[
             { label: 'Cedant', value: placement.cedant.name },
@@ -221,7 +221,7 @@ export function EndorsementCertificateModal({
 
       {/* ENDORSEMENT SUMMARY */}
       <SectionHeading>Endorsement Summary</SectionHeading>
-      <div className="text-sm mb-2 space-y-2">
+      <div className="text-base mb-2 space-y-2">
         {narrative ? (
           <p className="text-gray-800 leading-relaxed">{narrative}</p>
         ) : (
@@ -237,7 +237,7 @@ export function EndorsementCertificateModal({
 
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
+      <ul className="text-base text-gray-700 space-y-1 list-none mb-2">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>

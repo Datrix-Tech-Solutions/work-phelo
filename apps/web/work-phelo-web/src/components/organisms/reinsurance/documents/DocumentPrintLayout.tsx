@@ -63,14 +63,16 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
           height: `${HEADER_H}px`,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           padding: '12px 48px',
           borderBottom: '1px solid #e5e7eb',
           backgroundColor: 'white',
           zIndex: 2,
         }}
       >
-        <CompanyLogo width={130} height={65} style={{ objectFit: 'contain' }} priority />
+        <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+          <CompanyLogo width={130} height={65} style={{ objectFit: 'contain' }} priority />
+        </div>
         <QRCode value={COMPANY_URL} size={60} />
       </div>
 
@@ -151,7 +153,7 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
                     >
                       <p
                         style={{
-                          fontSize: '14px',
+                          fontSize: '16px',
                           color: '#374151',
                           fontStyle: 'italic',
                           margin: 0,

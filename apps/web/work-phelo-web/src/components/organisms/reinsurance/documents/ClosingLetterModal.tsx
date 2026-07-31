@@ -179,7 +179,7 @@ export function ClosingLetterModal({
       onClose={onClose}
     >
       {/* Address block */}
-      <div className="flex flex-col gap-0.5 text-sm mb-4">
+      <div className="flex flex-col gap-0.5 text-base mb-4">
         <p className="text-gray-500">
           {new Date().toLocaleDateString('en-GB', {
             day: '2-digit',
@@ -203,7 +203,7 @@ export function ClosingLetterModal({
         </p>
       </div>
 
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full text-base border-collapse">
         <tbody>
           {descriptionRows.map((row, i) => (
             <tr key={i}>
@@ -219,7 +219,7 @@ export function ClosingLetterModal({
         </tbody>
       </table>
 
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full text-base border-collapse">
         <tbody>
           {financialRows.map((row, i) =>
             row.divider ? (
@@ -249,7 +249,7 @@ export function ClosingLetterModal({
         </tbody>
       </table>
 
-      <div className="mt-8 flex flex-col gap-2 text-sm text-gray-700">
+      <div className="mt-8 flex flex-col gap-2 text-base text-gray-700">
         <p>Thank You.</p>
         <p>Yours faithfully,</p>
         <Image
