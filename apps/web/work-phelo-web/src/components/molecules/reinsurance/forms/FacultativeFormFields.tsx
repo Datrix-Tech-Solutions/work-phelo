@@ -5,6 +5,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { NumberField } from '@/components/atoms/NumberField';
 import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
 import { FacultativeFormValues } from '@/types/reinsurance';
 import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions, useRiskTypes } from '@/hooks';
@@ -33,10 +34,23 @@ export default function FacultativeFormFields({
   } = useFieldArray({
     control,
     name: 'extraRiskFields',
+    keyName: 'fieldArrayId',
   });
 
   const periodFrom = watch('periodFrom');
   const periodTo = watch('periodTo');
+
+  const sumInsuredValue = watch('sumInsured');
+  const premiumValue = watch('premium');
+  const computedRate =
+    typeof sumInsuredValue === 'number' &&
+    Number.isFinite(sumInsuredValue) &&
+    typeof premiumValue === 'number' &&
+    Number.isFinite(premiumValue) &&
+    sumInsuredValue > 0
+      ? premiumValue / sumInsuredValue
+      : null;
+  const rateLabel = computedRate != null ? `Rate (${computedRate.toFixed(2)}%)` : 'Rate (%)';
   const riskClassId = watch('riskClassId');
 
   const durationDays =
@@ -185,7 +199,7 @@ export default function FacultativeFormFields({
             {extraFields.length > 0 && (
               <div className="flex flex-col gap-2">
                 {extraFields.map((ef, index) => (
-                  <div key={ef.id} className="grid grid-cols-2 gap-2 items-end">
+                  <div key={ef.fieldArrayId} className="grid grid-cols-2 gap-2 items-end">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-bold text-gray-900">Field Name</label>
                       <input
@@ -219,7 +233,18 @@ export default function FacultativeFormFields({
 
             <button
               type="button"
-              onClick={() => appendExtra({ label: '', value: '' })}
+              onClick={() =>
+                appendExtra({
+                  id:
+                    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                      ? crypto.randomUUID()
+                      : `custom-${Date.now()}`,
+                  label: '',
+                  value: '',
+                  type: 'TEXT',
+                  displayOrder: extraFields.length + 1,
+                })
+              }
               className="self-start text-sm font-medium flex items-center gap-1 transition-colors text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover))"
             >
               <span className="text-base leading-none">+</span> Add Extra Field
@@ -234,11 +259,11 @@ export default function FacultativeFormFields({
           <div className="grid grid-cols-2 gap-3">
             <FormField
               label="Policy Number"
-              registration={register('reference', {
+              registration={register('policyNumber', {
                 minLength: { value: 2, message: 'Min 2 characters' },
                 maxLength: { value: 80, message: 'Max 80 characters' },
               })}
-              error={errors.reference}
+              error={errors.policyNumber}
               placeholder="e.g. POL-2024-001"
             />
 
@@ -255,20 +280,39 @@ export default function FacultativeFormFields({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label="100% Sum Insured"
-              type="number"
-              registration={register('sumInsured', {
-                required: 'Sum insured is required',
-                min: { value: 0, message: 'Cannot be negative' },
-                valueAsNumber: true,
-              })}
-              error={errors.sumInsured}
-              placeholder="e.g. 5000000"
+            <Controller
+              name="sumInsured"
+              control={control}
+              rules={{ min: { value: 0.01, message: 'Sum insured is required' } }}
+              render={({ field }) => (
+                <NumberField
+                  label="100% Sum Insured"
+                  value={typeof field.value === 'number' ? field.value : 0}
+                  onChange={field.onChange}
+                  error={errors.sumInsured?.message}
+                  placeholder="e.g. 50000"
+                />
+              )}
             />
+            <Controller
+              name="premium"
+              control={control}
+              rules={{ min: { value: 0.01, message: 'Premium is required' } }}
+              render={({ field }) => (
+                <NumberField
+                  label="100% Premium"
+                  value={typeof field.value === 'number' ? field.value : 0}
+                  onChange={field.onChange}
+                  error={errors.premium?.message}
+                  placeholder="e.g. 75000"
+                />
+              )}
+            />
+          </div>
 
+          <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="Rate (%)"
+              label={rateLabel}
               type="number"
               registration={register('rate', {
                 min: { value: 0, message: 'Cannot be negative' },
@@ -278,21 +322,6 @@ export default function FacultativeFormFields({
               error={errors.rate}
               placeholder="e.g. 1.5"
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label="100% Premium"
-              type="number"
-              registration={register('premium', {
-                required: 'Premium is required',
-                min: { value: 0, message: 'Cannot be negative' },
-                valueAsNumber: true,
-              })}
-              error={errors.premium}
-              placeholder="e.g. 75000"
-            />
-
             <FormField
               label="Facultative Offer (%)"
               type="number"
@@ -384,7 +413,7 @@ export default function FacultativeFormFields({
               {durationDays !== null && durationDays >= 0 ? (
                 `${durationDays} days`
               ) : (
-                <span className="text-gray-300">—</span>
+                <span className="text-gray-400">—</span>
               )}
             </div>
           </div>

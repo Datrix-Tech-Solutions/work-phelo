@@ -7,13 +7,14 @@ import { useMyProfile, useUpdateMyProfile, useEmployeeOptions } from '@/hooks/hr
 import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { TopNav } from '@/components/organisms/shared/TopNav';
-import { EditMyProfilePanel } from '@/components/organisms/employee/EditMyProfilePanel';
-import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
-import { EmploymentDetailsSection } from '@/components/molecules/employees/employeeDetailsSection';
-import { AccountDetailsSection } from '@/components/molecules/employees/accountDetailSection';
-import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
+import { EditMyProfilePanel } from '@/components/organisms/hr/employee/EditMyProfilePanel';
+import { EmployeeProfileCard } from '@/components/molecules/hr/employees/employeeProfileCard';
+import { EmploymentDetailsSection } from '@/components/molecules/hr/employees/employeeDetailsSection';
+import { AccountDetailsSection } from '@/components/molecules/hr/employees/accountDetailSection';
+import { EmployeeDetailSkeleton } from '@/components/molecules/hr/employees/employeeDetailSkeleton';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
+import { AppBackground } from '@/components/atoms/AppBackground';
 import type { UpdateEmployeePayload } from '@/types/hr';
 
 export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
@@ -41,13 +42,8 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
-      <TopNav
-        userInitials={initials}
-        notificationCount={0}
-        activeTab="portal"
-        onTabChange={() => {}}
-      />
+    <AppBackground className="h-dvh overflow-hidden flex flex-col">
+      <TopNav userInitials={initials} notificationCount={0} />
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         {isLoading || !employee ? (
@@ -90,6 +86,6 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
           isUpdating={isUpdating}
         />
       )}
-    </div>
+    </AppBackground>
   );
 }

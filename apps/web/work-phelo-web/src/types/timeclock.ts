@@ -30,6 +30,7 @@ export interface TimeEntry {
   isLate: boolean;
   isOutsideSchedule?: boolean;
   workMode?: AttendanceWorkMode | null;
+  location?: string;
   notes?: string;
 }
 
@@ -46,6 +47,7 @@ export interface LiveAttendanceEntry {
   isLate: boolean;
   isOutsideSchedule?: boolean;
   workMode?: AttendanceWorkMode | null;
+  location?: string;
 }
 
 export interface AttendanceStats {
@@ -68,5 +70,6 @@ export interface CorrectionRequest {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   reviewNote?: string;
   reviewedAt?: string;
+  reviewedByName?: string;
   createdAt: string;
 }

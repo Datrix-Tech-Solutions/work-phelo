@@ -3,13 +3,15 @@
 import { Controller, UseFormReturn } from 'react-hook-form';
 import { cn, inputClass } from '@/lib/utils';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { FormField } from '@/components/molecules/shared/FormField';
+import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCurrencyOptions } from '@/hooks';
 import { Facultative } from '@/types/reinsurance';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 export interface MakeClaimFormValues {
   estimatedLossAmount: string;
+  finalLossAmount: string;
   occurrenceDate: string;
   reportedDate: string;
   claimCause: string;
@@ -19,6 +21,7 @@ export interface MakeClaimFormValues {
 
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
   estimatedLossAmount: '',
+  finalLossAmount: '',
   occurrenceDate: '',
   reportedDate: '',
   claimCause: '',
@@ -40,9 +43,19 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 interface MakeClaimFormFieldsProps {
   form: UseFormReturn<MakeClaimFormValues>;
   placement: Facultative;
+  /** Skip the read-only Policy Number/Cedant/Class of Business rows — use when
+   * that info is already shown by the caller's own placement picker. */
+  hidePlacementInfo?: boolean;
+  /** Show the Actual Claim Amount field — only relevant once a claim already exists. */
+  isEditing?: boolean;
 }
 
-export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProps) {
+export function MakeClaimFormFields({
+  form,
+  placement,
+  hidePlacementInfo,
+  isEditing,
+}: MakeClaimFormFieldsProps) {
   const {
     register,
     control,
@@ -53,24 +66,70 @@ export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProp
 
   return (
     <div className="flex flex-col gap-5">
-      <ReadOnlyField label="Policy Number" value={placement.policyNumber ?? placement.reference} />
-      <ReadOnlyField label="Cedant" value={placement.cedant.name} />
-      {placement.classOfBusiness && (
-        <ReadOnlyField label="Class of Business" value={placement.classOfBusiness} />
+      {!hidePlacementInfo && (
+        <>
+          <ReadOnlyField
+            label="Policy Number"
+            value={displayPolicyNumber(placement.policyNumber)}
+          />
+          <ReadOnlyField label="Cedant" value={placement.cedant.name} />
+          {placement.classOfBusiness && (
+            <ReadOnlyField label="Class of Business" value={placement.classOfBusiness} />
+          )}
+
+          <hr className="border-gray-100" />
+        </>
       )}
 
-      <hr className="border-gray-100" />
-
-      <FormField
-        label="Estimated Loss Amount"
-        registration={register('estimatedLossAmount', {
-          required: 'Estimated loss amount is required',
-        })}
-        placeholder="0.00"
-        type="number"
-        step="any"
-        error={errors.estimatedLossAmount}
+      <Controller
+        name="estimatedLossAmount"
+        control={control}
+        rules={{
+          min: { value: 0.01, message: 'Estimated loss amount is required' },
+          validate: (value) => {
+            const amount = parseFloat(value);
+            if (placement.sumInsured != null && amount > placement.sumInsured) {
+              return `Estimated loss amount cannot exceed the sum insured (${placement.sumInsured.toLocaleString()})`;
+            }
+            return true;
+          },
+        }}
+        render={({ field }) => (
+          <NumberField
+            label="Estimated Loss Amount"
+            value={field.value ? Number(field.value) : 0}
+            onChange={(n) => field.onChange(String(n))}
+            error={errors.estimatedLossAmount?.message}
+            placeholder="0.00"
+          />
+        )}
       />
+
+      {isEditing && (
+        <Controller
+          name="finalLossAmount"
+          control={control}
+          rules={{
+            validate: (value) => {
+              if (!value || Number(value) === 0) return true;
+              const amount = parseFloat(value);
+              if (placement.sumInsured != null && amount > placement.sumInsured) {
+                return `Actual claim amount cannot exceed the sum insured (${placement.sumInsured.toLocaleString()})`;
+              }
+              return true;
+            },
+          }}
+          render={({ field }) => (
+            <NumberField
+              label="Actual Claim Amount"
+              value={field.value ? Number(field.value) : 0}
+              onChange={(n) => field.onChange(String(n))}
+              error={errors.finalLossAmount?.message}
+              placeholder="0.00"
+            />
+          )}
+        />
+      )}
 
       <Controller
         name="currency"
@@ -91,7 +150,19 @@ export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProp
       <Controller
         name="occurrenceDate"
         control={control}
-        rules={{ required: 'Occurrence date is required' }}
+        rules={{
+          required: 'Occurrence date is required',
+          validate: (value) => {
+            const date = new Date(value);
+            if (placement.inceptionDate && date < new Date(placement.inceptionDate)) {
+              return `Occurrence date cannot be before the inception date (${new Date(placement.inceptionDate).toLocaleDateString()})`;
+            }
+            if (placement.expiryDate && date > new Date(placement.expiryDate)) {
+              return `Occurrence date cannot be after the end date (${new Date(placement.expiryDate).toLocaleDateString()})`;
+            }
+            return true;
+          },
+        }}
         render={({ field }) => (
           <DatePicker
             label="Occurrence Date"

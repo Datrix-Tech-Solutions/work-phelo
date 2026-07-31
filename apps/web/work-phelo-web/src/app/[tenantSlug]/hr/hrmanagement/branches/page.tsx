@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
-import { BranchesTable } from '@/components/organisms/branches/BranchesTable';
+import { BranchesTable } from '@/components/organisms/hr/branches/BranchesTable';
 
 export default function BranchesPage() {
   const router = useRouter();

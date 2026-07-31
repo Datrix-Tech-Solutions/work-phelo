@@ -33,7 +33,7 @@ function buildPayload(data: ReinsurerFormValues): CreateCounterpartyPayload {
     ? addr.country === 'Ghana' && addr.city
       ? [
           {
-            line1: [addr.city, addr.state].filter(Boolean).join(', '),
+            line1: addr.streetName.trim() ? addr.streetName : addr.city,
             city: addr.city,
             country: 'GH',
             ...(addr.state && { state: addr.state }),

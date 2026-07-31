@@ -6,6 +6,7 @@ export const COUNTRY_OPTIONS: SearchSelectOption[] = [
   { value: 'Africa', label: 'Africa' },
   { value: 'Europe', label: 'Europe' },
   { value: 'Asia', label: 'Asia' },
+  { value: 'USA', label: 'USA' },
   { value: 'Rest of the World', label: 'Rest of the World' },
 ];
 
@@ -15,6 +16,7 @@ const LABEL_TO_CODE: Record<string, string> = {
   Africa: 'AF',
   Europe: 'EU',
   Asia: 'AS',
+  USA: 'US',
   'Rest of the World': 'RW',
 };
 

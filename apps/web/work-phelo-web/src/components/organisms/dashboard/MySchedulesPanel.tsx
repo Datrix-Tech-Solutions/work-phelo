@@ -6,7 +6,7 @@ import { useMyScheduleOverview } from '@/hooks/hr/useScheduling';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
-import { addDays, toISODate, getSundayOf } from '@/components/molecules/scheduling/WeekSelector';
+import { addDays, toISODate, getSundayOf } from '@/components/molecules/hr/scheduling/WeekSelector';
 import type { WorkMode, BackendShiftType } from '@/types/scheduling';
 
 interface ScheduleEntry {

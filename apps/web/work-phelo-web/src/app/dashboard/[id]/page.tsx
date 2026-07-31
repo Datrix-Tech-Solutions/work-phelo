@@ -3,7 +3,13 @@
 'use client';
 
 import { use, useMemo, useState } from 'react';
-import { useTenant, useTenantUsers, useTenantAudit, useResendInvite } from '@/hooks/useTenants';
+import {
+  useTenant,
+  useTenantUsers,
+  useTenantAudit,
+  useResendInvite,
+  useTenantBranding,
+} from '@/hooks/useTenants';
 import { useToast } from '@/hooks/useToast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUpdateModules, useUpdateFeatures } from '@/hooks/useModuleConfig';
@@ -27,6 +33,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const { data: tenant, isLoading: tenantLoading, error: tenantError } = useTenant(id);
   const { data: users = [] } = useTenantUsers(id);
   const { data: auditData } = useTenantAudit(id);
+  const { data: branding } = useTenantBranding(id);
 
   const queryClient = useQueryClient();
   const updateModules = useUpdateModules(id);
@@ -142,6 +149,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             location={tenant.country}
             address={tenant.address}
             contact={tenant.phone}
+            logoUrl={branding?.appLogo.readUrl ?? undefined}
             admin={
               admin
                 ? {

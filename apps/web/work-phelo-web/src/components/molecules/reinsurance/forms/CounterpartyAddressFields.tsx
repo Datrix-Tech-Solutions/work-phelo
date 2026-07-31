@@ -18,7 +18,7 @@ import { COUNTRY_OPTIONS, GHANA_REGIONS } from '@/lib/geo';
  * Shared location section for Cedant / Reinsurer / Broker add panels.
  *
  * - Country: always visible (Ghana | Africa | Europe | Asia | Rest of the World)
- * - Region + City: only shown when Ghana is selected
+ * - Region + Street Name + City: only shown when Ghana is selected
  */
 interface CounterpartyAddressFieldsProps<T extends FieldValues> {
   control: Control<T>;
@@ -40,7 +40,7 @@ export function CounterpartyAddressFields<T extends FieldValues>({
   const addrErrors = (errors as any)?.address ?? {};
 
   return (
-    <FormSection title="Address">
+    <FormSection title="Address Details">
       <div className="flex flex-col gap-4">
         {/* Country / Territory */}
         <Controller
@@ -55,6 +55,7 @@ export function CounterpartyAddressFields<T extends FieldValues>({
               onChange={(v) => {
                 field.onChange(v);
                 setValue('address.state' as Path<T>, '' as Parameters<typeof setValue>[1]);
+                setValue('address.streetName' as Path<T>, '' as Parameters<typeof setValue>[1]);
                 setValue('address.city' as Path<T>, '' as Parameters<typeof setValue>[1]);
               }}
               error={addrErrors.country?.message}
@@ -80,12 +81,22 @@ export function CounterpartyAddressFields<T extends FieldValues>({
           />
         )}
 
+        {/* Street Name — Ghana only */}
+        {/* {isGhana && (
+          <FormField
+            label="Street Name"
+            registration={register('address.streetName' as Path<T>)}
+            error={addrErrors.streetName}
+            placeholder="e.g. Independence Avenue"
+          />
+    )} */}
+
         {/* City — Ghana only */}
         <FormField
-          label="City"
+          label="Address"
           registration={register('address.city' as Path<T>)}
           error={addrErrors.city}
-          placeholder="e.g. Accra"
+          placeholder="e.g. Accra Community 3 Ave"
         />
       </div>
     </FormSection>

@@ -5,16 +5,24 @@ import { pageHeader, pagePx, pageContent } from '@/lib/layout';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { ChangePasswordTab } from '@/components/molecules/settings/ChangePasswordTab';
 import { AppearanceTab } from '@/components/molecules/settings/AppearanceTab';
+import { TabItem } from '@/components/molecules/shared/TabBar';
+import { useAuthStore } from '@/store/auth.store';
+import { SelfServiceTab } from './SelfServiceTab';
 
-type SettingsTab = 'security' | 'appearance';
+type SettingsTab = 'security' | 'appearance' | 'self-service';
 
-const TABS = [
+const TABS: TabItem[] = [
   { key: 'security', label: 'Change Password' },
   { key: 'appearance', label: 'Appearance' },
 ];
 
 export function SettingsContent() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('security');
+  const user = useAuthStore((state) => state.user);
+  const canManageTenantSettings = user?.role === 'SUPER_ADMIN' || user?.role === 'TENANT_ADMIN';
+  const tabs: TabItem[] = canManageTenantSettings
+    ? [...TABS, { key: 'self-service', label: 'Self Service' }]
+    : TABS;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -27,7 +35,7 @@ export function SettingsContent() {
 
       <div className={`${pagePx} shrink-0`}>
         <TabBar
-          tabs={TABS}
+          tabs={tabs}
           activeTab={activeTab}
           onTabChange={(t) => setActiveTab(t as SettingsTab)}
         />
@@ -37,6 +45,7 @@ export function SettingsContent() {
         <div className={pageContent}>
           {activeTab === 'security' && <ChangePasswordTab />}
           {activeTab === 'appearance' && <AppearanceTab />}
+          {activeTab === 'self-service' && <SelfServiceTab />}
         </div>
       </div>
     </div>

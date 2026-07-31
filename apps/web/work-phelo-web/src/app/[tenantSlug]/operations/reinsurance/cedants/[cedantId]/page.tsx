@@ -28,6 +28,7 @@ import { BusinessPaymentSection } from '@/components/molecules/reinsurance/Busin
 import { PaymentHistoryTab } from '@/components/molecules/reinsurance/tabs/PaymentHistoryTab';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
 import { Facultative } from '@/types/reinsurance';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 type CedantTab = 'placements' | 'revenue' | 'contacts';
 type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
@@ -174,7 +175,7 @@ export default function CedantDetailPage({
               </button>
               <Icons.ChevronRight className="w-5 h-5" />
               <span className="text-gray-700 font-medium">
-                {activePlacementView.placement.reference}
+                {displayPolicyNumber(activePlacementView.placement.policyNumber)}
               </span>
             </>
           ) : (
@@ -210,7 +211,7 @@ export default function CedantDetailPage({
         )}
       </div>
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         {cedantsLoading ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
@@ -235,7 +236,7 @@ export default function CedantDetailPage({
               />
 
               <div className="pt-5">
-                {activeTab === 'contacts' && <CedantContactsTab contacts={cedant.contacts} />}
+                {activeTab === 'contacts' && <CedantContactsTab counterparty={cedant} />}
 
                 {activeTab === 'placements' && (
                   <CedantPlacementsTab

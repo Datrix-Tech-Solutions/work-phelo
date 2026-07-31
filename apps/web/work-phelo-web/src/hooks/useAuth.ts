@@ -49,6 +49,7 @@ export function useLogin() {
     onSuccess: async () => {
       sessionStorage.removeItem('appraisal_reminder_shown');
       sessionStorage.removeItem('leave_reminder_shown');
+      sessionStorage.removeItem('mood_selector_shown');
       const user = await fetchMeWithProfileDetails(setPermissions);
       setUser(user);
       queryClient.invalidateQueries({ queryKey: ['me'] });
@@ -83,6 +84,7 @@ export function useLogout() {
     onSuccess: () => {
       sessionStorage.removeItem('appraisal_reminder_shown');
       sessionStorage.removeItem('leave_reminder_shown');
+      sessionStorage.removeItem('mood_selector_shown');
       logout();
       queryClient.clear();
     },

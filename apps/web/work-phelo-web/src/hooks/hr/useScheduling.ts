@@ -13,7 +13,7 @@ import {
   RespondShiftSwapPayload,
   ReviewShiftSwapPayload,
 } from '@/types/scheduling';
-import { SwapRequest } from '@/components/molecules/scheduling/SwapRequestCard';
+import { SwapRequest } from '@/components/molecules/hr/scheduling/SwapRequestCard';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 

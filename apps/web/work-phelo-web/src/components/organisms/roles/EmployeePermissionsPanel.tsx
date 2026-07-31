@@ -91,7 +91,7 @@ export function EmployeePermissionsPanel({
                     <button
                       onClick={() => onRemove(set.id)}
                       disabled={isRemoving}
-                      className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                      className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
                       aria-label="Remove"
                     >
                       <X className="w-4 h-4" />

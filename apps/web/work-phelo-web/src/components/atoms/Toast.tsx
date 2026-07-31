@@ -27,12 +27,12 @@ export function Toast({ id, message, type }: ToastItem) {
       )}
 
       {/* Message */}
-      <span className="flex-1 text-sm text-gray-700">{message}</span>
+      <span className="flex-1 text-sm text-[#374151]">{message}</span>
 
       {/* Dismiss */}
       <button
         onClick={() => removeToast(id)}
-        className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+        className="shrink-0 text-[#9ca3af] hover:text-[#374151] transition-colors"
         aria-label="Dismiss"
       >
         <Icons.X />

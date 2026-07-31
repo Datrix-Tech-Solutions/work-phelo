@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo } from 'react';
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
+import { useQueries } from '@tanstack/react-query';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { NumberField } from '@/components/atoms/NumberField';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useFacultatives, useCurrencyOptions } from '@/hooks';
+import {
+  fetchPlacementFinancialPosition,
+  placementFinancialPositionKey,
+} from '@/hooks/reinsurance/usePayments';
 import { cn, inputClass } from '@/lib/utils';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 export interface AddPaymentFormValues {
   cedantId: string;
@@ -87,6 +94,26 @@ export function AddPaymentFormFields({
 
   const cedantId = watch('cedantId');
   const businessIds = watch('businessIds');
+  const selectedFacultatives = useMemo(
+    () => facultatives.filter((f) => businessIds.includes(f.id)),
+    [facultatives, businessIds],
+  );
+
+  const positionQueries = useQueries({
+    queries: selectedFacultatives.map((f) => ({
+      queryKey: placementFinancialPositionKey(f.id),
+      queryFn: () => fetchPlacementFinancialPosition(f.id),
+    })),
+  });
+
+  const positionByPlacementId = useMemo(() => {
+    const map = new Map<string, (typeof positionQueries)[number]['data']>();
+    selectedFacultatives.forEach((f, index) => {
+      const position = positionQueries[index]?.data;
+      if (position) map.set(f.id, position);
+    });
+    return map;
+  }, [selectedFacultatives, positionQueries]);
 
   useEffect(() => {
     if (preFilledPlacement) {
@@ -110,18 +137,10 @@ export function AddPaymentFormFields({
       facultatives
         .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
         .map((f) => {
-          const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-          const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
-          const parts = [
-            f.classOfBusiness,
-            f.title,
-            f.premium != null
-              ? `${f.currency ? f.currency + ' ' : ''}${netPremium.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              : null,
-          ].filter(Boolean);
+          const parts = [f.classOfBusiness, f.title].filter(Boolean);
           return {
             value: f.id,
-            label: f.policyNumber ?? f.reference,
+            label: `${displayPolicyNumber(f.policyNumber)} · ${f.title}`,
             sublabel: parts.join(' · '),
           };
         }),
@@ -129,16 +148,18 @@ export function AddPaymentFormFields({
   );
 
   const totalExpected = useMemo(() => {
-    const selected = facultatives.filter((f) => businessIds.includes(f.id));
-    return selected.reduce((sum, f) => {
-      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-      return sum + facPremium * (1 - (f.commission ?? 0) / 100);
+    return selectedFacultatives.reduce((sum, f) => {
+      const outstanding = positionByPlacementId.get(f.id)?.cedant.outstanding;
+      return sum + Math.max(0, outstanding ?? 0);
     }, 0);
-  }, [facultatives, businessIds]);
+  }, [selectedFacultatives, positionByPlacementId]);
 
   const expectedCurrency = useMemo(
-    () => facultatives.find((f) => businessIds.includes(f.id))?.currency ?? null,
-    [facultatives, businessIds],
+    () =>
+      selectedFacultatives
+        .map((f) => positionByPlacementId.get(f.id)?.currency ?? f.currency)
+        .find(Boolean) ?? null,
+    [selectedFacultatives, positionByPlacementId],
   );
 
   const paymentType = watch('paymentType');
@@ -148,16 +169,15 @@ export function AddPaymentFormFields({
 
   const parsedAmount = parseFloat(amountValue) || 0;
 
-  const selectedFacultatives = useMemo(
-    () => facultatives.filter((f) => businessIds.includes(f.id)),
-    [facultatives, businessIds],
-  );
-
   const allSameCurrency = useMemo(() => {
     if (selectedFacultatives.length <= 1) return true;
-    const first = selectedFacultatives[0].currency;
-    return selectedFacultatives.every((f) => f.currency === first);
-  }, [selectedFacultatives]);
+    const first =
+      positionByPlacementId.get(selectedFacultatives[0].id)?.currency ??
+      selectedFacultatives[0].currency;
+    return selectedFacultatives.every(
+      (f) => (positionByPlacementId.get(f.id)?.currency ?? f.currency) === first,
+    );
+  }, [selectedFacultatives, positionByPlacementId]);
 
   const businessCurrency = preFilledPlacement?.currency ?? expectedCurrency;
   const showRate =
@@ -177,15 +197,20 @@ export function AddPaymentFormFields({
     if (!showAllocation) return;
     const newAllocations: Record<string, string> = {};
     selectedFacultatives.forEach((f) => {
-      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-      const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+      const netPremium = Math.max(0, positionByPlacementId.get(f.id)?.cedant.outstanding ?? 0);
       const proportion =
         totalExpected > 0 ? netPremium / totalExpected : 1 / selectedFacultatives.length;
       newAllocations[f.id] = (proportion * parsedAmount).toFixed(2);
     });
     setValue('allocations', newAllocations);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAllocation, parsedAmount, totalExpected]);
+  }, [
+    parsedAmount,
+    positionByPlacementId,
+    selectedFacultatives,
+    setValue,
+    showAllocation,
+    totalExpected,
+  ]);
 
   const allocatedTotal = Object.values(allocations ?? {}).reduce(
     (sum, v) => sum + (parseFloat(v) || 0),
@@ -199,7 +224,7 @@ export function AddPaymentFormFields({
   const totalExpectedHint =
     businessIds.length > 1 ? (
       <p className="text-xs text-gray-500 mt-1">
-        Expected total:{' '}
+        Outstanding total:{' '}
         <span className="font-medium text-gray-700">
           {expectedCurrency ? `${expectedCurrency} ` : ''}
           {totalExpected.toLocaleString(undefined, {
@@ -214,15 +239,14 @@ export function AddPaymentFormFields({
     <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
       <p className="text-xs font-semibold text-gray-700">Allocate Payment</p>
       {selectedFacultatives.map((f) => {
-        const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-        const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+        const netPremium = Math.max(0, positionByPlacementId.get(f.id)?.cedant.outstanding ?? 0);
         const rowNeedsRate =
           !allSameCurrency && !!paymentCurrency && !!f.currency && paymentCurrency !== f.currency;
         return (
           <div key={f.id} className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">
-                {f.policyNumber ?? f.reference}
+                {displayPolicyNumber(f.policyNumber)}
               </p>
               <p className="text-xs text-gray-400">
                 {f.currency ? `${f.currency} ` : ''}
@@ -335,13 +359,19 @@ export function AddPaymentFormFields({
         )}
       </div>
       <div>
-        <FormField
-          label="Amount"
-          registration={register('amount', { required: 'Amount is required' })}
-          placeholder="0.00"
-          type="number"
-          step="any"
-          error={errors.amount}
+        <Controller
+          name="amount"
+          control={control}
+          rules={{ min: { value: 0.01, message: 'Amount is required' } }}
+          render={({ field }) => (
+            <NumberField
+              label="Amount"
+              value={field.value ? Number(field.value) : 0}
+              onChange={(n) => field.onChange(String(n))}
+              error={errors.amount?.message}
+              placeholder="0.00"
+            />
+          )}
         />
         {totalExpectedHint}
       </div>
@@ -400,13 +430,19 @@ export function AddPaymentFormFields({
         )}
       </div>
       <div>
-        <FormField
-          label="Amount"
-          registration={register('amount', { required: 'Amount is required' })}
-          placeholder="0.00"
-          type="number"
-          step="any"
-          error={errors.amount}
+        <Controller
+          name="amount"
+          control={control}
+          rules={{ min: { value: 0.01, message: 'Amount is required' } }}
+          render={({ field }) => (
+            <NumberField
+              label="Amount"
+              value={field.value ? Number(field.value) : 0}
+              onChange={(n) => field.onChange(String(n))}
+              error={errors.amount?.message}
+              placeholder="0.00"
+            />
+          )}
         />
         {totalExpectedHint}
       </div>
@@ -457,7 +493,10 @@ export function AddPaymentFormFields({
     return (
       <div className="flex flex-col gap-5">
         <ReadOnlyField label="Cedant" value={preFilledPlacement.cedant.name} />
-        <ReadOnlyField label="Business" value={preFilledPlacement.reference} />
+        <ReadOnlyField
+          label="Business"
+          value={displayPolicyNumber(preFilledPlacement.policyNumber)}
+        />
         {paymentTypeField}
         {chequeFields}
         {bankFields}

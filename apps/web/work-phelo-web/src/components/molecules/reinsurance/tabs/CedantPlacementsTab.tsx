@@ -6,7 +6,14 @@ import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill'
 import { FilterChip } from '@/components/atoms/FilterChip';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
-import { usePlacementPayments, useCedantPlacementPaymentStatuses } from '@/hooks';
+import {
+  confirmedNetPremiumFor,
+  totalEffectivePremiumReceived,
+  useCedantPlacementPaymentStatuses,
+  usePlacementClosings,
+  usePlacementPayments,
+} from '@/hooks';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
 
@@ -45,18 +52,11 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-function netPremiumFor(p: Facultative): number {
-  const facPremium =
-    p.premium != null && p.facultativeOffer != null ? (p.facultativeOffer / 100) * p.premium : 0;
-  return p.commission != null ? facPremium * (1 - p.commission / 100) : facPremium;
-}
-
 function PaymentStatusCell({ placement }: { placement: Facultative }) {
   const { data: payments = [] } = usePlacementPayments(placement.id);
-  const netPremium = netPremiumFor(placement);
-  const paid = payments
-    .filter((p) => p.status === 'RECORDED')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+  const { data: closings = [] } = usePlacementClosings(placement.id);
+  const netPremium = confirmedNetPremiumFor(closings);
+  const paid = totalEffectivePremiumReceived(payments);
 
   let paymentStatus: PaymentStatus = 'Outstanding';
   if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
@@ -78,7 +78,9 @@ const PLACEMENT_COLUMNS: Column<Facultative>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: '190px',
-    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
+    render: (row) => (
+      <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
+    ),
   },
   {
     key: 'title',

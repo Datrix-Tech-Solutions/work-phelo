@@ -9,9 +9,10 @@ import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
 import { usePermission, usePermissionRule } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
-import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
-import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';
-import { AgreementGate } from '@/components/organisms/companyPolicies/AgreementGate';
+import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
+import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
+import { LeaveReminderModal } from '@/components/organisms/hr/leave/LeaveReminderModal';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function HRLayout({
   children,
@@ -22,14 +23,13 @@ export default function HRLayout({
 }) {
   const { tenantSlug } = use(params);
   const user = useAuthStore((s) => s.user);
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN';
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   const [collapsed, setCollapsed] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 768,
   );
-  const [activeTab, setActiveTab] = useState('portal');
-
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
@@ -80,7 +80,9 @@ export default function HRLayout({
   // announcements is also core — it is permission-gated, not feature-toggled
   const coreKeys = new Set(['dashboard', 'management', 'announcements']);
   const navAccess: Record<string, boolean> = {
-    dashboard: true,
+    // The dashboard is a self-service "my" view (my leave, my payslips, clock in/out) —
+    // not relevant for a tenant admin, so it's hidden for that role.
+    dashboard: !isTenantAdmin,
 
     employees: canReadEmployees || canReadOwnProfile,
     leave: canAccessLeave,
@@ -121,16 +123,16 @@ export default function HRLayout({
   // }));
 
   return (
-    <div className="h-screen overflow-hidden bg-app-bg-hr flex flex-col layout-hr">
-      <TopNav
-        showMenuButton
-        onMenuClick={() => setCollapsed((v) => !v)}
-        userInitials={initials}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        notificationCount={0}
-      />
-      <div className="flex flex-1 min-h-0 relative">
+    <AppBackground className="h-dvh overflow-hidden flex layout-hr">
+      <Sidebar groups={groups} collapsed={collapsed} />
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col relative">
+        <TopNav
+          showMenuButton
+          onMenuClick={() => setCollapsed((v) => !v)}
+          userInitials={initials}
+          notificationCount={0}
+          logoVariant="image"
+        />
         {/* Mobile backdrop: closes sidebar when tapping outside */}
         {!collapsed && (
           <div
@@ -138,9 +140,8 @@ export default function HRLayout({
             onClick={() => setCollapsed(true)}
           />
         )}
-        <Sidebar groups={groups} collapsed={collapsed} />
         <main
-          className="flex-1 min-h-0 overflow-y-auto flex flex-col"
+          className="flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col"
           onClick={() => {
             if (!collapsed) setCollapsed(true);
           }}
@@ -152,6 +153,6 @@ export default function HRLayout({
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
       {canReadOwnProfile && <AgreementGate />}
-    </div>
+    </AppBackground>
   );
 }

@@ -4,7 +4,7 @@ import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
-import { AssetsContent } from '@/components/organisms/assets/AssetsContent';
+import { AssetsContent } from '@/components/organisms/hr/assets/AssetsContent';
 
 export default function AssetsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);

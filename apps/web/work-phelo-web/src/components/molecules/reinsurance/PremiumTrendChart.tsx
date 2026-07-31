@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useThemeStore } from '@/store/theme.store';
 
 export interface PremiumDataPoint {
   date: string;
@@ -10,10 +11,16 @@ export interface PremiumDataPoint {
 interface PremiumTrendChartProps {
   data: PremiumDataPoint[];
   currency?: string;
+  /** Hex/CSS color for the line, area, and dots. Defaults to the current module's color. */
+  color?: string;
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return new Date(iso).toLocaleDateString('en-GB', { month: 'short' });
+}
+
+function formatDateLong(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 }
 
 function formatAmount(v: number): string {
@@ -24,8 +31,14 @@ function formatAmount(v: number): string {
       : v.toFixed(0);
 }
 
-export function PremiumTrendChart({ data, currency }: PremiumTrendChartProps) {
+export function PremiumTrendChart({
+  data,
+  currency,
+  color = 'var(--module-btn-bg, var(--brand))',
+}: PremiumTrendChartProps) {
   const [hovered, setHovered] = useState<number | null>(null);
+  const isDark = useThemeStore((s) => s.theme === 'dark');
+  const gridStroke = isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb';
 
   if (data.length === 0) {
     return (
@@ -37,10 +50,10 @@ export function PremiumTrendChart({ data, currency }: PremiumTrendChartProps) {
 
   const W = 700;
   const H = 220;
-  const PL = 64;
+  const PL = 76;
   const PR = 24;
   const PT = 20;
-  const PB = 44;
+  const PB = 48;
 
   const cW = W - PL - PR;
   const cH = H - PT - PB;
@@ -86,8 +99,8 @@ export function PremiumTrendChart({ data, currency }: PremiumTrendChartProps) {
     >
       <defs>
         <linearGradient id="premiumGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f97316" stopOpacity="0.18" />
-          <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
+          <stop offset="0%" stopColor={color} stopOpacity={0.6} />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
 
@@ -96,8 +109,8 @@ export function PremiumTrendChart({ data, currency }: PremiumTrendChartProps) {
         const y = toY(tick);
         return (
           <g key={i}>
-            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#e5e7eb" strokeWidth={1} />
-            <text x={PL - 8} y={y + 4} textAnchor="end" fontSize={11} fill="#9ca3af">
+            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke={gridStroke} strokeWidth={1} />
+            <text x={PL - 8} y={y + 5} textAnchor="end" fontSize={17} fill="#9ca3af">
               {formatAmount(tick)}
             </text>
           </g>
@@ -111,7 +124,7 @@ export function PremiumTrendChart({ data, currency }: PremiumTrendChartProps) {
       <path
         d={linePath}
         fill="none"
-        stroke="#f97316"
+        stroke={color}
         strokeWidth={2}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -122,9 +135,9 @@ export function PremiumTrendChart({ data, currency }: PremiumTrendChartProps) {
         <text
           key={idx}
           x={toX(idx)}
-          y={PT + cH + 18}
+          y={PT + cH + 22}
           textAnchor="middle"
-          fontSize={11}
+          fontSize={17}
           fill="#9ca3af"
         >
           {formatDate(data[idx].date)}
@@ -136,10 +149,10 @@ export function PremiumTrendChart({ data, currency }: PremiumTrendChartProps) {
         const cx = toX(i);
         const cy = toY(d.amount);
         const isHov = hovered === i;
-        const tW = 160;
-        const tH = 52;
-        const aH = 8;
-        const aHW = 6;
+        const tW = 128;
+        const tH = 38;
+        const aH = 6;
+        const aHW = 5;
         const tx = Math.max(PL, Math.min(W - PR - tW, cx - tW / 2));
         const ty = cy - tH - aH - 6;
         const ax = Math.max(tx + aHW + 4, Math.min(tx + tW - aHW - 4, cx));
@@ -156,42 +169,31 @@ export function PremiumTrendChart({ data, currency }: PremiumTrendChartProps) {
             <circle
               cx={cx}
               cy={cy}
-              r={isHov ? 5 : 3}
-              fill="#f97316"
-              stroke="white"
-              strokeWidth={2}
+              r={isHov ? 10 : 8}
+              fill={color}
+              opacity={0.16}
+              style={{ transition: 'r 0.1s ease' }}
+            />
+            <circle
+              cx={cx}
+              cy={cy}
+              r={isHov ? 5.5 : 4.5}
+              fill={color}
               style={{ transition: 'r 0.1s ease' }}
             />
             {isHov && (
               <g style={{ pointerEvents: 'none' }}>
-                <rect
-                  x={tx}
-                  y={ty}
-                  width={tW}
-                  height={tH}
-                  rx={6}
-                  fill="white"
-                  stroke="#f97316"
-                  strokeWidth={1.5}
-                />
-                <rect x={ax - aHW} y={ty + tH - 1.5} width={aHW * 2} height={3} fill="white" />
+                <rect x={tx} y={ty} width={tW} height={tH} rx={8} fill="var(--chip-dark,#111827)" />
                 <path
-                  d={`M ${ax - aHW},${ty + tH + 1} L ${ax},${ty + tH + aH} L ${ax + aHW},${ty + tH + 1} Z`}
-                  fill="white"
+                  d={`M ${ax - aHW},${ty + tH} L ${ax},${ty + tH + aH} L ${ax + aHW},${ty + tH} Z`}
+                  fill="var(--chip-dark,#111827)"
                 />
-                <path
-                  d={`M ${ax - aHW},${ty + tH} L ${ax},${ty + tH + aH} L ${ax + aHW},${ty + tH}`}
-                  fill="none"
-                  stroke="#f97316"
-                  strokeWidth={1.5}
-                  strokeLinejoin="round"
-                />
-                <text x={tx + 12} y={ty + 22} fontSize={13} fontWeight="600" fill="#111827">
+                <text x={tx + 10} y={ty + 16} fontSize={12} fontWeight="600" fill="#ffffff">
                   {currency ? `${currency} ` : ''}
                   {d.amount.toLocaleString()}
                 </text>
-                <text x={tx + 12} y={ty + 40} fontSize={11} fill="#6b7280">
-                  {formatDate(d.date)}
+                <text x={tx + 10} y={ty + 30} fontSize={10} fill="#9ca3af">
+                  {formatDateLong(d.date)}
                 </text>
               </g>
             )}

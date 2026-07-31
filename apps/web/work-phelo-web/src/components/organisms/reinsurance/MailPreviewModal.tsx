@@ -9,6 +9,7 @@ import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
 import { Icons } from '@/components/atoms/icons';
 import { inputClass } from '@/lib/utils';
 import { Facultative, PlacementClaim, PlacementClaimAllocation } from '@/types/reinsurance';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   useUpdateClaimStatus,
   useCreateClaimCashCall,
@@ -144,7 +145,7 @@ export function MailPreviewModal({
                 >
                   <Icons.X className="w-3 h-3" />
                 </button>
-                <span className="text-gray-300">,</span>
+                <span className="text-gray-400">,</span>
               </span>
             ))}
             {!addingRecipient && (
@@ -182,7 +183,7 @@ export function MailPreviewModal({
                   setAddingRecipient(false);
                   setRecipientDraft('');
                 }}
-                className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
+                className="shrink-0 text-gray-400 hover:text-gray-500 transition-colors"
               >
                 <Icons.X className="w-3.5 h-3.5" />
               </button>
@@ -197,7 +198,7 @@ export function MailPreviewModal({
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder={`Facultative Offer — ${placement.reference}`}
+            placeholder={`Facultative Offer — ${displayPolicyNumber(placement.policyNumber)}`}
             className={inputClass()}
           />
         </div>

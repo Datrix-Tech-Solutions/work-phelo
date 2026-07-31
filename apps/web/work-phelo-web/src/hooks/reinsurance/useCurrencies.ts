@@ -28,9 +28,7 @@ export function useCreateCurrency() {
       const res = await api.post<Currency>(BASE, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CURRENCIES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CURRENCIES_KEY }),
   });
 }
 
@@ -41,9 +39,7 @@ export function useUpdateCurrency() {
       const res = await api.patch<Currency>(`${BASE}/${id}`, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CURRENCIES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CURRENCIES_KEY }),
   });
 }
 
@@ -53,9 +49,7 @@ export function useDeleteCurrency() {
     mutationFn: async (id: string) => {
       await api.delete(`${BASE}/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CURRENCIES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CURRENCIES_KEY }),
   });
 }
 

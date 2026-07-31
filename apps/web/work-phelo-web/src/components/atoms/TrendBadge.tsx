@@ -18,10 +18,10 @@ export function TrendBadge({ change, tooltip }: TrendBadgeProps) {
     <span className="relative inline-flex">
       <span
         className={cn(
-          'inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full',
-          isNeutral && 'bg-gray-100 text-gray-500',
-          !isNeutral && isPositive && 'bg-green-50 text-green-600',
-          !isNeutral && !isPositive && 'bg-red-50 text-red-500',
+          'inline-flex items-center gap-0.5 text-[10px] font-medium px-1 py-0.05 rounded-full border',
+          isNeutral && 'border-gray-300 text-gray-500',
+          !isNeutral && isPositive && 'border-green-500 text-green-600',
+          !isNeutral && !isPositive && 'border-red-400 text-red-500',
           tooltip && 'cursor-default',
         )}
         onMouseEnter={() => tooltip && setShow(true)}
@@ -38,10 +38,10 @@ export function TrendBadge({ change, tooltip }: TrendBadgeProps) {
 
       {show && tooltip && (
         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none">
-          <span className="block bg-gray-900 text-white text-xs rounded-lg px-3 py-1.5 whitespace-nowrap shadow-lg">
+          <span className="block bg-(--chip-dark,#111827) text-white text-xs rounded-lg px-3 py-1.5 whitespace-nowrap shadow-lg">
             {tooltip}
           </span>
-          <span className="block w-2 h-2 bg-gray-900 rotate-45 rounded-sm mx-auto -mt-1" />
+          <span className="block w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm mx-auto -mt-1" />
         </span>
       )}
     </span>

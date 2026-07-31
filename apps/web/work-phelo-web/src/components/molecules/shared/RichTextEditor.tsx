@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 
 // Styles applied inside both the editable area and the preview pane
 const richContentClass = [
-  'text-sm text-gray-800',
+  'text-sm text-gray-900',
   '[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-2',
   '[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:my-2',
   '[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:my-1',
@@ -405,9 +405,9 @@ export function RichTextEditor({
       {/* overflow-visible so the table grid picker popup isn't clipped */}
       <div
         className={cn(
-          'border rounded-input bg-white overflow-visible',
-          error ? 'border-red-500' : 'border-gray-300',
-          'focus-within:ring-1 focus-within:ring-gray-400 focus-within:border-gray-400',
+          'border rounded-input bg-transparent overflow-visible',
+          error ? 'border-red-500' : 'border-(--input-border,var(--color-gray-400))',
+          'focus-within:ring-1 focus-within:ring-(--input-border,var(--color-gray-400)) focus-within:border-(--input-border,var(--color-gray-400))',
         )}
       >
         {/* ── Tab bar + toolbar ─────────────────────────────────────── */}

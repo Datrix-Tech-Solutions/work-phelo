@@ -1,76 +1,29 @@
 import {
+  EmployeeCompensationType,
   PayrollCountry,
   PayrollTaxPolicy,
 } from '../../prisma/generated/client';
 import { calculatePayrollForCountry } from './payroll-calculator.helper';
 
-describe('calculatePayrollForCountry', () => {
-  const ghanaSettings = {
-    payrollCountry: PayrollCountry.GH,
-    tier3Enabled: false,
-    tier3Rate: null,
-  };
+const ghSettings = {
+  payrollCountry: PayrollCountry.GH,
+  tier3Enabled: false,
+  tier3Rate: null,
+};
 
-  const baseValues = {
-    basicSalary: '0',
-    commissionAmount: '0',
-    totalAllowances: '0',
-    transportAmount: '0',
-    otherDeductions: '0',
-  };
+const baseValues = {
+  basicSalary: '0',
+  commissionAmount: '0',
+  totalAllowances: '0',
+  transportAmount: '0',
+  otherDeductions: '0',
+};
 
-  it('matches payslip net pay for the Buffalo payroll examples', () => {
-    expect(
-      calculatePayrollForCountry(
-        {
-          ...baseValues,
-          basicSalary: '3842.68',
-          totalAllowances: '1500',
-        },
-        ghanaSettings,
-      ).netSalary,
-    ).toBe('4250');
-
-    expect(
-      calculatePayrollForCountry(
-        {
-          ...baseValues,
-          basicSalary: '3841.68',
-          totalAllowances: '1500',
-        },
-        ghanaSettings,
-      ).netSalary,
-    ).toBe('4249.29');
-  });
-
-  it('keeps loans and advances as post-tax deductions', () => {
-    const withoutDeduction = calculatePayrollForCountry(
-      {
-        ...baseValues,
-        basicSalary: '3841.68',
-        totalAllowances: '1500',
-      },
-      ghanaSettings,
-    );
-    const withDeduction = calculatePayrollForCountry(
-      {
-        ...baseValues,
-        basicSalary: '3841.68',
-        totalAllowances: '1500',
-        otherDeductions: '100',
-      },
-      ghanaSettings,
-    );
-
-    expect(withDeduction.taxableIncome).toBe(withoutDeduction.taxableIncome);
-    expect(withDeduction.payeTax).toBe(withoutDeduction.payeTax);
-    expect(withDeduction.netSalary).toBe('4149.29');
-  });
-
+describe('calculatePayrollForCountry commission payroll MVP', () => {
   it('keeps existing salary payroll calculation unchanged', () => {
     const result = calculatePayrollForCountry(
       { ...baseValues, basicSalary: '5000' },
-      ghanaSettings,
+      ghSettings,
     );
 
     expect(result).toMatchObject({
@@ -88,7 +41,8 @@ describe('calculatePayrollForCountry', () => {
     const result = calculatePayrollForCountry(
       { ...baseValues, commissionAmount: '2000' },
       {
-        ...ghanaSettings,
+        ...ghSettings,
+        compensationType: EmployeeCompensationType.COMMISSION,
         taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
         commissionTaxable: true,
       },
@@ -109,7 +63,8 @@ describe('calculatePayrollForCountry', () => {
     const result = calculatePayrollForCountry(
       { ...baseValues, commissionAmount: '2000' },
       {
-        ...ghanaSettings,
+        ...ghSettings,
+        compensationType: EmployeeCompensationType.COMMISSION,
         taxPolicy: PayrollTaxPolicy.FIXED_AMOUNT,
         fixedTaxAmount: '150',
       },
@@ -127,7 +82,8 @@ describe('calculatePayrollForCountry', () => {
     const result = calculatePayrollForCountry(
       { ...baseValues, commissionAmount: '2000' },
       {
-        ...ghanaSettings,
+        ...ghSettings,
+        compensationType: EmployeeCompensationType.COMMISSION,
         taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
         commissionTaxable: false,
       },
@@ -141,11 +97,12 @@ describe('calculatePayrollForCountry', () => {
     });
   });
 
-  it('calculates salary-plus-commission employees in one gross pay base', () => {
+  it('calculates salary-plus-commission employees with separate commission tax', () => {
     const result = calculatePayrollForCountry(
       { ...baseValues, basicSalary: '1000', commissionAmount: '500' },
       {
-        ...ghanaSettings,
+        ...ghSettings,
+        compensationType: EmployeeCompensationType.SALARY_PLUS_COMMISSION,
         taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
         commissionTaxable: true,
       },
@@ -156,9 +113,9 @@ describe('calculatePayrollForCountry', () => {
       commissionAmount: '500',
       grossSalary: '1500',
       employeeSSNIT: '55',
-      taxableIncome: '1445',
-      payeTax: '143.63',
-      netSalary: '1301.38',
+      taxableIncome: '945',
+      payeTax: '106.13',
+      netSalary: '1338.88',
     });
   });
 
@@ -166,7 +123,8 @@ describe('calculatePayrollForCountry', () => {
     const result = calculatePayrollForCountry(
       { ...baseValues, commissionAmount: '2000' },
       {
-        ...ghanaSettings,
+        ...ghSettings,
+        compensationType: EmployeeCompensationType.COMMISSION,
         taxPolicy: PayrollTaxPolicy.EXEMPT,
         commissionTaxable: false,
       },

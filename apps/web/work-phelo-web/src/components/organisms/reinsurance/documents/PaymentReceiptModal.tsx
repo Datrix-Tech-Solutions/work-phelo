@@ -1,8 +1,11 @@
 'use client';
 
+import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
-import { useCedants } from '@/hooks';
+import { useCedants, useRiskTypes } from '@/hooks';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -25,7 +28,7 @@ function SectionHeader({ label }: { label: string }) {
     <tr className="bg-blue-900">
       <td
         colSpan={2}
-        className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
+        className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
       >
         {label}
       </td>
@@ -35,7 +38,7 @@ function SectionHeader({ label }: { label: string }) {
 
 function TableRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <tr className="border-b border-gray-100 last:border-b-0">
+    <tr>
       <td className={`py-2 px-4 w-1/2 ${bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
         {label}
       </td>
@@ -64,6 +67,7 @@ export function PaymentReceiptModal({
   onClose,
 }: PaymentReceiptModalProps) {
   const { data: cedants = [] } = useCedants();
+  const { data: riskTypes = [] } = useRiskTypes();
 
   const {
     currency,
@@ -72,12 +76,14 @@ export function PaymentReceiptModal({
     commission,
     classOfBusiness,
     title,
-    reference,
     policyNumber,
     inceptionDate,
     expiryDate,
     cedant,
+    riskTypeId,
   } = placement;
+
+  const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
   const fullCedant = cedants.find((c) => c.id === cedant.id);
   const primaryAddress =
@@ -103,11 +109,18 @@ export function PaymentReceiptModal({
 
   const afterContent = (
     <div className="mt-10 flex flex-col gap-6 border-t border-gray-200 pt-6">
-      <p className="text-sm text-gray-700 italic text-center">Thank you for your payment!</p>
+      <p className="text-base text-gray-700 italic text-center">Thank you for your payment!</p>
 
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-gray-500">Signature / Stamp</span>
-        <div className="w-64 border-b border-gray-400 mt-20" />
+        <span className="text-sm text-gray-500">Signature / Stamp</span>
+        <Image
+          src="/signature.png"
+          alt="Signature"
+          width={160}
+          height={80}
+          className="object-contain mt-2"
+        />
+        <div className="w-64 border-b border-gray-400" />
       </div>
     </div>
   );
@@ -132,7 +145,7 @@ export function PaymentReceiptModal({
     { label: 'Reinsured', value: cedant.name },
     { label: 'Policy Type', value: classOfBusiness ?? '—' },
     { label: 'Insured', value: title ?? '—' },
-    { label: 'Policy Number', value: policyNumber ?? reference ?? '—' },
+    { label: 'Policy Number', value: displayPolicyNumber(policyNumber) },
     { label: 'Policy Period', value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}` },
     { label: 'Currency', value: currency ?? '—' },
   ];
@@ -154,34 +167,42 @@ export function PaymentReceiptModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Payment Receipt — ${reference}`}
+      title={`Payment Receipt — ${displayPolicyNumber(policyNumber)}`}
       documentTitle="Payment Receipt"
+      fileName={buildDocumentFileName(
+        'Payment Receipt',
+        displayPolicyNumber(policyNumber),
+        riskTypeName,
+        title,
+      )}
       onPrint={onPrint}
       onClose={onClose}
       afterContent={afterContent}
     >
-      <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-4 text-base">
         {/* Receipt No. / Date */}
         <div className="flex items-start justify-between">
           <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Receipt No.</span>
-            <p className="font-semibold text-gray-900">{payment.reference ?? reference ?? '—'}</p>
+            <span className="text-sm text-gray-400 uppercase tracking-wide">Receipt No.</span>
+            <p className="font-semibold text-gray-900">
+              {payment.reference ?? displayPolicyNumber(policyNumber)}
+            </p>
           </div>
           <div className="text-right">
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Date</span>
+            <span className="text-sm text-gray-400 uppercase tracking-wide">Date</span>
             <p className="font-semibold text-gray-900">{fmtDate(payment.paymentDate)}</p>
           </div>
         </div>
 
         {/* Receipt To */}
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-gray-400 uppercase tracking-wide">Receipt To</span>
+          <span className="text-sm text-gray-400 uppercase tracking-wide">Receipt To</span>
           <p className="font-semibold text-gray-900">{cedant.name}</p>
           {cedantLocation && <p className="text-gray-500">{cedantLocation}</p>}
         </div>
 
         {/* Table */}
-        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-sm">
+        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-base">
           <tbody>
             <SectionHeader label="Client Details" />
             {clientRows.map((row) => (

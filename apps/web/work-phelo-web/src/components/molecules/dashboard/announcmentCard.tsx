@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Megaphone } from 'lucide-react';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { cardClass } from '@/lib/utils';
 import {
   useMarkAnnouncementRead,
   useMarkAllAnnouncementsRead,
@@ -45,7 +46,7 @@ export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
 
   if (announcements.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col gap-3 min-h-60">
+      <div className={cardClass('p-5 flex flex-col gap-3 min-h-60 flex-1 border-gray-200')}>
         <div className="flex items-center gap-2 shrink-0">
           <h2 className="text-base font-bold text-gray-900">General Announcements</h2>
         </div>
@@ -62,7 +63,7 @@ export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
 
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col min-h-100">
+      <div className={cardClass('p-5 flex flex-col min-h-100 flex-1 border-gray-200')}>
         {/* Header */}
         <div className="flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">

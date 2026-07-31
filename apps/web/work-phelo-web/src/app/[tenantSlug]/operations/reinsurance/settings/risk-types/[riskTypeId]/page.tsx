@@ -53,7 +53,7 @@ export default function RiskTypeDetailPage({
         )}
       </div>
 
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         {riskTypesLoading ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…

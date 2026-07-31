@@ -11,6 +11,7 @@ import {
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
 import { useFacultatives, useCreatePlacementPayment, useFacultativePlacement } from '@/hooks';
+import { fetchPlacementFinancialPosition } from '@/hooks/reinsurance/usePayments';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
@@ -60,15 +61,6 @@ export default function AddPaymentForm({
     const parsedAmount = parseFloat(values.amount) || 0;
     const hasAllocations = Object.keys(values.allocations).length > 0;
 
-    const totalNetPremium = selectedFacs.reduce((sum, f) => {
-      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-      return sum + facPremium * (1 - (f.commission ?? 0) / 100);
-    }, 0);
-
-    const allSameCurrency =
-      selectedFacs.length <= 1 ||
-      selectedFacs.every((f) => f.currency === selectedFacs[0].currency);
-
     const resolvedDate =
       values.paymentType === 'cheque'
         ? values.valueDate
@@ -82,6 +74,26 @@ export default function AddPaymentForm({
     const notesStr = values.paymentType === 'cheque' ? 'Cheque payment' : 'Bank transfer';
 
     try {
+      const positions = await Promise.all(
+        selectedFacs.map((f) =>
+          fetchPlacementFinancialPosition(f.id, new Date(resolvedDate).toISOString()),
+        ),
+      );
+      const positionByPlacementId = new Map(
+        selectedFacs.map((f, index) => [f.id, positions[index]]),
+      );
+      const totalOutstanding = selectedFacs.reduce((sum, f) => {
+        const outstanding = positionByPlacementId.get(f.id)?.cedant.outstanding ?? 0;
+        return sum + Math.max(0, outstanding);
+      }, 0);
+      const allSameCurrency =
+        selectedFacs.length <= 1 ||
+        selectedFacs.every(
+          (f) =>
+            (positionByPlacementId.get(f.id)?.currency ?? f.currency) ===
+            (positionByPlacementId.get(selectedFacs[0].id)?.currency ?? selectedFacs[0].currency),
+        );
+
       const calls = selectedFacs.map(async (f) => {
         let rawAmount: number;
         if (selectedFacs.length === 1) {
@@ -89,15 +101,15 @@ export default function AddPaymentForm({
         } else if (hasAllocations && values.allocations[f.id]) {
           rawAmount = parseFloat(values.allocations[f.id]) || 0;
         } else {
-          const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-          const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+          const netPremium = Math.max(0, positionByPlacementId.get(f.id)?.cedant.outstanding ?? 0);
           const proportion =
-            totalNetPremium > 0 ? netPremium / totalNetPremium : 1 / selectedFacs.length;
+            totalOutstanding > 0 ? netPremium / totalOutstanding : 1 / selectedFacs.length;
           rawAmount = proportion * parsedAmount;
         }
 
         const paymentCurrency = values.currency;
-        const placementCurrency = f.currency ?? values.currency;
+        const placementCurrency =
+          positionByPlacementId.get(f.id)?.currency ?? f.currency ?? values.currency;
         let submittedAmount = rawAmount;
 
         if (paymentCurrency !== placementCurrency) {
