@@ -67,6 +67,7 @@ import { UpdatePlacementEndorsementClosingStatusDto } from './dto/update-placeme
 import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
 import { ValidateEndorsementParticipantResponseDto } from './dto/validate-endorsement-participant-response.dto';
+import { ForceCloseEndorsementResponseDto } from './dto/force-close-endorsement-response.dto';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
@@ -1103,6 +1104,50 @@ export class PlacementsController {
     );
   }
 
+  @Post(':id/endorsements/:endorsementId/force-close')
+  @ApiTags('Reinsurance - Endorsement Closings')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Force close endorsement using agreed participant lines',
+    description:
+      'Operational override that closes an endorsement at its currently agreed endorsement participant lines. ' +
+      'For each ACCEPTED endorsement participant with a signed line, the backend creates or reuses the active endorsement closing snapshot, issues and confirms it, marks the endorsement participant CLOSED, then closes the endorsement. ' +
+      'Declined, pending and voided participant/closing history remains preserved. Original placement participants and original placement closings are never mutated.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiCreatedResponse({ type: ForceCloseEndorsementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Endorsement is still DRAFT or a participant signed line/snapshot value is invalid.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Endorsement is terminal/void/declined or no agreed participant line exists to close.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Placement or endorsement is missing, archived or belongs to another tenant.',
+  })
+  forceCloseEndorsement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementClosingsService.forceClose(
+      request.user,
+      id,
+      endorsementId,
+    );
+  }
+
   @Patch(':id/endorsements/:endorsementId/closings/:closingId/status')
   @ApiTags('Reinsurance - Endorsement Closings')
   @RequirePermissions(PlacementPermission.EDIT)
@@ -1328,6 +1373,55 @@ export class PlacementsController {
       endorsementId,
       participantId,
       dto,
+    );
+  }
+
+  @Post(':id/endorsements/:endorsementId/participants/:participantId/reinvite')
+  @ApiTags('Reinsurance - Endorsement Participants')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Re-invite a declined endorsement participant',
+    description:
+      'Creates a new INVITED endorsement participant attempt for the same reinsurer only when the selected prior attempt is DECLINED. ' +
+      'The declined row is preserved for history and is never overwritten. Accepted, closed and still-active participants cannot be re-invited through this endpoint.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Declined endorsement participant ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementEndorsementParticipantResponseDto })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The selected participant is not DECLINED or another active invitation already exists for that reinsurer.',
+  })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'The endorsement is terminal and cannot accept invitations.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Placement, endorsement, or endorsement participant is missing or belongs to another tenant.',
+  })
+  reinviteEndorsementParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementParticipantsService.reinvite(
+      request.user,
+      id,
+      endorsementId,
+      participantId,
     );
   }
 
