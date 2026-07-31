@@ -21,17 +21,17 @@ import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/Endo
 import { Facultative, PlacementEndorsement, PlacementPayment } from '@/types/reinsurance';
 import {
   endorsementKey,
+  fetchPlacementFinancialPosition,
+  placementFinancialPositionKey,
   useArchivedFacultatives,
-  useCedants,
   useDeleteFacultative,
   useFacultatives,
   useForceCloseFacultative,
-  usePlacementPayments,
+  usePlacementFinancialPosition,
   useRestoreFacultative,
   useCurrentTenantUsers,
 } from '@/hooks';
 import { TenantUser } from '@/types/tenant';
-import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   acceptedPercentFor,
@@ -97,33 +97,21 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Paid: 'text-[10px] text-green-600 font-medium',
 };
 
-function netPremiumFor(row: Facultative, deductionRate: number): number {
-  const facPremium =
-    row.premium != null && row.facultativeOffer != null
-      ? (row.facultativeOffer / 100) * row.premium
-      : 0;
-  const netPremium = row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
-  return netPremium - facPremium * deductionRate;
-}
-
-function useDeductionRateFor(cedantId: string): number {
-  const { data: cedants = [] } = useCedants();
-  return isForeignCedant(cedants.find((c) => c.id === cedantId))
-    ? FOREIGN_CEDANT_DEDUCTION_RATE
-    : 0;
+/** Derives Outstanding/Part Payment/Paid from the same authoritative financial-position
+ *  figures the Premiums page and placement Details page use — keeps all three surfaces
+ *  agreeing on payment status instead of each recomputing net premium/paid differently. */
+function statusFromPosition(due: number, paid: number, outstanding: number): PaymentStatus {
+  if (due > 0 && outstanding <= 0.0001) return 'Paid';
+  if (paid > 0) return 'Part Payment';
+  return 'Outstanding';
 }
 
 function PaymentStatusCell({ placement }: { placement: Facultative }) {
-  const { data: payments = [] } = usePlacementPayments(placement.id);
-  const deductionRate = useDeductionRateFor(placement.cedant.id);
-  const netPremium = netPremiumFor(placement, deductionRate);
-  const paid = payments
-    .filter((p) => p.status === 'RECORDED')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
-
-  let paymentStatus: PaymentStatus = 'Outstanding';
-  if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
-  else if (paid > 0) paymentStatus = 'Part Payment';
+  const { data: position } = usePlacementFinancialPosition(placement.id);
+  const due = position?.cedant.currentObligation ?? 0;
+  const paid = position?.cedant.netSettled ?? 0;
+  const outstanding = position?.cedant.outstanding ?? 0;
+  const paymentStatus = statusFromPosition(due, paid, outstanding);
 
   return (
     <div className="flex flex-col gap-1">
@@ -278,7 +266,6 @@ export function FacultativeTable({
     enabled: tab === 'archived',
   });
   const { data: tenantUsers = [] } = useCurrentTenantUsers({ enabled: tab === 'archived' });
-  const { data: cedants = [] } = useCedants();
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
   const { mutate: restorePlacement, isPending: isRestoring } = useRestoreFacultative();
   const { mutate: forceClosePlacement, isPending: isForceClosing } = useForceCloseFacultative(
@@ -290,15 +277,12 @@ export function FacultativeTable({
 
   const closingRows = useMemo(() => allRows.filter(isEffectivelyClosed), [allRows]);
 
-  const paymentQueries = useQueries({
+  const positionQueries = useQueries({
     queries:
       tab === 'closing'
         ? closingRows.map((row) => ({
-            queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
-            queryFn: async () => {
-              const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
-              return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-            },
+            queryKey: placementFinancialPositionKey(row.id),
+            queryFn: () => fetchPlacementFinancialPosition(row.id),
           }))
         : [],
   });
@@ -306,21 +290,14 @@ export function FacultativeTable({
   const paymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
     closingRows.forEach((row, i) => {
-      const payments = paymentQueries[i]?.data ?? [];
-      const deductionRate = isForeignCedant(cedants.find((c) => c.id === row.cedant.id))
-        ? FOREIGN_CEDANT_DEDUCTION_RATE
-        : 0;
-      const netPremium = netPremiumFor(row, deductionRate);
-      const paid = payments
-        .filter((p) => p.status === 'RECORDED')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      let status: PaymentStatus = 'Outstanding';
-      if (netPremium > 0 && paid >= netPremium) status = 'Paid';
-      else if (paid > 0) status = 'Part Payment';
-      map.set(row.id, status);
+      const position = positionQueries[i]?.data;
+      const due = position?.cedant.currentObligation ?? 0;
+      const paid = position?.cedant.netSettled ?? 0;
+      const outstanding = position?.cedant.outstanding ?? 0;
+      map.set(row.id, statusFromPosition(due, paid, outstanding));
     });
     return map;
-  }, [closingRows, paymentQueries, cedants]);
+  }, [closingRows, positionQueries]);
 
   const filtered = useMemo(() => {
     let rows = allRows;
@@ -405,25 +382,28 @@ export function FacultativeTable({
     return map;
   }, [paged, openPaymentQueries, tab]);
 
+  const openPositionQueries = useQueries({
+    queries:
+      tab === 'placements'
+        ? paged.map((row) => ({
+            queryKey: placementFinancialPositionKey(row.id),
+            queryFn: () => fetchPlacementFinancialPosition(row.id),
+          }))
+        : [],
+  });
+
   const openPaymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
     if (tab !== 'placements') return map;
     paged.forEach((row, i) => {
-      const payments = openPaymentQueries[i]?.data ?? [];
-      const deductionRate = isForeignCedant(cedants.find((c) => c.id === row.cedant.id))
-        ? FOREIGN_CEDANT_DEDUCTION_RATE
-        : 0;
-      const netPremium = netPremiumFor(row, deductionRate);
-      const paid = payments
-        .filter((p) => p.status === 'RECORDED')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      let status: PaymentStatus = 'Outstanding';
-      if (netPremium > 0 && paid >= netPremium) status = 'Paid';
-      else if (paid > 0) status = 'Part Payment';
-      map.set(row.id, status);
+      const position = openPositionQueries[i]?.data;
+      const due = position?.cedant.currentObligation ?? 0;
+      const paid = position?.cedant.netSettled ?? 0;
+      const outstanding = position?.cedant.outstanding ?? 0;
+      map.set(row.id, statusFromPosition(due, paid, outstanding));
     });
     return map;
-  }, [paged, openPaymentQueries, tab, cedants]);
+  }, [paged, openPositionQueries, tab]);
 
   // Reopen Offer is only valid once no endorsement has been made on the placement —
   // reopening after an endorsement would let the original offer diverge from what's
