@@ -111,7 +111,7 @@ function buildChangeSentence(
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3 mt-6 first:mt-0">
-      <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1">
+      <p className="text-sm font-semibold uppercase tracking-widest text-gray-500 mb-1">
         {children}
       </p>
       <div className="border-t border-gray-300" />
@@ -185,7 +185,7 @@ export function EndorsementCertificateModal({
       onClose={onClose}
     >
       {/* Letter header */}
-      <div className="flex flex-col gap-0.5 text-sm mb-6">
+      <div className="flex flex-col gap-0.5 text-base mb-6">
         <p className="text-gray-400 mb-3">{fmtDate(new Date().toISOString())}</p>
         <p className="font-semibold text-gray-900">The Managing Director</p>
         <p className="text-gray-800">{placement.cedant.name}</p>
@@ -200,7 +200,7 @@ export function EndorsementCertificateModal({
 
       {/* POLICY INFORMATION */}
       <SectionHeading>Policy Information</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
+      <table className="w-full text-base border-collapse mb-2">
         <tbody>
           {[
             { label: 'Cedant', value: placement.cedant.name },
@@ -211,7 +211,7 @@ export function EndorsementCertificateModal({
             { label: 'Currency', value: fmtVal(placement.currency) },
             { label: 'Class of Business', value: fmtVal(placement.classOfBusiness) },
           ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
+            <tr key={row.label}>
               <td className="py-1.5 pr-4 text-gray-500 w-2/5">{row.label}</td>
               <td className="py-1.5 pl-4 text-gray-900 font-medium">{row.value}</td>
             </tr>
@@ -221,23 +221,23 @@ export function EndorsementCertificateModal({
 
       {/* ENDORSEMENT SUMMARY */}
       <SectionHeading>Endorsement Summary</SectionHeading>
-      <div className="text-sm mb-2 space-y-2">
-        {endorsement.reason && (
-          <div>
-            <span className="text-gray-500">Reason:</span>
-            <p className="text-gray-900 font-medium mt-0.5">{endorsement.reason}</p>
-          </div>
-        )}
+      <div className="text-base mb-2 space-y-2">
         {narrative ? (
           <p className="text-gray-800 leading-relaxed">{narrative}</p>
         ) : (
           <p className="text-gray-400 italic">No parameter changes recorded.</p>
         )}
+        {endorsement.reason && (
+          <div>
+            <span className="text-gray-500">Comment:</span>
+            <p className="text-gray-900 font-medium mt-0.5">{endorsement.reason}</p>
+          </div>
+        )}
       </div>
 
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
+      <ul className="text-base text-gray-700 space-y-1 list-none mb-2">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>

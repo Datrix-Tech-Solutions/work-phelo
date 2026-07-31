@@ -13,7 +13,7 @@ export function inputClass(error?: string, extra?: string) {
     'focus:outline-none',
     error
       ? 'border-red-500 focus:ring-2 focus:ring-red-500/30 focus:border-red-500'
-      : 'border-gray-400 focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',
+      : 'border-(--input-border,var(--color-gray-400)) focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',
     extra,
   );
 }
@@ -32,7 +32,7 @@ export function cardClass(extra?: string, border?: 'module' | 'glass') {
   return cn(
     'bg-(--glass-subtle,rgba(255,255,255,0.3)) backdrop-blur-xl backdrop-saturate-150 rounded-xl',
     'border border-(--glass-border,rgba(255,255,255,0.55))',
-    'shadow-[0_20px_40px_-16px_rgba(0,0,0,0.22),0_2px_8px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))]',
+    'shadow-[0_20px_40px_-40px_rgba(0,0,0,0.12),0_2px_8px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))]',
     extra,
   );
 }

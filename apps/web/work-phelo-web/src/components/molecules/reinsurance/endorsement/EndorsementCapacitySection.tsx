@@ -1,7 +1,7 @@
 'use client';
 
 import { PlacementEndorsementSummary } from '@/types/reinsurance';
-import { ParameterCards } from './ParameterCards';
+import { ParameterChangesTable } from './ParameterChangesTable';
 import { CapacityBar } from './CapacityBar';
 import { cardClass } from '@/lib/utils';
 
@@ -17,6 +17,7 @@ interface EndorsementCapacitySectionProps {
   proposed: Record<string, unknown> | null;
   endorsementSummary: PlacementEndorsementSummary | undefined;
   summaryTargetPercent: number;
+  originalPercent: number;
   acceptedCapacityRows: CapacityRow[];
   capacityColorMap: Record<string, string>;
 }
@@ -27,6 +28,7 @@ export function EndorsementCapacitySection({
   proposed,
   endorsementSummary,
   summaryTargetPercent,
+  originalPercent,
   acceptedCapacityRows,
   capacityColorMap,
 }: EndorsementCapacitySectionProps) {
@@ -35,12 +37,17 @@ export function EndorsementCapacitySection({
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
         Endorsement Summary
       </p>
-      {proposed && <ParameterCards original={original} proposed={proposed} />}
+      {proposed && (
+        <div className={cardClass('p-3')}>
+          <ParameterChangesTable original={original} proposed={proposed} />
+        </div>
+      )}
       {!isDraft && endorsementSummary && (
         <div className={cardClass('p-3 flex flex-col gap-3')}>
           <CapacityBar
             acceptedPercent={endorsementSummary.acceptedPercent}
             targetPercent={endorsementSummary.targetPercent ?? summaryTargetPercent}
+            originalPercent={originalPercent}
             rows={acceptedCapacityRows}
             colorMap={capacityColorMap}
           />

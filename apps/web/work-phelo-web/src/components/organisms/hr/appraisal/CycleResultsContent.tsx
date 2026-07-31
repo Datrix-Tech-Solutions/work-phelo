@@ -3,7 +3,8 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { api } from '@/lib/api';
 import { AppraisalCycle, FinalRating, CycleResultItem, CycleResultsSummary } from '@/types/hr';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';

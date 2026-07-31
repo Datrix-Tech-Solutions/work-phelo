@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';

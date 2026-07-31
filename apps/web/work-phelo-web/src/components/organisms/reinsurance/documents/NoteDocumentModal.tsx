@@ -199,7 +199,7 @@ function CreditNoteContent({
   return (
     <>
       {/* Address block */}
-      <div className="flex flex-col gap-0.5 text-sm mb-4">
+      <div className="flex flex-col gap-0.5 text-base mb-4">
         <p className="text-gray-500">{fmtDateLong(new Date().toISOString())}</p>
         <p className="font-medium text-gray-900 mt-2">The Managing Director</p>
         <p className="text-gray-800">{reinsurerCompany}</p>
@@ -212,10 +212,10 @@ function CreditNoteContent({
         </p>
       </div>
 
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full text-base border-collapse">
         <tbody>
           {descriptionRows.map((row, i) => (
-            <tr key={i} className="border-b border-gray-50 last:border-0">
+            <tr key={i}>
               <td className="py-2 pr-4 text-gray-500 w-1/2">{row.label}</td>
               <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
                 {row.pct ?? ''}
@@ -228,7 +228,7 @@ function CreditNoteContent({
         </tbody>
       </table>
 
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full text-base border-collapse">
         <tbody>
           {financialRows.map((row, i) =>
             row.divider ? (
@@ -238,7 +238,7 @@ function CreditNoteContent({
                 </td>
               </tr>
             ) : (
-              <tr key={i} className="border-b border-gray-50 last:border-0">
+              <tr key={i}>
                 <td
                   className={`py-2 pr-4 text-gray-500 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : ''}`}
                 >
@@ -260,15 +260,15 @@ function CreditNoteContent({
 
       {placement?.description && (
         <div className="my-2">
-          <p className="text-xs font-semibold text-gray-400 tracking-wide mb-1">Kindly Refer:</p>
+          <p className="text-sm font-semibold text-gray-400 tracking-wide mb-1">Kindly Refer:</p>
           <div
-            className="text-sm text-gray-700"
+            className="text-base text-gray-700"
             dangerouslySetInnerHTML={{ __html: placement.description }}
           />
         </div>
       )}
 
-      <div className="mt-8 flex flex-col gap-2 text-sm text-gray-700">
+      <div className="mt-8 flex flex-col gap-2 text-base text-gray-700">
         <p>Thank You.</p>
         <p>Yours faithfully,</p>
         <Image
@@ -338,33 +338,33 @@ function DebitNoteContent({
 
   return (
     <>
-      <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-4 text-base">
         {/* Debit No / Date row */}
         <div className="flex items-start justify-between">
           <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Debit No.</span>
+            <span className="text-sm text-gray-400 uppercase tracking-wide">Debit No.</span>
             <p className="font-semibold text-gray-900">{debitNo}</p>
           </div>
           <div className="text-right">
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Date</span>
+            <span className="text-sm text-gray-400 uppercase tracking-wide">Date</span>
             <p className="font-semibold text-gray-900">{debitDate}</p>
           </div>
         </div>
 
         {/* Bill To */}
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-gray-400 uppercase tracking-wide">Bill To</span>
+          <span className="text-sm text-gray-400 uppercase tracking-wide">Bill To</span>
           <p className="font-semibold text-gray-900">{cedantName}</p>
           {cedantLocation && <p className="text-gray-500">{cedantLocation}</p>}
         </div>
 
         {/* Table */}
-        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-sm">
+        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-base">
           <tbody>
             <tr className="bg-blue-900">
               <td
                 colSpan={2}
-                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
+                className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
               >
                 Description
               </td>
@@ -374,7 +374,7 @@ function DebitNoteContent({
               { label: 'Reinsured', value: cedantName },
               { label: 'Policy Type', value: text(placement?.classOfBusiness) },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -389,7 +389,7 @@ function DebitNoteContent({
               },
               { label: 'Currency', value: currency ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -398,7 +398,7 @@ function DebitNoteContent({
             <tr className="bg-blue-900">
               <td
                 colSpan={2}
-                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-y border-blue-900"
+                className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-y border-blue-900"
               >
                 Particulars
               </td>
@@ -420,7 +420,7 @@ function DebitNoteContent({
                 bold: true,
               },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td
                   className={`py-2 px-4 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
                 >
@@ -438,10 +438,10 @@ function DebitNoteContent({
       </div>
 
       <div className="mt-10 flex flex-col gap-6 border-t border-gray-200 pt-6">
-        <p className="text-sm text-gray-700 italic text-center">Thank you for choosing us!</p>
+        <p className="text-base text-gray-700 italic text-center">Thank you for choosing us!</p>
 
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">Signature / Stamp</span>
+          <span className="text-sm text-gray-500">Signature / Stamp</span>
           <Image
             src={profile.signatureSrc ?? '/signature.png'}
             alt="Signature"
@@ -455,7 +455,7 @@ function DebitNoteContent({
 
         {bankAccounts.length > 0 && (
           <div
-            className="flex flex-col gap-1 p-4 border border-gray-200 rounded-lg bg-gray-50 text-xs text-gray-700"
+            className="flex flex-col gap-1 p-4 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700"
             style={{ breakInside: 'avoid' }}
           >
             <p className="font-semibold text-gray-900 mb-1">Bank Account</p>
@@ -469,7 +469,7 @@ function DebitNoteContent({
           </div>
         )}
 
-        <p className="text-xs font-semibold text-gray-800 leading-relaxed">
+        <p className="text-sm font-semibold text-gray-800 leading-relaxed">
           NOTE: COVER IS SUBJECT TO PREMIUM PAYMENT WARRANTY, PLEASE. WE WOULD THEREFORE APPRECIATE
           PAYMENT AS SOON AS POSSIBLE.
         </p>

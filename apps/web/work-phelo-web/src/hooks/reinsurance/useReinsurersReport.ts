@@ -36,8 +36,9 @@ function convertToTarget(
 }
 
 export interface ReinsurersReportParams {
-  /** Restricts to these years (by placement createdAt). Omitted/empty = all-time, no restriction. */
-  years?: string[];
+  /** Restricts to placements whose inceptionDate (period of insurance start) falls in [startDate, endDate]. */
+  startDate?: string;
+  endDate?: string;
   riskTypeId?: string;
   currency?: string;
   status?: FacultativeStatus;
@@ -75,15 +76,22 @@ export function useReinsurersReport(
   const filteredPlacements = useMemo(() => {
     if (!enabled) return [];
 
-    const years = params.years?.length ? new Set(params.years) : null;
+    const from = params.startDate ? new Date(params.startDate) : null;
+    const to = params.endDate ? new Date(params.endDate) : null;
+    if (to) to.setHours(23, 59, 59, 999);
 
     return placements.filter((p) => {
-      if (years && !years.has(String(new Date(p.createdAt).getFullYear()))) return false;
+      if (from || to) {
+        if (!p.inceptionDate) return false;
+        const inception = new Date(p.inceptionDate);
+        if (from && inception < from) return false;
+        if (to && inception > to) return false;
+      }
       if (params.riskTypeId && p.riskTypeId !== params.riskTypeId) return false;
       if (params.status && p.status !== params.status) return false;
       return true;
     });
-  }, [placements, enabled, params.years, params.riskTypeId, params.status]);
+  }, [placements, enabled, params.startDate, params.endDate, params.riskTypeId, params.status]);
 
   const placementParticipants = useMemo(() => {
     const reinsurerIdsFilter = params.reinsurerIds?.length ? new Set(params.reinsurerIds) : null;

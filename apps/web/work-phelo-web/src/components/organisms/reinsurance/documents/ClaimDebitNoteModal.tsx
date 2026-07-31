@@ -107,7 +107,7 @@ export function ClaimDebitNoteModal({
       onClose={onClose}
       afterContent={afterContent}
     >
-      <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-4 text-base">
         {/* Address block */}
         <div className="flex flex-col gap-0.5 mb-2">
           <p className="text-gray-500">
@@ -129,13 +129,13 @@ export function ClaimDebitNoteModal({
         </div>
 
         {/* Table */}
-        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-sm">
+        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-base">
           <tbody>
             {/* Description heading */}
             <tr className="bg-blue-900">
               <td
                 colSpan={2}
-                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
+                className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
               >
                 Description
               </td>
@@ -152,7 +152,7 @@ export function ClaimDebitNoteModal({
               },
               { label: 'Currency', value: currency ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -167,7 +167,7 @@ export function ClaimDebitNoteModal({
             </tr>
 
             {/* Your reinsurance participation */}
-            <tr className="border-b border-gray-200">
+            <tr>
               <td className="py-2.5 px-4 text-gray-600 w-1/2">Your reinsurance participation :</td>
               <td className="py-2.5 px-4 text-right text-gray-700">{sharePercent}% of 100%</td>
             </tr>

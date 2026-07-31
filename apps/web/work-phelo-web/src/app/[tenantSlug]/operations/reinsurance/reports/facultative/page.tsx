@@ -20,7 +20,7 @@ export default function FacultativeReportPage({
   const base = `/${tenantSlug}/operations/reinsurance/reports`;
   const [reportParams, setReportParams] = useState<FacultativeReportParams | null>(null);
 
-  const { rows, currencyTotals, isLoading } = useFacultativeReport(reportParams ?? { years: [] }, {
+  const { rows, currencyTotals, isLoading } = useFacultativeReport(reportParams ?? {}, {
     enabled: reportParams !== null,
   });
 
@@ -38,10 +38,14 @@ export default function FacultativeReportPage({
       leftPanel={<FacultativeReportFilters onGenerate={setReportParams} />}
       rightPanel={
         <>
-          <ReportHero title="Facultative" years={reportParams?.years ?? []} />
+          <ReportHero
+            title="Facultative"
+            startDate={reportParams?.startDate}
+            endDate={reportParams?.endDate}
+          />
           {!reportParams ? (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-sm text-gray-400">Select fiscal year to generate report</p>
+              <p className="text-sm text-gray-400">Select a date range to generate report</p>
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col gap-4">

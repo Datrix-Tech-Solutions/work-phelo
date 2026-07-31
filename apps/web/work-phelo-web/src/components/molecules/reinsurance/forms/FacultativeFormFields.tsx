@@ -5,6 +5,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { NumberField } from '@/components/atoms/NumberField';
 import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
 import { FacultativeFormValues } from '@/types/reinsurance';
 import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions, useRiskTypes } from '@/hooks';
@@ -279,27 +280,33 @@ export default function FacultativeFormFields({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label="100% Sum Insured"
-              type="number"
-              registration={register('sumInsured', {
-                required: 'Sum insured is required',
-                min: { value: 0, message: 'Cannot be negative' },
-                valueAsNumber: true,
-              })}
-              error={errors.sumInsured}
-              placeholder="e.g. 50000"
+            <Controller
+              name="sumInsured"
+              control={control}
+              rules={{ min: { value: 0.01, message: 'Sum insured is required' } }}
+              render={({ field }) => (
+                <NumberField
+                  label="100% Sum Insured"
+                  value={typeof field.value === 'number' ? field.value : 0}
+                  onChange={field.onChange}
+                  error={errors.sumInsured?.message}
+                  placeholder="e.g. 50000"
+                />
+              )}
             />
-            <FormField
-              label="100% Premium"
-              type="number"
-              registration={register('premium', {
-                required: 'Premium is required',
-                min: { value: 0, message: 'Cannot be negative' },
-                valueAsNumber: true,
-              })}
-              error={errors.premium}
-              placeholder="e.g. 75000"
+            <Controller
+              name="premium"
+              control={control}
+              rules={{ min: { value: 0.01, message: 'Premium is required' } }}
+              render={({ field }) => (
+                <NumberField
+                  label="100% Premium"
+                  value={typeof field.value === 'number' ? field.value : 0}
+                  onChange={field.onChange}
+                  error={errors.premium?.message}
+                  placeholder="e.g. 75000"
+                />
+              )}
             />
           </div>
 

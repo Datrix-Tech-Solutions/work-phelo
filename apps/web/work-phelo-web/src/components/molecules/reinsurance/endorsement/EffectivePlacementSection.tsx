@@ -24,13 +24,11 @@ export function EffectivePlacementSection({
   isError: boolean;
 }) {
   if (isLoading) {
-    return <p className="text-sm text-gray-400">Loading latest confirmed placement position...</p>;
+    return <p className="text-sm text-gray-400">Loading latest confirmed offer details...</p>;
   }
   if (isError || !view) {
     return (
-      <p className="text-sm text-red-500">
-        Latest confirmed placement position could not be loaded.
-      </p>
+      <p className="text-sm text-red-500">Latest confirmed offer details could not be loaded.</p>
     );
   }
 
@@ -43,10 +41,10 @@ export function EffectivePlacementSection({
       <summary className="cursor-pointer list-none">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h4 className="text-sm font-semibold text-gray-900">Current Effective Position</h4>
-            <p className="text-xs text-gray-500 mt-1">
-              Current effective as of {fmtDate(view.viewAsOf)}
-            </p>
+            <h4 className="text-sm font-semibold text-gray-900">
+              Current Offer as of{' '}
+              <span className="text-xs text-gray-500 mt-1">{fmtDate(view.viewAsOf)}</span>
+            </h4>
           </div>
           <div className="grid grid-cols-2 gap-3 text-right lg:grid-cols-3">
             <div>

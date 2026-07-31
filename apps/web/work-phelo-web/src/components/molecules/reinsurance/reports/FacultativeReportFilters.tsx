@@ -1,19 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { MultiSelect, MultiSelectOption } from '@/components/atoms/MultiSelect';
+import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { Button } from '@/components/atoms/Button';
 import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions } from '@/hooks';
 import { FACULTATIVE_STATUSES, FacultativeStatus } from '@/types/reinsurance';
 import { FacultativeReportParams } from '@/hooks/reinsurance/useFacultativeReport';
 import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
-
-const CURRENT_YEAR = new Date().getFullYear();
-const YEAR_OPTIONS: MultiSelectOption[] = Array.from({ length: 8 }, (_, i) => {
-  const year = String(CURRENT_YEAR - i);
-  return { value: year, label: year };
-});
 
 const STATUS_OPTIONS = FACULTATIVE_STATUSES.map((s) => ({
   value: s,
@@ -25,7 +20,8 @@ interface FacultativeReportFiltersProps {
 }
 
 export function FacultativeReportFilters({ onGenerate }: FacultativeReportFiltersProps) {
-  const [years, setYears] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [riskTypeId, setRiskTypeId] = useState('');
   const [currency, setCurrency] = useState('');
   const [status, setStatus] = useState('');
@@ -37,7 +33,8 @@ export function FacultativeReportFilters({ onGenerate }: FacultativeReportFilter
 
   const handleGenerate = () => {
     onGenerate({
-      years,
+      startDate,
+      endDate,
       riskTypeId: riskTypeId || undefined,
       currency: currency || undefined,
       status: (status || undefined) as FacultativeStatus | undefined,
@@ -48,14 +45,23 @@ export function FacultativeReportFilters({ onGenerate }: FacultativeReportFilter
   return (
     <div className="flex flex-col gap-5 flex-1 min-h-0">
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4">
-        <MultiSelect
-          label="Fiscal Year"
-          placeholder="Select year(s)…"
-          options={YEAR_OPTIONS}
-          value={years}
-          onChange={setYears}
-          size="sm"
-        />
+        <div className="grid grid-cols-2 gap-2">
+          <DatePicker
+            label="Period Start"
+            placeholder="Start date"
+            value={startDate}
+            onChange={setStartDate}
+            size="sm"
+          />
+          <DatePicker
+            label="Period End"
+            placeholder="End date"
+            value={endDate}
+            minDate={startDate || undefined}
+            onChange={setEndDate}
+            size="sm"
+          />
+        </div>
 
         <SearchSelect
           label="Risk Type"
@@ -94,7 +100,7 @@ export function FacultativeReportFilters({ onGenerate }: FacultativeReportFilter
         />
       </div>
 
-      <Button className="w-full" disabled={years.length === 0} onClick={handleGenerate}>
+      <Button className="w-full" disabled={!startDate || !endDate} onClick={handleGenerate}>
         Generate Report
       </Button>
     </div>

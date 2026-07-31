@@ -7,7 +7,12 @@ import { useNavigationLoaderStore } from '@/store/navigationLoader.store';
 const SHOW_DELAY_MS = 150;
 const MIN_VISIBLE_MS = 350;
 const FADE_MS = 150;
-const SAFETY_MS = 8000;
+// Last-resort circuit breaker, not the normal close path — the overlay is meant to
+// hide only once the "landed" effect below sees the pathname actually change. On a
+// slow network a real navigation can take several seconds; this must be long enough
+// that it never fires for that case, so it only ever catches a genuinely stuck/failed
+// navigation (bad redirect, hung request) instead of masking one as a normal load.
+const SAFETY_MS = 20000;
 
 declare global {
   interface Window {

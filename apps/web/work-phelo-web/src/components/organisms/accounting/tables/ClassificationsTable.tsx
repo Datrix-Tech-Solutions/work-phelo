@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { TableButton } from '@/components/atoms/TableButton';
 import { AccountClassification, GLAccountCategory } from '@/types/accounting';
 import { AddClassificationPanel } from '@/components/organisms/accounting/panels/AddClassificationPanel';
 import {
@@ -38,48 +40,64 @@ export function ClassificationsTable() {
 
   const classifications = useMemo(() => data?.items ?? [], [data]);
 
-  const columns = useMemo<Column<AccountClassification>[]>(
-    () => [
-      {
-        key: 'code',
-        label: 'Account Code',
-        width: '200px',
-        render: (row) => (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-            {row.code}
-          </span>
-        ),
-      },
-      {
-        key: 'name',
-        label: 'Account Name',
-        width: '1fr',
-        render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-      },
-      {
-        key: 'category',
-        label: 'Account Type',
-        width: '140px',
-        render: (row) => (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-            {CATEGORY_LABELS[row.category]}
-          </span>
-        ),
-      },
-      {
-        key: 'isActive',
-        label: 'Status',
-        width: '100px',
-        render: (row) => (
-          <Badge
-            label={row.isActive ? 'Active' : 'Inactive'}
-            variant={row.isActive ? 'success' : 'neutral'}
-          />
-        ),
-      },
-    ],
-    [],
-  );
+  function toggleActive(classification: AccountClassification) {
+    const mutation = classification.isActive ? deactivateClassification : activateClassification;
+    mutation.mutate(classification.id, {
+      onError: (error) => toast.error(extractError(error)),
+    });
+  }
+
+  const columns: Column<AccountClassification>[] = [
+    {
+      key: 'code',
+      label: 'Account Code',
+      width: '100px',
+      render: (row) => (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
+          {row.code}
+        </span>
+      ),
+    },
+    {
+      key: 'name',
+      label: 'Account Name',
+      width: 'minmax(150px, 1fr)',
+      render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
+    },
+    {
+      key: 'category',
+      label: 'Account Type',
+      width: '100px',
+      render: (row) => (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
+          {CATEGORY_LABELS[row.category]}
+        </span>
+      ),
+    },
+    {
+      key: 'isActive',
+      label: 'Status',
+      width: '100px',
+      render: (row) => (
+        <Badge
+          label={row.isActive ? 'Active' : 'Inactive'}
+          variant={row.isActive ? 'success' : 'neutral'}
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      label: '',
+      width: '120px',
+      render: (row) => (
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <TableButton variant={row.isActive ? 'red' : 'green'} onClick={() => toggleActive(row)}>
+            {row.isActive ? 'Deactivate' : 'Activate'}
+          </TableButton>
+        </div>
+      ),
+    },
+  ];
 
   const filtered = useMemo(() => {
     if (!search) return classifications;
@@ -91,13 +109,6 @@ export function ClassificationsTable() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  function toggleActive(classification: AccountClassification) {
-    const mutation = classification.isActive ? deactivateClassification : activateClassification;
-    mutation.mutate(classification.id, {
-      onError: (error) => toast.error(extractError(error)),
-    });
-  }
 
   return (
     <>
@@ -112,13 +123,6 @@ export function ClassificationsTable() {
           setPage(1);
         }}
         actionButton={{ label: 'Add Classification', onClick: () => setPanelOpen(true) }}
-        rowActions={(row) => [
-          {
-            label: row.isActive ? 'Deactivate' : 'Activate',
-            onClick: () => toggleActive(row),
-            danger: row.isActive,
-          },
-        ]}
         onRowClick={(row) =>
           router.push(`/${tenantSlug}/accounting/settings/classifications/${row.id}`)
         }

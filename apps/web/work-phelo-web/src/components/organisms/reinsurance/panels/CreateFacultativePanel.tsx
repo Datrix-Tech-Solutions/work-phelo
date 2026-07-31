@@ -30,7 +30,12 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
 
   const { mutateAsync: createFacultative } = useCreateFacultative();
   const { data: allRiskTypes = [] } = useRiskTypes();
-  const { data: generatedReference } = useNextFacultativeReference(isOpen);
+  const {
+    data: generatedReference,
+    isError: isReferenceError,
+    isFetching: isReferenceFetching,
+    refetch: refetchReference,
+  } = useNextFacultativeReference(isOpen);
 
   useEffect(() => {
     if (isOpen && generatedReference) {
@@ -85,18 +90,33 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
       onClose={handleClose}
       title="Facultative Placement Slip"
       footer={
-        <div className="flex justify-end gap-3">
+        <div className="flex items-center justify-end gap-3">
+          {isReferenceError && (
+            <p className="mr-auto text-sm text-red-600">
+              Couldn&apos;t generate a reference number
+            </p>
+          )}
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit(onSubmit)}
-            isLoading={isSubmitting}
-            disabled={!generatedReference}
-            loadingText="Saving…"
-          >
-            Save
-          </Button>
+          {isReferenceError ? (
+            <Button
+              onClick={() => refetchReference()}
+              isLoading={isReferenceFetching}
+              loadingText="Retrying…"
+            >
+              Retry
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit(onSubmit)}
+              isLoading={isSubmitting}
+              disabled={!generatedReference}
+              loadingText="Saving…"
+            >
+              Save
+            </Button>
+          )}
         </div>
       }
     >

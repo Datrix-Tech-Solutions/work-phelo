@@ -6,6 +6,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import { CreateProjectDto } from '@/types/hr';
@@ -137,14 +138,19 @@ export function CreateProjectPanel({
         />
       </div>
 
-      <FormField
-        label="Budget (GHS)"
-        registration={register('budget', {
-          min: { value: 0, message: 'Budget must be a positive number' },
-        })}
-        error={errors.budget}
-        type="number"
-        placeholder="e.g. 50000"
+      <Controller
+        name="budget"
+        control={control}
+        rules={{ min: { value: 0, message: 'Budget must be a positive number' } }}
+        render={({ field }) => (
+          <NumberField
+            label="Budget (GHS)"
+            value={field.value ? Number(field.value) : 0}
+            onChange={(n) => field.onChange(String(n))}
+            error={errors.budget?.message}
+            placeholder="e.g. 50000"
+          />
+        )}
       />
 
       <Controller

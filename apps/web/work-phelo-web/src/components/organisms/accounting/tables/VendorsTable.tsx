@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { AddVendorPanel } from '@/components/organisms/accounting/panels/AddVendorPanel';
@@ -47,13 +48,13 @@ export function VendorsTable() {
       {
         key: 'legalName',
         label: 'Vendor Name',
-        width: '1fr',
+        width: 'minmax(150px, 1fr)',
         render: (row) => <span className="font-medium text-gray-900">{row.legalName}</span>,
       },
       {
         key: 'primaryContactName',
         label: 'Contact Person',
-        width: '1fr',
+        width: 'minmax(150px, 1fr)',
         render: (row) => (
           <span className="text-gray-700 text-sm">{row.primaryContactName ?? '—'}</span>
         ),
@@ -61,7 +62,7 @@ export function VendorsTable() {
       {
         key: 'email',
         label: 'Email',
-        width: '1fr',
+        width: 'minmax(100px, 0.7fr)',
         render: (row) => <span className="text-gray-600 text-sm">{row.email ?? '—'}</span>,
       },
       {
@@ -73,7 +74,7 @@ export function VendorsTable() {
       {
         key: 'balance',
         label: 'Outstanding Balance',
-        width: '1fr',
+        width: '150px',
         render: (row) => (
           <span className="text-sm text-gray-700">
             {fmtBalance(row.balance.baseBalance, baseCurrency ?? row.currency)}

@@ -39,9 +39,7 @@ export function useCreateRiskClass() {
       const res = await api.post<RiskClass>(BASE, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RISK_CLASSES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RISK_CLASSES_KEY }),
   });
 }
 
@@ -52,9 +50,7 @@ export function useUpdateRiskClass() {
       const res = await api.patch<RiskClass>(`${BASE}/${id}`, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RISK_CLASSES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RISK_CLASSES_KEY }),
   });
 }
 
@@ -64,8 +60,6 @@ export function useDeleteRiskClass() {
     mutationFn: async (id: string) => {
       await api.delete(`${BASE}/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RISK_CLASSES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RISK_CLASSES_KEY }),
   });
 }

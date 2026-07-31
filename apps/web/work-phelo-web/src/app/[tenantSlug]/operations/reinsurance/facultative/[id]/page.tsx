@@ -1,16 +1,21 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement, useForceCloseFacultative } from '@/hooks';
+import {
+  useFacultativePlacement,
+  useForceCloseFacultative,
+  usePlacementEndorsements,
+} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { isEffectivelyClosed } from '@/lib/reinsurance/placementStatus';
+import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
 import {
   FacultativeOverview,
   PaymentStatus,
@@ -25,12 +30,6 @@ import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
 
-const TABS = [
-  { key: 'distribution', label: 'Distribution List' },
-  { key: 'closings', label: 'Placement Closings' },
-  { key: 'endorsement', label: 'Endorsement' },
-];
-
 export default function FacultativeDetailPage({
   params,
 }: {
@@ -39,36 +38,37 @@ export default function FacultativeDetailPage({
   const { tenantSlug, id } = use(params);
   const searchParams = useSearchParams();
   const fromClosing = searchParams.get('from') === 'closing';
+  const tabParam = searchParams.get('tab');
   const { data: placement, isLoading } = useFacultativePlacement(id);
+  const { data: endorsements = [] } = usePlacementEndorsements(placement?.id ?? '');
+  const pendingEndorsementCount = endorsements.filter(
+    (e) => !TERMINAL_ENDORSEMENT_STATUSES.includes(e.status),
+  ).length;
   const forceClose = useForceCloseFacultative(id);
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
+  const [activeTab, setActiveTab] = useState<FacultativeTab>(
+    tabParam === 'endorsement' ? 'endorsement' : 'distribution',
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [endorsementOpen, setEndorsementOpen] = useState(false);
   const [forceCloseOpen, setForceCloseOpen] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding Payment');
   const canForceClose = placement?.status === 'CLOSING';
+  const hasEndorsement = endorsements.some((e) => e.status !== 'VOID');
   const showReopen =
     !!placement &&
     isEffectivelyClosed(placement) &&
     placement.status !== 'DECLINED' &&
     placement.status !== 'CANCELLED';
 
-  const allReinsurersResolved = useMemo(() => {
-    const reinsurers =
-      placement?.participants.filter(
-        (p) => p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER',
-      ) ?? [];
-    return (
-      reinsurers.length > 0 &&
-      reinsurers.every((p) => p.status === 'CLOSED' || p.status === 'DECLINED')
-    );
-  }, [placement?.participants]);
+  const shouldDefaultToClosings = placement?.status === 'CLOSING' || placement?.status === 'CLOSED';
 
-  const [prevAllResolved, setPrevAllResolved] = useState(false);
-  if (allReinsurersResolved !== prevAllResolved) {
-    setPrevAllResolved(allReinsurersResolved);
-    if (allReinsurersResolved) {
+  const [prevShouldDefaultToClosings, setPrevShouldDefaultToClosings] = useState(false);
+  if (shouldDefaultToClosings !== prevShouldDefaultToClosings) {
+    setPrevShouldDefaultToClosings(shouldDefaultToClosings);
+    // Don't clobber an explicit `?tab=endorsement` deep link (e.g. from creating an
+    // endorsement on the Facultative list) with the closing-tab default.
+    if (shouldDefaultToClosings && tabParam !== 'endorsement') {
       setActiveTab('closings');
     }
   }
@@ -106,8 +106,16 @@ export default function FacultativeDetailPage({
                 Endorse Policy
               </Button>
             )}
-            {paymentStatus === 'Outstanding' && (
-              <Button size="sm" onClick={() => setEditOpen(true)}>
+            {paymentStatus === 'Outstanding Payment' && !(showReopen && hasEndorsement) && (
+              <Button
+                size="sm"
+                onClick={() => setEditOpen(true)}
+                className={
+                  showReopen
+                    ? 'bg-green-600 border-green-600 hover:bg-green-700 hover:border-green-700 focus:ring-green-600'
+                    : ''
+                }
+              >
                 {showReopen ? 'Reopen Offer' : 'Edit'}
               </Button>
             )}
@@ -138,7 +146,11 @@ export default function FacultativeDetailPage({
             {/* Tabs */}
             <div className="flex flex-col">
               <TabBar
-                tabs={TABS}
+                tabs={[
+                  { key: 'distribution', label: 'Distribution List' },
+                  { key: 'closings', label: 'Placement Closings' },
+                  { key: 'endorsement', label: 'Endorsement', count: pendingEndorsementCount },
+                ]}
                 activeTab={activeTab}
                 onTabChange={(t) => setActiveTab(t as FacultativeTab)}
               />
@@ -166,6 +178,7 @@ export default function FacultativeDetailPage({
           isOpen={endorsementOpen}
           placement={placement}
           onClose={() => setEndorsementOpen(false)}
+          onCreated={() => setActiveTab('endorsement')}
         />
       )}
       <Modal

@@ -1,7 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/atoms/Button';
-import { cardClass } from '@/lib/utils';
+import { cardClass, cn } from '@/lib/utils';
 
 export interface ShareBreakdownEntry {
   id: string;
@@ -17,6 +18,59 @@ interface PlacementShareBreakdownProps {
   entries: ShareBreakdownEntry[];
   onAddReinsurers: () => void;
   isAdding?: boolean;
+}
+
+interface ShareSegmentProps {
+  leftPct: number;
+  widthPct: number;
+  color: string;
+  delayMs: number;
+  roundedLeft: boolean;
+  roundedRight: boolean;
+}
+
+/**
+ * Absolutely positioned at a fixed `leftPct` (not animated) so its slot never
+ * shifts as sibling segments animate — only `width` transitions, giving a
+ * clean in-place fill instead of segments jostling each other via flex reflow.
+ * Because `leftPct` is the *final* cumulative offset, `delayMs` must cover the
+ * full duration of every prior segment's animation (not just a small stagger),
+ * otherwise this segment starts growing while an earlier one is still short of
+ * that offset, leaving a visible gap until it catches up.
+ * Own mount state per segment (rather than one shared flag on the parent) so a
+ * segment added later — a newly placed reinsurer — also grows in from 0
+ * instead of appearing already at its target width.
+ */
+function ShareSegment({
+  leftPct,
+  widthPct,
+  color,
+  delayMs,
+  roundedLeft,
+  roundedRight,
+}: ShareSegmentProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <div
+      style={{
+        left: `${leftPct}%`,
+        width: mounted ? `${widthPct}%` : '0%',
+        backgroundColor: color,
+        transitionDelay: `${delayMs}ms`,
+      }}
+      className={cn(
+        'absolute inset-y-0 transition-all duration-500',
+        roundedLeft && 'rounded-l-full',
+        roundedRight && 'rounded-r-full',
+      )}
+    />
+  );
 }
 
 export function PlacementShareBreakdown({
@@ -40,9 +94,11 @@ export function PlacementShareBreakdown({
             <span className="font-semibold text-gray-600">{total}%</span>
           </p>
         </div>
-        <Button size="sm" onClick={onAddReinsurers} isLoading={isAdding}>
-          Add Reinsurers
-        </Button>
+        {availablePct > 0 && (
+          <Button size="sm" onClick={onAddReinsurers} isLoading={isAdding}>
+            Add Reinsurers
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -54,17 +110,21 @@ export function PlacementShareBreakdown({
           </span>
         </div>
 
-        <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
-          {placedEntries.map((entry) => (
-            <div
-              key={entry.id}
-              style={{
-                width: total > 0 ? `${(entry.value / total) * 100}%` : '0%',
-                backgroundColor: entry.color,
-              }}
-              className="h-full transition-all duration-500"
-            />
-          ))}
+        <div className="relative h-2.5 rounded-full bg-gray-100 overflow-hidden">
+          {placedEntries.map((entry, index) => {
+            const priorValue = placedEntries.slice(0, index).reduce((sum, e) => sum + e.value, 0);
+            return (
+              <ShareSegment
+                key={entry.id}
+                leftPct={total > 0 ? (priorValue / total) * 100 : 0}
+                widthPct={total > 0 ? (entry.value / total) * 100 : 0}
+                color={entry.color}
+                delayMs={index * 500}
+                roundedLeft={index === 0}
+                roundedRight={index === placedEntries.length - 1}
+              />
+            );
+          })}
         </div>
 
         <p className="text-xs text-gray-400">

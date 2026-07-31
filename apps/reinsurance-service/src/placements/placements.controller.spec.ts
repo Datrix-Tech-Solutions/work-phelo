@@ -93,6 +93,7 @@ describe('PlacementsController', () => {
     create: jest.fn(),
     update: jest.fn(),
     changeStatus: jest.fn(),
+    reinvite: jest.fn(),
     delete: jest.fn(),
   };
   const endorsementClosingsService = {
@@ -100,6 +101,7 @@ describe('PlacementsController', () => {
     findOne: jest.fn(),
     create: jest.fn(),
     validateAndConfirm: jest.fn(),
+    forceClose: jest.fn(),
     changeStatus: jest.fn(),
   };
   const notesService = {
@@ -230,9 +232,11 @@ describe('PlacementsController', () => {
     ['createEndorsementParticipant', PlacementPermission.EDIT],
     ['updateEndorsementParticipant', PlacementPermission.EDIT],
     ['changeEndorsementParticipantStatus', PlacementPermission.EDIT],
+    ['reinviteEndorsementParticipant', PlacementPermission.EDIT],
     ['deleteEndorsementParticipant', PlacementPermission.EDIT],
     ['createEndorsementClosing', PlacementPermission.EDIT],
     ['validateAndConfirmEndorsementParticipant', PlacementPermission.EDIT],
+    ['forceCloseEndorsement', PlacementPermission.EDIT],
     ['changeEndorsementClosingStatus', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
     ['forceClose', PlacementPermission.EDIT],
@@ -614,6 +618,12 @@ describe('PlacementsController', () => {
       { status: PlacementEndorsementParticipantStatus.OFFER_SENT },
       { user } as never,
     );
+    await controller.reinviteEndorsementParticipant(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      { user } as never,
+    );
     await controller.deleteEndorsementParticipant(
       'placement-1',
       'endorsement-1',
@@ -642,6 +652,12 @@ describe('PlacementsController', () => {
       expect.objectContaining({
         status: PlacementEndorsementParticipantStatus.OFFER_SENT,
       }),
+    );
+    expect(endorsementParticipantsService.reinvite).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
     );
     expect(endorsementParticipantsService.delete).toHaveBeenCalledWith(
       user,
@@ -703,6 +719,9 @@ describe('PlacementsController', () => {
       'endorsement-participant-1',
       { user } as never,
     );
+    await controller.forceCloseEndorsement('placement-1', 'endorsement-1', {
+      user,
+    } as never);
 
     expect(endorsementClosingsService.create).toHaveBeenCalledWith(
       user,
@@ -722,6 +741,11 @@ describe('PlacementsController', () => {
       'placement-1',
       'endorsement-1',
       'endorsement-participant-1',
+    );
+    expect(endorsementClosingsService.forceClose).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
     );
   });
 

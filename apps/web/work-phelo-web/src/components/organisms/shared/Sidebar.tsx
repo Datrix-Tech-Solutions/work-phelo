@@ -315,10 +315,10 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
       className={cn(
         'bg-(--sidebar-bg,var(--module-btn-bg,var(--color-brand))) border-r border-(--sidebar-border,rgba(255,255,255,0.1)) shadow-lg flex flex-col shrink-0 overflow-hidden',
         // Mobile: absolute drawer that slides over content (below the top nav)
-        'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
+        'absolute inset-y-0 left-0 z-40 w-60 transition-transform duration-200',
         // Desktop: static in flex flow with width animation (spring curve)
         'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-350 md:ease-[cubic-bezier(0.34,1.8,0.64,1)]',
-        effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-56',
+        effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-50',
       )}
     >
       <nav className="flex-1 overflow-y-auto pt-10 pb-2 flex flex-col">

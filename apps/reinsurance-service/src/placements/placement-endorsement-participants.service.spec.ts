@@ -392,4 +392,152 @@ describe('PlacementEndorsementParticipantsService', () => {
       where: { id: 'endorsement-participant-1' },
     });
   });
+
+  it('re-invites a declined participant by creating a new invitation attempt', async () => {
+    prisma.placementEndorsementParticipant.findFirst
+      .mockResolvedValueOnce({
+        ...participant,
+        status: PlacementEndorsementParticipantStatus.DECLINED,
+        endorsement,
+        notes: 'No market appetite',
+      })
+      .mockResolvedValueOnce(null);
+    prisma.placementEndorsementParticipant.create.mockResolvedValue({
+      ...participant,
+      id: 'endorsement-participant-2',
+      status: PlacementEndorsementParticipantStatus.INVITED,
+      signedLinePercent: null,
+    });
+
+    const result = await service.reinvite(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+    );
+
+    expect(result.id).toBe('endorsement-participant-2');
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      }),
+    );
+    const duplicateArgs =
+      firstCallArg<Prisma.PlacementEndorsementParticipantFindFirstArgs>(
+        prisma.placementEndorsementParticipant.findFirst,
+      );
+    expect(duplicateArgs.where).toMatchObject({
+      id: 'endorsement-participant-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      endorsementId: 'endorsement-1',
+    });
+    const createArgs =
+      firstCallArg<Prisma.PlacementEndorsementParticipantCreateArgs>(
+        prisma.placementEndorsementParticipant.create,
+      );
+    expect(createArgs.data).toMatchObject({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      endorsementId: 'endorsement-1',
+      originalParticipantId: 'participant-1',
+      counterpartyId: 'reinsurer-1',
+      status: PlacementEndorsementParticipantStatus.INVITED,
+      sharePercent: participant.sharePercent,
+      signedLinePercent: null,
+      createdByUserId: 'user-1',
+    });
+    expect(String(createArgs.data.notes)).toContain(
+      'Re-invited after declined attempt endorsement-participant-1',
+    );
+    expect(
+      prisma.placementEndorsementParticipant.update,
+    ).not.toHaveBeenCalled();
+    expect(
+      prisma.placementEndorsementParticipant.delete,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('rejects re-inviting an accepted participant', async () => {
+    prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+      ...participant,
+      status: PlacementEndorsementParticipantStatus.ACCEPTED,
+      endorsement,
+    });
+
+    await expect(
+      service.reinvite(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(
+      prisma.placementEndorsementParticipant.create,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('rejects re-invite when another active attempt already exists', async () => {
+    prisma.placementEndorsementParticipant.findFirst
+      .mockResolvedValueOnce({
+        ...participant,
+        status: PlacementEndorsementParticipantStatus.DECLINED,
+        endorsement,
+      })
+      .mockResolvedValueOnce({ id: 'active-attempt' });
+
+    await expect(
+      service.reinvite(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(
+      prisma.placementEndorsementParticipant.create,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('retries re-invite once when a serializable transaction conflict is reported', async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError(
+      'Transaction conflict',
+      {
+        code: 'P2034',
+        clientVersion: 'test',
+      },
+    );
+    prisma.$transaction
+      .mockRejectedValueOnce(conflict)
+      .mockImplementationOnce((callback: (tx: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      );
+    prisma.placementEndorsementParticipant.findFirst
+      .mockResolvedValueOnce({
+        ...participant,
+        status: PlacementEndorsementParticipantStatus.DECLINED,
+        endorsement,
+      })
+      .mockResolvedValueOnce(null);
+    prisma.placementEndorsementParticipant.create.mockResolvedValue({
+      ...participant,
+      id: 'endorsement-participant-2',
+      status: PlacementEndorsementParticipantStatus.INVITED,
+      signedLinePercent: null,
+    });
+
+    await service.reinvite(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(prisma.placementEndorsementParticipant.create).toHaveBeenCalledTimes(
+      1,
+    );
+  });
 });

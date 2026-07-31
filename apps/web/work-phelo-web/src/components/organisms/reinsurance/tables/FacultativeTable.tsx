@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
@@ -16,19 +17,21 @@ import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panel
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { PartialEditFacultativePanel } from '@/components/organisms/reinsurance/panels/PartialEditFacultativePanel';
 import { RenewFacultativePanel } from '@/components/organisms/reinsurance/panels/RenewFacultativePanel';
-import { Facultative, PlacementPayment } from '@/types/reinsurance';
+import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
+import { Facultative, PlacementEndorsement, PlacementPayment } from '@/types/reinsurance';
 import {
+  endorsementKey,
+  fetchPlacementFinancialPosition,
+  placementFinancialPositionKey,
   useArchivedFacultatives,
-  useCedants,
   useDeleteFacultative,
   useFacultatives,
   useForceCloseFacultative,
-  usePlacementPayments,
+  usePlacementFinancialPosition,
   useRestoreFacultative,
   useCurrentTenantUsers,
 } from '@/hooks';
 import { TenantUser } from '@/types/tenant';
-import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   acceptedPercentFor,
@@ -94,33 +97,21 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Paid: 'text-[10px] text-green-600 font-medium',
 };
 
-function netPremiumFor(row: Facultative, deductionRate: number): number {
-  const facPremium =
-    row.premium != null && row.facultativeOffer != null
-      ? (row.facultativeOffer / 100) * row.premium
-      : 0;
-  const netPremium = row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
-  return netPremium - facPremium * deductionRate;
-}
-
-function useDeductionRateFor(cedantId: string): number {
-  const { data: cedants = [] } = useCedants();
-  return isForeignCedant(cedants.find((c) => c.id === cedantId))
-    ? FOREIGN_CEDANT_DEDUCTION_RATE
-    : 0;
+/** Derives Outstanding/Part Payment/Paid from the same authoritative financial-position
+ *  figures the Premiums page and placement Details page use — keeps all three surfaces
+ *  agreeing on payment status instead of each recomputing net premium/paid differently. */
+function statusFromPosition(due: number, paid: number, outstanding: number): PaymentStatus {
+  if (due > 0 && outstanding <= 0.0001) return 'Paid';
+  if (paid > 0) return 'Part Payment';
+  return 'Outstanding';
 }
 
 function PaymentStatusCell({ placement }: { placement: Facultative }) {
-  const { data: payments = [] } = usePlacementPayments(placement.id);
-  const deductionRate = useDeductionRateFor(placement.cedant.id);
-  const netPremium = netPremiumFor(placement, deductionRate);
-  const paid = payments
-    .filter((p) => p.status === 'RECORDED')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
-
-  let paymentStatus: PaymentStatus = 'Outstanding';
-  if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
-  else if (paid > 0) paymentStatus = 'Part Payment';
+  const { data: position } = usePlacementFinancialPosition(placement.id);
+  const due = position?.cedant.currentObligation ?? 0;
+  const paid = position?.cedant.netSettled ?? 0;
+  const outstanding = position?.cedant.outstanding ?? 0;
+  const paymentStatus = statusFromPosition(due, paid, outstanding);
 
   return (
     <div className="flex flex-col gap-1">
@@ -266,6 +257,7 @@ export function FacultativeTable({
   const [reopenTarget, setReopenTarget] = useState<Facultative | null>(null);
   const [partialEditTarget, setPartialEditTarget] = useState<Facultative | null>(null);
   const [renewTarget, setRenewTarget] = useState<Facultative | null>(null);
+  const [endorseTarget, setEndorseTarget] = useState<Facultative | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
   const [forceCloseTarget, setForceCloseTarget] = useState<Facultative | null>(null);
 
@@ -274,7 +266,6 @@ export function FacultativeTable({
     enabled: tab === 'archived',
   });
   const { data: tenantUsers = [] } = useCurrentTenantUsers({ enabled: tab === 'archived' });
-  const { data: cedants = [] } = useCedants();
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
   const { mutate: restorePlacement, isPending: isRestoring } = useRestoreFacultative();
   const { mutate: forceClosePlacement, isPending: isForceClosing } = useForceCloseFacultative(
@@ -286,15 +277,12 @@ export function FacultativeTable({
 
   const closingRows = useMemo(() => allRows.filter(isEffectivelyClosed), [allRows]);
 
-  const paymentQueries = useQueries({
+  const positionQueries = useQueries({
     queries:
       tab === 'closing'
         ? closingRows.map((row) => ({
-            queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
-            queryFn: async () => {
-              const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
-              return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-            },
+            queryKey: placementFinancialPositionKey(row.id),
+            queryFn: () => fetchPlacementFinancialPosition(row.id),
           }))
         : [],
   });
@@ -302,21 +290,14 @@ export function FacultativeTable({
   const paymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
     closingRows.forEach((row, i) => {
-      const payments = paymentQueries[i]?.data ?? [];
-      const deductionRate = isForeignCedant(cedants.find((c) => c.id === row.cedant.id))
-        ? FOREIGN_CEDANT_DEDUCTION_RATE
-        : 0;
-      const netPremium = netPremiumFor(row, deductionRate);
-      const paid = payments
-        .filter((p) => p.status === 'RECORDED')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      let status: PaymentStatus = 'Outstanding';
-      if (netPremium > 0 && paid >= netPremium) status = 'Paid';
-      else if (paid > 0) status = 'Part Payment';
-      map.set(row.id, status);
+      const position = positionQueries[i]?.data;
+      const due = position?.cedant.currentObligation ?? 0;
+      const paid = position?.cedant.netSettled ?? 0;
+      const outstanding = position?.cedant.outstanding ?? 0;
+      map.set(row.id, statusFromPosition(due, paid, outstanding));
     });
     return map;
-  }, [closingRows, paymentQueries, cedants]);
+  }, [closingRows, positionQueries]);
 
   const filtered = useMemo(() => {
     let rows = allRows;
@@ -401,25 +382,59 @@ export function FacultativeTable({
     return map;
   }, [paged, openPaymentQueries, tab]);
 
+  const openPositionQueries = useQueries({
+    queries:
+      tab === 'placements'
+        ? paged.map((row) => ({
+            queryKey: placementFinancialPositionKey(row.id),
+            queryFn: () => fetchPlacementFinancialPosition(row.id),
+          }))
+        : [],
+  });
+
   const openPaymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
     if (tab !== 'placements') return map;
     paged.forEach((row, i) => {
-      const payments = openPaymentQueries[i]?.data ?? [];
-      const deductionRate = isForeignCedant(cedants.find((c) => c.id === row.cedant.id))
-        ? FOREIGN_CEDANT_DEDUCTION_RATE
-        : 0;
-      const netPremium = netPremiumFor(row, deductionRate);
-      const paid = payments
-        .filter((p) => p.status === 'RECORDED')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      let status: PaymentStatus = 'Outstanding';
-      if (netPremium > 0 && paid >= netPremium) status = 'Paid';
-      else if (paid > 0) status = 'Part Payment';
-      map.set(row.id, status);
+      const position = openPositionQueries[i]?.data;
+      const due = position?.cedant.currentObligation ?? 0;
+      const paid = position?.cedant.netSettled ?? 0;
+      const outstanding = position?.cedant.outstanding ?? 0;
+      map.set(row.id, statusFromPosition(due, paid, outstanding));
     });
     return map;
-  }, [paged, openPaymentQueries, tab, cedants]);
+  }, [paged, openPositionQueries, tab]);
+
+  // Reopen Offer is only valid once no endorsement has been made on the placement —
+  // reopening after an endorsement would let the original offer diverge from what's
+  // since been endorsed. Excludes VOID endorsements, same as EndorsedReferencePill.
+  const endorsementQueries = useQueries({
+    queries:
+      tab === 'archived'
+        ? []
+        : paged.map((row) => ({
+            queryKey: endorsementKey(row.id),
+            queryFn: async () => {
+              const res = await api.get(
+                `/operations/reinsurance/placements/${row.id}/endorsements`,
+              );
+              return (res.data?.items ?? res.data ?? []) as PlacementEndorsement[];
+            },
+          })),
+  });
+
+  const hasEndorsementMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    if (tab === 'archived') return map;
+    paged.forEach((row, i) => {
+      const endorsements = endorsementQueries[i]?.data ?? [];
+      map.set(
+        row.id,
+        endorsements.some((e) => e.status !== 'VOID'),
+      );
+    });
+    return map;
+  }, [paged, endorsementQueries, tab]);
 
   const columns = useMemo<Column<Facultative>[]>(() => {
     const userNameById = new Map(
@@ -526,11 +541,16 @@ export function FacultativeTable({
       tab === 'closing' ? '?from=closing' : ''
     }`;
 
-    const renewAction: RowAction = {
-      label: 'Renew Offer',
-      onClick: () => setRenewTarget(row),
-      variant: 'success',
-    };
+    // Renewing only makes sense once an offer has left the draft/open stages; endorsing only
+    // applies to an offer that has actually closed (a policy is in force to amend).
+    const rowIsClosed = isEffectivelyClosed(row);
+    const renewAction: RowAction | null = rowIsClosed
+      ? { label: 'Renew Offer', onClick: () => setRenewTarget(row), variant: 'success' }
+      : null;
+    const endorseAction: RowAction | null =
+      row.status === 'CLOSED'
+        ? { label: 'Endorse Policy', onClick: () => setEndorseTarget(row) }
+        : null;
 
     if (tab === 'closing' && row.status !== 'DECLINED' && row.status !== 'CANCELLED') {
       const paymentStatus = paymentStatusMap.get(row.id) ?? 'Outstanding';
@@ -543,22 +563,28 @@ export function FacultativeTable({
         return [
           { label: 'View Offer', onClick: () => router.push(detailUrl) },
           partialEditAction,
-          renewAction,
+          ...(endorseAction ? [endorseAction] : []),
+          ...(renewAction ? [renewAction] : []),
         ];
       }
 
+      const hasEndorsement = hasEndorsementMap.get(row.id) ?? false;
+
       return [
         { label: 'View Offer Details', onClick: () => router.push(detailUrl) },
-        { label: 'Reopen Offer', onClick: () => setReopenTarget(row) },
+        ...(hasEndorsement ? [] : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
         partialEditAction,
         { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
-        renewAction,
+        ...(endorseAction ? [endorseAction] : []),
+        ...(renewAction ? [renewAction] : []),
       ];
     }
 
     if (tab === 'placements') {
       const paymentStatus = openPaymentStatusMap.get(row.id) ?? 'Outstanding';
       const canArchive = paymentStatus === 'Outstanding';
+      const isPartiallyClosed = row.status === 'PARTIALLY_PLACED' || row.status === 'CLOSING';
+      const hasEndorsement = hasEndorsementMap.get(row.id) ?? false;
       const forceCloseAction: RowAction | null =
         row.status === 'CLOSING'
           ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
@@ -566,16 +592,23 @@ export function FacultativeTable({
       const archiveAction: RowAction | null = canArchive
         ? { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }
         : null;
-      const editAction: RowAction = hasPaymentMap.get(row.id)
-        ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
-        : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
+      const reopenAction: RowAction | null =
+        isPartiallyClosed && !hasEndorsement
+          ? { label: 'Reopen Offer', onClick: () => setReopenTarget(row) }
+          : null;
+      const editAction: RowAction =
+        isPartiallyClosed || hasPaymentMap.get(row.id)
+          ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
+          : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
 
+      // Rows in this tab are, by definition, not yet effectively closed (draft/open statuses),
+      // so neither Renew nor Endorse Policy applies here.
       return [
         { label: 'View Offer', onClick: () => router.push(detailUrl) },
+        ...(reopenAction ? [reopenAction] : []),
         editAction,
         ...(forceCloseAction ? [forceCloseAction] : []),
         ...(archiveAction ? [archiveAction] : []),
-        renewAction,
       ];
     }
 
@@ -588,7 +621,8 @@ export function FacultativeTable({
       ...(canArchiveFallback
         ? [{ label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }]
         : []),
-      renewAction,
+      ...(endorseAction ? [endorseAction] : []),
+      ...(renewAction ? [renewAction] : []),
     ];
   };
 
@@ -700,6 +734,19 @@ export function FacultativeTable({
           isOpen={!!renewTarget}
           placement={renewTarget}
           onClose={() => setRenewTarget(null)}
+        />
+      )}
+
+      {endorseTarget && (
+        <EndorsementPanel
+          isOpen={!!endorseTarget}
+          placement={endorseTarget}
+          onClose={() => setEndorseTarget(null)}
+          onCreated={() =>
+            router.push(
+              `/${tenantSlug}/operations/reinsurance/facultative/${endorseTarget.id}?tab=endorsement`,
+            )
+          }
         />
       )}
 

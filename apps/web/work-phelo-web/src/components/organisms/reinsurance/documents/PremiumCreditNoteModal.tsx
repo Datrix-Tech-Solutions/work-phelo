@@ -99,12 +99,12 @@ export function PremiumCreditNoteModal({
 
   const creditAfterContent = (
     <div className="mt-10 flex flex-col gap-6 border-t border-gray-200 pt-6">
-      <p className="text-sm text-gray-700 italic text-center">
+      <p className="text-base text-gray-700 italic text-center">
         Thank you for your continued partnership!
       </p>
 
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-gray-500">Signature / Stamp</span>
+        <span className="text-sm text-gray-500">Signature / Stamp</span>
         <Image
           src="/signature.png"
           alt="Signature"
@@ -132,34 +132,34 @@ export function PremiumCreditNoteModal({
       onClose={onClose}
       afterContent={creditAfterContent}
     >
-      <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-4 text-base">
         {/* Credit No / Date row */}
         <div className="flex items-start justify-between">
           <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Credit No.</span>
+            <span className="text-sm text-gray-400 uppercase tracking-wide">Credit No.</span>
             <p className="font-semibold text-gray-900">{displayPolicyNumber(policyNumber)}</p>
           </div>
           <div className="text-right">
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Date</span>
+            <span className="text-sm text-gray-400 uppercase tracking-wide">Date</span>
             <p className="font-semibold text-gray-900">{today()}</p>
           </div>
         </div>
 
         {/* Pay To */}
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-gray-400 uppercase tracking-wide">Pay To</span>
+          <span className="text-sm text-gray-400 uppercase tracking-wide">Pay To</span>
           <p className="font-semibold text-gray-900">{reinsurerCompany}</p>
           {reinsurerLocation && <p className="text-gray-500">{reinsurerLocation}</p>}
         </div>
 
         {/* Table */}
-        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-sm">
+        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-base">
           <tbody>
             {/* Description heading */}
             <tr className="bg-blue-900">
               <td
                 colSpan={2}
-                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
+                className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
               >
                 Description
               </td>
@@ -169,7 +169,7 @@ export function PremiumCreditNoteModal({
               { label: 'Reinsured', value: cedant.name },
               { label: 'Policy Type', value: classOfBusiness ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -184,14 +184,14 @@ export function PremiumCreditNoteModal({
               },
               { label: 'Currency', value: currency ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
             ))}
 
             {offerDetailRows.map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -201,7 +201,7 @@ export function PremiumCreditNoteModal({
             <tr className="bg-blue-900">
               <td
                 colSpan={2}
-                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-y border-blue-900"
+                className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-y border-blue-900"
               >
                 Particulars
               </td>
@@ -234,7 +234,7 @@ export function PremiumCreditNoteModal({
                 bold: true,
               },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td
                   className={`py-2 px-4 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
                 >
@@ -252,9 +252,9 @@ export function PremiumCreditNoteModal({
 
         {description && (
           <div>
-            <p className="text-xs font-semibold text-gray-400  tracking-wide mb-1">Kindly Refer:</p>
+            <p className="text-sm font-semibold text-gray-400  tracking-wide mb-1">Kindly Refer:</p>
             <div
-              className="text-sm text-gray-700"
+              className="text-base text-gray-700"
               dangerouslySetInnerHTML={{ __html: description }}
             />
           </div>

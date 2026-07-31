@@ -41,6 +41,12 @@ export function MonthPicker({
   disablePast = false,
 }: MonthPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  /* keeps the dropdown mounted through its closing transition — see showDropdown/expanded below */
+  const [showDropdown, setShowDropdown] = useState(false);
+  /* drives the actual grid-rows/opacity styles, one frame behind `isOpen` on the
+     way in — mounting already-expanded gives the browser nothing to transition
+     from, so it just pops in instead of animating */
+  const [expanded, setExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { pos: dropdownPos } = useDropdownPosition(isOpen, containerRef);
@@ -49,11 +55,32 @@ export function MonthPicker({
   const currentMonth = today.getMonth();
 
   useEffect(() => {
+    if (!showDropdown || !isOpen) return;
+    const raf = requestAnimationFrame(() => setExpanded(true));
+    return () => cancelAnimationFrame(raf);
+  }, [showDropdown, isOpen]);
+
+  const openDropdown = () => {
+    setIsOpen(true);
+    setShowDropdown(true);
+  };
+
+  const closeDropdown = () => {
+    setIsOpen(false);
+    setExpanded(false);
+  };
+
+  /* keep the dropdown mounted until its closing transition finishes */
+  const handleDropdownTransitionEnd = (e: React.TransitionEvent) => {
+    if (!isOpen && e.propertyName === 'grid-template-rows') setShowDropdown(false);
+  };
+
+  useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
       if (containerRef.current?.contains(target)) return;
       if (dropdownRef.current?.contains(target)) return;
-      setIsOpen(false);
+      closeDropdown();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -84,7 +111,7 @@ export function MonthPicker({
 
   const handleSelect = (monthValue: string) => {
     onChange(monthValue);
-    setIsOpen(false);
+    closeDropdown();
   };
 
   const goToPrevYear = () => setViewYear((y) => y - 1);
@@ -97,92 +124,109 @@ export function MonthPicker({
 
   return (
     <div className={cn('relative', className)} ref={containerRef}>
-      {label && <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>}
+      {label && (
+        <label className="block truncate text-sm font-bold text-gray-900 mb-1.5" title={label}>
+          {label}
+        </label>
+      )}
 
       <button
         type="button"
         onClick={() => {
           if (disabled) return;
-          setIsOpen(!isOpen);
+          if (isOpen) closeDropdown();
+          else openDropdown();
         }}
         disabled={disabled}
         className={cn(
-          'w-full flex items-center justify-between px-4 py-3 border border-gray-300 rounded-input bg-white text-left text-sm',
-          'focus:outline-none focus:ring-1 focus:ring-brand',
+          'w-full flex items-center justify-between px-2 py-2 border rounded-input bg-transparent text-left text-sm transition-colors',
+          'focus:outline-none',
+          isOpen
+            ? 'border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
+            : 'border-(--input-border,var(--color-gray-400))',
           disabled && 'opacity-60 cursor-not-allowed',
         )}
       >
         <span className={selectedDate ? 'text-gray-900' : 'text-gray-400'}>{displayText}</span>
-        <Calendar className="w-5 h-5 text-gray-400" />
+        <Calendar className="w-4 h-4 text-gray-400" />
       </button>
 
       {/* Portaled to <body> so the dropdown overlays in place instead of pushing the rest of the form down. */}
-      {isOpen &&
+      {showDropdown &&
         typeof document !== 'undefined' &&
         createPortal(
           <div
             ref={dropdownRef}
+            onTransitionEnd={handleDropdownTransitionEnd}
             style={{
               position: 'fixed',
               top: dropdownPos.top,
               bottom: dropdownPos.bottom,
               left: dropdownPos.left,
               width: dropdownPos.width,
-              maxHeight: dropdownPos.maxHeight,
+              gridTemplateRows: expanded ? '1fr' : '0fr',
+              opacity: expanded ? 1 : 0,
             }}
-            className={popupClass('z-50 overflow-auto py-4 px-4')}
+            className="z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
           >
-            {/* Year Header */}
-            <div className="flex items-center justify-between mb-4 px-2">
-              <button
-                onClick={goToPrevYear}
-                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+            <div className={popupClass('min-h-0 overflow-hidden')}>
+              <div
+                className="overflow-y-auto py-4 px-4"
+                style={{ maxHeight: dropdownPos.maxHeight }}
               >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="font-semibold text-gray-900">{viewYear}</span>
-              <button
-                onClick={goToNextYear}
-                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
+                {/* Year Header */}
+                <div className="flex items-center justify-between mb-4 px-2">
+                  <button
+                    onClick={goToPrevYear}
+                    className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <span className="font-semibold text-gray-900">{viewYear}</span>
+                  <button
+                    onClick={goToNextYear}
+                    className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
 
-            {/* Months Grid */}
-            <div className="grid grid-cols-3 gap-2">
-              {months.map((m) => (
-                <button
-                  key={m.value}
-                  onClick={() => !m.isPast && handleSelect(m.value)}
-                  disabled={m.isPast}
-                  className={cn(
-                    'py-3 px-4 text-sm rounded-xl transition-all',
-                    m.isPast && 'opacity-40 cursor-not-allowed',
-                    normalizedValue === m.value
-                      ? 'bg-brand text-white font-medium'
-                      : !m.isPast && 'hover:bg-gray-100 text-gray-700',
-                  )}
-                >
-                  {m.name}
-                </button>
-              ))}
-            </div>
+                {/* Months Grid */}
+                <div className="grid grid-cols-3 gap-2">
+                  {months.map((m) => (
+                    <button
+                      key={m.value}
+                      onClick={() => !m.isPast && handleSelect(m.value)}
+                      disabled={m.isPast}
+                      className={cn(
+                        'py-3 px-4 text-sm rounded-xl transition-all',
+                        m.isPast && 'opacity-40 cursor-not-allowed',
+                        normalizedValue === m.value
+                          ? 'bg-brand text-white font-medium'
+                          : !m.isPast && 'hover:bg-gray-100 text-gray-700',
+                      )}
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
 
-            {/* Quick "3 Months from now" button */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <button
-                onClick={() => {
-                  const now = new Date();
-                  const future = new Date(now.getFullYear(), now.getMonth() + 3, 1);
-                  const futureStr = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, '0')}`;
-                  onChange(futureStr);
-                  setIsOpen(false);
-                }}
-                className="w-full py-2.5 text-sm text-brand hover:bg-brand/5 rounded-xl transition-colors"
-              >
-                Set to 3 months from now
-              </button>
+                {/* Quick "3 Months from now" button */}
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={() => {
+                      const now = new Date();
+                      const future = new Date(now.getFullYear(), now.getMonth() + 3, 1);
+                      const futureStr = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, '0')}`;
+                      onChange(futureStr);
+                      closeDropdown();
+                    }}
+                    className="w-full py-2.5 text-sm text-brand hover:bg-brand/5 rounded-xl transition-colors"
+                  >
+                    Set to 3 months from now
+                  </button>
+                </div>
+              </div>
             </div>
           </div>,
           document.body,

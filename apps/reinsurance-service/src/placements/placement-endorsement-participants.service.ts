@@ -310,6 +310,108 @@ export class PlacementEndorsementParticipantsService {
     });
   }
 
+  async reinvite(
+    user: RequestUser,
+    placementId: string,
+    endorsementId: string,
+    participantId: string,
+  ): Promise<EndorsementParticipantRecord> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) =>
+            this.reinviteInTransaction(
+              tx,
+              user,
+              placementId,
+              endorsementId,
+              participantId,
+            ),
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (
+          attempt === 0 &&
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034'
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new ConflictException(
+      'Could not re-invite endorsement participant due to a concurrent update. Please retry.',
+    );
+  }
+
+  private async reinviteInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    placementId: string,
+    endorsementId: string,
+    participantId: string,
+  ): Promise<EndorsementParticipantRecord> {
+    const participant = await tx.placementEndorsementParticipant.findFirst({
+      where: {
+        id: participantId,
+        tenantId: user.tenantId,
+        placementId,
+        endorsementId,
+      },
+      include: {
+        endorsement: {
+          select: {
+            id: true,
+            tenantId: true,
+            placementId: true,
+            status: true,
+            targetPercent: true,
+          },
+        },
+      },
+    });
+    if (!participant) {
+      throw new NotFoundException(
+        'Placement endorsement participant not found',
+      );
+    }
+    this.assertEndorsementMutable(participant.endorsement);
+
+    if (participant.status !== PlacementEndorsementParticipantStatus.DECLINED) {
+      throw new ConflictException(
+        'Only declined endorsement participants can be re-invited',
+      );
+    }
+
+    await this.assertNoActiveDuplicate(
+      tx,
+      user.tenantId,
+      endorsementId,
+      participant.counterpartyId,
+      participantId,
+    );
+
+    return tx.placementEndorsementParticipant.create({
+      data: {
+        tenantId: user.tenantId,
+        placementId,
+        endorsementId,
+        originalParticipantId: participant.originalParticipantId,
+        counterpartyId: participant.counterpartyId,
+        status: PlacementEndorsementParticipantStatus.INVITED,
+        sharePercent: participant.sharePercent,
+        signedLinePercent: null,
+        notes: participant.notes
+          ? `Re-invited after declined attempt ${participant.id}. Previous notes: ${participant.notes}`
+          : `Re-invited after declined attempt ${participant.id}.`,
+        createdByUserId: user.id,
+      },
+      include: participantInclude,
+    });
+  }
+
   async delete(
     user: RequestUser,
     placementId: string,

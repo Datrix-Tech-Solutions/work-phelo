@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
 import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents/GuaranteeNoteModal';
 import { NoteDocumentModal } from '@/components/organisms/reinsurance/documents/NoteDocumentModal';
-import { PlacementClosingSnapshotModal } from '@/components/organisms/reinsurance/documents/PlacementClosingSnapshotModal';
-import { EndorsementClosingSnapshotModal } from '@/components/organisms/reinsurance/documents/EndorsementClosingSnapshotModal';
+import {
+  ClosingLetterData,
+  ClosingLetterModal,
+} from '@/components/organisms/reinsurance/documents/ClosingLetterModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import {
   useCedants,
@@ -21,14 +24,13 @@ import {
   usePlacementEffectiveView,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import { cn } from '@/lib/utils';
 import { useToastStore } from '@/store/toast.store';
 import {
-  EndorsementParticipantClosing,
   Facultative,
   PlacementDocument,
   PlacementEndorsement,
   PlacementNote,
-  PlacementParticipantClosing,
 } from '@/types/reinsurance';
 
 interface ClosingRow {
@@ -63,11 +65,6 @@ interface MailReinsurerRow {
   brokerageFee: number;
 }
 
-interface EndorsementClosingPreviewState {
-  endorsement: PlacementEndorsement;
-  closing: EndorsementParticipantClosing;
-}
-
 function fmtPct(val: number) {
   return `${val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}%`;
 }
@@ -81,6 +78,12 @@ function toNumber(val: string | number | null | undefined): number | null {
   const parsed = typeof val === 'number' ? val : Number(val);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+const PARTICIPATION_TYPE_LABEL: Record<EffectivePositionRow['participationType'], string> = {
+  ORIGINAL: 'original',
+  REVISED: 'endorsed',
+  ADDED: 'added',
+};
 
 function isActiveNote(note: PlacementNote) {
   return note.status !== 'VOID';
@@ -104,10 +107,10 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [debitNoteViewed, setDebitNoteViewed] = useState(false);
   const [noteDocumentPreview, setNoteDocumentPreview] = useState<PlacementDocument | null>(null);
   const [noteRecordPreview, setNoteRecordPreview] = useState<PlacementNote | null>(null);
-  const [placementClosingPreview, setPlacementClosingPreview] =
-    useState<PlacementParticipantClosing | null>(null);
-  const [endorsementClosingPreview, setEndorsementClosingPreview] =
-    useState<EndorsementClosingPreviewState | null>(null);
+  const [closingLetterPreview, setClosingLetterPreview] = useState<{
+    closing: ClosingLetterData;
+    endorsement?: PlacementEndorsement;
+  } | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
   const [mailToReinsurerRow, setMailToReinsurerRow] = useState<MailReinsurerRow | null>(null);
 
@@ -188,8 +191,16 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'reinsurerCompany',
       label: 'Current Reinsurer',
-      width: 'minmax(200px, 1fr)',
-      render: (row) => <span className="font-medium text-gray-900">{row.reinsurerCompany}</span>,
+      width: 'minmax(220px, 1fr)',
+      render: (row) => (
+        <span className="flex flex-col">
+          <span className="font-medium text-gray-900">{row.reinsurerCompany}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            {PARTICIPATION_TYPE_LABEL[row.participationType]}
+            {row.sourceCount > 1 ? ` · ${row.sourceCount} snapshots` : ''}
+          </span>
+        </span>
+      ),
     },
     {
       key: 'signedShare',
@@ -198,20 +209,9 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       render: (row) => <span className="text-gray-700">{fmtPct(row.signedShare)}</span>,
     },
     {
-      key: 'participationType',
-      label: 'Source',
-      width: '140px',
-      render: (row) => (
-        <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          {row.participationType.toLowerCase()}
-          {row.sourceCount > 1 ? ` · ${row.sourceCount} snapshots` : ''}
-        </span>
-      ),
-    },
-    {
       key: 'grossPremium',
       label: 'Current Gross Premium',
-      width: 'minmax(200px, 1fr)',
+      width: '200px',
       render: (row) => (
         <span className="text-gray-700">{fmtAmount(row.grossPremium, row.currency)}</span>
       ),
@@ -219,7 +219,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'netPremium',
       label: 'Current Net Premium',
-      width: 'minmax(200px, 1fr)',
+      width: '200px',
       render: (row) => (
         <span className="text-gray-700">{fmtAmount(row.netPremium, row.currency)}</span>
       ),
@@ -261,31 +261,59 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const findActiveCreditNote = (closingId: string, notes = placementNotes) =>
     notes.find((note) => isActiveCreditNote(note, closingId));
 
-  const findEndorsementClosingContext = (endorsementId: string, closingId: string) => {
-    const endorsement = endorsements.find((item) => item.id === endorsementId);
-    const closing = endorsementClosings.find((item) => item.id === closingId);
-    return endorsement && closing ? { endorsement, closing } : null;
-  };
-
   const handleViewEffectiveClosing = (row: EffectivePositionRow) => {
     if (row.sourceType === 'PLACEMENT_CLOSING') {
       const closing = closings.find((item) => item.id === row.sourceClosingId);
       if (closing) {
-        setPlacementClosingPreview(closing);
+        setClosingLetterPreview({
+          closing: {
+            id: closing.id,
+            closingNumber: closing.closingNumber,
+            status: closing.status,
+            currency: closing.currency,
+            signedLinePercent: closing.signedLinePercent,
+            sumInsuredSnapshot: null,
+            premiumSnapshot: closing.grossPremium,
+            commissionPercent: closing.commissionPercent,
+            commissionAmount: closing.commissionAmount,
+            brokeragePercent: closing.brokeragePercent,
+            brokerageAmount: closing.brokerageAmount,
+            netPremium: closing.netPremium,
+            reinsurer: closing.participant.counterparty,
+          },
+        });
         return;
       }
     }
 
-    if (row.sourceType === 'ENDORSEMENT_CLOSING' && row.sourceEndorsementId) {
-      const context = findEndorsementClosingContext(row.sourceEndorsementId, row.sourceClosingId);
-      if (context) {
-        setEndorsementClosingPreview(context);
+    if (row.sourceType === 'ENDORSEMENT_CLOSING') {
+      const closing = endorsementClosings.find((item) => item.id === row.sourceClosingId);
+      const endorsement = endorsements.find((item) => item.id === row.sourceEndorsementId);
+      if (closing) {
+        setClosingLetterPreview({
+          closing: {
+            id: closing.id,
+            closingNumber: closing.closingNumber,
+            status: closing.status,
+            currency: closing.currency,
+            signedLinePercent: closing.signedLinePercent,
+            sumInsuredSnapshot: closing.sumInsuredSnapshot,
+            premiumSnapshot: closing.premiumSnapshot,
+            commissionPercent: closing.commissionPercent,
+            commissionAmount: closing.commissionAmount,
+            brokeragePercent: closing.brokeragePercent,
+            brokerageAmount: closing.brokerageAmount,
+            netPremium: closing.netPremium,
+            reinsurer: closing.endorsementParticipant.counterparty,
+          },
+          endorsement,
+        });
         return;
       }
     }
 
     useToastStore.getState().addToast({
-      message: 'Current closing snapshot could not be found. Refresh and try again.',
+      message: 'Current details could not be found. Refresh and try again.',
       type: 'error',
     });
   };
@@ -339,6 +367,11 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     }
   };
 
+  const originalParticipantCount = rows.length;
+  const originalTotalNetPremium = rows.reduce((sum, row) => sum + (row.netPremium ?? 0), 0);
+  const originalTotalShare = rows.reduce((sum, row) => sum + row.signedShare, 0);
+  const originalCurrency = rows.find((row) => row.currency)?.currency ?? placement.currency;
+
   const columns: Column<ClosingRow>[] = [
     {
       key: 'reinsurerCompany',
@@ -382,9 +415,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           <TableButton isLoading={isNoteBusy} onClick={() => handleOpenCreditNote(row.id)}>
             View Closings
           </TableButton>
-          <TableButton variant="blue" onClick={() => setMailToReinsurerRow(row)}>
-            Mail Reinsurer
-          </TableButton>
         </div>
       ),
     },
@@ -392,48 +422,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
 
   return (
     <>
-      <section className="mb-5 flex flex-col gap-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900">
-              Current Effective Closings / Position
-            </h4>
-            <p className="text-xs text-gray-500">
-              Latest confirmed placement position from original closings plus closed effective
-              endorsements. Historical original closings remain listed separately below.
-            </p>
-          </div>
-          {isPlacementClosed && (
-            <div className="flex flex-wrap items-center gap-2">
-              <TableButton
-                variant="gray"
-                onClick={() => {
-                  setGuaranteeNoteOpen(true);
-                  setGuaranteeNoteViewed(true);
-                }}
-                className={guaranteeNoteViewed ? '' : 'btn-pulse'}
-              >
-                View Guarantee Note
-              </TableButton>
-              <TableButton
-                variant={isCurrentDebitNoteSupported ? 'green' : 'gray'}
-                disabled={!isCurrentDebitNoteSupported}
-                tooltip={
-                  isCurrentDebitNoteSupported
-                    ? undefined
-                    : 'Current effective debit note generation is not yet backend-supported after endorsements. Original debit notes remain historical.'
-                }
-                onClick={handleOpenDebitNote}
-                className={debitNoteViewed ? '' : 'btn-pulse'}
-              >
-                View Debit Note
-              </TableButton>
-              <TableButton variant="blue" onClick={() => setMailToCedantOpen(true)}>
-                Mail to Cedant
-              </TableButton>
-            </div>
-          )}
-        </div>
+      <section className="mb-5">
         <DataTable
           columns={effectiveColumns}
           data={effectiveRows}
@@ -443,27 +432,78 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           totalPages={1}
           onPageChange={() => {}}
           noInternalScroll
+          secondaryButtons={
+            isPlacementClosed
+              ? [
+                  {
+                    label: 'View Guarantee Note',
+                    onClick: () => {
+                      setGuaranteeNoteOpen(true);
+                      setGuaranteeNoteViewed(true);
+                    },
+                    className: cn(
+                      'bg-transparent text-blue-600 border-blue-400 hover:bg-blue-400 hover:text-white hover:border-blue-400 focus:ring-blue-400',
+                      guaranteeNoteViewed ? '' : 'btn-pulse',
+                    ),
+                  },
+                  {
+                    label: 'View Debit Note',
+                    onClick: handleOpenDebitNote,
+                    disabled: !isCurrentDebitNoteSupported,
+                    title: isCurrentDebitNoteSupported
+                      ? undefined
+                      : 'debit note generation is not yet backend-supported after endorsements. Original debit notes remain historical.',
+                    className: cn(
+                      'ml-3 bg-transparent',
+                      isCurrentDebitNoteSupported
+                        ? 'text-green-700 border-green-600 hover:bg-green-600 hover:text-white hover:border-green-600 focus:ring-green-600'
+                        : 'text-gray-600 border-gray-400 hover:bg-gray-400 hover:text-white hover:border-gray-400 focus:ring-gray-400',
+                      debitNoteViewed ? '' : 'btn-pulse',
+                    ),
+                  },
+                  // {
+                  //   label: 'Mail to Cedant',
+                  //   onClick: () => setMailToCedantOpen(true),
+                  //   className:
+                  //     'ml-3 bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700 focus:ring-blue-600',
+                  // },
+                ]
+              : undefined
+          }
         />
       </section>
 
-      <section className="mb-3">
-        <h4 className="text-sm font-semibold text-gray-900">Original Placement Closings</h4>
-        <p className="text-xs text-gray-500">
-          Historical original placement closing snapshots. These records are not rewritten by
-          endorsements.
-        </p>
-      </section>
-
-      <DataTable
-        columns={columns}
-        data={rows}
-        isLoading={isLoadingClosings}
-        emptyMessage="No accepted participants yet"
-        currentPage={1}
-        totalPages={1}
-        onPageChange={() => {}}
-        noInternalScroll
-      />
+      <CollapsibleOverview
+        title="Original Offer"
+        defaultCollapsed
+        headerExtra={
+          <>
+            <span className="text-sm text-gray-500">|</span>
+            <span className="text-xs text-gray-600 font-medium">
+              {originalParticipantCount} participant{originalParticipantCount === 1 ? '' : 's'}
+            </span>
+            <span className="text-sm text-gray-500">|</span>
+            <span className="text-xs text-gray-600 font-medium">
+              {fmtAmount(originalTotalNetPremium, originalCurrency)} total net premium
+            </span>
+            <span className="text-sm text-gray-500">|</span>
+            <span className="text-xs text-gray-600 font-medium">
+              {fmtPct(originalTotalShare)} total share
+            </span>
+          </>
+        }
+      >
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={isLoadingClosings}
+          emptyMessage="No accepted participants yet"
+          currentPage={1}
+          totalPages={1}
+          onPageChange={() => {}}
+          noInternalScroll
+        />
+      </CollapsibleOverview>
 
       <GuaranteeNoteModal
         isOpen={guaranteeNoteOpen}
@@ -506,22 +546,13 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         onClose={() => setMailToCedantOpen(false)}
       />
 
-      <PlacementClosingSnapshotModal
-        isOpen={!!placementClosingPreview}
+      <ClosingLetterModal
+        isOpen={!!closingLetterPreview}
         placement={placement}
-        closing={placementClosingPreview}
-        onClose={() => setPlacementClosingPreview(null)}
+        endorsement={closingLetterPreview?.endorsement}
+        closing={closingLetterPreview?.closing ?? null}
+        onClose={() => setClosingLetterPreview(null)}
       />
-
-      {endorsementClosingPreview && (
-        <EndorsementClosingSnapshotModal
-          isOpen
-          placement={placement}
-          endorsement={endorsementClosingPreview.endorsement}
-          closing={endorsementClosingPreview.closing}
-          onClose={() => setEndorsementClosingPreview(null)}
-        />
-      )}
 
       {mailToReinsurerRow && (
         <MailPreviewModal

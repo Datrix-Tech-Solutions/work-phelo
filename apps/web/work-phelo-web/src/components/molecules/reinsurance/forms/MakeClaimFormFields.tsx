@@ -3,7 +3,7 @@
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { cn, inputClass } from '@/lib/utils';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { FormField } from '@/components/molecules/shared/FormField';
+import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCurrencyOptions, usePlacementEffectiveView } from '@/hooks';
 import { Facultative } from '@/types/reinsurance';
@@ -93,10 +93,11 @@ export function MakeClaimFormFields({
         </>
       )}
 
-      <FormField
-        label="Estimated Loss Amount"
-        registration={register('estimatedLossAmount', {
-          required: 'Estimated loss amount is required',
+      <Controller
+        name="estimatedLossAmount"
+        control={control}
+        rules={{
+          min: { value: 0.01, message: 'Estimated loss amount is required' },
           validate: (value) => {
             const amount = parseFloat(value);
             if (effectiveSumInsured != null && amount > effectiveSumInsured) {
@@ -104,30 +105,41 @@ export function MakeClaimFormFields({
             }
             return true;
           },
-        })}
-        placeholder="0.00"
-        type="number"
-        step="any"
-        error={errors.estimatedLossAmount}
+        }}
+        render={({ field }) => (
+          <NumberField
+            label="Estimated Loss Amount"
+            value={field.value ? Number(field.value) : 0}
+            onChange={(n) => field.onChange(String(n))}
+            error={errors.estimatedLossAmount?.message}
+            placeholder="0.00"
+          />
+        )}
       />
 
       {isEditing && (
-        <FormField
-          label="Actual Claim Amount"
-          registration={register('finalLossAmount', {
+        <Controller
+          name="finalLossAmount"
+          control={control}
+          rules={{
             validate: (value) => {
-              if (!value) return true;
+              if (!value || Number(value) === 0) return true;
               const amount = parseFloat(value);
               if (effectiveSumInsured != null && amount > effectiveSumInsured) {
                 return `Actual claim amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
               }
               return true;
             },
-          })}
-          placeholder="0.00"
-          type="number"
-          step="any"
-          error={errors.finalLossAmount}
+          }}
+          render={({ field }) => (
+            <NumberField
+              label="Actual Claim Amount"
+              value={field.value ? Number(field.value) : 0}
+              onChange={(n) => field.onChange(String(n))}
+              error={errors.finalLossAmount?.message}
+              placeholder="0.00"
+            />
+          )}
         />
       )}
 

@@ -27,7 +27,6 @@ interface EndorsementSlipPreviewModalProps {
   notes: PlacementNote[];
   summary?: PlacementEndorsementSummary;
   documentTitle?: string;
-  previewNotice?: string;
   focusedCounterpartyId?: string | null;
   focusedRecipient?: {
     name: string;
@@ -36,12 +35,18 @@ interface EndorsementSlipPreviewModalProps {
     status: string;
   } | null;
   /** 'OFFER_SLIP' — brand-new market participant, rendered like the original placement's
-   *  Offer Slip. 'REVISED_CERTIFICATE' — existing participant reviewing revised terms,
-   *  rendered like the endorsement certificate (Original vs Revised participation/impact),
-   *  computed live since no closing has been confirmed yet. Omitted for the whole-endorsement
-   *  overview, which keeps the generic layout. */
+   *  Offer Slip. 'REVISED_CERTIFICATE' — existing participant reviewing revised terms
+   *  (Original vs Proposed/Revised participation), computed live. Titled "Endorsement Offer
+   *  Slip" pre-close, or "Endorsement Certificate" once `confirmedClosing` is supplied — same
+   *  live rendering either way, just sourced from confirmed closing figures instead of the
+   *  in-flight offer. Not to be confused with the whole-endorsement "Endorsement Slip"
+   *  overview document (EndorsementHeader/generic branch below), which covers every
+   *  participant rather than one reinsurer. */
   previewFormat?: 'OFFER_SLIP' | 'REVISED_CERTIFICATE';
   brokerageFee?: number;
+  /** Confirmed closing for this participant — when set, REVISED_CERTIFICATE renders as the
+   *  post-close "Endorsement Certificate" using these authoritative figures. */
+  confirmedClosing?: EndorsementParticipantClosing | null;
   onClose: () => void;
 }
 
@@ -123,7 +128,7 @@ function formatField(
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3 mt-6 first:mt-0">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-500">
+      <p className="mb-1 text-sm font-semibold uppercase tracking-widest text-gray-500">
         {children}
       </p>
       <div className="border-t border-gray-300" />
@@ -133,10 +138,10 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
   return (
-    <table className="w-full border-collapse text-sm">
+    <table className="w-full border-collapse text-base">
       <tbody>
         {rows.map((row) => (
-          <tr key={row.label} className="border-b border-gray-50 last:border-0">
+          <tr key={row.label}>
             <td className="w-2/5 py-1.5 pr-4 text-gray-500">{row.label}</td>
             <td className="py-1.5 pl-4 font-medium text-gray-900">{row.value}</td>
           </tr>
@@ -144,6 +149,22 @@ function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] 
       </tbody>
     </table>
   );
+}
+
+// Risk/offer detail fields (schema-driven risk details + custom "extra" fields) aren't flat
+// scalars on the snapshot — they live nested under businessDetails/offerDetails, so they need
+// their own extraction/diff pass alongside CHANGE_FIELDS.
+function detailEntryMap(record: UnknownRecord): Map<string, { label: string; value: unknown }> {
+  const businessDetails = (record.businessDetails ?? null) as Record<string, unknown> | null;
+  const offerDetails = (record.offerDetails ?? null) as Record<string, unknown> | null;
+  const map = new Map<string, { label: string; value: unknown }>();
+  for (const entry of [
+    ...placementDetailEntries(businessDetails),
+    ...placementDetailEntries(offerDetails),
+  ]) {
+    map.set(entry.key, { label: entry.label, value: entry.value });
+  }
+  return map;
 }
 
 function ChangeTable({
@@ -160,28 +181,52 @@ function ChangeTable({
     return String(original[key] ?? '') !== String(proposed[key] ?? '');
   });
 
-  if (changed.length === 0) {
-    return <p className="text-sm text-gray-400 italic">No revised placement terms recorded.</p>;
+  const originalDetails = detailEntryMap(original);
+  const proposedDetails = detailEntryMap(proposed);
+  const changedDetailFields = Array.from(
+    new Set([...originalDetails.keys(), ...proposedDetails.keys()]),
+  )
+    .map((key) => ({
+      key,
+      label: (proposedDetails.get(key) ?? originalDetails.get(key))!.label,
+    }))
+    .filter(
+      ({ key }) =>
+        String(originalDetails.get(key)?.value ?? '') !==
+        String(proposedDetails.get(key)?.value ?? ''),
+    );
+
+  if (changed.length === 0 && changedDetailFields.length === 0) {
+    return <p className="text-base text-gray-400 italic">No revised placement terms recorded.</p>;
   }
 
   return (
-    <table className="w-full border-collapse text-sm">
+    <table className="w-full border-collapse text-base">
       <thead>
         <tr className="border-b border-gray-200">
-          <th className="py-1.5 pr-3 text-left text-xs font-semibold text-gray-500">Field</th>
-          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">Original</th>
-          <th className="py-1.5 pl-3 text-left text-xs font-semibold text-gray-500">Proposed</th>
+          <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">Field</th>
+          <th className="px-3 py-1.5 text-left text-sm font-semibold text-gray-500">Original</th>
+          <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">Proposed</th>
         </tr>
       </thead>
       <tbody>
         {changed.map((field) => (
-          <tr key={field.key} className="border-b border-gray-50 last:border-0">
+          <tr key={field.key}>
             <td className="py-1.5 pr-3 text-gray-500">{field.label}</td>
             <td className="px-3 py-1.5 text-gray-700">
               {formatField(original[field.key], field.type, original.currency ?? currency)}
             </td>
             <td className="py-1.5 pl-3 font-medium text-gray-900">
               {formatField(proposed[field.key], field.type, proposed.currency ?? currency)}
+            </td>
+          </tr>
+        ))}
+        {changedDetailFields.map(({ key, label }) => (
+          <tr key={key}>
+            <td className="py-1.5 pr-3 text-gray-500">{label}</td>
+            <td className="px-3 py-1.5 text-gray-700">{text(originalDetails.get(key)?.value)}</td>
+            <td className="py-1.5 pl-3 font-medium text-gray-900">
+              {text(proposedDetails.get(key)?.value)}
             </td>
           </tr>
         ))}
@@ -261,9 +306,10 @@ function buildChangeSentence(
 }
 
 /**
- * Content for an existing participant reviewing revised endorsement terms — mirrors the
- * pre-existing EndorsementReinsurerCertificateModal layout exactly, computed live since no
- * closing has been confirmed for this endorsement yet.
+ * Content for an existing participant reviewing revised endorsement terms — a live-computed
+ * "Endorsement Offer Slip" pre-close pitch, or an "Endorsement Certificate" once
+ * `confirmedClosing` is supplied, in which case the "Revised" figures come straight from that
+ * closing's authoritative numbers instead of being estimated from the in-flight offer.
  */
 function RevisedOfferContent({
   placement,
@@ -272,6 +318,7 @@ function RevisedOfferContent({
   reinsurerName,
   sharePercent,
   brokerageFee,
+  confirmedClosing,
 }: {
   placement: Facultative;
   endorsement: PlacementEndorsement;
@@ -279,6 +326,7 @@ function RevisedOfferContent({
   reinsurerName: string;
   sharePercent: number;
   brokerageFee: number;
+  confirmedClosing?: EndorsementParticipantClosing | null;
 }) {
   const originalPlacement = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = endorsement.proposedSnapshot
@@ -304,17 +352,26 @@ function RevisedOfferContent({
   const prevCommissionAmt = ((prevCommission + prevBrokerage) / 100) * prevYourPremium;
   const prevNetPremium = prevYourPremium - prevCommissionAmt;
 
-  // Revised values — live, since this endorsement hasn't been confirmed/closed yet
-  const currency = placement.currency;
-  const yourPremium = (sharePercent / 100) * (placement.premium ?? 0);
-  const yourSumInsured = (sharePercent / 100) * (placement.sumInsured ?? 0);
-  const commissionAmt = (((placement.commission ?? 0) + brokerageFee) / 100) * yourPremium;
-  const netPremium = yourPremium - commissionAmt;
-
-  // Financial impact (deltas)
-  const additionalPremium = yourPremium - prevYourPremium;
-  const additionalCommission = commissionAmt - prevCommissionAmt;
-  const netAmountPayable = netPremium - prevNetPremium;
+  // Revised values — once the participant's closing is confirmed, its own figures are
+  // authoritative (this is the "Endorsement Certificate" case). Until then, estimate from
+  // this endorsement's proposed terms (not the live placement record, which won't reflect
+  // the endorsement's figures until it's actually closed), falling back to the current
+  // placement only if there's no proposed snapshot at all.
+  const currency = confirmedClosing
+    ? text(confirmedClosing.currency ?? placement.currency)
+    : text(proposed?.currency ?? placement.currency);
+  const yourPremium = confirmedClosing
+    ? toNum(confirmedClosing.premiumSnapshot)
+    : (sharePercent / 100) * toNum(proposed?.premium ?? placement.premium);
+  const yourSumInsured = confirmedClosing
+    ? toNum(confirmedClosing.sumInsuredSnapshot)
+    : (sharePercent / 100) * toNum(proposed?.sumInsured ?? placement.sumInsured);
+  const commissionAmt = confirmedClosing
+    ? toNum(confirmedClosing.commissionAmount) + toNum(confirmedClosing.brokerageAmount)
+    : ((toNum(proposed?.commission ?? placement.commission) + brokerageFee) / 100) * yourPremium;
+  const netPremium = confirmedClosing
+    ? toNum(confirmedClosing.netPremium)
+    : yourPremium - commissionAmt;
 
   const changedFields = proposed
     ? CHANGE_FIELDS.filter(({ key }) => {
@@ -340,7 +397,7 @@ function RevisedOfferContent({
     <>
       {/* POLICY INFORMATION */}
       <SectionHeading>Policy Information</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
+      <table className="w-full text-base border-collapse mb-2">
         <tbody>
           {[
             { label: 'Cedant', value: placement.cedant.name },
@@ -352,7 +409,7 @@ function RevisedOfferContent({
             { label: 'Currency', value: text(placement.currency) },
             { label: 'Class of Business', value: text(placement.classOfBusiness) },
           ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
+            <tr key={row.label}>
               <td className="py-1.5 pr-4 text-gray-500 w-2/5">{row.label}</td>
               <td className="py-1.5 pl-4 text-gray-900 font-medium">{row.value}</td>
             </tr>
@@ -362,42 +419,55 @@ function RevisedOfferContent({
 
       {/* ENDORSEMENT SUMMARY */}
       <SectionHeading>Endorsement Summary</SectionHeading>
-      <div className="text-sm mb-2 space-y-2">
-        {Boolean(endorsement.reason) && (
-          <div>
-            <span className="text-gray-500">Reason:</span>
-            <p className="text-gray-900 font-medium mt-0.5">{endorsement.reason}</p>
-          </div>
-        )}
+      <div className="text-base mb-2 space-y-2">
         {narrative ? (
           <p className="text-gray-800 leading-relaxed">{narrative}</p>
         ) : (
           <p className="text-gray-400 italic">No parameter changes recorded.</p>
         )}
+        {Boolean(endorsement.reason) && (
+          <div>
+            <span className="text-gray-500">Comment:</span>
+            <p className="text-gray-900 font-medium mt-0.5">{endorsement.reason}</p>
+          </div>
+        )}
       </div>
+
+      {proposed && (
+        <>
+          <SectionHeading>Original vs Proposed Business</SectionHeading>
+          <ChangeTable original={originalPlacement} proposed={proposed} currency={currency} />
+        </>
+      )}
 
       {/* REINSURER PARTICIPATION */}
       <SectionHeading>Reinsurer Participation</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
+      <table className="w-full text-base border-collapse mb-2">
         <thead>
           <tr className="border-b border-gray-200">
-            <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/3" />
-            <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
+            <th className="py-1.5 pr-4 text-left text-sm font-semibold text-gray-500 w-1/3">
+              {confirmedClosing ? '' : `Your Participation (${prevShare}%)`}
+            </th>
+            <th className="py-1.5 px-4 text-left text-sm font-semibold text-gray-500 w-1/3">
               Original
             </th>
-            <th className="py-1.5 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
-              Revised
+            <th className="py-1.5 pl-4 text-left text-sm font-semibold text-gray-500 w-1/3">
+              {confirmedClosing ? 'Revised' : 'Proposed'}
             </th>
           </tr>
         </thead>
         <tbody>
           {[
-            {
-              label: 'Your Participation %',
-              previous: prevShare ? `${prevShare}%` : 'no change',
-              revised: `${sharePercent}%`,
-              bold: false,
-            },
+            ...(confirmedClosing
+              ? [
+                  {
+                    label: 'Your Participation %',
+                    previous: `${prevShare}%`,
+                    revised: `${toNum(confirmedClosing.signedLinePercent)}%`,
+                    bold: false,
+                  },
+                ]
+              : []),
             {
               label: 'Your Share SI',
               previous: fmtMoney(prevYourSumInsured || null, prevCurrency),
@@ -423,7 +493,7 @@ function RevisedOfferContent({
               bold: true,
             },
           ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
+            <tr key={row.label}>
               <td
                 className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
               >
@@ -444,44 +514,9 @@ function RevisedOfferContent({
         </tbody>
       </table>
 
-      {/* FINANCIAL IMPACT */}
-      <SectionHeading>Financial Impact</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
-        <tbody>
-          {[
-            {
-              label: additionalPremium >= 0 ? 'Additional Premium Due' : 'Return Premium',
-              value: fmtMoney(Math.abs(additionalPremium), currency),
-            },
-            {
-              label: additionalCommission >= 0 ? 'Additional Commission' : 'Return Commission',
-              value: fmtMoney(Math.abs(additionalCommission), currency),
-            },
-            {
-              label: netAmountPayable >= 0 ? 'Net Amount Payable' : 'Net Amount Returnable',
-              value: fmtMoney(Math.abs(netAmountPayable), currency),
-              bold: true,
-            },
-          ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
-              <td
-                className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
-              >
-                {row.label}
-              </td>
-              <td
-                className={`py-1.5 pl-4 text-right ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
-              >
-                {row.value}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
+      <ul className="text-base text-gray-700 space-y-1 list-none mb-2">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>
@@ -646,9 +681,9 @@ function OfferSlipContent({
       {description && (
         <>
           <hr className="border-gray-100 my-1" />
-          <p className="text-xs font-semibold text-gray-400 tracking-wide">Kindly Refer:</p>
+          <p className="text-sm font-semibold text-gray-400 tracking-wide">Kindly Refer:</p>
           <div
-            className="text-sm text-gray-700"
+            className="text-base text-gray-700"
             dangerouslySetInnerHTML={{ __html: description }}
           />
         </>
@@ -666,11 +701,11 @@ export function EndorsementSlipPreviewModal({
   notes,
   summary,
   documentTitle = 'Endorsement Slip Preview',
-  previewNotice = 'Backend record preview. No immutable official endorsement slip snapshot has been generated yet.',
   focusedCounterpartyId,
   focusedRecipient,
   previewFormat,
   brokerageFee = 0,
+  confirmedClosing,
   onClose,
 }: EndorsementSlipPreviewModalProps) {
   const { data: riskTypes = [] } = useRiskTypes();
@@ -718,13 +753,14 @@ export function EndorsementSlipPreviewModal({
   if (previewFormat === 'REVISED_CERTIFICATE') {
     const riskTypeName = riskTypes.find((rt) => rt.id === placement.riskTypeId)?.name ?? null;
     const sharePercent = Number(focusedRecipient?.offeredLinePercent ?? 0);
+    const docTitle = confirmedClosing ? 'Endorsement Certificate' : 'Endorsement Offer Slip';
     return (
       <DocumentPreviewModal
         isOpen={isOpen}
-        title={`Endorsement Certificate — ${endorsement.endorsementNumber}`}
-        documentTitle="Endorsement Certificate"
+        title={`${docTitle} — ${endorsement.endorsementNumber}`}
+        documentTitle={docTitle}
         fileName={buildDocumentFileName(
-          'Endorsement Certificate',
+          docTitle,
           displayPolicyNumber(placement.policyNumber),
           riskTypeName,
           placement.title,
@@ -740,6 +776,7 @@ export function EndorsementSlipPreviewModal({
           reinsurerName={focusedReinsurerName ?? ''}
           sharePercent={Number.isFinite(sharePercent) ? sharePercent : 0}
           brokerageFee={brokerageFee}
+          confirmedClosing={confirmedClosing}
         />
       </DocumentPreviewModal>
     );
@@ -760,19 +797,15 @@ export function EndorsementSlipPreviewModal({
       onPrint={() => {}}
       onClose={onClose}
     >
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
-        {previewNotice}
-      </div>
-
       <SectionHeading>Endorsement</SectionHeading>
       <InfoRows
         rows={[
-          { label: 'Placement Reference', value: placement.reference },
+          { label: 'Policy Number', value: displayPolicyNumber(placement.policyNumber) },
           { label: 'Insured', value: placement.title },
           { label: 'Endorsement Number', value: endorsement.endorsementNumber },
-          { label: 'Endorsement Type', value: endorsement.type },
-          { label: 'Impact Type', value: text(endorsement.impactType) },
-          { label: 'Status', value: endorsement.status },
+          // { label: 'Endorsement Type', value: endorsement.type },
+          // { label: 'Impact Type', value: text(endorsement.impactType) },
+          // { label: 'Status', value: endorsement.status },
           { label: 'Effective Date', value: fmtDate(endorsement.effectiveDate) },
           { label: 'Reason', value: text(endorsement.reason) },
         ]}
@@ -837,30 +870,49 @@ export function EndorsementSlipPreviewModal({
 
       <SectionHeading>Endorsement Participants</SectionHeading>
       {participants.length === 0 ? (
-        <p className="text-sm text-gray-400 italic">No endorsement participants recorded.</p>
+        <p className="text-base text-gray-400 italic">No endorsement participants recorded.</p>
       ) : (
-        <InfoRows
-          rows={participants.map((participant) => ({
-            label: participant.counterparty?.name ?? participant.counterpartyId,
-            value: `${participant.originalParticipantId ? 'REVISED' : 'ADDED'} · ${participant.status} · ${fmtPct(
-              participant.signedLinePercent ?? participant.sharePercent,
-            )}`,
-          }))}
-        />
-      )}
-
-      <SectionHeading>Confirmed Closings</SectionHeading>
-      {confirmedClosings.length === 0 ? (
-        <p className="text-sm text-gray-400 italic">No confirmed endorsement closings yet.</p>
-      ) : (
-        <InfoRows
-          rows={confirmedClosings.map((closing) => ({
-            label: closing.closingNumber,
-            value: `${closing.endorsementParticipant.counterparty.name} · ${fmtPct(
-              closing.signedLinePercent,
-            )} · Net ${fmtMoney(closing.netPremium, closing.currency)}`,
-          }))}
-        />
+        <table className="w-full text-base border-collapse mb-2">
+          <thead>
+            <tr className="border-b border-gray-200">
+              <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">
+                Reinsurer
+              </th>
+              <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">
+                Offer Share
+              </th>
+              <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">
+                Net Premium
+              </th>
+              <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">
+                Added/Revised
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {participants.map((participant) => {
+              const closing = confirmedClosings.find(
+                (item) => item.endorsementParticipant.counterpartyId === participant.counterpartyId,
+              );
+              return (
+                <tr key={participant.id}>
+                  <td className="py-1.5 pr-3 text-gray-900 font-medium">
+                    {participant.counterparty?.name ?? participant.counterpartyId}
+                  </td>
+                  <td className="py-1.5 px-3 text-gray-700">
+                    {fmtPct(participant.signedLinePercent ?? participant.sharePercent)}
+                  </td>
+                  <td className="py-1.5 px-3 text-gray-700">
+                    {closing ? fmtMoney(closing.netPremium, closing.currency) : '—'}
+                  </td>
+                  <td className="py-1.5 pl-3 text-gray-700">
+                    {participant.originalParticipantId ? 'Revised' : 'Added'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       )}
 
       {notes.length > 0 && (

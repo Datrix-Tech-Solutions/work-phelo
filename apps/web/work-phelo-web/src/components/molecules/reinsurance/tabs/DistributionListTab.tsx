@@ -225,6 +225,19 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleAccept = async (row: DistributionEntry) => {
     if (acceptingIds.has(row.id)) return;
+
+    const placedPct = entries
+      .filter((e) => e.id !== row.id && (e.status === 'ACCEPTED' || e.status === 'CLOSED'))
+      .reduce((sum, e) => sum + e.shareLine, 0);
+    const availablePct = Math.max(0, +(facOffer - placedPct).toFixed(4));
+    if (row.shareLine > availablePct) {
+      toast().addToast({
+        message: `${row.reinsurerCompany}'s share (${row.shareLine}%) exceeds the ${availablePct}% still available on this placement.`,
+        type: 'error',
+      });
+      return;
+    }
+
     setAcceptingIds((prev) => new Set([...prev, row.id]));
     patch(row.id, { status: 'ACCEPTED' });
 
@@ -305,6 +318,14 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       });
   };
 
+  const handleReopen = (row: DistributionEntry) => {
+    patch(row.id, { status: 'OFFER_SENT' });
+    updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) => {
+      patch(row.id, { status: 'DECLINED' });
+      toast().addToast({ message: extractError(error), type: 'error' });
+    });
+  };
+
   const handleDelete = (row: DistributionEntry) => {
     setDeletedIds((prev) => new Set([...prev, row.id]));
     deleteParticipant(row.id).catch((error) => {
@@ -350,6 +371,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           onClose={handleClose}
           onDelete={handleDelete}
           onRevert={handleRevert}
+          onReopen={handleReopen}
         />
       </div>
 

@@ -18,7 +18,7 @@ import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
-export type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
+export type PaymentStatus = 'Outstanding Payment' | 'Part Payment' | 'Paid';
 
 // Overview badge intentionally shows every in-progress status as blue; only Closed differs.
 const OVERVIEW_STATUS_VARIANT: Record<FacultativeStatus, 'info' | 'success'> = {
@@ -38,7 +38,7 @@ const STATUS_PING_COLOR: Record<'info' | 'success', { ping: string; dot: string 
 };
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
-  Outstanding: 'text-xs text-gray-400',
+  'Outstanding Payment': 'text-xs text-gray-400',
   'Part Payment': 'text-xs text-yellow-600 font-medium',
   Paid: 'text-xs text-green-600 font-medium',
 };
@@ -87,7 +87,7 @@ export function FacultativeOverview({
     const paid = totalEffectivePremiumReceived(payments);
     if (netPremium > 0 && paid >= netPremium) return 'Paid';
     if (paid > 0) return 'Part Payment';
-    return 'Outstanding';
+    return 'Outstanding Payment';
   }, [payments, closings]);
 
   useEffect(() => {
@@ -153,51 +153,40 @@ export function FacultativeOverview({
               </span>
             </>
           )}
-          {effectiveView && (
+          {appliedEndorsementCount > 0 && (
+            <>
+              <span className="text-sm text-gray-500">|</span>
+              <span className="text-xs text-green-600 font-medium">
+                {appliedEndorsementCount} active endorsement
+                {appliedEndorsementCount > 1 ? 's' : ''} as of{' '}
+                {fmtDate(effectiveView?.viewAsOf ?? '')}
+              </span>
+            </>
+          )}
+          {scheduledEndorsementCount > 0 && (
             <>
               <span className="text-sm text-gray-500">|</span>
               <span className="text-xs text-gray-600 font-medium">
-                Current effective as of {fmtDate(effectiveView.viewAsOf)}
+                {scheduledEndorsementCount} upcoming endorsement
+                {scheduledEndorsementCount > 1 ? 's' : ''}
+              </span>
+            </>
+          )}
+          {pendingEndorsementCount > 0 && (
+            <>
+              <span className="text-sm text-gray-500">|</span>
+              <span className="text-xs text-amber-700 font-medium">
+                {pendingEndorsementCount} pending endorsement
+                {pendingEndorsementCount > 1 ? 's' : ''}
               </span>
             </>
           )}
         </>
       }
     >
-      {(appliedEndorsementCount > 0 ||
-        scheduledEndorsementCount > 0 ||
-        pendingEndorsementCount > 0 ||
-        effectiveViewError) && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {appliedEndorsementCount > 0 && (
-            <Badge
-              label={`Includes ${appliedEndorsementCount} effective endorsement${
-                appliedEndorsementCount > 1 ? 's' : ''
-              }`}
-              variant="success"
-            />
-          )}
-          {scheduledEndorsementCount > 0 && (
-            <Badge
-              label={`${scheduledEndorsementCount} scheduled future endorsement${
-                scheduledEndorsementCount > 1 ? 's' : ''
-              }`}
-              variant="neutral"
-            />
-          )}
-          {pendingEndorsementCount > 0 && (
-            <Badge
-              label={`${pendingEndorsementCount} pending endorsement${
-                pendingEndorsementCount > 1 ? 's' : ''
-              }`}
-              variant="warning"
-            />
-          )}
-          {effectiveViewError && (
-            <span className="text-xs text-amber-700">
-              Current effective view could not be loaded; showing original placement terms.
-            </span>
-          )}
+      {effectiveViewError && (
+        <div className="mb-4 text-xs text-amber-700">
+          Current offer terms could not be loaded; showing original offer term.
         </div>
       )}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">

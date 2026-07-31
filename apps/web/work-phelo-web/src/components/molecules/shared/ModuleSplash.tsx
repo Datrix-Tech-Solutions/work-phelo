@@ -10,8 +10,13 @@ import { cn } from '@/lib/utils';
 // Deliberate branding pause — keeps the splash from flashing on fast navigations.
 const MIN_VISIBLE_MS = 2500;
 const FADE_MS = 200;
-// Fallback in case navigation stalls or redirects elsewhere (e.g. auth failure).
-const SAFETY_MS = 2500;
+// Last-resort circuit breaker, not the normal close path — the splash is meant to
+// hide only once the "landed" effect below sees the pathname actually change away
+// from originPath. Module routes often fetch data on load, so on a slow network
+// landing can take several seconds; this must be long enough that it never fires
+// for that case, so it only ever catches a genuinely stuck navigation (stalled
+// redirect, auth failure) instead of masking one as a normal load.
+const SAFETY_MS = 20000;
 
 type ArcOrigin = 'top-left' | 'bottom-right' | 'center' | 'top-right' | 'bottom-left';
 

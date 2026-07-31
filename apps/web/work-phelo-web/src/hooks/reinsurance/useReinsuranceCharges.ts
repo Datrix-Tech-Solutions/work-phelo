@@ -44,9 +44,7 @@ export function useCreateReinsuranceCharge() {
       const res = await api.post<ReinsuranceChargeConfiguration>(BASE, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: REINSURANCE_CHARGES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: REINSURANCE_CHARGES_KEY }),
   });
 }
 
@@ -60,9 +58,7 @@ export function useUpdateReinsuranceCharge() {
       const res = await api.patch<ReinsuranceChargeConfiguration>(`${BASE}/${id}`, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: REINSURANCE_CHARGES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: REINSURANCE_CHARGES_KEY }),
   });
 }
 
@@ -73,9 +69,7 @@ export function useDeactivateReinsuranceCharge() {
       const res = await api.post<ReinsuranceChargeConfiguration>(`${BASE}/${id}/deactivate`);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: REINSURANCE_CHARGES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: REINSURANCE_CHARGES_KEY }),
   });
 }
 
@@ -86,9 +80,7 @@ export function useActivateReinsuranceCharge() {
       const res = await api.post<ReinsuranceChargeConfiguration>(`${BASE}/${id}/activate`);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: REINSURANCE_CHARGES_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: REINSURANCE_CHARGES_KEY }),
   });
 }
 

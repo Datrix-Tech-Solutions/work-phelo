@@ -461,6 +461,7 @@ function invalidateEndorsementWorkflow(
   placementId: string,
   endorsementId?: string,
 ) {
+  queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
   queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
   queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
   queryClient.invalidateQueries({ queryKey: placementEffectiveViewKey(placementId) });

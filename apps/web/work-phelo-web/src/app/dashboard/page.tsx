@@ -4,7 +4,7 @@
 
 import { useState, useMemo } from 'react';
 import { useTenants, useDeleteTenant } from '@/hooks/useTenants';
-import { useRouter } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { WelcomeBanner } from '@/components/molecules/shared/WelcomeBanner';
 import { StatCard } from '@/components/molecules/shared/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';

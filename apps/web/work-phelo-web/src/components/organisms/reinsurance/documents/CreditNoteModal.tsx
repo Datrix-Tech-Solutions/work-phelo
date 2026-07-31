@@ -195,7 +195,7 @@ export function CreditNoteModal({
       onClose={onClose}
     >
       {/* Address block */}
-      <div className="flex flex-col gap-0.5 text-sm mb-4">
+      <div className="flex flex-col gap-0.5 text-base mb-4">
         <p className="text-gray-500">
           {new Date().toLocaleDateString('en-GB', {
             day: '2-digit',
@@ -214,10 +214,10 @@ export function CreditNoteModal({
         </p>
       </div>
 
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full text-base border-collapse">
         <tbody>
           {descriptionRows.map((row, i) => (
-            <tr key={i} className="border-b border-gray-50 last:border-0">
+            <tr key={i}>
               <td className="py-2 pr-4 text-gray-500 w-1/2">{row.label}</td>
               <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
                 {row.pct ?? ''}
@@ -230,7 +230,7 @@ export function CreditNoteModal({
         </tbody>
       </table>
 
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full text-base border-collapse">
         <tbody>
           {financialRows.map((row, i) =>
             row.divider ? (
@@ -240,7 +240,7 @@ export function CreditNoteModal({
                 </td>
               </tr>
             ) : (
-              <tr key={i} className="border-b border-gray-50 last:border-0">
+              <tr key={i}>
                 <td
                   className={`py-2 pr-4 text-gray-500 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : ''}`}
                 >
@@ -259,11 +259,11 @@ export function CreditNoteModal({
           )}
           {description && (
             <div className="my-2">
-              <p className="text-xs font-semibold text-gray-400  tracking-wide mb-1">
+              <p className="text-sm font-semibold text-gray-400  tracking-wide mb-1">
                 Kindly Refer:
               </p>
               <div
-                className="text-sm text-gray-700"
+                className="text-base text-gray-700"
                 dangerouslySetInnerHTML={{ __html: description }}
               />
             </div>

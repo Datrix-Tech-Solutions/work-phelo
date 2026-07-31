@@ -29,9 +29,7 @@ export function useCreateReinsurer() {
       const res = await api.post<Counterparty>(ENDPOINT, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: REINSURERS_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: REINSURERS_KEY }),
   });
 }
 
@@ -42,9 +40,7 @@ export function useUpdateReinsurer() {
       const res = await api.patch<Counterparty>(`${ENDPOINT}/${id}`, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: REINSURERS_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: REINSURERS_KEY }),
   });
 }
 
@@ -63,8 +59,6 @@ export function useDeleteReinsurer() {
     mutationFn: async (id: string) => {
       await api.delete(`${ENDPOINT}/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: REINSURERS_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: REINSURERS_KEY }),
   });
 }

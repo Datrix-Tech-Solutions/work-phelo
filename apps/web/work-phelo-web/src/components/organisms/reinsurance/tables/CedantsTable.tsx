@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { ContactCard } from '@/components/molecules/ContactCard';
 import { Modal } from '@/components/organisms/shared/Modal';

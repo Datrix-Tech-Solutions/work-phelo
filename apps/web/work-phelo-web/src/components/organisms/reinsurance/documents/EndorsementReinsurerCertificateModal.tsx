@@ -116,7 +116,7 @@ function buildChangeSentence(
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3 mt-6 first:mt-0">
-      <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1">
+      <p className="text-sm font-semibold uppercase tracking-widest text-gray-500 mb-1">
         {children}
       </p>
       <div className="border-t border-gray-300" />
@@ -223,7 +223,7 @@ export function EndorsementReinsurerCertificateModal({
     >
       {/* POLICY INFORMATION */}
       <SectionHeading>Policy Information</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
+      <table className="w-full text-base border-collapse mb-2">
         <tbody>
           {[
             { label: 'Cedant', value: placement.cedant.name },
@@ -235,7 +235,7 @@ export function EndorsementReinsurerCertificateModal({
             { label: 'Currency', value: fmtVal(placement.currency) },
             { label: 'Class of Business', value: fmtVal(placement.classOfBusiness) },
           ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
+            <tr key={row.label}>
               <td className="py-1.5 pr-4 text-gray-500 w-2/5">{row.label}</td>
               <td className="py-1.5 pl-4 text-gray-900 font-medium">{row.value}</td>
             </tr>
@@ -245,7 +245,7 @@ export function EndorsementReinsurerCertificateModal({
 
       {/* ENDORSEMENT SUMMARY */}
       <SectionHeading>Endorsement Summary</SectionHeading>
-      <div className="text-sm mb-2 space-y-2">
+      <div className="text-base mb-2 space-y-2">
         {endorsement.reason && (
           <div>
             <span className="text-gray-500">Reason:</span>
@@ -263,14 +263,14 @@ export function EndorsementReinsurerCertificateModal({
         <>
           {/* REINSURER PARTICIPATION */}
           <SectionHeading>Reinsurer Participation</SectionHeading>
-          <table className="w-full text-sm border-collapse mb-2">
+          <table className="w-full text-base border-collapse mb-2">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/3" />
-                <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
+                <th className="py-1.5 pr-4 text-left text-sm font-semibold text-gray-500 w-1/3" />
+                <th className="py-1.5 px-4 text-left text-sm font-semibold text-gray-500 w-1/3">
                   Original
                 </th>
-                <th className="py-1.5 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
+                <th className="py-1.5 pl-4 text-left text-sm font-semibold text-gray-500 w-1/3">
                   Revised
                 </th>
               </tr>
@@ -308,7 +308,7 @@ export function EndorsementReinsurerCertificateModal({
                   bold: true,
                 },
               ].map((row) => (
-                <tr key={row.label} className="border-b border-gray-50 last:border-0">
+                <tr key={row.label}>
                   <td
                     className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
                   >
@@ -331,7 +331,7 @@ export function EndorsementReinsurerCertificateModal({
 
           {/* FINANCIAL IMPACT */}
           <SectionHeading>Financial Impact</SectionHeading>
-          <table className="w-full text-sm border-collapse mb-2">
+          <table className="w-full text-base border-collapse mb-2">
             <tbody>
               {[
                 {
@@ -348,7 +348,7 @@ export function EndorsementReinsurerCertificateModal({
                   bold: true,
                 },
               ].map((row) => (
-                <tr key={row.label} className="border-b border-gray-50 last:border-0">
+                <tr key={row.label}>
                   <td
                     className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
                   >
@@ -368,7 +368,7 @@ export function EndorsementReinsurerCertificateModal({
 
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
+      <ul className="text-base text-gray-700 space-y-1 list-none mb-2">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>

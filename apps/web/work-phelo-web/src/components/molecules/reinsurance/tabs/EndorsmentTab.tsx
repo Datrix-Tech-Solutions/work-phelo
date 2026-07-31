@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, Ref, MutableRefObject } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   EndorsementParticipantClosing,
@@ -70,12 +70,16 @@ const SEGMENT_COLORS = [
 function EndorsementCard({
   endorsement,
   placement,
+  defaultOpen = false,
+  cardRef,
 }: {
   endorsement: PlacementEndorsement;
   placement: Facultative;
+  defaultOpen?: boolean;
+  cardRef?: Ref<HTMLDivElement>;
 }) {
   const [editPanelOpen, setEditPanelOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(defaultOpen);
   const [revisedShares, setRevisedShares] = useState<Record<string, string>>({});
   const [busyEPIds, setBusyEPIds] = useState<Set<string>>(new Set());
   const [marketPreview, setMarketPreview] = useState<EndorsementMarketPreviewState | null>(null);
@@ -86,6 +90,13 @@ function EndorsementCard({
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [mailPreviewCounterpartyId, setMailPreviewCounterpartyId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+
+  const cardElRef = useRef<HTMLDivElement | null>(null);
+  const setCardRef = (node: HTMLDivElement | null) => {
+    cardElRef.current = node;
+    if (typeof cardRef === 'function') cardRef(node);
+    else if (cardRef) (cardRef as MutableRefObject<HTMLDivElement | null>).current = node;
+  };
 
   const { data: reinsurers = [] } = useReinsurers();
 
@@ -136,6 +147,19 @@ function EndorsementCard({
     endorsement.id,
   );
   const queryClient = useQueryClient();
+
+  const prevStatusRef = useRef(endorsement.status);
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current;
+    prevStatusRef.current = endorsement.status;
+    // Leaving DRAFT reveals the participants table and close section, growing the
+    // card — scroll the newly added content into view the same way tab-selection does.
+    if (prevStatus === 'DRAFT' && endorsement.status !== 'DRAFT' && detailsOpen) {
+      requestAnimationFrame(() => {
+        cardElRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      });
+    }
+  }, [endorsement.status, detailsOpen]);
 
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = endorsement.proposedSnapshot
@@ -259,12 +283,6 @@ function EndorsementCard({
     (document) => document.type === 'ENDORSEMENT_SLIP' && document.endorsementId === endorsement.id,
   );
 
-  const findCertificateDocument = (closingId: string) =>
-    activePlacementDocuments.find(
-      (document) =>
-        document.type === 'ENDORSEMENT_CERTIFICATE' && document.endorsementClosingId === closingId,
-    );
-
   const handleViewEndorsementSlip = () => {
     if (endorsementSlipDocument) {
       setDocumentPreview(endorsementSlipDocument);
@@ -291,9 +309,6 @@ function EndorsementCard({
       documentTitle: isExistingPlacementParticipant
         ? 'Revised Endorsement Offer Preview'
         : 'Offer Slip',
-      previewNotice: isExistingPlacementParticipant
-        ? 'Backend endorsement preview for revised terms. This is not an ENDORSEMENT_CERTIFICATE and no immutable official revised-offer document has been generated yet.'
-        : 'Backend endorsement preview for a new market participant. This is not the original placement Offer Slip and no immutable official endorsement offer document has been generated yet.',
       recipientName: row.reinsurerName,
       relationship: isExistingPlacementParticipant
         ? 'Existing placement participant reviewing revised endorsement terms'
@@ -314,7 +329,6 @@ function EndorsementCard({
           createEndorsementParticipant({
             counterpartyId: entry.id,
             sharePercent: leftoverFacOffer > 0 ? leftoverFacOffer : undefined,
-            status: 'OFFER_SENT',
           }),
         ),
       );
@@ -340,6 +354,52 @@ function EndorsementCard({
       });
       useToastStore.getState().addToast({
         message: `${row.reinsurerName} declined for this endorsement`,
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setBusyEPIds((prev) => {
+        const n = new Set(prev);
+        n.delete(row.counterpartyId);
+        return n;
+      });
+    }
+  };
+
+  const handleRevertEndorsementParticipant = async (row: EndorsementParticipantRow) => {
+    if (!row.participantId || busyEPIds.has(row.counterpartyId)) return;
+    setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
+    try {
+      await updateEndorsementParticipantStatus.mutateAsync({
+        participantId: row.participantId,
+        status: 'QUOTED',
+      });
+      useToastStore.getState().addToast({
+        message: `${row.reinsurerName} reverted to pending for this endorsement`,
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setBusyEPIds((prev) => {
+        const n = new Set(prev);
+        n.delete(row.counterpartyId);
+        return n;
+      });
+    }
+  };
+
+  const handleReopenEndorsementParticipant = async (row: EndorsementParticipantRow) => {
+    if (!row.participantId || busyEPIds.has(row.counterpartyId)) return;
+    setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
+    try {
+      await updateEndorsementParticipantStatus.mutateAsync({
+        participantId: row.participantId,
+        status: 'OFFER_SENT',
+      });
+      useToastStore.getState().addToast({
+        message: `${row.reinsurerName} reopened for this endorsement`,
         type: 'success',
       });
     } catch (error) {
@@ -386,37 +446,76 @@ function EndorsementCard({
     }
   };
 
+  // Endorsement certificates are only meaningful for original/revised participants whose
+  // terms actually changed — a brand-new participant's confirmed closing already reflects
+  // their agreed offer, with nothing "endorsed" to certify against. Rendered live from the
+  // confirmed closing's own figures, the same way the pre-close "Endorsement Offer Slip"
+  // preview is computed — no backend document generation involved.
+  const handleViewCertificate = (
+    row: EndorsementParticipantRow,
+    closing: EndorsementParticipantClosing,
+  ) => {
+    if (row.isNew) return;
+    setMarketPreview({
+      counterpartyId: row.counterpartyId,
+      documentTitle: 'Endorsement Certificate',
+      recipientName: row.reinsurerName,
+      relationship: 'Existing placement participant with a confirmed endorsement closing',
+      offeredLinePercent: Number(closing.signedLinePercent),
+      status: 'CLOSED',
+      brokerageFee: row.brokerageFee,
+      previewFormat: 'REVISED_CERTIFICATE',
+      confirmedClosing: closing,
+    });
+  };
+
   const handleAcceptEndorsement = async (row: EndorsementParticipantRow) => {
+    const revised = parseFloat(revisedShares[row.counterpartyId] ?? String(row.offeredShare));
+    const share = isNaN(revised) ? row.offeredShare : revised;
+
+    if (share > leftoverFacOffer) {
+      useToastStore.getState().addToast({
+        message: `${row.reinsurerName}'s share (${share}%) exceeds the ${leftoverFacOffer}% still available on this endorsement.`,
+        type: 'error',
+      });
+      return;
+    }
+
     setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
     try {
-      const revised = parseFloat(revisedShares[row.counterpartyId] ?? String(row.offeredShare));
-      const share = isNaN(revised) ? row.offeredShare : revised;
-
       const originalParticipant = placement.participants.find(
         (p) => p.counterpartyId === row.counterpartyId,
       );
       const originalParticipantId = row.originalParticipantId ?? originalParticipant?.id;
 
-      if (row.participantId) {
+      let participantId = row.participantId;
+      if (participantId) {
         await updateEndorsementParticipant.mutateAsync({
-          participantId: row.participantId,
+          participantId,
           sharePercent: row.offeredShare,
           signedLinePercent: share,
           status: 'ACCEPTED',
+          suppressInvalidation: true,
         });
       } else {
-        await createEndorsementParticipant({
+        const created = await createEndorsementParticipant({
           counterpartyId: row.counterpartyId,
           ...(originalParticipantId ? { originalParticipantId } : {}),
           sharePercent: share,
           signedLinePercent: share,
           status: 'ACCEPTED',
         });
+        participantId = created.id;
       }
+
+      // Accept and validate are collapsed into a single step — an accepted
+      // participant's closing is confirmed immediately rather than waiting
+      // for a separate "Validate" click.
+      await validateAndConfirmEndorsementParticipant.mutateAsync({ participantId });
 
       await invalidateEndorsementView();
       useToastStore.getState().addToast({
-        message: `${row.reinsurerName} accepted for this endorsement`,
+        message: `${row.reinsurerName} accepted and validated for this endorsement`,
         type: 'success',
       });
     } catch (error) {
@@ -479,7 +578,7 @@ function EndorsementCard({
 
   return (
     <>
-      <div className={cardClass('p-5 flex flex-col gap-4')}>
+      <div ref={setCardRef} className={cardClass('p-5 flex flex-col gap-4')}>
         <div
           role="button"
           tabIndex={0}
@@ -541,6 +640,7 @@ function EndorsementCard({
                 proposed={proposed}
                 endorsementSummary={endorsementSummary}
                 summaryTargetPercent={summaryTargetPercent}
+                originalPercent={snapshotFacOffer}
                 acceptedCapacityRows={acceptedCapacityRows}
                 capacityColorMap={capacityColorMap}
               />
@@ -549,25 +649,28 @@ function EndorsementCard({
                 <EndorsementParticipantsTable
                   rows={endorsementRows}
                   endorsementParticipants={endorsementParticipants}
+                  isEndorsementClosed={endorsement.status === 'CLOSED'}
                   acceptedCounterpartyIds={acceptedCounterpartyIds}
                   confirmedClosingByEndorsementParticipantId={
                     confirmedClosingByEndorsementParticipantId
                   }
-                  findCertificateDocument={findCertificateDocument}
                   busyEPIds={busyEPIds}
                   mailedIds={mailedIds}
                   revisedShares={revisedShares}
                   onRevisedShareChange={(counterpartyId, value) =>
                     setRevisedShares((prev) => ({ ...prev, [counterpartyId]: value }))
                   }
+                  hasAvailableCapacity={leftoverFacOffer > 0}
                   onAddParticipant={() => setAddPanelOpen(true)}
                   onPreviewMarketDocument={handlePreviewMarketDocument}
                   onMailReinsurer={(counterpartyId) => setMailPreviewCounterpartyId(counterpartyId)}
                   onAccept={handleAcceptEndorsement}
                   onReject={handleRejectEndorsementParticipant}
+                  onRevert={handleRevertEndorsementParticipant}
+                  onReopen={handleReopenEndorsementParticipant}
                   onValidate={handleValidateEndorsementParticipant}
                   onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
-                  onViewCertificate={(document) => setDocumentPreview(document)}
+                  onViewCertificate={handleViewCertificate}
                 />
               )}
 
@@ -605,6 +708,18 @@ function EndorsementCard({
         mailRecipients={reinsurerEmails[mailPreviewCounterpartyId ?? ''] ?? []}
         onSendMail={() => {
           if (mailPreviewCounterpartyId) {
+            const participant = endorsementParticipants.find(
+              (item) => item.counterpartyId === mailPreviewCounterpartyId,
+            );
+            if (participant) {
+              updateEndorsementParticipantStatus
+                .mutateAsync({ participantId: participant.id, status: 'OFFER_SENT' })
+                .catch((error) => {
+                  useToastStore
+                    .getState()
+                    .addToast({ message: extractError(error), type: 'error' });
+                });
+            }
             setMailedIds((prev) => new Set([...prev, mailPreviewCounterpartyId]));
           }
           setMailPreviewCounterpartyId(null);
@@ -631,6 +746,24 @@ export function EndorsementTab({ placement }: EndorsementTabProps) {
     isError: effectiveViewError,
   } = usePlacementEffectiveView(placement.id, endorsements.length > 0);
 
+  const openCardRef = useRef<HTMLDivElement>(null);
+  const latestEndorsementId =
+    endorsements.length > 0
+      ? endorsements.reduce((latest, e) =>
+          new Date(e.createdAt) > new Date(latest.createdAt) ? e : latest,
+        ).id
+      : null;
+
+  // Scroll to the bottom of the open (latest) endorsement card whenever this tab
+  // is selected — with a single endorsement that lands at the page bottom anyway.
+  useEffect(() => {
+    if (!latestEndorsementId) return;
+    const raf = requestAnimationFrame(() => {
+      openCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [latestEndorsementId]);
+
   return (
     <div className="flex flex-col gap-5">
       <h3 className="text-base font-semibold text-gray-900">Policy Endorsement</h3>
@@ -649,7 +782,13 @@ export function EndorsementTab({ placement }: EndorsementTabProps) {
         <p className="text-sm text-gray-400">No endorsements have been made on this policy.</p>
       ) : (
         endorsements.map((e) => (
-          <EndorsementCard key={e.id} endorsement={e} placement={placement} />
+          <EndorsementCard
+            key={e.id}
+            endorsement={e}
+            placement={placement}
+            defaultOpen={e.id === latestEndorsementId}
+            cardRef={e.id === latestEndorsementId ? openCardRef : undefined}
+          />
         ))
       )}
     </div>

@@ -23,11 +23,7 @@ interface DocumentPrintLayoutProps {
   afterContent?: ReactNode;
 }
 
-export function DocumentPrintLayout({
-  documentTitle,
-  children,
-  afterContent,
-}: DocumentPrintLayoutProps) {
+export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLayoutProps) {
   if (typeof document === 'undefined') return null;
 
   return createPortal(
@@ -50,8 +46,8 @@ export function DocumentPrintLayout({
         <Image
           src="/iRiskrewatermark.png"
           alt=""
-          width={450}
-          height={300}
+          width={400}
+          height={250}
           style={{ objectFit: 'contain' }}
           priority
         />
@@ -65,32 +61,19 @@ export function DocumentPrintLayout({
           left: 0,
           right: 0,
           height: `${HEADER_H}px`,
-          display: 'grid',
-          gridTemplateColumns: '1fr auto 1fr',
+          display: 'flex',
           alignItems: 'center',
+          justifyContent: 'flex-end',
           padding: '12px 48px',
           borderBottom: '1px solid #e5e7eb',
           backgroundColor: 'white',
           zIndex: 2,
         }}
       >
-        <CompanyLogo width={130} height={65} style={{ objectFit: 'contain' }} priority />
-        <h1
-          style={{
-            fontSize: '14px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            color: '#111827',
-            margin: 0,
-            textAlign: 'center',
-          }}
-        >
-          {documentTitle}
-        </h1>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <QRCode value={COMPANY_URL} size={60} />
+        <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+          <CompanyLogo width={130} height={65} style={{ objectFit: 'contain' }} priority />
         </div>
+        <QRCode value={COMPANY_URL} size={60} />
       </div>
 
       {/* Fixed footer — sticks to bottom of every page */}
@@ -110,6 +93,7 @@ export function DocumentPrintLayout({
           backgroundColor: 'white',
           padding: '6px 48px',
           zIndex: 2,
+          fontFamily: 'var(--font-app), sans-serif',
         }}
       >
         {FOOTER_LINES.map((line) => (
@@ -169,7 +153,7 @@ export function DocumentPrintLayout({
                     >
                       <p
                         style={{
-                          fontSize: '14px',
+                          fontSize: '16px',
                           color: '#374151',
                           fontStyle: 'italic',
                           margin: 0,

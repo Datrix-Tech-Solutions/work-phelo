@@ -16,13 +16,13 @@ const COLUMNS: Column<AccountTypeDefinition>[] = [
   {
     key: 'name',
     label: 'Account Type Name',
-    width: '1fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
   },
   {
     key: 'description',
     label: 'Description',
-    width: '2fr',
+    width: 'minmax(200px, 2fr)',
     render: (row) => <span className="text-sm text-gray-700">{row.description ?? '—'}</span>,
   },
 ];
