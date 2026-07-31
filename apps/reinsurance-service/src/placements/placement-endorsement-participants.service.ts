@@ -310,6 +310,55 @@ export class PlacementEndorsementParticipantsService {
     });
   }
 
+  async reinvite(
+    user: RequestUser,
+    placementId: string,
+    endorsementId: string,
+    participantId: string,
+  ): Promise<EndorsementParticipantRecord> {
+    const participant = await this.findParticipantForUpdate(
+      user.tenantId,
+      placementId,
+      endorsementId,
+      participantId,
+    );
+    this.assertEndorsementMutable(participant.endorsement);
+
+    if (participant.status !== PlacementEndorsementParticipantStatus.DECLINED) {
+      throw new ConflictException(
+        'Only declined endorsement participants can be re-invited',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.assertNoActiveDuplicate(
+        tx,
+        user.tenantId,
+        endorsementId,
+        participant.counterpartyId,
+        participantId,
+      );
+
+      return tx.placementEndorsementParticipant.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId,
+          endorsementId,
+          originalParticipantId: participant.originalParticipantId,
+          counterpartyId: participant.counterpartyId,
+          status: PlacementEndorsementParticipantStatus.INVITED,
+          sharePercent: participant.sharePercent,
+          signedLinePercent: null,
+          notes: participant.notes
+            ? `Re-invited after declined attempt ${participant.id}. Previous notes: ${participant.notes}`
+            : `Re-invited after declined attempt ${participant.id}.`,
+          createdByUserId: user.id,
+        },
+        include: participantInclude,
+      });
+    });
+  }
+
   async delete(
     user: RequestUser,
     placementId: string,
