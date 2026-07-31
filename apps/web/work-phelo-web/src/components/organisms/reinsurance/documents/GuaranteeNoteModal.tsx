@@ -165,7 +165,7 @@ export function GuaranteeNoteModal({
     >
       <div className="flex flex-col gap-3">
         {/* Address block */}
-        <div className="flex flex-col gap-0.5 text-sm mb-2">
+        <div className="flex flex-col gap-0.5 text-base mb-2">
           <p className="text-gray-500">
             {new Date().toLocaleDateString('en-GB', {
               day: '2-digit',
@@ -180,10 +180,13 @@ export function GuaranteeNoteModal({
           <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
         </div>
 
-        <hr className="border-gray-100 mb-1" />
+        {/* <hr className="border-gray-100 mb-1" /> */}
 
-        {/* Section heading */}
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-1">
+        {/*  heading */}
+        <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 text-center underline">
+          Guarantee Note
+        </p>
+        <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide pt-1">
           Policy Details &amp; Risk Description
         </p>
 
@@ -201,8 +204,6 @@ export function GuaranteeNoteModal({
           label="Insurance Period"
           value={`${fmtDate(effectiveInceptionDate)} – ${fmtDate(effectiveExpiryDate)}`}
         />
-
-        <hr className="border-gray-100 my-1" />
 
         <DetailField
           inline
@@ -234,19 +235,15 @@ export function GuaranteeNoteModal({
           value={fmtAmount(commissionAmount, effectiveCurrency)}
         />
 
-        <hr className="border-gray-100 my-1" />
-
         <DetailField inline label="Net Premium" value={fmtAmount(netPremium, effectiveCurrency)} />
 
-        <hr className="border-gray-100 my-2" />
-
         {/* Participants */}
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+        <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
           Reinsurance Participant(s)
         </p>
 
         {participantRows.length === 0 ? (
-          <p className="text-sm text-gray-400">No participants assigned.</p>
+          <p className="text-base text-gray-400">No participants assigned.</p>
         ) : (
           participantRows.map((p) => (
             <DetailField

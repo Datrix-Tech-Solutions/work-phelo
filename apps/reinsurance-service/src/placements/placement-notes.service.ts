@@ -741,6 +741,11 @@ export class PlacementNotesService {
       (total, closing) => total + this.toNumber(closing.commissionAmount),
       0,
     );
+    // Each closing carries its own commissionPercent, so a placement-level debit note
+    // pooling multiple reinsurers can't reuse a single one verbatim — derive the blended
+    // rate that the summed commissionAmount actually represents against grossAmount.
+    const commissionPercent =
+      grossAmount > 0 ? (commissionAmount / grossAmount) * 100 : null;
     const chargeResult = await this.chargeSettings.calculateCharges(
       tenantId,
       {
@@ -757,7 +762,7 @@ export class PlacementNotesService {
     return {
       currency,
       grossAmount,
-      commissionPercent: null,
+      commissionPercent,
       commissionAmount,
       brokeragePercent: null,
       brokerageAmount: null,
@@ -847,6 +852,11 @@ export class PlacementNotesService {
       (total, closing) => total + this.toNumber(closing.commissionAmount),
       0,
     );
+    // Same reasoning as debitSnapshot: each endorsement closing carries its own
+    // commissionPercent, so the pooled placement-level note derives a blended rate
+    // from the summed amounts rather than reusing a single closing's percent verbatim.
+    const commissionPercent =
+      grossAmount > 0 ? (commissionAmount / grossAmount) * 100 : null;
     const chargeResult = await this.chargeSettings.calculateCharges(
       tenantId,
       {
@@ -863,7 +873,7 @@ export class PlacementNotesService {
     return {
       currency,
       grossAmount,
-      commissionPercent: null,
+      commissionPercent,
       commissionAmount,
       brokeragePercent: null,
       brokerageAmount: null,

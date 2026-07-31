@@ -28,7 +28,7 @@ function SectionHeader({ label }: { label: string }) {
     <tr className="bg-blue-900">
       <td
         colSpan={2}
-        className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
+        className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
       >
         {label}
       </td>
@@ -109,10 +109,10 @@ export function PaymentReceiptModal({
 
   const afterContent = (
     <div className="mt-10 flex flex-col gap-6 border-t border-gray-200 pt-6">
-      <p className="text-sm text-gray-700 italic text-center">Thank you for your payment!</p>
+      <p className="text-base text-gray-700 italic text-center">Thank you for your payment!</p>
 
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-gray-500">Signature / Stamp</span>
+        <span className="text-sm text-gray-500">Signature / Stamp</span>
         <Image
           src="/signature.png"
           alt="Signature"
@@ -179,30 +179,30 @@ export function PaymentReceiptModal({
       onClose={onClose}
       afterContent={afterContent}
     >
-      <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-4 text-base">
         {/* Receipt No. / Date */}
         <div className="flex items-start justify-between">
           <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Receipt No.</span>
+            <span className="text-sm text-gray-400 uppercase tracking-wide">Receipt No.</span>
             <p className="font-semibold text-gray-900">
               {payment.reference ?? displayPolicyNumber(policyNumber)}
             </p>
           </div>
           <div className="text-right">
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Date</span>
+            <span className="text-sm text-gray-400 uppercase tracking-wide">Date</span>
             <p className="font-semibold text-gray-900">{fmtDate(payment.paymentDate)}</p>
           </div>
         </div>
 
         {/* Receipt To */}
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-gray-400 uppercase tracking-wide">Receipt To</span>
+          <span className="text-sm text-gray-400 uppercase tracking-wide">Receipt To</span>
           <p className="font-semibold text-gray-900">{cedant.name}</p>
           {cedantLocation && <p className="text-gray-500">{cedantLocation}</p>}
         </div>
 
         {/* Table */}
-        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-sm">
+        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-base">
           <tbody>
             <SectionHeader label="Client Details" />
             {clientRows.map((row) => (

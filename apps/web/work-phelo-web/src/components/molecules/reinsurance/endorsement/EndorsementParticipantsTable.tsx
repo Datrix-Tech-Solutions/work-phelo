@@ -14,6 +14,7 @@ import { EndorsementParticipantRow } from './types';
 interface EndorsementParticipantsTableProps {
   rows: EndorsementParticipantRow[];
   endorsementParticipants: PlacementEndorsementParticipant[];
+  isEndorsementClosed: boolean;
   acceptedCounterpartyIds: Set<string>;
   confirmedClosingByEndorsementParticipantId: Record<string, EndorsementParticipantClosing>;
   busyEPIds: Set<string>;
@@ -39,6 +40,7 @@ interface EndorsementParticipantsTableProps {
 export function EndorsementParticipantsTable({
   rows,
   endorsementParticipants,
+  isEndorsementClosed,
   acceptedCounterpartyIds,
   confirmedClosingByEndorsementParticipantId,
   busyEPIds,
@@ -228,9 +230,11 @@ export function EndorsementParticipantsTable({
           const responded = isAccepted || isDeclined;
           return (
             <div className="flex items-center gap-2">
-              <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
-                Offer Slip
-              </TableButton>
+              {!isEndorsementClosed && (
+                <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
+                  Offer Slip
+                </TableButton>
+              )}
               {!mailed && !responded && (
                 <button
                   type="button"
@@ -262,7 +266,7 @@ export function EndorsementParticipantsTable({
                   <Icons.X className="w-5 h-5" />
                 </button>
               )}
-              {isDeclined && (
+              {isDeclined && !isEndorsementClosed && (
                 <button
                   type="button"
                   title={isBusy ? 'Reopening...' : 'Reopen'}
