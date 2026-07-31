@@ -91,6 +91,7 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
           backgroundColor: 'white',
           padding: '6px 48px',
           zIndex: 2,
+          fontFamily: 'var(--font-app), sans-serif',
         }}
       >
         {FOOTER_LINES.map((line) => (

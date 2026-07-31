@@ -206,7 +206,7 @@ export function ClosingLetterModal({
       <table className="w-full text-sm border-collapse">
         <tbody>
           {descriptionRows.map((row, i) => (
-            <tr key={i} className="border-b border-gray-50 last:border-0">
+            <tr key={i}>
               <td className="py-2 pr-4 text-gray-500 w-1/2">{row.label}</td>
               <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
                 {row.pct ?? ''}
@@ -229,7 +229,7 @@ export function ClosingLetterModal({
                 </td>
               </tr>
             ) : (
-              <tr key={i} className="border-b border-gray-50 last:border-0">
+              <tr key={i}>
                 <td
                   className={`py-2 pr-4 text-gray-500 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : ''}`}
                 >

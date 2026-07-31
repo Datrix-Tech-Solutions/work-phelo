@@ -21,7 +21,11 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, Props>(
   ({ label, error, className, ...props }, ref) => {
     return (
       <div className="flex flex-col gap-1.5">
-        {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
+        {label && (
+          <label className="block truncate text-sm font-bold text-gray-900" title={label}>
+            {label}
+          </label>
+        )}
         {props.type === 'textarea' ? (
           <textarea
             ref={ref as React.Ref<HTMLTextAreaElement>}

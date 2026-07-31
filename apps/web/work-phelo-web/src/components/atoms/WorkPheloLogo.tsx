@@ -9,7 +9,7 @@ interface WorkPheloLogoProps {
 
 export function WorkPheloLogo({ className, variant = 'text' }: WorkPheloLogoProps) {
   if (variant === 'image') {
-    return <CompanyLogo className={cn('object-contain', className)} />;
+    return <CompanyLogo className={cn('object-fill', className)} />;
   }
 
   return <WorkPheloWordmark className={className} />;

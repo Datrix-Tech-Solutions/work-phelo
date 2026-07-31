@@ -145,7 +145,7 @@ function ProfileDropdown({
       <button
         onClick={() => setOpen((v) => !v)}
         style={frostedAvatarStyle(avatarColor)}
-        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold backdrop-blur-sm border border-white/30 transition-opacity hover:opacity-80"
+        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold backdrop-blur-sm border border-white/30 transition-opacity hover:opacity-80"
       >
         {userInitials}
       </button>

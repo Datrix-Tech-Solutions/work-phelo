@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../../shared/DataTable';
 import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/hr/useAppraisals';

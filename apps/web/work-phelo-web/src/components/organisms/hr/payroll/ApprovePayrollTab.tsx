@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { MoreVertical } from 'lucide-react';
 import { Column, DataTable } from '../../shared/DataTable';
 import { PayrollRun } from '@/types/hr';

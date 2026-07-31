@@ -29,9 +29,7 @@ export function useCreateCedant() {
       const res = await api.post<Counterparty>(ENDPOINT, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CEDANTS_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CEDANTS_KEY }),
   });
 }
 
@@ -42,9 +40,7 @@ export function useUpdateCedant() {
       const res = await api.patch<Counterparty>(`${ENDPOINT}/${id}`, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CEDANTS_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CEDANTS_KEY }),
   });
 }
 
@@ -63,8 +59,6 @@ export function useDeleteCedant() {
     mutationFn: async (id: string) => {
       await api.delete(`${ENDPOINT}/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CEDANTS_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CEDANTS_KEY }),
   });
 }

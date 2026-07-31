@@ -169,7 +169,7 @@ export function PremiumCreditNoteModal({
               { label: 'Reinsured', value: cedant.name },
               { label: 'Policy Type', value: classOfBusiness ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -184,14 +184,14 @@ export function PremiumCreditNoteModal({
               },
               { label: 'Currency', value: currency ?? '—' },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
             ))}
 
             {offerDetailRows.map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
               </tr>
@@ -234,7 +234,7 @@ export function PremiumCreditNoteModal({
                 bold: true,
               },
             ].map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+              <tr key={row.label}>
                 <td
                   className={`py-2 px-4 w-1/2 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
                 >

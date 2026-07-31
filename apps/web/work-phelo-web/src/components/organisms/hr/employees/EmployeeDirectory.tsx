@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { ContactCard, PillColor } from '@/components/molecules/ContactCard';
 import { EmployeeStatsRow } from '@/components/molecules/hr/employees/EmployeeStatsRow';

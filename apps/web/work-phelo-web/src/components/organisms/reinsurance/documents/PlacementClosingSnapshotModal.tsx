@@ -82,7 +82,7 @@ function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] 
     <table className="w-full border-collapse text-sm">
       <tbody>
         {rows.map((row) => (
-          <tr key={row.label} className="border-b border-gray-50 last:border-0">
+          <tr key={row.label}>
             <td className="w-2/5 py-1.5 pr-4 text-gray-500">{row.label}</td>
             <td className="py-1.5 pl-4 font-medium text-gray-900">{row.value}</td>
           </tr>

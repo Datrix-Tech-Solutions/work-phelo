@@ -13,8 +13,8 @@ export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
   const { data: currencies = [] } = useCurrencies();
 
   return (
-    <div className="flex flex-wrap">
-      <div className="w-50">
+    <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
+      <div className="lg:col-span-1">
         <CurrencyAmountListCard
           title="Sum Insured"
           columnLabel="Sum Insured"
@@ -23,7 +23,7 @@ export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
           isLoading={isLoading}
         />
       </div>
-      <div className="w-50">
+      <div className="lg:col-span-1">
         <CurrencyAmountListCard
           title="Total Premium"
           columnLabel="Total Premium"
@@ -32,7 +32,7 @@ export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
           isLoading={isLoading}
         />
       </div>
-      <div className="w-50">
+      <div className="lg:col-span-1">
         <CurrencyAmountListCard
           title="Total Brokerage"
           columnLabel="Total Brokerage"
@@ -41,7 +41,7 @@ export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
           isLoading={isLoading}
         />
       </div>
-      <div className="w-50">
+      <div className="lg:col-span-1">
         <CurrencyAmountListCard
           title="Total Claim Incurred"
           columnLabel="Total Claims"
@@ -50,7 +50,7 @@ export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
           isLoading={isLoading}
         />
       </div>
-      <div className="w-50">
+      <div className="lg:col-span-1">
         <CurrencyAmountListCard
           title="Total Recoveries"
           columnLabel="Recoveries"
@@ -59,7 +59,7 @@ export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
           isLoading={isLoading}
         />
       </div>
-      <div className="w-50">
+      <div className="lg:col-span-1">
         <CurrencyAmountListCard
           title="Outstanding Premiums"
           columnLabel="Outstanding"

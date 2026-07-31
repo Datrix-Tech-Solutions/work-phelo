@@ -6,7 +6,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
-import { Facultative, PlacementParticipantStatus } from '@/types/reinsurance';
+import { Facultative, PlacementParticipantStatus, toDisplayStatus } from '@/types/reinsurance';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
 import { cn } from '@/lib/utils';
 
@@ -59,6 +59,7 @@ interface DistributionTableProps {
   onClose?: (row: DistributionEntry) => void;
   onDelete?: (row: DistributionEntry) => void;
   onRevert?: (row: DistributionEntry) => void;
+  onReopen?: (row: DistributionEntry) => void;
 }
 
 export function DistributionTable({
@@ -75,6 +76,7 @@ export function DistributionTable({
   onClose,
   onDelete,
   onRevert,
+  onReopen,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [mailPreviewId, setMailPreviewId] = useState<string | null>(null);
@@ -292,6 +294,10 @@ export function DistributionTable({
           !responded;
         const showRevert = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
         const showClose = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
+        const showReopen =
+          !isPlacementLocked &&
+          row.status === 'DECLINED' &&
+          toDisplayStatus(placement.status) !== 'Closed';
         return (
           <div className="flex items-center gap-2">
             {showPreviewIcon && (
@@ -343,6 +349,19 @@ export function DistributionTable({
                 className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
                 <Icons.X className="w-5 h-5" />
+              </button>
+            )}
+            {showReopen && (
+              <button
+                type="button"
+                title={isBusy ? 'Reopening...' : 'Reopen'}
+                onClick={() => {
+                  if (!isBusy) onReopen?.(row);
+                }}
+                disabled={isBusy}
+                className={`text-amber-500 hover:text-amber-600 transition-colors ${disabledActionClass}`}
+              >
+                <Icons.RotateCcw className="w-5 h-5" />
               </button>
             )}
             {showRevert && (

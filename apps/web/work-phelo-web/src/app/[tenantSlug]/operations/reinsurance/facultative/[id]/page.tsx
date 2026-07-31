@@ -38,6 +38,7 @@ export default function FacultativeDetailPage({
   const { tenantSlug, id } = use(params);
   const searchParams = useSearchParams();
   const fromClosing = searchParams.get('from') === 'closing';
+  const tabParam = searchParams.get('tab');
   const { data: placement, isLoading } = useFacultativePlacement(id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement?.id ?? '');
   const pendingEndorsementCount = endorsements.filter(
@@ -45,7 +46,9 @@ export default function FacultativeDetailPage({
   ).length;
   const forceClose = useForceCloseFacultative(id);
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
+  const [activeTab, setActiveTab] = useState<FacultativeTab>(
+    tabParam === 'endorsement' ? 'endorsement' : 'distribution',
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [endorsementOpen, setEndorsementOpen] = useState(false);
   const [forceCloseOpen, setForceCloseOpen] = useState(false);
@@ -63,7 +66,9 @@ export default function FacultativeDetailPage({
   const [prevShouldDefaultToClosings, setPrevShouldDefaultToClosings] = useState(false);
   if (shouldDefaultToClosings !== prevShouldDefaultToClosings) {
     setPrevShouldDefaultToClosings(shouldDefaultToClosings);
-    if (shouldDefaultToClosings) {
+    // Don't clobber an explicit `?tab=endorsement` deep link (e.g. from creating an
+    // endorsement on the Facultative list) with the closing-tab default.
+    if (shouldDefaultToClosings && tabParam !== 'endorsement') {
       setActiveTab('closings');
     }
   }
@@ -173,6 +178,7 @@ export default function FacultativeDetailPage({
           isOpen={endorsementOpen}
           placement={placement}
           onClose={() => setEndorsementOpen(false)}
+          onCreated={() => setActiveTab('endorsement')}
         />
       )}
       <Modal

@@ -19,16 +19,16 @@ function buildColumns(label: string): Column<AmountRow>[] {
     {
       key: 'currency',
       label: 'Currency',
-      width: '1fr',
+      width: '56px',
       render: (row) => <span className="font-medium text-gray-900">{row.isoCode}</span>,
     },
     {
       key: 'amount',
       label,
-      width: '140px',
+      width: '1fr',
       className: 'text-right',
       render: (row) => (
-        <span className="font-medium text-gray-900">
+        <span className="block truncate font-medium text-gray-900">
           {row.amount != null ? fmtAmount(row.amount) : '—'}
         </span>
       ),

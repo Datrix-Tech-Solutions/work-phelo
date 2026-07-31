@@ -25,7 +25,7 @@ function isSuperAdminRoute(pathname: string): boolean {
   );
 }
 
-export function CompanyLogo({ className, style, width = 80, height = 60 }: CompanyLogoProps) {
+export function CompanyLogo({ className, style, width = 80, height = 50 }: CompanyLogoProps) {
   const pathname = usePathname();
   const isSuperAdmin = isSuperAdminRoute(pathname ?? '');
   const { user } = useAuthStore();

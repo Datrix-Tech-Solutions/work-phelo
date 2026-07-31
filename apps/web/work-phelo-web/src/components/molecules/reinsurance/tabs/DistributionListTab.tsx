@@ -318,6 +318,14 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       });
   };
 
+  const handleReopen = (row: DistributionEntry) => {
+    patch(row.id, { status: 'OFFER_SENT' });
+    updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) => {
+      patch(row.id, { status: 'DECLINED' });
+      toast().addToast({ message: extractError(error), type: 'error' });
+    });
+  };
+
   const handleDelete = (row: DistributionEntry) => {
     setDeletedIds((prev) => new Set([...prev, row.id]));
     deleteParticipant(row.id).catch((error) => {
@@ -363,6 +371,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           onClose={handleClose}
           onDelete={handleDelete}
           onRevert={handleRevert}
+          onReopen={handleReopen}
         />
       </div>
 

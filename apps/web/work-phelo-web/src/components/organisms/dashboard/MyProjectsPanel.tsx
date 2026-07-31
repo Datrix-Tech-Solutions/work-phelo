@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ChevronDown, ChevronRight, ArrowRight } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { useMyTasks, useUpdateTaskStatus } from '@/hooks';
