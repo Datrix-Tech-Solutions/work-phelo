@@ -924,6 +924,13 @@ export interface ValidateEndorsementParticipantResponse {
   effectiveStatus: PlacementEndorsementStatus;
 }
 
+export interface ForceCloseEndorsementResponse {
+  endorsement: PlacementEndorsement;
+  closings: EndorsementParticipantClosing[];
+  summary: PlacementEndorsementSummary;
+  effectiveStatus: PlacementEndorsementStatus;
+}
+
 export type PlacementDocumentType =
   | 'OFFER_SLIP'
   | 'CLOSING_SLIP'

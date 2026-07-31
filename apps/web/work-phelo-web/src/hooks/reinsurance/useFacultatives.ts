@@ -26,6 +26,7 @@ import {
   PlacementNote,
   EndorsementParticipantClosing,
   ValidateEndorsementParticipantResponse,
+  ForceCloseEndorsementResponse,
   PlacementDocument,
 } from '@/types/reinsurance';
 
@@ -549,6 +550,21 @@ export function useUpdateEndorsementStatus(placementId: string) {
   });
 }
 
+export function useForceCloseEndorsement(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ endorsementId }: { endorsementId: string }) => {
+      const res = await api.post<ForceCloseEndorsementResponse>(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/force-close`,
+      );
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      invalidateEndorsementWorkflow(queryClient, placementId, variables.endorsementId);
+    },
+  });
+}
+
 export function usePlacementEndorsementSummary(
   placementId: string,
   endorsementId: string | undefined,
@@ -603,6 +619,24 @@ export function useCreateEndorsementParticipant(
       const res = await api.post(
         `${BASE}/${placementId}/endorsements/${endorsementId}/participants`,
         payload,
+      );
+      return res.data as PlacementEndorsementParticipant;
+    },
+    onSuccess: () => {
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId);
+    },
+  });
+}
+
+export function useReinviteEndorsementParticipant(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ participantId }: { participantId: string }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}/reinvite`,
       );
       return res.data as PlacementEndorsementParticipant;
     },
