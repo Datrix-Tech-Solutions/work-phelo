@@ -417,6 +417,12 @@ describe('PlacementEndorsementParticipantsService', () => {
     );
 
     expect(result.id).toBe('endorsement-participant-2');
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      }),
+    );
     const duplicateArgs =
       firstCallArg<Prisma.PlacementEndorsementParticipantFindFirstArgs>(
         prisma.placementEndorsementParticipant.findFirst,
@@ -493,5 +499,45 @@ describe('PlacementEndorsementParticipantsService', () => {
     expect(
       prisma.placementEndorsementParticipant.create,
     ).not.toHaveBeenCalled();
+  });
+
+  it('retries re-invite once when a serializable transaction conflict is reported', async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError(
+      'Transaction conflict',
+      {
+        code: 'P2034',
+        clientVersion: 'test',
+      },
+    );
+    prisma.$transaction
+      .mockRejectedValueOnce(conflict)
+      .mockImplementationOnce((callback: (tx: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      );
+    prisma.placementEndorsementParticipant.findFirst
+      .mockResolvedValueOnce({
+        ...participant,
+        status: PlacementEndorsementParticipantStatus.DECLINED,
+        endorsement,
+      })
+      .mockResolvedValueOnce(null);
+    prisma.placementEndorsementParticipant.create.mockResolvedValue({
+      ...participant,
+      id: 'endorsement-participant-2',
+      status: PlacementEndorsementParticipantStatus.INVITED,
+      signedLinePercent: null,
+    });
+
+    await service.reinvite(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(prisma.placementEndorsementParticipant.create).toHaveBeenCalledTimes(
+      1,
+    );
   });
 });
