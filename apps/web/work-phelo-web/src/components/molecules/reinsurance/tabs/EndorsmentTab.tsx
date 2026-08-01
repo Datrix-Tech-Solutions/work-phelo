@@ -417,6 +417,17 @@ function EndorsementCard({
       // INVITED attempt for the same reinsurer.
       await reinviteEndorsementParticipant.mutateAsync({ participantId: row.participantId });
       await invalidateEndorsementView();
+      // The new attempt starts back at INVITED and needs its own offer sent
+      // before it can move to OFFER_SENT and then be accepted — mailedIds is
+      // keyed by counterparty, so without clearing it here the row would
+      // still read as "already sent" from the declined attempt and skip
+      // straight to Accept, which the backend rejects (INVITED -> ACCEPTED
+      // isn't a valid transition).
+      setMailedIds((prev) => {
+        const n = new Set(prev);
+        n.delete(row.counterpartyId);
+        return n;
+      });
       useToastStore.getState().addToast({
         message: `${row.reinsurerName} re-invited for this endorsement`,
         type: 'success',

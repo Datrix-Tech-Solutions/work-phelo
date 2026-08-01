@@ -395,6 +395,10 @@ function EndorsementSlipContent({ document }: { document: PlacementDocument }) {
 
   return (
     <>
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-2 text-center">
+        Endorsement Slip
+      </p>
+
       <SectionHeading>Document Control</SectionHeading>
       <DocumentControlRows document={document} />
 
@@ -506,6 +510,10 @@ function EndorsementCertificateContent({
 
   return (
     <>
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-2 text-center">
+        Endorsement Certificate
+      </p>
+
       <SectionHeading>Document Control</SectionHeading>
       <DocumentControlRows document={document} />
 
