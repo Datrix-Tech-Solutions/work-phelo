@@ -162,6 +162,10 @@ export function EndorsementClosingSnapshotModal({
       onPrint={() => {}}
       onClose={onClose}
     >
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-2 text-center">
+        Endorsement Closing Statement
+      </p>
+
       {/* Address block */}
       <div className="flex flex-col gap-0.5 text-base mb-4">
         <p className="text-gray-500">

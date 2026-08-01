@@ -221,6 +221,10 @@ export function EndorsementReinsurerCertificateModal({
       onPrint={onPrint}
       onClose={onClose}
     >
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-2 text-center">
+        Endorsement Certificate
+      </p>
+
       {/* POLICY INFORMATION */}
       <SectionHeading>Policy Information</SectionHeading>
       <table className="w-full text-base border-collapse mb-2">

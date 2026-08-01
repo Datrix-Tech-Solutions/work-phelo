@@ -184,6 +184,10 @@ export function EndorsementCertificateModal({
       onPrint={onPrint}
       onClose={onClose}
     >
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-2 text-center">
+        Endorsement Certificate
+      </p>
+
       {/* Letter header */}
       <div className="flex flex-col gap-0.5 text-base mb-6">
         <p className="text-gray-400 mb-3">{fmtDate(new Date().toISOString())}</p>

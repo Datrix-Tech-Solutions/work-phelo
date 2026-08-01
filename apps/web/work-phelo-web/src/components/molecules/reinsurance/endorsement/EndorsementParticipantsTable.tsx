@@ -203,13 +203,19 @@ export function EndorsementParticipantsTable({
       width: 'minmax(200px, 1fr)',
       render: (row) => {
         const endorsementParticipant = findRowParticipant(endorsementParticipants, row);
+        // The real backend status — never overridden by the local "editing"
+        // flag. Actions that require a specific backend transition (like
+        // Decline, which only exists from INVITED/OFFER_SENT/QUOTED) must be
+        // gated on this, not on the edit-mode-aware `isAccepted` below,
+        // otherwise editing an already-accepted offer would let you try to
+        // decline a participant the backend still considers ACCEPTED.
+        const isActuallyAccepted =
+          endorsementParticipant?.status === 'ACCEPTED' ||
+          endorsementParticipant?.status === 'CLOSED';
         const isEditingRevision =
           endorsementParticipant?.status === 'ACCEPTED' &&
           editingCounterpartyIds.has(row.counterpartyId);
-        const isAccepted =
-          !isEditingRevision &&
-          (endorsementParticipant?.status === 'ACCEPTED' ||
-            endorsementParticipant?.status === 'CLOSED');
+        const isAccepted = isActuallyAccepted && !isEditingRevision;
         const isDeclined = endorsementParticipant?.status === 'DECLINED';
         const isValidated = row.participantId
           ? Boolean(confirmedClosingByEndorsementParticipantId[row.participantId])
@@ -242,7 +248,10 @@ export function EndorsementParticipantsTable({
         }
 
         if (row.isNew) {
-          const responded = isAccepted || isDeclined;
+          // Whether the backend has a final answer already (accepted or
+          // declined) — used to gate Decline, which is never valid once a
+          // participant has actually responded, edit mode or not.
+          const hasResponded = isActuallyAccepted || isDeclined;
           return (
             <div className="flex items-center gap-2">
               {!isEndorsementClosed && (
@@ -250,7 +259,7 @@ export function EndorsementParticipantsTable({
                   Offer Slip
                 </TableButton>
               )}
-              {!mailed && !responded && (
+              {!mailed && !hasResponded && (
                 <button
                   type="button"
                   title="Share"
@@ -260,7 +269,7 @@ export function EndorsementParticipantsTable({
                   <Icons.Mail className="w-5 h-5" />
                 </button>
               )}
-              {mailed && !responded && (
+              {mailed && (!hasResponded || isEditingRevision) && (
                 <TableButton
                   variant="green"
                   isLoading={isBusy}
@@ -271,7 +280,7 @@ export function EndorsementParticipantsTable({
                   Accept
                 </TableButton>
               )}
-              {mailed && !responded && (
+              {mailed && !hasResponded && (
                 <TableButton
                   variant="red"
                   isLoading={isBusy}

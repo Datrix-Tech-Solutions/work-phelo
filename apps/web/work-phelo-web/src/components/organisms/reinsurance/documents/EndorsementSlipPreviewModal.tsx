@@ -395,9 +395,13 @@ function RevisedOfferContent({
 
   return (
     <>
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-1 text-center">
+        {confirmedClosing ? 'Endorsement Certificate' : 'Endorsement Offer Slip'}
+      </p>
+
       {/* POLICY INFORMATION */}
       <SectionHeading>Policy Information</SectionHeading>
-      <table className="w-full text-base border-collapse mb-2">
+      <table className="w-full text-sm border-collapse mb-2">
         <tbody>
           {[
             { label: 'Cedant', value: placement.cedant.name },
@@ -419,7 +423,7 @@ function RevisedOfferContent({
 
       {/* ENDORSEMENT SUMMARY */}
       <SectionHeading>Endorsement Summary</SectionHeading>
-      <div className="text-base mb-2 space-y-2">
+      <div className="text-sm mb-2 space-y-2">
         {narrative ? (
           <p className="text-gray-800 leading-relaxed">{narrative}</p>
         ) : (
@@ -442,7 +446,7 @@ function RevisedOfferContent({
 
       {/* REINSURER PARTICIPATION */}
       <SectionHeading>Reinsurer Participation</SectionHeading>
-      <table className="w-full text-base border-collapse mb-2">
+      <table className="w-full text-sm border-collapse mb-2">
         <thead>
           <tr className="border-b border-gray-200">
             <th className="py-1.5 pr-4 text-left text-sm font-semibold text-gray-500 w-1/3">
@@ -594,6 +598,9 @@ function OfferSlipContent({
 
   return (
     <div className="flex flex-col gap-3">
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-2 text-center">
+        Facultative Offer Slip
+      </p>
       <div className="mb-4">
         <Field label="Date" value={fmtDate(new Date().toISOString())} />
       </div>
