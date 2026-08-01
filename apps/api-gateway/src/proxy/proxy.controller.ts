@@ -31,6 +31,7 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/google(?:\/callback)?$/,
   /^\/api\/v1\/auth\/microsoft(?:\/callback)?$/,
   /^\/api\/v1\/auth\/tenants\/register$/,
+  /^\/api\/v1\/auth\/tenants\/slug\/[^/]+\/branding$/,
   /^\/api\/v1\/auth\/users\/accept-invite$/,
   /^\/api\/v1\/auth\/mfa\/send-sms$/,
   /^\/api\/v1\/operations\/reinsurance\/health$/,
@@ -123,6 +124,21 @@ export class ProxyController {
     return (
       isSwaggerEnabled() &&
       SWAGGER_PUBLIC_PATTERNS.some((pattern) => pattern.test(path))
+    );
+  }
+
+  private shouldStreamRequestBody(req: Request): boolean {
+    if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      return false;
+    }
+
+    const contentTypeHeader = req.headers['content-type'];
+    const contentType = Array.isArray(contentTypeHeader)
+      ? contentTypeHeader.join(';')
+      : contentTypeHeader;
+
+    return (
+      contentType?.toLowerCase().startsWith('multipart/form-data') ?? false
     );
   }
 
@@ -270,6 +286,11 @@ export class ProxyController {
         });
       }
     });
+
+    if (this.shouldStreamRequestBody(req)) {
+      req.pipe(proxyReq);
+      return;
+    }
 
     if (['POST', 'PUT', 'PATCH'].includes(req.method!) && req.body) {
       const body = JSON.stringify(req.body);

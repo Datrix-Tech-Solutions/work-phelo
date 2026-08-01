@@ -99,7 +99,50 @@ model Tenant {
   users           User[]
   permissionSets  PermissionSet[]
   userPermissions UserPermission[]
+  branding        TenantBranding?
 
+  @@schema("w_auth")
+}
+
+model TenantBranding {
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique
+  appName             String?
+  appLogoObjectKey    String?
+  appLogoMimeType     String?
+  appLogoFileName     String?
+  appLogoSizeBytes    Int?
+  sidebarLogoObjectKey String?
+  sidebarLogoMimeType  String?
+  sidebarLogoFileName  String?
+  sidebarLogoSizeBytes Int?
+  loginLogoObjectKey   String?
+  loginLogoMimeType    String?
+  loginLogoFileName    String?
+  loginLogoSizeBytes   Int?
+  logoObjectKey       String?
+  logoDisplayUrl      String?
+  faviconObjectKey    String?
+  faviconDisplayUrl   String?
+  faviconMimeType     String?
+  faviconFileName     String?
+  faviconSizeBytes    Int?
+  primaryColor        String?
+  secondaryColor      String?
+  accentColor         String?
+  sidebarColor        String?
+  emailHeaderColor    String?
+  documentHeaderColor String?
+  themeMode           String   @default("LIGHT")
+  updatedByUserId     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  updatedBy User?  @relation("TenantBrandingUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([updatedByUserId])
   @@schema("w_auth")
 }
 
@@ -236,6 +279,7 @@ model User {
   userPermissions     UserPermission[]    @relation("UserPermissions")
   grantedPermissions  UserPermission[]    @relation("GrantedPermissions")
   permissionSets      UserPermissionSet[]
+  brandingUpdates     TenantBranding[]    @relation("TenantBrandingUpdatedBy")
 
   @@unique([tenantId, email])
   @@schema("w_auth")
