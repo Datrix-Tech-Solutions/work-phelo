@@ -14,7 +14,10 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
   ForbiddenException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -23,14 +26,23 @@ import {
   ApiParam,
   ApiQuery,
   ApiBody,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { TenantLifecycleService } from './tenant-lifecycle.service';
 import { TenantConfigService } from './tenant-config.service';
 import { TenantAdminService } from './tenant-admin.service';
+import { TenantBrandingService } from './tenant-branding.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { QueryTenantsDto } from './dto/query-tenants.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
+import {
+  PublicTenantBrandingResponseDto,
+  TENANT_BRANDING_ASSET_TYPES,
+  TenantBrandingResponseDto,
+  TenantBrandingUploadAssetType,
+  UpdateTenantBrandingDto,
+} from './dto/tenant-branding.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -39,6 +51,19 @@ import { Request } from 'express';
 
 type AuthenticatedRequest = Request & { user: RequestUser };
 
+const brandingAssetUploadSchema = {
+  type: 'object',
+  required: ['file'],
+  properties: {
+    file: {
+      type: 'string',
+      format: 'binary',
+      description:
+        'Private branding image. Logos support PNG, JPEG or WEBP. Favicons also support ICO.',
+    },
+  },
+};
+
 @ApiTags('Tenants')
 @Controller('tenants')
 export class TenantsController {
@@ -46,6 +71,7 @@ export class TenantsController {
     private readonly lifecycle: TenantLifecycleService,
     private readonly config: TenantConfigService,
     private readonly admin: TenantAdminService,
+    private readonly branding: TenantBrandingService,
   ) {}
 
   @Post('register')
@@ -139,6 +165,207 @@ export class TenantsController {
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
     return this.lifecycle.getTenantAuditLogs(id, { page, limit });
+  }
+
+  @Get('me/branding')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Get own tenant branding — Tenant Admin self-service',
+  })
+  @ApiResponse({
+    status: 200,
+    type: TenantBrandingResponseDto,
+    description: 'Tenant branding returned.',
+  })
+  getOwnBranding(@Req() req: AuthenticatedRequest) {
+    return this.branding.findByTenantId(this.requireOwnTenantId(req.user));
+  }
+
+  @Patch('me/branding')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Update own tenant branding — Tenant Admin self-service',
+  })
+  @ApiBody({ type: UpdateTenantBrandingDto })
+  @ApiResponse({
+    status: 200,
+    type: TenantBrandingResponseDto,
+    description: 'Tenant branding updated.',
+  })
+  updateOwnBranding(
+    @Body() dto: UpdateTenantBrandingDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.branding.update(
+      this.requireOwnTenantId(req.user),
+      dto,
+      req.user.id,
+    );
+  }
+
+  @Post('me/branding/assets/:assetType')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload own tenant branding asset — Tenant Admin self-service',
+  })
+  @ApiParam({ name: 'assetType', enum: TENANT_BRANDING_ASSET_TYPES })
+  @ApiBody({ schema: brandingAssetUploadSchema })
+  @ApiResponse({
+    status: 200,
+    type: TenantBrandingResponseDto,
+    description: 'Tenant branding asset uploaded.',
+  })
+  uploadOwnBrandingAsset(
+    @Param('assetType') assetType: TenantBrandingUploadAssetType,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.branding.uploadAsset(
+      this.requireOwnTenantId(req.user),
+      req.user.id,
+      assetType,
+      file,
+    );
+  }
+
+  @Get('slug/:slug/branding')
+  @ApiOperation({
+    summary: 'Get safe public tenant branding by workspace slug',
+    description:
+      'Public read-only bootstrap endpoint for login/workspace theming. Returns safe display colors and display URLs only; object storage keys and audit metadata are never exposed.',
+  })
+  @ApiParam({
+    name: 'slug',
+    description: 'Tenant workspace slug, for example acme-ghana.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: PublicTenantBrandingResponseDto,
+    description: 'Safe tenant branding returned.',
+  })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  getPublicBrandingBySlug(@Param('slug') slug: string) {
+    return this.branding.findPublicBySlug(slug);
+  }
+
+  @Get(':id/branding')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Get tenant branding — SuperAdmin or owning Tenant Admin',
+    description:
+      'Returns the canonical tenant branding record with S3-ready object keys for authenticated administrators. WorkPhelo defaults are returned when no branding row exists.',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({
+    status: 200,
+    type: TenantBrandingResponseDto,
+    description: 'Tenant branding returned.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Tenant Admin tried to access another tenant branding record.',
+  })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  getBranding(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    this.assertBrandingAccess(id, req.user);
+    return this.branding.findByTenantId(id);
+  }
+
+  @Patch(':id/branding')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Update tenant branding — SuperAdmin or owning Tenant Admin',
+    description:
+      'Upserts S3-ready tenant branding metadata. Hex colors are validated. Public URLs are not treated as source of truth when object keys exist.',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiBody({
+    type: UpdateTenantBrandingDto,
+    examples: {
+      colors: {
+        summary: 'Brand colors only',
+        value: {
+          primaryColor: '#0D2244',
+          secondaryColor: '#85B7EB',
+          accentColor: '#1E3A8A',
+          sidebarColor: '#0D2244',
+          emailHeaderColor: '#0D2244',
+          documentHeaderColor: '#0D2244',
+        },
+      },
+      s3ReadyAssets: {
+        summary: 'Future S3 object keys',
+        value: {
+          logoObjectKey: 'tenant-branding/tenant-123/logo/v1/logo.png',
+          faviconObjectKey: 'tenant-branding/tenant-123/favicon/v1/favicon.ico',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    type: TenantBrandingResponseDto,
+    description: 'Tenant branding updated.',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid hex color value.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Tenant Admin tried to update another tenant branding record.',
+  })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  updateBranding(
+    @Param('id') id: string,
+    @Body() dto: UpdateTenantBrandingDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.assertBrandingAccess(id, req.user);
+    return this.branding.update(id, dto, req.user.id);
+  }
+
+  @Post(':id/branding/assets/:assetType')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary:
+      'Upload tenant branding asset — Super Admin override or owning Tenant Admin',
+    description:
+      'Stores private branding assets in S3 and updates TenantBranding. This is separate from TenantDocumentProfile document logos.',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiParam({ name: 'assetType', enum: TENANT_BRANDING_ASSET_TYPES })
+  @ApiBody({ schema: brandingAssetUploadSchema })
+  @ApiResponse({
+    status: 200,
+    type: TenantBrandingResponseDto,
+    description: 'Tenant branding asset uploaded.',
+  })
+  uploadBrandingAsset(
+    @Param('id') id: string,
+    @Param('assetType') assetType: TenantBrandingUploadAssetType,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.assertBrandingAccess(id, req.user);
+    return this.branding.uploadAsset(id, req.user.id, assetType, file);
   }
 
   @Get(':id')
@@ -317,5 +544,22 @@ export class TenantsController {
   })
   async resendAdminInvite(@Param('id') tenantId: string) {
     return this.admin.resendAdminInvite(tenantId);
+  }
+
+  private assertBrandingAccess(tenantId: string, user: RequestUser): void {
+    if (user.role === 'TENANT_ADMIN' && tenantId !== user.tenantId) {
+      throw new ForbiddenException(
+        'You can only manage branding for your own company.',
+      );
+    }
+  }
+
+  private requireOwnTenantId(user: RequestUser): string {
+    if (!user.tenantId) {
+      throw new ForbiddenException(
+        'Tenant branding self-service requires a tenant-scoped user.',
+      );
+    }
+    return user.tenantId;
   }
 }
