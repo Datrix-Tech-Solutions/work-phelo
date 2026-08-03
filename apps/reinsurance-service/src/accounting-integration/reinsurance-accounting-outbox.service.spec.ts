@@ -1,0 +1,355 @@
+import {
+  Prisma,
+  ReinsuranceAccountingOutboxStatus,
+} from '../../prisma/generated/client';
+import {
+  ReinsuranceAccountingClient,
+  ReinsuranceAccountingClientError,
+} from './reinsurance-accounting-client';
+import { ReinsuranceAccountingEventBuilder } from './reinsurance-accounting-event.builder';
+import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
+
+type Row = Prisma.ReinsuranceAccountingOutboxGetPayload<object>;
+
+function uniqueConstraintError() {
+  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: 'test',
+  });
+}
+
+function makeRow(overrides: Partial<Row> = {}): Row {
+  return {
+    id: 'outbox-1',
+    tenantId: 'tenant-1',
+    sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+    sourceRecordType: 'PlacementPayment',
+    sourceRecordId: 'payment-1',
+    sourceDocumentId: null,
+    idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+    occurredAt: new Date('2026-07-29T10:00:00.000Z'),
+    currency: 'GHS',
+    payload: { amounts: { amount: 1000 } },
+    status: ReinsuranceAccountingOutboxStatus.PENDING,
+    attemptCount: 0,
+    lastAttemptAt: null,
+    nextAttemptAt: null,
+    lastError: null,
+    accountingSourceEventId: null,
+    createdAt: new Date('2026-07-29T10:00:00.000Z'),
+    updatedAt: new Date('2026-07-29T10:00:00.000Z'),
+    deliveredAt: null,
+    ...overrides,
+  };
+}
+
+function makePrisma(rows: Row[]) {
+  const delegate = {
+    create: jest.fn(
+      ({
+        data,
+      }: {
+        data: Prisma.ReinsuranceAccountingOutboxUncheckedCreateInput;
+      }) => {
+        const row = makeRow({
+          ...data,
+          sourceDocumentId: data.sourceDocumentId ?? null,
+          status: data.status ?? ReinsuranceAccountingOutboxStatus.PENDING,
+          attemptCount: data.attemptCount ?? 0,
+          lastAttemptAt: data.lastAttemptAt ?? null,
+          nextAttemptAt: data.nextAttemptAt ?? null,
+          lastError: data.lastError ?? null,
+          accountingSourceEventId: data.accountingSourceEventId ?? null,
+          deliveredAt: data.deliveredAt ?? null,
+        } as Partial<Row>);
+        rows.push(row);
+        return Promise.resolve(row);
+      },
+    ),
+    findUnique: jest.fn(
+      ({
+        where,
+      }: {
+        where: {
+          tenantId_idempotencyKey: { tenantId: string; idempotencyKey: string };
+        };
+      }) =>
+        Promise.resolve(
+          rows.find(
+            (row) =>
+              row.tenantId === where.tenantId_idempotencyKey.tenantId &&
+              row.idempotencyKey ===
+                where.tenantId_idempotencyKey.idempotencyKey,
+          ) ?? null,
+        ),
+    ),
+    findMany: jest.fn(
+      ({ where, take }: { where: { tenantId?: string }; take?: number }) =>
+        Promise.resolve(
+          rows
+            .filter((row) => !where.tenantId || row.tenantId === where.tenantId)
+            .filter(
+              (row) =>
+                row.status === ReinsuranceAccountingOutboxStatus.PENDING ||
+                (row.status === ReinsuranceAccountingOutboxStatus.FAILED &&
+                  row.nextAttemptAt !== null &&
+                  row.nextAttemptAt <= new Date()) ||
+                (row.status === ReinsuranceAccountingOutboxStatus.PROCESSING &&
+                  row.lastAttemptAt !== null &&
+                  row.lastAttemptAt <= new Date(Date.now() - 15 * 60 * 1000)),
+            )
+            .slice(0, take)
+            .map((row) => ({ id: row.id, tenantId: row.tenantId })),
+        ),
+    ),
+    findFirst: jest.fn(
+      ({ where }: { where: { id: string; tenantId: string } }) =>
+        Promise.resolve(
+          rows.find(
+            (row) => row.id === where.id && row.tenantId === where.tenantId,
+          ) ?? null,
+        ),
+    ),
+    updateMany: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: {
+          id: string;
+          tenantId: string;
+          status?: ReinsuranceAccountingOutboxStatus;
+        };
+        data: Record<string, unknown>;
+      }) => {
+        const row = rows.find(
+          (candidate) =>
+            candidate.id === where.id &&
+            candidate.tenantId === where.tenantId &&
+            (!where.status || candidate.status === where.status),
+        );
+        if (!row) return Promise.resolve({ count: 0 });
+        if (
+          row.status !== ReinsuranceAccountingOutboxStatus.PENDING &&
+          row.status !== ReinsuranceAccountingOutboxStatus.FAILED &&
+          !(
+            row.status === ReinsuranceAccountingOutboxStatus.PROCESSING &&
+            row.lastAttemptAt !== null &&
+            row.lastAttemptAt <= new Date(Date.now() - 15 * 60 * 1000)
+          )
+        ) {
+          return Promise.resolve({ count: 0 });
+        }
+        Object.assign(row, {
+          ...data,
+          attemptCount:
+            typeof data.attemptCount === 'object' && data.attemptCount !== null
+              ? row.attemptCount + 1
+              : (data.attemptCount ?? row.attemptCount),
+        });
+        return Promise.resolve({ count: 1 });
+      },
+    ),
+    update: jest.fn(
+      ({ where, data }: { where: { id: string }; data: Partial<Row> }) => {
+        const row = rows.find((candidate) => candidate.id === where.id);
+        if (!row) return Promise.reject(new Error('Row not found'));
+        Object.assign(row, data);
+        return Promise.resolve(row);
+      },
+    ),
+  };
+
+  return {
+    reinsuranceAccountingOutbox: delegate,
+  } as unknown as Prisma.TransactionClient;
+}
+
+describe('ReinsuranceAccountingOutboxService', () => {
+  const builder = new ReinsuranceAccountingEventBuilder();
+  let client: jest.Mocked<ReinsuranceAccountingClient>;
+
+  beforeEach(() => {
+    jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date('2026-07-29T12:00:00.000Z').getTime());
+    client = {
+      enqueueSourceEvent: jest.fn(),
+    } as unknown as jest.Mocked<ReinsuranceAccountingClient>;
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('enqueues a pending event through the supplied transaction client', async () => {
+    const rows: Row[] = [];
+    const prisma = makePrisma(rows);
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const row = await service.enqueueAccountingEvent(prisma, {
+      tenantId: 'tenant-1',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordType: 'PlacementPayment',
+      sourceRecordId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      occurredAt: '2026-07-29T10:00:00.000Z',
+      currency: 'GHS',
+      payload: { amounts: { amount: 1000 } },
+    });
+
+    expect(row.status).toBe(ReinsuranceAccountingOutboxStatus.PENDING);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('returns the existing logical event when the idempotency key already exists', async () => {
+    const existing = makeRow();
+    const prisma = makePrisma([existing]);
+    const delegate = prisma.reinsuranceAccountingOutbox as unknown as {
+      create: jest.Mock;
+    };
+    delegate.create.mockRejectedValueOnce(uniqueConstraintError());
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const row = await service.enqueueAccountingEvent(prisma, {
+      tenantId: existing.tenantId,
+      sourceEventType: existing.sourceEventType,
+      sourceRecordType: existing.sourceRecordType,
+      sourceRecordId: existing.sourceRecordId,
+      idempotencyKey: existing.idempotencyKey,
+      occurredAt: existing.occurredAt,
+      currency: existing.currency,
+      payload: existing.payload as Record<string, unknown>,
+    });
+
+    expect(row).toBe(existing);
+  });
+
+  it('delivers pending events and stores the Accounting source-event id', async () => {
+    const rows = [makeRow()];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockResolvedValueOnce({
+      id: 'accounting-event-1',
+    });
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const result = await service.processPending(prisma, {
+      tenantId: 'tenant-1',
+    });
+
+    expect(result.deliveredCount).toBe(1);
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.DELIVERED);
+    expect(rows[0].accountingSourceEventId).toBe('accounting-event-1');
+    expect(client.enqueueSourceEvent.mock.calls).toHaveLength(1);
+  });
+
+  it('marks retryable failures with a next attempt date', async () => {
+    const rows = [makeRow()];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockRejectedValueOnce(
+      new ReinsuranceAccountingClientError('Accounting unavailable', true, 503),
+    );
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const result = await service.processPending(prisma, {
+      tenantId: 'tenant-1',
+    });
+
+    expect(result.failedCount).toBe(1);
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.FAILED);
+    expect(rows[0].nextAttemptAt).toEqual(new Date('2026-07-29T12:01:00.000Z'));
+  });
+
+  it('marks permanent validation failures without scheduling infinite retries', async () => {
+    const rows = [makeRow()];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockRejectedValueOnce(
+      new ReinsuranceAccountingClientError('Malformed payload', false, 400),
+    );
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    await service.processPending(prisma, { tenantId: 'tenant-1' });
+
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.FAILED);
+    expect(rows[0].nextAttemptAt).toBeNull();
+  });
+
+  it('preserves events with clear diagnostics when delivery configuration is missing', async () => {
+    const rows = [makeRow()];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockRejectedValueOnce(
+      new ReinsuranceAccountingClientError(
+        'ACCOUNTING_SERVICE_URL is not configured',
+        false,
+      ),
+    );
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    await service.processPending(prisma, { tenantId: 'tenant-1' });
+
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.FAILED);
+    expect(rows[0].lastError).toBe('ACCOUNTING_SERVICE_URL is not configured');
+    expect(rows[0].nextAttemptAt).toBeNull();
+    expect(rows[0].idempotencyKey).toBe(
+      'reinsurance:payment:payment-1:recorded:v1',
+    );
+  });
+
+  it('retries eligible failures and treats Accounting idempotent responses as delivery', async () => {
+    const rows = [
+      makeRow({
+        status: ReinsuranceAccountingOutboxStatus.FAILED,
+        attemptCount: 1,
+        nextAttemptAt: new Date('2026-07-29T11:59:00.000Z'),
+      }),
+    ];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockResolvedValueOnce({ id: 'existing-event-1' });
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const result = await service.processPending(prisma, {
+      tenantId: 'tenant-1',
+    });
+
+    expect(result.deliveredCount).toBe(1);
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.DELIVERED);
+    expect(rows[0].accountingSourceEventId).toBe('existing-event-1');
+  });
+
+  it('does not double-deliver when two processors race for the same row', async () => {
+    const rows = [makeRow()];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockResolvedValue({ id: 'accounting-event-1' });
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const results = await Promise.all([
+      service.processOne(prisma, 'tenant-1', 'outbox-1'),
+      service.processOne(prisma, 'tenant-1', 'outbox-1'),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual([
+      'DELIVERED',
+      'SKIPPED',
+    ]);
+    expect(client.enqueueSourceEvent.mock.calls).toHaveLength(1);
+  });
+
+  it('reclaims stale processing rows for retry', async () => {
+    const rows = [
+      makeRow({
+        status: ReinsuranceAccountingOutboxStatus.PROCESSING,
+        attemptCount: 1,
+        lastAttemptAt: new Date('2026-07-29T11:30:00.000Z'),
+      }),
+    ];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockResolvedValue({ id: 'accounting-event-1' });
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const result = await service.processPending(prisma, {
+      tenantId: 'tenant-1',
+    });
+
+    expect(result.deliveredCount).toBe(1);
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.DELIVERED);
+    expect(rows[0].attemptCount).toBe(2);
+  });
+});

@@ -13,9 +13,8 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   useFacultatives,
   useAllReinsurerClaims,
-  useAllReinsurerClaimPayments,
-  useCreatePlacementPayment,
-  useCurrencyOptions,
+  useCreateClaimRecoveryReceipt,
+  useReverseClaimRecoveryReceipt,
   RecoveryRow,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
@@ -27,10 +26,7 @@ function fmtAmount(val: number, currency: string) {
   return `${currency} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-interface RecoveryTableRow extends RecoveryRow {
-  paid: number;
-  outstanding: number;
-}
+type RecoveryTableRow = RecoveryRow;
 
 interface RecordPaymentValues {
   paymentType: string;
@@ -40,7 +36,6 @@ interface RecordPaymentValues {
   amount: string;
   bankName: string;
   currency: string;
-  rate: string;
 }
 
 const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
@@ -51,7 +46,6 @@ const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
   amount: '',
   bankName: '',
   currency: '',
-  rate: '',
 };
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -64,13 +58,13 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
     <div className="flex flex-col gap-1.5">
       <label className="text-sm font-bold text-gray-900">{label}</label>
       <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-700">
-        {value || '—'}
+        {value || '-'}
       </div>
     </div>
   );
 }
 
-function RecordRecoveryPaymentModal({
+function RecordRecoveryReceiptModal({
   row,
   onClose,
 }: {
@@ -85,18 +79,17 @@ function RecordRecoveryPaymentModal({
     formState: { errors, isSubmitting },
   } = useForm<RecordPaymentValues>({ defaultValues: RECORD_PAYMENT_DEFAULTS });
 
-  const createPayment = useCreatePlacementPayment();
-  const { data: currencyOptions = [] } = useCurrencyOptions();
+  const createReceipt = useCreateClaimRecoveryReceipt();
+  const reverseReceipt = useReverseClaimRecoveryReceipt();
   const addToast = useToastStore((s) => s.addToast);
 
   const paymentType = useWatch({ control, name: 'paymentType' });
-  const paymentCurrency = useWatch({ control, name: 'currency' });
 
   useEffect(() => {
     if (row) {
       reset({
         ...RECORD_PAYMENT_DEFAULTS,
-        amount: row.outstanding > 0 ? String(row.outstanding) : '',
+        amount: row.outstandingAmount > 0 ? String(row.outstandingAmount) : '',
         currency: row.currency,
       });
     }
@@ -107,31 +100,29 @@ function RecordRecoveryPaymentModal({
     onClose();
   };
 
-  const showRate = !!paymentCurrency && !!row?.currency && paymentCurrency !== row.currency;
-
   const onSubmit = async (values: RecordPaymentValues) => {
     if (!row) return;
     try {
       const resolvedDate = values.paymentType === 'cheque' ? values.valueDate : values.paymentDate;
-      const rate = showRate ? parseFloat(values.rate) || 1 : 1;
-      const amount = Math.round((parseFloat(values.amount) || 0) * rate * 100) / 100;
+      const amount = Math.round((parseFloat(values.amount) || 0) * 100) / 100;
 
       const refParts: string[] = [];
       if (values.chequeNumber) refParts.push(values.chequeNumber);
       if (values.bankName) refParts.push(values.bankName);
 
-      await createPayment.mutateAsync({
+      await createReceipt.mutateAsync({
         placementId: row.placementId,
-        type: 'CLAIM_SETTLEMENT',
-        direction: 'INBOUND',
-        counterpartyId: row.reinsurerId,
-        amount,
-        currency: row.currency,
-        paymentDate: new Date(resolvedDate).toISOString(),
-        reference: refParts.join(' — ') || undefined,
-        notes: `Claim ${row.claimNumber}`,
+        claimId: row.claimId,
+        cashCallId: row.cashCallId,
+        payload: {
+          amount,
+          currency: row.currency,
+          paymentDate: new Date(resolvedDate).toISOString(),
+          reference: refParts.join(' - ') || undefined,
+          notes: values.bankName ? `Received via ${values.bankName}` : undefined,
+        },
       });
-      addToast({ message: 'Recovery payment recorded', type: 'success' });
+      addToast({ message: 'Recovery receipt recorded', type: 'success' });
       handleClose();
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
@@ -145,7 +136,7 @@ function RecordRecoveryPaymentModal({
           <FormField
             label="Cheque Number"
             registration={register('chequeNumber', { required: 'Cheque number is required' })}
-            placeholder="Enter cheque number…"
+            placeholder="Enter cheque number..."
             error={errors.chequeNumber}
           />
         </div>
@@ -170,41 +161,14 @@ function RecordRecoveryPaymentModal({
       <FormField
         label="Bank Name"
         registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name…"
+        placeholder="Enter bank name..."
         error={errors.bankName}
       />
 
-      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
-        <Controller
-          name="currency"
-          control={control}
-          rules={{ required: 'Currency is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Currency"
-              placeholder="Select currency…"
-              options={currencyOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.currency?.message}
-              size="sm"
-            />
-          )}
-        />
-        {showRate && (
-          <FormField
-            label="Rate"
-            registration={register('rate', { required: 'Rate is required' })}
-            placeholder="0.00"
-            type="number"
-            step="any"
-            error={errors.rate}
-          />
-        )}
-      </div>
+      {row && <ReadOnlyField label="Currency" value={row.currency} />}
 
       <FormField
-        label="Amount"
+        label="Amount Received"
         registration={register('amount', { required: 'Amount is required' })}
         placeholder="0.00"
         type="number"
@@ -234,41 +198,14 @@ function RecordRecoveryPaymentModal({
       <FormField
         label="Bank Name"
         registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name…"
+        placeholder="Enter bank name..."
         error={errors.bankName}
       />
 
-      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
-        <Controller
-          name="currency"
-          control={control}
-          rules={{ required: 'Currency is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Currency"
-              placeholder="Select currency…"
-              options={currencyOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.currency?.message}
-              size="sm"
-            />
-          )}
-        />
-        {showRate && (
-          <FormField
-            label="Rate"
-            registration={register('rate', { required: 'Rate is required' })}
-            placeholder="0.00"
-            type="number"
-            step="any"
-            error={errors.rate}
-          />
-        )}
-      </div>
+      {row && <ReadOnlyField label="Currency" value={row.currency} />}
 
       <FormField
-        label="Amount"
+        label="Amount Received"
         registration={register('amount', { required: 'Amount is required' })}
         placeholder="0.00"
         type="number"
@@ -282,21 +219,23 @@ function RecordRecoveryPaymentModal({
     <SidePanel
       isOpen={!!row}
       onClose={handleClose}
-      title="Record Recovery Payment"
-      description={row ? `${row.reinsurerName} — ${row.claimNumber}` : undefined}
+      title={row?.outstandingAmount ? 'Record Recovery Receipt' : 'Recovery Receipt History'}
+      description={row ? `${row.reinsurerName} - ${row.claimNumber}` : undefined}
       footer={
         <div className="flex items-center justify-end gap-3">
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" form="record-recovery-payment-form" isLoading={isSubmitting}>
-            Record Payment
-          </Button>
+          {!!row?.outstandingAmount && (
+            <Button type="submit" form="record-recovery-receipt-form" isLoading={isSubmitting}>
+              Record Recovery
+            </Button>
+          )}
         </div>
       }
     >
       <form
-        id="record-recovery-payment-form"
+        id="record-recovery-receipt-form"
         onSubmit={handleSubmit(onSubmit)}
         className="flex flex-col gap-5"
       >
@@ -305,29 +244,115 @@ function RecordRecoveryPaymentModal({
             <ReadOnlyField label="Policy Number" value={row.policyNumber} />
             <ReadOnlyField label="Reinsurer" value={row.reinsurerName} />
             <ReadOnlyField label="Claim Number" value={row.claimNumber} />
-            <ReadOnlyField label="Outstanding" value={fmtAmount(row.outstanding, row.currency)} />
+            <ReadOnlyField label="Cash Call" value={row.cashCallNumber} />
+            <ReadOnlyField
+              label="Outstanding Recovery"
+              value={fmtAmount(row.outstandingAmount, row.currency)}
+            />
           </div>
         )}
 
-        <Controller
-          name="paymentType"
-          control={control}
-          rules={{ required: 'Payment type is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Payment Type"
-              placeholder="Select payment type…"
-              options={PAYMENT_TYPE_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.paymentType?.message}
-              size="sm"
+        {!!row?.outstandingAmount && (
+          <>
+            <Controller
+              name="paymentType"
+              control={control}
+              rules={{ required: 'Payment type is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Payment Type"
+                  placeholder="Select payment type..."
+                  options={PAYMENT_TYPE_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.paymentType?.message}
+                  size="sm"
+                />
+              )}
             />
-          )}
-        />
 
-        {chequeFields}
-        {bankFields}
+            {chequeFields}
+            {bankFields}
+          </>
+        )}
+
+        {row && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900">Recovery Receipt History</h4>
+              <p className="text-xs text-gray-500">
+                Immutable Reinsurer to Broker receipts for this cash call.
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-gray-200">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-left">Amount</th>
+                    <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-3 py-2 text-left">Reference</th>
+                    <th className="px-3 py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {row.receipts.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-4 text-center text-gray-500">
+                        No recovery receipts recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    row.receipts.map((receipt) => (
+                      <tr key={receipt.id} className="border-t border-gray-100">
+                        <td className="px-3 py-2">
+                          {new Date(receipt.paymentDate).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-2">
+                          {fmtAmount(parseFloat(receipt.amount), receipt.currency)}
+                        </td>
+                        <td className="px-3 py-2">{receipt.status}</td>
+                        <td className="px-3 py-2">{receipt.reference ?? '-'}</td>
+                        <td className="px-3 py-2 text-right">
+                          {receipt.status === 'RECORDED' && !receipt.reversalOfReceiptId ? (
+                            <TableButton
+                              variant="gray"
+                              onClick={() =>
+                                reverseReceipt.mutate(
+                                  {
+                                    placementId: row.placementId,
+                                    claimId: row.claimId,
+                                    receiptId: receipt.id,
+                                    notes: 'Reversed from recovery history',
+                                  },
+                                  {
+                                    onSuccess: () => {
+                                      addToast({
+                                        message: 'Recovery receipt reversed',
+                                        type: 'success',
+                                      });
+                                      handleClose();
+                                    },
+                                    onError: (error) =>
+                                      addToast({ message: extractError(error), type: 'error' }),
+                                  },
+                                )
+                              }
+                            >
+                              Reverse
+                            </TableButton>
+                          ) : (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </form>
     </SidePanel>
   );
@@ -350,21 +375,10 @@ export function RecoveriesTable() {
   );
 
   const { rows, isLoading: loadingClaims } = useAllReinsurerClaims(reinsuredPlacements);
-  const { paidMap, isLoading: loadingPayments } = useAllReinsurerClaimPayments(reinsuredPlacements);
 
-  const isLoading = loadingPlacements || loadingClaims || loadingPayments;
+  const isLoading = loadingPlacements || loadingClaims;
 
-  const recoveryRows: RecoveryTableRow[] = useMemo(
-    () =>
-      rows.map((row) => {
-        const paid = Math.min(
-          paidMap.get(`${row.placementId}:${row.reinsurerId}`) ?? 0,
-          row.recoveryAmount,
-        );
-        return { ...row, paid, outstanding: Math.max(0, row.recoveryAmount - paid) };
-      }),
-    [rows, paidMap],
-  );
+  const recoveryRows: RecoveryTableRow[] = useMemo(() => rows, [rows]);
 
   const reinsurerOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -409,7 +423,7 @@ export function RecoveriesTable() {
       render: (row) => (
         <div className="flex flex-col gap-0.5">
           <span className="font-semibold text-gray-900 leading-tight">{row.insuredTitle}</span>
-          <span className="text-xs text-gray-400">{row.riskType ?? '—'}</span>
+          <span className="text-xs text-gray-400">{row.riskType ?? '-'}</span>
         </div>
       ),
     },
@@ -426,45 +440,68 @@ export function RecoveriesTable() {
     //   render: (row) => <span className="text-gray-700">{row.claimNumber}</span>,
     // },
     {
-      key: 'sharePercent',
-      label: 'Share (%)',
-      width: '100px',
+      key: 'cashCallNumber',
+      label: 'Cash Call',
+      width: '120px',
       className: 'text-center',
-      render: (row) => <span className="text-gray-600 block text-center">{row.sharePercent}%</span>,
+      render: (row) => (
+        <span className="text-gray-600 block text-center">{row.cashCallNumber}</span>
+      ),
     },
     {
-      key: 'recoveryAmount',
-      label: 'Recovery Amount',
+      key: 'calledAmount',
+      label: 'Called Amount',
       width: '150px',
       render: (row) => (
         <span className="font-medium text-gray-900 block">
-          {fmtAmount(row.recoveryAmount, row.currency)}
+          {fmtAmount(row.calledAmount, row.currency)}
         </span>
       ),
     },
     {
-      key: 'outstanding',
+      key: 'recoveredAmount',
+      label: 'Recovered',
+      width: '150px',
+      render: (row) => (
+        <span className="text-gray-700 block">{fmtAmount(row.recoveredAmount, row.currency)}</span>
+      ),
+    },
+    {
+      key: 'outstandingAmount',
       label: 'Outstanding',
       width: '150px',
       render: (row) => (
         <span
-          className={`font-medium ${row.outstanding > 0 ? 'text-orange-600' : 'text-gray-900'}`}
+          className={`font-medium ${
+            row.outstandingAmount > 0 ? 'text-orange-600' : 'text-gray-900'
+          }`}
         >
-          {fmtAmount(row.outstanding, row.currency)}
+          {fmtAmount(row.outstandingAmount, row.currency)}
         </span>
       ),
+    },
+    {
+      key: 'recoveryStatus',
+      label: 'Status',
+      width: '150px',
+      render: (row) => <span className="text-gray-700">{row.recoveryStatus}</span>,
     },
     {
       key: 'actions',
       label: 'Actions',
       width: '150px',
-      render: () => (
+      render: (row) => (
         <TableButton
-          variant="gray"
-          disabled
-          tooltip="Claim recovery receipts are deferred until the backend recovery settlement flow is implemented."
+          variant={row.outstandingAmount > 0 && row.cashCallStatus === 'ISSUED' ? 'blue' : 'gray'}
+          disabled={row.cashCallStatus !== 'ISSUED'}
+          tooltip={
+            row.cashCallStatus === 'ISSUED'
+              ? undefined
+              : 'Only issued cash calls can receive recovery receipts.'
+          }
+          onClick={() => setPaymentRow(row)}
         >
-          Deferred
+          {row.outstandingAmount > 0 ? 'Record Recovery' : 'View History'}
         </TableButton>
       ),
     },
@@ -476,7 +513,7 @@ export function RecoveriesTable() {
         columns={columns}
         data={paged}
         isLoading={isLoading}
-        searchPlaceholder="Search recoveries…"
+        searchPlaceholder="Search recoveries..."
         searchValue={search}
         noInternalScroll
         onSearch={(q) => {
@@ -503,7 +540,7 @@ export function RecoveriesTable() {
         onPageChange={setPage}
       />
 
-      <RecordRecoveryPaymentModal row={paymentRow} onClose={() => setPaymentRow(null)} />
+      <RecordRecoveryReceiptModal row={paymentRow} onClose={() => setPaymentRow(null)} />
     </>
   );
 }

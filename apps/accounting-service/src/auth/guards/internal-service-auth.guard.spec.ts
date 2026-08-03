@@ -9,11 +9,14 @@ import {
 const SECRET = 'a-secure-internal-service-secret-of-at-least-32-characters';
 const PATH = '/internal/source-events';
 
-function context(headers: Record<string, string>): ExecutionContext {
+function context(
+  headers: Record<string, string>,
+  path = PATH,
+): ExecutionContext {
   const request = {
     headers,
     method: 'POST',
-    originalUrl: PATH,
+    originalUrl: path,
   } as unknown as Request;
   return {
     switchToHttp: () => ({ getRequest: () => request }),
@@ -23,9 +26,10 @@ function context(headers: Record<string, string>): ExecutionContext {
 function signedHeaders(
   serviceName = 'reinsurance-service',
   timestamp = Math.floor(Date.now() / 1000).toString(),
+  path = PATH,
 ): Record<string, string> {
   const signature = createHmac('sha256', SECRET)
-    .update(`${serviceName}:${timestamp}:POST:${PATH}`)
+    .update(`${serviceName}:${timestamp}:POST:${path}`)
     .digest('hex');
   return {
     [INTERNAL_SERVICE_AUTH_HEADERS.service]: serviceName,
@@ -47,7 +51,7 @@ describe('InternalServiceAuthGuard', () => {
     process.env.INTERNAL_SERVICE_AUTH_MAX_CLOCK_SKEW_SECONDS = '300';
   });
 
-  afterAll(() => {
+  afterEach(() => {
     if (originalSecret === undefined) {
       delete process.env.INTERNAL_SERVICE_AUTH_SECRET;
     } else {
@@ -81,6 +85,15 @@ describe('InternalServiceAuthGuard', () => {
     expect(
       new InternalServiceAuthGuard().canActivate(
         context(signedHeaders(serviceName)),
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts a valid signature for the internal subledger ensure path', () => {
+    const path = '/internal/subledgers/ensure';
+    expect(
+      new InternalServiceAuthGuard().canActivate(
+        context(signedHeaders('reinsurance-service', undefined, path), path),
       ),
     ).toBe(true);
   });

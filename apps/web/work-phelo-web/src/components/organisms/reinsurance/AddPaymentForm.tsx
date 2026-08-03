@@ -177,20 +177,20 @@ export default function AddPaymentForm({
 
   return (
     <>
-      <Button onClick={() => setPanelOpen(true)}>Record Payment</Button>
+      <Button onClick={() => setPanelOpen(true)}>Receive Cedant Premium</Button>
 
       <SidePanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
-        title="Record Payment"
-        description="Enter the payment details below."
+        title="Receive Cedant Premium"
+        description="Record money received from the cedant for selected placement obligations."
         footer={
           <div className="flex items-center justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" form="add-payment-form" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving…' : 'Record Payment'}
+              {isSubmitting ? 'Saving…' : 'Record Cedant Receipt'}
             </Button>
           </div>
         }

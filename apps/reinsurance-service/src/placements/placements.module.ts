@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
+import { ReinsuranceAccountingIntegrationModule } from '../accounting-integration/reinsurance-accounting-integration.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ReinsuranceChargeSettingsModule } from '../settings/reinsurance-charge-settings.module';
 import { ClaimAllocationCalculator } from './claim-allocation.calculator';
@@ -8,6 +9,8 @@ import { PlacementFinancialActivityReader } from './placement-financial-activity
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
+import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
+import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recovery-receipts.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementAttachmentsController } from './placement-attachments.controller';
 import { PlacementAttachmentsService } from './placement-attachments.service';
@@ -31,7 +34,12 @@ import { S3DocumentStorageService } from './storage/s3-document-storage.service'
 import { TenantDocumentProfileClient } from './tenant-document-profile.client';
 
 @Module({
-  imports: [PrismaModule, RabbitMQModule, ReinsuranceChargeSettingsModule],
+  imports: [
+    PrismaModule,
+    RabbitMQModule,
+    ReinsuranceChargeSettingsModule,
+    ReinsuranceAccountingIntegrationModule,
+  ],
   controllers: [
     PlacementsController,
     PlacementAttachmentsController,
@@ -43,6 +51,8 @@ import { TenantDocumentProfileClient } from './tenant-document-profile.client';
     PlacementAttachmentsService,
     PlacementClaimsService,
     PlacementClaimCashCallsService,
+    PlacementClaimCedantSettlementsService,
+    PlacementClaimRecoveryReceiptsService,
     PlacementClosingsService,
     PlacementDocumentsService,
     PlacementEndorsementsService,

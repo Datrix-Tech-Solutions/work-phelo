@@ -5,19 +5,33 @@ import {
   Facultative,
   PlacementClaim,
   PlacementClaimAllocation,
+  PlacementClaimCashCall,
   PlacementClaimStatus,
   PlacementParticipant,
 } from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
-import { useReinsurers, useCedants, useClaimAllocations } from '@/hooks';
+import {
+  useReinsurers,
+  useCedants,
+  useClaimAllocations,
+  useClaimCashCalls,
+  useClaimRecoveryPosition,
+  useApproveClaimPayable,
+  useClaimCedantSettlements,
+  useCreateClaimCedantSettlement,
+  useReverseClaimCedantSettlement,
+} from '@/hooks';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import { cardClass } from '@/lib/utils';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 const CLAIM_STATUS_VARIANT: Record<
   PlacementClaimStatus,
@@ -339,12 +353,332 @@ function ClaimReinsurersTable({
   );
 }
 
+function ClaimCashCallsTable({ cashCalls }: { cashCalls: PlacementClaimCashCall[] }) {
+  const columns: Column<PlacementClaimCashCall>[] = useMemo(
+    () => [
+      {
+        key: 'cashCallNumber',
+        label: 'Cash Call',
+        render: (row) => <span className="font-medium text-gray-900">{row.cashCallNumber}</span>,
+      },
+      {
+        key: 'counterparty',
+        label: 'Reinsurer',
+        render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
+      },
+      {
+        key: 'amount',
+        label: 'Amount',
+        width: '150px',
+        className: 'text-right pr-8',
+        render: (row) => (
+          <span className="text-gray-900 block text-right">{fmt(row.amount, row.currency)}</span>
+        ),
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        width: '110px',
+        render: (row) => (
+          <Badge
+            label={row.status.charAt(0) + row.status.slice(1).toLowerCase()}
+            variant={
+              row.status === 'VOID' ? 'danger' : row.status === 'ISSUED' ? 'warning' : 'neutral'
+            }
+          />
+        ),
+      },
+      {
+        key: 'issuedAt',
+        label: 'Issued',
+        width: '130px',
+        render: (row) => <span className="text-gray-600">{fmtDate(row.issuedAt)}</span>,
+      },
+    ],
+    [],
+  );
+
+  return (
+    <div className="flex flex-col gap-0">
+      <div className="px-4 pt-4 pb-2 bg-white rounded-t-xl border border-b-0 border-gray-200">
+        <span className="text-sm font-bold text-gray-900">Cash Calls</span>
+        <p className="text-xs text-gray-400 mt-1">
+          Backend cash-call records generated from this claim&apos;s allocation snapshots.
+        </p>
+      </div>
+      <DataTable
+        columns={columns}
+        data={cashCalls}
+        emptyMessage="No cash calls for this claim"
+        currentPage={1}
+        totalPages={0}
+        onPageChange={() => {}}
+        noInternalScroll
+      />
+    </div>
+  );
+}
+
+function ClaimCedantSettlementPanel({
+  placementId,
+  claim,
+}: {
+  placementId: string;
+  claim: PlacementClaim;
+}) {
+  const addToast = useToastStore((s) => s.addToast);
+  const { data: position } = useClaimRecoveryPosition(placementId, claim.id);
+  const { data: settlements = [] } = useClaimCedantSettlements(placementId, claim.id);
+  const approvePayable = useApproveClaimPayable(placementId, claim.id);
+  const createSettlement = useCreateClaimCedantSettlement(placementId, claim.id);
+  const reverseSettlement = useReverseClaimCedantSettlement(placementId, claim.id);
+  const [approvedAmount, setApprovedAmount] = useState('');
+  const [settlementAmount, setSettlementAmount] = useState('');
+  const [settlementDate, setSettlementDate] = useState('');
+  const [reference, setReference] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const finalLossAmount = position?.claim.finalLossAmount ?? claim.finalLossAmount;
+  const approvedPayableAmount =
+    position?.cedantSettlement.approvedPayableAmount ?? claim.approvedPayableAmount;
+  const outstandingAmount = position?.cedantSettlement.outstandingAmount ?? '0.00';
+  const canRecordSettlement = !!approvedPayableAmount && parseFloat(outstandingAmount) > 0;
+
+  const handleApprove = async () => {
+    try {
+      await approvePayable.mutateAsync({
+        approvedPayableAmount: Math.round((parseFloat(approvedAmount) || 0) * 100) / 100,
+      });
+      addToast({ message: 'Cedant payable amount approved', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleRecordSettlement = async () => {
+    try {
+      await createSettlement.mutateAsync({
+        currency: claim.currency,
+        amount: Math.round((parseFloat(settlementAmount) || 0) * 100) / 100,
+        settlementDate: new Date(settlementDate).toISOString(),
+        reference: reference || undefined,
+        notes: notes || undefined,
+      });
+      setSettlementAmount('');
+      setReference('');
+      setNotes('');
+      addToast({ message: 'Cedant settlement recorded', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleReverse = async (settlementId: string) => {
+    const reversalNotes =
+      window.prompt('Reason for reversing this cedant settlement?') ?? undefined;
+    try {
+      await reverseSettlement.mutateAsync({ settlementId, notes: reversalNotes });
+      addToast({ message: 'Cedant settlement reversed', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const settlementColumns: Column<(typeof settlements)[number]>[] = [
+    {
+      key: 'settlementDate',
+      label: 'Date',
+      width: '130px',
+      render: (row) => <span className="text-gray-600">{fmtDate(row.settlementDate)}</span>,
+    },
+    {
+      key: 'amount',
+      label: 'Amount',
+      className: 'text-right pr-8',
+      width: '150px',
+      render: (row) => (
+        <span className="block text-right font-medium text-gray-900">
+          {fmt(row.amount, row.currency)}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      width: '110px',
+      render: (row) => (
+        <Badge
+          label={row.status === 'REVERSED' ? 'Reversed' : 'Recorded'}
+          variant={row.status === 'REVERSED' ? 'danger' : 'success'}
+        />
+      ),
+    },
+    {
+      key: 'reference',
+      label: 'Reference',
+      render: (row) => <span className="text-gray-600">{row.reference ?? '—'}</span>,
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: '110px',
+      render: (row) =>
+        row.status === 'RECORDED' && !row.reversalOfSettlementId ? (
+          <button
+            type="button"
+            className="text-xs font-semibold text-red-600 hover:text-red-700"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleReverse(row.id);
+            }}
+            disabled={reverseSettlement.isPending}
+          >
+            Reverse
+          </button>
+        ) : (
+          <span className="text-xs text-gray-400">Historical</span>
+        ),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-bold text-gray-900">Cedant Claim Settlement</span>
+        <p className="text-xs text-gray-500">
+          Broker → Cedant settlement is approved and tracked separately from reinsurer recoveries.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <DetailField horizontal label="Final Loss" value={fmt(finalLossAmount, claim.currency)} />
+        <DetailField
+          horizontal
+          label="Approved Payable"
+          value={fmt(approvedPayableAmount, claim.currency)}
+        />
+        <DetailField
+          horizontal
+          label="Settled"
+          value={fmt(position?.cedantSettlement.settledAmount, claim.currency)}
+        />
+        <DetailField
+          horizontal
+          label="Outstanding"
+          value={fmt(outstandingAmount, claim.currency)}
+        />
+        <DetailField
+          horizontal
+          label="Broker Exposure"
+          value={fmt(position?.funding.brokerFundedExposure, claim.currency)}
+        />
+      </div>
+
+      {!finalLossAmount && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          Final loss amount is required before approving cedant payable.
+        </div>
+      )}
+
+      {finalLossAmount && (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-end rounded-lg bg-gray-50 p-3">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+            Approve Payable Amount
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={approvedAmount}
+              onChange={(event) => setApprovedAmount(event.target.value)}
+              placeholder={approvedPayableAmount ?? finalLossAmount}
+              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
+            />
+          </label>
+          <Button
+            type="button"
+            onClick={handleApprove}
+            disabled={!approvedAmount || approvePayable.isPending}
+            isLoading={approvePayable.isPending}
+          >
+            Approve Payable
+          </Button>
+        </div>
+      )}
+
+      {approvedPayableAmount && (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 rounded-lg bg-gray-50 p-3">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+            Settlement Date
+            <input
+              type="date"
+              value={settlementDate}
+              onChange={(event) => setSettlementDate(event.target.value)}
+              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+            Amount
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={settlementAmount}
+              onChange={(event) => setSettlementAmount(event.target.value)}
+              placeholder={outstandingAmount}
+              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+            Reference
+            <input
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              placeholder="Payment reference"
+              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+            Notes
+            <input
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Optional notes"
+              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
+            />
+          </label>
+          <div className="flex items-end">
+            <Button
+              type="button"
+              onClick={handleRecordSettlement}
+              disabled={!canRecordSettlement || !settlementDate || !settlementAmount}
+              isLoading={createSettlement.isPending}
+            >
+              Record Settlement
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <DataTable
+        columns={settlementColumns}
+        data={settlements}
+        emptyMessage="No cedant settlements recorded"
+        currentPage={1}
+        totalPages={0}
+        onPageChange={() => {}}
+        noInternalScroll
+      />
+    </div>
+  );
+}
+
 export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionProps) {
   const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
   const { data: reinsurers = [] } = useReinsurers();
   const { data: cedants = [] } = useCedants();
   const { data: allocations = [] } = useClaimAllocations(placement.id, claim?.id ?? '');
+  const { data: cashCalls = [] } = useClaimCashCalls(placement.id, claim?.id ?? '');
 
   const deductionRate = isForeignCedant(cedants.find((c) => c.id === placement.cedant.id))
     ? FOREIGN_CEDANT_DEDUCTION_RATE
@@ -420,6 +754,10 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
           {fmt(totalActualClaim, claim?.currency ?? placement.currency)}
         </span>
       </div>
+
+      {claim && <ClaimCashCallsTable cashCalls={cashCalls} />}
+
+      {claim && <ClaimCedantSettlementPanel placementId={placement.id} claim={claim} />}
 
       {mailTarget && (
         <MailPreviewModal

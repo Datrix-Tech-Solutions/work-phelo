@@ -90,6 +90,7 @@ describe('PlacementClaimCashCallsService', () => {
       create: PrismaMethod;
       update: PrismaMethod;
     };
+    placementClaimRecoveryReceipt: { findFirst: PrismaMethod };
     placementPayment: { findFirst: PrismaMethod; update: PrismaMethod };
     placementClosing: { update: PrismaMethod };
     placementNote: { update: PrismaMethod };
@@ -112,6 +113,9 @@ describe('PlacementClaimCashCallsService', () => {
         count: jest.fn<Promise<unknown>, [unknown]>(),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementClaimRecoveryReceipt: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementPayment: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
@@ -301,6 +305,7 @@ describe('PlacementClaimCashCallsService', () => {
       ...cashCall,
       status: PlacementClaimCashCallStatus.ISSUED,
     });
+    prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue(null);
     prisma.placementClaimCashCall.update.mockResolvedValue({
       ...cashCall,
       status: PlacementClaimCashCallStatus.VOID,
@@ -332,6 +337,7 @@ describe('PlacementClaimCashCallsService', () => {
 
   it('voids a DRAFT or ISSUED cash call with a reason', async () => {
     prisma.placementClaimCashCall.findFirst.mockResolvedValue(cashCall);
+    prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue(null);
     prisma.placementClaimCashCall.update.mockResolvedValue({
       ...cashCall,
       status: PlacementClaimCashCallStatus.VOID,
@@ -349,6 +355,24 @@ describe('PlacementClaimCashCallsService', () => {
       status: PlacementClaimCashCallStatus.VOID,
       voidReason: 'Replacement required',
     });
+  });
+
+  it('rejects void when active recovery receipts exist', async () => {
+    prisma.placementClaimCashCall.findFirst.mockResolvedValue({
+      ...cashCall,
+      status: PlacementClaimCashCallStatus.ISSUED,
+    });
+    prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue({
+      id: 'receipt-1',
+    });
+
+    await expect(
+      service.void(user, 'placement-1', 'claim-1', 'cash-call-1', {
+        voidReason: 'Replacement required',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.placementClaimCashCall.update).not.toHaveBeenCalled();
   });
 
   it('does not mutate claim allocation, closings, payments or notes when creating cash calls', async () => {

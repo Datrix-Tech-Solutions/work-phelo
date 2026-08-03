@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClaimAllocationCalculator } from './claim-allocation.calculator';
 import { ClosingSnapshotReader } from './closing-snapshot.reader';
 import { PlacementEffectivePositionService } from './placement-effective-position.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
@@ -45,6 +46,15 @@ describe('PlacementClaimsService', () => {
   const placement = {
     id: 'placement-1',
     currency: 'GHS',
+  };
+
+  const effectiveView = {
+    effectiveTerms: {
+      inceptionDate: '2026-01-01T00:00:00.000Z',
+      expiryDate: '2026-12-31T00:00:00.000Z',
+      currency: 'GHS',
+      sumInsured: 100000,
+    },
   };
 
   const claim = {
@@ -105,6 +115,9 @@ describe('PlacementClaimsService', () => {
     $transaction: jest.Mock;
   };
   let service: PlacementClaimsService;
+  let effectiveViewService: {
+    getEffectiveView: jest.Mock;
+  };
   let lockPolicy: PlacementFinancialLockPolicy;
   let money: ReinsuranceMoneyHelper;
 
@@ -143,9 +156,13 @@ describe('PlacementClaimsService', () => {
       ),
     };
     money = new ReinsuranceMoneyHelper();
+    effectiveViewService = {
+      getEffectiveView: jest.fn().mockResolvedValue(effectiveView),
+    };
     service = new PlacementClaimsService(
       prisma as unknown as PrismaService,
       new PlacementEffectivePositionService(new ClosingSnapshotReader(money)),
+      effectiveViewService as unknown as PlacementEffectiveViewService,
       new ClaimAllocationCalculator(money),
       money,
     );
@@ -172,6 +189,11 @@ describe('PlacementClaimsService', () => {
     const createArgs = firstCallArg<Prisma.PlacementClaimCreateArgs>(
       prisma.placementClaim.create,
     );
+    expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      new Date('2026-06-03T00:00:00.000Z'),
+    );
     expect(createArgs.data).toMatchObject({
       tenantId: 'tenant-1',
       placementId: 'placement-1',
@@ -185,6 +207,78 @@ describe('PlacementClaimsService', () => {
       createdByUserId: 'user-1',
       updatedByUserId: 'user-1',
     });
+  });
+
+  it('rejects a claim before the effective coverage inception date', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+
+    await expect(
+      service.create(user, 'placement-1', {
+        occurrenceDate: '2025-12-31T12:00:00.000Z',
+        reportedDate: '2026-06-05T10:00:00.000Z',
+        claimCause: 'Warehouse fire',
+        currency: 'GHS',
+        estimatedLossAmount: 40000,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placementClaim.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a claim after the effective coverage expiry date', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+
+    await expect(
+      service.create(user, 'placement-1', {
+        occurrenceDate: '2027-01-01T00:00:00.000Z',
+        reportedDate: '2026-06-05T10:00:00.000Z',
+        claimCause: 'Warehouse fire',
+        currency: 'GHS',
+        estimatedLossAmount: 40000,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placementClaim.create).not.toHaveBeenCalled();
+  });
+
+  it('validates claim amounts against the effective sum insured on the loss date', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+
+    await expect(
+      service.create(user, 'placement-1', {
+        occurrenceDate: '2026-06-03T00:00:00.000Z',
+        reportedDate: '2026-06-05T10:00:00.000Z',
+        claimCause: 'Warehouse fire',
+        currency: 'GHS',
+        estimatedLossAmount: 100000.01,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placementClaim.create).not.toHaveBeenCalled();
+  });
+
+  it('uses endorsed loss-date terms instead of raw placement values', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.count.mockResolvedValue(0);
+    prisma.placementClaim.create.mockResolvedValue(claim);
+    effectiveViewService.getEffectiveView.mockResolvedValueOnce({
+      effectiveTerms: {
+        ...effectiveView.effectiveTerms,
+        sumInsured: 700000,
+      },
+    });
+
+    await service.create(user, 'placement-1', {
+      occurrenceDate: '2026-08-01T00:00:00.000Z',
+      reportedDate: '2026-08-02T10:00:00.000Z',
+      claimCause: 'Warehouse fire',
+      currency: 'GHS',
+      estimatedLossAmount: 650000,
+    });
+
+    expect(prisma.placementClaim.create).toHaveBeenCalled();
+    expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
   });
 
   it('rejects wrong-tenant or archived placement when creating claim', async () => {
@@ -239,6 +333,7 @@ describe('PlacementClaimsService', () => {
   it('sets finalLossAmount and finalized metadata on editable claim update', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaimAllocation.findFirst.mockResolvedValue(null);
     prisma.placementClaim.update.mockResolvedValue({
       ...claim,
       finalLossAmount: new Prisma.Decimal('37500.00'),
@@ -258,6 +353,62 @@ describe('PlacementClaimsService', () => {
       updatedByUserId: 'user-1',
     });
     expect(updateArgs.data).toHaveProperty('finalizedAt');
+  });
+
+  it('revalidates effective terms when updating occurrence date or amounts', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaimAllocation.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.update(user, 'placement-1', 'claim-1', {
+        occurrenceDate: '2027-01-01T00:00:00.000Z',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placementClaim.update).not.toHaveBeenCalled();
+    expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      new Date('2027-01-01T00:00:00.000Z'),
+    );
+  });
+
+  it('blocks allocation-sensitive edits after allocations have been generated', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaimAllocation.findFirst.mockResolvedValue({
+      id: 'allocation-1',
+    });
+
+    await expect(
+      service.update(user, 'placement-1', 'claim-1', {
+        occurrenceDate: '2026-08-01T00:00:00.000Z',
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(effectiveViewService.getEffectiveView).not.toHaveBeenCalled();
+    expect(prisma.placementClaim.update).not.toHaveBeenCalled();
+  });
+
+  it('allows non-economic claim text edits after allocations exist', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaimAllocation.findFirst.mockResolvedValue({
+      id: 'allocation-1',
+    });
+    prisma.placementClaim.update.mockResolvedValue({
+      ...claim,
+      claimCause: 'Updated cause',
+    });
+
+    await service.update(user, 'placement-1', 'claim-1', {
+      claimCause: 'Updated cause',
+    });
+
+    expect(prisma.placementClaimAllocation.findFirst).not.toHaveBeenCalled();
+    const updateArgs = firstCallArg<Prisma.PlacementClaimUpdateArgs>(
+      prisma.placementClaim.update,
+    );
+    expect(updateArgs.data).toMatchObject({ claimCause: 'Updated cause' });
   });
 
   it('rejects editing CLOSED or VOID claims', async () => {

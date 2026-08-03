@@ -162,6 +162,45 @@ describe('PlacementFinancialPositionService', () => {
     });
   });
 
+  it('subtracts bank-confirmed reinsurer disbursements from reinsurer outstanding', async () => {
+    tx.placementPayment.findMany.mockResolvedValue([
+      {
+        id: 'payment-disbursement',
+        counterpartyId: 'reinsurer-a',
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        amount: new Prisma.Decimal('25000.00'),
+        currency: 'GHS',
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
+        reversalOfPaymentId: null,
+      },
+      {
+        id: 'payment-failed',
+        counterpartyId: 'reinsurer-a',
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        amount: new Prisma.Decimal('5000.00'),
+        currency: 'GHS',
+        status: PlacementPaymentStatus.FAILED,
+        reversalOfPaymentId: null,
+      },
+    ]);
+
+    const result = await service.getFinancialPosition(
+      tenantId,
+      placementId,
+      asOfDate,
+    );
+
+    expect(result.reinsurers).toContainEqual(
+      expect.objectContaining({
+        counterpartyId: 'reinsurer-a',
+        grossRecorded: 30000,
+        netSettled: 25000,
+        outstanding: 35000,
+        position: 'PAYABLE',
+      }),
+    );
+  });
+
   it('adds effective additional-premium endorsement adjustments', async () => {
     tx.placementEndorsementClosing.findMany.mockResolvedValue([
       {

@@ -7,6 +7,7 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClaimCashCallStatus,
+  PlacementClaimRecoveryReceiptStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -156,6 +157,14 @@ export class PlacementClaimCashCallsService {
     );
     if (cashCall.status === dto.status) return cashCall;
     this.assertStatusTransition(cashCall.status, dto.status);
+    if (dto.status === PlacementClaimCashCallStatus.VOID) {
+      await this.assertNoEffectiveRecoveryReceipts(
+        user.tenantId,
+        placementId,
+        claimId,
+        cashCallId,
+      );
+    }
 
     const now = new Date();
     return this.prisma.placementClaimCashCall.update({
@@ -189,6 +198,12 @@ export class PlacementClaimCashCallsService {
     this.assertStatusTransition(
       cashCall.status,
       PlacementClaimCashCallStatus.VOID,
+    );
+    await this.assertNoEffectiveRecoveryReceipts(
+      user.tenantId,
+      placementId,
+      claimId,
+      cashCallId,
     );
 
     return this.prisma.placementClaimCashCall.update({
@@ -266,6 +281,30 @@ export class PlacementClaimCashCallsService {
     if (!allowed[from].includes(to)) {
       throw new BadRequestException(
         `Cannot move claim cash call from ${from} to ${to}`,
+      );
+    }
+  }
+
+  private async assertNoEffectiveRecoveryReceipts(
+    tenantId: string,
+    placementId: string,
+    claimId: string,
+    cashCallId: string,
+  ): Promise<void> {
+    const receipt = await this.prisma.placementClaimRecoveryReceipt.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        claimId,
+        cashCallId,
+        status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+        reversalOfReceiptId: null,
+      },
+      select: { id: true },
+    });
+    if (receipt) {
+      throw new ConflictException(
+        'Claim cash call cannot be voided while active recovery receipts exist. Reverse receipts first.',
       );
     }
   }

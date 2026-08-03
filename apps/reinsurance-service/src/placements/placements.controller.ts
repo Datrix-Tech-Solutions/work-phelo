@@ -86,7 +86,23 @@ import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-stat
 import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
 import { VoidPlacementClaimCashCallDto } from './dto/void-placement-claim-cash-call.dto';
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
+import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
+import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recovery-receipts.service';
 import { PlacementClaimsService } from './placement-claims.service';
+import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-payable.dto';
+import { CreatePlacementClaimCedantSettlementDto } from './dto/create-placement-claim-cedant-settlement.dto';
+import { CreatePlacementClaimRecoveryReceiptDto } from './dto/create-placement-claim-recovery-receipt.dto';
+import {
+  PlacementClaimCedantSettlementListResponseDto,
+  PlacementClaimCedantSettlementResponseDto,
+} from './dto/placement-claim-cedant-settlement-response.dto';
+import {
+  PlacementClaimRecoveryPositionResponseDto,
+  PlacementClaimRecoveryReceiptListResponseDto,
+  PlacementClaimRecoveryReceiptResponseDto,
+} from './dto/placement-claim-recovery-response.dto';
+import { ReversePlacementClaimCedantSettlementDto } from './dto/reverse-placement-claim-cedant-settlement.dto';
+import { ReversePlacementClaimRecoveryReceiptDto } from './dto/reverse-placement-claim-recovery-receipt.dto';
 import {
   PlacementClosingListResponseDto,
   PlacementClosingResponseDto,
@@ -160,6 +176,8 @@ export class PlacementsController {
     private readonly financialPositionService: PlacementFinancialPositionService,
     private readonly claimsService: PlacementClaimsService,
     private readonly claimCashCallsService: PlacementClaimCashCallsService,
+    private readonly claimCedantSettlementsService: PlacementClaimCedantSettlementsService,
+    private readonly claimRecoveryReceiptsService: PlacementClaimRecoveryReceiptsService,
   ) {}
 
   @Get(':id/effective-view')
@@ -1581,6 +1599,139 @@ export class PlacementsController {
     return this.claimsService.changeStatus(request.user, id, claimId, dto);
   }
 
+  @Patch(':id/claims/:claimId/approve-payable')
+  @ApiTags('Reinsurance - Claim Cedant Settlements')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Approve cedant payable amount for a claim',
+    description:
+      'Stores the broker-approved amount payable to the cedant. Phase 1 requires finalLossAmount and rejects approvals above that final loss. Reinsurer recovery receipts do not determine this amount.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The claim has no final loss, amount is invalid, or the claim is terminal.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Approved payable amount is below the amount already settled to the cedant.',
+  })
+  approveClaimPayable(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Body() dto: ApprovePlacementClaimPayableDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimCedantSettlementsService.approvePayable(
+      request.user,
+      id,
+      claimId,
+      dto,
+    );
+  }
+
+  @Get(':id/claims/:claimId/cedant-settlements')
+  @ApiTags('Reinsurance - Claim Cedant Settlements')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List cedant claim settlements',
+    description:
+      'Returns immutable Broker -> Cedant settlement history for one claim. Recovery receipts from reinsurers are tracked separately.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimCedantSettlementListResponseDto })
+  async findClaimCedantSettlements(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.claimCedantSettlementsService.findAll(
+      request.user.tenantId,
+      id,
+      claimId,
+    );
+    return { items };
+  }
+
+  @Post(':id/claims/:claimId/cedant-settlements')
+  @ApiTags('Reinsurance - Claim Cedant Settlements')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Record cedant claim settlement',
+    description:
+      'Records Broker -> Cedant settlement against the approved payable amount. Partial settlements are supported; over-settlement and wrong currency are rejected.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiCreatedResponse({ type: PlacementClaimCedantSettlementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Approved payable is missing, settlement currency mismatches or required settlement data is invalid.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'Settlement amount exceeds outstanding approved payable.',
+  })
+  createClaimCedantSettlement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Body() dto: CreatePlacementClaimCedantSettlementDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimCedantSettlementsService.create(
+      request.user,
+      id,
+      claimId,
+      dto,
+    );
+  }
+
+  @Post(':id/claims/:claimId/cedant-settlements/:settlementId/reverse')
+  @ApiTags('Reinsurance - Claim Cedant Settlements')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Reverse a cedant claim settlement',
+    description:
+      'Marks the original Broker -> Cedant settlement REVERSED and creates an immutable linked reversal row. Cedant outstanding is restored.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'settlementId',
+    format: 'uuid',
+    description: 'Cedant settlement ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementClaimCedantSettlementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'A reversal settlement cannot be reversed.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'Cedant settlement has already been reversed.',
+  })
+  reverseClaimCedantSettlement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('settlementId', ParseUUIDPipe) settlementId: string,
+    @Body() dto: ReversePlacementClaimCedantSettlementDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimCedantSettlementsService.reverse(
+      request.user,
+      id,
+      claimId,
+      settlementId,
+      dto,
+    );
+  }
+
   @Get(':id/claims/:claimId/allocations')
   @ApiTags('Reinsurance - Claim Allocations')
   @RequirePermissions(PlacementPermission.VIEW)
@@ -2036,6 +2187,141 @@ export class PlacementsController {
       id,
       endorsementId,
       noteId,
+      dto,
+    );
+  }
+
+  @Get(':id/claims/:claimId/recovery-position')
+  @ApiTags('Reinsurance - Claim Recoveries')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get claim recovery position',
+    description:
+      'Returns recovery totals from claim allocation snapshots, issued cash calls and immutable recovery receipt records. Cedant settlement remains deferred.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimRecoveryPositionResponseDto })
+  getClaimRecoveryPosition(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimRecoveryReceiptsService.getRecoveryPosition(
+      request.user.tenantId,
+      id,
+      claimId,
+    );
+  }
+
+  @Get(':id/claims/:claimId/cash-calls/:cashCallId/recovery-receipts')
+  @ApiTags('Reinsurance - Claim Recoveries')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List recovery receipts for a claim cash call',
+    description:
+      'Returns immutable Reinsurer -> Broker recovery receipt history for one claim cash call.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'cashCallId',
+    format: 'uuid',
+    description: 'Claim cash call ID.',
+  })
+  @ApiOkResponse({ type: PlacementClaimRecoveryReceiptListResponseDto })
+  async findClaimRecoveryReceipts(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('cashCallId', ParseUUIDPipe) cashCallId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.claimRecoveryReceiptsService.findAll(
+      request.user.tenantId,
+      id,
+      claimId,
+      cashCallId,
+    );
+    return { items };
+  }
+
+  @Post(':id/claims/:claimId/cash-calls/:cashCallId/recovery-receipts')
+  @ApiTags('Reinsurance - Claim Recoveries')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Record recovery receipt for an issued cash call',
+    description:
+      'Records Reinsurer -> Broker cash received against an ISSUED claim cash call. The backend derives placement, claim, allocation and counterparty from the cash call and rejects over-recovery.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'cashCallId',
+    format: 'uuid',
+    description: 'Claim cash call ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementClaimRecoveryReceiptResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Cash call is not issued, currency mismatches or required receipt data is invalid.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'Recovery amount exceeds outstanding recovery balance.',
+  })
+  createClaimRecoveryReceipt(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('cashCallId', ParseUUIDPipe) cashCallId: string,
+    @Body() dto: CreatePlacementClaimRecoveryReceiptDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimRecoveryReceiptsService.create(
+      request.user,
+      id,
+      claimId,
+      cashCallId,
+      dto,
+    );
+  }
+
+  @Post(':id/claims/:claimId/recovery-receipts/:receiptId/reverse')
+  @ApiTags('Reinsurance - Claim Recoveries')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Reverse a claim recovery receipt',
+    description:
+      'Marks the original recovery receipt REVERSED and creates an immutable linked reversal record. Recovery outstanding is restored.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'receiptId',
+    format: 'uuid',
+    description: 'Recovery receipt ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementClaimRecoveryReceiptResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'A reversal receipt cannot be reversed.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'Recovery receipt has already been reversed.',
+  })
+  reverseClaimRecoveryReceipt(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('receiptId', ParseUUIDPipe) receiptId: string,
+    @Body() dto: ReversePlacementClaimRecoveryReceiptDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimRecoveryReceiptsService.reverse(
+      request.user,
+      id,
+      claimId,
+      receiptId,
       dto,
     );
   }

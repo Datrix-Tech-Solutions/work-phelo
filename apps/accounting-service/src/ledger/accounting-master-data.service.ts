@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   FiscalPeriodStatus,
@@ -26,6 +27,7 @@ import {
   CreateFiscalPeriodDto,
   CreateGLAccountDto,
   CreateSubledgerAccountDto,
+  EnsureInternalSubledgerDto,
   QueryAccountingPartiesDto,
   QueryAccountGroupsDto,
   QueryAccountHierarchyDto,
@@ -1476,6 +1478,104 @@ export class AccountingMasterDataService {
     });
   }
 
+  async ensureInternalInsuranceSubledger(
+    callingService: string,
+    dto: EnsureInternalSubledgerDto,
+  ) {
+    const externalRef = this.requiredExternalRef(dto.externalRef);
+    const name = this.requiredName(dto.name);
+    const existing = await this.prisma.subledgerAccount.findFirst({
+      where: {
+        tenantId: dto.tenantId,
+        type: dto.type,
+        externalRef,
+      },
+      include: {
+        controlAccount: { select: { id: true, code: true, name: true } },
+      },
+    });
+
+    if (existing) {
+      if (existing.status !== RecordStatus.ACTIVE) {
+        throw new ConflictException(
+          `${dto.type} subledger is inactive and must be reactivated in Accounting before source-module posting can use it`,
+        );
+      }
+      if (
+        dto.currency &&
+        existing.currency &&
+        existing.currency !== dto.currency
+      ) {
+        throw new ConflictException(
+          `${dto.type} subledger currency does not match the source counterparty currency`,
+        );
+      }
+      return this.prisma.subledgerAccount.update({
+        where: {
+          id_tenantId: { id: existing.id, tenantId: dto.tenantId },
+        },
+        data: {
+          name,
+          ...(dto.currency && !existing.currency
+            ? { currency: dto.currency }
+            : {}),
+          updatedByUserId: this.internalActor(callingService),
+        },
+        include: {
+          controlAccount: { select: { id: true, code: true, name: true } },
+        },
+      });
+    }
+
+    const config = await this.getConfiguredControlAccounts(dto.tenantId);
+    const controlAccountId =
+      dto.type === SubledgerType.CEDANT
+        ? config.accountsReceivableControlAccountId
+        : config.accountsPayableControlAccountId;
+    if (!controlAccountId) {
+      throw new BadRequestException(
+        dto.type === SubledgerType.CEDANT
+          ? 'Configure an accounts receivable control account before syncing Cedant subledgers'
+          : 'Configure an accounts payable control account before syncing Reinsurer subledgers',
+      );
+    }
+
+    await this.assertControlAccount(
+      dto.tenantId,
+      controlAccountId,
+      dto.type === SubledgerType.CEDANT
+        ? GLAccountCategory.ASSET
+        : GLAccountCategory.LIABILITY,
+      dto.type === SubledgerType.CEDANT
+        ? 'Cedant receivable control account'
+        : 'Reinsurer payable control account',
+    );
+    if (dto.currency) {
+      await this.assertActiveCurrency(dto.tenantId, dto.currency);
+    }
+
+    try {
+      return await this.prisma.subledgerAccount.create({
+        data: {
+          tenantId: dto.tenantId,
+          code: this.integrationSubledgerCode(dto.type, externalRef),
+          name,
+          type: dto.type,
+          externalRef,
+          controlAccountId,
+          currency: dto.currency,
+          createdByUserId: this.internalActor(callingService),
+          updatedByUserId: this.internalActor(callingService),
+        },
+        include: {
+          controlAccount: { select: { id: true, code: true, name: true } },
+        },
+      });
+    } catch (error) {
+      this.rethrowUnique(error, 'Subledger account already exists');
+    }
+  }
+
   async listCustomers(tenantId: string, query: QueryAccountingPartiesDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
@@ -2599,6 +2699,35 @@ export class AccountingMasterDataService {
   private optional(value: string | undefined): string | null | undefined {
     if (value === undefined) return undefined;
     return value.trim() || null;
+  }
+
+  private integrationSubledgerCode(
+    type: SubledgerType,
+    externalRef: string,
+  ): string {
+    const prefix = type === SubledgerType.CEDANT ? 'CED' : 'REI';
+    const digest = createHash('sha1').update(externalRef).digest('hex');
+    return `${prefix}-${digest.slice(0, 12).toUpperCase()}`;
+  }
+
+  private internalActor(callingService: string): string {
+    return `service:${callingService.slice(0, 80)}`;
+  }
+
+  private requiredExternalRef(value: string): string {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) {
+      throw new BadRequestException('externalRef is required');
+    }
+    return trimmedValue;
+  }
+
+  private requiredName(value: string): string {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) {
+      throw new BadRequestException('name is required');
+    }
+    return trimmedValue;
   }
 
   private rethrowUnique(error: unknown, message: string): never {

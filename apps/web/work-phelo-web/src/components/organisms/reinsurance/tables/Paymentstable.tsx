@@ -247,10 +247,7 @@ export function PaymentsTable() {
     return map;
   }, [closingRows, positionQueries]);
 
-  const payableRows = useMemo(
-    () => closingRows.filter((r) => paymentStatusMap.get(r.id) !== 'Outstanding'),
-    [closingRows, paymentStatusMap],
-  );
+  const payableRows = closingRows;
 
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -336,15 +333,14 @@ export function PaymentsTable() {
       }}
       extraFilters={extraFilters}
       actionButton={{
-        label: 'Receive Premium',
+        label: 'Receive Cedant Premium',
         onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/new`),
       }}
       rowActions={(row) => [
         {
-          label: 'Receive Premium',
+          label: 'Receive Cedant Premium',
           onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
         },
-        { label: 'View', onClick: () => {} },
       ]}
       emptyMessage="No payment records found"
       currentPage={page}

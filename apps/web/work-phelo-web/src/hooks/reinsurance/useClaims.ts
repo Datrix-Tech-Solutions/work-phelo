@@ -2,12 +2,18 @@ import { useMemo } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
+  ApprovePlacementClaimPayablePayload,
+  CreatePlacementClaimCedantSettlementPayload,
   CreatePlacementClaimPayload,
+  CreatePlacementClaimRecoveryReceiptPayload,
   Facultative,
   PlacementClaim,
   PlacementClaimAllocation,
   PlacementClaimCashCall,
   PlacementClaimCashCallStatus,
+  PlacementClaimCedantSettlement,
+  PlacementClaimRecoveryPosition,
+  PlacementClaimRecoveryReceipt,
   PlacementClaimStatus,
   UpdatePlacementClaimPayload,
 } from '@/types/reinsurance';
@@ -18,14 +24,39 @@ const BASE = '/operations/reinsurance/placements';
 export const claimsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'claims'] as const;
 
-const claimKey = (placementId: string, claimId: string) =>
+export const claimKey = (placementId: string, claimId: string) =>
   [...claimsKey(placementId), claimId] as const;
 
-const allocationsKey = (placementId: string, claimId: string) =>
+export const allocationsKey = (placementId: string, claimId: string) =>
   [...claimKey(placementId, claimId), 'allocations'] as const;
 
-const cashCallsKey = (placementId: string, claimId: string) =>
+export const cashCallsKey = (placementId: string, claimId: string) =>
   [...claimKey(placementId, claimId), 'cash-calls'] as const;
+
+export const recoveryPositionKey = (placementId: string, claimId: string) =>
+  [...claimKey(placementId, claimId), 'recovery-position'] as const;
+
+export const cedantSettlementsKey = (placementId: string, claimId: string) =>
+  [...claimKey(placementId, claimId), 'cedant-settlements'] as const;
+
+export const recoveryReceiptsKey = (placementId: string, claimId: string, cashCallId: string) =>
+  [...claimKey(placementId, claimId), 'cash-calls', cashCallId, 'recovery-receipts'] as const;
+
+function invalidateClaimWorkflow(
+  queryClient: ReturnType<typeof useQueryClient>,
+  placementId: string,
+  claimId?: string,
+) {
+  queryClient.invalidateQueries({ queryKey: claimsKey(placementId) });
+  if (claimId) {
+    queryClient.invalidateQueries({ queryKey: claimKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: allocationsKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: recoveryPositionKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: cedantSettlementsKey(placementId, claimId) });
+  }
+  queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
+}
 
 export function usePlacementClaims(placementId: string) {
   return useQuery({
@@ -64,7 +95,7 @@ export function useCreatePlacementClaim() {
         claim,
         ...current.filter((item) => item.id !== claim.id),
       ]);
-      return queryClient.invalidateQueries({ queryKey: claimsKey(claim.placementId) });
+      invalidateClaimWorkflow(queryClient, claim.placementId, claim.id);
     },
   });
 }
@@ -76,11 +107,9 @@ export function useUpdatePlacementClaim(placementId: string, claimId: string) {
       const res = await api.patch(`${BASE}/${placementId}/claims/${claimId}`, payload);
       return res.data as PlacementClaim;
     },
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: claimsKey(placementId) }),
-        queryClient.invalidateQueries({ queryKey: claimKey(placementId, claimId) }),
-      ]),
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
   });
 }
 
@@ -91,11 +120,9 @@ export function useUpdateClaimStatus(placementId: string, claimId: string) {
       const res = await api.patch(`${BASE}/${placementId}/claims/${claimId}/status`, { status });
       return res.data as PlacementClaim;
     },
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: claimsKey(placementId) }),
-        queryClient.invalidateQueries({ queryKey: claimKey(placementId, claimId) }),
-      ]),
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
   });
 }
 
@@ -117,8 +144,22 @@ export function useGenerateClaimAllocations(placementId: string, claimId: string
       const res = await api.post(`${BASE}/${placementId}/claims/${claimId}/allocations/generate`);
       return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: allocationsKey(placementId, claimId) }),
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
+export function useGenerateClaimAllocationsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ placementId, claimId }: { placementId: string; claimId: string }) => {
+      const res = await api.post(`${BASE}/${placementId}/claims/${claimId}/allocations/generate`);
+      return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
+    },
+    onSuccess: (_allocations, variables) => {
+      invalidateClaimWorkflow(queryClient, variables.placementId, variables.claimId);
+    },
   });
 }
 
@@ -142,8 +183,9 @@ export function useCreateClaimCashCall(placementId: string, claimId: string) {
       );
       return res.data as PlacementClaimCashCall;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) }),
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
   });
 }
 
@@ -163,8 +205,9 @@ export function useUpdateClaimCashCallStatus(placementId: string, claimId: strin
       );
       return res.data as PlacementClaimCashCall;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) }),
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
   });
 }
 
@@ -178,111 +221,183 @@ export function useVoidClaimCashCall(placementId: string, claimId: string) {
       );
       return res.data as PlacementClaimCashCall;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) }),
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
   });
 }
 
-export interface ReinsurerClaimRow {
-  id: string;
-  claimId: string;
-  claimNumber: string;
-  status: PlacementClaimStatus;
-  placementId: string;
-  placementReference: string;
-  policyNumber: string | null;
-  cedantName: string;
-  currency: string;
-  sharePercent: number;
-  recoveryAmount: number;
-  occurrenceDate: string;
+export function useClaimRecoveryPosition(placementId: string, claimId: string) {
+  return useQuery({
+    queryKey: recoveryPositionKey(placementId, claimId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/claims/${claimId}/recovery-position`);
+      return res.data as PlacementClaimRecoveryPosition;
+    },
+    enabled: !!placementId && !!claimId,
+  });
 }
 
-/**
- * Claims for every offer this reinsurer participates in — one row per claim, with the
- * claim's actual (final if finalized, else estimated) loss amount as the recovery figure.
- * Uses the same query keys as usePlacementClaims so results share the cache.
- */
-export function useReinsurerClaims(
-  placements: Facultative[],
-  reinsurerId: string,
-): { rows: ReinsurerClaimRow[]; isLoading: boolean } {
-  const reinsuredPlacements = useMemo(
-    () =>
-      placements.filter((p) =>
-        p.participants.some(
-          (pt) =>
-            pt.counterpartyId === reinsurerId &&
-            (pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
-        ),
-      ),
-    [placements, reinsurerId],
-  );
-
-  const claimQueries = useQueries({
-    queries: reinsuredPlacements.map((p) => ({
-      queryKey: claimsKey(p.id),
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/claims`);
-        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
-      },
-    })),
-  });
-
-  const isLoading = claimQueries.some((q) => q.isLoading);
-
-  const rows = useMemo(() => {
-    const list: ReinsurerClaimRow[] = [];
-    reinsuredPlacements.forEach((p, i) => {
-      const claims = claimQueries[i]?.data ?? [];
-      const participant = p.participants.find((pt) => pt.counterpartyId === reinsurerId);
-      const sharePercent = parseFloat(
-        participant?.signedLinePercent ?? participant?.sharePercent ?? '0',
+export function useApproveClaimPayable(placementId: string, claimId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ApprovePlacementClaimPayablePayload) => {
+      const res = await api.patch(
+        `${BASE}/${placementId}/claims/${claimId}/approve-payable`,
+        payload,
       );
-      claims.forEach((claim) => {
-        list.push({
-          id: claim.id,
-          claimId: claim.id,
-          claimNumber: claim.claimNumber,
-          status: claim.status,
-          placementId: p.id,
-          placementReference: displayPolicyNumber(p.policyNumber),
-          policyNumber: p.policyNumber,
-          cedantName: p.cedant.name,
-          currency: claim.currency,
-          sharePercent,
-          recoveryAmount: parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount),
-          occurrenceDate: claim.occurrenceDate,
-        });
-      });
-    });
-    return list;
-  }, [reinsuredPlacements, claimQueries, reinsurerId]);
+      return res.data as PlacementClaim;
+    },
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
 
-  return { rows, isLoading };
+export function useClaimCedantSettlements(placementId: string, claimId: string) {
+  return useQuery({
+    queryKey: cedantSettlementsKey(placementId, claimId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/claims/${claimId}/cedant-settlements`);
+      return (res.data?.items ?? res.data ?? []) as PlacementClaimCedantSettlement[];
+    },
+    enabled: !!placementId && !!claimId,
+  });
+}
+
+export function useCreateClaimCedantSettlement(placementId: string, claimId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreatePlacementClaimCedantSettlementPayload) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/cedant-settlements`,
+        payload,
+      );
+      return res.data as PlacementClaimCedantSettlement;
+    },
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
+export function useReverseClaimCedantSettlement(placementId: string, claimId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ settlementId, notes }: { settlementId: string; notes?: string }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/cedant-settlements/${settlementId}/reverse`,
+        { notes },
+      );
+      return res.data as PlacementClaimCedantSettlement;
+    },
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
+export function useClaimRecoveryReceipts(placementId: string, claimId: string, cashCallId: string) {
+  return useQuery({
+    queryKey: recoveryReceiptsKey(placementId, claimId, cashCallId),
+    queryFn: async () => {
+      const res = await api.get(
+        `${BASE}/${placementId}/claims/${claimId}/cash-calls/${cashCallId}/recovery-receipts`,
+      );
+      return (res.data?.items ?? res.data ?? []) as PlacementClaimRecoveryReceipt[];
+    },
+    enabled: !!placementId && !!claimId && !!cashCallId,
+  });
+}
+
+export function useCreateClaimRecoveryReceipt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      placementId,
+      claimId,
+      cashCallId,
+      payload,
+    }: {
+      placementId: string;
+      claimId: string;
+      cashCallId: string;
+      payload: CreatePlacementClaimRecoveryReceiptPayload;
+    }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/cash-calls/${cashCallId}/recovery-receipts`,
+        payload,
+      );
+      return res.data as PlacementClaimRecoveryReceipt;
+    },
+    onSuccess: (_receipt, variables) => {
+      invalidateClaimWorkflow(queryClient, variables.placementId, variables.claimId);
+      queryClient.invalidateQueries({
+        queryKey: recoveryReceiptsKey(
+          variables.placementId,
+          variables.claimId,
+          variables.cashCallId,
+        ),
+      });
+    },
+  });
+}
+
+export function useReverseClaimRecoveryReceipt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      placementId,
+      claimId,
+      receiptId,
+      notes,
+    }: {
+      placementId: string;
+      claimId: string;
+      receiptId: string;
+      notes?: string;
+    }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/recovery-receipts/${receiptId}/reverse`,
+        { notes },
+      );
+      return res.data as PlacementClaimRecoveryReceipt;
+    },
+    onSuccess: (_receipt, variables) => {
+      invalidateClaimWorkflow(queryClient, variables.placementId, variables.claimId);
+    },
+  });
 }
 
 export interface RecoveryRow {
   id: string;
   placementId: string;
+  claimId: string;
+  cashCallId: string;
+  allocationId: string;
   policyNumber: string;
   insuredTitle: string;
   riskType: string | null;
   reinsurerId: string;
   reinsurerName: string;
   claimNumber: string;
+  cashCallNumber: string;
+  cashCallStatus: PlacementClaimCashCallStatus;
   currency: string;
-  sharePercent: number;
-  recoveryAmount: number;
+  calledAmount: number;
+  recoveredAmount: number;
+  reversedAmount: number;
+  outstandingAmount: number;
+  recoveryStatus: PlacementClaimRecoveryPosition['perCashCall'][number]['recoveryStatus'];
+  receipts: PlacementClaimRecoveryReceipt[];
   occurrenceDate: string;
 }
 
 /**
- * Claim recoveries owed by every reinsurer across all placements — one row per
- * (claim, reinsurer participant) pair, with the recovery amount scaled to that
- * reinsurer's share. Uses the same query keys as usePlacementClaims so results
- * share the cache. Expects `placements` to already be filtered to the set worth
- * querying (e.g. those with an accepted/closed participant).
+ * Claim recoveries owed by every reinsurer across all placements. Rows are derived
+ * from backend recovery-position truth: ClaimAllocation -> issued CashCall ->
+ * RecoveryReceipt. No participant percentages are used as authoritative recovery
+ * amounts here.
  */
 export function useAllReinsurerClaims(placements: Facultative[]): {
   rows: RecoveryRow[];
@@ -300,38 +415,62 @@ export function useAllReinsurerClaims(placements: Facultative[]): {
 
   const isLoading = claimQueries.some((q) => q.isLoading);
 
+  const claimRefs = useMemo(
+    () =>
+      placements.flatMap((placement, placementIndex) =>
+        (claimQueries[placementIndex]?.data ?? []).map((claim) => ({
+          placement,
+          claim,
+        })),
+      ),
+    [placements, claimQueries],
+  );
+
+  const positionQueries = useQueries({
+    queries: claimRefs.map(({ placement, claim }) => ({
+      queryKey: recoveryPositionKey(placement.id, claim.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${placement.id}/claims/${claim.id}/recovery-position`);
+        return res.data as PlacementClaimRecoveryPosition;
+      },
+      enabled: !!placement.id && !!claim.id,
+    })),
+  });
+
   const rows = useMemo(() => {
     const list: RecoveryRow[] = [];
-    placements.forEach((p, i) => {
-      const claims = claimQueries[i]?.data ?? [];
-      const participants = p.participants.filter(
-        (pt) => pt.status === 'ACCEPTED' || pt.status === 'CLOSED',
-      );
-      claims.forEach((claim) => {
-        const claimAmount = parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount);
-        participants.forEach((pt) => {
-          const sharePercent = parseFloat(pt.signedLinePercent ?? pt.sharePercent ?? '0');
-          list.push({
-            id: `${claim.id}-${pt.id}`,
-            placementId: p.id,
-            policyNumber: displayPolicyNumber(p.policyNumber),
-            insuredTitle: p.title,
-            riskType: p.classOfBusiness,
-            reinsurerId: pt.counterpartyId,
-            reinsurerName: pt.counterparty.name,
-            claimNumber: claim.claimNumber,
-            currency: claim.currency,
-            sharePercent,
-            recoveryAmount: claimAmount * (sharePercent / 100),
-            occurrenceDate: claim.occurrenceDate,
-          });
+    claimRefs.forEach(({ placement, claim }, index) => {
+      const position = positionQueries[index]?.data;
+      position?.perCashCall.forEach((cashCall) => {
+        list.push({
+          id: `${claim.id}-${cashCall.cashCallId}`,
+          placementId: placement.id,
+          claimId: claim.id,
+          cashCallId: cashCall.cashCallId,
+          allocationId: cashCall.allocationId,
+          policyNumber: displayPolicyNumber(placement.policyNumber),
+          insuredTitle: placement.title,
+          riskType: placement.classOfBusiness,
+          reinsurerId: cashCall.counterpartyId,
+          reinsurerName: cashCall.counterparty.name,
+          claimNumber: claim.claimNumber,
+          cashCallNumber: cashCall.cashCallNumber,
+          cashCallStatus: cashCall.cashCallStatus,
+          currency: cashCall.currency,
+          calledAmount: parseFloat(cashCall.calledAmount),
+          recoveredAmount: parseFloat(cashCall.recoveredAmount),
+          reversedAmount: parseFloat(cashCall.reversedAmount),
+          outstandingAmount: parseFloat(cashCall.outstandingAmount),
+          recoveryStatus: cashCall.recoveryStatus,
+          receipts: cashCall.receipts,
+          occurrenceDate: claim.occurrenceDate,
         });
       });
     });
     return list;
-  }, [placements, claimQueries]);
+  }, [claimRefs, positionQueries]);
 
-  return { rows, isLoading };
+  return { rows, isLoading: isLoading || positionQueries.some((q) => q.isLoading) };
 }
 
 const OPEN_CLAIM_STATUSES: PlacementClaimStatus[] = [

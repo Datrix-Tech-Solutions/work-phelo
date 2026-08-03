@@ -5,6 +5,7 @@ import {
   PostingDirection,
   Prisma,
   SourceEventStatus,
+  SubledgerType,
 } from '../../prisma/generated/client';
 import { JournalsService } from '../ledger/journals.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -91,16 +92,17 @@ describe('SourceEventsService', () => {
 
   function setup(
     initialStatus: SourceEventStatus = SourceEventStatus.RECEIVED,
+    seedDto: CreateSourceEventDto = dto,
   ) {
     const event = {
       id: 'event-1',
       tenantId: actor.tenantId,
-      sourceModule: dto.sourceModule,
-      sourceEventType: dto.sourceEventType,
-      sourceRecordId: dto.sourceRecordId,
-      sourceDocumentId: dto.sourceDocumentId ?? null,
-      idempotencyKey: dto.idempotencyKey,
-      payload: dto.payload as Prisma.JsonObject,
+      sourceModule: seedDto.sourceModule,
+      sourceEventType: seedDto.sourceEventType,
+      sourceRecordId: seedDto.sourceRecordId,
+      sourceDocumentId: seedDto.sourceDocumentId ?? null,
+      idempotencyKey: seedDto.idempotencyKey,
+      payload: seedDto.payload as Prisma.JsonObject,
       status: initialStatus,
       failureReason:
         initialStatus === SourceEventStatus.FAILED ? 'Previous failure' : null,
@@ -241,6 +243,868 @@ describe('SourceEventsService', () => {
             glAccountId: 'revenue-account',
             debit: 0,
             credit: 100,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('posts REINSURANCE DEBIT_NOTE_ISSUED using the cedant subledger reference', async () => {
+    const reinsuranceDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      sourceRecordId: 'note-1',
+      sourceDocumentId: 'note-1',
+      idempotencyKey: 'reinsurance:debit-note:note-1:issued:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          noteNumber: 'DN-001',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: { netPremium: 8550 },
+      },
+    };
+    const reinsuranceRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.netPremium',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Debit note {{payload.references.noteNumber}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'premium-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.netPremium',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Premium clearing {{payload.references.noteNumber}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      reinsuranceDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(reinsuranceRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, reinsuranceDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.CEDANT,
+        externalRef: 'cedant-1',
+        status: 'ACTIVE',
+      },
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'DEBIT_NOTE_ISSUED',
+        sourceRecordId: 'note-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 8550,
+            credit: 0,
+            description: 'Debit note DN-001 for FAC-2026-001',
+          }),
+          expect.objectContaining({
+            glAccountId: 'premium-clearing',
+            debit: 0,
+            credit: 8550,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('fails REINSURANCE DEBIT_NOTE_ISSUED cleanly when the cedant subledger is missing', async () => {
+    const reinsuranceDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      sourceRecordId: 'note-1',
+      sourceDocumentId: 'note-1',
+      idempotencyKey: 'reinsurance:debit-note:note-1:issued:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: { netPremium: 8550 },
+      },
+    };
+    const reinsuranceRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'DEBIT_NOTE_ISSUED',
+      lines: [
+        {
+          ...rule.lines[0],
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.netPremium',
+          currencySource: 'currency',
+        },
+        {
+          ...rule.lines[1],
+          amountSource: 'amounts.netPremium',
+          currencySource: 'currency',
+        },
+      ],
+    };
+    const { event, journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      reinsuranceDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(reinsuranceRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue(null);
+
+    const result = await service.receive(actor, reinsuranceDto);
+
+    expect(result.status).toBe(SourceEventStatus.FAILED);
+    expect(event.failureReason).toBe(
+      'Active cedant subledger not found for rule line 1',
+    );
+    expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('posts REINSURANCE CREDIT_NOTE_ISSUED using tenant-configured policy and reinsurer subledger', async () => {
+    const creditNoteDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'CREDIT_NOTE_ISSUED',
+      sourceRecordId: 'credit-note-1',
+      sourceDocumentId: 'credit-note-1',
+      idempotencyKey: 'reinsurance:credit-note:credit-note-1:issued:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          closingId: 'closing-1',
+          noteNumber: 'CN-001',
+        },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: {
+          creditMagnitude: 3712.5,
+          signedReceivableImpact: 0,
+          signedPayableImpact: 3712.5,
+        },
+      },
+    };
+    const creditNoteRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'CREDIT_NOTE_ISSUED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'premium-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.creditMagnitude',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Credit note {{payload.references.noteNumber}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'reinsurer-premium-payable',
+          subledgerType: SubledgerType.REINSURER,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.creditMagnitude',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Reinsurer credit {{payload.references.noteNumber}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      creditNoteDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(creditNoteRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'reinsurer-subledger-1',
+    });
+
+    const result = await service.receive(actor, creditNoteDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+        status: 'ACTIVE',
+      },
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'CREDIT_NOTE_ISSUED',
+        sourceRecordId: 'credit-note-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'premium-clearing',
+            debit: 3712.5,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'reinsurer-premium-payable',
+            subledgerAccountId: 'reinsurer-subledger-1',
+            debit: 0,
+            credit: 3712.5,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('posts REINSURANCE ENDORSEMENT_DEBIT_NOTE_ISSUED as a tenant-configured additional premium event', async () => {
+    const endorsementDebitDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+      sourceRecordId: 'endorsement-debit-note-1',
+      sourceDocumentId: 'endorsement-debit-note-1',
+      idempotencyKey:
+        'reinsurance:endorsement-debit-note:endorsement-debit-note-1:issued:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          endorsementId: 'endorsement-1',
+          endorsementReference: 'END-001',
+          noteNumber: 'EDN-001',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: {
+          adjustmentMagnitude: 2500,
+          signedReceivableImpact: 2500,
+          signedPayableImpact: 0,
+        },
+      },
+    };
+    const endorsementDebitRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.adjustmentMagnitude',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Endorsement debit note {{payload.references.noteNumber}} for {{payload.references.endorsementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'premium-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.adjustmentMagnitude',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Endorsement premium clearing {{payload.references.noteNumber}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      endorsementDebitDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(endorsementDebitRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, endorsementDebitDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.CEDANT,
+        externalRef: 'cedant-1',
+        status: 'ACTIVE',
+      },
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+        sourceRecordId: 'endorsement-debit-note-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 2500,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'premium-clearing',
+            debit: 0,
+            credit: 2500,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('posts REINSURANCE ENDORSEMENT_CREDIT_NOTE_ISSUED as a tenant-configured return-premium event', async () => {
+    const endorsementCreditDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+      sourceRecordId: 'endorsement-credit-note-1',
+      sourceDocumentId: 'endorsement-credit-note-1',
+      idempotencyKey:
+        'reinsurance:endorsement-credit-note:endorsement-credit-note-1:issued:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          endorsementId: 'endorsement-1',
+          endorsementReference: 'END-001',
+          endorsementClosingId: 'endorsement-closing-1',
+          noteNumber: 'ECN-001',
+        },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: {
+          returnPremiumMagnitude: 1800,
+          adjustmentMagnitude: 1800,
+          signedReceivableImpact: 0,
+          signedPayableImpact: 1800,
+        },
+      },
+    };
+    const endorsementCreditRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'premium-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.returnPremiumMagnitude',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Endorsement credit note {{payload.references.noteNumber}} for {{payload.references.endorsementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'reinsurer-premium-payable',
+          subledgerType: SubledgerType.REINSURER,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.returnPremiumMagnitude',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Endorsement return premium {{payload.references.noteNumber}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      endorsementCreditDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(endorsementCreditRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'reinsurer-subledger-1',
+    });
+
+    const result = await service.receive(actor, endorsementCreditDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+        status: 'ACTIVE',
+      },
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+        sourceRecordId: 'endorsement-credit-note-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'premium-clearing',
+            debit: 1800,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'reinsurer-premium-payable',
+            subledgerAccountId: 'reinsurer-subledger-1',
+            debit: 0,
+            credit: 1800,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('posts REINSURANCE PREMIUM_PAYMENT_RECEIVED using tenant-configured cash and receivable accounts', async () => {
+    const paymentDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordId: 'payment-1',
+      sourceDocumentId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          paymentId: 'payment-1',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: {
+          paymentAmount: 8500,
+          signedCashImpact: 8500,
+          signedReceivableImpact: -8500,
+        },
+      },
+    };
+    const paymentRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Premium payment {{payload.references.paymentId}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Clear cedant receivable {{payload.references.paymentId}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      paymentDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(paymentRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, paymentDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PREMIUM_PAYMENT_RECEIVED',
+        sourceRecordId: 'payment-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'bank-clearing',
+            debit: 8500,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 0,
+            credit: 8500,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('posts REINSURANCE PAYMENT_REVERSED as a separate reversing journal', async () => {
+    const reversalDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PAYMENT_REVERSED',
+      sourceRecordId: 'payment-reversal-1',
+      sourceDocumentId: 'payment-reversal-1',
+      idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
+      payload: {
+        transactionDate: '2026-07-06T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          originalPaymentId: 'payment-1',
+          reversalPaymentId: 'payment-reversal-1',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: {
+          paymentAmount: 8500,
+          signedCashImpact: -8500,
+          signedReceivableImpact: 8500,
+        },
+      },
+    };
+    const reversalRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PAYMENT_REVERSED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Reverse payment {{payload.references.reversalPaymentId}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Reverse cash {{payload.references.originalPaymentId}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      reversalDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(reversalRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, reversalDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PAYMENT_REVERSED',
+        sourceRecordId: 'payment-reversal-1',
+        idempotencyKey: 'source-event:event-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 8500,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'bank-clearing',
+            debit: 0,
+            credit: 8500,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('posts REINSURANCE REINSURER_DISBURSEMENT_RECORDED using tenant-configured payable and cash accounts', async () => {
+    const disbursementDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      sourceRecordId: 'payment-disbursement-1',
+      sourceDocumentId: 'payment-disbursement-1',
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-1:recorded:v1',
+      payload: {
+        transactionDate: '2026-07-07T10:00:00.000Z',
+        currency: 'USD',
+        exchangeRate: 12.5,
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          paymentId: 'payment-disbursement-1',
+          settlementReference: 'SETTLE-001',
+        },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: {
+          paymentAmount: 750,
+          allocatedAmount: 750,
+          unallocatedAmount: 0,
+          bankCharges: 12.5,
+          withholdingTax: 25,
+          signedCashImpact: -750,
+          signedPayableImpact: -750,
+        },
+        allocations: [
+          {
+            allocationId: 'allocation-1',
+            creditNoteId: 'credit-note-1',
+            creditNoteNumber: 'CN-001',
+            obligationType: 'CREDIT_NOTE',
+            obligationCurrency: 'USD',
+            allocatedAmount: 500,
+            paymentCurrencyAmount: 500,
+          },
+          {
+            allocationId: 'allocation-2',
+            creditNoteId: 'endorsement-credit-note-1',
+            creditNoteNumber: 'ECN-001',
+            obligationType: 'ENDORSEMENT_CREDIT_NOTE',
+            obligationCurrency: 'GHS',
+            allocatedAmount: 3125,
+            paymentCurrencyAmount: 250,
+            agreedExchangeRate: 12.5,
+          },
+        ],
+      },
+    };
+    const disbursementRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'reinsurer-premium-payable',
+          subledgerType: SubledgerType.REINSURER,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.allocatedAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Clear reinsurer payable {{payload.references.paymentId}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.allocatedAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Bank-confirmed reinsurer payment {{payload.references.paymentId}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      disbursementDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(disbursementRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'reinsurer-subledger-1',
+    });
+
+    const result = await service.receive(actor, disbursementDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+        status: 'ACTIVE',
+      },
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'REINSURER_DISBURSEMENT_RECORDED',
+        sourceRecordId: 'payment-disbursement-1',
+        transactionCurrency: 'USD',
+        exchangeRate: 12.5,
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'reinsurer-premium-payable',
+            subledgerAccountId: 'reinsurer-subledger-1',
+            debit: 750,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'bank-clearing',
+            debit: 0,
+            credit: 750,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('posts REINSURANCE REINSURER_DISBURSEMENT_REVERSED as the reversing payable and cash journal', async () => {
+    const reversalDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+      sourceRecordId: 'payment-disbursement-reversal-1',
+      sourceDocumentId: 'payment-disbursement-reversal-1',
+      idempotencyKey:
+        'reinsurance:reinsurer-disbursement:payment-disbursement-reversal-1:reversal:v1',
+      payload: {
+        transactionDate: '2026-07-08T10:00:00.000Z',
+        currency: 'USD',
+        exchangeRate: 12.5,
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          originalPaymentId: 'payment-disbursement-1',
+          reversalPaymentId: 'payment-disbursement-reversal-1',
+          paymentId: 'payment-disbursement-reversal-1',
+          settlementReference: 'REVERSAL-SETTLE-001',
+        },
+        counterparty: { id: 'reinsurer-1', type: 'REINSURER' },
+        amounts: {
+          paymentAmount: 750,
+          allocatedAmount: 750,
+          bankCharges: 12.5,
+          withholdingTax: 25,
+          signedCashImpact: 750,
+          signedPayableImpact: 750,
+        },
+        allocations: [
+          {
+            allocationId: 'allocation-1-reversal',
+            creditNoteId: 'credit-note-1',
+            creditNoteNumber: 'CN-001',
+            obligationType: 'CREDIT_NOTE',
+            obligationCurrency: 'USD',
+            allocatedAmount: 500,
+            paymentCurrencyAmount: 500,
+          },
+          {
+            allocationId: 'allocation-2-reversal',
+            creditNoteId: 'endorsement-credit-note-1',
+            creditNoteNumber: 'ECN-001',
+            obligationType: 'ENDORSEMENT_CREDIT_NOTE',
+            obligationCurrency: 'GHS',
+            allocatedAmount: 3125,
+            paymentCurrencyAmount: 250,
+            agreedExchangeRate: 12.5,
+          },
+        ],
+      },
+    };
+    const reversalRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.allocatedAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Reverse bank-confirmed reinsurer payment {{payload.references.originalPaymentId}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'reinsurer-premium-payable',
+          subledgerType: SubledgerType.REINSURER,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.allocatedAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Restore reinsurer payable {{payload.references.reversalPaymentId}} for {{payload.references.placementReference}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      reversalDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(reversalRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'reinsurer-subledger-1',
+    });
+
+    const result = await service.receive(actor, reversalDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'REINSURER_DISBURSEMENT_REVERSED',
+        sourceRecordId: 'payment-disbursement-reversal-1',
+        transactionCurrency: 'USD',
+        exchangeRate: 12.5,
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'bank-clearing',
+            debit: 750,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'reinsurer-premium-payable',
+            subledgerAccountId: 'reinsurer-subledger-1',
+            debit: 0,
+            credit: 750,
           }),
         ],
       }),

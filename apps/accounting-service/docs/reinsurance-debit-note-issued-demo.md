@@ -13,7 +13,9 @@ Create active GL accounts first:
 - `Cedant Premium Receivable`
 - `Premium Clearing` or `Premium Income`
 
-Then create a posting rule using the actual GL account IDs.
+Then create a posting rule using the actual tenant GL account IDs.
+The debit line may use the Cedant subledger by resolving the Reinsurance
+`Counterparty.id` from `counterparty.id`.
 
 ```json
 {
@@ -28,9 +30,11 @@ Then create a posting rule using the actual GL account IDs.
       "sequence": 1,
       "direction": "DR",
       "glAccountId": "<cedant-premium-receivable-account-id>",
+      "subledgerType": "CEDANT",
+      "subledgerExternalRefSource": "counterparty.id",
       "amountSource": "amounts.netPremium",
       "currencySource": "currency",
-      "descriptionTemplate": "Debit note receivable {{sourceDocumentId}} for {{payload.policyNumber}}"
+      "descriptionTemplate": "Debit note {{payload.references.noteNumber}} receivable for {{payload.references.placementReference}}"
     },
     {
       "sequence": 2,
@@ -38,7 +42,7 @@ Then create a posting rule using the actual GL account IDs.
       "glAccountId": "<premium-clearing-or-income-account-id>",
       "amountSource": "amounts.netPremium",
       "currencySource": "currency",
-      "descriptionTemplate": "Premium recognized from debit note {{sourceDocumentId}}"
+      "descriptionTemplate": "Premium recognized from debit note {{payload.references.noteNumber}}"
     }
   ]
 }
@@ -59,13 +63,31 @@ Trusted services enqueue events through `POST /internal/source-events`.
   "occurredAt": "2026-07-09T10:00:00.000Z",
   "currency": "GHS",
   "payload": {
-    "amounts": {
-      "netPremium": 12500
+    "transactionDate": "2026-07-09T10:00:00.000Z",
+    "currency": "GHS",
+    "references": {
+      "placementId": "placement-uuid",
+      "placementReference": "FAC-2026-001",
+      "policyNumber": "POL-2026-001",
+      "noteId": "placement-note-uuid",
+      "noteNumber": "DN-001"
     },
-    "policyNumber": "POL-2026-001",
-    "cedant": {
+    "counterparty": {
       "id": "cedant-uuid",
-      "name": "Example Cedant"
+      "type": "CEDANT",
+      "name": "Example Cedant",
+      "subledgerExternalRef": "cedant-uuid"
+    },
+    "amounts": {
+      "grossPremium": 15000,
+      "commissionAmount": 1500,
+      "brokerageAmount": 750,
+      "netPremium": 12750
+    },
+    "documents": {
+      "placementNoteId": "placement-note-uuid",
+      "placementNoteNumber": "DN-001",
+      "sourceDocumentId": "placement-note-uuid"
     }
   }
 }

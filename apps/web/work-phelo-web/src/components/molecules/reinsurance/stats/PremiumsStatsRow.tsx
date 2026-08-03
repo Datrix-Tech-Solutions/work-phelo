@@ -30,7 +30,7 @@ export function PremiumsStatsRow() {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <KpiCard
-        label="Total Premium Due"
+        label="Cedant Premium Due"
         value={fmtAmount(totalDue)}
         icon={Icons.FileCheck2}
         iconColor="#2a78d6"

@@ -90,6 +90,9 @@ enum PlacementPaymentDirection {
 
 enum PlacementPaymentStatus {
   RECORDED
+  BANK_CONFIRMED
+  FAILED
+  CANCELLED
   REVERSED
 
   @@schema("reinsurance")
@@ -150,6 +153,29 @@ enum PlacementClaimCashCallStatus {
   ISSUED
   PAID
   VOID
+
+  @@schema("reinsurance")
+}
+
+enum PlacementClaimRecoveryReceiptStatus {
+  RECORDED
+  REVERSED
+
+  @@schema("reinsurance")
+}
+
+enum PlacementClaimCedantSettlementStatus {
+  RECORDED
+  REVERSED
+
+  @@schema("reinsurance")
+}
+
+enum ReinsuranceAccountingOutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
 
   @@schema("reinsurance")
 }
@@ -362,6 +388,7 @@ model Counterparty {
   placementNotes          PlacementNote[]                   @relation("PlacementNoteCounterparty")
   claimAllocations        PlacementClaimAllocation[]        @relation("PlacementClaimAllocationCounterparty")
   claimCashCalls          PlacementClaimCashCall[]          @relation("PlacementClaimCashCallCounterparty")
+  claimRecoveryReceipts   PlacementClaimRecoveryReceipt[]   @relation("PlacementClaimRecoveryReceiptCounterparty")
   endorsementParticipants PlacementEndorsementParticipant[] @relation("PlacementEndorsementParticipantCounterparty")
 
   @@unique([id, tenantId])
@@ -434,11 +461,14 @@ model Placement {
   claims                  PlacementClaim[]
   claimAllocations        PlacementClaimAllocation[]
   claimCashCalls          PlacementClaimCashCall[]
+  claimRecoveryReceipts   PlacementClaimRecoveryReceipt[]
+  claimCedantSettlements  PlacementClaimCedantSettlement[]
   documents               PlacementDocument[]
   attachments             PlacementAttachment[]
   endorsements            PlacementEndorsement[]
   endorsementParticipants PlacementEndorsementParticipant[]
   endorsementClosings     PlacementEndorsementClosing[]
+  paymentAllocations      PlacementPaymentAllocation[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
@@ -643,31 +673,36 @@ model PlacementClosing {
 }
 
 model PlacementClaim {
-  id                  String                     @id @default(uuid())
-  tenantId            String
-  placementId         String
-  claimNumber         String
-  status              PlacementClaimStatus       @default(DRAFT)
-  occurrenceDate      DateTime
-  reportedDate        DateTime
-  claimCause          String
-  occurrenceDetails   String?
-  currency            String
-  estimatedLossAmount Decimal                    @db.Decimal(18, 2)
-  finalLossAmount     Decimal?                   @db.Decimal(18, 2)
-  finalizedAt         DateTime?
-  finalizedByUserId   String?
-  createdByUserId     String
-  updatedByUserId     String?
-  closedAt            DateTime?
-  voidedAt            DateTime?
-  createdAt           DateTime                   @default(now())
-  updatedAt           DateTime                   @updatedAt
-  placement           Placement                  @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  allocations         PlacementClaimAllocation[]
-  cashCalls           PlacementClaimCashCall[]
-  documents           PlacementDocument[]
-  attachments         PlacementAttachment[]
+  id                    String                           @id @default(uuid())
+  tenantId              String
+  placementId           String
+  claimNumber           String
+  status                PlacementClaimStatus             @default(DRAFT)
+  occurrenceDate        DateTime
+  reportedDate          DateTime
+  claimCause            String
+  occurrenceDetails     String?
+  currency              String
+  estimatedLossAmount   Decimal                          @db.Decimal(18, 2)
+  finalLossAmount       Decimal?                         @db.Decimal(18, 2)
+  finalizedAt           DateTime?
+  finalizedByUserId     String?
+  approvedPayableAmount Decimal?                         @db.Decimal(18, 2)
+  approvedAt            DateTime?
+  approvedByUserId      String?
+  createdByUserId       String
+  updatedByUserId       String?
+  closedAt              DateTime?
+  voidedAt              DateTime?
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+  placement             Placement                        @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  allocations           PlacementClaimAllocation[]
+  cashCalls             PlacementClaimCashCall[]
+  recoveryReceipts      PlacementClaimRecoveryReceipt[]
+  cedantSettlements     PlacementClaimCedantSettlement[]
+  documents             PlacementDocument[]
+  attachments           PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, claimNumber])
@@ -703,6 +738,7 @@ model PlacementClaimAllocation {
   endorsementParticipant       PlacementEndorsementParticipant? @relation(fields: [endorsementParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
   counterparty                 Counterparty                     @relation("PlacementClaimAllocationCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
   cashCalls                    PlacementClaimCashCall[]
+  recoveryReceipts             PlacementClaimRecoveryReceipt[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, claimId])
@@ -715,29 +751,30 @@ model PlacementClaimAllocation {
 }
 
 model PlacementClaimCashCall {
-  id                String                       @id @default(uuid())
+  id                String                          @id @default(uuid())
   tenantId          String
   placementId       String
   claimId           String
   allocationId      String
   counterpartyId    String
   cashCallNumber    String
-  status            PlacementClaimCashCallStatus @default(DRAFT)
+  status            PlacementClaimCashCallStatus    @default(DRAFT)
   currency          String
-  amount            Decimal                      @db.Decimal(18, 2)
-  basisAmount       Decimal                      @db.Decimal(18, 2)
-  signedLinePercent Decimal                      @db.Decimal(7, 4)
+  amount            Decimal                         @db.Decimal(18, 2)
+  basisAmount       Decimal                         @db.Decimal(18, 2)
+  signedLinePercent Decimal                         @db.Decimal(7, 4)
   issuedAt          DateTime?
   paidAt            DateTime?
   voidedAt          DateTime?
   voidReason        String?
   createdByUserId   String
-  createdAt         DateTime                     @default(now())
-  updatedAt         DateTime                     @updatedAt
-  placement         Placement                    @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  claim             PlacementClaim               @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  allocation        PlacementClaimAllocation     @relation(fields: [allocationId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  counterparty      Counterparty                 @relation("PlacementClaimCashCallCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+  placement         Placement                       @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claim             PlacementClaim                  @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  allocation        PlacementClaimAllocation        @relation(fields: [allocationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty      Counterparty                    @relation("PlacementClaimCashCallCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  recoveryReceipts  PlacementClaimRecoveryReceipt[]
   documents         PlacementDocument[]
   attachments       PlacementAttachment[]
 
@@ -751,35 +788,134 @@ model PlacementClaimCashCall {
   @@schema("reinsurance")
 }
 
+model PlacementClaimRecoveryReceipt {
+  id                  String                              @id @default(uuid())
+  tenantId            String
+  placementId         String
+  claimId             String
+  allocationId        String
+  cashCallId          String
+  counterpartyId      String
+  currency            String
+  amount              Decimal                             @db.Decimal(18, 2)
+  paymentDate         DateTime
+  reference           String?
+  notes               String?
+  status              PlacementClaimRecoveryReceiptStatus @default(RECORDED)
+  reversalOfReceiptId String?
+  createdByUserId     String
+  createdAt           DateTime                            @default(now())
+  updatedAt           DateTime                            @updatedAt
+  placement           Placement                           @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claim               PlacementClaim                      @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  allocation          PlacementClaimAllocation            @relation(fields: [allocationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  cashCall            PlacementClaimCashCall              @relation(fields: [cashCallId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty        Counterparty                        @relation("PlacementClaimRecoveryReceiptCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfReceipt   PlacementClaimRecoveryReceipt?      @relation("PlacementClaimRecoveryReceiptReversal", fields: [reversalOfReceiptId], references: [id], onDelete: Restrict)
+  reversalReceipts    PlacementClaimRecoveryReceipt[]     @relation("PlacementClaimRecoveryReceiptReversal")
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, claimId, status, createdAt])
+  @@index([tenantId, cashCallId, status, createdAt])
+  @@index([tenantId, allocationId, status, createdAt])
+  @@index([tenantId, counterpartyId, createdAt])
+  @@index([tenantId, reversalOfReceiptId])
+  @@schema("reinsurance")
+}
+
+model PlacementClaimCedantSettlement {
+  id                     String                               @id @default(uuid())
+  tenantId               String
+  placementId            String
+  claimId                String
+  currency               String
+  amount                 Decimal                              @db.Decimal(18, 2)
+  settlementDate         DateTime
+  reference              String?
+  notes                  String?
+  status                 PlacementClaimCedantSettlementStatus @default(RECORDED)
+  reversalOfSettlementId String?
+  createdByUserId        String
+  createdAt              DateTime                             @default(now())
+  updatedAt              DateTime                             @updatedAt
+  placement              Placement                            @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claim                  PlacementClaim                       @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  reversalOfSettlement   PlacementClaimCedantSettlement?      @relation("PlacementClaimCedantSettlementReversal", fields: [reversalOfSettlementId], references: [id], onDelete: Restrict)
+  reversalSettlements    PlacementClaimCedantSettlement[]     @relation("PlacementClaimCedantSettlementReversal")
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, claimId, status, createdAt])
+  @@index([tenantId, claimId, status, createdAt])
+  @@index([tenantId, reversalOfSettlementId])
+  @@schema("reinsurance")
+}
+
+model ReinsuranceAccountingOutbox {
+  id                      String                            @id @default(uuid())
+  tenantId                String
+  sourceEventType         String
+  sourceRecordType        String
+  sourceRecordId          String
+  sourceDocumentId        String?
+  idempotencyKey          String
+  occurredAt              DateTime
+  currency                String
+  payload                 Json
+  status                  ReinsuranceAccountingOutboxStatus @default(PENDING)
+  attemptCount            Int                               @default(0)
+  lastAttemptAt           DateTime?
+  nextAttemptAt           DateTime?
+  lastError               String?
+  accountingSourceEventId String?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  deliveredAt             DateTime?
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, nextAttemptAt, createdAt])
+  @@index([tenantId, sourceRecordType, sourceRecordId])
+  @@index([tenantId, sourceEventType, createdAt])
+  @@schema("reinsurance")
+}
+
 model PlacementPayment {
-  id                   String                       @id @default(uuid())
-  tenantId             String
-  placementId          String
-  closingId            String?
-  endorsementClosingId String?
-  participantId        String?
-  counterpartyId       String
-  type                 PlacementPaymentType
-  direction            PlacementPaymentDirection
-  amount               Decimal                      @db.Decimal(18, 2)
-  currency             String
-  paymentDate          DateTime
-  reference            String?
-  notes                String?
-  status               PlacementPaymentStatus       @default(RECORDED)
-  reversalOfPaymentId  String?
-  createdByUserId      String
-  createdAt            DateTime                     @default(now())
-  updatedAt            DateTime                     @updatedAt
-  placement            Placement                    @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  closing              PlacementClosing?            @relation(fields: [closingId], references: [id], onDelete: Restrict)
-  endorsementClosing   PlacementEndorsementClosing? @relation(fields: [endorsementClosingId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  participant          PlacementParticipant?        @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  counterparty         Counterparty                 @relation("PlacementPaymentCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalOfPayment    PlacementPayment?            @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
-  reversalPayments     PlacementPayment[]           @relation("PlacementPaymentReversal")
-  settledNotes         PlacementNote[]              @relation("PlacementNoteSettlement")
-  attachments          PlacementAttachment[]
+  id                    String                       @id @default(uuid())
+  tenantId              String
+  placementId           String
+  closingId             String?
+  endorsementClosingId  String?
+  participantId         String?
+  counterpartyId        String
+  type                  PlacementPaymentType
+  direction             PlacementPaymentDirection
+  amount                Decimal                      @db.Decimal(18, 2)
+  currency              String
+  paymentDate           DateTime
+  reference             String?
+  settlementReference   String?
+  bankReference         String?
+  bankConfirmedAt       DateTime?
+  bankConfirmedByUserId String?
+  agreedExchangeRate    Decimal?                     @db.Decimal(18, 8)
+  bankChargeAmount      Decimal                      @default(0) @db.Decimal(18, 2)
+  withholdingTaxAmount  Decimal                      @default(0) @db.Decimal(18, 2)
+  notes                 String?
+  status                PlacementPaymentStatus       @default(RECORDED)
+  reversalOfPaymentId   String?
+  createdByUserId       String
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  placement             Placement                    @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closing               PlacementClosing?            @relation(fields: [closingId], references: [id], onDelete: Restrict)
+  endorsementClosing    PlacementEndorsementClosing? @relation(fields: [endorsementClosingId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participant           PlacementParticipant?        @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty          Counterparty                 @relation("PlacementPaymentCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfPayment     PlacementPayment?            @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
+  reversalPayments      PlacementPayment[]           @relation("PlacementPaymentReversal")
+  settledNotes          PlacementNote[]              @relation("PlacementNoteSettlement")
+  allocations           PlacementPaymentAllocation[]
+  attachments           PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, status, createdAt])
@@ -790,6 +926,32 @@ model PlacementPayment {
   @@index([tenantId, closingId, createdAt])
   @@index([tenantId, endorsementClosingId, createdAt])
   @@index([tenantId, reversalOfPaymentId])
+  @@schema("reinsurance")
+}
+
+model PlacementPaymentAllocation {
+  id                 String           @id @default(uuid())
+  tenantId           String
+  placementId        String
+  paymentId          String
+  noteId             String
+  allocatedAmount    Decimal          @db.Decimal(18, 2)
+  allocatedCurrency  String
+  obligationAmount   Decimal          @db.Decimal(18, 2)
+  obligationCurrency String
+  agreedExchangeRate Decimal?         @db.Decimal(18, 8)
+  createdByUserId    String
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  placement          Placement        @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  payment            PlacementPayment @relation(fields: [paymentId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  note               PlacementNote    @relation(fields: [noteId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, paymentId, noteId])
+  @@index([tenantId, placementId, createdAt])
+  @@index([tenantId, noteId, createdAt])
+  @@index([tenantId, paymentId, createdAt])
   @@schema("reinsurance")
 }
 
@@ -835,6 +997,7 @@ model PlacementNote {
   endorsementParticipant   PlacementEndorsementParticipant? @relation(fields: [endorsementParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
   counterparty             Counterparty                     @relation("PlacementNoteCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
   settledByPayment         PlacementPayment?                @relation("PlacementNoteSettlement", fields: [settledByPaymentId], references: [id], onDelete: Restrict)
+  paymentAllocations       PlacementPaymentAllocation[]
   documents                PlacementDocument[]
 
   @@unique([id, tenantId])

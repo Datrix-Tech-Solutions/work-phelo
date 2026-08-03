@@ -17,6 +17,7 @@ import {
   ReinsuranceChargeRateType,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import {
   AppliedChargeSnapshot,
   ChargeCalculationResult,
@@ -52,10 +53,21 @@ const noteInclude = {
       counterpartyId: true,
     },
   },
+  endorsement: {
+    select: {
+      id: true,
+      endorsementNumber: true,
+      type: true,
+      impactType: true,
+      effectiveDate: true,
+      status: true,
+    },
+  },
   endorsementClosing: {
     select: {
       id: true,
       closingNumber: true,
+      endorsementParticipantId: true,
     },
   },
 } satisfies Prisma.PlacementNoteInclude;
@@ -81,6 +93,7 @@ export class PlacementNotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chargeSettings: ReinsuranceChargeSettingsService,
+    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async findAll(
@@ -467,13 +480,37 @@ export class PlacementNotesService {
       );
     }
 
-    return this.prisma.placementNote.update({
-      where: { id: noteId },
-      data: {
-        status: PlacementNoteStatus.ISSUED,
-        issuedAt: new Date(),
-      },
-      include: noteInclude,
+    const issuedAt = new Date();
+    const accountingEvent =
+      note.type === PlacementNoteType.DEBIT_NOTE
+        ? await this.financialEvents.prepareDebitNoteIssued(
+            user,
+            note,
+            issuedAt,
+          )
+        : note.type === PlacementNoteType.CREDIT_NOTE
+          ? await this.financialEvents.prepareCreditNoteIssued(
+              user,
+              note,
+              issuedAt,
+            )
+          : null;
+
+    return this.prisma.$transaction(async (tx) => {
+      const issuedNote = await tx.placementNote.update({
+        where: { id: noteId },
+        data: {
+          status: PlacementNoteStatus.ISSUED,
+          issuedAt,
+        },
+        include: noteInclude,
+      });
+
+      if (accountingEvent) {
+        await this.financialEvents.enqueuePreparedEvent(tx, accountingEvent);
+      }
+
+      return issuedNote;
     });
   }
 
@@ -525,13 +562,37 @@ export class PlacementNotesService {
       );
     }
 
-    return this.prisma.placementNote.update({
-      where: { id: noteId },
-      data: {
-        status: PlacementNoteStatus.ISSUED,
-        issuedAt: new Date(),
-      },
-      include: noteInclude,
+    const issuedAt = new Date();
+    const accountingEvent =
+      note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE
+        ? await this.financialEvents.prepareEndorsementDebitNoteIssued(
+            user,
+            note,
+            issuedAt,
+          )
+        : note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+          ? await this.financialEvents.prepareEndorsementCreditNoteIssued(
+              user,
+              note,
+              issuedAt,
+            )
+          : null;
+
+    return this.prisma.$transaction(async (tx) => {
+      const issuedNote = await tx.placementNote.update({
+        where: { id: noteId },
+        data: {
+          status: PlacementNoteStatus.ISSUED,
+          issuedAt,
+        },
+        include: noteInclude,
+      });
+
+      if (accountingEvent) {
+        await this.financialEvents.enqueuePreparedEvent(tx, accountingEvent);
+      }
+
+      return issuedNote;
     });
   }
 

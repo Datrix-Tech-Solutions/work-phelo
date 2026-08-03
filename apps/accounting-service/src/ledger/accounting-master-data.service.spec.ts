@@ -74,6 +74,7 @@ describe('AccountingMasterDataService', () => {
       },
       subledgerAccount: {
         create: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
       },
       accountingCustomer: {
@@ -217,6 +218,119 @@ describe('AccountingMasterDataService', () => {
         }),
       ]),
     );
+  });
+
+  it('ensures a Cedant subledger from an internal service using the AR control account', async () => {
+    const { prisma, service } = setup();
+    prisma.subledgerAccount.findFirst.mockResolvedValue(null);
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      accountsReceivableControlAccountId: 'ar-control',
+      accountsPayableControlAccountId: 'ap-control',
+    });
+    prisma.gLAccount.findFirst.mockResolvedValue({
+      id: 'ar-control',
+      tenantId: actor.tenantId,
+      category: GLAccountCategory.ASSET,
+      allowPosting: true,
+      status: RecordStatus.ACTIVE,
+    });
+    prisma.gLAccount.count.mockResolvedValue(0);
+    prisma.accountingCurrency.findUnique.mockResolvedValue({
+      code: 'GHS',
+      isActive: true,
+    });
+    prisma.subledgerAccount.create.mockResolvedValue({
+      id: 'subledger-1',
+      tenantId: actor.tenantId,
+      code: 'CED-123',
+      name: 'Acme Cedant',
+      type: SubledgerType.CEDANT,
+      externalRef: 'counterparty-1',
+    });
+
+    await service.ensureInternalInsuranceSubledger('reinsurance-service', {
+      tenantId: actor.tenantId,
+      type: SubledgerType.CEDANT,
+      externalRef: 'counterparty-1',
+      name: 'Acme Cedant',
+      currency: 'GHS',
+    });
+
+    const [createArgs] = prisma.subledgerAccount.create.mock.calls[0] as [
+      { data: Record<string, unknown> },
+    ];
+    expect(createArgs.data).toMatchObject({
+      tenantId: actor.tenantId,
+      type: SubledgerType.CEDANT,
+      externalRef: 'counterparty-1',
+      controlAccountId: 'ar-control',
+      createdByUserId: 'service:reinsurance-service',
+    });
+    expect(createArgs.data.code).toEqual(
+      expect.stringMatching(/^CED-[A-F0-9]{12}$/),
+    );
+  });
+
+  it('updates an existing active Reinsurer subledger by type and external reference', async () => {
+    const { prisma, service } = setup();
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'subledger-1',
+      tenantId: actor.tenantId,
+      code: 'REI-OLD',
+      name: 'Old Reinsurer',
+      type: SubledgerType.REINSURER,
+      externalRef: 'counterparty-1',
+      currency: null,
+      status: RecordStatus.ACTIVE,
+    });
+    prisma.subledgerAccount.update.mockResolvedValue({
+      id: 'subledger-1',
+      name: 'New Reinsurer',
+    });
+
+    await service.ensureInternalInsuranceSubledger('reinsurance-service', {
+      tenantId: actor.tenantId,
+      type: SubledgerType.REINSURER,
+      externalRef: 'counterparty-1',
+      name: 'New Reinsurer',
+      currency: 'GHS',
+    });
+
+    const [updateArgs] = prisma.subledgerAccount.update.mock.calls[0] as [
+      {
+        where: { id_tenantId: { id: string; tenantId: string } };
+        data: Record<string, unknown>;
+      },
+    ];
+    expect(updateArgs.where).toEqual({
+      id_tenantId: { id: 'subledger-1', tenantId: actor.tenantId },
+    });
+    expect(updateArgs.data).toMatchObject({
+      name: 'New Reinsurer',
+      currency: 'GHS',
+      updatedByUserId: 'service:reinsurance-service',
+    });
+  });
+
+  it('does not silently reactivate an inactive integrated subledger', async () => {
+    const { prisma, service } = setup();
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'subledger-1',
+      tenantId: actor.tenantId,
+      type: SubledgerType.CEDANT,
+      externalRef: 'counterparty-1',
+      status: RecordStatus.INACTIVE,
+    });
+
+    await expect(
+      service.ensureInternalInsuranceSubledger('reinsurance-service', {
+        tenantId: actor.tenantId,
+        type: SubledgerType.CEDANT,
+        externalRef: 'counterparty-1',
+        name: 'Acme Cedant',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.subledgerAccount.update).not.toHaveBeenCalled();
   });
 
   it('derives GL account category and normal balance from account group', async () => {

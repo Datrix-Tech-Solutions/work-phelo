@@ -9,6 +9,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -465,6 +466,43 @@ export class CreateSubledgerAccountDto {
 export class UpdateSubledgerAccountDto extends PartialType(
   CreateSubledgerAccountDto,
 ) {}
+
+export class EnsureInternalSubledgerDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  tenantId!: string;
+
+  @ApiProperty({ enum: [SubledgerType.CEDANT, SubledgerType.REINSURER] })
+  @IsIn([SubledgerType.CEDANT, SubledgerType.REINSURER])
+  type!: SubledgerType;
+
+  @ApiProperty({ example: 'reinsurance-counterparty-id' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  externalRef!: string;
+
+  @ApiProperty({ example: 'Acme Insurance Company' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiPropertyOptional({ example: 'GHS' })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  currency?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional source metadata retained by callers; not persisted in Phase 1.',
+  })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
+}
 
 export class QueryAccountingPartiesDto {
   @ApiPropertyOptional({ example: 'Acme' })

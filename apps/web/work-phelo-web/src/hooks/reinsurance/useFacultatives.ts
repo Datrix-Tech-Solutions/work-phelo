@@ -448,8 +448,8 @@ export const endorsementKey = (placementId: string) =>
 export const endorsementSummaryKey = (placementId: string, endorsementId: string) =>
   [...endorsementKey(placementId), endorsementId, 'summary'] as const;
 
-export const placementEffectiveViewKey = (placementId: string) =>
-  [...placementQueryKey(placementId), 'effective-view'] as const;
+export const placementEffectiveViewKey = (placementId: string, asOfDate?: string) =>
+  [...placementQueryKey(placementId), 'effective-view', asOfDate ?? 'current'] as const;
 
 export const endorsementParticipantKey = (placementId: string, endorsementId: string) =>
   [...endorsementKey(placementId), endorsementId, 'participants'] as const;
@@ -580,11 +580,13 @@ export function usePlacementEndorsementSummary(
   });
 }
 
-export function usePlacementEffectiveView(placementId: string, enabled = true) {
+export function usePlacementEffectiveView(placementId: string, enabled = true, asOfDate?: string) {
   return useQuery({
-    queryKey: placementEffectiveViewKey(placementId),
+    queryKey: placementEffectiveViewKey(placementId, asOfDate),
     queryFn: async () => {
-      const res = await api.get(`${BASE}/${placementId}/effective-view`);
+      const res = await api.get(`${BASE}/${placementId}/effective-view`, {
+        params: asOfDate ? { asOfDate } : undefined,
+      });
       return res.data as EffectivePlacementView;
     },
     enabled: !!placementId && enabled,

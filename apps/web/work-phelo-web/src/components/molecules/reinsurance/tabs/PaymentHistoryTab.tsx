@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { usePlacementPayments } from '@/hooks';
+import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
+import { usePlacementPayments, useReversePayment } from '@/hooks';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -43,7 +45,25 @@ interface PaymentHistoryTabProps {
 
 export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabProps) {
   const { data: payments = [], isLoading } = usePlacementPayments(placementId);
+  const reversePayment = useReversePayment();
+  const addToast = useToastStore((s) => s.addToast);
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
+
+  const handleReverse = async (payment: PlacementPayment) => {
+    if (
+      !window.confirm(
+        'Reverse this recorded transaction? The original payment will remain in history, be marked reversed, and a reversal entry will be created.',
+      )
+    ) {
+      return;
+    }
+    try {
+      await reversePayment.mutateAsync({ placementId, paymentId: payment.id });
+      addToast({ message: 'Payment reversed successfully', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    }
+  };
 
   const COLUMNS: Column<PlacementPayment>[] = [
     {
@@ -56,7 +76,14 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       key: 'type',
       label: 'Type',
       width: '1.4fr',
-      render: (row) => <span className="text-gray-700">{fmtType(row.type)}</span>,
+      render: (row) => (
+        <div className="flex flex-col">
+          <span className="text-gray-700">{fmtType(row.type)}</span>
+          <span className="text-xs text-gray-400">
+            {row.direction === 'INBOUND' ? 'Inbound' : 'Outbound'}
+          </span>
+        </div>
+      ),
     },
     {
       key: 'counterparty',
@@ -120,9 +147,13 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
         totalPages={1}
         onPageChange={() => {}}
         noInternalScroll
-        rowActions={(row: PlacementPayment) => [
-          { label: 'Receipt', onClick: () => setReceiptTarget(row) },
-        ]}
+        rowActions={(row: PlacementPayment) => {
+          const actions: RowAction[] = [{ label: 'Receipt', onClick: () => setReceiptTarget(row) }];
+          if (row.status === 'RECORDED' && !row.reversalOfPaymentId) {
+            actions.push({ label: 'Reverse', danger: true, onClick: () => handleReverse(row) });
+          }
+          return actions;
+        }}
       />
 
       {receiptTarget && (

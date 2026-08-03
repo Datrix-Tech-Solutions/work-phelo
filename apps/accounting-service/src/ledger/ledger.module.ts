@@ -4,6 +4,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingSettingsController } from './accounting-settings.controller';
 import { AccountsController } from './accounts.controller';
+import { InternalSubledgersController } from './internal-subledgers.controller';
 import { JournalPolicy } from './journal.policy';
 import { JournalsController } from './journals.controller';
 import { JournalsService } from './journals.service';
@@ -15,6 +16,7 @@ import { ReportsService } from './reports.service';
   controllers: [
     AccountingSettingsController,
     AccountsController,
+    InternalSubledgersController,
     JournalsController,
     ReportsController,
   ],

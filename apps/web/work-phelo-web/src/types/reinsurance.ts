@@ -1006,6 +1006,120 @@ export interface PlacementPayment {
   endorsementClosing: { id: string; closingNumber: string } | null;
 }
 
+export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'REVERSED';
+export type PlacementClaimCedantSettlementStatus = 'RECORDED' | 'REVERSED';
+export type PlacementClaimRecoveryStatus =
+  | 'UNRECOVERED'
+  | 'PARTIALLY_RECOVERED'
+  | 'FULLY_RECOVERED';
+
+export interface PlacementClaimRecoveryReceipt {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  allocationId: string;
+  cashCallId: string;
+  counterpartyId: string;
+  currency: string;
+  amount: string;
+  paymentDate: string;
+  reference: string | null;
+  notes: string | null;
+  status: PlacementClaimRecoveryReceiptStatus;
+  reversalOfReceiptId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
+}
+
+export interface PlacementClaimCedantSettlement {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  currency: string;
+  amount: string;
+  settlementDate: string;
+  reference: string | null;
+  notes: string | null;
+  status: PlacementClaimCedantSettlementStatus;
+  reversalOfSettlementId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlacementClaimRecoveryPositionCashCall {
+  cashCallId: string;
+  allocationId: string;
+  counterpartyId: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
+  cashCallNumber: string;
+  cashCallStatus: PlacementClaimCashCallStatus;
+  currency: string;
+  calledAmount: string;
+  recoveredAmount: string;
+  reversedAmount: string;
+  outstandingAmount: string;
+  recoveryStatus: PlacementClaimRecoveryStatus;
+  receipts: PlacementClaimRecoveryReceipt[];
+}
+
+export interface PlacementClaimRecoveryPosition {
+  claimId: string;
+  placementId: string;
+  currency: string;
+  claim: {
+    finalLossAmount: string | null;
+    approvedPayableAmount: string | null;
+    approvedAt: string | null;
+    approvedByUserId: string | null;
+  };
+  recoveries: {
+    totalAllocated: string;
+    totalCashCalled: string;
+    totalRecovered: string;
+    totalReversed: string;
+    totalOutstanding: string;
+  };
+  perCashCall: PlacementClaimRecoveryPositionCashCall[];
+  cedantSettlement: {
+    approvedPayableAmount: string | null;
+    settledAmount: string;
+    reversedAmount: string;
+    outstandingAmount: string;
+    settlementStatus: 'PENDING_APPROVAL' | 'APPROVED_UNSETTLED' | 'PARTIALLY_SETTLED' | 'SETTLED';
+  };
+  funding: {
+    brokerFundedExposure: string;
+    recoveredMinusSettled: string;
+  };
+  cedantSettlementStatus: string;
+}
+
+export interface ApprovePlacementClaimPayablePayload {
+  approvedPayableAmount: number;
+  notes?: string;
+}
+
+export interface CreatePlacementClaimCedantSettlementPayload {
+  currency: string;
+  amount: number;
+  settlementDate: string;
+  reference?: string;
+  notes?: string;
+}
+
+export interface CreatePlacementClaimRecoveryReceiptPayload {
+  currency: string;
+  amount: number;
+  paymentDate: string;
+  reference?: string;
+  notes?: string;
+}
+
 export interface CreatePlacementPaymentPayload {
   type: PlacementPaymentType;
   direction: PlacementPaymentDirection;
@@ -1114,6 +1228,9 @@ export interface PlacementClaim {
   finalLossAmount: string | null;
   finalizedAt: string | null;
   finalizedByUserId: string | null;
+  approvedPayableAmount: string | null;
+  approvedAt: string | null;
+  approvedByUserId: string | null;
   createdByUserId: string;
   updatedByUserId: string | null;
   closedAt: string | null;

@@ -7,13 +7,15 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
-  PlacementClosingStatus,
-  PlacementEndorsementStatus,
+  PlacementNoteDirection,
+  PlacementNoteStatus,
+  PlacementNoteType,
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
   Prisma,
 } from '../../prisma/generated/client';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
@@ -45,17 +47,54 @@ const paymentInclude = {
       closingNumber: true,
     },
   },
+  allocations: {
+    include: {
+      note: {
+        select: {
+          id: true,
+          noteNumber: true,
+          type: true,
+          currency: true,
+          status: true,
+          direction: true,
+          netAmount: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  },
 } satisfies Prisma.PlacementPaymentInclude;
+
+const paymentEventPlacementSelect = {
+  id: true,
+  reference: true,
+  policyNumber: true,
+  title: true,
+  cedantId: true,
+} satisfies Prisma.PlacementSelect;
 
 type PlacementPaymentRecord = Prisma.PlacementPaymentGetPayload<{
   include: typeof paymentInclude;
 }>;
+
+type ValidatedDisbursementAllocation = {
+  tenantId: string;
+  placementId: string;
+  noteId: string;
+  allocatedAmount: Prisma.Decimal;
+  allocatedCurrency: string;
+  obligationAmount: Prisma.Decimal;
+  obligationCurrency: string;
+  agreedExchangeRate: Prisma.Decimal | null;
+  createdByUserId: string;
+};
 
 @Injectable()
 export class PlacementPaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly financialPositionService: PlacementFinancialPositionService,
+    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async findAll(
@@ -96,6 +135,9 @@ export class PlacementPaymentsService {
         tenantId: true,
         cedantId: true,
         currency: true,
+        reference: true,
+        policyNumber: true,
+        title: true,
       },
     });
     if (!placement) throw new NotFoundException('Placement not found');
@@ -106,7 +148,10 @@ export class PlacementPaymentsService {
         'Placement currency is required before recording payment',
       );
     }
-    if (currency !== placement.currency) {
+    if (
+      dto.type !== PlacementPaymentType.REINSURER_DISBURSEMENT &&
+      currency !== placement.currency
+    ) {
       throw new BadRequestException(
         'Payment currency must match placement currency',
       );
@@ -122,6 +167,8 @@ export class PlacementPaymentsService {
     });
     if (!counterparty) throw new NotFoundException('Counterparty not found');
 
+    let disbursementAllocations: ValidatedDisbursementAllocation[] = [];
+
     if (dto.type === PlacementPaymentType.PREMIUM_RECEIVED) {
       await this.assertPremiumReceived(
         user.tenantId,
@@ -132,11 +179,12 @@ export class PlacementPaymentsService {
         dto,
       );
     } else if (dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT) {
-      await this.assertReinsurerDisbursement(
+      disbursementAllocations = await this.assertReinsurerDisbursement(
         user.tenantId,
         placementId,
         counterparty,
         dto,
+        user.id,
       );
     } else {
       throw new BadRequestException(
@@ -144,25 +192,73 @@ export class PlacementPaymentsService {
       );
     }
 
-    return this.prisma.placementPayment.create({
-      data: {
-        tenantId: user.tenantId,
-        placementId,
-        closingId: dto.closingId,
-        endorsementClosingId: dto.endorsementClosingId,
-        participantId: dto.participantId,
-        counterpartyId: dto.counterpartyId,
-        type: dto.type,
-        direction: dto.direction,
-        amount: dto.amount,
-        currency,
-        paymentDate: new Date(dto.paymentDate),
-        reference: this.cleanOptional(dto.reference),
-        notes: this.cleanOptional(dto.notes),
-        status: PlacementPaymentStatus.RECORDED,
-        createdByUserId: user.id,
-      },
-      include: paymentInclude,
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.placementPayment.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId,
+          closingId: dto.closingId,
+          endorsementClosingId: dto.endorsementClosingId,
+          participantId: dto.participantId,
+          counterpartyId: dto.counterpartyId,
+          type: dto.type,
+          direction: dto.direction,
+          amount: dto.amount,
+          currency,
+          paymentDate: new Date(dto.paymentDate),
+          reference: this.cleanOptional(dto.reference),
+          settlementReference: this.cleanOptional(dto.settlementReference),
+          bankReference: this.cleanOptional(dto.bankReference),
+          bankConfirmedAt:
+            dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT
+              ? new Date(dto.bankConfirmedAt as string)
+              : null,
+          bankConfirmedByUserId:
+            dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT
+              ? user.id
+              : null,
+          agreedExchangeRate: dto.agreedExchangeRate ?? null,
+          bankChargeAmount: dto.bankChargeAmount ?? 0,
+          withholdingTaxAmount: dto.withholdingTaxAmount ?? 0,
+          notes: this.cleanOptional(dto.notes),
+          status:
+            dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT
+              ? PlacementPaymentStatus.BANK_CONFIRMED
+              : PlacementPaymentStatus.RECORDED,
+          createdByUserId: user.id,
+          ...(disbursementAllocations.length
+            ? {
+                allocations: {
+                  create: disbursementAllocations,
+                },
+              }
+            : {}),
+        },
+        include: paymentInclude,
+      });
+
+      if (dto.type === PlacementPaymentType.PREMIUM_RECEIVED) {
+        const event = this.financialEvents.preparePremiumPaymentReceived(user, {
+          ...payment,
+          placement,
+        });
+        if (event) {
+          await this.financialEvents.enqueuePreparedEvent(tx, event);
+        }
+      } else if (dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT) {
+        const event = this.financialEvents.prepareReinsurerDisbursementRecorded(
+          user,
+          {
+            ...payment,
+            placement,
+          },
+        );
+        if (event) {
+          await this.financialEvents.enqueuePreparedEvent(tx, event);
+        }
+      }
+
+      return payment;
     });
   }
 
@@ -180,13 +276,19 @@ export class PlacementPaymentsService {
       throw new ConflictException('Payment has already been reversed');
     }
 
+    const placement = await this.prisma.placement.findFirst({
+      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
+      select: paymentEventPlacementSelect,
+    });
+    if (!placement) throw new NotFoundException('Placement not found');
+
     return this.prisma.$transaction(async (tx) => {
       await tx.placementPayment.update({
         where: { id: payment.id },
         data: { status: PlacementPaymentStatus.REVERSED },
       });
 
-      return tx.placementPayment.create({
+      const reversal = await tx.placementPayment.create({
         data: {
           tenantId: user.tenantId,
           placementId,
@@ -202,13 +304,80 @@ export class PlacementPaymentsService {
           reference: payment.reference
             ? `REVERSAL-${payment.reference}`
             : `REVERSAL-${payment.id}`,
+          settlementReference: payment.settlementReference
+            ? `REVERSAL-${payment.settlementReference}`
+            : null,
+          bankReference: payment.bankReference
+            ? `REVERSAL-${payment.bankReference}`
+            : null,
+          bankConfirmedAt: null,
+          bankConfirmedByUserId: null,
+          agreedExchangeRate: payment.agreedExchangeRate,
+          bankChargeAmount: payment.bankChargeAmount.negated(),
+          withholdingTaxAmount: payment.withholdingTaxAmount.negated(),
           notes: 'Payment reversal',
           status: PlacementPaymentStatus.RECORDED,
           reversalOfPaymentId: payment.id,
           createdByUserId: user.id,
+          ...(payment.allocations.length
+            ? {
+                allocations: {
+                  create: payment.allocations.map((allocation) => ({
+                    tenantId: user.tenantId,
+                    placementId,
+                    noteId: allocation.noteId,
+                    allocatedAmount: allocation.allocatedAmount.negated(),
+                    allocatedCurrency: allocation.allocatedCurrency,
+                    obligationAmount: allocation.obligationAmount.negated(),
+                    obligationCurrency: allocation.obligationCurrency,
+                    agreedExchangeRate: allocation.agreedExchangeRate,
+                    createdByUserId: user.id,
+                  })),
+                },
+              }
+            : {}),
         },
         include: paymentInclude,
       });
+
+      if (payment.type === PlacementPaymentType.PREMIUM_RECEIVED) {
+        const event = this.financialEvents.preparePaymentReversed(user, {
+          ...reversal,
+          placement,
+          reversalOfPayment: {
+            id: payment.id,
+            amount: payment.amount,
+            currency: payment.currency,
+            paymentDate: payment.paymentDate,
+            reference: payment.reference,
+            status: PlacementPaymentStatus.REVERSED,
+          },
+        });
+        if (event) {
+          await this.financialEvents.enqueuePreparedEvent(tx, event);
+        }
+      } else if (payment.type === PlacementPaymentType.REINSURER_DISBURSEMENT) {
+        const event = this.financialEvents.prepareReinsurerDisbursementReversed(
+          user,
+          {
+            ...reversal,
+            placement,
+            reversalOfPayment: {
+              id: payment.id,
+              amount: payment.amount,
+              currency: payment.currency,
+              paymentDate: payment.paymentDate,
+              reference: payment.reference,
+              status: PlacementPaymentStatus.REVERSED,
+            },
+          },
+        );
+        if (event) {
+          await this.financialEvents.enqueuePreparedEvent(tx, event);
+        }
+      }
+
+      return reversal;
     });
   }
 
@@ -234,7 +403,12 @@ export class PlacementPaymentsService {
     const payments = await this.prisma.placementPayment.findMany({
       where: {
         ...where,
-        status: PlacementPaymentStatus.RECORDED,
+        status: {
+          in: [
+            PlacementPaymentStatus.RECORDED,
+            PlacementPaymentStatus.BANK_CONFIRMED,
+          ],
+        },
         reversalOfPaymentId: null,
       },
       select: { amount: true },
@@ -305,7 +479,8 @@ export class PlacementPaymentsService {
     placementId: string,
     counterparty: { id: string; type: CounterpartyType },
     dto: CreatePlacementPaymentDto,
-  ): Promise<void> {
+    userId: string,
+  ): Promise<ValidatedDisbursementAllocation[]> {
     if (dto.direction !== PlacementPaymentDirection.OUTBOUND) {
       throw new BadRequestException('Reinsurer disbursement must be OUTBOUND');
     }
@@ -314,162 +489,130 @@ export class PlacementPaymentsService {
         'Reinsurer disbursement counterparty must be a reinsurer',
       );
     }
-    const hasOriginalClosingSource = Boolean(dto.closingId);
-    const hasEndorsementClosingSource = Boolean(dto.endorsementClosingId);
-    if (hasOriginalClosingSource === hasEndorsementClosingSource) {
+    if (!dto.bankConfirmedAt) {
       throw new BadRequestException(
-        'Reinsurer disbursement requires exactly one closing source',
+        'Reinsurer disbursement requires bankConfirmedAt because bank confirmation is the approved recognition boundary',
       );
     }
-    if (hasEndorsementClosingSource) {
-      await this.assertEndorsementClosingDisbursement(
-        tenantId,
-        placementId,
-        counterparty,
-        dto,
-      );
-      return;
-    }
-    if (!dto.closingId || !dto.participantId) {
+    if (!this.cleanOptional(dto.bankReference)) {
       throw new BadRequestException(
-        'Original closing disbursement requires closingId and participantId',
+        'Reinsurer disbursement requires a bankReference',
+      );
+    }
+    if (dto.closingId || dto.endorsementClosingId || dto.participantId) {
+      throw new BadRequestException(
+        'Reinsurer disbursement settlement sources must be supplied through allocations, not placement-level closing fields',
+      );
+    }
+    if (!dto.allocations?.length) {
+      throw new BadRequestException(
+        'Reinsurer disbursement requires at least one credit-note allocation',
       );
     }
 
-    const closing = await this.prisma.placementClosing.findFirst({
-      where: {
-        id: dto.closingId,
-        tenantId,
-        placementId,
-        participantId: dto.participantId,
-        status: PlacementClosingStatus.CONFIRMED,
-      },
-      include: {
-        participant: {
-          select: {
-            id: true,
-            counterpartyId: true,
-          },
-        },
-      },
-    });
-
-    if (!closing) {
-      throw new BadRequestException(
-        'Reinsurer disbursement requires a matching confirmed closing',
-      );
-    }
-    if (closing.participant.counterpartyId !== counterparty.id) {
-      throw new BadRequestException(
-        'Payment counterparty must match the closing participant reinsurer',
-      );
-    }
-    if (closing.currency !== dto.currency) {
-      throw new BadRequestException(
-        'Closing currency must match the payment currency',
-      );
-    }
-
-    const totalPaid = await this.effectiveRecordedPaymentsTotal({
+    return this.validateReinsurerDisbursementAllocations(
       tenantId,
       placementId,
-      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
-      currency: dto.currency,
-      closingId: dto.closingId,
-      participantId: dto.participantId,
-    });
-    const position = await this.financialPositionService.getFinancialPosition(
-      tenantId,
-      placementId,
-      new Date(dto.paymentDate),
-    );
-    const reinsurerPosition = position.reinsurers.find(
-      (item) => item.counterpartyId === counterparty.id,
-    );
-    this.assertDoesNotExceedOutstanding(
-      dto.amount,
-      Math.min(
-        this.decimalToNumber(closing.netPremium) - totalPaid,
-        reinsurerPosition?.outstanding ?? 0,
-      ),
-      'Reinsurer disbursement exceeds the outstanding effective reinsurer premium',
+      counterparty.id,
+      dto,
+      userId,
     );
   }
 
-  private async assertEndorsementClosingDisbursement(
+  private async validateReinsurerDisbursementAllocations(
     tenantId: string,
     placementId: string,
-    counterparty: { id: string; type: CounterpartyType },
+    counterpartyId: string,
     dto: CreatePlacementPaymentDto,
-  ): Promise<void> {
-    if (dto.participantId) {
+    userId: string,
+  ): Promise<ValidatedDisbursementAllocation[]> {
+    const allocations = dto.allocations ?? [];
+    const uniqueNoteIds = new Set(
+      allocations.map((allocation) => allocation.noteId),
+    );
+    if (uniqueNoteIds.size !== allocations.length) {
       throw new BadRequestException(
-        'Endorsement closing disbursement must omit participantId',
-      );
-    }
-    if (!dto.endorsementClosingId) {
-      throw new BadRequestException(
-        'Endorsement closing disbursement requires endorsementClosingId',
+        'Reinsurer disbursement allocations must not duplicate credit notes',
       );
     }
 
-    const closing = await this.prisma.placementEndorsementClosing.findFirst({
+    const paymentCurrency = this.cleanCurrency(dto.currency);
+    const notes = await this.prisma.placementNote.findMany({
       where: {
-        id: dto.endorsementClosingId,
+        id: { in: [...uniqueNoteIds] },
         tenantId,
         placementId,
-        status: PlacementClosingStatus.CONFIRMED,
-        endorsement: {
-          tenantId,
-          placementId,
-          status: PlacementEndorsementStatus.CLOSED,
-          effectiveDate: { lte: new Date(dto.paymentDate) },
+        counterpartyId,
+        status: PlacementNoteStatus.ISSUED,
+        direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+        type: {
+          in: [
+            PlacementNoteType.CREDIT_NOTE,
+            PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          ],
         },
       },
-      include: {
-        endorsementParticipant: {
-          select: {
-            id: true,
-            counterpartyId: true,
-          },
-        },
+      select: {
+        id: true,
+        currency: true,
+        netAmount: true,
       },
     });
 
-    if (!closing) {
+    if (notes.length !== uniqueNoteIds.size) {
       throw new BadRequestException(
-        'Reinsurer disbursement requires a matching confirmed effective endorsement closing',
-      );
-    }
-    if (closing.endorsementParticipant.counterpartyId !== counterparty.id) {
-      throw new BadRequestException(
-        'Payment counterparty must match the endorsement closing reinsurer',
-      );
-    }
-    if (closing.currency !== dto.currency) {
-      throw new BadRequestException(
-        'Endorsement closing currency must match the payment currency',
+        'Reinsurer disbursement allocations must reference issued credit notes for the payment reinsurer',
       );
     }
 
-    const position = await this.financialPositionService.getFinancialPosition(
-      tenantId,
-      placementId,
-      new Date(dto.paymentDate),
-    );
-    if (position.isMultiCurrency || position.currency !== dto.currency) {
+    const notesById = new Map(notes.map((note) => [note.id, note]));
+    const allocationCreates: ValidatedDisbursementAllocation[] = [];
+    let allocatedTotal = new Prisma.Decimal(0);
+
+    for (const allocation of allocations) {
+      const note = notesById.get(allocation.noteId);
+      if (!note) continue;
+      const obligationCurrency = this.cleanCurrency(note.currency);
+      const requiresFx = obligationCurrency !== paymentCurrency;
+      if (requiresFx && !dto.agreedExchangeRate) {
+        throw new BadRequestException(
+          'Reinsurer disbursement requires agreedExchangeRate when payment currency differs from credit-note currency',
+        );
+      }
+      if (requiresFx && !allocation.obligationAmount) {
+        throw new BadRequestException(
+          'Reinsurer disbursement requires obligationAmount when payment currency differs from credit-note currency',
+        );
+      }
+      const allocatedAmount = new Prisma.Decimal(allocation.allocatedAmount);
+      const obligationAmount = new Prisma.Decimal(
+        allocation.obligationAmount ?? allocation.allocatedAmount,
+      );
+      allocatedTotal = allocatedTotal.plus(allocatedAmount);
+      allocationCreates.push({
+        tenantId,
+        placementId,
+        noteId: allocation.noteId,
+        allocatedAmount,
+        allocatedCurrency: paymentCurrency,
+        obligationAmount,
+        obligationCurrency,
+        agreedExchangeRate: requiresFx
+          ? new Prisma.Decimal(dto.agreedExchangeRate as number)
+          : dto.agreedExchangeRate
+            ? new Prisma.Decimal(dto.agreedExchangeRate)
+            : null,
+        createdByUserId: userId,
+      });
+    }
+
+    if (!allocatedTotal.equals(new Prisma.Decimal(dto.amount))) {
       throw new BadRequestException(
-        'Financial position currency must match the payment currency',
+        'Reinsurer disbursement allocated amounts must equal the payment amount; unallocated payments are not supported',
       );
     }
-    const reinsurerPosition = position.reinsurers.find(
-      (item) => item.counterpartyId === counterparty.id,
-    );
-    this.assertDoesNotExceedOutstanding(
-      dto.amount,
-      reinsurerPosition?.outstanding ?? 0,
-      'Reinsurer disbursement exceeds the outstanding effective reinsurer premium',
-    );
+
+    return allocationCreates;
   }
 
   private cleanCurrency(value: string): string {
