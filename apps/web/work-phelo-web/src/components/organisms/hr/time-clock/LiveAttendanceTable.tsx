@@ -82,7 +82,7 @@ export function LiveAttendanceTable() {
     {
       key: 'employeeName',
       label: 'Employee',
-      width: 'minmax(200px, 1.5fr)',
+      width: 'minmax(150px, 1.5fr)',
       render: (entry) => {
         const workModeLabel = formatWorkMode(entry.workMode);
         return (
@@ -104,13 +104,13 @@ export function LiveAttendanceTable() {
     {
       key: 'department',
       label: 'Department',
-      width: 'minmax(150px,1.5fr)',
+      width: 'minmax(100px,1fr)',
       render: (entry) => <span className="text-gray-600 truncate">{entry.department ?? '—'}</span>,
     },
     {
       key: 'clockIn',
       label: 'Clock In',
-      width: '120px',
+      width: '100px',
       render: (entry) => (
         <span className="tabular-nums text-gray-700">{formatTime(entry.clockIn)}</span>
       ),
@@ -128,8 +128,10 @@ export function LiveAttendanceTable() {
     {
       key: 'location',
       label: 'Location',
-      width: 'minmax(120px, 1.5fr)',
-      render: (entry) => <span className="text-gray-600 truncate">{entry.location ?? '—'}</span>,
+      width: 'minmax(150px, 1.5fr)',
+      render: (entry) => (
+        <span className="text-gray-600 block truncate">{entry.location ?? '—'}</span>
+      ),
     },
     {
       key: 'status',
