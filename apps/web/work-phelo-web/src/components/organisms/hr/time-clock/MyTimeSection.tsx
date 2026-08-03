@@ -38,25 +38,25 @@ export function MyTimeSection({
   const historyColumns: Column<TimeEntry>[] = [
     {
       key: 'date',
-      width: 'minmax(100px, 1fr)',
+      width: '150px,',
       label: 'Date',
       render: (r) => <span>{formatDate(r.date)}</span>,
     },
     {
       key: 'clockIn',
-      width: '200px',
+      width: '150px',
       label: 'CLOCK IN',
       render: (r) => <span>{formatTime(r.clockIn)}</span>,
     },
     {
       key: 'clockOut',
-      width: '200px',
+      width: '150px',
       label: 'Clock out',
       render: (r) => <span>{r.clockOut ? formatTime(r.clockOut) : '—'}</span>,
     },
     {
       key: 'totalMinutes',
-      width: '200px',
+      width: '150px',
       label: 'Hours',
       render: (r) => <span>{r.totalMinutes > 0 ? formatMinutes(r.totalMinutes) : '—'}</span>,
     },
@@ -64,11 +64,11 @@ export function MyTimeSection({
       key: 'location',
       width: 'minmax(150px, 1fr)',
       label: 'Location',
-      render: (r) => <span className="truncate">{r.location ?? '—'}</span>,
+      render: (r) => <span className="block truncate">{r.location ?? '—'}</span>,
     },
     {
       key: 'status',
-      width: '200px',
+      width: '100px',
       label: 'Status',
       render: (r) => (
         <div className="flex flex-col gap-1">

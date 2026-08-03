@@ -46,7 +46,7 @@ export function RecordsSection({
     {
       key: 'employeeName',
       label: 'Employee',
-      width: 'minmax(150px, 1.5fr)',
+      width: 'minmax(100px, 1fr)',
       render: (r) => <span className="font-medium">{r.employeeName}</span>,
     },
     {
@@ -84,7 +84,7 @@ export function RecordsSection({
       key: 'location',
       label: 'Location',
       width: 'minmax(150px, 1.5fr)',
-      render: (r) => <span className="truncate">{r.location ?? '—'}</span>,
+      render: (r) => <span className="block truncate">{r.location ?? '—'}</span>,
     },
     {
       key: 'flags',
