@@ -86,7 +86,7 @@ export function ContactCard({
     <div
       className={glassStrongClass(
         cn(
-          'group relative rounded-xl p-4 w-95 h-full flex flex-col gap-4',
+          'group relative rounded-xl p-4 w-80 h-full flex flex-col gap-4',
           'border border-gray-100 shadow-lg transition-all duration-200',
           'hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-1.5',
           onClick && 'cursor-pointer',

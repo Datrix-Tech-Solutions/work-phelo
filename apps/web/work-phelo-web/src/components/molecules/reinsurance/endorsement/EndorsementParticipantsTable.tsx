@@ -11,11 +11,27 @@ import {
 } from '@/types/reinsurance';
 import { EndorsementParticipantRow } from './types';
 
+// A counterparty can briefly have two endorsement participant records (the
+// preserved DECLINED row plus a fresh one from reinvite) — an exact
+// participantId match must win over a counterpartyId fallback, otherwise
+// `.find` returns whichever record happens to come first in the list.
+function findRowParticipant(
+  endorsementParticipants: PlacementEndorsementParticipant[],
+  row: EndorsementParticipantRow,
+): PlacementEndorsementParticipant | undefined {
+  if (row.participantId) {
+    return endorsementParticipants.find((item) => item.id === row.participantId);
+  }
+  return endorsementParticipants.find((item) => item.counterpartyId === row.counterpartyId);
+}
+
 interface EndorsementParticipantsTableProps {
   rows: EndorsementParticipantRow[];
   endorsementParticipants: PlacementEndorsementParticipant[];
   isEndorsementClosed: boolean;
   acceptedCounterpartyIds: Set<string>;
+  /** Counterparties an accepted-but-unvalidated row was reopened for editing (client-only, no status change). */
+  editingCounterpartyIds: Set<string>;
   confirmedClosingByEndorsementParticipantId: Record<string, EndorsementParticipantClosing>;
   busyEPIds: Set<string>;
   mailedIds: Set<string>;
@@ -27,7 +43,7 @@ interface EndorsementParticipantsTableProps {
   onMailReinsurer: (counterpartyId: string) => void;
   onAccept: (row: EndorsementParticipantRow) => void;
   onReject: (row: EndorsementParticipantRow) => void;
-  onRevert: (row: EndorsementParticipantRow) => void;
+  onEditRevision: (row: EndorsementParticipantRow) => void;
   onReopen: (row: EndorsementParticipantRow) => void;
   onValidate: (row: EndorsementParticipantRow) => void;
   onViewClosing: (closing: EndorsementParticipantClosing) => void;
@@ -42,6 +58,7 @@ export function EndorsementParticipantsTable({
   endorsementParticipants,
   isEndorsementClosed,
   acceptedCounterpartyIds,
+  editingCounterpartyIds,
   confirmedClosingByEndorsementParticipantId,
   busyEPIds,
   mailedIds,
@@ -53,7 +70,7 @@ export function EndorsementParticipantsTable({
   onMailReinsurer,
   onAccept,
   onReject,
-  onRevert,
+  onEditRevision,
   onReopen,
   onValidate,
   // onViewClosing,
@@ -84,18 +101,18 @@ export function EndorsementParticipantsTable({
       label: 'Revised',
       width: '100px',
       render: (row) => {
-        const isAccepted = acceptedCounterpartyIds.has(row.counterpartyId);
+        const isAccepted =
+          acceptedCounterpartyIds.has(row.counterpartyId) &&
+          !editingCounterpartyIds.has(row.counterpartyId);
         if (isAccepted) {
-          const ep = endorsementParticipants.find((p) => p.counterpartyId === row.counterpartyId);
+          const ep = findRowParticipant(endorsementParticipants, row);
           return (
             <span className="text-gray-700">
               {parseFloat(ep?.signedLinePercent ?? ep?.sharePercent ?? String(row.originalShare))}%
             </span>
           );
         }
-        const endorsementParticipant = endorsementParticipants.find(
-          (p) => p.id === row.participantId || p.counterpartyId === row.counterpartyId,
-        );
+        const endorsementParticipant = findRowParticipant(endorsementParticipants, row);
         if (endorsementParticipant?.status === 'DECLINED') {
           return <span className="text-gray-400">0%</span>;
         }
@@ -127,9 +144,7 @@ export function EndorsementParticipantsTable({
       label: 'Net Premium',
       width: '150px',
       render: (row) => {
-        const endorsementParticipant = endorsementParticipants.find(
-          (item) => item.id === row.participantId || item.counterpartyId === row.counterpartyId,
-        );
+        const endorsementParticipant = findRowParticipant(endorsementParticipants, row);
         if (endorsementParticipant?.status === 'DECLINED') {
           return (
             <span className="text-gray-400">
@@ -166,9 +181,7 @@ export function EndorsementParticipantsTable({
       label: 'Response',
       width: '100px',
       render: (row) => {
-        const endorsementParticipant = endorsementParticipants.find(
-          (item) => item.id === row.participantId || item.counterpartyId === row.counterpartyId,
-        );
+        const endorsementParticipant = findRowParticipant(endorsementParticipants, row);
         if (endorsementParticipant?.status === 'DECLINED') {
           return <Badge label="Declined" variant="danger" />;
         }
@@ -189,12 +202,20 @@ export function EndorsementParticipantsTable({
       label: 'Actions',
       width: 'minmax(200px, 1fr)',
       render: (row) => {
-        const endorsementParticipant = endorsementParticipants.find(
-          (item) => item.id === row.participantId || item.counterpartyId === row.counterpartyId,
-        );
-        const isAccepted =
+        const endorsementParticipant = findRowParticipant(endorsementParticipants, row);
+        // The real backend status — never overridden by the local "editing"
+        // flag. Actions that require a specific backend transition (like
+        // Decline, which only exists from INVITED/OFFER_SENT/QUOTED) must be
+        // gated on this, not on the edit-mode-aware `isAccepted` below,
+        // otherwise editing an already-accepted offer would let you try to
+        // decline a participant the backend still considers ACCEPTED.
+        const isActuallyAccepted =
           endorsementParticipant?.status === 'ACCEPTED' ||
           endorsementParticipant?.status === 'CLOSED';
+        const isEditingRevision =
+          endorsementParticipant?.status === 'ACCEPTED' &&
+          editingCounterpartyIds.has(row.counterpartyId);
+        const isAccepted = isActuallyAccepted && !isEditingRevision;
         const isDeclined = endorsementParticipant?.status === 'DECLINED';
         const isValidated = row.participantId
           ? Boolean(confirmedClosingByEndorsementParticipantId[row.participantId])
@@ -227,7 +248,10 @@ export function EndorsementParticipantsTable({
         }
 
         if (row.isNew) {
-          const responded = isAccepted || isDeclined;
+          // Whether the backend has a final answer already (accepted or
+          // declined) — used to gate Decline, which is never valid once a
+          // participant has actually responded, edit mode or not.
+          const hasResponded = isActuallyAccepted || isDeclined;
           return (
             <div className="flex items-center gap-2">
               {!isEndorsementClosed && (
@@ -235,7 +259,7 @@ export function EndorsementParticipantsTable({
                   Offer Slip
                 </TableButton>
               )}
-              {!mailed && !responded && (
+              {!mailed && !hasResponded && (
                 <button
                   type="button"
                   title="Share"
@@ -245,7 +269,7 @@ export function EndorsementParticipantsTable({
                   <Icons.Mail className="w-5 h-5" />
                 </button>
               )}
-              {mailed && !responded && (
+              {mailed && (!hasResponded || isEditingRevision) && (
                 <TableButton
                   variant="green"
                   isLoading={isBusy}
@@ -256,28 +280,28 @@ export function EndorsementParticipantsTable({
                   Accept
                 </TableButton>
               )}
-              {mailed && !responded && (
-                <button
-                  type="button"
-                  title="Reject"
-                  onClick={() => onReject(row)}
-                  className="text-red-400 hover:text-red-600 transition-colors"
+              {mailed && !hasResponded && (
+                <TableButton
+                  variant="red"
+                  isLoading={isBusy}
+                  onClick={() => {
+                    if (!isBusy) onReject(row);
+                  }}
                 >
-                  <Icons.X className="w-5 h-5" />
-                </button>
+                  Decline
+                </TableButton>
               )}
               {isDeclined && !isEndorsementClosed && (
-                <button
-                  type="button"
-                  title={isBusy ? 'Reopening...' : 'Reopen'}
+                <TableButton
+                  variant="orange"
+                  isLoading={isBusy}
+                  tooltip="Re-invite this reinsurer"
                   onClick={() => {
                     if (!isBusy) onReopen(row);
                   }}
-                  disabled={isBusy}
-                  className={`text-amber-500 hover:text-amber-600 transition-colors ${isBusy ? 'opacity-50 cursor-wait' : ''}`}
                 >
-                  <Icons.RotateCcw className="w-5 h-5" />
-                </button>
+                  Reinvite
+                </TableButton>
               )}
               {isAccepted &&
                 (isValidated ? (
@@ -293,17 +317,16 @@ export function EndorsementParticipantsTable({
                     >
                       Validate
                     </TableButton>
-                    <button
-                      type="button"
-                      title="Revert to pending"
+                    <TableButton
+                      variant="orange"
+                      isLoading={isBusy}
+                      tooltip="Edit revised offer"
                       onClick={() => {
-                        if (!isBusy) onRevert(row);
+                        if (!isBusy) onEditRevision(row);
                       }}
-                      disabled={isBusy}
-                      className={`text-amber-500 hover:text-amber-600 transition-colors ${isBusy ? 'opacity-50 cursor-wait' : ''}`}
                     >
-                      <Icons.RotateCcw className="w-5 h-5" />
-                    </button>
+                      Change Offer
+                    </TableButton>
                   </>
                 ))}
             </div>
@@ -329,17 +352,16 @@ export function EndorsementParticipantsTable({
                   >
                     Validate
                   </TableButton>
-                  <button
-                    type="button"
-                    title="Revert to pending"
+                  <TableButton
+                    variant="orange"
+                    isLoading={isBusy}
+                    tooltip="Edit revised offer"
                     onClick={() => {
-                      if (!isBusy) onRevert(row);
+                      if (!isBusy) onEditRevision(row);
                     }}
-                    disabled={isBusy}
-                    className={`text-amber-500 hover:text-amber-600 transition-colors ${isBusy ? 'opacity-50 cursor-wait' : ''}`}
                   >
-                    <Icons.RotateCcw className="w-5 h-5" />
-                  </button>
+                    Change Offer
+                  </TableButton>
                 </>
               )
             ) : isDeclined ? null : (
