@@ -7,7 +7,7 @@ on:
 # ── 1. Concurrency control ─────────────────────────────────────────────────────
 # Allow a newer dev push to replace an older in-flight deployment.
 concurrency:
-  group: deploy-dev-${{ github.sha }}
+  group: deploy-dev-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -138,6 +138,11 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      BUILDKIT_CACHE_SCOPE: ${{ matrix.service }}-dev
+      BUILDKIT_CACHE_MODE: min
+      BUILDKIT_CACHE_EXPORT_OPTIONAL: true
+
     # ── 2. Next.js moved into the unified change-filtered matrix ──────────────
     # All services share one job definition; per-service dockerfile paths are
     # declared here so there is no separate nextjs-build-push job to maintain.
@@ -199,6 +204,15 @@ jobs:
         if: steps.changed.outputs.skip == 'false'
         uses: docker/setup-buildx-action@v4
 
+      - name: Log Docker cache settings
+        if: steps.changed.outputs.skip == 'false'
+        run: |
+          echo "Image: ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}"
+          echo "BuildKit cache backend: gha"
+          echo "BuildKit cache scope: ${BUILDKIT_CACHE_SCOPE}"
+          echo "BuildKit cache mode: ${BUILDKIT_CACHE_MODE}"
+          echo "BuildKit cache export optional: ${BUILDKIT_CACHE_EXPORT_OPTIONAL}"
+
       - name: Build and push ${{ matrix.service }}
         if: steps.changed.outputs.skip == 'false'
         uses: docker/build-push-action@v7
@@ -209,8 +223,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:dev
             ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ env.BUILD_SHA }}
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          cache-from: type=gha,scope=${{ env.BUILDKIT_CACHE_SCOPE }}
+          cache-to: type=gha,scope=${{ env.BUILDKIT_CACHE_SCOPE }},mode=${{ env.BUILDKIT_CACHE_MODE }},ignore-error=true
           build-args: |
             BUILD_SHA=${{ env.BUILD_SHA }}
             BUILD_REF=${{ env.BUILD_REF }}
