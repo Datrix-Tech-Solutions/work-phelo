@@ -168,13 +168,17 @@ Reinsurance source events SHOULD be activated incrementally.
 
 ### 6.2 Claims family
 
-| Event                              | Status | Source truth               |
-| ---------------------------------- | ------ | -------------------------- |
-| `CLAIM_REGISTERED`                 | Future | Claim registration record. |
-| `CLAIM_CASH_CALL_ISSUED`           | Future | Issued cash-call snapshot. |
-| `CLAIM_CEDANT_SETTLEMENT_RECORDED` | Future | Cedant settlement record.  |
-| `CLAIM_RECOVERY_RECEIPT_RECORDED`  | Future | Recovery receipt record.   |
-| `CLAIM_CLOSED`                     | Future | Claim lifecycle record.    |
+| Event                              | Status              | Source truth                                             |
+| ---------------------------------- | ------------------- | -------------------------------------------------------- |
+| `CLAIM_REGISTERED`                 | Planned non-posting | Claim registration record.                               |
+| `CLAIM_PAYABLE_APPROVED`           | Policy pending      | Broker-approved cedant payable on `PlacementClaim`.      |
+| `CLAIM_CASH_CALL_ISSUED`           | Policy pending      | Issued `PlacementClaimCashCall`.                         |
+| `CLAIM_CASH_CALL_VOIDED`           | Policy pending      | Voided issued `PlacementClaimCashCall`.                  |
+| `CLAIM_CEDANT_SETTLEMENT_RECORDED` | Policy pending      | `PlacementClaimCedantSettlement` record.                 |
+| `CLAIM_CEDANT_SETTLEMENT_REVERSED` | Policy pending      | linked reversal `PlacementClaimCedantSettlement` record. |
+| `CLAIM_RECOVERY_RECEIPT_RECORDED`  | Policy pending      | `PlacementClaimRecoveryReceipt` record.                  |
+| `CLAIM_RECOVERY_RECEIPT_REVERSED`  | Policy pending      | linked reversal `PlacementClaimRecoveryReceipt` record.  |
+| `CLAIM_CLOSED`                     | Planned non-posting | Claim lifecycle record.                                  |
 
 ### 6.3 Endorsement family
 
@@ -186,18 +190,23 @@ Lifecycle events such as `ENDORSEMENT_CLOSED` MAY be useful for audit or reporti
 
 ## 7. Source Records and Business Dates
 
-| Event                             | Immutable source record        | Business date          | Idempotency key                                                      |
-| --------------------------------- | ------------------------------ | ---------------------- | -------------------------------------------------------------------- |
-| `DEBIT_NOTE_ISSUED`               | `PlacementNote.id`             | `issuedAt`             | `reinsurance:debit-note:<noteId>:issued:v1`                          |
-| `CREDIT_NOTE_ISSUED`              | `PlacementNote.id`             | `issuedAt`             | `reinsurance:credit-note:<noteId>:issued:v1`                         |
-| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | `PlacementNote.id`             | `issuedAt`             | `reinsurance:endorsement-debit-note:<noteId>:issued:v1`              |
-| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | `PlacementNote.id`             | `issuedAt`             | `reinsurance:endorsement-credit-note:<noteId>:issued:v1`             |
-| `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment.id`          | `paymentDate`          | `reinsurance:payment:<paymentId>:recorded:v1`                        |
-| `PAYMENT_REVERSED`                | reversal `PlacementPayment.id` | reversal `paymentDate` | `reinsurance:payment:<reversalPaymentId>:reversal:v1`                |
-| `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment.id`          | `bankConfirmedAt`      | `reinsurance:reinsurer-disbursement:<paymentId>:recorded:v1`         |
-| `REINSURER_DISBURSEMENT_REVERSED` | reversal `PlacementPayment.id` | reversal `paymentDate` | `reinsurance:reinsurer-disbursement:<reversalPaymentId>:reversal:v1` |
-| `CLAIM_CASH_CALL_ISSUED`          | `ClaimCashCall.id`             | `issuedAt`             | `reinsurance:claim-cash-call:<cashCallId>:issued:v1`                 |
-| `CLAIM_RECOVERY_RECEIPT_RECORDED` | `RecoveryReceipt.id`           | `receiptDate`          | `reinsurance:recovery-receipt:<receiptId>:recorded:v1`               |
+| Event                              | Immutable source record                      | Business date             | Idempotency key                                                          |
+| ---------------------------------- | -------------------------------------------- | ------------------------- | ------------------------------------------------------------------------ |
+| `DEBIT_NOTE_ISSUED`                | `PlacementNote.id`                           | `issuedAt`                | `reinsurance:debit-note:<noteId>:issued:v1`                              |
+| `CREDIT_NOTE_ISSUED`               | `PlacementNote.id`                           | `issuedAt`                | `reinsurance:credit-note:<noteId>:issued:v1`                             |
+| `ENDORSEMENT_DEBIT_NOTE_ISSUED`    | `PlacementNote.id`                           | `issuedAt`                | `reinsurance:endorsement-debit-note:<noteId>:issued:v1`                  |
+| `ENDORSEMENT_CREDIT_NOTE_ISSUED`   | `PlacementNote.id`                           | `issuedAt`                | `reinsurance:endorsement-credit-note:<noteId>:issued:v1`                 |
+| `PREMIUM_PAYMENT_RECEIVED`         | `PlacementPayment.id`                        | `paymentDate`             | `reinsurance:payment:<paymentId>:recorded:v1`                            |
+| `PAYMENT_REVERSED`                 | reversal `PlacementPayment.id`               | reversal `paymentDate`    | `reinsurance:payment:<reversalPaymentId>:reversal:v1`                    |
+| `REINSURER_DISBURSEMENT_RECORDED`  | `PlacementPayment.id`                        | `bankConfirmedAt`         | `reinsurance:reinsurer-disbursement:<paymentId>:recorded:v1`             |
+| `REINSURER_DISBURSEMENT_REVERSED`  | reversal `PlacementPayment.id`               | reversal `paymentDate`    | `reinsurance:reinsurer-disbursement:<reversalPaymentId>:reversal:v1`     |
+| `CLAIM_PAYABLE_APPROVED`           | `PlacementClaim.id`                          | `approvedAt`              | `reinsurance:claim-payable:<claimId>:approved:v1`                        |
+| `CLAIM_CASH_CALL_ISSUED`           | `PlacementClaimCashCall.id`                  | `issuedAt`                | `reinsurance:claim-cash-call:<cashCallId>:issued:v1`                     |
+| `CLAIM_CASH_CALL_VOIDED`           | `PlacementClaimCashCall.id`                  | `voidedAt`                | `reinsurance:claim-cash-call:<cashCallId>:voided:v1`                     |
+| `CLAIM_RECOVERY_RECEIPT_RECORDED`  | `PlacementClaimRecoveryReceipt.id`           | `paymentDate`             | `reinsurance:claim-recovery-receipt:<receiptId>:recorded:v1`             |
+| `CLAIM_RECOVERY_RECEIPT_REVERSED`  | reversal `PlacementClaimRecoveryReceipt.id`  | reversal `paymentDate`    | `reinsurance:claim-recovery-receipt:<reversalReceiptId>:reversal:v1`     |
+| `CLAIM_CEDANT_SETTLEMENT_RECORDED` | `PlacementClaimCedantSettlement.id`          | `settlementDate`          | `reinsurance:claim-cedant-settlement:<settlementId>:recorded:v1`         |
+| `CLAIM_CEDANT_SETTLEMENT_REVERSED` | reversal `PlacementClaimCedantSettlement.id` | reversal `settlementDate` | `reinsurance:claim-cedant-settlement:<reversalSettlementId>:reversal:v1` |
 
 Reinsurance MUST use business dates from source records, not outbox creation timestamps, for Accounting event `occurredAt`.
 
@@ -685,12 +694,30 @@ Claims integration MUST use backend-confirmed claim financial records, not front
 
 Claim allocation percentages and recovery amounts MUST use effective confirmed participation snapshots according to Reinsurance claim allocation rules.
 
-Cash-call and recovery accounting MUST NOT be activated until Product/Finance decides:
+Claims accounting MUST NOT be activated from claim lifecycle status alone. Claim
+registration, reserve status and claim closure are non-posting in v1 unless
+Finance approves a reserve, write-off or memorandum accounting policy.
 
+The canonical claims accounting audit is
+[Reinsurance Claims Accounting Architecture Audit v1](./accounting/reinsurance-claims-accounting-architecture-audit-v1.md).
+
+The claims policy approval gate is
+[Reinsurance Claims Accounting Policy Decision Register v1](./accounting/reinsurance-claims-accounting-policy-decision-register-v1.md).
+
+Cash-call, payable, settlement and recovery accounting MUST NOT be activated until Product/Finance decides:
+
+- Whether approved claim payable creates a cedant payable immediately.
+- How later claim payable approval amendments are represented.
 - Whether cash calls create receivables immediately.
 - Whether recoveries reduce claim receivable or clear cash-call receivable.
-- Whether claim settlement postings are gross or net.
+- Whether cedant settlements clear a prior payable or recognize expense at payment.
 - Whether cedant settlement and reinsurer recovery use separate subledger types.
+- Whether cross-currency claims, bank charges and withholding tax are in scope.
+
+If claim receipt or settlement currency differs from claim currency in a future
+workflow, Reinsurance MUST persist the agreed FX rate before publishing an
+Accounting event. Accounting MUST NOT fetch live FX rates for historical claim
+events.
 
 ---
 
