@@ -136,7 +136,7 @@ A Reinsurer payable can arise from a credit note, premium clearing process, sett
 
 **Current System Evidence**
 
-The platform already recognizes issued credit notes and endorsement credit notes. Reinsurer disbursement records can be captured operationally, but their accounting events are not active.
+The platform recognizes issued credit notes and endorsement credit notes. On the current accounting integration branch, bank-confirmed reinsurer disbursement records and linked disbursement reversal rows are captured as accounting source events after policy approval.
 
 **Available Options**
 
@@ -817,7 +817,7 @@ Pending approval.
 
 **Implementation Impact**
 
-Add `REINSURER_DISBURSEMENT_REVERSED` before or alongside recorded disbursement activation.
+Keep `REINSURER_DISBURSEMENT_RECORDED` and `REINSURER_DISBURSEMENT_REVERSED` aligned so original disbursements and immutable linked reversal rows remain traceable.
 
 ### Decision 13: How should FX differences be recognized?
 
@@ -1251,7 +1251,7 @@ For implementation detail, refer to:
 ### Facts
 
 - Premium and endorsement-note accounting events are already implemented.
-- Reinsurer settlement accounting events are not active.
+- Reinsurer settlement recorded and reversal accounting source events are implemented on the current integration branch.
 - The prior operational system supported recorded Reinsurer disbursements linked to one confirmed closing source.
 - The approved policy requires explicit credit-note allocation, bank confirmation, persisted agreed FX, bank charges and withholding tax before accounting event activation.
 - The current operational system supports linked payment reversals.

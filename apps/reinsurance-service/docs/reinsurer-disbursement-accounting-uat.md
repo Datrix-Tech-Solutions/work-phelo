@@ -190,7 +190,6 @@ Placement
 
 ## Explicit Non-Goals
 
-- `REINSURER_DISBURSEMENT_REVERSED` is not active in this milestone.
 - Reinsurance does not create Journal Vouchers.
 - Reinsurance does not create write-off events.
 - Reinsurance does not publish FX gain/loss events.

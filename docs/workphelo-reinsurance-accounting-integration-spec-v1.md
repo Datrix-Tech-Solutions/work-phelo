@@ -39,11 +39,12 @@ As of this draft, Reinsurance has:
 - Activated `DEBIT_NOTE_ISSUED` capture when placement debit notes are issued for Accounting-enabled tenants.
 - Activated `CREDIT_NOTE_ISSUED` capture when placement credit notes are issued for Accounting-enabled tenants.
 - Activated `PREMIUM_PAYMENT_RECEIVED` and `PAYMENT_REVERSED` capture for premium receipt lifecycle records.
+- Activated `REINSURER_DISBURSEMENT_RECORDED` and `REINSURER_DISBURSEMENT_REVERSED` capture for bank-confirmed reinsurer settlement lifecycle records.
 
 Endorsement notes are active through issued endorsement-note records.
 
-Note voiding, reinsurer disbursement accounting, claims, recoveries and
-settlements remain inactive until explicitly approved and implemented.
+Note voiding, claims, recoveries and cedant claim settlements remain inactive
+until explicitly approved and implemented.
 
 ---
 
@@ -140,6 +141,7 @@ Operational endpoints:
 | `POST /accounting-integration/reconciliation/premium-payment-received`        | Dry-runs or explicitly enqueues missing `PREMIUM_PAYMENT_RECEIVED` outbox rows for premium receipt rows.    |
 | `POST /accounting-integration/reconciliation/payment-reversed`                | Dry-runs or explicitly enqueues missing `PAYMENT_REVERSED` outbox rows for premium payment reversal rows.   |
 | `POST /accounting-integration/reconciliation/reinsurer-disbursement-recorded` | Dry-runs or explicitly enqueues missing `REINSURER_DISBURSEMENT_RECORDED` outbox rows.                      |
+| `POST /accounting-integration/reconciliation/reinsurer-disbursement-reversed` | Dry-runs or explicitly enqueues missing `REINSURER_DISBURSEMENT_REVERSED` outbox rows.                      |
 
 Accounting internal endpoint:
 
@@ -164,7 +166,7 @@ Reinsurance source events SHOULD be activated incrementally.
 | `PREMIUM_PAYMENT_RECEIVED`        | Active                  | Recorded premium payment row.                         |
 | `PAYMENT_REVERSED`                | Active                  | Reversal payment row linked to original payment.      |
 | `REINSURER_DISBURSEMENT_RECORDED` | Active                  | Bank-confirmed outbound reinsurer payment allocation. |
-| `REINSURER_DISBURSEMENT_REVERSED` | Proposed                | Reversal payment row linked to original disbursement. |
+| `REINSURER_DISBURSEMENT_REVERSED` | Active                  | Reversal payment row linked to original disbursement. |
 
 ### 6.2 Claims family
 
@@ -651,7 +653,7 @@ withholding tax and FX treatment per tenant.
 Unallocated payments, failed payments, cancelled payments, approval-only states
 and reversal rows MUST NOT emit this event.
 
-Candidate reversal event:
+Active reversal event:
 
 ```text
 sourceEventType = REINSURER_DISBURSEMENT_REVERSED
@@ -662,8 +664,9 @@ idempotencyKey = reinsurance:reinsurer-disbursement:<reversalPaymentId>:reversal
 occurredAt = reversal PlacementPayment.paymentDate
 ```
 
-`REINSURER_DISBURSEMENT_REVERSED` remains planned and MUST be implemented from
-the linked reversal payment row in a separate milestone.
+`REINSURER_DISBURSEMENT_REVERSED` is recognized from the linked reversal
+payment row. Reinsurance MUST NOT publish this event from the original payment
+status mutation alone.
 
 ---
 
