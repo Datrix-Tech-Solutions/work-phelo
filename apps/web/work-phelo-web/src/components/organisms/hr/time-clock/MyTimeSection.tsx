@@ -38,7 +38,7 @@ export function MyTimeSection({
   const historyColumns: Column<TimeEntry>[] = [
     {
       key: 'date',
-      width: '150px,',
+      width: '150px',
       label: 'Date',
       render: (r) => <span>{formatDate(r.date)}</span>,
     },
