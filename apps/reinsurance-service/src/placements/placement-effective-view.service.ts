@@ -191,19 +191,18 @@ export class PlacementEffectiveViewService {
           0,
         ),
       );
-      const facultativeOfferPercent = this.money.roundMoney(
-        effectiveFinancials.facultativeOfferPercent ??
-          effectiveParticipants.reduce(
-            (total, participant) => total + participant.signedLinePercent,
-            0,
-          ),
-      );
       const effectivePlacedPercent = this.money.roundMoney(
         effectiveParticipants.reduce(
           (total, participant) => total + participant.signedLinePercent,
           0,
         ),
       );
+      const facultativeOfferPercent = this.resolveEffectiveCapacityPercent({
+        effectiveFinancials,
+        effectivePlacedPercent,
+        hasConfirmedEndorsementClosings:
+          effectiveEndorsementSnapshots.length > 0,
+      });
       const remainingCapacityPercent = this.money.roundMoney(
         Math.max(0, facultativeOfferPercent - effectivePlacedPercent),
       );
@@ -286,7 +285,7 @@ export class PlacementEffectiveViewService {
           premium: effectiveFinancials.premium,
           commissionPercent: effectiveFinancials.commissionPercent,
           brokeragePercent: effectiveFinancials.brokeragePercent,
-          facultativeOfferPercent: effectiveFinancials.facultativeOfferPercent,
+          facultativeOfferPercent,
         },
         effectiveParticipants,
         appliedEndorsements: this.mapAppliedEndorsements(appliedEndorsements),
@@ -528,6 +527,21 @@ export class PlacementEffectiveViewService {
         };
       },
       baseTotals,
+    );
+  }
+
+  private resolveEffectiveCapacityPercent(input: {
+    effectiveFinancials: MutableEffectiveTotals;
+    effectivePlacedPercent: number;
+    hasConfirmedEndorsementClosings: boolean;
+  }): number {
+    if (input.hasConfirmedEndorsementClosings) {
+      return this.money.roundMoney(input.effectivePlacedPercent);
+    }
+
+    return this.money.roundMoney(
+      input.effectiveFinancials.facultativeOfferPercent ??
+        input.effectivePlacedPercent,
     );
   }
 

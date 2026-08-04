@@ -587,6 +587,82 @@ describe('PlacementEffectiveViewService', () => {
     ]);
   });
 
+  it('uses confirmed endorsement closing snapshots, not proposed target capacity, after force close', async () => {
+    tx.placement.findFirst.mockResolvedValue({
+      ...placement,
+      facultativeOffer: '70.0000',
+    });
+    closingSnapshotReader.findConfirmedPlacementClosingSnapshots.mockResolvedValue(
+      [
+        {
+          ...placementSnapshots[0],
+          signedLinePercent: 40,
+          premium: 40000,
+        },
+        {
+          ...placementSnapshots[1],
+          signedLinePercent: 30,
+          premium: 30000,
+        },
+      ],
+    );
+    closingSnapshotReader.findConfirmedEndorsementClosingSnapshots.mockResolvedValue(
+      [
+        {
+          sourceType: 'ENDORSEMENT_CLOSING',
+          closingId: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          counterpartyId: 'reinsurer-c',
+          signedLinePercent: 5,
+          premium: 7500,
+          commissionPercent: 10,
+          commissionAmount: 750,
+          brokeragePercent: 7.5,
+          brokerageAmount: 562.5,
+          netPremium: 6187.5,
+          currency: 'USD',
+        },
+      ],
+    );
+    tx.placementEndorsement.findMany.mockResolvedValue([
+      makeConfirmedEndorsement({
+        targetPercent: '80.0000',
+        proposedSnapshot: {
+          facultativeOffer: '80.0000',
+          premium: '150000.00',
+          currency: 'USD',
+        },
+        closings: [
+          {
+            id: 'endorsement-closing-1',
+            closingNumber: 'ENC-001',
+            status: PlacementClosingStatus.CONFIRMED,
+            endorsementParticipantId: 'endorsement-participant-1',
+            signedLinePercent: '5.0000',
+            endorsementParticipant: { counterpartyId: 'reinsurer-c' },
+          },
+        ],
+      }),
+    ]);
+
+    const result = await service.getEffectiveView(tenantId, placementId);
+
+    expect(result.effectiveTotals.facultativeOfferPercent).toBe(75);
+    expect(result.effectiveTerms.facultativeOfferPercent).toBe(75);
+    expect(result.capacityBreakdown).toMatchObject({
+      originalCapacityPercent: 70,
+      confirmedEndorsementCapacityPercent: 5,
+      effectiveTotalCapacityPercent: 75,
+      remainingCapacityPercent: 0,
+    });
+    expect(result.effectiveTotals.grossPremium).toBe(77500);
+    expect(
+      result.effectiveParticipants.map(
+        (participant) => participant.signedLinePercent,
+      ),
+    ).toEqual([40, 30, 5]);
+  });
+
   it('requests endorsements in effective-date order with deterministic created order', async () => {
     await service.getEffectiveView(tenantId, placementId);
 
