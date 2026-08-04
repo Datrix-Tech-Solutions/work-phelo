@@ -33,8 +33,19 @@ function fmtType(type: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  RECORDED: 'Recorded',
+  BANK_CONFIRMED: 'Bank Confirmed',
+  FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
+  REVERSED: 'Reversed',
+};
+
 const STATUS_VARIANT: Record<string, 'success' | 'danger' | 'neutral'> = {
   RECORDED: 'success',
+  BANK_CONFIRMED: 'success',
+  FAILED: 'danger',
+  CANCELLED: 'neutral',
   REVERSED: 'danger',
 };
 
@@ -129,12 +140,20 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       width: '110px',
       render: (row) => (
         <Badge
-          label={row.status === 'REVERSED' ? 'Reversed' : 'Recorded'}
+          label={STATUS_LABEL[row.status] ?? fmtType(row.status)}
           variant={STATUS_VARIANT[row.status] ?? 'neutral'}
         />
       ),
     },
   ];
+
+  const canReversePayment = (payment: PlacementPayment) => {
+    if (payment.reversalOfPaymentId) return false;
+    if (payment.type === 'REINSURER_DISBURSEMENT') {
+      return payment.status === 'BANK_CONFIRMED';
+    }
+    return payment.status === 'RECORDED';
+  };
 
   return (
     <>
@@ -149,7 +168,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
         noInternalScroll
         rowActions={(row: PlacementPayment) => {
           const actions: RowAction[] = [{ label: 'Receipt', onClick: () => setReceiptTarget(row) }];
-          if (row.status === 'RECORDED' && !row.reversalOfPaymentId) {
+          if (canReversePayment(row)) {
             actions.push({ label: 'Reverse', danger: true, onClick: () => handleReverse(row) });
           }
           return actions;

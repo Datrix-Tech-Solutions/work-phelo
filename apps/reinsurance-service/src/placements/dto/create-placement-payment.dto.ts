@@ -81,7 +81,7 @@ export class CreatePlacementPaymentDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Legacy original placement closing source. Reinsurer disbursements must now use allocations instead.',
+      'Operational original placement closing source for a reinsurer disbursement.',
   })
   @IsOptional()
   @IsUUID()
@@ -90,7 +90,7 @@ export class CreatePlacementPaymentDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Legacy endorsement closing source. Reinsurer disbursements must now use allocations instead.',
+      'Operational endorsement closing source for a reinsurer disbursement.',
   })
   @IsOptional()
   @IsUUID()
@@ -99,7 +99,7 @@ export class CreatePlacementPaymentDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Legacy original participant source. Reinsurer disbursements must now use allocations instead.',
+      'Original placement participant source. Supported only with original placement closing disbursements.',
   })
   @IsOptional()
   @IsUUID()
@@ -145,7 +145,12 @@ export class CreatePlacementPaymentDto {
   @MaxLength(100)
   settlementReference?: string;
 
-  @ApiPropertyOptional({ example: 'BANK-CONF-001', maxLength: 100 })
+  @ApiPropertyOptional({
+    example: 'BANK-CONF-001',
+    maxLength: 100,
+    description:
+      'Accounting-only bank reference captured during bank confirmation. Use reference for the operational payment reference.',
+  })
   @TrimmedString()
   @IsOptional()
   @IsString()
@@ -156,7 +161,7 @@ export class CreatePlacementPaymentDto {
     type: String,
     format: 'date-time',
     description:
-      'Required for REINSURER_DISBURSEMENT because Finance approved bank confirmation as the accounting boundary.',
+      'Accounting-only bank confirmation timestamp. Operational Reinsurance payment recording does not require this field.',
   })
   @IsOptional()
   @IsDateString()
@@ -166,7 +171,7 @@ export class CreatePlacementPaymentDto {
     example: 12.345678,
     minimum: 0.000001,
     description:
-      'Agreed transaction FX rate. Required when payment currency differs from the settled credit-note currency.',
+      'Accounting-only agreed transaction FX rate. Required later when Accounting confirms a different-currency settlement.',
   })
   @Type(() => Number)
   @IsOptional()
@@ -178,7 +183,7 @@ export class CreatePlacementPaymentDto {
     example: 25,
     minimum: 0,
     description:
-      'Bank charges captured on the transaction. Accounting owns final posting treatment.',
+      'Accounting-only bank charges captured during bank confirmation. Accounting owns final posting treatment.',
   })
   @Type(() => Number)
   @IsOptional()
@@ -190,7 +195,7 @@ export class CreatePlacementPaymentDto {
     example: 50,
     minimum: 0,
     description:
-      'Withholding tax captured on the transaction. Accounting owns final posting treatment.',
+      'Accounting-only withholding tax captured during bank confirmation. Accounting owns final posting treatment.',
   })
   @Type(() => Number)
   @IsOptional()
@@ -211,7 +216,7 @@ export class CreatePlacementPaymentDto {
   @ApiPropertyOptional({
     type: [CreatePlacementPaymentAllocationDto],
     description:
-      'Required for REINSURER_DISBURSEMENT. Captures one payment to one or more issued credit-note obligations.',
+      'Optional credit-note allocations for a reinsurer disbursement. Accounting may complete or confirm allocations later.',
   })
   @IsOptional()
   @IsArray()

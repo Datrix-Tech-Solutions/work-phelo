@@ -978,7 +978,12 @@ export type PlacementPaymentType =
   | 'CLAIM_SETTLEMENT';
 
 export type PlacementPaymentDirection = 'INBOUND' | 'OUTBOUND';
-export type PlacementPaymentStatus = 'RECORDED' | 'REVERSED';
+export type PlacementPaymentStatus =
+  | 'RECORDED'
+  | 'BANK_CONFIRMED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REVERSED';
 
 export interface PlacementPayment {
   id: string;
@@ -994,6 +999,13 @@ export interface PlacementPayment {
   currency: string;
   paymentDate: string;
   reference: string | null;
+  settlementReference: string | null;
+  bankReference: string | null;
+  bankConfirmedAt: string | null;
+  bankConfirmedByUserId: string | null;
+  agreedExchangeRate: string | null;
+  bankChargeAmount: string;
+  withholdingTaxAmount: string;
   notes: string | null;
   status: PlacementPaymentStatus;
   reversalOfPaymentId: string | null;
