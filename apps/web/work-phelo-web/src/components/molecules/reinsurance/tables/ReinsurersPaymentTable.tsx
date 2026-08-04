@@ -6,6 +6,7 @@ import {
   Facultative,
   PlacementFinancialPosition,
   PlacementReinsurerFinancialPosition,
+  PlacementSettlementMethod,
 } from '@/types/reinsurance';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
@@ -44,11 +45,22 @@ type ReinsurerPositionRow = PlacementReinsurerFinancialPosition & {
 
 type DisbursementFormValues = {
   sourceId: string;
+  settlementMethod: PlacementSettlementMethod;
   amount: string;
   paymentDate: string;
   reference: string;
   notes: string;
 };
+
+const SETTLEMENT_METHODS: PlacementSettlementMethod[] = [
+  'BANK_TRANSFER',
+  'CHEQUE',
+  'CASH',
+  'MOBILE_MONEY',
+  'INTERNAL_OFFSET',
+  'JOURNAL',
+  'OTHER',
+];
 
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';
@@ -83,6 +95,7 @@ export function ReinsurersPaymentTable({
   const form = useForm<DisbursementFormValues>({
     defaultValues: {
       sourceId: '',
+      settlementMethod: 'BANK_TRANSFER',
       amount: '',
       paymentDate: new Date().toISOString(),
       reference: '',
@@ -173,6 +186,7 @@ export function ReinsurersPaymentTable({
     const firstSource = sources[0];
     form.reset({
       sourceId: firstSource?.value ?? '',
+      settlementMethod: 'BANK_TRANSFER',
       amount: firstSource
         ? String(Math.min(paymentTarget.outstanding, firstSource.outstanding))
         : '',
@@ -208,6 +222,8 @@ export function ReinsurersPaymentTable({
         participantId: source.participantId,
         amount: parseMoney(values.amount),
         currency: source.currency,
+        settlementMethod: values.settlementMethod,
+        settlementCurrency: source.currency,
         paymentDate: new Date(values.paymentDate).toISOString(),
         reference: values.reference || undefined,
         notes: values.notes || undefined,
@@ -351,6 +367,21 @@ export function ReinsurersPaymentTable({
             registration={form.register('amount', { required: 'Amount is required' })}
             error={form.formState.errors.amount}
           />
+          <label className="space-y-1">
+            <span className="block text-sm font-medium text-gray-700">Settlement Method</span>
+            <select
+              className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              {...form.register('settlementMethod', {
+                required: 'Settlement method is required',
+              })}
+            >
+              {SETTLEMENT_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {method.replaceAll('_', ' ')}
+                </option>
+              ))}
+            </select>
+          </label>
           <Controller
             name="paymentDate"
             control={form.control}
@@ -365,9 +396,9 @@ export function ReinsurersPaymentTable({
             )}
           />
           <FormField
-            label="Reference"
+            label="Payment / Method Reference"
             registration={form.register('reference')}
-            placeholder="Bank reference…"
+            placeholder="Cheque, mobile-money, offset or payment reference…"
             error={form.formState.errors.reference}
           />
           <FormField

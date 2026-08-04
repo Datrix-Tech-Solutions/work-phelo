@@ -13,21 +13,10 @@ import type {
 } from '@/types/accountingIntegration';
 
 const PAGE_SIZE = 10;
-const SETTLEMENT_METHODS: SettlementMethod[] = [
-  'BANK_TRANSFER',
-  'CHEQUE',
-  'CASH',
-  'MOBILE_MONEY',
-  'INTERNAL_OFFSET',
-  'JOURNAL',
-  'OTHER',
-];
 
 interface ConfirmationForm {
   bankConfirmedAt: string;
   bankReference: string;
-  settlementMethod: SettlementMethod;
-  settlementCurrency: string;
   confirmedExchangeRate: string;
   bankChargeAmount: string;
   notes: string;
@@ -36,8 +25,6 @@ interface ConfirmationForm {
 const INITIAL_FORM: ConfirmationForm = {
   bankConfirmedAt: '',
   bankReference: '',
-  settlementMethod: 'BANK_TRANSFER',
-  settlementCurrency: '',
   confirmedExchangeRate: '',
   bankChargeAmount: '',
   notes: '',
@@ -95,6 +82,50 @@ function methodAffectsCash(method: SettlementMethod) {
   );
 }
 
+function methodLabel(method: SettlementMethod) {
+  return method.replaceAll('_', ' ');
+}
+
+function confirmationTitle(method: SettlementMethod) {
+  switch (method) {
+    case 'CHEQUE':
+      return 'Confirm cheque clearance';
+    case 'CASH':
+      return 'Confirm cash receipt';
+    case 'MOBILE_MONEY':
+      return 'Confirm mobile-money transaction';
+    case 'INTERNAL_OFFSET':
+      return 'Confirm internal offset';
+    case 'JOURNAL':
+      return 'Confirm journal settlement';
+    case 'OTHER':
+      return 'Confirm other settlement';
+    case 'BANK_TRANSFER':
+    default:
+      return 'Confirm bank transfer';
+  }
+}
+
+function confirmationReferenceLabel(method: SettlementMethod) {
+  switch (method) {
+    case 'CHEQUE':
+      return 'Clearance Reference';
+    case 'CASH':
+      return 'Cash Receipt Reference';
+    case 'MOBILE_MONEY':
+      return 'Provider Confirmation Reference';
+    case 'INTERNAL_OFFSET':
+      return 'Offset Approval Reference';
+    case 'JOURNAL':
+      return 'Journal Posting Reference';
+    case 'OTHER':
+      return 'Confirmation Evidence Reference';
+    case 'BANK_TRANSFER':
+    default:
+      return 'Bank Transaction Reference';
+  }
+}
+
 function fieldValue(value: string | number | null | undefined, fallback = '-') {
   if (value === null || value === undefined || value === '') return fallback;
   return String(value);
@@ -111,6 +142,9 @@ export function FinancialConfirmationQueue({
   const [page, setPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState<AccountingBankConfirmationWorkItem | null>(null);
   const [form, setForm] = useState<ConfirmationForm>(INITIAL_FORM);
+  const selectedSettlementMethod =
+    selectedItem?.businessSnapshot?.settlementMethod ?? 'BANK_TRANSFER';
+  const selectedHasOperationalReference = Boolean(selectedItem?.operationalReference);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -137,7 +171,6 @@ export function FinancialConfirmationQueue({
     setForm({
       ...INITIAL_FORM,
       bankConfirmedAt: defaultDateTimeLocal(),
-      settlementCurrency: item.currency,
     });
   };
 
@@ -162,8 +195,6 @@ export function FinancialConfirmationQueue({
     await onConfirm(selectedItem, {
       bankConfirmedAt: new Date(form.bankConfirmedAt).toISOString(),
       bankReference: form.bankReference.trim() || undefined,
-      settlementMethod: form.settlementMethod,
-      settlementCurrency: form.settlementCurrency.trim().toUpperCase() || selectedItem.currency,
       confirmedExchangeRate: toOptionalNumber(form.confirmedExchangeRate),
       bankChargeAmount: toOptionalNumber(form.bankChargeAmount),
       notes: form.notes.trim() || undefined,
@@ -266,7 +297,7 @@ export function FinancialConfirmationQueue({
             row.availableConfirmationActions.includes('CONFIRM_BANK_PAYMENT')
               ? [
                   {
-                    label: 'Confirm Bank Payment',
+                    label: 'Confirm Payment',
                     onClick: () => openConfirmModal(row),
                     variant: 'success',
                   },
@@ -287,7 +318,7 @@ export function FinancialConfirmationQueue({
       <Modal
         isOpen={!!selectedItem}
         onClose={closeConfirmModal}
-        title="Confirm Bank Payment"
+        title={confirmationTitle(selectedSettlementMethod)}
         description="Capture the Accounting confirmation facts for this source-module payment."
         width="max-w-2xl"
         footer={
@@ -301,7 +332,7 @@ export function FinancialConfirmationQueue({
               isLoading={isConfirming}
               loadingText="Confirming..."
             >
-              Confirm Bank Payment
+              {confirmationTitle(selectedSettlementMethod)}
             </Button>
           </>
         }
@@ -362,6 +393,22 @@ export function FinancialConfirmationQueue({
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Settlement Method
+                  </div>
+                  <div className="font-medium text-slate-900">
+                    {methodLabel(selectedSettlementMethod)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Settlement Currency
+                  </div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.settlementCurrency)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
                     Cedant FX Source
                   </div>
                   <div className="font-medium text-slate-900">
@@ -394,22 +441,6 @@ export function FinancialConfirmationQueue({
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label className="space-y-1">
-                <span className="block text-sm font-medium text-gray-700">Settlement Method</span>
-                <select
-                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  value={form.settlementMethod}
-                  onChange={(event) =>
-                    updateForm('settlementMethod', event.target.value as SettlementMethod)
-                  }
-                >
-                  {SETTLEMENT_METHODS.map((method) => (
-                    <option key={method} value={method}>
-                      {method.replaceAll('_', ' ')}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <Input
                 label="Confirmation Date"
                 type="datetime-local"
@@ -417,20 +448,15 @@ export function FinancialConfirmationQueue({
                 onChange={updateFormFromInput('bankConfirmedAt')}
                 required
               />
-              <Input
-                label="Settlement Reference"
-                value={form.bankReference}
-                onChange={updateFormFromInput('bankReference')}
-                maxLength={100}
-                required={methodRequiresReference(form.settlementMethod)}
-              />
-              <Input
-                label="Settlement Currency"
-                value={form.settlementCurrency}
-                onChange={updateFormFromInput('settlementCurrency')}
-                maxLength={3}
-                required
-              />
+              {!selectedHasOperationalReference && (
+                <Input
+                  label={confirmationReferenceLabel(selectedSettlementMethod)}
+                  value={form.bankReference}
+                  onChange={updateFormFromInput('bankReference')}
+                  maxLength={100}
+                  required={methodRequiresReference(selectedSettlementMethod)}
+                />
+              )}
               <Input
                 label="Confirmed FX Rate"
                 type="number"
@@ -439,17 +465,19 @@ export function FinancialConfirmationQueue({
                 value={form.confirmedExchangeRate}
                 onChange={updateFormFromInput('confirmedExchangeRate')}
               />
-              <Input
-                label="Bank Charges"
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.bankChargeAmount}
-                onChange={updateFormFromInput('bankChargeAmount')}
-              />
+              {methodAffectsCash(selectedSettlementMethod) && (
+                <Input
+                  label="Bank Charges"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.bankChargeAmount}
+                  onChange={updateFormFromInput('bankChargeAmount')}
+                />
+              )}
             </div>
 
-            {!methodAffectsCash(form.settlementMethod) && (
+            {!methodAffectsCash(selectedSettlementMethod) && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 This settlement method does not represent a bank/cash movement. The event will
                 expose that fact so Accounting posting rules avoid cash-impact lines.

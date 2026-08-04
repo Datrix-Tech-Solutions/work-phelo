@@ -671,6 +671,24 @@ account selection remains Accounting-owned tenant configuration or a future
 Accounting confirmation extension; Reinsurance stores only the factual bank
 charge amount.
 
+Operational payment ownership:
+
+- Reinsurance creates the `PlacementPayment` and owns amount, currency,
+  Reinsurer, original/endorsement closing source, payment date, payment
+  reference, settlement method, settlement currency, notes and any source
+  allocation facts.
+- Accounting confirms financial completion and MUST NOT overwrite those
+  source-owned fields.
+- For cheque settlements, Reinsurance stores the cheque/payment reference on the
+  operational payment (for example `reference = CHQ-001`). Accounting confirms
+  clearance/completion using confirmation date and notes, and does not ask the
+  accountant to re-enter `CHQ-001`.
+- For bank transfers, mobile money and cash, Accounting may add missing
+  confirmation evidence only when the operational payment did not already carry
+  a reference.
+- For `INTERNAL_OFFSET` and `JOURNAL`, Accounting confirms completion/linkage
+  without representing the event as a bank/cash movement.
+
 FX source hierarchy:
 
 1. Use allocation-level persisted agreed FX where Credit Note allocations prove

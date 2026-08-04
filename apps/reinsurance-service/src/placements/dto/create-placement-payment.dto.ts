@@ -16,6 +16,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   PlacementPaymentDirection,
   PlacementPaymentType,
+  PlacementSettlementMethod,
 } from '../../../prisma/generated/client';
 import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
@@ -144,6 +145,29 @@ export class CreatePlacementPaymentDto {
   @IsString()
   @MaxLength(100)
   settlementReference?: string;
+
+  @ApiPropertyOptional({
+    enum: PlacementSettlementMethod,
+    example: PlacementSettlementMethod.BANK_TRANSFER,
+    description:
+      'Operational settlement method selected by the source module. Accounting confirms completion later and cannot replace this fact.',
+  })
+  @IsOptional()
+  @IsEnum(PlacementSettlementMethod)
+  settlementMethod?: PlacementSettlementMethod;
+
+  @ApiPropertyOptional({
+    example: 'USD',
+    minLength: 3,
+    maxLength: 3,
+    description:
+      'Operational settlement currency. Defaults to payment currency when omitted.',
+  })
+  @TrimmedString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  settlementCurrency?: string;
 
   @ApiPropertyOptional({
     example: 'BANK-CONF-001',

@@ -17,6 +17,8 @@ export interface AccountingConfirmationBusinessSnapshot {
   reinsurerName?: string | null;
   operationalPaymentAmount?: string | number | null;
   operationalPaymentCurrency?: string | null;
+  settlementMethod?: SettlementMethod | null;
+  settlementCurrency?: string | null;
   obligationCurrency?: string | null;
   cedantPremiumPaymentCurrency?: string | null;
   cedantPaymentFxRate?: string | number | null;

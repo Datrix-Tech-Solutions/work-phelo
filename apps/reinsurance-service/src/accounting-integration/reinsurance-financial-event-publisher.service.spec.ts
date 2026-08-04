@@ -871,6 +871,33 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     });
   });
 
+  it('preserves operational cheque facts in the disbursement event payload', () => {
+    const { actor, service } = makeService();
+
+    const event = service.prepareReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      reference: 'CHQ-001',
+      bankReference: null,
+      settlementMethod: PlacementSettlementMethod.CHEQUE,
+    });
+
+    expect(event?.payload).toMatchObject({
+      references: {
+        paymentReference: 'CHQ-001',
+      },
+      payment: {
+        paymentReference: 'CHQ-001',
+        bankReference: null,
+        settlementMethod: PlacementSettlementMethod.CHEQUE,
+      },
+      amounts: {
+        paymentAmount: 750,
+        signedCashImpact: -750,
+        signedPayableImpact: -750,
+      },
+    });
+  });
+
   it('prepares REINSURER_DISBURSEMENT_REVERSED from the immutable reversal row', () => {
     const { actor, service } = makeService();
     const reversal = {

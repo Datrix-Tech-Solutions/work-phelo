@@ -203,6 +203,14 @@ cash movement or a non-cash settlement. `BANK_TRANSFER`, `CHEQUE`, `CASH` and
 `MOBILE_MONEY` MAY carry bank/cash impact. `INTERNAL_OFFSET` and `JOURNAL` MUST
 not be represented as bank/cash movements.
 
+Operational modules MUST create and own the source transaction facts. Accounting
+confirmation MUST NOT recreate or overwrite source-owned values such as amount,
+currency, counterparty, settlement method, payment reference, cheque number,
+mobile-money reference, source closing or contractual tax/levy facts. Accounting
+MAY add confirmation-only facts such as clearing/completion date, confirmation
+evidence, bank charges, confirmed FX where no persisted operational FX exists,
+and posting/account treatment.
+
 ---
 
 ## 4. Canonical Event Model

@@ -1196,6 +1196,8 @@ export interface CreatePlacementPaymentPayload {
   amount: number;
   currency: string;
   paymentDate: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
   reference?: string;
   notes?: string;
 }

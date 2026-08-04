@@ -1007,6 +1007,95 @@ describe('PlacementPaymentsService', () => {
     });
   });
 
+  it('confirms cheque clearance without re-entering the operational cheque reference', async () => {
+    const recordedDisbursement = {
+      ...payment,
+      id: 'payment-disbursement-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.RECORDED,
+      currency: 'GHS',
+      settlementMethod: PlacementSettlementMethod.CHEQUE,
+      settlementCurrency: 'GHS',
+      closingId: 'closing-1',
+      reference: 'CHQ-001',
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: null,
+      },
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce({ id: 'placement-1' })
+      .mockResolvedValueOnce(placement);
+    prisma.placementPayment.findFirst
+      .mockResolvedValueOnce(recordedDisbursement)
+      .mockResolvedValueOnce({
+        ...recordedDisbursement,
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
+        bankReference: null,
+        bankConfirmedAt: new Date('2026-06-05T10:00:00.000Z'),
+      });
+    prisma.placementPayment.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.confirmBankPayment(
+      user,
+      'placement-1',
+      'payment-disbursement-1',
+      {
+        bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+        notes: 'Cheque cleared',
+      },
+    );
+
+    const updateArgs = firstCallArg<Prisma.PlacementPaymentUpdateManyArgs>(
+      prisma.placementPayment.updateMany,
+    );
+    expect(updateArgs.data).toMatchObject({
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      settlementMethod: PlacementSettlementMethod.CHEQUE,
+      settlementCurrency: 'GHS',
+      bankReference: null,
+    });
+  });
+
+  it('rejects confirmation attempts that change the operational settlement method', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementPayment.findFirst.mockResolvedValue({
+      ...payment,
+      id: 'payment-disbursement-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.RECORDED,
+      currency: 'USD',
+      settlementMethod: PlacementSettlementMethod.CHEQUE,
+      settlementCurrency: 'USD',
+      reference: 'CHQ-001',
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: null,
+      },
+    });
+
+    await expect(
+      service.confirmBankPayment(
+        user,
+        'placement-1',
+        'payment-disbursement-1',
+        {
+          bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+          settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+          bankReference: 'BANK-CONF-001',
+        },
+      ),
+    ).rejects.toThrow('cannot change the operational settlement method');
+    expect(prisma.placementPayment.updateMany).not.toHaveBeenCalled();
+  });
+
   it.each([
     PlacementPaymentStatus.BANK_CONFIRMED,
     PlacementPaymentStatus.CANCELLED,

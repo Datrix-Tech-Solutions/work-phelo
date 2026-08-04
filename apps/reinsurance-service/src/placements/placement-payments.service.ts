@@ -268,8 +268,10 @@ export class PlacementPaymentsService {
           paymentDate: new Date(dto.paymentDate),
           reference: this.cleanOptional(dto.reference),
           settlementReference: this.cleanOptional(dto.settlementReference),
-          settlementMethod: null,
-          settlementCurrency: null,
+          settlementMethod: dto.settlementMethod ?? null,
+          settlementCurrency: this.cleanOptional(dto.settlementCurrency)
+            ? this.cleanCurrency(dto.settlementCurrency as string)
+            : null,
           bankReference:
             dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT
               ? null
@@ -347,10 +349,13 @@ export class PlacementPaymentsService {
     });
     if (!placement) throw new NotFoundException('Placement not found');
 
-    const settlementMethod =
-      dto.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
-    const settlementCurrency = this.cleanCurrency(
-      dto.settlementCurrency ?? payment.currency,
+    const settlementMethod = this.resolveConfirmationSettlementMethod(
+      payment,
+      dto.settlementMethod,
+    );
+    const settlementCurrency = this.resolveConfirmationSettlementCurrency(
+      payment,
+      dto.settlementCurrency,
     );
     const bankReference = this.cleanOptional(dto.bankReference);
     const confirmedExchangeRate =
@@ -358,6 +363,7 @@ export class PlacementPaymentsService {
     this.assertConfirmationFacts({
       settlementMethod,
       bankReference,
+      operationalReference: payment.reference,
       notes: dto.notes,
     });
     this.assertSettlementFxFacts(
@@ -605,6 +611,7 @@ export class PlacementPaymentsService {
   private assertConfirmationFacts(input: {
     settlementMethod: PlacementSettlementMethod;
     bankReference: string | null;
+    operationalReference: string | null;
     notes?: string;
   }): void {
     const referenceRequiredMethods: PlacementSettlementMethod[] = [
@@ -616,7 +623,10 @@ export class PlacementPaymentsService {
       input.settlementMethod,
     );
 
-    if (referenceRequired && !input.bankReference) {
+    const hasReference = Boolean(
+      input.bankReference || input.operationalReference,
+    );
+    if (referenceRequired && !hasReference) {
       throw new BadRequestException(
         `${input.settlementMethod} confirmation requires a settlement reference`,
       );
@@ -624,13 +634,47 @@ export class PlacementPaymentsService {
 
     if (
       input.settlementMethod === PlacementSettlementMethod.OTHER &&
-      !input.bankReference &&
+      !hasReference &&
       !this.cleanOptional(input.notes)
     ) {
       throw new BadRequestException(
         'OTHER settlement method requires either a reference or confirmation notes',
       );
     }
+  }
+
+  private resolveConfirmationSettlementMethod(
+    payment: PlacementPaymentRecord,
+    requested: PlacementSettlementMethod | undefined,
+  ): PlacementSettlementMethod {
+    if (payment.settlementMethod) {
+      if (requested && requested !== payment.settlementMethod) {
+        throw new BadRequestException(
+          'Confirmation cannot change the operational settlement method',
+        );
+      }
+      return payment.settlementMethod;
+    }
+    return requested ?? PlacementSettlementMethod.BANK_TRANSFER;
+  }
+
+  private resolveConfirmationSettlementCurrency(
+    payment: PlacementPaymentRecord,
+    requested: string | undefined,
+  ): string {
+    if (payment.settlementCurrency) {
+      const cleanedRequested = this.cleanOptional(requested);
+      if (
+        cleanedRequested &&
+        this.cleanCurrency(cleanedRequested) !== payment.settlementCurrency
+      ) {
+        throw new BadRequestException(
+          'Confirmation cannot change the operational settlement currency',
+        );
+      }
+      return payment.settlementCurrency;
+    }
+    return this.cleanCurrency(requested ?? payment.currency);
   }
 
   private assertSettlementFxFacts(

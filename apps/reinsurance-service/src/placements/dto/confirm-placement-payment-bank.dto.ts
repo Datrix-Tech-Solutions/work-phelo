@@ -39,7 +39,7 @@ export class ConfirmPlacementPaymentBankDto {
     enum: PlacementSettlementMethod,
     example: PlacementSettlementMethod.BANK_TRANSFER,
     description:
-      'Accounting-confirmed settlement method. Defaults to BANK_TRANSFER for backward compatibility.',
+      'Compatibility field for legacy payments without an operational settlement method. New confirmations cannot change the operational settlement method.',
   })
   @IsOptional()
   @IsEnum(PlacementSettlementMethod)
@@ -50,7 +50,7 @@ export class ConfirmPlacementPaymentBankDto {
     minLength: 3,
     maxLength: 3,
     description:
-      'Confirmed settlement currency. Defaults to the operational payment currency.',
+      'Compatibility field for legacy payments without an operational settlement currency. New confirmations cannot change the operational settlement currency.',
   })
   @TrimmedString()
   @IsOptional()

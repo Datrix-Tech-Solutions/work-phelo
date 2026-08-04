@@ -91,6 +91,8 @@ export function mapReinsurancePaymentToBankConfirmationWorkItem(
       reinsurerName: payment.counterparty.name,
       operationalPaymentAmount: payment.amount,
       operationalPaymentCurrency: payment.currency,
+      settlementMethod: payment.settlementMethod ?? 'BANK_TRANSFER',
+      settlementCurrency: payment.settlementCurrency ?? payment.currency,
       obligationCurrency,
       cedantPremiumPaymentCurrency: null,
       cedantPaymentFxRate: allocation?.agreedExchangeRate ?? payment.agreedExchangeRate,
