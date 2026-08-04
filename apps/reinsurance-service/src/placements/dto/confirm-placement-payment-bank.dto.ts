@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -8,6 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PlacementSettlementMethod } from '../../../prisma/generated/client';
 import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
 export class ConfirmPlacementPaymentBankDto {
@@ -21,21 +23,58 @@ export class ConfirmPlacementPaymentBankDto {
   @IsDateString()
   bankConfirmedAt!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'BANK-CONF-2026-001',
     maxLength: 100,
-    description: 'Bank confirmation/reference supplied by Accounting.',
+    description:
+      'Bank, cheque, mobile-money or settlement reference supplied by Accounting. Required for bank-transfer, cheque and mobile-money confirmations.',
   })
   @TrimmedString()
+  @IsOptional()
   @IsString()
   @MaxLength(100)
-  bankReference!: string;
+  bankReference?: string;
+
+  @ApiPropertyOptional({
+    enum: PlacementSettlementMethod,
+    example: PlacementSettlementMethod.BANK_TRANSFER,
+    description:
+      'Accounting-confirmed settlement method. Defaults to BANK_TRANSFER for backward compatibility.',
+  })
+  @IsOptional()
+  @IsEnum(PlacementSettlementMethod)
+  settlementMethod?: PlacementSettlementMethod;
+
+  @ApiPropertyOptional({
+    example: 'USD',
+    minLength: 3,
+    maxLength: 3,
+    description:
+      'Confirmed settlement currency. Defaults to the operational payment currency.',
+  })
+  @TrimmedString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  settlementCurrency?: string;
 
   @ApiPropertyOptional({
     example: 12.345678,
     minimum: 0.000001,
     description:
-      'Agreed transaction FX rate, required by policy when settlement currency differs from the obligation currency.',
+      'Confirmed transaction FX rate. Required when settlement currency differs from the obligation currency and no persisted agreed FX already exists.',
+  })
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.000001)
+  confirmedExchangeRate?: number;
+
+  @ApiPropertyOptional({
+    example: 12.345678,
+    minimum: 0.000001,
+    deprecated: true,
+    description: 'Deprecated compatibility alias for confirmedExchangeRate.',
   })
   @Type(() => Number)
   @IsOptional()
@@ -54,18 +93,6 @@ export class ConfirmPlacementPaymentBankDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   bankChargeAmount?: number;
-
-  @ApiPropertyOptional({
-    example: 50,
-    minimum: 0,
-    description:
-      'Withholding tax captured during Accounting confirmation. Accounting determines final ledger posting treatment.',
-  })
-  @Type(() => Number)
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  withholdingTaxAmount?: number;
 
   @ApiPropertyOptional({
     example: 'Confirmed from bank statement batch 2026-06-04.',

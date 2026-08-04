@@ -28,9 +28,40 @@ function sourceDetailUrl(payment: PlacementPayment) {
   return `/operations/reinsurance/facultative/${payment.placementId}`;
 }
 
+function firstAllocation(payment: PlacementPayment) {
+  return payment.allocations?.[0] ?? null;
+}
+
+function sourceNicLevy(payment: PlacementPayment) {
+  const values = payment.allocations
+    ?.map((allocation) => allocation.note?.nicLevyAmount)
+    .filter(Boolean)
+    .map(Number);
+  if (!values?.length) return null;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return Number.isFinite(total) && total !== 0 ? total : null;
+}
+
+function sourceWithholdingTaxAmount(payment: PlacementPayment) {
+  const values = payment.allocations
+    ?.map((allocation) => allocation.note?.withholdingTaxAmount)
+    .filter(Boolean)
+    .map(Number);
+  if (!values?.length) return null;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return Number.isFinite(total) && total !== 0 ? total : null;
+}
+
 export function mapReinsurancePaymentToBankConfirmationWorkItem(
   payment: PlacementPayment,
 ): AccountingBankConfirmationWorkItem {
+  const allocation = firstAllocation(payment);
+  const obligationCurrency =
+    allocation?.obligationCurrency ??
+    payment.closing?.currency ??
+    payment.endorsementClosing?.currency ??
+    payment.currency;
+
   return {
     id: `REINSURANCE:${payment.id}`,
     sourceModule: 'REINSURANCE',
@@ -52,6 +83,24 @@ export function mapReinsurancePaymentToBankConfirmationWorkItem(
     operationalStatus: payment.status,
     confirmationStatus: payment.status === 'RECORDED' ? 'PENDING_CONFIRMATION' : payment.status,
     availableConfirmationActions: payment.status === 'RECORDED' ? ['CONFIRM_BANK_PAYMENT'] : [],
+    businessSnapshot: {
+      placementReference: payment.placement?.reference ?? payment.placementId,
+      endorsementReference: payment.endorsementClosing?.endorsement?.endorsementNumber ?? null,
+      closingReference:
+        payment.endorsementClosing?.closingNumber ?? payment.closing?.closingNumber ?? null,
+      reinsurerName: payment.counterparty.name,
+      operationalPaymentAmount: payment.amount,
+      operationalPaymentCurrency: payment.currency,
+      obligationCurrency,
+      cedantPremiumPaymentCurrency: null,
+      cedantPaymentFxRate: allocation?.agreedExchangeRate ?? payment.agreedExchangeRate,
+      nicLevyAmount: sourceNicLevy(payment),
+      contractualWithholdingTaxAmount: sourceWithholdingTaxAmount(payment),
+      contractualWithholdingTaxRate: allocation?.note?.withholdingTaxPercent ?? null,
+      creditNoteReference: allocation?.note?.noteNumber ?? null,
+      operationalPaymentDate: payment.paymentDate,
+      paymentReference: payment.reference,
+    },
     metadata: {
       placementId: payment.placementId,
       closingId: payment.closingId,

@@ -14,6 +14,7 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
+  PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
 import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
@@ -23,6 +24,15 @@ import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
 
 const paymentInclude = {
+  placement: {
+    select: {
+      id: true,
+      reference: true,
+      policyNumber: true,
+      title: true,
+      currency: true,
+    },
+  },
   counterparty: {
     select: {
       id: true,
@@ -41,12 +51,25 @@ const paymentInclude = {
     select: {
       id: true,
       closingNumber: true,
+      netPremium: true,
+      currency: true,
     },
   },
   endorsementClosing: {
     select: {
       id: true,
       closingNumber: true,
+      netPremium: true,
+      currency: true,
+      endorsementId: true,
+      endorsement: {
+        select: {
+          id: true,
+          endorsementNumber: true,
+          effectiveDate: true,
+          type: true,
+        },
+      },
     },
   },
   allocations: {
@@ -60,6 +83,10 @@ const paymentInclude = {
           status: true,
           direction: true,
           netAmount: true,
+          nicLevyPercent: true,
+          nicLevyAmount: true,
+          withholdingTaxPercent: true,
+          withholdingTaxAmount: true,
         },
       },
     },
@@ -241,6 +268,8 @@ export class PlacementPaymentsService {
           paymentDate: new Date(dto.paymentDate),
           reference: this.cleanOptional(dto.reference),
           settlementReference: this.cleanOptional(dto.settlementReference),
+          settlementMethod: null,
+          settlementCurrency: null,
           bankReference:
             dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT
               ? null
@@ -318,6 +347,25 @@ export class PlacementPaymentsService {
     });
     if (!placement) throw new NotFoundException('Placement not found');
 
+    const settlementMethod =
+      dto.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency = this.cleanCurrency(
+      dto.settlementCurrency ?? payment.currency,
+    );
+    const bankReference = this.cleanOptional(dto.bankReference);
+    const confirmedExchangeRate =
+      dto.confirmedExchangeRate ?? dto.agreedExchangeRate ?? undefined;
+    this.assertConfirmationFacts({
+      settlementMethod,
+      bankReference,
+      notes: dto.notes,
+    });
+    this.assertSettlementFxFacts(
+      payment,
+      settlementCurrency,
+      confirmedExchangeRate,
+    );
+
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.placementPayment.updateMany({
         where: {
@@ -330,11 +378,12 @@ export class PlacementPaymentsService {
           status: PlacementPaymentStatus.BANK_CONFIRMED,
           bankConfirmedAt: new Date(dto.bankConfirmedAt),
           bankConfirmedByUserId: user.id,
-          bankReference: this.cleanRequired(dto.bankReference),
+          settlementMethod,
+          settlementCurrency,
+          bankReference,
           agreedExchangeRate:
-            dto.agreedExchangeRate ?? payment.agreedExchangeRate,
+            confirmedExchangeRate ?? payment.agreedExchangeRate,
           bankChargeAmount: dto.bankChargeAmount ?? 0,
-          withholdingTaxAmount: dto.withholdingTaxAmount ?? 0,
           notes: this.appendConfirmationNotes(payment.notes, dto.notes),
         },
       });
@@ -414,6 +463,8 @@ export class PlacementPaymentsService {
           settlementReference: payment.settlementReference
             ? `REVERSAL-${payment.settlementReference}`
             : null,
+          settlementMethod: payment.settlementMethod,
+          settlementCurrency: payment.settlementCurrency,
           bankReference: payment.bankReference
             ? `REVERSAL-${payment.bankReference}`
             : null,
@@ -547,6 +598,78 @@ export class PlacementPaymentsService {
     if (!allowedNext.includes(PlacementPaymentStatus.REVERSED)) {
       throw new BadRequestException(
         `Cannot reverse a reinsurer disbursement from ${payment.status}. Accounting must confirm the bank transaction before reversal is available.`,
+      );
+    }
+  }
+
+  private assertConfirmationFacts(input: {
+    settlementMethod: PlacementSettlementMethod;
+    bankReference: string | null;
+    notes?: string;
+  }): void {
+    const referenceRequiredMethods: PlacementSettlementMethod[] = [
+      PlacementSettlementMethod.BANK_TRANSFER,
+      PlacementSettlementMethod.CHEQUE,
+      PlacementSettlementMethod.MOBILE_MONEY,
+    ];
+    const referenceRequired = referenceRequiredMethods.includes(
+      input.settlementMethod,
+    );
+
+    if (referenceRequired && !input.bankReference) {
+      throw new BadRequestException(
+        `${input.settlementMethod} confirmation requires a settlement reference`,
+      );
+    }
+
+    if (
+      input.settlementMethod === PlacementSettlementMethod.OTHER &&
+      !input.bankReference &&
+      !this.cleanOptional(input.notes)
+    ) {
+      throw new BadRequestException(
+        'OTHER settlement method requires either a reference or confirmation notes',
+      );
+    }
+  }
+
+  private assertSettlementFxFacts(
+    payment: PlacementPaymentRecord,
+    settlementCurrency: string,
+    confirmedExchangeRate: number | undefined,
+  ): void {
+    const persistedPaymentRate = this.optionalDecimalToNumber(
+      payment.agreedExchangeRate,
+    );
+    const hasPaymentFx = Boolean(confirmedExchangeRate ?? persistedPaymentRate);
+    const allocations = payment.allocations ?? [];
+
+    if (allocations.length > 0) {
+      const missingFxAllocation = allocations.find((allocation) => {
+        const obligationCurrency = this.cleanCurrency(
+          allocation.obligationCurrency,
+        );
+        if (obligationCurrency === settlementCurrency) return false;
+        return !allocation.agreedExchangeRate && !hasPaymentFx;
+      });
+      if (missingFxAllocation) {
+        throw new BadRequestException(
+          'Cross-currency reinsurer disbursement confirmation requires a persisted agreed FX rate for every different-currency obligation',
+        );
+      }
+      return;
+    }
+
+    const obligationCurrency =
+      this.cleanOptional(payment.closing?.currency ?? undefined) ??
+      this.cleanOptional(payment.endorsementClosing?.currency ?? undefined) ??
+      payment.currency;
+    if (
+      this.cleanCurrency(obligationCurrency) !== settlementCurrency &&
+      !hasPaymentFx
+    ) {
+      throw new BadRequestException(
+        'Cross-currency reinsurer disbursement confirmation requires a persisted agreed FX rate',
       );
     }
   }
@@ -839,10 +962,6 @@ export class PlacementPaymentsService {
     return cleaned ? cleaned : null;
   }
 
-  private cleanRequired(value: string): string {
-    return value.trim();
-  }
-
   private appendConfirmationNotes(
     existing: string | null,
     notes: string | undefined,
@@ -859,5 +978,13 @@ export class PlacementPaymentsService {
     if (value === null) return 0;
     const parsed = typeof value === 'number' ? value : Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private optionalDecimalToNumber(
+    value: Prisma.Decimal | number | string | null | undefined,
+  ): number | null {
+    if (value === null || value === undefined) return null;
+    const parsed = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 }

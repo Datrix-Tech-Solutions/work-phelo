@@ -33,8 +33,6 @@ describe('Reinsurance accounting event documentation', () => {
       /The user records an already\s+completed bank\/cash receipt/,
     );
     expect(spec).toContain('User records completed inbound bank/cash receipt');
-    expect(spec).toContain(
-      'Accounting bank confirmation time (`bankConfirmedAt`)',
-    );
+    expect(spec).toContain('Accounting confirmation time (`bankConfirmedAt`)');
   });
 });

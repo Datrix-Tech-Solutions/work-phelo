@@ -4,6 +4,7 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
+  PlacementSettlementMethod,
 } from '../../../prisma/generated/client';
 
 export class PlacementPaymentCounterpartyDto {
@@ -34,6 +35,12 @@ export class PlacementPaymentClosingDto {
 
   @ApiProperty({ example: 'CLO-001' })
   closingNumber!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '1250.00' })
+  netPremium?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'USD' })
+  currency?: string | null;
 }
 
 export class PlacementPaymentAllocationNoteDto {
@@ -48,6 +55,15 @@ export class PlacementPaymentAllocationNoteDto {
 
   @ApiProperty({ example: 'USD' })
   currency!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '25.00' })
+  nicLevyAmount?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '50.00' })
+  withholdingTaxAmount?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '0.5000' })
+  withholdingTaxPercent?: string | null;
 }
 
 export class PlacementPaymentAllocationDto {
@@ -144,6 +160,16 @@ export class PlacementPaymentResponseDto {
     example: 'SETTLE-2026-001',
   })
   settlementReference!: string | null;
+
+  @ApiPropertyOptional({
+    enum: PlacementSettlementMethod,
+    nullable: true,
+    example: PlacementSettlementMethod.BANK_TRANSFER,
+  })
+  settlementMethod!: PlacementSettlementMethod | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'USD' })
+  settlementCurrency!: string | null;
 
   @ApiPropertyOptional({
     type: String,

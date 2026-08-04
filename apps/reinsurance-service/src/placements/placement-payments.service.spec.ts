@@ -12,6 +12,7 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
+  PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
 import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
@@ -840,6 +841,8 @@ describe('PlacementPaymentsService', () => {
       bankConfirmedAt: new Date('2026-06-05T10:00:00.000Z'),
       bankConfirmedByUserId: 'user-1',
       bankReference: 'BANK-CONF-001',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'USD',
       agreedExchangeRate: new Prisma.Decimal('1.2'),
       bankChargeAmount: new Prisma.Decimal('25.00'),
       withholdingTaxAmount: new Prisma.Decimal('50.00'),
@@ -863,9 +866,10 @@ describe('PlacementPaymentsService', () => {
       {
         bankConfirmedAt: '2026-06-05T10:00:00.000Z',
         bankReference: 'BANK-CONF-001',
-        agreedExchangeRate: 1.2,
+        settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+        settlementCurrency: 'USD',
+        confirmedExchangeRate: 1.2,
         bankChargeAmount: 25,
-        withholdingTaxAmount: 50,
         notes: 'Statement batch 42',
       },
     );
@@ -882,10 +886,11 @@ describe('PlacementPaymentsService', () => {
     expect(updateArgs.data).toMatchObject({
       status: PlacementPaymentStatus.BANK_CONFIRMED,
       bankConfirmedByUserId: 'user-1',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'USD',
       bankReference: 'BANK-CONF-001',
       agreedExchangeRate: 1.2,
       bankChargeAmount: 25,
-      withholdingTaxAmount: 50,
       notes: 'Operational settlement\nBank confirmation: Statement batch 42',
     });
     expect(
@@ -903,6 +908,103 @@ describe('PlacementPaymentsService', () => {
       preparedEvent,
     );
     expect(result.status).toBe(PlacementPaymentStatus.BANK_CONFIRMED);
+  });
+
+  it('blocks cross-currency reinsurer confirmation when no persisted FX fact exists', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementPayment.findFirst.mockResolvedValue({
+      ...payment,
+      id: 'payment-disbursement-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.RECORDED,
+      currency: 'USD',
+      closingId: 'closing-1',
+      agreedExchangeRate: null,
+      closing: {
+        id: 'closing-1',
+        closingNumber: 'CLO-001',
+        currency: 'GHS',
+        netPremium: new Prisma.Decimal('1200.00'),
+      },
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: null,
+      },
+    });
+
+    await expect(
+      service.confirmBankPayment(
+        user,
+        'placement-1',
+        'payment-disbursement-1',
+        {
+          bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+          bankReference: 'BANK-CONF-001',
+          settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+          settlementCurrency: 'USD',
+        },
+      ),
+    ).rejects.toThrow('requires a persisted agreed FX rate');
+    expect(prisma.placementPayment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows internal-offset confirmation without a bank reference', async () => {
+    const recordedDisbursement = {
+      ...payment,
+      id: 'payment-disbursement-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.RECORDED,
+      currency: 'USD',
+      closingId: 'closing-1',
+      reference: 'PAY-001',
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: null,
+      },
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce({ id: 'placement-1' })
+      .mockResolvedValueOnce(placement);
+    prisma.placementPayment.findFirst
+      .mockResolvedValueOnce(recordedDisbursement)
+      .mockResolvedValueOnce({
+        ...recordedDisbursement,
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
+        settlementMethod: PlacementSettlementMethod.INTERNAL_OFFSET,
+        settlementCurrency: 'USD',
+        bankReference: null,
+        bankConfirmedAt: new Date('2026-06-05T10:00:00.000Z'),
+      });
+    prisma.placementPayment.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.confirmBankPayment(
+      user,
+      'placement-1',
+      'payment-disbursement-1',
+      {
+        bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+        settlementMethod: PlacementSettlementMethod.INTERNAL_OFFSET,
+        settlementCurrency: 'USD',
+        notes: 'Offset against cedant balance',
+      },
+    );
+
+    const updateArgs = firstCallArg<Prisma.PlacementPaymentUpdateManyArgs>(
+      prisma.placementPayment.updateMany,
+    );
+    expect(updateArgs.data).toMatchObject({
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      settlementMethod: PlacementSettlementMethod.INTERNAL_OFFSET,
+      settlementCurrency: 'USD',
+      bankReference: null,
+    });
   });
 
   it.each([

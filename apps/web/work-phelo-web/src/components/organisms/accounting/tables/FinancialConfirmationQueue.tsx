@@ -9,25 +9,37 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import type {
   AccountingBankConfirmationWorkItem,
   ConfirmBankPaymentPayload,
+  SettlementMethod,
 } from '@/types/accountingIntegration';
 
 const PAGE_SIZE = 10;
+const SETTLEMENT_METHODS: SettlementMethod[] = [
+  'BANK_TRANSFER',
+  'CHEQUE',
+  'CASH',
+  'MOBILE_MONEY',
+  'INTERNAL_OFFSET',
+  'JOURNAL',
+  'OTHER',
+];
 
 interface ConfirmationForm {
   bankConfirmedAt: string;
   bankReference: string;
-  agreedExchangeRate: string;
+  settlementMethod: SettlementMethod;
+  settlementCurrency: string;
+  confirmedExchangeRate: string;
   bankChargeAmount: string;
-  withholdingTaxAmount: string;
   notes: string;
 }
 
 const INITIAL_FORM: ConfirmationForm = {
   bankConfirmedAt: '',
   bankReference: '',
-  agreedExchangeRate: '',
+  settlementMethod: 'BANK_TRANSFER',
+  settlementCurrency: '',
+  confirmedExchangeRate: '',
   bankChargeAmount: '',
-  withholdingTaxAmount: '',
   notes: '',
 };
 
@@ -70,6 +82,24 @@ function defaultDateTimeLocal() {
   return local.toISOString().slice(0, 16);
 }
 
+function methodRequiresReference(method: SettlementMethod) {
+  return method === 'BANK_TRANSFER' || method === 'CHEQUE' || method === 'MOBILE_MONEY';
+}
+
+function methodAffectsCash(method: SettlementMethod) {
+  return (
+    method === 'BANK_TRANSFER' ||
+    method === 'CHEQUE' ||
+    method === 'CASH' ||
+    method === 'MOBILE_MONEY'
+  );
+}
+
+function fieldValue(value: string | number | null | undefined, fallback = '-') {
+  if (value === null || value === undefined || value === '') return fallback;
+  return String(value);
+}
+
 export function FinancialConfirmationQueue({
   items,
   isLoading,
@@ -104,7 +134,11 @@ export function FinancialConfirmationQueue({
 
   const openConfirmModal = (item: AccountingBankConfirmationWorkItem) => {
     setSelectedItem(item);
-    setForm({ ...INITIAL_FORM, bankConfirmedAt: defaultDateTimeLocal() });
+    setForm({
+      ...INITIAL_FORM,
+      bankConfirmedAt: defaultDateTimeLocal(),
+      settlementCurrency: item.currency,
+    });
   };
 
   const closeConfirmModal = () => {
@@ -127,10 +161,11 @@ export function FinancialConfirmationQueue({
     if (!selectedItem) return;
     await onConfirm(selectedItem, {
       bankConfirmedAt: new Date(form.bankConfirmedAt).toISOString(),
-      bankReference: form.bankReference.trim(),
-      agreedExchangeRate: toOptionalNumber(form.agreedExchangeRate),
+      bankReference: form.bankReference.trim() || undefined,
+      settlementMethod: form.settlementMethod,
+      settlementCurrency: form.settlementCurrency.trim().toUpperCase() || selectedItem.currency,
+      confirmedExchangeRate: toOptionalNumber(form.confirmedExchangeRate),
       bankChargeAmount: toOptionalNumber(form.bankChargeAmount),
-      withholdingTaxAmount: toOptionalNumber(form.withholdingTaxAmount),
       notes: form.notes.trim() || undefined,
     });
     setSelectedItem(null);
@@ -292,28 +327,117 @@ export function FinancialConfirmationQueue({
               </div>
             </div>
 
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <h4 className="text-sm font-semibold text-slate-900">Business Snapshot</h4>
+              <p className="mt-1 text-xs text-slate-500">
+                Read-only source facts supplied by the operational module. Accounting confirms
+                settlement execution below.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Placement</div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.placementReference)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Endorsement</div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.endorsementReference)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Closing</div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.closingReference)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Obligation Currency
+                  </div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.obligationCurrency)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Cedant FX Source
+                  </div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.cedantPaymentFxRate, 'Not linked')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">NIC Levy</div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.nicLevyAmount)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Contractual WHT
+                  </div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.contractualWithholdingTaxAmount)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Credit Note Source
+                  </div>
+                  <div className="font-medium text-slate-900">
+                    {fieldValue(selectedItem.businessSnapshot?.creditNoteReference)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="space-y-1">
+                <span className="block text-sm font-medium text-gray-700">Settlement Method</span>
+                <select
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={form.settlementMethod}
+                  onChange={(event) =>
+                    updateForm('settlementMethod', event.target.value as SettlementMethod)
+                  }
+                >
+                  {SETTLEMENT_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {method.replaceAll('_', ' ')}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <Input
-                label="Bank Confirmation Date"
+                label="Confirmation Date"
                 type="datetime-local"
                 value={form.bankConfirmedAt}
                 onChange={updateFormFromInput('bankConfirmedAt')}
                 required
               />
               <Input
-                label="Bank Reference"
+                label="Settlement Reference"
                 value={form.bankReference}
                 onChange={updateFormFromInput('bankReference')}
                 maxLength={100}
+                required={methodRequiresReference(form.settlementMethod)}
+              />
+              <Input
+                label="Settlement Currency"
+                value={form.settlementCurrency}
+                onChange={updateFormFromInput('settlementCurrency')}
+                maxLength={3}
                 required
               />
               <Input
-                label="FX Rate"
+                label="Confirmed FX Rate"
                 type="number"
                 step="0.000001"
                 min="0"
-                value={form.agreedExchangeRate}
-                onChange={updateFormFromInput('agreedExchangeRate')}
+                value={form.confirmedExchangeRate}
+                onChange={updateFormFromInput('confirmedExchangeRate')}
               />
               <Input
                 label="Bank Charges"
@@ -323,15 +447,14 @@ export function FinancialConfirmationQueue({
                 value={form.bankChargeAmount}
                 onChange={updateFormFromInput('bankChargeAmount')}
               />
-              <Input
-                label="Withholding Tax"
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.withholdingTaxAmount}
-                onChange={updateFormFromInput('withholdingTaxAmount')}
-              />
             </div>
+
+            {!methodAffectsCash(form.settlementMethod) && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                This settlement method does not represent a bank/cash movement. The event will
+                expose that fact so Accounting posting rules avoid cash-impact lines.
+              </div>
+            )}
 
             <Input
               label="Confirmation Notes"

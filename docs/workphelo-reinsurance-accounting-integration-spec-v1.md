@@ -627,6 +627,11 @@ Eligibility:
 - when allocations exist, allocated payment-currency amount MUST equal the
   payment amount
 - cross-currency allocations MUST carry a persisted agreed exchange rate
+- cross-currency original or endorsement closing settlement MUST carry a
+  persisted agreed or confirmed exchange rate
+- confirmation MUST include a settlement method. Supported values are
+  `BANK_TRANSFER`, `CHEQUE`, `CASH`, `MOBILE_MONEY`, `INTERNAL_OFFSET`,
+  `JOURNAL` and `OTHER`.
 
 Recorded event:
 
@@ -643,20 +648,40 @@ Payloads use `allocation.model = CREDIT_NOTE_ALLOCATIONS` and include:
 
 - placement and payment references;
 - Reinsurer counterparty and `subledgerExternalRef`;
-- payment date, bank-confirmation date and bank reference;
+- payment date, confirmation date, settlement method, settlement currency and
+  settlement reference/bank reference where required;
 - settlement reference where present;
-- positive `paymentAmount`, `allocatedAmount`, `bankCharges` and
-  `withholdingTax` facts;
+- positive `paymentAmount`, `allocatedAmount` and `bankCharges` execution
+  facts;
+- source-owned NIC levy and contractual withholding-tax facts from issued
+  Credit Note / Endorsement Credit Note snapshots where available;
 - `unallocatedAmount = paymentAmount - allocatedAmount`;
-- `signedCashImpact < 0`;
+- `signedCashImpact < 0` only when the settlement method is cash-affecting
+  (`BANK_TRANSFER`, `CHEQUE`, `CASH`, `MOBILE_MONEY`);
+- `signedCashImpact = 0` for `INTERNAL_OFFSET` and `JOURNAL`;
 - `signedPayableImpact < 0`;
 - allocation IDs, Credit Note IDs/numbers/types, obligation currency,
   obligation amount, payment-currency amount and persisted agreed FX rate where
   applicable.
 
 Reinsurance MUST NOT publish GL account IDs or journal directions. Accounting
-posting rules clear the existing payable and resolve cash, bank charges,
-withholding tax and FX treatment per tenant.
+posting rules clear the existing payable and resolve cash, non-cash offsets,
+bank charges, NIC levy, withholding tax and FX treatment per tenant. Bank-charge
+account selection remains Accounting-owned tenant configuration or a future
+Accounting confirmation extension; Reinsurance stores only the factual bank
+charge amount.
+
+FX source hierarchy:
+
+1. Use allocation-level persisted agreed FX where Credit Note allocations prove
+   the obligation/payment currency relationship.
+2. Otherwise use payment-level confirmed/agreed FX persisted on
+   `PlacementPayment`.
+3. If a future model explicitly links a Cedant premium receipt to a downstream
+   Reinsurer settlement, its persisted payment FX may be exposed as settlement
+   basis. The current domain does not infer that relationship.
+4. If currencies differ and no persisted FX fact exists, confirmation MUST be
+   blocked. Reinsurance and Accounting MUST NOT fetch live FX rates.
 
 Failed payments, cancelled payments, approval-only states and reversal rows
 MUST NOT emit this event. Unallocated-by-note disbursements MAY emit this event
@@ -685,16 +710,16 @@ business meaning from tenant posting configuration. Accounting posting rules
 remain tenant owned; the rows below are recommended defaults and test-backed
 examples, not hardcoded universal journals.
 
-| Event                             | Source record                  | Recognition boundary                                  | Business meaning                                 | AR effect                      | AP effect                      | Bank/cash effect    | Recommended default posting                           | Code-active? |
-| --------------------------------- | ------------------------------ | ----------------------------------------------------- | ------------------------------------------------ | ------------------------------ | ------------------------------ | ------------------- | ----------------------------------------------------- | ------------ |
-| `DEBIT_NOTE_ISSUED`               | Issued `PlacementNote`         | Official placement debit note issue time              | Cedant owes premium to broker                    | Increases Cedant receivable    | Unaffected                     | Unaffected          | DR Cedant Premium Receivable / CR Premium Income      | Yes          |
-| `CREDIT_NOTE_ISSUED`              | Issued `PlacementNote`         | Official placement credit note issue time             | Broker owes premium share to Reinsurer           | Unaffected                     | Increases Reinsurer payable    | Unaffected          | DR Premium Clearing or Expense / CR Reinsurer Payable | Yes          |
-| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Issued endorsement debit note  | Official endorsement debit note issue time            | Additional premium due from Cedant               | Increases Cedant receivable    | Unaffected                     | Unaffected          | DR Cedant Premium Receivable / CR Endorsement Premium | Yes          |
-| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Issued endorsement credit note | Official endorsement credit note issue time           | Return premium / payable adjustment to Reinsurer | Unaffected                     | Increases Reinsurer payable    | Unaffected          | DR Return Premium or Clearing / CR Reinsurer Payable  | Yes          |
-| `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment` receipt row | User records completed inbound bank/cash receipt      | Cedant payment clears receivable                 | Decreases Cedant receivable    | Unaffected                     | Increases bank/cash | DR Bank/Cash / CR Cedant Premium Receivable           | Yes          |
-| `PAYMENT_REVERSED`                | Reversal `PlacementPayment`    | Reversal row creation time                            | Premium receipt reversal                         | Re-increases Cedant receivable | Unaffected                     | Decreases bank/cash | DR Cedant Premium Receivable / CR Bank/Cash           | Yes          |
-| `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment` row         | Accounting bank confirmation time (`bankConfirmedAt`) | Bank-confirmed Reinsurer disbursement            | Unaffected                     | Decreases Reinsurer payable    | Decreases bank/cash | DR Reinsurer Payable / CR Bank/Cash                   | Yes          |
-| `REINSURER_DISBURSEMENT_REVERSED` | Reversal `PlacementPayment`    | Reversal row creation time                            | Reinsurer disbursement reversal                  | Unaffected                     | Re-increases Reinsurer payable | Increases bank/cash | DR Bank/Cash / CR Reinsurer Payable                   | Yes          |
+| Event                             | Source record                  | Recognition boundary                             | Business meaning                                 | AR effect                      | AP effect                      | Bank/cash effect                                                    | Recommended default posting                                                | Code-active? |
+| --------------------------------- | ------------------------------ | ------------------------------------------------ | ------------------------------------------------ | ------------------------------ | ------------------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------ |
+| `DEBIT_NOTE_ISSUED`               | Issued `PlacementNote`         | Official placement debit note issue time         | Cedant owes premium to broker                    | Increases Cedant receivable    | Unaffected                     | Unaffected                                                          | DR Cedant Premium Receivable / CR Premium Income                           | Yes          |
+| `CREDIT_NOTE_ISSUED`              | Issued `PlacementNote`         | Official placement credit note issue time        | Broker owes premium share to Reinsurer           | Unaffected                     | Increases Reinsurer payable    | Unaffected                                                          | DR Premium Clearing or Expense / CR Reinsurer Payable                      | Yes          |
+| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Issued endorsement debit note  | Official endorsement debit note issue time       | Additional premium due from Cedant               | Increases Cedant receivable    | Unaffected                     | Unaffected                                                          | DR Cedant Premium Receivable / CR Endorsement Premium                      | Yes          |
+| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Issued endorsement credit note | Official endorsement credit note issue time      | Return premium / payable adjustment to Reinsurer | Unaffected                     | Increases Reinsurer payable    | Unaffected                                                          | DR Return Premium or Clearing / CR Reinsurer Payable                       | Yes          |
+| `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment` receipt row | User records completed inbound bank/cash receipt | Cedant payment clears receivable                 | Decreases Cedant receivable    | Unaffected                     | Increases bank/cash                                                 | DR Bank/Cash / CR Cedant Premium Receivable                                | Yes          |
+| `PAYMENT_REVERSED`                | Reversal `PlacementPayment`    | Reversal row creation time                       | Premium receipt reversal                         | Re-increases Cedant receivable | Unaffected                     | Decreases bank/cash                                                 | DR Cedant Premium Receivable / CR Bank/Cash                                | Yes          |
+| `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment` row         | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer settlement                   | Unaffected                     | Decreases Reinsurer payable    | Decreases bank/cash only for cash-affecting settlement methods      | DR Reinsurer Payable / CR Bank/Cash or tenant-configured non-cash clearing | Yes          |
+| `REINSURER_DISBURSEMENT_REVERSED` | Reversal `PlacementPayment`    | Reversal row creation time                       | Reinsurer disbursement reversal                  | Unaffected                     | Re-increases Reinsurer payable | Increases bank/cash only when reversing a cash-affecting settlement | DR Bank/Cash or tenant-configured clearing / CR Reinsurer Payable          | Yes          |
 
 Actual posting behavior depends on active `PostingRule` rows in Accounting.
 Tenants MAY route through clearing accounts, income accounts, expense accounts,

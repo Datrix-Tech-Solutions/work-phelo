@@ -179,13 +179,29 @@ reuse the same UI/container patterns:
 - `operationalStatus`
 - `confirmationStatus`
 - `availableConfirmationActions`
-- confirmation metadata such as bank date, bank reference, FX, charges,
-  withholding tax, and notes
+- read-only business snapshot facts from the source module, including source
+  references, obligation currency, contractual tax/levy facts and persisted FX
+  basis where available
+- confirmation metadata such as confirmation date, settlement method,
+  settlement currency, settlement reference, confirmed FX, bank charges and
+  notes
 
 Reinsurance reinsurer disbursement bank confirmation is the first supported
 source-module adapter. Payroll, Inventory, CRM, Subscription, and future modules
 SHOULD add their own adapters rather than embedding module-specific database
 knowledge inside Accounting.
+
+Confirmation workflows MUST NOT fetch live FX rates. If a source-module
+settlement crosses currencies, the event MUST use a persisted agreed FX fact or
+the confirmation MUST be blocked with a controlled error. Contractual taxes and
+levies remain source-module business facts; Accounting MAY route them through
+posting rules but MUST NOT invent or recalculate them during normal
+confirmation.
+
+Settlement method MUST be explicit when a confirmation can represent either a
+cash movement or a non-cash settlement. `BANK_TRANSFER`, `CHEQUE`, `CASH` and
+`MOBILE_MONEY` MAY carry bank/cash impact. `INTERNAL_OFFSET` and `JOURNAL` MUST
+not be represented as bank/cash movements.
 
 ---
 
