@@ -112,7 +112,7 @@ export function totalEffectiveReinsurerDisbursement(
       (p) =>
         p.type === 'REINSURER_DISBURSEMENT' &&
         p.counterpartyId === reinsurerId &&
-        p.status === 'RECORDED' &&
+        (p.status === 'RECORDED' || p.status === 'BANK_CONFIRMED') &&
         !p.reversalOfPaymentId,
     )
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);

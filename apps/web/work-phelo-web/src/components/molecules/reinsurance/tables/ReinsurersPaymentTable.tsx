@@ -121,7 +121,7 @@ export function ReinsurersPaymentTable({
           .filter(
             (payment) =>
               payment.type === 'REINSURER_DISBURSEMENT' &&
-              payment.status === 'RECORDED' &&
+              (payment.status === 'RECORDED' || payment.status === 'BANK_CONFIRMED') &&
               !payment.reversalOfPaymentId &&
               payment.closingId === closing.id,
           )
@@ -147,7 +147,7 @@ export function ReinsurersPaymentTable({
             .filter(
               (payment) =>
                 payment.type === 'REINSURER_DISBURSEMENT' &&
-                payment.status === 'RECORDED' &&
+                (payment.status === 'RECORDED' || payment.status === 'BANK_CONFIRMED') &&
                 !payment.reversalOfPaymentId &&
                 payment.endorsementClosingId === adjustment.closingId,
             )
@@ -178,7 +178,7 @@ export function ReinsurersPaymentTable({
         : '',
       paymentDate: new Date().toISOString(),
       reference: '',
-      notes: 'Reinsurer disbursement',
+      notes: 'Operational reinsurer disbursement',
     });
   }, [form, paymentTarget, sources]);
 
@@ -212,7 +212,7 @@ export function ReinsurersPaymentTable({
         reference: values.reference || undefined,
         notes: values.notes || undefined,
       });
-      addToast({ message: 'Reinsurer payment recorded successfully', type: 'success' });
+      addToast({ message: 'Reinsurer disbursement recorded successfully', type: 'success' });
       closeModal();
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
@@ -282,7 +282,7 @@ export function ReinsurersPaymentTable({
             disabled={row.outstanding <= 0.0001}
             onClick={() => setPaymentTarget(row)}
           >
-            Record Disbursement
+            Record Reinsurer Disbursement
           </Button>
         ),
       },
@@ -311,15 +311,15 @@ export function ReinsurersPaymentTable({
       <Modal
         isOpen={!!paymentTarget}
         onClose={closeModal}
-        title="Record Reinsurer Payment"
-        description="Record an outbound settlement against the selected confirmed closing source."
+        title="Record Reinsurer Disbursement"
+        description="Record the operational payment made to the Reinsurer. Accounting will confirm the bank transaction separately."
         footer={
           <>
             <Button variant="outline" onClick={closeModal}>
               Cancel
             </Button>
             <Button onClick={submitDisbursement} disabled={createPayment.isPending}>
-              {createPayment.isPending ? 'Saving…' : 'Record Payment'}
+              {createPayment.isPending ? 'Saving…' : 'Record Disbursement'}
             </Button>
           </>
         }

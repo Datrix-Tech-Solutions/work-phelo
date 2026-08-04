@@ -2596,7 +2596,8 @@ export class PlacementsController {
       'Records the first payment foundation financial fact for a placement. ' +
       'The first recorded payment financially locks the placement and future direct placement/participant edits return 409 until endorsements are implemented. ' +
       'Payment creation remains allowed after lock so additional receipts/disbursements can be recorded. ' +
-      'Premium received is placement-level and must come from the cedant. Reinsurer disbursement requires a matching CONFIRMED closing and participant.',
+      'Premium received is placement-level and must come from the cedant. Reinsurer disbursement records the operational outbound payment against a confirmed original or endorsement closing. ' +
+      'Accounting confirmation, bank reference, FX, withholding tax, bank charges and posting happen in the later Accounting workflow.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiCreatedResponse({ type: PlacementPaymentResponseDto })
