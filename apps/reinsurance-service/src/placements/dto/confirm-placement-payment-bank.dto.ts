@@ -18,7 +18,7 @@ export class ConfirmPlacementPaymentBankDto {
     format: 'date-time',
     example: '2026-06-04T14:30:00.000Z',
     description:
-      'Accounting-owned date/time when the bank completed the outbound reinsurer disbursement.',
+      'Accounting-owned date/time when the payment was financially confirmed as received, cleared, completed, posted or offset.',
   })
   @IsDateString()
   bankConfirmedAt!: string;
@@ -27,7 +27,7 @@ export class ConfirmPlacementPaymentBankDto {
     example: 'BANK-CONF-2026-001',
     maxLength: 100,
     description:
-      'Bank, cheque, mobile-money or settlement reference supplied by Accounting. Required for bank-transfer, cheque and mobile-money confirmations.',
+      'Bank, cheque, mobile-money or settlement reference supplied by Accounting when the operational module did not already provide one.',
   })
   @TrimmedString()
   @IsOptional()

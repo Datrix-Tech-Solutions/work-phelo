@@ -98,7 +98,8 @@ export function confirmedNetPremiumFor(closings: PlacementParticipantClosing[]):
 export function totalEffectivePremiumReceived(payments: PlacementPayment[]): number {
   return payments
     .filter(
-      (p) => p.type === 'PREMIUM_RECEIVED' && p.status === 'RECORDED' && !p.reversalOfPaymentId,
+      (p) =>
+        p.type === 'PREMIUM_RECEIVED' && p.status === 'BANK_CONFIRMED' && !p.reversalOfPaymentId,
     )
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
@@ -112,7 +113,7 @@ export function totalEffectiveReinsurerDisbursement(
       (p) =>
         p.type === 'REINSURER_DISBURSEMENT' &&
         p.counterpartyId === reinsurerId &&
-        (p.status === 'RECORDED' || p.status === 'BANK_CONFIRMED') &&
+        p.status === 'BANK_CONFIRMED' &&
         !p.reversalOfPaymentId,
     )
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
@@ -238,7 +239,7 @@ export function useReinsurerPaymentSummary(
           (pmt) =>
             pmt.type === 'REINSURER_DISBURSEMENT' &&
             pmt.counterpartyId === reinsurerId &&
-            pmt.status === 'RECORDED' &&
+            pmt.status === 'BANK_CONFIRMED' &&
             !pmt.reversalOfPaymentId,
         )
         .forEach((pmt) => {
@@ -279,7 +280,7 @@ export function useCedantPaymentSummary(placements: Facultative[]): {
         .filter(
           (pmt) =>
             pmt.type === 'PREMIUM_RECEIVED' &&
-            pmt.status === 'RECORDED' &&
+            pmt.status === 'BANK_CONFIRMED' &&
             !pmt.reversalOfPaymentId,
         )
         .forEach((pmt) => {

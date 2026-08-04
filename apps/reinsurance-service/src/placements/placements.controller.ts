@@ -185,10 +185,9 @@ export class PlacementsController {
   @ApiTags('Reinsurance - Payments')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
-    summary:
-      'List reinsurer disbursements awaiting Accounting bank confirmation',
+    summary: 'List payments awaiting Accounting financial confirmation',
     description:
-      'Returns tenant-scoped RECORDED outbound reinsurer disbursements that Accounting must confirm before financial recognition and posting begin.',
+      'Returns tenant-scoped RECORDED inbound premium receipts and outbound reinsurer disbursements that Accounting must confirm before financial recognition and posting begin.',
   })
   @ApiOkResponse({ type: PlacementPaymentListResponseDto })
   async findPendingBankConfirmationPayments(
@@ -2643,22 +2642,23 @@ export class PlacementsController {
   @ApiTags('Reinsurance - Payments')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
-    summary: 'Confirm reinsurer disbursement bank completion',
+    summary: 'Confirm payment financial completion',
     description:
-      'Accounting-owned workflow step that transitions a RECORDED reinsurer disbursement to BANK_CONFIRMED, stores bank confirmation facts, and enqueues REINSURER_DISBURSEMENT_RECORDED for Accounting posting.',
+      'Accounting-owned workflow step that transitions a RECORDED inbound premium receipt or outbound reinsurer disbursement to BANK_CONFIRMED, stores confirmation facts, and enqueues the corresponding Accounting event for posting.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
     name: 'paymentId',
     format: 'uuid',
-    description: 'RECORDED reinsurer disbursement payment ID.',
+    description:
+      'RECORDED premium receipt or reinsurer disbursement payment ID.',
   })
   @ApiBody({ type: ConfirmPlacementPaymentBankDto })
   @ApiOkResponse({ type: PlacementPaymentResponseDto })
   @ApiBadRequestResponse({
     type: ApiErrorResponseDto,
     description:
-      'The payment is not an original outbound reinsurer disbursement or is in a non-confirmable status.',
+      'The payment is not an original inbound premium receipt/outbound reinsurer disbursement or is in a non-confirmable status.',
   })
   @ApiConflictResponse({
     type: ApiErrorResponseDto,

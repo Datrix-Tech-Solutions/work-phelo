@@ -487,9 +487,7 @@ export class PlacementFinancialPositionService {
     const netSettled = this.round(
       originalRows
         .filter(
-          (payment) =>
-            payment.status === PlacementPaymentStatus.RECORDED ||
-            payment.status === PlacementPaymentStatus.BANK_CONFIRMED,
+          (payment) => payment.status === PlacementPaymentStatus.BANK_CONFIRMED,
         )
         .reduce(
           (total, payment) => total + this.money.toNumber(payment.amount),

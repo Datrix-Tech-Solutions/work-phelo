@@ -692,14 +692,28 @@ export class ReinsuranceFinancialEventPublisher {
 
     if (!this.isRecordedPremiumPayment(payment)) {
       throw new Error(
-        `Payment ${payment.id} is not a valid recorded premium receipt`,
+        `Payment ${payment.id} is not a valid bank-confirmed premium receipt`,
       );
     }
 
     const placement = this.requirePlacement(payment);
     const counterparty = this.requireCedantCounterparty(payment);
     const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
-    const occurredAt = payment.paymentDate.toISOString();
+    const occurredAt = payment.bankConfirmedAt?.toISOString();
+    if (!occurredAt) {
+      throw new Error(
+        `Payment ${payment.id} is missing bankConfirmedAt for PREMIUM_PAYMENT_RECEIVED`,
+      );
+    }
+    const exchangeRate = this.optionalDecimalNumber(payment.agreedExchangeRate);
+    const bankCharges = Math.abs(
+      this.optionalDecimalNumber(payment.bankChargeAmount) ?? 0,
+    );
+    const settlementMethod =
+      payment.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency = payment.settlementCurrency ?? payment.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+    const signedCashImpact = cashAffecting ? paymentAmount : 0;
 
     return {
       tenantId: payment.tenantId,
@@ -713,12 +727,15 @@ export class ReinsuranceFinancialEventPublisher {
       payload: {
         transactionDate: occurredAt,
         currency: payment.currency,
+        ...(exchangeRate ? { exchangeRate } : {}),
         references: {
           placementId: placement.id,
           placementReference: placement.reference,
           policyNumber: placement.policyNumber,
           placementTitle: placement.title,
           paymentId: payment.id,
+          paymentReference: payment.reference,
+          settlementReference: payment.settlementReference ?? null,
         },
         counterparty: {
           id: counterparty.id,
@@ -729,15 +746,25 @@ export class ReinsuranceFinancialEventPublisher {
         },
         amounts: {
           paymentAmount,
-          signedCashImpact: paymentAmount,
+          bankCharges,
+          signedCashImpact,
           signedReceivableImpact: -paymentAmount,
+          cashAffectingSettlement: cashAffecting,
         },
         payment: {
           id: payment.id,
-          paymentDate: occurredAt,
-          paymentMethod: null,
+          paymentDate: payment.paymentDate.toISOString(),
+          bankConfirmedAt: occurredAt,
+          paymentMethod: settlementMethod,
           paymentReference: payment.reference,
-          bankReference: payment.reference,
+          settlementReference: payment.settlementReference ?? null,
+          bankReference: payment.bankReference,
+          settlementMethod,
+          method: settlementMethod,
+          currency: payment.currency,
+          settlementCurrency,
+          agreedExchangeRate: exchangeRate,
+          confirmedExchangeRate: exchangeRate,
           status: payment.status,
           type: payment.type,
           direction: payment.direction,
@@ -786,6 +813,13 @@ export class ReinsuranceFinancialEventPublisher {
     }
     const paymentAmount = Math.abs(this.decimalNumber(reversalPayment.amount));
     const occurredAt = reversalPayment.paymentDate.toISOString();
+    const settlementMethod =
+      reversalPayment.settlementMethod ??
+      PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency =
+      reversalPayment.settlementCurrency ?? reversalPayment.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+    const signedCashImpact = cashAffecting ? -paymentAmount : 0;
 
     return {
       tenantId: reversalPayment.tenantId,
@@ -820,8 +854,9 @@ export class ReinsuranceFinancialEventPublisher {
           originalPaymentAmount: Math.abs(
             this.decimalNumber(originalPayment.amount),
           ),
-          signedCashImpact: -paymentAmount,
+          signedCashImpact,
           signedReceivableImpact: paymentAmount,
+          cashAffectingSettlement: cashAffecting,
         },
         payment: {
           id: reversalPayment.id,
@@ -833,6 +868,9 @@ export class ReinsuranceFinancialEventPublisher {
           paymentReference: reversalPayment.reference,
           originalPaymentReference: originalPayment.reference,
           bankReference: reversalPayment.reference,
+          settlementMethod,
+          method: settlementMethod,
+          settlementCurrency,
           status: reversalPayment.status,
           originalPaymentStatus: originalPayment.status,
           type: reversalPayment.type,
@@ -1595,10 +1633,12 @@ export class ReinsuranceFinancialEventPublisher {
     return (
       payment.type === PlacementPaymentType.PREMIUM_RECEIVED &&
       payment.direction === PlacementPaymentDirection.INBOUND &&
-      payment.status === PlacementPaymentStatus.RECORDED &&
+      payment.status === PlacementPaymentStatus.BANK_CONFIRMED &&
       payment.reversalOfPaymentId === null &&
       payment.paymentDate instanceof Date &&
       !Number.isNaN(payment.paymentDate.getTime()) &&
+      payment.bankConfirmedAt instanceof Date &&
+      !Number.isNaN(payment.bankConfirmedAt.getTime()) &&
       payment.currency.trim().length === 3 &&
       this.decimalNumber(payment.amount) > 0
     );

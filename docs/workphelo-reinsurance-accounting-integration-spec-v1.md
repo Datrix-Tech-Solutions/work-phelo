@@ -531,20 +531,25 @@ The endpoints are tenant scoped, duplicate safe and preserve original
 
 ## 10.1 Premium Payment and Reversal Activation
 
-`PREMIUM_PAYMENT_RECEIVED` is recognized when a valid
-`PlacementPayment` premium receipt row is officially recorded with:
+`PREMIUM_PAYMENT_RECEIVED` is recognized when a valid `PlacementPayment`
+premium receipt row is financially confirmed by Accounting with:
 
 - `type = PREMIUM_RECEIVED`
 - `direction = INBOUND`
-- `status = RECORDED`
+- `status = BANK_CONFIRMED`
 - `reversalOfPaymentId = null`
-- a valid `paymentDate`
+- a valid reported `paymentDate`
+- a valid `bankConfirmedAt`
 
-Current Product/Finance classification: **A. The user records an already
-completed bank/cash receipt.** Immediate recognition remains intentional for
-the current workflow. If the product later changes this screen to record
-expected receipts before bank completion, Reinsurance MUST introduce a separate
-confirmation adapter rather than reusing this event boundary silently.
+Reinsurance users record the Cedant-reported receipt as operational evidence
+with `status = RECORDED`. No Accounting outbox event is created at that point.
+Accounting confirms actual receipt, cheque clearance, mobile-money success,
+cash receipt, internal offset or journal completion. Only that confirmation
+transitions the row to `BANK_CONFIRMED` and emits `PREMIUM_PAYMENT_RECEIVED`.
+
+`BANK_CONFIRMED` means "financially confirmed by Accounting" for this workflow.
+For `CASH`, `INTERNAL_OFFSET` and `JOURNAL`, it does not imply a commercial bank
+literally confirmed the transaction.
 
 Current Reinsurance payment allocation is placement-level. The payment create
 workflow does not allocate a premium receipt to one or more specific
@@ -567,9 +572,10 @@ DR Bank / Cash / Undeposited Funds
 CR Cedant Premium Receivable
 ```
 
-`PAYMENT_REVERSED` is recognized when Reinsurance creates the reversal
-`PlacementPayment` row and links it to the original payment through
-`reversalOfPaymentId`.
+`PAYMENT_REVERSED` is recognized only for a previously `BANK_CONFIRMED`
+premium receipt. A merely `RECORDED` receipt has no financial event to reverse;
+it should be cancelled/failed operationally through a future lifecycle action
+rather than publishing a reversal event.
 
 The reversal event uses the reversal row as its source record, not the original
 payment row:
@@ -601,10 +607,10 @@ CR Bank / Cash / Undeposited Funds
 ```
 
 Reinsurance MUST capture premium payment and reversal events atomically with
-the payment transaction when Accounting is enabled. The capture step MUST NOT
-require Accounting URL/HMAC configuration, service reachability, posting rules,
-subledger readiness or fiscal-period status. Those remain delivery/posting
-readiness concerns.
+the Accounting confirmation or reversal transaction when Accounting is enabled.
+The capture step MUST NOT require Accounting URL/HMAC configuration, service
+reachability, posting rules, subledger readiness or fiscal-period status. Those
+remain delivery/posting readiness concerns.
 
 ---
 
@@ -671,18 +677,21 @@ account selection remains Accounting-owned tenant configuration or a future
 Accounting confirmation extension; Reinsurance stores only the factual bank
 charge amount.
 
-Operational payment ownership:
+Direction-aware operational payment ownership:
 
-- Reinsurance creates the `PlacementPayment` and owns amount, currency,
-  Reinsurer, original/endorsement closing source, payment date, payment
-  reference, settlement method, settlement currency, notes and any source
-  allocation facts.
-- Accounting confirms financial completion and MUST NOT overwrite those
-  source-owned fields.
+- For inbound Cedant premium receipts, Reinsurance owns amount, Cedant,
+  placement, business currency, reported receipt date, source reference,
+  receipt notes/evidence, and any source-supplied method/currency/FX facts.
+- For outbound Reinsurer disbursements, Reinsurance owns amount, Reinsurer,
+  placement, original/endorsement closing source, payment-request date,
+  internal reference, notes, source allocations, and any intended
+  method/currency/FX facts.
+- Accounting confirms financial completion and MUST NOT overwrite populated
+  source-owned fields for either direction.
 - For cheque settlements, Reinsurance stores the cheque/payment reference on the
-  operational payment (for example `reference = CHQ-001`). Accounting confirms
-  clearance/completion using confirmation date and notes, and does not ask the
-  accountant to re-enter `CHQ-001`.
+  operational payment when known (for example `reference = CHQ-001`).
+  Accounting confirms clearance/completion using confirmation date and notes,
+  and does not ask the accountant to re-enter `CHQ-001`.
 - For bank transfers, mobile money and cash, Accounting may add missing
   confirmation evidence only when the operational payment did not already carry
   a reference.
@@ -734,8 +743,8 @@ examples, not hardcoded universal journals.
 | `CREDIT_NOTE_ISSUED`              | Issued `PlacementNote`         | Official placement credit note issue time        | Broker owes premium share to Reinsurer           | Unaffected                     | Increases Reinsurer payable    | Unaffected                                                          | DR Premium Clearing or Expense / CR Reinsurer Payable                      | Yes          |
 | `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Issued endorsement debit note  | Official endorsement debit note issue time       | Additional premium due from Cedant               | Increases Cedant receivable    | Unaffected                     | Unaffected                                                          | DR Cedant Premium Receivable / CR Endorsement Premium                      | Yes          |
 | `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Issued endorsement credit note | Official endorsement credit note issue time      | Return premium / payable adjustment to Reinsurer | Unaffected                     | Increases Reinsurer payable    | Unaffected                                                          | DR Return Premium or Clearing / CR Reinsurer Payable                       | Yes          |
-| `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment` receipt row | User records completed inbound bank/cash receipt | Cedant payment clears receivable                 | Decreases Cedant receivable    | Unaffected                     | Increases bank/cash                                                 | DR Bank/Cash / CR Cedant Premium Receivable                                | Yes          |
-| `PAYMENT_REVERSED`                | Reversal `PlacementPayment`    | Reversal row creation time                       | Premium receipt reversal                         | Re-increases Cedant receivable | Unaffected                     | Decreases bank/cash                                                 | DR Cedant Premium Receivable / CR Bank/Cash                                | Yes          |
+| `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment` receipt row | Accounting confirmation time (`bankConfirmedAt`) | Cedant payment clears receivable                 | Decreases Cedant receivable    | Unaffected                     | Increases bank/cash only for cash-affecting settlement methods      | DR Bank/Cash or tenant-configured clearing / CR Cedant Premium Receivable  | Yes          |
+| `PAYMENT_REVERSED`                | Reversal `PlacementPayment`    | Reversal row creation time                       | Premium receipt reversal                         | Re-increases Cedant receivable | Unaffected                     | Decreases bank/cash only when reversing a cash-affecting receipt    | DR Cedant Premium Receivable / CR Bank/Cash or tenant-configured clearing  | Yes          |
 | `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment` row         | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer settlement                   | Unaffected                     | Decreases Reinsurer payable    | Decreases bank/cash only for cash-affecting settlement methods      | DR Reinsurer Payable / CR Bank/Cash or tenant-configured non-cash clearing | Yes          |
 | `REINSURER_DISBURSEMENT_REVERSED` | Reversal `PlacementPayment`    | Reversal row creation time                       | Reinsurer disbursement reversal                  | Unaffected                     | Re-increases Reinsurer payable | Increases bank/cash only when reversing a cash-affecting settlement | DR Bank/Cash or tenant-configured clearing / CR Reinsurer Payable          | Yes          |
 

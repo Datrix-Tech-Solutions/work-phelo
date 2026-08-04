@@ -15,6 +15,9 @@ export interface ConfirmReinsurerDisbursementBankPaymentPayload extends ConfirmB
 }
 
 function sourceDescription(payment: PlacementPayment) {
+  if (payment.type === 'PREMIUM_RECEIVED') {
+    return 'Cedant premium receipt';
+  }
   if (payment.endorsementClosing) {
     return `Endorsement closing ${payment.endorsementClosing.closingNumber}`;
   }
@@ -60,7 +63,10 @@ export function mapReinsurancePaymentToBankConfirmationWorkItem(
     allocation?.obligationCurrency ??
     payment.closing?.currency ??
     payment.endorsementClosing?.currency ??
+    payment.placement?.currency ??
     payment.currency;
+  const settlementMethod = payment.settlementMethod ?? null;
+  const settlementCurrency = payment.settlementCurrency ?? null;
 
   return {
     id: `REINSURANCE:${payment.id}`,
@@ -68,8 +74,8 @@ export function mapReinsurancePaymentToBankConfirmationWorkItem(
     sourceRecordId: payment.id,
     sourceParentId: payment.placementId,
     sourceReference: payment.settlementReference ?? payment.reference ?? payment.id,
-    transactionType: 'REINSURER_DISBURSEMENT',
-    direction: 'OUTBOUND',
+    transactionType: payment.type,
+    direction: payment.direction,
     counterpartyId: payment.counterpartyId,
     sourceDescription: sourceDescription(payment),
     sourceDetailUrl: sourceDetailUrl(payment),
@@ -88,11 +94,13 @@ export function mapReinsurancePaymentToBankConfirmationWorkItem(
       endorsementReference: payment.endorsementClosing?.endorsement?.endorsementNumber ?? null,
       closingReference:
         payment.endorsementClosing?.closingNumber ?? payment.closing?.closingNumber ?? null,
-      reinsurerName: payment.counterparty.name,
+      counterpartyName: payment.counterparty.name,
+      reinsurerName: payment.type === 'REINSURER_DISBURSEMENT' ? payment.counterparty.name : null,
+      cedantName: payment.type === 'PREMIUM_RECEIVED' ? payment.counterparty.name : null,
       operationalPaymentAmount: payment.amount,
       operationalPaymentCurrency: payment.currency,
-      settlementMethod: payment.settlementMethod ?? 'BANK_TRANSFER',
-      settlementCurrency: payment.settlementCurrency ?? payment.currency,
+      settlementMethod,
+      settlementCurrency,
       obligationCurrency,
       cedantPremiumPaymentCurrency: null,
       cedantPaymentFxRate: allocation?.agreedExchangeRate ?? payment.agreedExchangeRate,

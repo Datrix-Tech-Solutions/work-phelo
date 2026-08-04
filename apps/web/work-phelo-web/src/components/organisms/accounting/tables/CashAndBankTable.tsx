@@ -37,7 +37,7 @@ export function CashAndBankTable() {
 
       addToast({
         type: 'success',
-        message: 'Bank payment confirmed and sent to Accounting.',
+        message: 'Payment financially confirmed and sent to Accounting.',
       });
     } catch (error) {
       addToast({

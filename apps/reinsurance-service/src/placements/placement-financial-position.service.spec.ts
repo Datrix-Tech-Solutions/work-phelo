@@ -116,7 +116,7 @@ describe('PlacementFinancialPositionService', () => {
     ]);
   });
 
-  it('subtracts only active non-reversed premium receipts from cedant outstanding', async () => {
+  it('subtracts only bank-confirmed non-reversed premium receipts from cedant outstanding', async () => {
     tx.placementPayment.findMany.mockResolvedValue([
       {
         id: 'payment-active',
@@ -124,7 +124,7 @@ describe('PlacementFinancialPositionService', () => {
         type: PlacementPaymentType.PREMIUM_RECEIVED,
         amount: new Prisma.Decimal('70000.00'),
         currency: 'GHS',
-        status: PlacementPaymentStatus.RECORDED,
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
         reversalOfPaymentId: null,
       },
       {
@@ -142,7 +142,7 @@ describe('PlacementFinancialPositionService', () => {
         type: PlacementPaymentType.PREMIUM_RECEIVED,
         amount: new Prisma.Decimal('-30000.00'),
         currency: 'GHS',
-        status: PlacementPaymentStatus.RECORDED,
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
         reversalOfPaymentId: 'payment-reversed',
       },
     ]);
@@ -335,7 +335,7 @@ describe('PlacementFinancialPositionService', () => {
         type: PlacementPaymentType.PREMIUM_RECEIVED,
         amount: new Prisma.Decimal('100000.00'),
         currency: 'GHS',
-        status: PlacementPaymentStatus.RECORDED,
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
         reversalOfPaymentId: null,
       },
     ]);

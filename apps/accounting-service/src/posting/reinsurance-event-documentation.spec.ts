@@ -29,10 +29,8 @@ describe('Reinsurance accounting event documentation', () => {
   });
 
   it('documents the current cash recognition boundaries for receipts and disbursements', () => {
-    expect(spec).toMatch(
-      /The user records an already\s+completed bank\/cash receipt/,
-    );
-    expect(spec).toContain('User records completed inbound bank/cash receipt');
+    expect(spec).toMatch(/No Accounting outbox event is created at that point/);
+    expect(spec).toContain('Cedant payment clears receivable');
     expect(spec).toContain('Accounting confirmation time (`bankConfirmedAt`)');
   });
 });

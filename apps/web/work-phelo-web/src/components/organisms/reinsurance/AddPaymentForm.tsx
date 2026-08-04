@@ -131,6 +131,8 @@ export default function AddPaymentForm({
           currency: placementCurrency,
           paymentDate: new Date(resolvedDate).toISOString(),
           reference,
+          settlementMethod: values.paymentType === 'cheque' ? 'CHEQUE' : 'BANK_TRANSFER',
+          settlementCurrency: placementCurrency,
           notes: notesStr,
         });
       });

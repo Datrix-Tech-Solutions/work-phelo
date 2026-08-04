@@ -100,9 +100,10 @@ const paymentEventPlacementSelect = {
   policyNumber: true,
   title: true,
   cedantId: true,
+  currency: true,
 } satisfies Prisma.PlacementSelect;
 
-const REINSURER_DISBURSEMENT_LIFECYCLE: Readonly<
+const FINANCIALLY_CONFIRMABLE_PAYMENT_LIFECYCLE: Readonly<
   Record<PlacementPaymentStatus, readonly PlacementPaymentStatus[]>
 > = {
   [PlacementPaymentStatus.RECORDED]: [
@@ -158,8 +159,16 @@ export class PlacementPaymentsService {
     return this.prisma.placementPayment.findMany({
       where: {
         tenantId,
-        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
-        direction: PlacementPaymentDirection.OUTBOUND,
+        OR: [
+          {
+            type: PlacementPaymentType.PREMIUM_RECEIVED,
+            direction: PlacementPaymentDirection.INBOUND,
+          },
+          {
+            type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+            direction: PlacementPaymentDirection.OUTBOUND,
+          },
+        ],
         status: PlacementPaymentStatus.RECORDED,
         reversalOfPaymentId: null,
         placement: { archivedAt: null },
@@ -208,15 +217,6 @@ export class PlacementPaymentsService {
         'Placement currency is required before recording payment',
       );
     }
-    if (
-      dto.type !== PlacementPaymentType.REINSURER_DISBURSEMENT &&
-      currency !== placement.currency
-    ) {
-      throw new BadRequestException(
-        'Payment currency must match placement currency',
-      );
-    }
-
     const counterparty = await this.prisma.counterparty.findFirst({
       where: {
         id: dto.counterpartyId,
@@ -272,17 +272,11 @@ export class PlacementPaymentsService {
           settlementCurrency: this.cleanOptional(dto.settlementCurrency)
             ? this.cleanCurrency(dto.settlementCurrency as string)
             : null,
-          bankReference:
-            dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT
-              ? null
-              : this.cleanOptional(dto.bankReference),
+          bankReference: null,
           bankConfirmedAt: null,
           bankConfirmedByUserId: null,
           agreedExchangeRate: dto.agreedExchangeRate ?? null,
-          bankChargeAmount:
-            dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT
-              ? 0
-              : (dto.bankChargeAmount ?? 0),
+          bankChargeAmount: 0,
           withholdingTaxAmount:
             dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT
               ? 0
@@ -301,16 +295,6 @@ export class PlacementPaymentsService {
         include: paymentInclude,
       });
 
-      if (dto.type === PlacementPaymentType.PREMIUM_RECEIVED) {
-        const event = this.financialEvents.preparePremiumPaymentReceived(user, {
-          ...payment,
-          placement,
-        });
-        if (event) {
-          await this.financialEvents.enqueuePreparedEvent(tx, event);
-        }
-      }
-
       return payment;
     });
   }
@@ -323,23 +307,19 @@ export class PlacementPaymentsService {
   ): Promise<PlacementPaymentRecord> {
     const payment = await this.findOne(user.tenantId, placementId, paymentId);
 
-    if (
-      payment.type !== PlacementPaymentType.REINSURER_DISBURSEMENT ||
-      payment.direction !== PlacementPaymentDirection.OUTBOUND ||
-      payment.reversalOfPaymentId
-    ) {
+    if (!this.isConfirmablePayment(payment)) {
       throw new BadRequestException(
-        'Only original recorded reinsurer disbursements can be bank-confirmed',
+        'Only original recorded inbound premium receipts or outbound reinsurer disbursements can be financially confirmed',
       );
     }
     if (payment.status === PlacementPaymentStatus.BANK_CONFIRMED) {
       throw new ConflictException(
-        'Reinsurer disbursement has already been bank-confirmed',
+        'Payment has already been financially confirmed',
       );
     }
     if (payment.status !== PlacementPaymentStatus.RECORDED) {
       throw new BadRequestException(
-        `Cannot bank-confirm a reinsurer disbursement from ${payment.status}`,
+        `Cannot financially confirm a payment from ${payment.status}`,
       );
     }
 
@@ -357,7 +337,10 @@ export class PlacementPaymentsService {
       payment,
       dto.settlementCurrency,
     );
-    const bankReference = this.cleanOptional(dto.bankReference);
+    const bankReference = this.resolveConfirmationBankReference(
+      payment,
+      dto.bankReference,
+    );
     const confirmedExchangeRate =
       dto.confirmedExchangeRate ?? dto.agreedExchangeRate ?? undefined;
     this.assertConfirmationFacts({
@@ -396,7 +379,7 @@ export class PlacementPaymentsService {
 
       if (updateResult.count !== 1) {
         throw new ConflictException(
-          'Reinsurer disbursement could not be bank-confirmed because its status changed',
+          'Payment could not be financially confirmed because its status changed',
         );
       }
 
@@ -408,13 +391,10 @@ export class PlacementPaymentsService {
         throw new NotFoundException('Placement payment not found');
       }
 
-      const event = this.financialEvents.prepareReinsurerDisbursementRecorded(
-        user,
-        {
-          ...confirmed,
-          placement,
-        },
-      );
+      const event = this.prepareConfirmationEvent(user, {
+        ...confirmed,
+        placement,
+      });
       if (event) {
         await this.financialEvents.enqueuePreparedEvent(tx, event);
       }
@@ -596,16 +576,27 @@ export class PlacementPaymentsService {
   }
 
   private assertCanReversePayment(payment: PlacementPaymentRecord): void {
-    if (payment.type !== PlacementPaymentType.REINSURER_DISBURSEMENT) {
-      return;
-    }
-
-    const allowedNext = REINSURER_DISBURSEMENT_LIFECYCLE[payment.status] ?? [];
+    const allowedNext =
+      FINANCIALLY_CONFIRMABLE_PAYMENT_LIFECYCLE[payment.status] ?? [];
     if (!allowedNext.includes(PlacementPaymentStatus.REVERSED)) {
       throw new BadRequestException(
-        `Cannot reverse a reinsurer disbursement from ${payment.status}. Accounting must confirm the bank transaction before reversal is available.`,
+        `Cannot reverse a payment from ${payment.status}. Accounting must financially confirm the payment before reversal is available.`,
       );
     }
+  }
+
+  private isConfirmablePayment(payment: PlacementPaymentRecord): boolean {
+    if (payment.reversalOfPaymentId) return false;
+    if (
+      payment.type === PlacementPaymentType.PREMIUM_RECEIVED &&
+      payment.direction === PlacementPaymentDirection.INBOUND
+    ) {
+      return true;
+    }
+    return (
+      payment.type === PlacementPaymentType.REINSURER_DISBURSEMENT &&
+      payment.direction === PlacementPaymentDirection.OUTBOUND
+    );
   }
 
   private assertConfirmationFacts(input: {
@@ -677,6 +668,22 @@ export class PlacementPaymentsService {
     return this.cleanCurrency(requested ?? payment.currency);
   }
 
+  private resolveConfirmationBankReference(
+    payment: PlacementPaymentRecord,
+    requested: string | undefined,
+  ): string | null {
+    if (payment.bankReference) {
+      const cleanedRequested = this.cleanOptional(requested);
+      if (cleanedRequested && cleanedRequested !== payment.bankReference) {
+        throw new BadRequestException(
+          'Confirmation cannot change the source payment reference',
+        );
+      }
+      return payment.bankReference;
+    }
+    return this.cleanOptional(requested);
+  }
+
   private assertSettlementFxFacts(
     payment: PlacementPaymentRecord,
     settlementCurrency: string,
@@ -687,6 +694,19 @@ export class PlacementPaymentsService {
     );
     const hasPaymentFx = Boolean(confirmedExchangeRate ?? persistedPaymentRate);
     const allocations = payment.allocations ?? [];
+    const placementCurrency = this.cleanOptional(
+      payment.placement?.currency ?? undefined,
+    );
+    if (
+      placementCurrency &&
+      payment.type === PlacementPaymentType.PREMIUM_RECEIVED &&
+      this.cleanCurrency(placementCurrency) !== settlementCurrency &&
+      !hasPaymentFx
+    ) {
+      throw new BadRequestException(
+        'Cross-currency premium receipt confirmation requires a persisted agreed FX rate',
+      );
+    }
 
     if (allocations.length > 0) {
       const missingFxAllocation = allocations.find((allocation) => {
@@ -745,9 +765,9 @@ export class PlacementPaymentsService {
       placementId,
       new Date(dto.paymentDate),
     );
-    if (position.isMultiCurrency || position.currency !== currency) {
+    if (position.isMultiCurrency) {
       throw new BadRequestException(
-        'Financial position currency must match the payment currency',
+        'Premium received cannot be recorded against a multi-currency financial position',
       );
     }
     if (position.cedant.currentObligation <= 0) {
@@ -756,9 +776,42 @@ export class PlacementPaymentsService {
       );
     }
     this.assertDoesNotExceedOutstanding(
-      dto.amount,
+      this.paymentAmountInPositionCurrency(
+        dto.amount,
+        currency,
+        position.currency ?? currency,
+        dto.agreedExchangeRate,
+      ),
       position.cedant.outstanding,
       'Premium received exceeds the outstanding current effective premium',
+    );
+  }
+
+  private paymentAmountInPositionCurrency(
+    amount: number,
+    paymentCurrency: string,
+    positionCurrency: string,
+    exchangeRate: number | undefined,
+  ): number {
+    if (paymentCurrency === positionCurrency) return amount;
+    if (!exchangeRate) return 0;
+    return amount / exchangeRate;
+  }
+
+  private prepareConfirmationEvent(
+    user: RequestUser,
+    payment: PlacementPaymentRecord & {
+      placement: NonNullable<PlacementPaymentRecord['placement']> & {
+        cedantId: string;
+      };
+    },
+  ) {
+    if (payment.type === PlacementPaymentType.PREMIUM_RECEIVED) {
+      return this.financialEvents.preparePremiumPaymentReceived(user, payment);
+    }
+    return this.financialEvents.prepareReinsurerDisbursementRecorded(
+      user,
+      payment,
     );
   }
 

@@ -618,10 +618,22 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     );
   });
 
-  it('prepares a PREMIUM_PAYMENT_RECEIVED event from the recorded payment row', () => {
+  it('prepares a PREMIUM_PAYMENT_RECEIVED event from the bank-confirmed payment row', () => {
     const { actor, service } = makeService();
+    const confirmedPayment = {
+      ...payment,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      bankConfirmedAt: new Date('2026-06-06T09:15:00.000Z'),
+      bankReference: 'BANK-CONF-001',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'GHS',
+      bankChargeAmount: new Prisma.Decimal('15.00'),
+    };
 
-    const event = service.preparePremiumPaymentReceived(actor, payment);
+    const event = service.preparePremiumPaymentReceived(
+      actor,
+      confirmedPayment,
+    );
 
     expect(event).toMatchObject({
       tenantId: 'tenant-1',
@@ -630,15 +642,16 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       sourceRecordId: 'payment-1',
       sourceDocumentId: 'payment-1',
       idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
-      occurredAt: '2026-06-05T10:30:00.000Z',
+      occurredAt: '2026-06-06T09:15:00.000Z',
       currency: 'GHS',
       payload: {
-        transactionDate: '2026-06-05T10:30:00.000Z',
+        transactionDate: '2026-06-06T09:15:00.000Z',
         references: {
           placementId: 'placement-1',
           placementReference: 'FAC-2026-001',
           policyNumber: 'POL-001',
           paymentId: 'payment-1',
+          paymentReference: 'BANK-001',
         },
         counterparty: {
           id: 'cedant-1',
@@ -648,8 +661,17 @@ describe('ReinsuranceFinancialEventPublisher', () => {
         },
         amounts: {
           paymentAmount: 1000,
+          bankCharges: 15,
           signedCashImpact: 1000,
           signedReceivableImpact: -1000,
+          cashAffectingSettlement: true,
+        },
+        payment: {
+          status: PlacementPaymentStatus.BANK_CONFIRMED,
+          bankConfirmedAt: '2026-06-06T09:15:00.000Z',
+          bankReference: 'BANK-CONF-001',
+          settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+          settlementCurrency: 'GHS',
         },
         allocation: {
           model: 'PLACEMENT_LEVEL_RECEIVABLE',

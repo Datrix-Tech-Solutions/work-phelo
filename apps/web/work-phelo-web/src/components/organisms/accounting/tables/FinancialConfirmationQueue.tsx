@@ -13,10 +13,21 @@ import type {
 } from '@/types/accountingIntegration';
 
 const PAGE_SIZE = 10;
+const SETTLEMENT_METHODS: SettlementMethod[] = [
+  'BANK_TRANSFER',
+  'CHEQUE',
+  'CASH',
+  'MOBILE_MONEY',
+  'INTERNAL_OFFSET',
+  'JOURNAL',
+  'OTHER',
+];
 
 interface ConfirmationForm {
   bankConfirmedAt: string;
   bankReference: string;
+  settlementMethod: SettlementMethod;
+  settlementCurrency: string;
   confirmedExchangeRate: string;
   bankChargeAmount: string;
   notes: string;
@@ -25,6 +36,8 @@ interface ConfirmationForm {
 const INITIAL_FORM: ConfirmationForm = {
   bankConfirmedAt: '',
   bankReference: '',
+  settlementMethod: 'BANK_TRANSFER',
+  settlementCurrency: '',
   confirmedExchangeRate: '',
   bankChargeAmount: '',
   notes: '',
@@ -86,14 +99,15 @@ function methodLabel(method: SettlementMethod) {
   return method.replaceAll('_', ' ');
 }
 
-function confirmationTitle(method: SettlementMethod) {
+function confirmationTitle(method: SettlementMethod, direction?: string) {
+  const inbound = direction === 'INBOUND';
   switch (method) {
     case 'CHEQUE':
-      return 'Confirm cheque clearance';
+      return inbound ? 'Confirm cheque receipt' : 'Confirm Reinsurer cheque payment';
     case 'CASH':
-      return 'Confirm cash receipt';
+      return inbound ? 'Confirm cash receipt' : 'Confirm Reinsurer cash payment';
     case 'MOBILE_MONEY':
-      return 'Confirm mobile-money transaction';
+      return inbound ? 'Confirm mobile-money receipt' : 'Confirm Reinsurer mobile-money payment';
     case 'INTERNAL_OFFSET':
       return 'Confirm internal offset';
     case 'JOURNAL':
@@ -102,7 +116,7 @@ function confirmationTitle(method: SettlementMethod) {
       return 'Confirm other settlement';
     case 'BANK_TRANSFER':
     default:
-      return 'Confirm bank transfer';
+      return inbound ? 'Confirm Cedant bank receipt' : 'Confirm Reinsurer bank transfer';
   }
 }
 
@@ -142,9 +156,16 @@ export function FinancialConfirmationQueue({
   const [page, setPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState<AccountingBankConfirmationWorkItem | null>(null);
   const [form, setForm] = useState<ConfirmationForm>(INITIAL_FORM);
-  const selectedSettlementMethod =
-    selectedItem?.businessSnapshot?.settlementMethod ?? 'BANK_TRANSFER';
+  const sourceSettlementMethod = selectedItem?.businessSnapshot?.settlementMethod ?? null;
+  const sourceSettlementCurrency = selectedItem?.businessSnapshot?.settlementCurrency ?? null;
+  const selectedSettlementMethod = sourceSettlementMethod ?? form.settlementMethod;
+  const selectedSettlementCurrency =
+    sourceSettlementCurrency ?? form.settlementCurrency.trim().toUpperCase();
   const selectedHasOperationalReference = Boolean(selectedItem?.operationalReference);
+  const selectedConfirmationTitle = confirmationTitle(
+    selectedSettlementMethod,
+    selectedItem?.direction,
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -171,6 +192,8 @@ export function FinancialConfirmationQueue({
     setForm({
       ...INITIAL_FORM,
       bankConfirmedAt: defaultDateTimeLocal(),
+      settlementMethod: item.businessSnapshot?.settlementMethod ?? 'BANK_TRANSFER',
+      settlementCurrency: item.businessSnapshot?.settlementCurrency ?? item.currency,
     });
   };
 
@@ -185,7 +208,7 @@ export function FinancialConfirmationQueue({
   };
   const updateFormFromInput =
     (key: keyof ConfirmationForm) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       updateForm(key, event.target.value);
     };
 
@@ -195,6 +218,10 @@ export function FinancialConfirmationQueue({
     await onConfirm(selectedItem, {
       bankConfirmedAt: new Date(form.bankConfirmedAt).toISOString(),
       bankReference: form.bankReference.trim() || undefined,
+      settlementMethod: sourceSettlementMethod ? undefined : form.settlementMethod,
+      settlementCurrency: sourceSettlementCurrency
+        ? undefined
+        : selectedSettlementCurrency || selectedItem.currency,
       confirmedExchangeRate: toOptionalNumber(form.confirmedExchangeRate),
       bankChargeAmount: toOptionalNumber(form.bankChargeAmount),
       notes: form.notes.trim() || undefined,
@@ -318,7 +345,7 @@ export function FinancialConfirmationQueue({
       <Modal
         isOpen={!!selectedItem}
         onClose={closeConfirmModal}
-        title={confirmationTitle(selectedSettlementMethod)}
+        title={selectedConfirmationTitle}
         description="Capture the Accounting confirmation facts for this source-module payment."
         width="max-w-2xl"
         footer={
@@ -332,7 +359,7 @@ export function FinancialConfirmationQueue({
               isLoading={isConfirming}
               loadingText="Confirming..."
             >
-              {confirmationTitle(selectedSettlementMethod)}
+              {selectedConfirmationTitle}
             </Button>
           </>
         }
@@ -396,7 +423,9 @@ export function FinancialConfirmationQueue({
                     Settlement Method
                   </div>
                   <div className="font-medium text-slate-900">
-                    {methodLabel(selectedSettlementMethod)}
+                    {sourceSettlementMethod
+                      ? methodLabel(sourceSettlementMethod)
+                      : 'Missing - Accounting will complete'}
                   </div>
                 </div>
                 <div>
@@ -404,7 +433,7 @@ export function FinancialConfirmationQueue({
                     Settlement Currency
                   </div>
                   <div className="font-medium text-slate-900">
-                    {fieldValue(selectedItem.businessSnapshot?.settlementCurrency)}
+                    {fieldValue(sourceSettlementCurrency, 'Missing - Accounting will complete')}
                   </div>
                 </div>
                 <div>
@@ -448,6 +477,32 @@ export function FinancialConfirmationQueue({
                 onChange={updateFormFromInput('bankConfirmedAt')}
                 required
               />
+              {!sourceSettlementMethod && (
+                <label className="space-y-1">
+                  <span className="block text-sm font-medium text-gray-700">Settlement Method</span>
+                  <select
+                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={form.settlementMethod}
+                    onChange={updateFormFromInput('settlementMethod')}
+                    required
+                  >
+                    {SETTLEMENT_METHODS.map((method) => (
+                      <option key={method} value={method}>
+                        {methodLabel(method)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {!sourceSettlementCurrency && (
+                <Input
+                  label="Settlement Currency"
+                  value={form.settlementCurrency}
+                  onChange={updateFormFromInput('settlementCurrency')}
+                  maxLength={3}
+                  required
+                />
+              )}
               {!selectedHasOperationalReference && (
                 <Input
                   label={confirmationReferenceLabel(selectedSettlementMethod)}

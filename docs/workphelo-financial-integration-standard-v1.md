@@ -182,14 +182,14 @@ reuse the same UI/container patterns:
 - read-only business snapshot facts from the source module, including source
   references, obligation currency, contractual tax/levy facts and persisted FX
   basis where available
-- confirmation metadata such as confirmation date, settlement method,
-  settlement currency, settlement reference, confirmed FX, bank charges and
-  notes
+- confirmation metadata such as confirmation date, settlement method when
+  missing, settlement currency when missing, settlement reference when missing,
+  confirmed FX, bank charges and notes
 
-Reinsurance reinsurer disbursement bank confirmation is the first supported
-source-module adapter. Payroll, Inventory, CRM, Subscription, and future modules
-SHOULD add their own adapters rather than embedding module-specific database
-knowledge inside Accounting.
+Reinsurance inbound premium receipt and outbound reinsurer disbursement
+confirmation are the first supported source-module adapters. Payroll,
+Inventory, CRM, Subscription, and future modules SHOULD add their own adapters
+rather than embedding module-specific database knowledge inside Accounting.
 
 Confirmation workflows MUST NOT fetch live FX rates. If a source-module
 settlement crosses currencies, the event MUST use a persisted agreed FX fact or
@@ -203,13 +203,21 @@ cash movement or a non-cash settlement. `BANK_TRANSFER`, `CHEQUE`, `CASH` and
 `MOBILE_MONEY` MAY carry bank/cash impact. `INTERNAL_OFFSET` and `JOURNAL` MUST
 not be represented as bank/cash movements.
 
-Operational modules MUST create and own the source transaction facts. Accounting
-confirmation MUST NOT recreate or overwrite source-owned values such as amount,
-currency, counterparty, settlement method, payment reference, cheque number,
-mobile-money reference, source closing or contractual tax/levy facts. Accounting
-MAY add confirmation-only facts such as clearing/completion date, confirmation
-evidence, bank charges, confirmed FX where no persisted operational FX exists,
-and posting/account treatment.
+Operational modules MUST create and own the source transaction facts. Populated
+source values are authoritative and read-only during Accounting confirmation.
+Accounting confirmation MUST NOT recreate or overwrite source-owned values such
+as amount, currency, counterparty, settlement method, payment reference, cheque
+number, mobile-money reference, source closing or contractual tax/levy facts.
+Accounting MAY add confirmation-only facts such as clearing/completion date,
+missing method/reference/currency details, confirmation evidence, bank charges,
+confirmed FX where no persisted operational FX exists, and posting/account
+treatment.
+
+For compatibility, a payment status named `BANK_CONFIRMED` MAY mean
+"financially confirmed by Accounting" even when the settlement method is cash,
+internal offset or journal. Implementations SHOULD document the method-specific
+business meaning rather than overloading source-module users with duplicate
+status names.
 
 ---
 

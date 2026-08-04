@@ -879,12 +879,7 @@ export class ReinsuranceAccountingReadinessService {
         tenantId: user.tenantId,
         type: PlacementPaymentType.PREMIUM_RECEIVED,
         direction: PlacementPaymentDirection.INBOUND,
-        status: {
-          in: [
-            PlacementPaymentStatus.RECORDED,
-            PlacementPaymentStatus.REVERSED,
-          ],
-        },
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
         reversalOfPaymentId: null,
         placement: { archivedAt: null },
       },

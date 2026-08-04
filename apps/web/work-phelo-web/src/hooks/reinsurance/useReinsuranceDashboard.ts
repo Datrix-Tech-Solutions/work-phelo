@@ -247,7 +247,7 @@ export function useReinsurancePremiumPaidPct({
 
       const payments = paymentQueries[i]?.data ?? [];
       const paid = payments
-        .filter((p) => p.status === 'RECORDED')
+        .filter((p) => p.status === 'BANK_CONFIRMED')
         .reduce(
           (sum, p) =>
             sum + convertToTarget(parseFloat(p.amount), p.currency, currencies, targetRate),
@@ -698,7 +698,7 @@ export function useReinsuranceFinancialsByCurrency({ period }: { period: Period 
 
       const payments = (paymentQueries[i]?.data ?? []) as PlacementPayment[];
       const premiumPaid = payments
-        .filter((pmt) => pmt.type === 'PREMIUM_RECEIVED' && pmt.status === 'RECORDED')
+        .filter((pmt) => pmt.type === 'PREMIUM_RECEIVED' && pmt.status === 'BANK_CONFIRMED')
         .reduce((sum, pmt) => sum + parseFloat(pmt.amount), 0);
       const outstanding = Math.max(0, netPremiumFor(f) - premiumPaid);
       if (outstanding > 0) {

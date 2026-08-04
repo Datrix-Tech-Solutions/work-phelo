@@ -14,6 +14,8 @@ export interface AccountingConfirmationBusinessSnapshot {
   placementReference?: string | null;
   endorsementReference?: string | null;
   closingReference?: string | null;
+  counterpartyName?: string | null;
+  cedantName?: string | null;
   reinsurerName?: string | null;
   operationalPaymentAmount?: string | number | null;
   operationalPaymentCurrency?: string | null;
