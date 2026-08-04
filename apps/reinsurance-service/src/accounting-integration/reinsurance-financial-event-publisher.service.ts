@@ -994,48 +994,45 @@ export class ReinsuranceFinancialEventPublisher {
     }
 
     const allocations = payment.allocations ?? [];
-    if (allocations.length === 0) {
-      exclusionReasons.push('no allocations');
-    } else {
-      const paymentCurrency = payment.currency?.trim().toUpperCase();
-      let allocatedTotal = 0;
-      for (const allocation of allocations) {
-        allocatedTotal = this.roundMoney(
-          allocatedTotal + this.decimalNumber(allocation.allocatedAmount),
-        );
-        if (!allocation.note) {
-          exclusionReasons.push('missing credit note');
-          continue;
-        }
-        if (
-          allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
-          allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
-        ) {
-          exclusionReasons.push('unsupported obligation type');
-        }
-        if (
-          allocation.note.status !== undefined &&
-          allocation.note.status !== PlacementNoteStatus.ISSUED
-        ) {
-          exclusionReasons.push('missing credit note');
-        }
-        if (
-          allocation.note.direction !== undefined &&
-          allocation.note.direction !==
-            PlacementNoteDirection.BROKER_TO_REINSURER
-        ) {
-          exclusionReasons.push('unsupported obligation type');
-        }
-        if (
-          paymentCurrency &&
-          allocation.obligationCurrency.trim().toUpperCase() !==
-            paymentCurrency &&
-          !allocation.agreedExchangeRate &&
-          !payment.agreedExchangeRate
-        ) {
-          exclusionReasons.push('missing agreed FX rate');
-        }
+    const paymentCurrency = payment.currency?.trim().toUpperCase();
+    let allocatedTotal = 0;
+    for (const allocation of allocations) {
+      allocatedTotal = this.roundMoney(
+        allocatedTotal + this.decimalNumber(allocation.allocatedAmount),
+      );
+      if (!allocation.note) {
+        exclusionReasons.push('missing credit note');
+        continue;
       }
+      if (
+        allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
+        allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+      ) {
+        exclusionReasons.push('unsupported obligation type');
+      }
+      if (
+        allocation.note.status !== undefined &&
+        allocation.note.status !== PlacementNoteStatus.ISSUED
+      ) {
+        exclusionReasons.push('missing credit note');
+      }
+      if (
+        allocation.note.direction !== undefined &&
+        allocation.note.direction !== PlacementNoteDirection.BROKER_TO_REINSURER
+      ) {
+        exclusionReasons.push('unsupported obligation type');
+      }
+      if (
+        paymentCurrency &&
+        allocation.obligationCurrency.trim().toUpperCase() !==
+          paymentCurrency &&
+        !allocation.agreedExchangeRate &&
+        !payment.agreedExchangeRate
+      ) {
+        exclusionReasons.push('missing agreed FX rate');
+      }
+    }
+    if (allocations.length > 0) {
       const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
       if (this.roundMoney(allocatedTotal) !== this.roundMoney(paymentAmount)) {
         exclusionReasons.push('incomplete allocation');
@@ -1441,36 +1438,34 @@ export class ReinsuranceFinancialEventPublisher {
     }
 
     const allocations = payment.allocations ?? [];
-    if (allocations.length === 0) {
-      exclusionReasons.push('no allocations');
-    } else {
-      const paymentCurrency = payment.currency?.trim().toUpperCase();
-      let allocatedTotal = 0;
-      for (const allocation of allocations) {
-        allocatedTotal = this.roundMoney(
-          allocatedTotal +
-            Math.abs(this.decimalNumber(allocation.allocatedAmount)),
-        );
-        if (!allocation.note) {
-          exclusionReasons.push('missing credit note');
-          continue;
-        }
-        if (
-          allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
-          allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
-        ) {
-          exclusionReasons.push('unsupported obligation type');
-        }
-        if (
-          paymentCurrency &&
-          allocation.obligationCurrency.trim().toUpperCase() !==
-            paymentCurrency &&
-          !allocation.agreedExchangeRate &&
-          !payment.agreedExchangeRate
-        ) {
-          exclusionReasons.push('missing agreed FX rate');
-        }
+    const paymentCurrency = payment.currency?.trim().toUpperCase();
+    let allocatedTotal = 0;
+    for (const allocation of allocations) {
+      allocatedTotal = this.roundMoney(
+        allocatedTotal +
+          Math.abs(this.decimalNumber(allocation.allocatedAmount)),
+      );
+      if (!allocation.note) {
+        exclusionReasons.push('missing credit note');
+        continue;
       }
+      if (
+        allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
+        allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+      ) {
+        exclusionReasons.push('unsupported obligation type');
+      }
+      if (
+        paymentCurrency &&
+        allocation.obligationCurrency.trim().toUpperCase() !==
+          paymentCurrency &&
+        !allocation.agreedExchangeRate &&
+        !payment.agreedExchangeRate
+      ) {
+        exclusionReasons.push('missing agreed FX rate');
+      }
+    }
+    if (allocations.length > 0) {
       const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
       if (this.roundMoney(allocatedTotal) !== this.roundMoney(paymentAmount)) {
         exclusionReasons.push('incomplete allocation');

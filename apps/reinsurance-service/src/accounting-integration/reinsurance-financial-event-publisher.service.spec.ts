@@ -719,6 +719,34 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     });
   });
 
+  it('allows bank-confirmed reinsurer disbursement recognition without credit-note allocations', () => {
+    const { actor, service } = makeService();
+
+    const eligibility = service.classifyReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      allocations: [],
+    });
+
+    const event = service.prepareReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      allocations: [],
+    });
+
+    expect(eligibility.eligible).toBe(true);
+    expect(eligibility.exclusionReasons).toEqual([]);
+    expect(event?.payload).toMatchObject({
+      amounts: {
+        paymentAmount: 750,
+        allocatedAmount: 0,
+        unallocatedAmount: 750,
+      },
+      allocation: {
+        allocationCount: 0,
+      },
+      allocations: [],
+    });
+  });
+
   it('prepares REINSURER_DISBURSEMENT_RECORDED from a bank-confirmed allocation snapshot', () => {
     const { actor, service } = makeService();
 
@@ -930,7 +958,6 @@ describe('ReinsuranceFinancialEventPublisher', () => {
         'failed payment',
         'reversal row',
         'missing bank confirmation date',
-        'no allocations',
       ]),
     );
   });

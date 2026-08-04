@@ -52,3 +52,4 @@ export * from './accounting/useCustomers';
 export * from './accounting/useAccountClassifications';
 export * from './accounting/useAccountGroups';
 export * from './accounting/useJournals';
+export * from './accounting/useReinsuranceBankConfirmations';

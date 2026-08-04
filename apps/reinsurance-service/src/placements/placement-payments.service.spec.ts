@@ -114,6 +114,7 @@ describe('PlacementPaymentsService', () => {
       findFirst: PrismaMethod;
       create: PrismaMethod;
       update: PrismaMethod;
+      updateMany: PrismaMethod;
     };
     $transaction: jest.Mock;
   };
@@ -152,6 +153,7 @@ describe('PlacementPaymentsService', () => {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+        updateMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
       $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) =>
         callback(prisma),
@@ -780,6 +782,163 @@ describe('PlacementPaymentsService', () => {
       bankConfirmedAt: null,
       bankConfirmedByUserId: null,
     });
+  });
+
+  it('lists recorded reinsurer disbursements pending Accounting bank confirmation', async () => {
+    prisma.placementPayment.findMany.mockResolvedValue([
+      {
+        ...payment,
+        id: 'pending-disbursement-1',
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        direction: PlacementPaymentDirection.OUTBOUND,
+        status: PlacementPaymentStatus.RECORDED,
+      },
+    ]);
+
+    const result = await service.findPendingBankConfirmations('tenant-1');
+
+    const listArgs = firstCallArg<Prisma.PlacementPaymentFindManyArgs>(
+      prisma.placementPayment.findMany,
+    );
+    expect(listArgs.where).toMatchObject({
+      tenantId: 'tenant-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.RECORDED,
+      reversalOfPaymentId: null,
+      placement: { archivedAt: null },
+    });
+    expect(result).toHaveLength(1);
+  });
+
+  it('bank-confirms a recorded reinsurer disbursement and enqueues accounting recognition', async () => {
+    const preparedEvent = {
+      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
+      sourceRecordId: 'payment-disbursement-1',
+    };
+    const recordedDisbursement = {
+      ...payment,
+      id: 'payment-disbursement-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status: PlacementPaymentStatus.RECORDED,
+      closingId: 'closing-1',
+      participantId: 'participant-1',
+      reference: 'PAY-001',
+      notes: 'Operational settlement',
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Reliable Re',
+        registrationNumber: null,
+      },
+    };
+    const confirmedDisbursement = {
+      ...recordedDisbursement,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      bankConfirmedAt: new Date('2026-06-05T10:00:00.000Z'),
+      bankConfirmedByUserId: 'user-1',
+      bankReference: 'BANK-CONF-001',
+      agreedExchangeRate: new Prisma.Decimal('1.2'),
+      bankChargeAmount: new Prisma.Decimal('25.00'),
+      withholdingTaxAmount: new Prisma.Decimal('50.00'),
+      notes: 'Operational settlement\nBank confirmation: Statement batch 42',
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce({ id: 'placement-1' })
+      .mockResolvedValueOnce(placement);
+    prisma.placementPayment.findFirst
+      .mockResolvedValueOnce(recordedDisbursement)
+      .mockResolvedValueOnce(confirmedDisbursement);
+    prisma.placementPayment.updateMany.mockResolvedValue({ count: 1 });
+    financialEvents.prepareReinsurerDisbursementRecorded.mockReturnValue(
+      preparedEvent,
+    );
+
+    const result = await service.confirmBankPayment(
+      user,
+      'placement-1',
+      'payment-disbursement-1',
+      {
+        bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+        bankReference: 'BANK-CONF-001',
+        agreedExchangeRate: 1.2,
+        bankChargeAmount: 25,
+        withholdingTaxAmount: 50,
+        notes: 'Statement batch 42',
+      },
+    );
+
+    const updateArgs = firstCallArg<Prisma.PlacementPaymentUpdateManyArgs>(
+      prisma.placementPayment.updateMany,
+    );
+    expect(updateArgs.where).toMatchObject({
+      id: 'payment-disbursement-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      status: PlacementPaymentStatus.RECORDED,
+    });
+    expect(updateArgs.data).toMatchObject({
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      bankConfirmedByUserId: 'user-1',
+      bankReference: 'BANK-CONF-001',
+      agreedExchangeRate: 1.2,
+      bankChargeAmount: 25,
+      withholdingTaxAmount: 50,
+      notes: 'Operational settlement\nBank confirmation: Statement batch 42',
+    });
+    expect(
+      financialEvents.prepareReinsurerDisbursementRecorded,
+    ).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({
+        id: 'payment-disbursement-1',
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
+        placement,
+      }),
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      preparedEvent,
+    );
+    expect(result.status).toBe(PlacementPaymentStatus.BANK_CONFIRMED);
+  });
+
+  it.each([
+    PlacementPaymentStatus.BANK_CONFIRMED,
+    PlacementPaymentStatus.CANCELLED,
+    PlacementPaymentStatus.FAILED,
+    PlacementPaymentStatus.REVERSED,
+  ])('rejects bank confirmation from %s status', async (status) => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementPayment.findFirst.mockResolvedValue({
+      ...payment,
+      id: 'payment-disbursement-1',
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      status,
+    });
+
+    const promise = service.confirmBankPayment(
+      user,
+      'placement-1',
+      'payment-disbursement-1',
+      {
+        bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+        bankReference: 'BANK-CONF-001',
+      },
+    );
+
+    if (status === PlacementPaymentStatus.BANK_CONFIRMED) {
+      await expect(promise).rejects.toThrow(ConflictException);
+    } else {
+      await expect(promise).rejects.toThrow(BadRequestException);
+    }
+    expect(prisma.placementPayment.updateMany).not.toHaveBeenCalled();
+    expect(
+      financialEvents.prepareReinsurerDisbursementRecorded,
+    ).not.toHaveBeenCalled();
   });
 
   it('rejects reinsurer disbursements without a closing source or allocation', async () => {

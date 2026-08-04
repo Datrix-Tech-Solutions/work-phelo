@@ -18,6 +18,7 @@ import {
 } from '../../prisma/generated/client';
 import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfirmPlacementPaymentBankDto } from './dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
 
@@ -121,6 +122,23 @@ export class PlacementPaymentsService {
       where: { tenantId, placementId },
       include: paymentInclude,
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findPendingBankConfirmations(
+    tenantId: string,
+  ): Promise<PlacementPaymentRecord[]> {
+    return this.prisma.placementPayment.findMany({
+      where: {
+        tenantId,
+        type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+        direction: PlacementPaymentDirection.OUTBOUND,
+        status: PlacementPaymentStatus.RECORDED,
+        reversalOfPaymentId: null,
+        placement: { archivedAt: null },
+      },
+      include: paymentInclude,
+      orderBy: [{ paymentDate: 'desc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -263,6 +281,90 @@ export class PlacementPaymentsService {
       }
 
       return payment;
+    });
+  }
+
+  async confirmBankPayment(
+    user: RequestUser,
+    placementId: string,
+    paymentId: string,
+    dto: ConfirmPlacementPaymentBankDto,
+  ): Promise<PlacementPaymentRecord> {
+    const payment = await this.findOne(user.tenantId, placementId, paymentId);
+
+    if (
+      payment.type !== PlacementPaymentType.REINSURER_DISBURSEMENT ||
+      payment.direction !== PlacementPaymentDirection.OUTBOUND ||
+      payment.reversalOfPaymentId
+    ) {
+      throw new BadRequestException(
+        'Only original recorded reinsurer disbursements can be bank-confirmed',
+      );
+    }
+    if (payment.status === PlacementPaymentStatus.BANK_CONFIRMED) {
+      throw new ConflictException(
+        'Reinsurer disbursement has already been bank-confirmed',
+      );
+    }
+    if (payment.status !== PlacementPaymentStatus.RECORDED) {
+      throw new BadRequestException(
+        `Cannot bank-confirm a reinsurer disbursement from ${payment.status}`,
+      );
+    }
+
+    const placement = await this.prisma.placement.findFirst({
+      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
+      select: paymentEventPlacementSelect,
+    });
+    if (!placement) throw new NotFoundException('Placement not found');
+
+    return this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.placementPayment.updateMany({
+        where: {
+          id: paymentId,
+          tenantId: user.tenantId,
+          placementId,
+          status: PlacementPaymentStatus.RECORDED,
+        },
+        data: {
+          status: PlacementPaymentStatus.BANK_CONFIRMED,
+          bankConfirmedAt: new Date(dto.bankConfirmedAt),
+          bankConfirmedByUserId: user.id,
+          bankReference: this.cleanRequired(dto.bankReference),
+          agreedExchangeRate:
+            dto.agreedExchangeRate ?? payment.agreedExchangeRate,
+          bankChargeAmount: dto.bankChargeAmount ?? 0,
+          withholdingTaxAmount: dto.withholdingTaxAmount ?? 0,
+          notes: this.appendConfirmationNotes(payment.notes, dto.notes),
+        },
+      });
+
+      if (updateResult.count !== 1) {
+        throw new ConflictException(
+          'Reinsurer disbursement could not be bank-confirmed because its status changed',
+        );
+      }
+
+      const confirmed = await tx.placementPayment.findFirst({
+        where: { id: paymentId, tenantId: user.tenantId, placementId },
+        include: paymentInclude,
+      });
+      if (!confirmed) {
+        throw new NotFoundException('Placement payment not found');
+      }
+
+      const event = this.financialEvents.prepareReinsurerDisbursementRecorded(
+        user,
+        {
+          ...confirmed,
+          placement,
+        },
+      );
+      if (event) {
+        await this.financialEvents.enqueuePreparedEvent(tx, event);
+      }
+
+      return confirmed;
     });
   }
 
@@ -735,6 +837,20 @@ export class PlacementPaymentsService {
   private cleanOptional(value: string | undefined): string | null {
     const cleaned = value?.trim();
     return cleaned ? cleaned : null;
+  }
+
+  private cleanRequired(value: string): string {
+    return value.trim();
+  }
+
+  private appendConfirmationNotes(
+    existing: string | null,
+    notes: string | undefined,
+  ): string | null {
+    const cleaned = this.cleanOptional(notes);
+    if (!cleaned) return existing;
+    const confirmationNote = `Bank confirmation: ${cleaned}`;
+    return existing ? `${existing}\n${confirmationNote}` : confirmationNote;
   }
 
   private decimalToNumber(

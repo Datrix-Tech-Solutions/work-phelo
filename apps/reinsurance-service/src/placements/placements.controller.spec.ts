@@ -119,9 +119,11 @@ describe('PlacementsController', () => {
     voidEndorsementNote: jest.fn(),
   };
   const paymentsService = {
+    findPendingBankConfirmations: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
     create: jest.fn(),
+    confirmBankPayment: jest.fn(),
     reverse: jest.fn(),
   };
   const claimsService = {
@@ -1227,8 +1229,12 @@ describe('PlacementsController', () => {
 
   it('delegates payment reads with authenticated tenant context', async () => {
     const controller = createController();
+    paymentsService.findPendingBankConfirmations.mockResolvedValue([]);
     paymentsService.findAll.mockResolvedValue([]);
 
+    const pendingResult = await controller.findPendingBankConfirmationPayments({
+      user,
+    } as never);
     const listResult = await controller.findPayments('placement-1', {
       user,
     } as never);
@@ -1236,6 +1242,10 @@ describe('PlacementsController', () => {
       user,
     } as never);
 
+    expect(paymentsService.findPendingBankConfirmations).toHaveBeenCalledWith(
+      'tenant-1',
+    );
+    expect(pendingResult).toEqual({ items: [] });
     expect(paymentsService.findAll).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
@@ -1248,7 +1258,7 @@ describe('PlacementsController', () => {
     );
   });
 
-  it('delegates payment create and reverse with authenticated user context', async () => {
+  it('delegates payment create, bank confirmation and reverse with authenticated user context', async () => {
     const controller = createController();
     const dto = {
       type: PlacementPaymentType.PREMIUM_RECEIVED,
@@ -1258,8 +1268,19 @@ describe('PlacementsController', () => {
       currency: 'USD',
       paymentDate: '2026-06-04T12:00:00.000Z',
     };
+    const bankConfirmationDto = {
+      bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+      bankReference: 'BANK-CONF-001',
+      bankChargeAmount: 25,
+    };
 
     await controller.createPayment('placement-1', dto, { user } as never);
+    await controller.confirmPaymentBankCompletion(
+      'placement-1',
+      'payment-1',
+      bankConfirmationDto,
+      { user } as never,
+    );
     await controller.reversePayment('placement-1', 'payment-1', {
       user,
     } as never);
@@ -1268,6 +1289,12 @@ describe('PlacementsController', () => {
       user,
       'placement-1',
       dto,
+    );
+    expect(paymentsService.confirmBankPayment).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'payment-1',
+      bankConfirmationDto,
     );
     expect(paymentsService.reverse).toHaveBeenCalledWith(
       user,
