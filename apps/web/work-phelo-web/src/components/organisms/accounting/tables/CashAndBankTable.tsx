@@ -8,11 +8,14 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
   useConfirmReinsurerDisbursementBankPayment,
-  usePendingReinsurerDisbursementConfirmations,
+  useReinsuranceBankConfirmationWorkItems,
 } from '@/hooks/accounting/useReinsuranceBankConfirmations';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { PlacementPayment } from '@/types/reinsurance';
+import type {
+  AccountingBankConfirmationWorkItem,
+  ConfirmBankPaymentPayload,
+} from '@/types/accountingIntegration';
 
 const PAGE_SIZE = 10;
 
@@ -56,16 +59,6 @@ function toOptionalNumber(value: string) {
   return trimmed ? Number(trimmed) : undefined;
 }
 
-function sourceLabel(payment: PlacementPayment) {
-  if (payment.endorsementClosing) {
-    return `Endorsement closing ${payment.endorsementClosing.closingNumber}`;
-  }
-  if (payment.closing) {
-    return `Closing ${payment.closing.closingNumber}`;
-  }
-  return 'Credit-note allocation';
-}
-
 function defaultDateTimeLocal() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -75,24 +68,25 @@ function defaultDateTimeLocal() {
 export function CashAndBankTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [selectedPayment, setSelectedPayment] = useState<PlacementPayment | null>(null);
+  const [selectedItem, setSelectedItem] = useState<AccountingBankConfirmationWorkItem | null>(null);
   const [form, setForm] = useState<ConfirmationForm>(INITIAL_FORM);
 
   const addToast = useToastStore((state) => state.addToast);
-  const pendingQuery = usePendingReinsurerDisbursementConfirmations();
+  const pendingQuery = useReinsuranceBankConfirmationWorkItems();
   const confirmMutation = useConfirmReinsurerDisbursementBankPayment();
 
   const pendingPayments = useMemo(() => pendingQuery.data ?? [], [pendingQuery.data]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return pendingPayments;
-    return pendingPayments.filter((payment) => {
+    return pendingPayments.filter((item) => {
       return (
-        payment.counterparty.name.toLowerCase().includes(q) ||
-        payment.reference?.toLowerCase().includes(q) ||
-        payment.settlementReference?.toLowerCase().includes(q) ||
-        payment.bankReference?.toLowerCase().includes(q) ||
-        sourceLabel(payment).toLowerCase().includes(q)
+        item.sourceModule.toLowerCase().includes(q) ||
+        item.counterpartyName.toLowerCase().includes(q) ||
+        item.sourceReference.toLowerCase().includes(q) ||
+        item.operationalReference?.toLowerCase().includes(q) ||
+        item.settlementReference?.toLowerCase().includes(q) ||
+        item.sourceDescription.toLowerCase().includes(q)
       );
     });
   }, [pendingPayments, search]);
@@ -100,14 +94,14 @@ export function CashAndBankTable() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const openConfirmModal = (payment: PlacementPayment) => {
-    setSelectedPayment(payment);
+  const openConfirmModal = (item: AccountingBankConfirmationWorkItem) => {
+    setSelectedItem(item);
     setForm({ ...INITIAL_FORM, bankConfirmedAt: defaultDateTimeLocal() });
   };
 
   const closeConfirmModal = () => {
     if (confirmMutation.isPending) return;
-    setSelectedPayment(null);
+    setSelectedItem(null);
     setForm(INITIAL_FORM);
   };
 
@@ -120,13 +114,25 @@ export function CashAndBankTable() {
       updateForm(key, event.target.value);
     };
 
+  const confirmWorkItem = async (
+    item: AccountingBankConfirmationWorkItem,
+    payload: ConfirmBankPaymentPayload,
+  ) => {
+    if (item.sourceModule !== 'REINSURANCE') {
+      throw new Error(`${item.sourceModule} bank confirmation is not supported yet.`);
+    }
+    return confirmMutation.mutateAsync({
+      placementId: item.sourceParentId,
+      paymentId: item.sourceRecordId,
+      ...payload,
+    });
+  };
+
   const submitConfirmation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedPayment) return;
+    if (!selectedItem) return;
     try {
-      await confirmMutation.mutateAsync({
-        placementId: selectedPayment.placementId,
-        paymentId: selectedPayment.id,
+      await confirmWorkItem(selectedItem, {
         bankConfirmedAt: new Date(form.bankConfirmedAt).toISOString(),
         bankReference: form.bankReference.trim(),
         agreedExchangeRate: toOptionalNumber(form.agreedExchangeRate),
@@ -138,7 +144,7 @@ export function CashAndBankTable() {
         type: 'success',
         message: 'Bank payment confirmed and sent to Accounting.',
       });
-      setSelectedPayment(null);
+      setSelectedItem(null);
       setForm(INITIAL_FORM);
     } catch (error) {
       addToast({
@@ -148,26 +154,36 @@ export function CashAndBankTable() {
     }
   };
 
-  const columns: Column<PlacementPayment>[] = [
+  const columns: Column<AccountingBankConfirmationWorkItem>[] = [
     {
-      key: 'paymentDate',
-      label: 'Payment Date',
+      key: 'sourceModule',
+      label: 'Source Module',
+      width: '150px',
+      render: (row) => (
+        <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+          {row.sourceModule}
+        </span>
+      ),
+    },
+    {
+      key: 'businessDate',
+      label: 'Business Date',
       width: '140px',
-      render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.paymentDate)}</span>,
+      render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.businessDate)}</span>,
     },
     {
       key: 'counterparty',
-      label: 'Reinsurer',
+      label: 'Counterparty',
       width: 'minmax(180px, 1fr)',
       render: (row) => (
-        <span className="text-sm font-medium text-gray-900">{row.counterparty.name}</span>
+        <span className="text-sm font-medium text-gray-900">{row.counterpartyName}</span>
       ),
     },
     {
       key: 'source',
       label: 'Source',
       width: 'minmax(180px, 1fr)',
-      render: (row) => <span className="text-sm text-gray-700">{sourceLabel(row)}</span>,
+      render: (row) => <span className="text-sm text-gray-700">{row.sourceDescription}</span>,
     },
     {
       key: 'amount',
@@ -183,7 +199,9 @@ export function CashAndBankTable() {
       key: 'reference',
       label: 'Payment Ref',
       width: '150px',
-      render: (row) => <span className="text-sm text-gray-700">{row.reference ?? '-'}</span>,
+      render: (row) => (
+        <span className="text-sm text-gray-700">{row.operationalReference ?? '-'}</span>
+      ),
     },
     {
       key: 'status',
@@ -201,10 +219,10 @@ export function CashAndBankTable() {
     <>
       <div className="space-y-4">
         <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-          <h3 className="text-sm font-semibold text-blue-950">Reinsurer Bank Confirmations</h3>
+          <h3 className="text-sm font-semibold text-blue-950">Bank Confirmation Work Queue</h3>
           <p className="mt-1 text-sm text-blue-900">
-            Reinsurance records operational outbound payments. Accounting confirms the bank
-            completion here before recognition and posting begin.
+            Source modules record operational payments. Accounting confirms bank completion here
+            before recognition and posting begin. Reinsurance is the first connected source.
           </p>
         </div>
 
@@ -212,7 +230,7 @@ export function CashAndBankTable() {
           columns={columns}
           data={paged}
           isLoading={pendingQuery.isLoading}
-          searchPlaceholder="Search reinsurer, source or reference..."
+          searchPlaceholder="Search source, counterparty or reference..."
           searchValue={search}
           onSearch={(q) => {
             setSearch(q);
@@ -227,8 +245,8 @@ export function CashAndBankTable() {
           ]}
           emptyMessage={
             pendingQuery.isError
-              ? 'Unable to load pending bank confirmations'
-              : 'No reinsurer disbursements are awaiting bank confirmation'
+              ? 'Integration queue unavailable. Core Accounting remains available.'
+              : 'No source-module payments are awaiting bank confirmation'
           }
           currentPage={page}
           totalPages={totalPages}
@@ -237,7 +255,7 @@ export function CashAndBankTable() {
       </div>
 
       <Modal
-        isOpen={!!selectedPayment}
+        isOpen={!!selectedItem}
         onClose={closeConfirmModal}
         title="Confirm Bank Payment"
         description="Capture the Accounting confirmation facts for this outbound reinsurer disbursement."
@@ -258,19 +276,22 @@ export function CashAndBankTable() {
           </>
         }
       >
-        {selectedPayment && (
+        {selectedItem && (
           <form
             id="confirm-reinsurer-bank-payment-form"
             className="mt-5 space-y-4"
             onSubmit={submitConfirmation}
           >
             <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-              <div className="font-semibold text-gray-900">{selectedPayment.counterparty.name}</div>
+              <div className="font-semibold text-gray-900">{selectedItem.counterpartyName}</div>
               <div className="mt-1">
-                {sourceLabel(selectedPayment)} -{' '}
-                {fmtAmount(selectedPayment.amount, selectedPayment.currency)}
+                {selectedItem.sourceDescription} -{' '}
+                {fmtAmount(selectedItem.amount, selectedItem.currency)}
               </div>
-              <div className="mt-1">Operational ref: {selectedPayment.reference ?? '-'}</div>
+              <div className="mt-1">Source module: {selectedItem.sourceModule}</div>
+              <div className="mt-1">
+                Operational ref: {selectedItem.operationalReference ?? '-'}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

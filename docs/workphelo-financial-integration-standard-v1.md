@@ -142,6 +142,45 @@ Automated journals MUST indicate:
 - Source document ID where available
 - Source event inbox ID
 
+### 3.3 Accounting-owned confirmation work queues
+
+Some operational modules record a payment or settlement before Accounting can
+recognise it financially. In those cases Accounting MAY expose a confirmation
+work queue that calls a source-module API to complete the agreed recognition
+boundary.
+
+Accounting confirmation work queues MUST preserve Accounting independence:
+
+- Accounting startup, navigation, setup, manual journals, posting, reversals,
+  reports, customers, vendors, and manual bank/cash workflows MUST NOT require
+  the source module to be available.
+- A source-module queue outage, disabled module, or permission denial MUST be
+  isolated to that queue and MUST NOT break core Accounting screens.
+- The Accounting UI MUST NOT read source-module databases directly.
+- The source module MUST own the operational record and lifecycle transition.
+- Accounting MUST own bank confirmation facts, posting policy, posting rules,
+  and journal creation.
+
+Confirmation work items SHOULD use a stable adapter shape so future modules can
+reuse the same UI/container patterns:
+
+- `sourceModule`
+- `sourceRecordId`
+- `sourceReference`
+- `sourceDetailUrl` where available
+- `counterparty`
+- `amount`
+- `currency`
+- `action`
+- `status`
+- confirmation metadata such as bank date, bank reference, FX, charges,
+  withholding tax, and notes
+
+Reinsurance reinsurer disbursement bank confirmation is the first supported
+source-module adapter. Payroll, Inventory, CRM, Subscription, and future modules
+SHOULD add their own adapters rather than embedding module-specific database
+knowledge inside Accounting.
+
 ---
 
 ## 4. Canonical Event Model
