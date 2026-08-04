@@ -142,14 +142,14 @@ Automated journals MUST indicate:
 - Source document ID where available
 - Source event inbox ID
 
-### 3.3 Accounting-owned confirmation work queues
+### 3.3 Financial Confirmation Queue
 
 Some operational modules record a payment or settlement before Accounting can
-recognise it financially. In those cases Accounting MAY expose a confirmation
-work queue that calls a source-module API to complete the agreed recognition
-boundary.
+recognise it financially. In those cases Accounting MAY expose a Financial
+Confirmation Queue that calls a source-module API to complete the agreed
+recognition boundary.
 
-Accounting confirmation work queues MUST preserve Accounting independence:
+Financial confirmation queues MUST preserve Accounting independence:
 
 - Accounting startup, navigation, setup, manual journals, posting, reversals,
   reports, customers, vendors, and manual bank/cash workflows MUST NOT require
@@ -164,15 +164,21 @@ Accounting confirmation work queues MUST preserve Accounting independence:
 Confirmation work items SHOULD use a stable adapter shape so future modules can
 reuse the same UI/container patterns:
 
+- `id`
 - `sourceModule`
 - `sourceRecordId`
 - `sourceReference`
+- `transactionType`
+- `direction`
+- `counterpartyId`
 - `sourceDetailUrl` where available
 - `counterparty`
 - `amount`
 - `currency`
-- `action`
-- `status`
+- `operationalDate`
+- `operationalStatus`
+- `confirmationStatus`
+- `availableConfirmationActions`
 - confirmation metadata such as bank date, bank reference, FX, charges,
   withholding tax, and notes
 

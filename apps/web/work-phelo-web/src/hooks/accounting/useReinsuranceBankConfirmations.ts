@@ -24,6 +24,10 @@ function sourceDescription(payment: PlacementPayment) {
   return 'Credit-note allocation';
 }
 
+function sourceDetailUrl(payment: PlacementPayment) {
+  return `/operations/reinsurance/facultative/${payment.placementId}`;
+}
+
 export function mapReinsurancePaymentToBankConfirmationWorkItem(
   payment: PlacementPayment,
 ): AccountingBankConfirmationWorkItem {
@@ -33,15 +37,27 @@ export function mapReinsurancePaymentToBankConfirmationWorkItem(
     sourceRecordId: payment.id,
     sourceParentId: payment.placementId,
     sourceReference: payment.settlementReference ?? payment.reference ?? payment.id,
+    transactionType: 'REINSURER_DISBURSEMENT',
+    direction: 'OUTBOUND',
+    counterpartyId: payment.counterpartyId,
     sourceDescription: sourceDescription(payment),
+    sourceDetailUrl: sourceDetailUrl(payment),
     counterpartyName: payment.counterparty.name,
     counterpartyType: payment.counterparty.type,
     amount: payment.amount,
     currency: payment.currency,
-    businessDate: payment.paymentDate,
+    operationalDate: payment.paymentDate,
     operationalReference: payment.reference,
     settlementReference: payment.settlementReference,
-    status: payment.status,
+    operationalStatus: payment.status,
+    confirmationStatus: payment.status === 'RECORDED' ? 'PENDING_CONFIRMATION' : payment.status,
+    availableConfirmationActions: payment.status === 'RECORDED' ? ['CONFIRM_BANK_PAYMENT'] : [],
+    metadata: {
+      placementId: payment.placementId,
+      closingId: payment.closingId,
+      endorsementClosingId: payment.endorsementClosingId,
+      participantId: payment.participantId,
+    },
   };
 }
 

@@ -165,7 +165,7 @@ Reinsurance source events SHOULD be activated incrementally.
 | `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Active                  | Issued endorsement credit note snapshot.              |
 | `PREMIUM_PAYMENT_RECEIVED`        | Active                  | Recorded premium payment row.                         |
 | `PAYMENT_REVERSED`                | Active                  | Reversal payment row linked to original payment.      |
-| `REINSURER_DISBURSEMENT_RECORDED` | Active                  | Bank-confirmed outbound reinsurer payment allocation. |
+| `REINSURER_DISBURSEMENT_RECORDED` | Active                  | Bank-confirmed outbound reinsurer payment row.        |
 | `REINSURER_DISBURSEMENT_REVERSED` | Active                  | Reversal payment row linked to original disbursement. |
 
 ### 6.2 Claims family
@@ -540,6 +540,12 @@ The endpoints are tenant scoped, duplicate safe and preserve original
 - `reversalOfPaymentId = null`
 - a valid `paymentDate`
 
+Current Product/Finance classification: **A. The user records an already
+completed bank/cash receipt.** Immediate recognition remains intentional for
+the current workflow. If the product later changes this screen to record
+expected receipts before bank completion, Reinsurance MUST introduce a separate
+confirmation adapter rather than reusing this event boundary silently.
+
 Current Reinsurance payment allocation is placement-level. The payment create
 workflow does not allocate a premium receipt to one or more specific
 `PlacementNote` records. Therefore, payloads MUST state:
@@ -615,10 +621,12 @@ Eligibility:
 - `PlacementPayment.reversalOfPaymentId = null`
 - `PlacementPayment.bankConfirmedAt` is present
 - the counterparty is a Reinsurer
-- one or more `PlacementPaymentAllocation` rows exist
-- allocations reference issued `CREDIT_NOTE` or `ENDORSEMENT_CREDIT_NOTE`
-- allocated payment-currency amount equals the payment amount
-- cross-currency allocations carry a persisted agreed exchange rate
+- optional `PlacementPaymentAllocation` rows MAY exist
+- when allocations exist, they MUST reference issued `CREDIT_NOTE` or
+  `ENDORSEMENT_CREDIT_NOTE`
+- when allocations exist, allocated payment-currency amount MUST equal the
+  payment amount
+- cross-currency allocations MUST carry a persisted agreed exchange rate
 
 Recorded event:
 
@@ -639,7 +647,7 @@ Payloads use `allocation.model = CREDIT_NOTE_ALLOCATIONS` and include:
 - settlement reference where present;
 - positive `paymentAmount`, `allocatedAmount`, `bankCharges` and
   `withholdingTax` facts;
-- `unallocatedAmount = 0`;
+- `unallocatedAmount = paymentAmount - allocatedAmount`;
 - `signedCashImpact < 0`;
 - `signedPayableImpact < 0`;
 - allocation IDs, Credit Note IDs/numbers/types, obligation currency,
@@ -650,8 +658,10 @@ Reinsurance MUST NOT publish GL account IDs or journal directions. Accounting
 posting rules clear the existing payable and resolve cash, bank charges,
 withholding tax and FX treatment per tenant.
 
-Unallocated payments, failed payments, cancelled payments, approval-only states
-and reversal rows MUST NOT emit this event.
+Failed payments, cancelled payments, approval-only states and reversal rows
+MUST NOT emit this event. Unallocated-by-note disbursements MAY emit this event
+after bank confirmation; Accounting uses the payment-level business facts and
+tenant posting rules.
 
 Active reversal event:
 
@@ -667,6 +677,34 @@ occurredAt = reversal PlacementPayment.paymentDate
 `REINSURER_DISBURSEMENT_REVERSED` is recognized from the linked reversal
 payment row. Reinsurance MUST NOT publish this event from the original payment
 status mutation alone.
+
+### 10.3 Active Premium Event AR/AP Matrix
+
+This matrix documents the active Reinsurance premium-event family. It separates
+business meaning from tenant posting configuration. Accounting posting rules
+remain tenant owned; the rows below are recommended defaults and test-backed
+examples, not hardcoded universal journals.
+
+| Event                             | Source record                  | Recognition boundary                                  | Business meaning                                 | AR effect                      | AP effect                      | Bank/cash effect    | Recommended default posting                           | Code-active? |
+| --------------------------------- | ------------------------------ | ----------------------------------------------------- | ------------------------------------------------ | ------------------------------ | ------------------------------ | ------------------- | ----------------------------------------------------- | ------------ |
+| `DEBIT_NOTE_ISSUED`               | Issued `PlacementNote`         | Official placement debit note issue time              | Cedant owes premium to broker                    | Increases Cedant receivable    | Unaffected                     | Unaffected          | DR Cedant Premium Receivable / CR Premium Income      | Yes          |
+| `CREDIT_NOTE_ISSUED`              | Issued `PlacementNote`         | Official placement credit note issue time             | Broker owes premium share to Reinsurer           | Unaffected                     | Increases Reinsurer payable    | Unaffected          | DR Premium Clearing or Expense / CR Reinsurer Payable | Yes          |
+| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Issued endorsement debit note  | Official endorsement debit note issue time            | Additional premium due from Cedant               | Increases Cedant receivable    | Unaffected                     | Unaffected          | DR Cedant Premium Receivable / CR Endorsement Premium | Yes          |
+| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Issued endorsement credit note | Official endorsement credit note issue time           | Return premium / payable adjustment to Reinsurer | Unaffected                     | Increases Reinsurer payable    | Unaffected          | DR Return Premium or Clearing / CR Reinsurer Payable  | Yes          |
+| `PREMIUM_PAYMENT_RECEIVED`        | `PlacementPayment` receipt row | User records completed inbound bank/cash receipt      | Cedant payment clears receivable                 | Decreases Cedant receivable    | Unaffected                     | Increases bank/cash | DR Bank/Cash / CR Cedant Premium Receivable           | Yes          |
+| `PAYMENT_REVERSED`                | Reversal `PlacementPayment`    | Reversal row creation time                            | Premium receipt reversal                         | Re-increases Cedant receivable | Unaffected                     | Decreases bank/cash | DR Cedant Premium Receivable / CR Bank/Cash           | Yes          |
+| `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment` row         | Accounting bank confirmation time (`bankConfirmedAt`) | Bank-confirmed Reinsurer disbursement            | Unaffected                     | Decreases Reinsurer payable    | Decreases bank/cash | DR Reinsurer Payable / CR Bank/Cash                   | Yes          |
+| `REINSURER_DISBURSEMENT_REVERSED` | Reversal `PlacementPayment`    | Reversal row creation time                            | Reinsurer disbursement reversal                  | Unaffected                     | Re-increases Reinsurer payable | Increases bank/cash | DR Bank/Cash / CR Reinsurer Payable                   | Yes          |
+
+Actual posting behavior depends on active `PostingRule` rows in Accounting.
+Tenants MAY route through clearing accounts, income accounts, expense accounts,
+tax accounts, FX accounts or bank-charge accounts according to approved policy.
+Source modules MUST publish business facts only and MUST NOT choose GL accounts.
+
+Manual Accounting remains supported for source-module gaps. Today this means
+manual journals, manual posting/reversal and tenant-configured reports. Dedicated
+AR receipt, AP payment and cashbook sub-ledger workflow screens are separate
+future capabilities and MUST NOT be implied by this integration.
 
 ---
 
