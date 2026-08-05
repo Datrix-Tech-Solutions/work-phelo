@@ -28,6 +28,7 @@ import {
   ReconcileDebitNoteAccountingEventsDto,
   ReconcilePaymentAccountingEventsDto,
 } from './reinsurance-accounting-readiness.dto';
+import { ReinsuranceAccountingOutboxDispatcher } from './reinsurance-accounting-outbox-dispatcher.service';
 import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
 
 @Controller('accounting-integration')
@@ -41,6 +42,7 @@ import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-
 export class ReinsuranceAccountingIntegrationController {
   constructor(
     private readonly readiness: ReinsuranceAccountingReadinessService,
+    private readonly dispatcher: ReinsuranceAccountingOutboxDispatcher,
   ) {}
 
   @Get('status')
@@ -75,6 +77,16 @@ export class ReinsuranceAccountingIntegrationController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.readiness.processPending(request.user, query);
+  }
+
+  @Get('outbox/dispatcher/status')
+  @ApiOperation({
+    summary: 'Get Reinsurance Accounting outbox dispatcher status',
+    description:
+      'Reports automatic dispatcher configuration and recent batch activity. The endpoint is observational and does not create or dispatch financial events.',
+  })
+  dispatcherStatus() {
+    return this.dispatcher.status();
   }
 
   @Post('reconciliation/debit-note-issued')

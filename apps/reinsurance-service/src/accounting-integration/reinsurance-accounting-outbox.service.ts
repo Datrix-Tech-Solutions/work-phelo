@@ -17,12 +17,16 @@ const MAX_BATCH_LIMIT = 100;
 const MAX_BACKOFF_MS = 15 * 60 * 1000;
 const BASE_BACKOFF_MS = 60 * 1000;
 const PROCESSING_STALE_AFTER_MS = 15 * 60 * 1000;
+const DEFAULT_MAX_ATTEMPTS = 10;
 
 type OutboxRecord = Prisma.ReinsuranceAccountingOutboxGetPayload<object>;
 
 export interface ProcessAccountingOutboxOptions {
   tenantId?: string;
   limit?: number;
+  maxAttempts?: number;
+  processingTimeoutMs?: number;
+  retryDelayMs?: number;
 }
 
 export interface ProcessAccountingOutboxResult {
@@ -74,13 +78,11 @@ export class ReinsuranceAccountingOutboxService {
     prisma: Prisma.TransactionClient,
     options: ProcessAccountingOutboxOptions = {},
   ): Promise<ProcessAccountingOutboxResult> {
-    const limit = Math.min(
-      options.limit ?? DEFAULT_BATCH_LIMIT,
-      MAX_BATCH_LIMIT,
-    );
+    const limit = this.batchLimit(options.limit);
+    const maxAttempts = this.maxAttempts(options.maxAttempts);
     const now = new Date();
     const staleProcessingBefore = new Date(
-      now.getTime() - PROCESSING_STALE_AFTER_MS,
+      now.getTime() - this.processingTimeoutMs(options.processingTimeoutMs),
     );
     const candidates = await prisma.reinsuranceAccountingOutbox.findMany({
       where: {
@@ -90,10 +92,12 @@ export class ReinsuranceAccountingOutboxService {
           {
             status: ReinsuranceAccountingOutboxStatus.FAILED,
             nextAttemptAt: { lte: now },
+            attemptCount: { lt: maxAttempts },
           },
           {
             status: ReinsuranceAccountingOutboxStatus.PROCESSING,
             lastAttemptAt: { lte: staleProcessingBefore },
+            attemptCount: { lt: maxAttempts },
           },
         ],
       },
@@ -112,6 +116,7 @@ export class ReinsuranceAccountingOutboxService {
         prisma,
         candidate.tenantId,
         candidate.id,
+        options,
       );
       events.push(result);
       if (result.status === ReinsuranceAccountingOutboxStatus.DELIVERED) {
@@ -136,8 +141,9 @@ export class ReinsuranceAccountingOutboxService {
     prisma: Prisma.TransactionClient,
     tenantId: string,
     outboxId: string,
+    options: ProcessAccountingOutboxOptions = {},
   ): Promise<ProcessAccountingOutboxResult['events'][number]> {
-    const claimed = await this.claim(prisma, tenantId, outboxId);
+    const claimed = await this.claim(prisma, tenantId, outboxId, options);
     if (!claimed) {
       return {
         outboxId,
@@ -172,9 +178,15 @@ export class ReinsuranceAccountingOutboxService {
       };
     } catch (error) {
       const failure = this.failure(error);
-      const nextAttemptAt = failure.retryable
-        ? new Date(Date.now() + this.backoffMs(claimed.attemptCount))
-        : null;
+      const exhausted =
+        claimed.attemptCount >= this.maxAttempts(options.maxAttempts);
+      const nextAttemptAt =
+        failure.retryable && !exhausted
+          ? new Date(
+              Date.now() +
+                this.backoffMs(claimed.attemptCount, options.retryDelayMs),
+            )
+          : null;
       await prisma.reinsuranceAccountingOutbox.update({
         where: { id: claimed.id },
         data: {
@@ -184,7 +196,7 @@ export class ReinsuranceAccountingOutboxService {
         },
       });
       this.logger.warn(
-        `Failed accounting outbox ${claimed.id} event=${claimed.sourceEventType} source=${claimed.sourceRecordType}:${claimed.sourceRecordId} attempt=${claimed.attemptCount} retryable=${failure.retryable} error=${failure.message}`,
+        `Failed accounting outbox ${claimed.id} event=${claimed.sourceEventType} source=${claimed.sourceRecordType}:${claimed.sourceRecordId} attempt=${claimed.attemptCount} retryable=${failure.retryable} exhausted=${exhausted} error=${failure.message}`,
       );
       return {
         outboxId: claimed.id,
@@ -218,11 +230,13 @@ export class ReinsuranceAccountingOutboxService {
     prisma: Prisma.TransactionClient,
     tenantId: string,
     outboxId: string,
+    options: ProcessAccountingOutboxOptions = {},
   ): Promise<OutboxRecord | null> {
     const now = new Date();
     const staleProcessingBefore = new Date(
-      now.getTime() - PROCESSING_STALE_AFTER_MS,
+      now.getTime() - this.processingTimeoutMs(options.processingTimeoutMs),
     );
+    const maxAttempts = this.maxAttempts(options.maxAttempts);
     const claimed = await prisma.reinsuranceAccountingOutbox.updateMany({
       where: {
         id: outboxId,
@@ -232,10 +246,12 @@ export class ReinsuranceAccountingOutboxService {
           {
             status: ReinsuranceAccountingOutboxStatus.FAILED,
             nextAttemptAt: { lte: now },
+            attemptCount: { lt: maxAttempts },
           },
           {
             status: ReinsuranceAccountingOutboxStatus.PROCESSING,
             lastAttemptAt: { lte: staleProcessingBefore },
+            attemptCount: { lt: maxAttempts },
           },
         ],
       },
@@ -252,9 +268,28 @@ export class ReinsuranceAccountingOutboxService {
     });
   }
 
-  private backoffMs(attemptCount: number): number {
+  private batchLimit(value?: number): number {
     return Math.min(
-      BASE_BACKOFF_MS * 2 ** Math.max(attemptCount - 1, 0),
+      Math.max(Math.trunc(value ?? DEFAULT_BATCH_LIMIT), 1),
+      MAX_BATCH_LIMIT,
+    );
+  }
+
+  private maxAttempts(value?: number): number {
+    return Math.max(Math.trunc(value ?? DEFAULT_MAX_ATTEMPTS), 1);
+  }
+
+  private processingTimeoutMs(value?: number): number {
+    return Math.max(Math.trunc(value ?? PROCESSING_STALE_AFTER_MS), 1000);
+  }
+
+  private retryDelayMs(value?: number): number {
+    return Math.max(Math.trunc(value ?? BASE_BACKOFF_MS), 1000);
+  }
+
+  private backoffMs(attemptCount: number, retryDelayMs?: number): number {
+    return Math.min(
+      this.retryDelayMs(retryDelayMs) * 2 ** Math.max(attemptCount - 1, 0),
       MAX_BACKOFF_MS,
     );
   }
