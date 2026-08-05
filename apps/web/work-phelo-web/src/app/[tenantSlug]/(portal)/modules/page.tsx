@@ -84,12 +84,8 @@ export default function ModulesPage({ params }: { params: Promise<{ tenantSlug: 
         {/* Welcome banner */}
         <div className="bg-transparent mx-3 mt-3 sm:mx-6 sm:mt-6 rounded-card px-4 sm:px-8 py-4 sm:py-6 flex flex-wrap items-center gap-4 justify-between">
           <div>
-            {!isTenantAdmin && (
-              <p className="text-l font-medium text-brand mb-1 [text-shadow:0_6px_4px_rgba(0,0,0,0.4)]">
-                {tenantName}
-              </p>
-            )}
-            <h1 className="text-2xl font-bold text-gray-800 [text-shadow:0_6px_4px_rgba(0,0,0,0.4)]">
+            {!isTenantAdmin && <p className="text-l font-medium text-brand mb-1">{tenantName}</p>}
+            <h1 className="text-2xl font-bold text-gray-800">
               {getGreeting()}, {isTenantAdmin ? tenantName : firstName}
             </h1>
           </div>
