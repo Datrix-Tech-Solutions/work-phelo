@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
-import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
+import { TableButton } from '@/components/atoms/TableButton';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { usePlacementPayments, useReversePayment } from '@/hooks';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
@@ -80,13 +81,13 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
     {
       key: 'paymentDate',
       label: 'Date',
-      width: '130px',
+      width: '100px',
       render: (row) => <span className="text-gray-700">{fmtDate(row.paymentDate)}</span>,
     },
     {
       key: 'type',
       label: 'Type',
-      width: '1.4fr',
+      width: '150px',
       render: (row) => (
         <div className="flex flex-col">
           <span className="text-gray-700">{fmtType(row.type)}</span>
@@ -98,27 +99,27 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
     },
     {
       key: 'counterparty',
-      label: 'Counterparty',
-      width: '1.5fr',
+      label: 'Participant',
+      width: 'minmax(100px, 0.7fr)',
       render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
     },
-    {
-      key: 'closing',
-      label: 'Closing',
-      width: '1.3fr',
-      render: (row) => {
-        const label = row.endorsementClosing
-          ? `Endorsement · ${row.endorsementClosing.closingNumber}`
-          : row.closing
-            ? `Original · ${row.closing.closingNumber}`
-            : 'Placement-level';
-        return <span className="text-gray-700">{label}</span>;
-      },
-    },
+    // {
+    //   key: 'closing',
+    //   label: 'Closing',
+    //   width: '120px',
+    //   render: (row) => {
+    //     const label = row.endorsementClosing
+    //       ? `Endorsement · ${row.endorsementClosing.closingNumber}`
+    //       : row.closing
+    //         ? `Original · ${row.closing.closingNumber}`
+    //         : 'Placement-level';
+    //     return <span className="text-gray-700">{label}</span>;
+    //   },
+    // },
     {
       key: 'notes',
       label: 'Payment Details',
-      width: '1.4fr',
+      width: 'minmax(120px, 1fr)',
       render: (row) => (
         <div className="flex flex-col">
           <span className="text-gray-700">{row.notes || '—'}</span>
@@ -129,7 +130,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
     {
       key: 'amount',
       label: 'Amount',
-      width: '1.2fr',
+      width: '120px',
       render: (row) => (
         <span className="font-medium text-gray-900">{fmtAmount(row.amount, row.currency)}</span>
       ),
@@ -137,12 +138,30 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
     {
       key: 'status',
       label: 'Status',
-      width: '110px',
+      width: '100px',
       render: (row) => (
         <Badge
           label={STATUS_LABEL[row.status] ?? fmtType(row.status)}
           variant={STATUS_VARIANT[row.status] ?? 'neutral'}
         />
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: '150px',
+      className: 'pr-6',
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <TableButton variant="blue" onClick={() => setReceiptTarget(row)}>
+            Reciept
+          </TableButton>
+          {canReversePayment(row) && (
+            <TableButton variant="red" onClick={() => handleReverse(row)}>
+              Reverse
+            </TableButton>
+          )}
+        </div>
       ),
     },
   ];
@@ -166,13 +185,6 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
         totalPages={1}
         onPageChange={() => {}}
         noInternalScroll
-        rowActions={(row: PlacementPayment) => {
-          const actions: RowAction[] = [{ label: 'Receipt', onClick: () => setReceiptTarget(row) }];
-          if (canReversePayment(row)) {
-            actions.push({ label: 'Reverse', danger: true, onClick: () => handleReverse(row) });
-          }
-          return actions;
-        }}
       />
 
       {receiptTarget && (

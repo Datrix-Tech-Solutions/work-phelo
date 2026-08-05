@@ -173,20 +173,20 @@ export function GuaranteeNoteModal({
               year: 'numeric',
             })}
           </p>
-          <p className="font-medium text-gray-900 mt-2">The Managing Director</p>
+          <p className="font-base text-gray-900 mt-2">The Managing Director</p>
           <p className="text-gray-800">{displayName}</p>
           {displayCity && <p className="text-gray-600">{displayCity}</p>}
           {displayRegionCountry && <p className="text-gray-600">{displayRegionCountry}</p>}
-          <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
+          <p className="font-base text-gray-900 mt-2">Dear Sir/Madam</p>
         </div>
 
         {/* <hr className="border-gray-100 mb-1" /> */}
 
         {/*  heading */}
-        <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 text-center underline">
+        <p className="text-base font-semibold text-gray-900 uppercase tracking-wide pt-1 text-center underline">
           Guarantee Note
         </p>
-        <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide pt-1">
+        <p className="text-base font-semibold text-gray-400 uppercase tracking-wide pt-1">
           Policy Details &amp; Risk Description
         </p>
 
@@ -238,7 +238,7 @@ export function GuaranteeNoteModal({
         <DetailField inline label="Net Premium" value={fmtAmount(netPremium, effectiveCurrency)} />
 
         {/* Participants */}
-        <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+        <p className="text-base font-semibold text-gray-400 uppercase tracking-wide">
           Reinsurance Participant(s)
         </p>
 

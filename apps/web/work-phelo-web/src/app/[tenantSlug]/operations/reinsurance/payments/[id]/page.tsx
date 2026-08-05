@@ -98,7 +98,7 @@ export default function PaymentDetailPage({
             </p>
             <Link
               href={`/${tenantSlug}/operations/reinsurance/payments`}
-              className="text-sm font-semibold text-[var(--module-btn-bg,var(--color-brand))] hover:underline"
+              className="text-sm font-semibold text-(--module-btn-bg,var(--color-brand)) hover:underline"
             >
               Back to payments
             </Link>

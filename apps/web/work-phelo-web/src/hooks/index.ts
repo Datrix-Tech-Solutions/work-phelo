@@ -40,6 +40,8 @@ export * from './reinsurance/useClaims';
 export * from './reinsurance/useCedantsReport';
 export * from './reinsurance/useReinsurersReport';
 export * from './reinsurance/useFacultativeReport';
+export * from './reinsurance/useMailboxes';
+export * from './reinsurance/useEmailThreads';
 
 // Accounting hooks
 export * from './accounting/useCurrencies';

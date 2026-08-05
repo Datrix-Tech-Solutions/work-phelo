@@ -60,7 +60,7 @@ const COLUMNS: Column<ClaimTableRow>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
-    width: 'minmax(190px, 1fr)',
+    width: '150px',
     render: (row) => (
       <EndorsedReferencePill
         id={row.placement.id}
@@ -82,7 +82,7 @@ const COLUMNS: Column<ClaimTableRow>[] = [
   {
     key: 'claimNumber',
     label: 'Claim Number',
-    width: '120px',
+    width: '100px',
     render: (row) => <span className="font-medium text-gray-900">{row.claim.claimNumber}</span>,
   },
   {

@@ -119,7 +119,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'title',
     label: 'Insured / Risk Type',
-    width: 'minmax(150px, 1fr)',
+    width: 'minmax(120px, 1fr)',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
@@ -195,7 +195,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'status',
     label: 'Status',
-    width: '130px',
+    width: '100px',
     className: 'pr-6',
     render: (row) => <PaymentStatusCell placement={row} />,
   },
@@ -336,12 +336,12 @@ export function PaymentsTable() {
         label: 'Receive Cedant Premium',
         onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/new`),
       }}
-      rowActions={(row) => [
-        {
-          label: 'View Payment Workspace',
-          onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
-        },
-      ]}
+      // rowActions={(row) => [
+      //   {
+      //     label: 'View Payment Workspace',
+      //     onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
+      //   },
+      // ]}
       emptyMessage="No payment records found"
       currentPage={page}
       totalPages={totalPages}

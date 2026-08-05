@@ -46,7 +46,7 @@ export default function PortalLayout({
         notificationCount={0}
         logoVariant="image"
         //remember to comment out the tabs when pushing to production because the executive dashboard is not ready yet
-        // tabs={tabs}
+        tabs={tabs}
       />
       {children}
       <MoodSelectorModal />
