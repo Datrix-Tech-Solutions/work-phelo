@@ -115,6 +115,7 @@ enum PlacementNoteType {
   CREDIT_NOTE
   ENDORSEMENT_DEBIT_NOTE
   ENDORSEMENT_CREDIT_NOTE
+  CURRENT_EFFECTIVE_DEBIT_NOTE
 
   @@schema("reinsurance")
 }
@@ -996,6 +997,10 @@ model PlacementNote {
   withholdingTaxAmount     Decimal                          @default(0) @db.Decimal(18, 2)
   netAmount                Decimal                          @db.Decimal(18, 2)
   appliedCharges           Json?
+  sourceSnapshot           Json?
+  effectiveAsOf            DateTime?
+  effectiveVersionKey      String?
+  postingEnabled           Boolean                          @default(true)
   noteDate                 DateTime
   issuedAt                 DateTime?
   voidedAt                 DateTime?
@@ -1018,6 +1023,7 @@ model PlacementNote {
   @@unique([tenantId, placementId, noteNumber])
   @@index([tenantId, placementId, status, createdAt])
   @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, placementId, type, effectiveAsOf])
   @@index([tenantId, status, placementId])
   @@index([tenantId, closingId, status])
   @@index([tenantId, participantId, createdAt])
@@ -1026,6 +1032,7 @@ model PlacementNote {
   @@index([tenantId, endorsementParticipantId, createdAt])
   @@index([tenantId, counterpartyId, createdAt])
   @@index([tenantId, settledByPaymentId])
+  @@unique([tenantId, placementId, type, effectiveVersionKey])
   @@schema("reinsurance")
 }
 

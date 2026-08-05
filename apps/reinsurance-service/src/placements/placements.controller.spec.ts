@@ -111,6 +111,10 @@ describe('PlacementsController', () => {
     findEndorsementNote: jest.fn(),
     createDebitNote: jest.fn(),
     createCreditNote: jest.fn(),
+    previewCurrentEffectiveDebitNote: jest.fn(),
+    createCurrentEffectiveDebitNote: jest.fn(),
+    findAllCurrentEffectiveDebitNotes: jest.fn(),
+    findCurrentEffectiveDebitNote: jest.fn(),
     createEndorsementDebitNote: jest.fn(),
     createEndorsementCreditNote: jest.fn(),
     issue: jest.fn(),
@@ -1024,6 +1028,46 @@ describe('PlacementsController', () => {
       'placement-1',
       'note-1',
       expect.objectContaining({ voidReason: 'Issued in error' }),
+    );
+  });
+
+  it('delegates current effective debit note operations with authenticated tenant context', async () => {
+    const controller = createController();
+    notesService.findAllCurrentEffectiveDebitNotes.mockResolvedValue([]);
+
+    await controller.previewEffectiveDebitNote(
+      'placement-1',
+      { asOfDate: '2026-06-10T00:00:00.000Z' },
+      { user } as never,
+    );
+    await controller.createEffectiveDebitNote(
+      'placement-1',
+      { asOfDate: '2026-06-10T00:00:00.000Z' },
+      { user } as never,
+    );
+    await controller.findEffectiveDebitNotes('placement-1', { user } as never);
+    await controller.findEffectiveDebitNote('placement-1', 'note-1', {
+      user,
+    } as never);
+
+    expect(notesService.previewCurrentEffectiveDebitNote).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      '2026-06-10T00:00:00.000Z',
+    );
+    expect(notesService.createCurrentEffectiveDebitNote).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      '2026-06-10T00:00:00.000Z',
+    );
+    expect(notesService.findAllCurrentEffectiveDebitNotes).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    expect(notesService.findCurrentEffectiveDebitNote).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'note-1',
     );
   });
 

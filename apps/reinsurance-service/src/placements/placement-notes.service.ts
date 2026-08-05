@@ -4,11 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementClosingStatus,
   PlacementEndorsementImpactType,
+  PlacementEndorsementStatus,
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
@@ -18,11 +20,14 @@ import {
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
+import { EffectiveDebitNotePreviewResponseDto } from './dto/effective-debit-note.dto';
 import {
   AppliedChargeSnapshot,
   ChargeCalculationResult,
   ReinsuranceChargeSettingsService,
 } from '../settings/reinsurance-charge-settings.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
+import { PlacementFinancialPositionService } from './placement-financial-position.service';
 import { UpdatePlacementNoteStatusDto } from './dto/update-placement-note-status.dto';
 import { VoidPlacementNoteDto } from './dto/void-placement-note.dto';
 
@@ -83,9 +88,15 @@ type DebitClosingSnapshot = {
 };
 
 type EndorsementDebitClosingSnapshot = {
+  id?: string;
   premiumSnapshot: Prisma.Decimal;
   commissionAmount: Prisma.Decimal | null;
   currency: string | null;
+};
+
+type CurrentEffectiveDebitNotePreview = EffectiveDebitNotePreviewResponseDto & {
+  sourceSnapshot: Prisma.JsonObject;
+  appliedCharges: Prisma.JsonObject;
 };
 
 @Injectable()
@@ -94,6 +105,8 @@ export class PlacementNotesService {
     private readonly prisma: PrismaService,
     private readonly chargeSettings: ReinsuranceChargeSettingsService,
     private readonly financialEvents: ReinsuranceFinancialEventPublisher,
+    private readonly financialPosition: PlacementFinancialPositionService,
+    private readonly effectiveView: PlacementEffectiveViewService,
   ) {}
 
   async findAll(
@@ -304,6 +317,16 @@ export class PlacementNotesService {
       placementId,
       endorsementId,
     );
+    if (endorsement.status !== PlacementEndorsementStatus.CLOSED) {
+      throw new BadRequestException(
+        'Endorsement debit notes require a CLOSED endorsement',
+      );
+    }
+    if (endorsement.effectiveDate.getTime() > Date.now()) {
+      throw new BadRequestException(
+        'Future-dated closed endorsements are excluded from current endorsement debit-note generation',
+      );
+    }
     if (
       endorsement.impactType ===
       PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION
@@ -329,6 +352,7 @@ export class PlacementNotesService {
           status: PlacementClosingStatus.CONFIRMED,
         },
         select: {
+          id: true,
           premiumSnapshot: true,
           commissionAmount: true,
           currency: true,
@@ -365,12 +389,164 @@ export class PlacementNotesService {
           noteNumber,
           status: PlacementNoteStatus.DRAFT,
           ...snapshot,
+          sourceSnapshot: {
+            statementType: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+            postingBehavior: 'POSTING_ENDORSEMENT_ADJUSTMENT',
+            placementId,
+            endorsementId,
+            endorsementNumber: endorsement.endorsementNumber,
+            endorsementEffectiveDate: endorsement.effectiveDate.toISOString(),
+            sourceClosingIds: closings
+              .map((closing) => closing.id)
+              .filter((id): id is string => Boolean(id)),
+            generatedAt: noteDate.toISOString(),
+            generatedByUserId: user.id,
+          },
+          postingEnabled: true,
           noteDate,
           createdByUserId: user.id,
         },
         include: noteInclude,
       });
     });
+  }
+
+  async previewCurrentEffectiveDebitNote(
+    tenantId: string,
+    placementId: string,
+    asOfDate?: Date | string,
+  ): Promise<EffectiveDebitNotePreviewResponseDto> {
+    return this.buildCurrentEffectiveDebitNotePreview(
+      tenantId,
+      placementId,
+      asOfDate,
+    );
+  }
+
+  async createCurrentEffectiveDebitNote(
+    user: RequestUser,
+    placementId: string,
+    asOfDate?: Date | string,
+  ): Promise<PlacementNoteRecord> {
+    const preview = await this.buildCurrentEffectiveDebitNotePreview(
+      user.tenantId,
+      placementId,
+      asOfDate,
+    );
+    const placement = await this.findPlacement(user.tenantId, placementId);
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.placementNote.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            placementId,
+            type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+            effectiveVersionKey: preview.effectiveVersionKey,
+          },
+          include: noteInclude,
+        });
+        if (existing) return existing;
+
+        const noteNumber = await this.nextNoteNumber(
+          tx,
+          user.tenantId,
+          placementId,
+          PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+        );
+        const noteDate = new Date();
+
+        return tx.placementNote.create({
+          data: {
+            tenantId: user.tenantId,
+            placementId,
+            counterpartyId: placement.cedantId,
+            type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+            direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+            noteNumber,
+            status: PlacementNoteStatus.DRAFT,
+            currency: preview.currency,
+            grossAmount: preview.grossAmount,
+            commissionPercent: null,
+            commissionAmount: preview.commissionAmount,
+            brokeragePercent: null,
+            brokerageAmount: preview.brokerageAmount,
+            nicLevyPercent: 0,
+            nicLevyAmount: this.sumSourceNoteAmount(
+              preview.sourceSnapshot,
+              'nicLevyAmount',
+            ),
+            withholdingTaxPercent: 0,
+            withholdingTaxAmount: this.sumSourceNoteAmount(
+              preview.sourceSnapshot,
+              'withholdingTaxAmount',
+            ),
+            netAmount: preview.netAmount,
+            appliedCharges: preview.appliedCharges,
+            sourceSnapshot: preview.sourceSnapshot,
+            effectiveAsOf: new Date(preview.asOfDate),
+            effectiveVersionKey: preview.effectiveVersionKey,
+            postingEnabled: false,
+            noteDate,
+            createdByUserId: user.id,
+          },
+          include: noteInclude,
+        });
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existing = await this.prisma.placementNote.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            placementId,
+            type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+            effectiveVersionKey: preview.effectiveVersionKey,
+          },
+          include: noteInclude,
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
+  }
+
+  async findAllCurrentEffectiveDebitNotes(
+    tenantId: string,
+    placementId: string,
+  ): Promise<PlacementNoteRecord[]> {
+    await this.assertPlacement(tenantId, placementId);
+    return this.prisma.placementNote.findMany({
+      where: {
+        tenantId,
+        placementId,
+        type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+      },
+      include: noteInclude,
+      orderBy: [{ effectiveAsOf: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async findCurrentEffectiveDebitNote(
+    tenantId: string,
+    placementId: string,
+    noteId: string,
+  ): Promise<PlacementNoteRecord> {
+    await this.assertPlacement(tenantId, placementId);
+    const note = await this.prisma.placementNote.findFirst({
+      where: {
+        id: noteId,
+        tenantId,
+        placementId,
+        type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+      },
+      include: noteInclude,
+    });
+    if (!note)
+      throw new NotFoundException('Current effective debit note not found');
+    return note;
   }
 
   async createEndorsementCreditNote(
@@ -482,19 +658,21 @@ export class PlacementNotesService {
 
     const issuedAt = new Date();
     const accountingEvent =
-      note.type === PlacementNoteType.DEBIT_NOTE
-        ? await this.financialEvents.prepareDebitNoteIssued(
-            user,
-            note,
-            issuedAt,
-          )
-        : note.type === PlacementNoteType.CREDIT_NOTE
-          ? await this.financialEvents.prepareCreditNoteIssued(
+      note.postingEnabled === false
+        ? null
+        : note.type === PlacementNoteType.DEBIT_NOTE
+          ? await this.financialEvents.prepareDebitNoteIssued(
               user,
               note,
               issuedAt,
             )
-          : null;
+          : note.type === PlacementNoteType.CREDIT_NOTE
+            ? await this.financialEvents.prepareCreditNoteIssued(
+                user,
+                note,
+                issuedAt,
+              )
+            : null;
 
     return this.prisma.$transaction(async (tx) => {
       const issuedNote = await tx.placementNote.update({
@@ -653,7 +831,13 @@ export class PlacementNotesService {
     tenantId: string,
     placementId: string,
     endorsementId: string,
-  ): Promise<{ id: string; impactType: PlacementEndorsementImpactType }> {
+  ): Promise<{
+    id: string;
+    endorsementNumber: string;
+    impactType: PlacementEndorsementImpactType;
+    status: PlacementEndorsementStatus;
+    effectiveDate: Date;
+  }> {
     const endorsement = await this.prisma.placementEndorsement.findFirst({
       where: {
         id: endorsementId,
@@ -661,7 +845,13 @@ export class PlacementNotesService {
         placementId,
         placement: { archivedAt: null },
       },
-      select: { id: true, impactType: true },
+      select: {
+        id: true,
+        endorsementNumber: true,
+        impactType: true,
+        status: true,
+        effectiveDate: true,
+      },
     });
     if (!endorsement)
       throw new NotFoundException('Placement endorsement not found');
@@ -776,8 +966,224 @@ export class PlacementNotesService {
           ? 'CN'
           : type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE
             ? 'EDN'
-            : 'ECN';
+            : type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+              ? 'ECN'
+              : 'CEDN';
     return `${prefix}-${String(count + 1).padStart(3, '0')}`;
+  }
+
+  private async buildCurrentEffectiveDebitNotePreview(
+    tenantId: string,
+    placementId: string,
+    asOfDate?: Date | string,
+  ): Promise<CurrentEffectiveDebitNotePreview> {
+    const effectiveAsOf = this.parseOptionalDate(asOfDate);
+    const [financialPosition, effectiveView, sourceReferences] =
+      await Promise.all([
+        this.financialPosition.getFinancialPosition(
+          tenantId,
+          placementId,
+          effectiveAsOf,
+        ),
+        this.effectiveView.getEffectiveView(
+          tenantId,
+          placementId,
+          effectiveAsOf,
+        ),
+        this.findCurrentEffectiveDebitNoteSourceReferences(
+          tenantId,
+          placementId,
+          effectiveAsOf,
+        ),
+      ]);
+
+    if (financialPosition.isMultiCurrency || !financialPosition.currency) {
+      throw new ConflictException(
+        'Current effective debit note requires a single confirmed currency.',
+      );
+    }
+    if (financialPosition.cedant.currentObligation <= 0) {
+      throw new BadRequestException(
+        'Current effective debit note requires a positive cedant obligation.',
+      );
+    }
+
+    const includedEndorsementIds = effectiveView.appliedEndorsements.map(
+      (endorsement) => endorsement.id,
+    );
+    const excludedFutureEndorsementIds =
+      effectiveView.scheduledEndorsements.map((endorsement) => endorsement.id);
+    const sourceNoteReferences = sourceReferences.filter(
+      (source) => source.sourceType === 'NOTE',
+    );
+    const versionPayload = {
+      placementId,
+      currency: financialPosition.currency,
+      originalObligation: financialPosition.cedant.originalObligation,
+      endorsementAdjustments: financialPosition.cedant.endorsementAdjustments,
+      currentEffectiveObligation: financialPosition.cedant.currentObligation,
+      includedEndorsementIds,
+      sourceClosingIds: sourceReferences
+        .filter((source) => source.sourceType !== 'NOTE')
+        .map((source) => source.id)
+        .sort(),
+      effectiveTerms: effectiveView.effectiveTerms,
+    };
+    const effectiveVersionKey = this.hashVersion(versionPayload);
+    const sourceSnapshot = this.toJsonObject({
+      statementType: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+      postingBehavior: 'NON_POSTING_CONSOLIDATED_STATEMENT',
+      postingDecision:
+        'Original and endorsement-adjustment debit notes carry financial recognition; posting this consolidated statement would duplicate receivables.',
+      placementId,
+      asOfDate: effectiveAsOf.toISOString(),
+      effectiveVersionKey,
+      financialPosition: {
+        cedant: financialPosition.cedant,
+        adjustments: financialPosition.adjustments,
+        warnings: financialPosition.warnings,
+      },
+      effectiveView: {
+        basePlacement: effectiveView.basePlacement,
+        effectiveTerms: effectiveView.effectiveTerms,
+        effectiveTotals: effectiveView.effectiveTotals,
+        capacityBreakdown: effectiveView.capacityBreakdown,
+        appliedEndorsements: effectiveView.appliedEndorsements,
+        scheduledEndorsements: effectiveView.scheduledEndorsements,
+        pendingEndorsements: effectiveView.pendingEndorsements,
+        warnings: effectiveView.warnings,
+      },
+      sourceReferences,
+      sourceNoteIds: sourceNoteReferences.map((source) => source.id),
+      sourceNotes: sourceNoteReferences,
+      generatedAt: new Date().toISOString(),
+    });
+    const appliedCharges = this.toJsonObject({
+      statementMode: 'CONSOLIDATED_FROM_SOURCE_SNAPSHOTS',
+      postingEnabled: false,
+      sourceNoteIds: sourceNoteReferences.map((source) => source.id),
+    });
+
+    return {
+      placementId,
+      asOfDate: effectiveAsOf.toISOString(),
+      postingEnabled: false,
+      currency: financialPosition.currency,
+      originalObligation: financialPosition.cedant.originalObligation,
+      endorsementAdjustments: financialPosition.cedant.endorsementAdjustments,
+      currentEffectiveObligation: financialPosition.cedant.currentObligation,
+      grossAmount:
+        effectiveView.effectiveTotals.grossPremium ||
+        financialPosition.cedant.currentObligation,
+      commissionAmount: effectiveView.effectiveTotals.commissionAmount,
+      brokerageAmount: effectiveView.effectiveTotals.brokerageAmount,
+      netAmount: financialPosition.cedant.currentObligation,
+      effectiveVersionKey,
+      includedEndorsementIds,
+      excludedFutureEndorsementIds,
+      sourceReferences,
+      sourceSnapshot,
+      appliedCharges,
+    };
+  }
+
+  private async findCurrentEffectiveDebitNoteSourceReferences(
+    tenantId: string,
+    placementId: string,
+    asOfDate: Date,
+  ) {
+    const [placementClosings, endorsementClosings, sourceNotes] =
+      await Promise.all([
+        this.prisma.placementClosing.findMany({
+          where: {
+            tenantId,
+            placementId,
+            status: PlacementClosingStatus.CONFIRMED,
+          },
+          select: { id: true, closingNumber: true },
+          orderBy: [
+            { confirmedAt: 'asc' },
+            { createdAt: 'asc' },
+            { id: 'asc' },
+          ],
+        }),
+        this.prisma.placementEndorsementClosing.findMany({
+          where: {
+            tenantId,
+            placementId,
+            status: PlacementClosingStatus.CONFIRMED,
+            endorsement: {
+              tenantId,
+              placementId,
+              status: PlacementEndorsementStatus.CLOSED,
+              effectiveDate: { lte: asOfDate },
+            },
+          },
+          select: {
+            id: true,
+            closingNumber: true,
+            endorsementId: true,
+          },
+          orderBy: [
+            { endorsement: { effectiveDate: 'asc' } },
+            { endorsement: { createdAt: 'asc' } },
+            { endorsementId: 'asc' },
+            { createdAt: 'asc' },
+            { id: 'asc' },
+          ],
+        }),
+        this.prisma.placementNote.findMany({
+          where: {
+            tenantId,
+            placementId,
+            type: {
+              in: [
+                PlacementNoteType.DEBIT_NOTE,
+                PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+                PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+              ],
+            },
+            status: { not: PlacementNoteStatus.VOID },
+          },
+          select: {
+            id: true,
+            noteNumber: true,
+            endorsementId: true,
+            type: true,
+            grossAmount: true,
+            nicLevyAmount: true,
+            withholdingTaxAmount: true,
+            netAmount: true,
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }),
+      ]);
+
+    return [
+      ...placementClosings.map((closing) => ({
+        sourceType: 'PLACEMENT_CLOSING' as const,
+        id: closing.id,
+        reference: closing.closingNumber,
+        endorsementId: null,
+      })),
+      ...endorsementClosings.map((closing) => ({
+        sourceType: 'ENDORSEMENT_CLOSING' as const,
+        id: closing.id,
+        reference: closing.closingNumber,
+        endorsementId: closing.endorsementId,
+      })),
+      ...sourceNotes.map((note) => ({
+        sourceType: 'NOTE' as const,
+        id: note.id,
+        reference: note.noteNumber,
+        endorsementId: note.endorsementId,
+        noteType: note.type,
+        grossAmount: this.toNumber(note.grossAmount),
+        nicLevyAmount: this.toNumber(note.nicLevyAmount),
+        withholdingTaxAmount: this.toNumber(note.withholdingTaxAmount),
+        netAmount: this.toNumber(note.netAmount),
+      })),
+    ];
   }
 
   private async debitSnapshot(
@@ -909,6 +1315,11 @@ export class PlacementNotesService {
       (total, closing) => total + this.toNumber(closing.premiumSnapshot),
       0,
     );
+    if (grossAmount <= 0) {
+      throw new BadRequestException(
+        'Endorsement debit notes require a positive additional-premium adjustment',
+      );
+    }
     const commissionAmount = closings.reduce(
       (total, closing) => total + this.toNumber(closing.commissionAmount),
       0,
@@ -1062,6 +1473,49 @@ export class PlacementNotesService {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
     const parsed = Number(value.toString());
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private parseOptionalDate(value: Date | string | undefined): Date {
+    const date =
+      value == null
+        ? new Date()
+        : value instanceof Date
+          ? value
+          : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid effective debit note asOfDate');
+    }
+    return date;
+  }
+
+  private hashVersion(payload: unknown): string {
+    const hash = createHash('sha256')
+      .update(JSON.stringify(payload))
+      .digest('hex')
+      .slice(0, 32);
+    return `current-effective-debit-note:v1:${hash}`;
+  }
+
+  private sumSourceNoteAmount(
+    sourceSnapshot: Prisma.JsonObject,
+    field: 'nicLevyAmount' | 'withholdingTaxAmount',
+  ): number {
+    const sourceNotes = sourceSnapshot.sourceNotes;
+    if (!Array.isArray(sourceNotes)) return 0;
+    return sourceNotes.reduce<number>((total, source) => {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        return total;
+      }
+      const value = (source as Record<string, unknown>)[field];
+      return (
+        total +
+        (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+      );
+    }, 0);
+  }
+
+  private toJsonObject(value: Record<string, unknown>): Prisma.JsonObject {
+    return JSON.parse(JSON.stringify(value)) as Prisma.JsonObject;
   }
 
   private cleanRequired(value: string): string {

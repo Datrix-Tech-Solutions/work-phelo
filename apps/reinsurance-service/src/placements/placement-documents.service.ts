@@ -1088,7 +1088,10 @@ export class PlacementDocumentsService {
     if (note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE) {
       return PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE;
     }
-    if (note.type === PlacementNoteType.DEBIT_NOTE) {
+    if (
+      note.type === PlacementNoteType.DEBIT_NOTE ||
+      note.type === PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE
+    ) {
       return PlacementDocumentType.DEBIT_NOTE;
     }
     return PlacementDocumentType.CREDIT_NOTE;

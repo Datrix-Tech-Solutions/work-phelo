@@ -29,6 +29,8 @@ import {
   ReinsuranceChargeSettingsService,
 } from '../settings/reinsurance-charge-settings.service';
 import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
+import { PlacementFinancialPositionService } from './placement-financial-position.service';
 
 describe('PlacementNotesService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
@@ -202,6 +204,8 @@ describe('PlacementNotesService', () => {
     prepareEndorsementCreditNoteIssued: jest.Mock;
     enqueuePreparedEvent: jest.Mock;
   };
+  let financialPosition: { getFinancialPosition: jest.Mock };
+  let effectiveView: { getEffectiveView: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -261,10 +265,142 @@ describe('PlacementNotesService', () => {
       prepareEndorsementCreditNoteIssued: jest.fn().mockResolvedValue(null),
       enqueuePreparedEvent: jest.fn(),
     };
+    financialPosition = {
+      getFinancialPosition: jest.fn().mockResolvedValue({
+        placementId: 'placement-1',
+        asOfDate: '2026-06-10T00:00:00.000Z',
+        currency: 'USD',
+        isMultiCurrency: false,
+        cedant: {
+          originalObligation: 6750,
+          endorsementAdjustments: 1800,
+          currentObligation: 8550,
+          received: 0,
+          refunded: 0,
+          grossRecorded: 0,
+          reversed: 0,
+          netSettled: 0,
+          outstanding: 8550,
+          position: 'RECEIVABLE',
+        },
+        reinsurers: [],
+        adjustments: [
+          {
+            sourceType: 'ENDORSEMENT_CLOSING',
+            closingId: 'endorsement-closing-1',
+            endorsementId: 'endorsement-1',
+            endorsementNumber: 'END-001',
+            counterpartyId: 'reinsurer-1',
+            originalParticipantId: null,
+            amount: 1800,
+            currency: 'USD',
+            effectiveDate: '2026-06-05T00:00:00.000Z',
+          },
+        ],
+        warnings: [],
+      }),
+    };
+    effectiveView = {
+      getEffectiveView: jest.fn().mockResolvedValue({
+        viewAsOf: '2026-06-10T00:00:00.000Z',
+        basePlacement: {
+          id: 'placement-1',
+          reference: 'FAC-001',
+          policyNumber: 'POL-001',
+          title: 'Factory Fire',
+          cedantId: 'cedant-1',
+          currency: 'USD',
+          sumInsured: 100000,
+          premium: 10000,
+          rate: 1,
+          commissionPercent: 10,
+          brokeragePercent: 0,
+          facultativeOfferPercent: 60,
+        },
+        effectiveTotals: {
+          facultativeOfferPercent: 70,
+          originalFacultativeOfferPercent: 60,
+          acceptedEndorsementCapacityPercent: 0,
+          confirmedEndorsementCapacityPercent: 10,
+          remainingCapacityPercent: 0,
+          participantCount: 2,
+          sumInsured: 120000,
+          premium: 12000,
+          currency: 'USD',
+          rate: 1,
+          commissionPercent: 10,
+          brokeragePercent: 0,
+          grossPremium: 9500,
+          commissionAmount: 950,
+          brokerageAmount: 0,
+          netPremium: 8550,
+        },
+        capacityBreakdown: {
+          originalCapacityPercent: 60,
+          acceptedEndorsementCapacityPercent: 0,
+          confirmedEndorsementCapacityPercent: 10,
+          remainingCapacityPercent: 0,
+          effectiveTotalCapacityPercent: 70,
+        },
+        effectiveTerms: {
+          title: 'Factory Fire',
+          policyNumber: 'POL-001',
+          cedantId: 'cedant-1',
+          riskTypeId: 'risk-type-1',
+          businessDetails: null,
+          offerDetails: null,
+          description: null,
+          inceptionDate: '2026-06-01T00:00:00.000Z',
+          expiryDate: '2027-05-31T00:00:00.000Z',
+          currency: 'USD',
+          sumInsured: 120000,
+          rate: 1,
+          premium: 12000,
+          commissionPercent: 10,
+          brokeragePercent: 0,
+          facultativeOfferPercent: 70,
+        },
+        effectiveParticipants: [],
+        appliedEndorsements: [
+          {
+            id: 'endorsement-1',
+            endorsementNumber: 'END-001',
+            type: 'PARTICIPANT_ADDITION',
+            status: 'CLOSED',
+            effectiveDate: '2026-06-05T00:00:00.000Z',
+            targetPercent: 70,
+            confirmedClosings: [
+              {
+                id: 'endorsement-closing-1',
+                closingNumber: 'ENC-001',
+                endorsementParticipantId: 'endorsement-participant-1',
+                counterpartyId: 'reinsurer-1',
+                signedLinePercent: 10,
+              },
+            ],
+          },
+        ],
+        scheduledEndorsements: [
+          {
+            id: 'endorsement-2',
+            endorsementNumber: 'END-002',
+            type: 'PARTICIPANT_ADDITION',
+            status: 'CLOSED',
+            effectiveDate: '2026-07-01T00:00:00.000Z',
+            targetPercent: 80,
+            confirmedClosingCount: 1,
+          },
+        ],
+        pendingEndorsements: [],
+        warnings: [],
+      }),
+    };
     service = new PlacementNotesService(
       prisma as unknown as PrismaService,
       chargeSettings as unknown as ReinsuranceChargeSettingsService,
       financialEvents as unknown as ReinsuranceFinancialEventPublisher,
+      financialPosition as unknown as PlacementFinancialPositionService,
+      effectiveView as unknown as PlacementEffectiveViewService,
     );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
@@ -590,6 +726,10 @@ describe('PlacementNotesService', () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
     });
     prisma.placementNote.findFirst.mockResolvedValue(null);
     prisma.placementEndorsementClosing.findMany.mockResolvedValue([
@@ -643,7 +783,10 @@ describe('PlacementNotesService', () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
+      endorsementNumber: 'END-001',
       impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
     });
     prisma.placementNote.findFirst.mockResolvedValue(null);
     prisma.placementEndorsementClosing.findMany.mockResolvedValue([]);
@@ -653,11 +796,48 @@ describe('PlacementNotesService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('rejects endorsement debit note when the endorsement is not closed', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'ACCEPTED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
+    });
+
+    await expect(
+      service.createEndorsementDebitNote(user, 'placement-1', 'endorsement-1'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.placementNote.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects future-dated endorsement debit note generation by default', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    await expect(
+      service.createEndorsementDebitNote(user, 'placement-1', 'endorsement-1'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.placementNote.create).not.toHaveBeenCalled();
+  });
+
   it('rejects endorsement debit note for decrease or cancellation endorsements', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
+      endorsementNumber: 'END-001',
       impactType: PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
     });
 
     await expect(
@@ -671,7 +851,10 @@ describe('PlacementNotesService', () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
+      endorsementNumber: 'END-001',
       impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
     });
     prisma.placementNote.findFirst.mockResolvedValue(null);
     prisma.placementEndorsementClosing.findMany.mockResolvedValue([
@@ -694,11 +877,40 @@ describe('PlacementNotesService', () => {
     expect(prisma.placementNote.create).not.toHaveBeenCalled();
   });
 
+  it('rejects endorsement debit note for zero or return-premium adjustments', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        id: 'endorsement-closing-1',
+        premiumSnapshot: new Prisma.Decimal('-500.00'),
+        commissionAmount: new Prisma.Decimal('-50.00'),
+        currency: 'USD',
+      },
+    ]);
+
+    await expect(
+      service.createEndorsementDebitNote(user, 'placement-1', 'endorsement-1'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.placementNote.create).not.toHaveBeenCalled();
+  });
+
   it('rejects duplicate active endorsement debit note', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
+      endorsementNumber: 'END-001',
       impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
     });
     prisma.placementNote.findFirst.mockResolvedValue({ id: 'active-note' });
 
@@ -711,7 +923,10 @@ describe('PlacementNotesService', () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
+      endorsementNumber: 'END-001',
       impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
     });
     prisma.placementNote.findFirst.mockResolvedValue(null);
     prisma.placementEndorsementClosing.findMany.mockResolvedValue([
@@ -743,6 +958,141 @@ describe('PlacementNotesService', () => {
         type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
       },
     });
+  });
+
+  it('creates a non-posting current effective debit note statement from backend effective state', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { id: 'closing-1', closingNumber: 'CLO-001' },
+    ]);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        id: 'endorsement-closing-1',
+        closingNumber: 'ENC-001',
+        endorsementId: 'endorsement-1',
+      },
+    ]);
+    prisma.placementNote.findMany.mockResolvedValue([
+      {
+        id: 'note-1',
+        noteNumber: 'DN-001',
+        endorsementId: null,
+        type: PlacementNoteType.DEBIT_NOTE,
+        grossAmount: new Prisma.Decimal('7500.00'),
+        nicLevyAmount: new Prisma.Decimal('10.00'),
+        withholdingTaxAmount: new Prisma.Decimal('5.00'),
+        netAmount: new Prisma.Decimal('6750.00'),
+      },
+      {
+        id: 'endorsement-note-1',
+        noteNumber: 'EDN-001',
+        endorsementId: 'endorsement-1',
+        type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+        grossAmount: new Prisma.Decimal('2000.00'),
+        nicLevyAmount: new Prisma.Decimal('2.00'),
+        withholdingTaxAmount: new Prisma.Decimal('1.00'),
+        netAmount: new Prisma.Decimal('1800.00'),
+      },
+    ]);
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+      noteNumber: 'CEDN-001',
+      postingEnabled: false,
+      effectiveVersionKey: 'current-effective-debit-note:v1:test',
+    });
+
+    await service.createCurrentEffectiveDebitNote(
+      user,
+      'placement-1',
+      '2026-06-10T00:00:00.000Z',
+    );
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      placementId: 'placement-1',
+      counterpartyId: 'cedant-1',
+      type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+      direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+      noteNumber: 'CEDN-001',
+      postingEnabled: false,
+      grossAmount: 9500,
+      commissionAmount: 950,
+      brokerageAmount: 0,
+      nicLevyAmount: 12,
+      withholdingTaxAmount: 6,
+      netAmount: 8550,
+    });
+    const sourceSnapshot = createArgs.data.sourceSnapshot as Record<
+      string,
+      unknown
+    >;
+    expect(sourceSnapshot.postingBehavior).toBe(
+      'NON_POSTING_CONSOLIDATED_STATEMENT',
+    );
+    expect(sourceSnapshot.postingDecision).toEqual(
+      expect.stringContaining('duplicate receivables'),
+    );
+    expect(sourceSnapshot.sourceNoteIds).toEqual([
+      'note-1',
+      'endorsement-note-1',
+    ]);
+    expect(createArgs.data.effectiveVersionKey).toMatch(
+      /^current-effective-debit-note:v1:/,
+    );
+  });
+
+  it('reuses an existing current effective debit note for the same deterministic version', async () => {
+    const existing = {
+      ...note,
+      type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+      postingEnabled: false,
+      effectiveVersionKey: 'current-effective-debit-note:v1:existing',
+    };
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { id: 'closing-1', closingNumber: 'CLO-001' },
+    ]);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([]);
+    prisma.placementNote.findMany.mockResolvedValue([]);
+    prisma.placementNote.findFirst.mockResolvedValue(existing);
+
+    const result = await service.createCurrentEffectiveDebitNote(
+      user,
+      'placement-1',
+      '2026-06-10T00:00:00.000Z',
+    );
+
+    expect(result).toBe(existing);
+    expect(prisma.placementNote.create).not.toHaveBeenCalled();
+  });
+
+  it('issues current effective debit notes without enqueueing accounting events', async () => {
+    const currentEffectiveNote = {
+      ...note,
+      type: PlacementNoteType.CURRENT_EFFECTIVE_DEBIT_NOTE,
+      postingEnabled: false,
+      effectiveVersionKey: 'current-effective-debit-note:v1:test',
+    };
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(currentEffectiveNote);
+    prisma.placementNote.update.mockResolvedValue({
+      ...currentEffectiveNote,
+      status: PlacementNoteStatus.ISSUED,
+      issuedAt: new Date('2026-06-04T13:00:00.000Z'),
+    });
+
+    await service.issue(user, 'placement-1', 'note-1', {
+      status: PlacementNoteStatus.ISSUED,
+    });
+
+    expect(financialEvents.prepareDebitNoteIssued).not.toHaveBeenCalled();
+    expect(financialEvents.prepareCreditNoteIssued).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('creates endorsement credit note from a confirmed endorsement closing snapshot', async () => {
