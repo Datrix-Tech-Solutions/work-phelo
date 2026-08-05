@@ -8,6 +8,7 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
+  PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -106,6 +107,8 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     paymentDate: new Date('2026-06-05T10:30:00.000Z'),
     reference: 'BANK-001',
     settlementReference: null,
+    settlementMethod: null,
+    settlementCurrency: null,
     bankReference: null,
     bankConfirmedAt: null,
     agreedExchangeRate: null,
@@ -141,6 +144,8 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     paymentDate: new Date('2026-06-07T09:30:00.000Z'),
     reference: 'PAY-REF-001',
     settlementReference: 'SETTLE-001',
+    settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+    settlementCurrency: 'USD',
     bankReference: 'BANK-CONF-001',
     bankConfirmedAt: new Date('2026-06-07T10:00:00.000Z'),
     agreedExchangeRate: new Prisma.Decimal('12.50000000'),
@@ -170,6 +175,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
           status: PlacementNoteStatus.ISSUED,
           currency: 'USD',
           netAmount: new Prisma.Decimal('500.00'),
+          nicLevyAmount: new Prisma.Decimal('10.00'),
+          withholdingTaxAmount: new Prisma.Decimal('20.00'),
+          withholdingTaxPercent: new Prisma.Decimal('4.0000'),
         },
       },
       {
@@ -188,6 +196,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
           status: PlacementNoteStatus.ISSUED,
           currency: 'GHS',
           netAmount: new Prisma.Decimal('3125.00'),
+          nicLevyAmount: new Prisma.Decimal('62.50'),
+          withholdingTaxAmount: new Prisma.Decimal('125.00'),
+          withholdingTaxPercent: new Prisma.Decimal('4.0000'),
         },
       },
     ],
@@ -607,10 +618,22 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     );
   });
 
-  it('prepares a PREMIUM_PAYMENT_RECEIVED event from the recorded payment row', () => {
+  it('prepares a PREMIUM_PAYMENT_RECEIVED event from the bank-confirmed payment row', () => {
     const { actor, service } = makeService();
+    const confirmedPayment = {
+      ...payment,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      bankConfirmedAt: new Date('2026-06-06T09:15:00.000Z'),
+      bankReference: 'BANK-CONF-001',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'GHS',
+      bankChargeAmount: new Prisma.Decimal('15.00'),
+    };
 
-    const event = service.preparePremiumPaymentReceived(actor, payment);
+    const event = service.preparePremiumPaymentReceived(
+      actor,
+      confirmedPayment,
+    );
 
     expect(event).toMatchObject({
       tenantId: 'tenant-1',
@@ -619,15 +642,16 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       sourceRecordId: 'payment-1',
       sourceDocumentId: 'payment-1',
       idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
-      occurredAt: '2026-06-05T10:30:00.000Z',
+      occurredAt: '2026-06-06T09:15:00.000Z',
       currency: 'GHS',
       payload: {
-        transactionDate: '2026-06-05T10:30:00.000Z',
+        transactionDate: '2026-06-06T09:15:00.000Z',
         references: {
           placementId: 'placement-1',
           placementReference: 'FAC-2026-001',
           policyNumber: 'POL-001',
           paymentId: 'payment-1',
+          paymentReference: 'BANK-001',
         },
         counterparty: {
           id: 'cedant-1',
@@ -637,8 +661,17 @@ describe('ReinsuranceFinancialEventPublisher', () => {
         },
         amounts: {
           paymentAmount: 1000,
+          bankCharges: 15,
           signedCashImpact: 1000,
           signedReceivableImpact: -1000,
+          cashAffectingSettlement: true,
+        },
+        payment: {
+          status: PlacementPaymentStatus.BANK_CONFIRMED,
+          bankConfirmedAt: '2026-06-06T09:15:00.000Z',
+          bankReference: 'BANK-CONF-001',
+          settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+          settlementCurrency: 'GHS',
         },
         allocation: {
           model: 'PLACEMENT_LEVEL_RECEIVABLE',
@@ -719,6 +752,34 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     });
   });
 
+  it('allows bank-confirmed reinsurer disbursement recognition without credit-note allocations', () => {
+    const { actor, service } = makeService();
+
+    const eligibility = service.classifyReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      allocations: [],
+    });
+
+    const event = service.prepareReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      allocations: [],
+    });
+
+    expect(eligibility.eligible).toBe(true);
+    expect(eligibility.exclusionReasons).toEqual([]);
+    expect(event?.payload).toMatchObject({
+      amounts: {
+        paymentAmount: 750,
+        allocatedAmount: 0,
+        unallocatedAmount: 750,
+      },
+      allocation: {
+        allocationCount: 0,
+      },
+      allocations: [],
+    });
+  });
+
   it('prepares REINSURER_DISBURSEMENT_RECORDED from a bank-confirmed allocation snapshot', () => {
     const { actor, service } = makeService();
 
@@ -758,15 +819,21 @@ describe('ReinsuranceFinancialEventPublisher', () => {
           status: PlacementPaymentStatus.BANK_CONFIRMED,
           bankConfirmedAt: '2026-06-07T10:00:00.000Z',
           bankReference: 'BANK-CONF-001',
+          settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+          settlementCurrency: 'USD',
         },
         amounts: {
           paymentAmount: 750,
           allocatedAmount: 750,
           unallocatedAmount: 0,
           bankCharges: 12.5,
-          withholdingTax: 25,
+          nicLevyAmount: 72.5,
+          contractualWithholdingTaxAmount: 145,
+          contractualWithholdingTaxRate: 4,
+          withholdingTax: 145,
           signedCashImpact: -750,
           signedPayableImpact: -750,
+          cashAffectingSettlement: true,
         },
         allocation: {
           model: 'CREDIT_NOTE_ALLOCATIONS',
@@ -785,6 +852,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
         allocatedAmount: 500,
         paymentCurrencyAmount: 500,
         agreedExchangeRate: null,
+        nicLevyAmount: 10,
+        contractualWithholdingTaxAmount: 20,
+        contractualWithholdingTaxRate: 4,
       }),
       expect.objectContaining({
         allocationId: 'allocation-2',
@@ -795,8 +865,59 @@ describe('ReinsuranceFinancialEventPublisher', () => {
         allocatedAmount: 3125,
         paymentCurrencyAmount: 250,
         agreedExchangeRate: 12.5,
+        nicLevyAmount: 62.5,
+        contractualWithholdingTaxAmount: 125,
+        contractualWithholdingTaxRate: 4,
       }),
     ]);
+  });
+
+  it('sets no cash impact for journal reinsurer disbursement settlements', () => {
+    const { actor, service } = makeService();
+
+    const event = service.prepareReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      settlementMethod: PlacementSettlementMethod.JOURNAL,
+    });
+
+    expect(event?.payload).toMatchObject({
+      payment: {
+        settlementMethod: PlacementSettlementMethod.JOURNAL,
+      },
+      amounts: {
+        paymentAmount: 750,
+        signedCashImpact: 0,
+        signedPayableImpact: -750,
+        cashAffectingSettlement: false,
+      },
+    });
+  });
+
+  it('preserves operational cheque facts in the disbursement event payload', () => {
+    const { actor, service } = makeService();
+
+    const event = service.prepareReinsurerDisbursementRecorded(actor, {
+      ...reinsurerDisbursement,
+      reference: 'CHQ-001',
+      bankReference: null,
+      settlementMethod: PlacementSettlementMethod.CHEQUE,
+    });
+
+    expect(event?.payload).toMatchObject({
+      references: {
+        paymentReference: 'CHQ-001',
+      },
+      payment: {
+        paymentReference: 'CHQ-001',
+        bankReference: null,
+        settlementMethod: PlacementSettlementMethod.CHEQUE,
+      },
+      amounts: {
+        paymentAmount: 750,
+        signedCashImpact: -750,
+        signedPayableImpact: -750,
+      },
+    });
   });
 
   it('prepares REINSURER_DISBURSEMENT_REVERSED from the immutable reversal row', () => {
@@ -864,15 +985,20 @@ describe('ReinsuranceFinancialEventPublisher', () => {
           isReversal: true,
           reversalOfPaymentId: 'payment-disbursement-1',
           bankReference: 'REVERSAL-BANK-CONF-001',
+          settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
         },
         amounts: {
           paymentAmount: 750,
           originalPaymentAmount: 750,
           allocatedAmount: 750,
           bankCharges: 12.5,
-          withholdingTax: 25,
+          nicLevyAmount: 72.5,
+          contractualWithholdingTaxAmount: 145,
+          contractualWithholdingTaxRate: 4,
+          withholdingTax: 145,
           signedCashImpact: 750,
           signedPayableImpact: 750,
+          cashAffectingSettlement: true,
         },
         allocation: {
           model: 'CREDIT_NOTE_ALLOCATIONS',
@@ -930,7 +1056,6 @@ describe('ReinsuranceFinancialEventPublisher', () => {
         'failed payment',
         'reversal row',
         'missing bank confirmation date',
-        'no allocations',
       ]),
     );
   });

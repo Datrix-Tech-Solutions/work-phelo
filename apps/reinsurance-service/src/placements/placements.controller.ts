@@ -128,6 +128,7 @@ import {
   PlacementPaymentResponseDto,
 } from './dto/placement-payment-response.dto';
 import { PlacementFinancialPositionResponseDto } from './dto/placement-financial-position-response.dto';
+import { ConfirmPlacementPaymentBankDto } from './dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
 import { PlacementPaymentsService } from './placement-payments.service';
@@ -179,6 +180,24 @@ export class PlacementsController {
     private readonly claimCedantSettlementsService: PlacementClaimCedantSettlementsService,
     private readonly claimRecoveryReceiptsService: PlacementClaimRecoveryReceiptsService,
   ) {}
+
+  @Get('payments/pending-bank-confirmation')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List payments awaiting Accounting financial confirmation',
+    description:
+      'Returns tenant-scoped RECORDED inbound premium receipts and outbound reinsurer disbursements that Accounting must confirm before financial recognition and posting begin.',
+  })
+  @ApiOkResponse({ type: PlacementPaymentListResponseDto })
+  async findPendingBankConfirmationPayments(
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.paymentsService.findPendingBankConfirmations(
+      request.user.tenantId,
+    );
+    return { items };
+  }
 
   @Get(':id/effective-view')
   @ApiTags('Reinsurance - Placements')
@@ -2617,6 +2636,52 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.paymentsService.create(request.user, id, dto);
+  }
+
+  @Post(':id/payments/:paymentId/bank-confirmation')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Confirm payment financial completion',
+    description:
+      'Accounting-owned workflow step that transitions a RECORDED inbound premium receipt or outbound reinsurer disbursement to BANK_CONFIRMED, stores confirmation facts, and enqueues the corresponding Accounting event for posting.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'paymentId',
+    format: 'uuid',
+    description:
+      'RECORDED premium receipt or reinsurer disbursement payment ID.',
+  })
+  @ApiBody({ type: ConfirmPlacementPaymentBankDto })
+  @ApiOkResponse({ type: PlacementPaymentResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The payment is not an original inbound premium receipt/outbound reinsurer disbursement or is in a non-confirmable status.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The payment is already bank-confirmed or changed status before confirmation completed.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or payment is archived, missing or belongs to another tenant.',
+  })
+  confirmPaymentBankCompletion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: ConfirmPlacementPaymentBankDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.paymentsService.confirmBankPayment(
+      request.user,
+      id,
+      paymentId,
+      dto,
+    );
   }
 
   @Post(':id/payments/:paymentId/reverse')

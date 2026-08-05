@@ -52,6 +52,31 @@ const paymentReconciliationInclude = {
       status: true,
     },
   },
+  closing: {
+    select: {
+      id: true,
+      closingNumber: true,
+      netPremium: true,
+      currency: true,
+    },
+  },
+  endorsementClosing: {
+    select: {
+      id: true,
+      closingNumber: true,
+      netPremium: true,
+      currency: true,
+      endorsementId: true,
+      endorsement: {
+        select: {
+          id: true,
+          endorsementNumber: true,
+          effectiveDate: true,
+          type: true,
+        },
+      },
+    },
+  },
   allocations: {
     include: {
       note: {
@@ -63,6 +88,10 @@ const paymentReconciliationInclude = {
           status: true,
           currency: true,
           netAmount: true,
+          nicLevyPercent: true,
+          nicLevyAmount: true,
+          withholdingTaxPercent: true,
+          withholdingTaxAmount: true,
         },
       },
     },
@@ -850,12 +879,7 @@ export class ReinsuranceAccountingReadinessService {
         tenantId: user.tenantId,
         type: PlacementPaymentType.PREMIUM_RECEIVED,
         direction: PlacementPaymentDirection.INBOUND,
-        status: {
-          in: [
-            PlacementPaymentStatus.RECORDED,
-            PlacementPaymentStatus.REVERSED,
-          ],
-        },
+        status: PlacementPaymentStatus.BANK_CONFIRMED,
         reversalOfPaymentId: null,
         placement: { archivedAt: null },
       },

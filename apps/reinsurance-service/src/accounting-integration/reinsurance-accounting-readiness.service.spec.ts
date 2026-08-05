@@ -7,6 +7,7 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
+  PlacementSettlementMethod,
   Prisma,
   ReinsuranceAccountingOutboxStatus,
 } from '../../prisma/generated/client';
@@ -146,8 +147,16 @@ describe('ReinsuranceAccountingReadinessService', () => {
     currency: 'GHS',
     paymentDate: new Date('2026-06-05T10:30:00.000Z'),
     reference: 'BANK-001',
+    settlementReference: null,
+    settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+    settlementCurrency: 'GHS',
+    bankReference: 'BANK-CONF-001',
+    bankConfirmedAt: new Date('2026-06-06T09:15:00.000Z'),
+    agreedExchangeRate: null,
+    bankChargeAmount: new Prisma.Decimal('0.00'),
+    withholdingTaxAmount: new Prisma.Decimal('0.00'),
     notes: null,
-    status: PlacementPaymentStatus.RECORDED,
+    status: PlacementPaymentStatus.BANK_CONFIRMED,
     reversalOfPaymentId: null,
     counterparty: {
       id: 'cedant-1',
@@ -373,7 +382,7 @@ describe('ReinsuranceAccountingReadinessService', () => {
         sourceRecordId: 'payment-1',
         sourceDocumentId: 'payment-1',
         idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
-        occurredAt: '2026-06-05T10:30:00.000Z',
+        occurredAt: '2026-06-06T09:15:00.000Z',
         currency: 'GHS',
         payload: { amounts: { paymentAmount: 1000 } },
       }),
@@ -872,7 +881,7 @@ describe('ReinsuranceAccountingReadinessService', () => {
       expect.anything(),
       expect.objectContaining({
         idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
-        occurredAt: '2026-06-05T10:30:00.000Z',
+        occurredAt: '2026-06-06T09:15:00.000Z',
       }),
     );
     expect(result).toMatchObject({

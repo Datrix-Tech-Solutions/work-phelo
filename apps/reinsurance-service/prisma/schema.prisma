@@ -98,6 +98,18 @@ enum PlacementPaymentStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementSettlementMethod {
+  BANK_TRANSFER
+  CHEQUE
+  CASH
+  MOBILE_MONEY
+  INTERNAL_OFFSET
+  JOURNAL
+  OTHER
+
+  @@schema("reinsurance")
+}
+
 enum PlacementNoteType {
   DEBIT_NOTE
   CREDIT_NOTE
@@ -894,6 +906,8 @@ model PlacementPayment {
   paymentDate           DateTime
   reference             String?
   settlementReference   String?
+  settlementMethod      PlacementSettlementMethod?
+  settlementCurrency    String?
   bankReference         String?
   bankConfirmedAt       DateTime?
   bankConfirmedByUserId String?

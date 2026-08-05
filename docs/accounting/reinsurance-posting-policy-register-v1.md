@@ -45,6 +45,7 @@ accountants own exact posting rules.
 - Reinsurer disbursement recorded and reversed events publish business facts only. Reinsurance does
   not choose payable, bank-charge, withholding-tax or FX gain/loss GL accounts.
   Accounting posting rules resolve those accounts per tenant.
-- The recorded disbursement event supports multiple Credit Note allocations,
-  partial settlement, persisted agreed FX rates, bank-charge facts and
-  withholding-tax facts. Unallocated payments are rejected before event capture.
+- The recorded disbursement event supports closing-based settlement without
+  Credit Note allocations, and strict multiple Credit Note allocation facts when
+  allocations are present. It carries persisted agreed FX, settlement method,
+  bank-charge, NIC levy and contractual withholding-tax facts where available.

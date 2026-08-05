@@ -8,6 +8,7 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
+  PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -82,6 +83,8 @@ type PaymentForEvent = {
   paymentDate: Date;
   reference: string | null;
   settlementReference?: string | null;
+  settlementMethod?: PlacementSettlementMethod | null;
+  settlementCurrency?: string | null;
   bankReference?: string | null;
   bankConfirmedAt?: Date | null;
   agreedExchangeRate?: Prisma.Decimal | number | string | null;
@@ -111,6 +114,25 @@ type PaymentForEvent = {
     reference: string | null;
     status: PlacementPaymentStatus;
   } | null;
+  closing?: {
+    id: string;
+    closingNumber: string;
+    netPremium?: Prisma.Decimal | number | string | null;
+    currency?: string | null;
+  } | null;
+  endorsementClosing?: {
+    id: string;
+    closingNumber: string;
+    netPremium?: Prisma.Decimal | number | string | null;
+    currency?: string | null;
+    endorsementId?: string;
+    endorsement?: {
+      id: string;
+      endorsementNumber: string;
+      effectiveDate: Date;
+      type: string;
+    } | null;
+  } | null;
   allocations?: Array<{
     id: string;
     noteId: string;
@@ -127,6 +149,10 @@ type PaymentForEvent = {
       status?: PlacementNoteStatus;
       direction?: PlacementNoteDirection;
       netAmount?: Prisma.Decimal | number | string;
+      nicLevyPercent?: Prisma.Decimal | number | string | null;
+      nicLevyAmount?: Prisma.Decimal | number | string | null;
+      withholdingTaxPercent?: Prisma.Decimal | number | string | null;
+      withholdingTaxAmount?: Prisma.Decimal | number | string | null;
     };
   }>;
 };
@@ -666,14 +692,28 @@ export class ReinsuranceFinancialEventPublisher {
 
     if (!this.isRecordedPremiumPayment(payment)) {
       throw new Error(
-        `Payment ${payment.id} is not a valid recorded premium receipt`,
+        `Payment ${payment.id} is not a valid bank-confirmed premium receipt`,
       );
     }
 
     const placement = this.requirePlacement(payment);
     const counterparty = this.requireCedantCounterparty(payment);
     const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
-    const occurredAt = payment.paymentDate.toISOString();
+    const occurredAt = payment.bankConfirmedAt?.toISOString();
+    if (!occurredAt) {
+      throw new Error(
+        `Payment ${payment.id} is missing bankConfirmedAt for PREMIUM_PAYMENT_RECEIVED`,
+      );
+    }
+    const exchangeRate = this.optionalDecimalNumber(payment.agreedExchangeRate);
+    const bankCharges = Math.abs(
+      this.optionalDecimalNumber(payment.bankChargeAmount) ?? 0,
+    );
+    const settlementMethod =
+      payment.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency = payment.settlementCurrency ?? payment.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+    const signedCashImpact = cashAffecting ? paymentAmount : 0;
 
     return {
       tenantId: payment.tenantId,
@@ -687,12 +727,15 @@ export class ReinsuranceFinancialEventPublisher {
       payload: {
         transactionDate: occurredAt,
         currency: payment.currency,
+        ...(exchangeRate ? { exchangeRate } : {}),
         references: {
           placementId: placement.id,
           placementReference: placement.reference,
           policyNumber: placement.policyNumber,
           placementTitle: placement.title,
           paymentId: payment.id,
+          paymentReference: payment.reference,
+          settlementReference: payment.settlementReference ?? null,
         },
         counterparty: {
           id: counterparty.id,
@@ -703,15 +746,25 @@ export class ReinsuranceFinancialEventPublisher {
         },
         amounts: {
           paymentAmount,
-          signedCashImpact: paymentAmount,
+          bankCharges,
+          signedCashImpact,
           signedReceivableImpact: -paymentAmount,
+          cashAffectingSettlement: cashAffecting,
         },
         payment: {
           id: payment.id,
-          paymentDate: occurredAt,
-          paymentMethod: null,
+          paymentDate: payment.paymentDate.toISOString(),
+          bankConfirmedAt: occurredAt,
+          paymentMethod: settlementMethod,
           paymentReference: payment.reference,
-          bankReference: payment.reference,
+          settlementReference: payment.settlementReference ?? null,
+          bankReference: payment.bankReference,
+          settlementMethod,
+          method: settlementMethod,
+          currency: payment.currency,
+          settlementCurrency,
+          agreedExchangeRate: exchangeRate,
+          confirmedExchangeRate: exchangeRate,
           status: payment.status,
           type: payment.type,
           direction: payment.direction,
@@ -760,6 +813,13 @@ export class ReinsuranceFinancialEventPublisher {
     }
     const paymentAmount = Math.abs(this.decimalNumber(reversalPayment.amount));
     const occurredAt = reversalPayment.paymentDate.toISOString();
+    const settlementMethod =
+      reversalPayment.settlementMethod ??
+      PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency =
+      reversalPayment.settlementCurrency ?? reversalPayment.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+    const signedCashImpact = cashAffecting ? -paymentAmount : 0;
 
     return {
       tenantId: reversalPayment.tenantId,
@@ -794,8 +854,9 @@ export class ReinsuranceFinancialEventPublisher {
           originalPaymentAmount: Math.abs(
             this.decimalNumber(originalPayment.amount),
           ),
-          signedCashImpact: -paymentAmount,
+          signedCashImpact,
           signedReceivableImpact: paymentAmount,
+          cashAffectingSettlement: cashAffecting,
         },
         payment: {
           id: reversalPayment.id,
@@ -807,6 +868,9 @@ export class ReinsuranceFinancialEventPublisher {
           paymentReference: reversalPayment.reference,
           originalPaymentReference: originalPayment.reference,
           bankReference: reversalPayment.reference,
+          settlementMethod,
+          method: settlementMethod,
+          settlementCurrency,
           status: reversalPayment.status,
           originalPaymentStatus: originalPayment.status,
           type: reversalPayment.type,
@@ -862,9 +926,7 @@ export class ReinsuranceFinancialEventPublisher {
     const bankCharges = Math.abs(
       this.optionalDecimalNumber(payment.bankChargeAmount) ?? 0,
     );
-    const withholdingTax = Math.abs(
-      this.optionalDecimalNumber(payment.withholdingTaxAmount) ?? 0,
-    );
+    const sourceCharges = this.sourceChargeFacts(payment);
     const occurredAt = payment.bankConfirmedAt?.toISOString();
     if (!occurredAt) {
       throw new Error(
@@ -872,6 +934,11 @@ export class ReinsuranceFinancialEventPublisher {
       );
     }
     const exchangeRate = this.optionalDecimalNumber(payment.agreedExchangeRate);
+    const settlementMethod =
+      payment.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency = payment.settlementCurrency ?? payment.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+    const signedCashImpact = cashAffecting ? -paymentAmount : 0;
 
     return {
       tenantId: payment.tenantId,
@@ -896,6 +963,17 @@ export class ReinsuranceFinancialEventPublisher {
           paymentId: payment.id,
           paymentReference: payment.reference,
           settlementReference: payment.settlementReference ?? null,
+          closingId: payment.closingId ?? payment.closing?.id ?? null,
+          closingNumber: payment.closing?.closingNumber ?? null,
+          endorsementClosingId:
+            payment.endorsementClosingId ??
+            payment.endorsementClosing?.id ??
+            null,
+          endorsementClosingNumber:
+            payment.endorsementClosing?.closingNumber ?? null,
+          endorsementId: payment.endorsementClosing?.endorsementId ?? null,
+          endorsementReference:
+            payment.endorsementClosing?.endorsement?.endorsementNumber ?? null,
         },
         counterparty: {
           id: counterparty.id,
@@ -914,9 +992,12 @@ export class ReinsuranceFinancialEventPublisher {
           paymentReference: payment.reference,
           settlementReference: payment.settlementReference ?? null,
           bankReference: payment.bankReference,
-          method: null,
+          settlementMethod,
+          method: settlementMethod,
           currency: payment.currency,
+          settlementCurrency,
           agreedExchangeRate: exchangeRate,
+          confirmedExchangeRate: exchangeRate,
           isReversal: false,
           reversalOfPaymentId: null,
           notes: payment.notes,
@@ -926,10 +1007,17 @@ export class ReinsuranceFinancialEventPublisher {
           allocatedAmount,
           unallocatedAmount,
           bankCharges,
-          withholdingTax,
-          signedCashImpact: -paymentAmount,
+          nicLevyAmount: sourceCharges.nicLevyAmount,
+          contractualWithholdingTaxAmount:
+            sourceCharges.contractualWithholdingTaxAmount,
+          contractualWithholdingTaxRate:
+            sourceCharges.contractualWithholdingTaxRate,
+          withholdingTax: sourceCharges.contractualWithholdingTaxAmount,
+          signedCashImpact,
           signedPayableImpact: -allocatedAmount,
+          cashAffectingSettlement: cashAffecting,
         },
+        sourceCharges,
         allocations: (payment.allocations ?? []).map((allocation) => ({
           allocationId: allocation.id,
           creditNoteId: allocation.noteId,
@@ -940,6 +1028,15 @@ export class ReinsuranceFinancialEventPublisher {
           paymentCurrencyAmount: this.decimalNumber(allocation.allocatedAmount),
           agreedExchangeRate: this.optionalDecimalNumber(
             allocation.agreedExchangeRate,
+          ),
+          nicLevyAmount: this.optionalDecimalNumber(
+            allocation.note?.nicLevyAmount,
+          ),
+          contractualWithholdingTaxAmount: this.optionalDecimalNumber(
+            allocation.note?.withholdingTaxAmount,
+          ),
+          contractualWithholdingTaxRate: this.optionalDecimalNumber(
+            allocation.note?.withholdingTaxPercent,
           ),
         })),
         allocation: {
@@ -994,51 +1091,63 @@ export class ReinsuranceFinancialEventPublisher {
     }
 
     const allocations = payment.allocations ?? [];
-    if (allocations.length === 0) {
-      exclusionReasons.push('no allocations');
-    } else {
-      const paymentCurrency = payment.currency?.trim().toUpperCase();
-      let allocatedTotal = 0;
-      for (const allocation of allocations) {
-        allocatedTotal = this.roundMoney(
-          allocatedTotal + this.decimalNumber(allocation.allocatedAmount),
-        );
-        if (!allocation.note) {
-          exclusionReasons.push('missing credit note');
-          continue;
-        }
-        if (
-          allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
-          allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
-        ) {
-          exclusionReasons.push('unsupported obligation type');
-        }
-        if (
-          allocation.note.status !== undefined &&
-          allocation.note.status !== PlacementNoteStatus.ISSUED
-        ) {
-          exclusionReasons.push('missing credit note');
-        }
-        if (
-          allocation.note.direction !== undefined &&
-          allocation.note.direction !==
-            PlacementNoteDirection.BROKER_TO_REINSURER
-        ) {
-          exclusionReasons.push('unsupported obligation type');
-        }
-        if (
-          paymentCurrency &&
-          allocation.obligationCurrency.trim().toUpperCase() !==
-            paymentCurrency &&
-          !allocation.agreedExchangeRate &&
-          !payment.agreedExchangeRate
-        ) {
-          exclusionReasons.push('missing agreed FX rate');
-        }
+    const paymentCurrency = payment.currency?.trim().toUpperCase();
+    const settlementCurrency =
+      payment.settlementCurrency?.trim().toUpperCase() ?? paymentCurrency;
+    let allocatedTotal = 0;
+    for (const allocation of allocations) {
+      allocatedTotal = this.roundMoney(
+        allocatedTotal + this.decimalNumber(allocation.allocatedAmount),
+      );
+      if (!allocation.note) {
+        exclusionReasons.push('missing credit note');
+        continue;
       }
+      if (
+        allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
+        allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+      ) {
+        exclusionReasons.push('unsupported obligation type');
+      }
+      if (
+        allocation.note.status !== undefined &&
+        allocation.note.status !== PlacementNoteStatus.ISSUED
+      ) {
+        exclusionReasons.push('missing credit note');
+      }
+      if (
+        allocation.note.direction !== undefined &&
+        allocation.note.direction !== PlacementNoteDirection.BROKER_TO_REINSURER
+      ) {
+        exclusionReasons.push('unsupported obligation type');
+      }
+      if (
+        paymentCurrency &&
+        allocation.obligationCurrency.trim().toUpperCase() !==
+          settlementCurrency &&
+        !allocation.agreedExchangeRate &&
+        !payment.agreedExchangeRate
+      ) {
+        exclusionReasons.push('missing agreed FX rate');
+      }
+    }
+    if (allocations.length > 0) {
       const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
       if (this.roundMoney(allocatedTotal) !== this.roundMoney(paymentAmount)) {
         exclusionReasons.push('incomplete allocation');
+      }
+    }
+    if (allocations.length === 0 && settlementCurrency) {
+      const obligationCurrency =
+        payment.closing?.currency?.trim().toUpperCase() ??
+        payment.endorsementClosing?.currency?.trim().toUpperCase() ??
+        paymentCurrency;
+      if (
+        obligationCurrency &&
+        obligationCurrency !== settlementCurrency &&
+        !payment.agreedExchangeRate
+      ) {
+        exclusionReasons.push('missing agreed FX rate');
       }
     }
 
@@ -1058,6 +1167,120 @@ export class ReinsuranceFinancialEventPublisher {
     event: ReinsuranceAccountingEventInput,
   ) {
     return this.outbox.enqueueAccountingEvent(tx, event);
+  }
+
+  private isCashAffectingSettlement(
+    method: PlacementSettlementMethod,
+  ): boolean {
+    const cashAffectingMethods: PlacementSettlementMethod[] = [
+      PlacementSettlementMethod.BANK_TRANSFER,
+      PlacementSettlementMethod.CHEQUE,
+      PlacementSettlementMethod.CASH,
+      PlacementSettlementMethod.MOBILE_MONEY,
+    ];
+    return cashAffectingMethods.includes(method);
+  }
+
+  private sourceChargeFacts(payment: PaymentForEvent): {
+    nicLevyAmount: number | null;
+    contractualWithholdingTaxAmount: number | null;
+    contractualWithholdingTaxRate: number | null;
+    sources: Array<{
+      noteId: string;
+      noteNumber: string | null;
+      noteType: PlacementNoteType | null;
+      allocatedObligationAmount: number;
+      noteNetAmount: number | null;
+      allocationRatio: number | null;
+      nicLevyAmount: number | null;
+      withholdingTaxAmount: number | null;
+      withholdingTaxRate: number | null;
+    }>;
+  } {
+    const sources = (payment.allocations ?? [])
+      .filter((allocation) => allocation.note)
+      .map((allocation) => {
+        const note = allocation.note!;
+        const allocatedObligationAmount = Math.abs(
+          this.decimalNumber(allocation.obligationAmount),
+        );
+        const noteNetAmountRaw = this.optionalDecimalNumber(note.netAmount);
+        const noteNetAmount =
+          noteNetAmountRaw === null ? null : Math.abs(noteNetAmountRaw);
+        const allocationRatio =
+          noteNetAmount && noteNetAmount > 0
+            ? allocatedObligationAmount / noteNetAmount
+            : null;
+        const ratio = allocationRatio ?? 1;
+        const nicLevyAmount = this.proportionalSourceAmount(
+          note.nicLevyAmount,
+          ratio,
+        );
+        const withholdingTaxAmount = this.proportionalSourceAmount(
+          note.withholdingTaxAmount,
+          ratio,
+        );
+
+        return {
+          noteId: note.id,
+          noteNumber: note.noteNumber ?? null,
+          noteType: note.type ?? null,
+          allocatedObligationAmount,
+          noteNetAmount,
+          allocationRatio:
+            allocationRatio === null ? null : this.roundMoney(allocationRatio),
+          nicLevyAmount,
+          withholdingTaxAmount,
+          withholdingTaxRate: this.optionalDecimalNumber(
+            note.withholdingTaxPercent,
+          ),
+        };
+      });
+
+    const nicLevyAmount = this.nullIfZero(
+      this.roundMoney(
+        sources.reduce(
+          (total, source) => total + (source.nicLevyAmount ?? 0),
+          0,
+        ),
+      ),
+    );
+    const contractualWithholdingTaxAmount = this.nullIfZero(
+      this.roundMoney(
+        sources.reduce(
+          (total, source) => total + (source.withholdingTaxAmount ?? 0),
+          0,
+        ),
+      ),
+    );
+    const uniqueRates = [
+      ...new Set(
+        sources
+          .map((source) => source.withholdingTaxRate)
+          .filter((rate): rate is number => rate !== null),
+      ),
+    ];
+
+    return {
+      nicLevyAmount,
+      contractualWithholdingTaxAmount,
+      contractualWithholdingTaxRate:
+        uniqueRates.length === 1 ? uniqueRates[0] : null,
+      sources,
+    };
+  }
+
+  private proportionalSourceAmount(
+    amount: Prisma.Decimal | number | string | null | undefined,
+    ratio: number,
+  ): number | null {
+    const parsed = this.optionalDecimalNumber(amount);
+    if (parsed === null) return null;
+    return this.nullIfZero(this.roundMoney(Math.abs(parsed) * ratio));
+  }
+
+  private nullIfZero(value: number): number | null {
+    return value === 0 ? null : value;
   }
 
   prepareReinsurerDisbursementReversed(
@@ -1100,13 +1323,16 @@ export class ReinsuranceFinancialEventPublisher {
     const bankCharges = Math.abs(
       this.optionalDecimalNumber(reversalPayment.bankChargeAmount) ?? 0,
     );
-    const withholdingTax = Math.abs(
-      this.optionalDecimalNumber(reversalPayment.withholdingTaxAmount) ?? 0,
-    );
+    const sourceCharges = this.sourceChargeFacts(reversalPayment);
     const occurredAt = reversalPayment.paymentDate.toISOString();
     const exchangeRate = this.optionalDecimalNumber(
       reversalPayment.agreedExchangeRate,
     );
+    const settlementMethod =
+      reversalPayment.settlementMethod ??
+      PlacementSettlementMethod.BANK_TRANSFER;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+    const signedCashImpact = cashAffecting ? paymentAmount : 0;
 
     return {
       tenantId: reversalPayment.tenantId,
@@ -1132,6 +1358,20 @@ export class ReinsuranceFinancialEventPublisher {
           reversalPaymentId: reversalPayment.id,
           paymentId: reversalPayment.id,
           settlementReference: reversalPayment.settlementReference ?? null,
+          closingId:
+            reversalPayment.closingId ?? reversalPayment.closing?.id ?? null,
+          closingNumber: reversalPayment.closing?.closingNumber ?? null,
+          endorsementClosingId:
+            reversalPayment.endorsementClosingId ??
+            reversalPayment.endorsementClosing?.id ??
+            null,
+          endorsementClosingNumber:
+            reversalPayment.endorsementClosing?.closingNumber ?? null,
+          endorsementId:
+            reversalPayment.endorsementClosing?.endorsementId ?? null,
+          endorsementReference:
+            reversalPayment.endorsementClosing?.endorsement
+              ?.endorsementNumber ?? null,
         },
         counterparty: {
           id: counterparty.id,
@@ -1154,9 +1394,13 @@ export class ReinsuranceFinancialEventPublisher {
           originalPaymentReference: originalPayment.reference,
           settlementReference: reversalPayment.settlementReference ?? null,
           bankReference: reversalPayment.bankReference,
-          method: null,
+          settlementMethod,
+          method: settlementMethod,
           currency: reversalPayment.currency,
+          settlementCurrency:
+            reversalPayment.settlementCurrency ?? reversalPayment.currency,
           agreedExchangeRate: exchangeRate,
+          confirmedExchangeRate: exchangeRate,
           isReversal: true,
           reversalOfPaymentId: originalPayment.id,
           notes: reversalPayment.notes,
@@ -1168,10 +1412,17 @@ export class ReinsuranceFinancialEventPublisher {
           ),
           allocatedAmount,
           bankCharges,
-          withholdingTax,
-          signedCashImpact: paymentAmount,
+          nicLevyAmount: sourceCharges.nicLevyAmount,
+          contractualWithholdingTaxAmount:
+            sourceCharges.contractualWithholdingTaxAmount,
+          contractualWithholdingTaxRate:
+            sourceCharges.contractualWithholdingTaxRate,
+          withholdingTax: sourceCharges.contractualWithholdingTaxAmount,
+          signedCashImpact,
           signedPayableImpact: allocatedAmount,
+          cashAffectingSettlement: cashAffecting,
         },
+        sourceCharges,
         allocations: (reversalPayment.allocations ?? []).map((allocation) => ({
           allocationId: allocation.id,
           creditNoteId: allocation.noteId,
@@ -1186,6 +1437,15 @@ export class ReinsuranceFinancialEventPublisher {
           ),
           agreedExchangeRate: this.optionalDecimalNumber(
             allocation.agreedExchangeRate,
+          ),
+          nicLevyAmount: this.optionalDecimalNumber(
+            allocation.note?.nicLevyAmount,
+          ),
+          contractualWithholdingTaxAmount: this.optionalDecimalNumber(
+            allocation.note?.withholdingTaxAmount,
+          ),
+          contractualWithholdingTaxRate: this.optionalDecimalNumber(
+            allocation.note?.withholdingTaxPercent,
           ),
         })),
         allocation: {
@@ -1373,10 +1633,12 @@ export class ReinsuranceFinancialEventPublisher {
     return (
       payment.type === PlacementPaymentType.PREMIUM_RECEIVED &&
       payment.direction === PlacementPaymentDirection.INBOUND &&
-      payment.status === PlacementPaymentStatus.RECORDED &&
+      payment.status === PlacementPaymentStatus.BANK_CONFIRMED &&
       payment.reversalOfPaymentId === null &&
       payment.paymentDate instanceof Date &&
       !Number.isNaN(payment.paymentDate.getTime()) &&
+      payment.bankConfirmedAt instanceof Date &&
+      !Number.isNaN(payment.bankConfirmedAt.getTime()) &&
       payment.currency.trim().length === 3 &&
       this.decimalNumber(payment.amount) > 0
     );
@@ -1441,39 +1703,52 @@ export class ReinsuranceFinancialEventPublisher {
     }
 
     const allocations = payment.allocations ?? [];
-    if (allocations.length === 0) {
-      exclusionReasons.push('no allocations');
-    } else {
-      const paymentCurrency = payment.currency?.trim().toUpperCase();
-      let allocatedTotal = 0;
-      for (const allocation of allocations) {
-        allocatedTotal = this.roundMoney(
-          allocatedTotal +
-            Math.abs(this.decimalNumber(allocation.allocatedAmount)),
-        );
-        if (!allocation.note) {
-          exclusionReasons.push('missing credit note');
-          continue;
-        }
-        if (
-          allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
-          allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
-        ) {
-          exclusionReasons.push('unsupported obligation type');
-        }
-        if (
-          paymentCurrency &&
-          allocation.obligationCurrency.trim().toUpperCase() !==
-            paymentCurrency &&
-          !allocation.agreedExchangeRate &&
-          !payment.agreedExchangeRate
-        ) {
-          exclusionReasons.push('missing agreed FX rate');
-        }
+    const paymentCurrency = payment.currency?.trim().toUpperCase();
+    const settlementCurrency =
+      payment.settlementCurrency?.trim().toUpperCase() ?? paymentCurrency;
+    let allocatedTotal = 0;
+    for (const allocation of allocations) {
+      allocatedTotal = this.roundMoney(
+        allocatedTotal +
+          Math.abs(this.decimalNumber(allocation.allocatedAmount)),
+      );
+      if (!allocation.note) {
+        exclusionReasons.push('missing credit note');
+        continue;
       }
+      if (
+        allocation.note.type !== PlacementNoteType.CREDIT_NOTE &&
+        allocation.note.type !== PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+      ) {
+        exclusionReasons.push('unsupported obligation type');
+      }
+      if (
+        paymentCurrency &&
+        allocation.obligationCurrency.trim().toUpperCase() !==
+          settlementCurrency &&
+        !allocation.agreedExchangeRate &&
+        !payment.agreedExchangeRate
+      ) {
+        exclusionReasons.push('missing agreed FX rate');
+      }
+    }
+    if (allocations.length > 0) {
       const paymentAmount = Math.abs(this.decimalNumber(payment.amount));
       if (this.roundMoney(allocatedTotal) !== this.roundMoney(paymentAmount)) {
         exclusionReasons.push('incomplete allocation');
+      }
+    }
+    if (allocations.length === 0 && settlementCurrency) {
+      const obligationCurrency =
+        payment.closing?.currency?.trim().toUpperCase() ??
+        payment.endorsementClosing?.currency?.trim().toUpperCase() ??
+        paymentCurrency;
+      if (
+        obligationCurrency &&
+        obligationCurrency !== settlementCurrency &&
+        !payment.agreedExchangeRate
+      ) {
+        exclusionReasons.push('missing agreed FX rate');
       }
     }
 

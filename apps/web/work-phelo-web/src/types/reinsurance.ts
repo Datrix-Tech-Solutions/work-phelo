@@ -984,6 +984,33 @@ export type PlacementPaymentStatus =
   | 'FAILED'
   | 'CANCELLED'
   | 'REVERSED';
+export type PlacementSettlementMethod =
+  | 'BANK_TRANSFER'
+  | 'CHEQUE'
+  | 'CASH'
+  | 'MOBILE_MONEY'
+  | 'INTERNAL_OFFSET'
+  | 'JOURNAL'
+  | 'OTHER';
+
+export interface PlacementPaymentAllocation {
+  id: string;
+  noteId: string;
+  allocatedAmount: string;
+  allocatedCurrency: string;
+  obligationAmount: string;
+  obligationCurrency: string;
+  agreedExchangeRate: string | null;
+  note: {
+    id: string;
+    noteNumber: string;
+    type: string;
+    currency: string;
+    nicLevyAmount?: string | null;
+    withholdingTaxAmount?: string | null;
+    withholdingTaxPercent?: string | null;
+  };
+}
 
 export interface PlacementPayment {
   id: string;
@@ -1000,6 +1027,8 @@ export interface PlacementPayment {
   paymentDate: string;
   reference: string | null;
   settlementReference: string | null;
+  settlementMethod: PlacementSettlementMethod | null;
+  settlementCurrency: string | null;
   bankReference: string | null;
   bankConfirmedAt: string | null;
   bankConfirmedByUserId: string | null;
@@ -1012,10 +1041,35 @@ export interface PlacementPayment {
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
+  placement?: {
+    id: string;
+    reference: string;
+    policyNumber: string | null;
+    title: string;
+    currency?: string | null;
+  };
   counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
   participant: { id: string; counterpartyId: string } | null;
-  closing: { id: string; closingNumber: string } | null;
-  endorsementClosing: { id: string; closingNumber: string } | null;
+  closing: {
+    id: string;
+    closingNumber: string;
+    netPremium?: string | null;
+    currency?: string | null;
+  } | null;
+  endorsementClosing: {
+    id: string;
+    closingNumber: string;
+    netPremium?: string | null;
+    currency?: string | null;
+    endorsementId?: string;
+    endorsement?: {
+      id: string;
+      endorsementNumber: string;
+      effectiveDate: string;
+      type: string;
+    } | null;
+  } | null;
+  allocations?: PlacementPaymentAllocation[];
 }
 
 export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'REVERSED';
@@ -1142,6 +1196,8 @@ export interface CreatePlacementPaymentPayload {
   amount: number;
   currency: string;
   paymentDate: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
   reference?: string;
   notes?: string;
 }

@@ -142,6 +142,83 @@ Automated journals MUST indicate:
 - Source document ID where available
 - Source event inbox ID
 
+### 3.3 Financial Confirmation Queue
+
+Some operational modules record a payment or settlement before Accounting can
+recognise it financially. In those cases Accounting MAY expose a Financial
+Confirmation Queue that calls a source-module API to complete the agreed
+recognition boundary.
+
+Financial confirmation queues MUST preserve Accounting independence:
+
+- Accounting startup, navigation, setup, manual journals, posting, reversals,
+  reports, customers, vendors, and manual bank/cash workflows MUST NOT require
+  the source module to be available.
+- A source-module queue outage, disabled module, or permission denial MUST be
+  isolated to that queue and MUST NOT break core Accounting screens.
+- The Accounting UI MUST NOT read source-module databases directly.
+- The source module MUST own the operational record and lifecycle transition.
+- Accounting MUST own bank confirmation facts, posting policy, posting rules,
+  and journal creation.
+
+Confirmation work items SHOULD use a stable adapter shape so future modules can
+reuse the same UI/container patterns:
+
+- `id`
+- `sourceModule`
+- `sourceRecordId`
+- `sourceReference`
+- `transactionType`
+- `direction`
+- `counterpartyId`
+- `sourceDetailUrl` where available
+- `counterparty`
+- `amount`
+- `currency`
+- `operationalDate`
+- `operationalStatus`
+- `confirmationStatus`
+- `availableConfirmationActions`
+- read-only business snapshot facts from the source module, including source
+  references, obligation currency, contractual tax/levy facts and persisted FX
+  basis where available
+- confirmation metadata such as confirmation date, settlement method when
+  missing, settlement currency when missing, settlement reference when missing,
+  confirmed FX, bank charges and notes
+
+Reinsurance inbound premium receipt and outbound reinsurer disbursement
+confirmation are the first supported source-module adapters. Payroll,
+Inventory, CRM, Subscription, and future modules SHOULD add their own adapters
+rather than embedding module-specific database knowledge inside Accounting.
+
+Confirmation workflows MUST NOT fetch live FX rates. If a source-module
+settlement crosses currencies, the event MUST use a persisted agreed FX fact or
+the confirmation MUST be blocked with a controlled error. Contractual taxes and
+levies remain source-module business facts; Accounting MAY route them through
+posting rules but MUST NOT invent or recalculate them during normal
+confirmation.
+
+Settlement method MUST be explicit when a confirmation can represent either a
+cash movement or a non-cash settlement. `BANK_TRANSFER`, `CHEQUE`, `CASH` and
+`MOBILE_MONEY` MAY carry bank/cash impact. `INTERNAL_OFFSET` and `JOURNAL` MUST
+not be represented as bank/cash movements.
+
+Operational modules MUST create and own the source transaction facts. Populated
+source values are authoritative and read-only during Accounting confirmation.
+Accounting confirmation MUST NOT recreate or overwrite source-owned values such
+as amount, currency, counterparty, settlement method, payment reference, cheque
+number, mobile-money reference, source closing or contractual tax/levy facts.
+Accounting MAY add confirmation-only facts such as clearing/completion date,
+missing method/reference/currency details, confirmation evidence, bank charges,
+confirmed FX where no persisted operational FX exists, and posting/account
+treatment.
+
+For compatibility, a payment status named `BANK_CONFIRMED` MAY mean
+"financially confirmed by Accounting" even when the settlement method is cash,
+internal offset or journal. Implementations SHOULD document the method-specific
+business meaning rather than overloading source-module users with duplicate
+status names.
+
 ---
 
 ## 4. Canonical Event Model
