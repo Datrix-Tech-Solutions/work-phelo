@@ -84,20 +84,37 @@ function makePrisma(rows: Row[]) {
         ),
     ),
     findMany: jest.fn(
-      ({ where, take }: { where: { tenantId?: string }; take?: number }) =>
+      ({
+        where,
+        take,
+      }: {
+        where: {
+          tenantId?: string;
+          OR?: Array<{ attemptCount?: { lt?: number } }>;
+        };
+        take?: number;
+      }) =>
         Promise.resolve(
           rows
             .filter((row) => !where.tenantId || row.tenantId === where.tenantId)
-            .filter(
-              (row) =>
+            .filter((row) => {
+              const maxAttempts = where.OR?.find(
+                (item) => item.attemptCount?.lt != null,
+              )?.attemptCount?.lt;
+              const underLimit =
+                maxAttempts == null || row.attemptCount < maxAttempts;
+              return (
                 row.status === ReinsuranceAccountingOutboxStatus.PENDING ||
-                (row.status === ReinsuranceAccountingOutboxStatus.FAILED &&
+                (underLimit &&
+                  row.status === ReinsuranceAccountingOutboxStatus.FAILED &&
                   row.nextAttemptAt !== null &&
                   row.nextAttemptAt <= new Date()) ||
-                (row.status === ReinsuranceAccountingOutboxStatus.PROCESSING &&
+                (underLimit &&
+                  row.status === ReinsuranceAccountingOutboxStatus.PROCESSING &&
                   row.lastAttemptAt !== null &&
-                  row.lastAttemptAt <= new Date(Date.now() - 15 * 60 * 1000)),
-            )
+                  row.lastAttemptAt <= new Date(Date.now() - 15 * 60 * 1000))
+              );
+            })
             .slice(0, take)
             .map((row) => ({ id: row.id, tenantId: row.tenantId })),
         ),
@@ -119,14 +136,19 @@ function makePrisma(rows: Row[]) {
           id: string;
           tenantId: string;
           status?: ReinsuranceAccountingOutboxStatus;
+          OR?: Array<{ attemptCount?: { lt?: number } }>;
         };
         data: Record<string, unknown>;
       }) => {
+        const maxAttempts = where.OR?.find(
+          (item) => item.attemptCount?.lt != null,
+        )?.attemptCount?.lt;
         const row = rows.find(
           (candidate) =>
             candidate.id === where.id &&
             candidate.tenantId === where.tenantId &&
-            (!where.status || candidate.status === where.status),
+            (!where.status || candidate.status === where.status) &&
+            (maxAttempts == null || candidate.attemptCount < maxAttempts),
         );
         if (!row) return Promise.resolve({ count: 0 });
         if (
@@ -256,6 +278,60 @@ describe('ReinsuranceAccountingOutboxService', () => {
     expect(result.failedCount).toBe(1);
     expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.FAILED);
     expect(rows[0].nextAttemptAt).toEqual(new Date('2026-07-29T12:01:00.000Z'));
+  });
+
+  it('uses the configured retry delay as the exponential backoff base', async () => {
+    const rows = [makeRow({ attemptCount: 1 })];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockRejectedValueOnce(
+      new ReinsuranceAccountingClientError('Accounting unavailable', true, 503),
+    );
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    await service.processPending(prisma, {
+      tenantId: 'tenant-1',
+      retryDelayMs: 5000,
+    });
+
+    expect(rows[0].nextAttemptAt).toEqual(new Date('2026-07-29T12:00:10.000Z'));
+  });
+
+  it('does not retry failed rows that reached the configured attempt limit', async () => {
+    const rows = [
+      makeRow({
+        status: ReinsuranceAccountingOutboxStatus.FAILED,
+        attemptCount: 3,
+        nextAttemptAt: new Date('2026-07-29T11:59:00.000Z'),
+      }),
+    ];
+    const prisma = makePrisma(rows);
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const result = await service.processPending(prisma, {
+      tenantId: 'tenant-1',
+      maxAttempts: 3,
+    });
+
+    expect(result.processedCount).toBe(0);
+    expect(client.enqueueSourceEvent.mock.calls).toHaveLength(0);
+  });
+
+  it('leaves retryable failures parked when the final attempt fails', async () => {
+    const rows = [makeRow({ attemptCount: 2 })];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockRejectedValueOnce(
+      new ReinsuranceAccountingClientError('Accounting unavailable', true, 503),
+    );
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    await service.processPending(prisma, {
+      tenantId: 'tenant-1',
+      maxAttempts: 3,
+    });
+
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.FAILED);
+    expect(rows[0].attemptCount).toBe(3);
+    expect(rows[0].nextAttemptAt).toBeNull();
   });
 
   it('marks permanent validation failures without scheduling infinite retries', async () => {

@@ -12,6 +12,7 @@ import {
   ApiBearerAuth,
   ApiCookieAuth,
   ApiOperation,
+  ApiOkResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -24,10 +25,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
+  AccountingOutboxDispatcherStatusDto,
   ProcessReinsuranceAccountingOutboxDto,
   ReconcileDebitNoteAccountingEventsDto,
   ReconcilePaymentAccountingEventsDto,
 } from './reinsurance-accounting-readiness.dto';
+import { ReinsuranceAccountingOutboxDispatcher } from './reinsurance-accounting-outbox-dispatcher.service';
 import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
 
 @Controller('accounting-integration')
@@ -41,6 +44,7 @@ import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-
 export class ReinsuranceAccountingIntegrationController {
   constructor(
     private readonly readiness: ReinsuranceAccountingReadinessService,
+    private readonly dispatcher: ReinsuranceAccountingOutboxDispatcher,
   ) {}
 
   @Get('status')
@@ -75,6 +79,17 @@ export class ReinsuranceAccountingIntegrationController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.readiness.processPending(request.user, query);
+  }
+
+  @Get('outbox/dispatcher/status')
+  @ApiOperation({
+    summary: 'Get Reinsurance Accounting outbox dispatcher status',
+    description:
+      'Reports automatic dispatcher configuration and recent batch activity. The endpoint is authenticated, requires the existing Reinsurance dashboard view permission, and is observational only. It does not create, dispatch or expose financial-event payloads.',
+  })
+  @ApiOkResponse({ type: AccountingOutboxDispatcherStatusDto })
+  dispatcherStatus() {
+    return this.dispatcher.status();
   }
 
   @Post('reconciliation/debit-note-issued')
