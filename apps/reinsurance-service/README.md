@@ -861,6 +861,57 @@ Source rules:
 - Claim notices use `PlacementClaim` snapshots.
 - Claim cash-call documents use `PlacementClaimCashCall` snapshots.
 
+## Accounting Outbox Dispatcher
+
+The Reinsurance Accounting integration stores financial source events in the
+tenant-scoped transactional outbox before delivery to Accounting. The automatic
+dispatcher starts with the Reinsurance service and delivers already-enqueued
+rows to Accounting using the existing HMAC-protected internal source-event API.
+It does not create new financial events, change recognition rules or alter
+posting-rule payloads.
+
+Dispatcher configuration:
+
+```env
+REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED=true
+REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_POLL_INTERVAL_MS=10000
+REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_BATCH_SIZE=25
+REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_PROCESSING_TIMEOUT_MS=900000
+REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_RETRY_DELAY_MS=60000
+REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_MAX_ATTEMPTS=10
+```
+
+Configuration rules:
+
+- Invalid booleans fall back to the default.
+- Poll interval, processing timeout and retry delay are clamped to at least
+  `1000` milliseconds.
+- Batch size is clamped to `1..100`.
+- Maximum attempts is clamped to `1..100`.
+- The dispatcher can be disabled without disabling manual reconciliation or
+  manual outbox processing endpoints.
+
+Dispatcher behavior:
+
+- Processes `PENDING`, retry-eligible `FAILED` and stale `PROCESSING` rows.
+- Never processes `DELIVERED` rows.
+- Uses atomic row claiming so multiple Reinsurance service instances cannot
+  publish the same outbox row successfully.
+- Uses exponential retry backoff based on
+  `REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_RETRY_DELAY_MS`, capped by the
+  service retry policy.
+- Leaves retry-exhausted rows in `FAILED` with no `nextAttemptAt` so support can
+  inspect and reconcile them intentionally.
+- On shutdown, clears its timer and waits for any active batch to finish.
+
+Operational endpoints:
+
+- `POST /api/v1/operations/reinsurance/accounting-integration/outbox/process-pending`
+  manually dispatches eligible outbox rows.
+- `GET /api/v1/operations/reinsurance/accounting-integration/outbox/dispatcher/status`
+  reports sanitized worker status and batch counts. It does not expose event
+  payloads, HMAC secrets, service URLs or per-event failure messages.
+
 ## Placement Payment API
 
 Placement payments record the first MVP financial activity for a placement.

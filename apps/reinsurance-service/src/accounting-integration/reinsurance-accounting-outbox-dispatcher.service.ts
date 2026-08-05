@@ -5,10 +5,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  ProcessAccountingOutboxResult,
-  ReinsuranceAccountingOutboxService,
-} from './reinsurance-accounting-outbox.service';
+import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
 
 const DEFAULT_ENABLED = true;
 const DEFAULT_POLL_INTERVAL_MS = 10_000;
@@ -26,6 +23,13 @@ export interface AccountingOutboxDispatcherConfig {
   maxAttempts: number;
 }
 
+export interface AccountingOutboxDispatcherBatchSummary {
+  processedCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  skippedCount: number;
+}
+
 export interface AccountingOutboxDispatcherStatus {
   enabled: boolean;
   running: boolean;
@@ -34,7 +38,7 @@ export interface AccountingOutboxDispatcherStatus {
   startedAt: string | null;
   stoppedAt: string | null;
   lastBatchAt: string | null;
-  lastResult: ProcessAccountingOutboxResult | null;
+  lastResult: AccountingOutboxDispatcherBatchSummary | null;
   lastError: string | null;
 }
 
@@ -52,7 +56,7 @@ export class ReinsuranceAccountingOutboxDispatcher
   private startedAt: Date | null = null;
   private stoppedAt: Date | null = null;
   private lastBatchAt: Date | null = null;
-  private lastResult: ProcessAccountingOutboxResult | null = null;
+  private lastResult: AccountingOutboxDispatcherBatchSummary | null = null;
   private lastError: string | null = null;
 
   constructor(
@@ -63,6 +67,10 @@ export class ReinsuranceAccountingOutboxDispatcher
   onApplicationBootstrap(): void {
     if (!this.config.enabled) {
       this.logger.log('Accounting outbox dispatcher disabled');
+      return;
+    }
+    if (this.running) {
+      this.logger.warn('Accounting outbox dispatcher already running');
       return;
     }
 
@@ -131,7 +139,12 @@ export class ReinsuranceAccountingOutboxDispatcher
         retryDelayMs: this.config.retryDelayMs,
       });
       this.lastBatchAt = new Date();
-      this.lastResult = result;
+      this.lastResult = {
+        processedCount: result.processedCount,
+        deliveredCount: result.deliveredCount,
+        failedCount: result.failedCount,
+        skippedCount: result.skippedCount,
+      };
       this.lastError = null;
       if (result.processedCount > 0) {
         this.logger.log(
@@ -140,12 +153,13 @@ export class ReinsuranceAccountingOutboxDispatcher
       }
     } catch (error) {
       this.lastBatchAt = new Date();
-      this.lastError =
+      const message =
         error instanceof Error
           ? error.message
           : 'Unexpected accounting outbox dispatcher failure';
+      this.lastError = 'Last dispatcher batch failed; see service logs.';
       this.logger.error(
-        `Accounting outbox dispatcher batch failed trigger=${trigger}: ${this.lastError}`,
+        `Accounting outbox dispatcher batch failed trigger=${trigger}: ${message}`,
       );
     }
   }

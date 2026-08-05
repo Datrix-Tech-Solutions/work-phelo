@@ -71,6 +71,47 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
     await dispatcher.onModuleDestroy();
   });
 
+  it('falls back or clamps unsafe configuration values', () => {
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED', 'maybe');
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_POLL_INTERVAL_MS', '-1');
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_BATCH_SIZE', '500');
+    setEnv(
+      'REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_PROCESSING_TIMEOUT_MS',
+      'not-a-number',
+    );
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_RETRY_DELAY_MS', '0');
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_MAX_ATTEMPTS', '-5');
+    const dispatcher = new ReinsuranceAccountingOutboxDispatcher(
+      prisma,
+      outbox,
+    );
+
+    expect(dispatcher.status().config).toEqual({
+      enabled: true,
+      pollIntervalMs: 1000,
+      batchSize: 100,
+      processingTimeoutMs: 900000,
+      retryDelayMs: 1000,
+      maxAttempts: 1,
+    });
+  });
+
+  it('does not create a second timer if bootstrap is called twice', async () => {
+    const dispatcher = new ReinsuranceAccountingOutboxDispatcher(
+      prisma,
+      outbox,
+    );
+
+    dispatcher.onApplicationBootstrap();
+    dispatcher.onApplicationBootstrap();
+    await Promise.resolve();
+
+    expect(jest.getTimerCount()).toBe(1);
+    expect(outbox.processPending.mock.calls).toHaveLength(1);
+
+    await dispatcher.onModuleDestroy();
+  });
+
   it('does not start or process when disabled', async () => {
     setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED', 'false');
     const dispatcher = new ReinsuranceAccountingOutboxDispatcher(
@@ -132,7 +173,9 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
     );
 
     await dispatcher.processBatch('manual');
-    expect(dispatcher.status().lastError).toBe('database unavailable');
+    expect(dispatcher.status().lastError).toBe(
+      'Last dispatcher batch failed; see service logs.',
+    );
 
     await dispatcher.processBatch('manual');
     expect(dispatcher.status()).toMatchObject({
@@ -142,9 +185,38 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
         deliveredCount: 1,
         failedCount: 0,
         skippedCount: 0,
-        events: [],
       },
     });
+  });
+
+  it('continues polling after a failed scheduled tick', async () => {
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_POLL_INTERVAL_MS', '2000');
+    outbox.processPending
+      .mockRejectedValueOnce(new Error('database unavailable'))
+      .mockResolvedValue({
+        processedCount: 0,
+        deliveredCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        events: [],
+      });
+    const dispatcher = new ReinsuranceAccountingOutboxDispatcher(
+      prisma,
+      outbox,
+    );
+
+    dispatcher.onApplicationBootstrap();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    jest.advanceTimersByTime(2000);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(outbox.processPending.mock.calls).toHaveLength(2);
+    expect(dispatcher.status().lastError).toBeNull();
+
+    await dispatcher.onModuleDestroy();
   });
 
   it('clears the interval and waits for in-flight work during shutdown', async () => {
