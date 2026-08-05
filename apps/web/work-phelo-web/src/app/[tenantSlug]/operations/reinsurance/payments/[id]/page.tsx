@@ -27,7 +27,11 @@ export default function PaymentDetailPage({
   const { tenantSlug, id } = use(params);
   const searchParams = useSearchParams();
   const fromClosing = searchParams.get('from') === 'closing';
-  const { data: placement } = useFacultativePlacement(id);
+  const {
+    data: placement,
+    isLoading: placementLoading,
+    isError: placementError,
+  } = useFacultativePlacement(id);
   const [activeTab, setActiveTab] = useState<PaymentTab>('overview');
 
   return (
@@ -85,9 +89,27 @@ export default function PaymentDetailPage({
               </div>
             </div>
           </div>
+        ) : placementError ? (
+          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-gray-200 bg-white/70 p-8 text-center">
+            <div className="text-base font-semibold text-gray-900">Payment placement not found</div>
+            <p className="max-w-md text-sm text-gray-500">
+              This payment workspace is tied to a placement. The placement may no longer be
+              available to this tenant, or the page may have been opened with the wrong record ID.
+            </p>
+            <Link
+              href={`/${tenantSlug}/operations/reinsurance/payments`}
+              className="text-sm font-semibold text-[var(--module-btn-bg,var(--color-brand))] hover:underline"
+            >
+              Back to payments
+            </Link>
+          </div>
+        ) : placementLoading ? (
+          <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+            Loading payment workspace…
+          </div>
         ) : (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-            Loading…
+            Select a placement from the payments list.
           </div>
         )}
       </div>
