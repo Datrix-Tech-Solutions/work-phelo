@@ -1232,24 +1232,7 @@ export class TimeService {
   ) {
     const where: Prisma.TimeCorrectionWhereInput = { tenantId };
 
-    if (isCompanyAdminUser(actor)) {
-      if (filters.employeeId) where.employeeId = filters.employeeId;
-    } else if (isEmployeeSelfServiceUser(actor)) {
-      if (hasPermissionRule(actor, 'time-corrections:VIEW')) {
-        if (filters.employeeId) where.employeeId = filters.employeeId;
-      } else {
-        const actorEmployee = await getActorEmployee(
-          this.prisma,
-          tenantId,
-          actor.id,
-        );
-        where.employeeId = actorEmployee.id;
-      }
-    } else {
-      assertHrAccess(hasPermissionRule(actor, 'time-corrections:VIEW'));
-      if (filters.employeeId) where.employeeId = filters.employeeId;
-    }
-
+    if (filters.employeeId) where.employeeId = filters.employeeId;
     if (filters.status) where.status = filters.status as TimeCorrectionStatus;
 
     return this.prisma.timeCorrection.findMany({
