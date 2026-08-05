@@ -117,6 +117,12 @@ import { PlacementDocumentDownloadUrlDto } from './dto/placement-document-downlo
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
 import { PlacementDocumentsService } from './placement-documents.service';
 import {
+  CreateEffectiveDebitNoteDto,
+  EffectiveDebitNoteListResponseDto,
+  EffectiveDebitNotePreviewResponseDto,
+  EffectiveDebitNoteQueryDto,
+} from './dto/effective-debit-note.dto';
+import {
   PlacementNoteListResponseDto,
   PlacementNoteResponseDto,
 } from './dto/placement-note-response.dto';
@@ -2457,6 +2463,128 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.notesService.createCreditNote(request.user, id, closingId);
+  }
+
+  @Get(':id/effective-debit-note/preview')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Preview current effective debit note',
+    description:
+      'Returns a non-persisted backend-truth preview of the consolidated current-effective cedant debit-note statement. ' +
+      'The statement includes original confirmed business plus CLOSED effective endorsements as of the requested date. ' +
+      'It is non-posting because original and endorsement-adjustment notes carry financial recognition.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiQuery({
+    name: 'asOfDate',
+    required: false,
+    description:
+      'Optional ISO date/time. Future-dated closed endorsements are excluded unless the as-of date reaches them.',
+  })
+  @ApiOkResponse({ type: EffectiveDebitNotePreviewResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The as-of date is invalid or the current effective cedant obligation is not positive.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The effective debit note contains multiple currencies and cannot be aggregated safely.',
+  })
+  previewEffectiveDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: EffectiveDebitNoteQueryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.previewCurrentEffectiveDebitNote(
+      request.user.tenantId,
+      id,
+      query.asOfDate,
+    );
+  }
+
+  @Post(':id/effective-debit-note')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create current effective debit note',
+    description:
+      'Creates or reuses a DRAFT current-effective debit-note statement for the same deterministic effective business version. ' +
+      'The note is explicitly non-posting, so issuing it does not enqueue an Accounting event and cannot duplicate AR recognition.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiBody({ type: CreateEffectiveDebitNoteDto })
+  @ApiCreatedResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The as-of date is invalid or the current effective cedant obligation is not positive.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The effective debit note contains multiple currencies and cannot be aggregated safely.',
+  })
+  createEffectiveDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateEffectiveDebitNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.createCurrentEffectiveDebitNote(
+      request.user,
+      id,
+      dto.asOfDate,
+    );
+  }
+
+  @Get(':id/effective-debit-notes')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List current effective debit notes',
+    description:
+      'Lists persisted current-effective debit-note statement versions for the placement. Historical versions remain immutable.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: EffectiveDebitNoteListResponseDto })
+  async findEffectiveDebitNotes(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.notesService.findAllCurrentEffectiveDebitNotes(
+      request.user.tenantId,
+      id,
+    );
+    return { items };
+  }
+
+  @Get(':id/effective-debit-notes/:noteId')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get current effective debit note',
+    description:
+      'Returns a persisted current-effective debit-note statement version scoped to the authenticated tenant and placement.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Current effective debit note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  findEffectiveDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.findCurrentEffectiveDebitNote(
+      request.user.tenantId,
+      id,
+      noteId,
+    );
   }
 
   @Patch(':id/notes/:noteId/status')

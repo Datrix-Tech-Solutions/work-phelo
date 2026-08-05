@@ -149,6 +149,38 @@ export class PlacementNoteResponseDto {
   })
   appliedCharges!: Record<string, unknown> | null;
 
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    description:
+      'Immutable source snapshot used to generate statement-style notes and preserve traceability.',
+  })
+  sourceSnapshot!: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    format: 'date-time',
+    description:
+      'As-of date used for current-effective statement generation, when applicable.',
+  })
+  effectiveAsOf!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'Deterministic effective business version key used to reuse the same logical current-effective note.',
+  })
+  effectiveVersionKey!: string | null;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'False for non-posting statements that must not enqueue Accounting events when issued.',
+  })
+  postingEnabled!: boolean;
+
   @ApiProperty({ type: String, format: 'date-time' })
   noteDate!: string;
 
