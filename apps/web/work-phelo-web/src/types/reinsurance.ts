@@ -1846,3 +1846,108 @@ export const QUOTA_SHARE_DEFAULTS: QuotaShareFormValues = {
   reinsurerPanel: [{ ...DEFAULT_REINSURER_ROW }],
   supportingDocument: null,
 };
+
+export type MailboxProvider = 'MICROSOFT_GRAPH' | 'GOOGLE_GMAIL';
+export type MailboxConnectionStatus = 'ACTIVE' | 'DISCONNECTED' | 'ERROR';
+
+export interface MailboxConnection {
+  id: string;
+  tenantId: string;
+  provider: MailboxProvider;
+  emailAddress: string;
+  normalizedEmail: string;
+  displayName: string | null;
+  status: MailboxConnectionStatus;
+  externalMailboxId: string | null;
+  tokenExpiresAt: string | null;
+  lastSyncedAt: string | null;
+  lastSyncError: string | null;
+  connectedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConnectMailboxPayload {
+  provider: MailboxProvider;
+  emailAddress: string;
+  displayName?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  tokenExpiresAt?: string;
+}
+
+export interface PaginatedMailboxes {
+  items: MailboxConnection[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface MailboxSyncResponse {
+  mailbox: MailboxConnection;
+  threadsSynced: number;
+  messagesSynced: number;
+}
+
+export interface EmailParticipant {
+  email?: string;
+  name?: string;
+}
+
+export interface EmailThreadParticipants {
+  from?: EmailParticipant;
+  to?: EmailParticipant[];
+  cc?: EmailParticipant[];
+}
+
+export type EmailMessageDirection = 'INBOUND' | 'OUTBOUND';
+export type EmailMessageStatus = 'DRAFT' | 'SENDING' | 'SENT' | 'FAILED';
+
+export interface EmailAttachmentMetadata {
+  id: string;
+  messageId: string;
+  providerAttachmentId: string;
+  fileName: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  isInline: boolean;
+}
+
+export interface EmailMessage {
+  id: string;
+  threadId: string;
+  mailboxConnectionId: string;
+  direction: EmailMessageDirection;
+  status: EmailMessageStatus;
+  subject: string | null;
+  fromEmail: string | null;
+  fromName: string | null;
+  toRecipients: EmailParticipant[] | null;
+  ccRecipients: EmailParticipant[] | null;
+  receivedAt: string | null;
+  sentAt: string | null;
+  bodyPreview: string | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+  hasAttachments: boolean;
+  isRead: boolean;
+  attachments: EmailAttachmentMetadata[];
+}
+
+export interface EmailThread {
+  id: string;
+  mailboxConnectionId: string;
+  subject: string | null;
+  participants: EmailThreadParticipants | null;
+  lastMessageAt: string | null;
+  messageCount: number;
+  hasAttachments: boolean;
+  createdAt: string;
+  updatedAt: string;
+  /** Undocumented-but-real: up to 5 most-recent messages, included on both list and detail responses. */
+  messages: EmailMessage[];
+}
+
+export interface PaginatedEmailThreads {
+  items: EmailThread[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}

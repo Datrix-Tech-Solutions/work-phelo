@@ -413,7 +413,7 @@ export function RecoveriesTable() {
     {
       key: 'policyNumber',
       label: 'Policy Number',
-      width: 'minmax(150px, 1fr)',
+      width: '150px',
       render: (row) => <EndorsedReferencePill id={row.placementId} reference={row.policyNumber} />,
     },
     {
@@ -430,7 +430,7 @@ export function RecoveriesTable() {
     {
       key: 'reinsurerName',
       label: 'Reinsurer',
-      width: 'minmax(130px, 1fr)',
+      width: 'minmax(130px, 0.7fr)',
       render: (row) => <span className="text-gray-700">{row.reinsurerName}</span>,
     },
     // {
@@ -442,7 +442,7 @@ export function RecoveriesTable() {
     {
       key: 'cashCallNumber',
       label: 'Cash Call',
-      width: '120px',
+      width: '100px',
       className: 'text-center',
       render: (row) => (
         <span className="text-gray-600 block text-center">{row.cashCallNumber}</span>
@@ -451,7 +451,7 @@ export function RecoveriesTable() {
     {
       key: 'calledAmount',
       label: 'Called Amount',
-      width: '150px',
+      width: '120px',
       render: (row) => (
         <span className="font-medium text-gray-900 block">
           {fmtAmount(row.calledAmount, row.currency)}
@@ -461,7 +461,7 @@ export function RecoveriesTable() {
     {
       key: 'recoveredAmount',
       label: 'Recovered',
-      width: '150px',
+      width: '120px',
       render: (row) => (
         <span className="text-gray-700 block">{fmtAmount(row.recoveredAmount, row.currency)}</span>
       ),
@@ -469,7 +469,7 @@ export function RecoveriesTable() {
     {
       key: 'outstandingAmount',
       label: 'Outstanding',
-      width: '150px',
+      width: '120px',
       render: (row) => (
         <span
           className={`font-medium ${
@@ -483,13 +483,13 @@ export function RecoveriesTable() {
     {
       key: 'recoveryStatus',
       label: 'Status',
-      width: '150px',
+      width: '120px',
       render: (row) => <span className="text-gray-700">{row.recoveryStatus}</span>,
     },
     {
       key: 'actions',
       label: 'Actions',
-      width: '150px',
+      width: '120px',
       render: (row) => (
         <TableButton
           variant={row.outstandingAmount > 0 && row.cashCallStatus === 'ISSUED' ? 'blue' : 'gray'}

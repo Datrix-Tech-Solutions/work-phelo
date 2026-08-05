@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { cn, popupClass } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
@@ -23,6 +24,14 @@ export function SidePanel({
   footer,
   width = 'sm:w-[480px]',
 }: SidePanelProps) {
+  // Portals need a browser DOM to render into — stay unmounted through SSR and the
+  // initial client render so hydration sees the same (empty) output, then flip on.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   // Close on Escape key
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -40,7 +49,9 @@ export function SidePanel({
     };
   }, [isOpen]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -103,6 +114,7 @@ export function SidePanel({
           </div>
         )}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

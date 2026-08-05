@@ -12,6 +12,7 @@ import {
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
+import { NumberField } from '@/components/atoms/NumberField';
 import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
@@ -253,12 +254,13 @@ function ClaimReinsurersTable({
       {
         key: 'reinsurerName',
         label: 'Reinsurer',
+        width: 'minmax(120px, 1fr)',
         render: (row) => <span className="font-medium text-gray-900">{row.reinsurerName}</span>,
       },
       {
         key: 'signedLinePercent',
-        label: allocations.length > 0 ? 'Effective Line' : 'Est. Share',
-        width: '110px',
+        label: allocations.length > 0 ? 'Est. Share' : 'Est. Share',
+        width: '100px',
         className: 'text-center',
         render: (row) => (
           <span className="text-gray-600 block text-center">
@@ -269,13 +271,13 @@ function ClaimReinsurersTable({
       {
         key: 'allocationSource',
         label: 'Source',
-        width: '180px',
+        width: '100px',
         render: (row) => <span className="text-gray-600">{row.allocationSource}</span>,
       },
       {
         key: 'allocatedAmount',
         label: isActualAmount ? 'Actual Claim' : 'Est. Claim',
-        width: '180px',
+        width: '120px',
         className: 'text-right pr-8',
         render: (row) => (
           <span className="text-gray-900 block text-right">
@@ -359,11 +361,13 @@ function ClaimCashCallsTable({ cashCalls }: { cashCalls: PlacementClaimCashCall[
       {
         key: 'cashCallNumber',
         label: 'Cash Call',
+        width: '100px',
         render: (row) => <span className="font-medium text-gray-900">{row.cashCallNumber}</span>,
       },
       {
         key: 'counterparty',
         label: 'Reinsurer',
+        width: 'minmax(120px, 1fr)',
         render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
       },
       {
@@ -378,7 +382,7 @@ function ClaimCashCallsTable({ cashCalls }: { cashCalls: PlacementClaimCashCall[
       {
         key: 'status',
         label: 'Status',
-        width: '110px',
+        width: '100px',
         render: (row) => (
           <Badge
             label={row.status.charAt(0) + row.status.slice(1).toLowerCase()}
@@ -399,8 +403,8 @@ function ClaimCashCallsTable({ cashCalls }: { cashCalls: PlacementClaimCashCall[
   );
 
   return (
-    <div className="flex flex-col gap-0">
-      <div className="px-4 pt-4 pb-2 bg-white rounded-t-xl border border-b-0 border-gray-200">
+    <div className="flex flex-col gap-2">
+      <div className={cardClass('p-6 w-full')}>
         <span className="text-sm font-bold text-gray-900">Cash Calls</span>
         <p className="text-xs text-gray-400 mt-1">
           Backend cash-call records generated from this claim&apos;s allocation snapshots.
@@ -488,7 +492,7 @@ function ClaimCedantSettlementPanel({
     {
       key: 'settlementDate',
       label: 'Date',
-      width: '130px',
+      width: '100px',
       render: (row) => <span className="text-gray-600">{fmtDate(row.settlementDate)}</span>,
     },
     {
@@ -516,12 +520,13 @@ function ClaimCedantSettlementPanel({
     {
       key: 'reference',
       label: 'Reference',
+      width: 'minmax(120px, 1fr)',
       render: (row) => <span className="text-gray-600">{row.reference ?? '—'}</span>,
     },
     {
       key: 'actions',
       label: 'Actions',
-      width: '110px',
+      width: '100px',
       render: (row) =>
         row.status === 'RECORDED' && !row.reversalOfSettlementId ? (
           <button
@@ -542,15 +547,12 @@ function ClaimCedantSettlementPanel({
   ];
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4">
-      <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-2">
+      <div className={cardClass('p-6 w-full ')}>
         <span className="text-sm font-bold text-gray-900">Cedant Claim Settlement</span>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-500 pb-2">
           Broker → Cedant settlement is approved and tracked separately from reinsurer recoveries.
         </p>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <DetailField horizontal label="Final Loss" value={fmt(finalLossAmount, claim.currency)} />
         <DetailField
           horizontal
@@ -577,31 +579,6 @@ function ClaimCedantSettlementPanel({
       {!finalLossAmount && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
           Final loss amount is required before approving cedant payable.
-        </div>
-      )}
-
-      {finalLossAmount && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-end rounded-lg bg-gray-50 p-3">
-          <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
-            Approve Payable Amount
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={approvedAmount}
-              onChange={(event) => setApprovedAmount(event.target.value)}
-              placeholder={approvedPayableAmount ?? finalLossAmount}
-              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
-            />
-          </label>
-          <Button
-            type="button"
-            onClick={handleApprove}
-            disabled={!approvedAmount || approvePayable.isPending}
-            isLoading={approvePayable.isPending}
-          >
-            Approve Payable
-          </Button>
         </div>
       )}
 
@@ -667,6 +644,28 @@ function ClaimCedantSettlementPanel({
         totalPages={0}
         onPageChange={() => {}}
         noInternalScroll
+        extraFilters={
+          finalLossAmount && (
+            <div className="flex items-end gap-2">
+              <div className="w-40">
+                <NumberField
+                  label="Payable Amount"
+                  value={approvedAmount ? Number(approvedAmount) : 0}
+                  onChange={(n) => setApprovedAmount(n ? String(n) : '')}
+                  placeholder={String(approvedPayableAmount ?? finalLossAmount)}
+                />
+              </div>
+              <Button
+                type="button"
+                onClick={handleApprove}
+                disabled={!approvedAmount || approvePayable.isPending}
+                isLoading={approvePayable.isPending}
+              >
+                Approve Payable
+              </Button>
+            </div>
+          )
+        }
       />
     </div>
   );
