@@ -338,7 +338,7 @@ export function PaymentsTable() {
       }}
       rowActions={(row) => [
         {
-          label: 'Receive Cedant Premium',
+          label: 'View Payment Workspace',
           onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
         },
       ]}
