@@ -1,8 +1,8 @@
 # Reinsurance Claims Accounting Finance Decision Pack v1
 
-Status: Draft 1
+Status: Phase 1 approved policy baseline
 
-Date: 2026-08-03
+Date: 2026-08-05
 
 Audience: Finance, Product, Claims Operations, Management and Solution
 Architecture.
@@ -11,8 +11,9 @@ Purpose: convert the technical Claims Accounting audit into plain-language
 business decisions that must be approved before WorkPhelo activates Claims
 accounting journals.
 
-This document is not an approval. Every recommendation remains pending until
-Finance and Product explicitly approve it.
+Finance/Product approved the Phase 1 Claims Accounting policy on 2026-08-05.
+Engineering still activates events incrementally; this PR activates only
+`CLAIM_PAYABLE_APPROVED`.
 
 ## 1. Executive Summary
 
@@ -552,26 +553,26 @@ Claim registration and claim closure remain non-posting in Phase 1.
 
 ## 7. Approval Matrix
 
-| Decision ID | Plain-language decision                                  | Recommended option                                             | Owner                    | Status  | Approved by | Approval date | Comments |
-| ----------- | -------------------------------------------------------- | -------------------------------------------------------------- | ------------------------ | ------- | ----------- | ------------- | -------- |
-| CLM-001     | Does registering a claim create an Accounting entry?     | No GL posting in Phase 1.                                      | Finance/Product          | Pending |             |               |          |
-| CLM-002     | When does the Broker officially owe the Cedant?          | When approved payable amount is approved, with safeguards.     | Finance                  | Pending |             |               |          |
-| CLM-003     | Which amount should be recognized as payable?            | Approved payable amount.                                       | Finance                  | Pending |             |               |          |
-| CLM-004     | What happens if approved payable changes later?          | Require immutable amendment history before later changes post. | Finance/Engineering      | Pending |             |               |          |
-| CLM-005     | Does issuing a cash call create a reinsurer receivable?  | Tenant-configurable; memo-only default for Phase 1.            | Finance                  | Pending |             |               |          |
-| CLM-006     | If a posted cash call is voided, what happens?           | Reverse only if issue posted; otherwise no posting.            | Finance                  | Pending |             |               |          |
-| CLM-007     | When reinsurer recovery is received, what does it clear? | Tenant-configurable based on cash-call policy.                 | Finance                  | Pending |             |               |          |
-| CLM-008     | How should recovery receipt reversal behave?             | Reverse original recovery event.                               | Finance                  | Pending |             |               |          |
-| CLM-009     | When Broker pays Cedant, what does payment clear?        | Approved cedant claim payable.                                 | Finance                  | Pending |             |               |          |
-| CLM-010     | How should Cedant settlement reversal behave?            | Reverse original settlement event.                             | Finance                  | Pending |             |               |          |
-| CLM-011     | Can Broker pay Cedant before all recovery is received?   | Yes, with broker-funded exposure reporting.                    | Finance/Product          | Pending |             |               |          |
-| CLM-012     | Should broker-funded exposure create a separate journal? | Reporting only in Phase 1.                                     | Finance                  | Pending |             |               |          |
-| CLM-013     | Are claim reserves part of Version 1?                    | Out of scope.                                                  | Finance                  | Pending |             |               |          |
-| CLM-014     | Should claim closure create an Accounting entry?         | No GL posting by default.                                      | Finance                  | Pending |             |               |          |
-| CLM-015     | How should claim write-offs be handled?                  | Manual JV until dedicated write-off record exists.             | Finance/Engineering      | Pending |             |               |          |
-| CLM-016     | Is cross-currency Claims accounting supported?           | Not until agreed FX fields are persisted.                      | Finance/Engineering      | Pending |             |               |          |
-| CLM-017     | How should bank charges and withholding tax be handled?  | Not until structured fields are added.                         | Finance/Engineering      | Pending |             |               |          |
-| CLM-018     | Which Accounting subledgers are required?                | Cedant and reinsurer subledgers where posting rules use them.  | Finance/Accounting Admin | Pending |             |               |          |
+| Decision ID | Plain-language decision                                  | Recommended option                                                 | Owner               | Status             | Approved by     | Approval date | Comments                                          |
+| ----------- | -------------------------------------------------------- | ------------------------------------------------------------------ | ------------------- | ------------------ | --------------- | ------------- | ------------------------------------------------- |
+| CLM-001     | Does registering a claim create an Accounting entry?     | No GL posting in Phase 1.                                          | Finance/Product     | Approved           | Finance/Product | 2026-08-05    | Reinsurance claims only.                          |
+| CLM-002     | When does the Broker officially owe the Cedant?          | When Reinsurer approves the claim payable.                         | Finance/Product     | Approved           | Finance/Product | 2026-08-05    | Activates `CLAIM_PAYABLE_APPROVED`.               |
+| CLM-003     | Which amount should be recognized as payable?            | Approved payable amount.                                           | Finance/Product     | Approved           | Finance/Product | 2026-08-05    | Final loss remains the validation cap.            |
+| CLM-004     | What happens if approved payable changes later?          | Require immutable amendment history before later changes post.     | Finance/Product     | Approved           | Finance/Product | 2026-08-05    | Phase 1 blocks silent mutation after recognition. |
+| CLM-005     | Does issuing a cash call create a reinsurer receivable?  | Deferred; recovery recognition requires formal agreement/approval. | Finance/Product     | Deferred           | Finance/Product | 2026-08-05    | Cash-call events are not activated in this PR.    |
+| CLM-006     | If a posted cash call is voided, what happens?           | Reverse only if issue posted; otherwise no posting.                | Finance/Product     | Approved principle | Finance/Product | 2026-08-05    | Event deferred.                                   |
+| CLM-007     | When reinsurer recovery is received, what does it clear? | Recovery recognition occurs when formally agreed/approved.         | Finance/Product     | Approved principle | Finance/Product | 2026-08-05    | Event deferred.                                   |
+| CLM-008     | How should recovery receipt reversal behave?             | Reverse original recovery event.                                   | Finance/Product     | Approved principle | Finance/Product | 2026-08-05    | Event deferred.                                   |
+| CLM-009     | When Broker pays Cedant, what does payment clear?        | Approved cedant claim payable after Accounting bank confirmation.  | Finance/Product     | Approved principle | Finance/Product | 2026-08-05    | Event deferred.                                   |
+| CLM-010     | How should Cedant settlement reversal behave?            | Reverse original settlement event.                                 | Finance/Product     | Approved principle | Finance/Product | 2026-08-05    | Event deferred.                                   |
+| CLM-011     | Can Broker pay Cedant before all recovery is received?   | Yes, with outstanding balances remaining open.                     | Finance/Product     | Approved           | Finance/Product | 2026-08-05    | Broker-funded exposure workflow remains separate. |
+| CLM-012     | Should broker-funded exposure create a separate journal? | Reporting only in Phase 1.                                         | Finance             | Pending            |                 |               |                                                   |
+| CLM-013     | Are claim reserves part of Version 1?                    | Out of scope.                                                      | Finance             | Pending            |                 |               |                                                   |
+| CLM-014     | Should claim closure create an Accounting entry?         | No GL posting by default.                                          | Finance             | Pending            |                 |               |                                                   |
+| CLM-015     | How should claim write-offs be handled?                  | Manual JV until dedicated write-off record exists.                 | Finance/Engineering | Pending            |                 |               |                                                   |
+| CLM-016     | Is cross-currency Claims accounting supported?           | Use persisted contractual/agreed FX; never live FX.                | Finance/Product     | Approved           | Finance/Product | 2026-08-05    | Event activation requires persisted FX facts.     |
+| CLM-017     | How should bank charges and withholding tax be handled?  | Bank charges are Accounting-owned; WHT/NIC not applicable.         | Finance/Product     | Approved           | Finance/Product | 2026-08-05    | Operations does not allocate GL accounts.         |
+| CLM-018     | Which Accounting subledgers are required?                | Cedant and reinsurer subledgers where posting rules use them.      | Finance/Product     | Approved           | Finance/Product | 2026-08-05    | Tenant posting rules decide usage.                |
 
 ## 8. Quick Approval Form
 

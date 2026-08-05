@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  PlacementClaimAllocationStatus,
   PlacementClaimCedantSettlementStatus,
   PlacementClaimStatus,
   Prisma,
@@ -15,6 +16,7 @@ import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-p
 import { CreatePlacementClaimCedantSettlementDto } from './dto/create-placement-claim-cedant-settlement.dto';
 import { ReversePlacementClaimCedantSettlementDto } from './dto/reverse-placement-claim-cedant-settlement.dto';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 
 const cedantSettlementInclude = {
   reversalSettlements: {
@@ -50,6 +52,7 @@ export class PlacementClaimCedantSettlementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly money: ReinsuranceMoneyHelper,
+    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async approvePayable(
@@ -59,6 +62,7 @@ export class PlacementClaimCedantSettlementsService {
     dto: ApprovePlacementClaimPayableDto,
   ): Promise<ClaimApprovalRecord> {
     const approvedAmount = this.money.roundMoney(dto.approvedPayableAmount);
+    const dtoCurrency = dto.currency ? this.cleanCurrency(dto.currency) : null;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -72,6 +76,12 @@ export class PlacementClaimCedantSettlementsService {
             );
             this.assertClaimCanBeApproved(claim);
 
+            if (dtoCurrency && dtoCurrency !== claim.currency) {
+              throw new BadRequestException(
+                'Approved payable currency must match the claim currency',
+              );
+            }
+
             const finalLossAmount = this.money.toOptionalNumber(
               claim.finalLossAmount,
             );
@@ -83,6 +93,41 @@ export class PlacementClaimCedantSettlementsService {
             if (approvedAmount > finalLossAmount) {
               throw new BadRequestException(
                 'Approved payable amount cannot exceed the final loss amount',
+              );
+            }
+
+            await this.assertClaimHasActiveReinsurerAllocations(
+              tx,
+              user.tenantId,
+              placementId,
+              claimId,
+            );
+
+            const existingApproval =
+              await tx.placementClaimPayableApproval.findFirst({
+                where: {
+                  tenantId: user.tenantId,
+                  placementId,
+                  claimId,
+                },
+                orderBy: { approvalVersion: 'desc' },
+              });
+            if (existingApproval) {
+              const existingAmount = this.money.roundMoney(
+                this.money.toNumber(existingApproval.approvedPayableAmount),
+              );
+              const existingFinalLoss = this.money.roundMoney(
+                this.money.toNumber(existingApproval.finalLossAmount),
+              );
+              if (
+                existingAmount === approvedAmount &&
+                existingFinalLoss === finalLossAmount &&
+                existingApproval.currency === claim.currency
+              ) {
+                return claim;
+              }
+              throw new ConflictException(
+                'Claim payable approval has already been recognized. Future changes require an explicit amendment or reversal workflow.',
               );
             }
 
@@ -101,15 +146,45 @@ export class PlacementClaimCedantSettlementsService {
               );
             }
 
-            return tx.placementClaim.update({
+            const approvedAt = new Date();
+            const approval = await tx.placementClaimPayableApproval.create({
+              data: {
+                tenantId: user.tenantId,
+                placementId: claim.placementId,
+                claimId: claim.id,
+                approvalVersion: 1,
+                approvedPayableAmount: approvedAmount,
+                finalLossAmount,
+                currency: claim.currency,
+                approvedAt,
+                approvedByUserId: user.id,
+                notes: this.cleanOptional(dto.notes),
+              },
+            });
+            const accountingEvent =
+              await this.financialEvents.prepareClaimPayableApproved(
+                user,
+                approval,
+              );
+
+            const approvedClaim = await tx.placementClaim.update({
               where: { id: claimId },
               data: {
                 approvedPayableAmount: approvedAmount,
-                approvedAt: new Date(),
+                approvedAt,
                 approvedByUserId: user.id,
                 updatedByUserId: user.id,
               },
             });
+
+            if (accountingEvent) {
+              await this.financialEvents.enqueuePreparedEvent(
+                tx,
+                accountingEvent,
+              );
+            }
+
+            return approvedClaim;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
@@ -411,6 +486,27 @@ export class PlacementClaimCedantSettlementsService {
     ) {
       throw new BadRequestException(
         'Terminal claims cannot have payable amount approved',
+      );
+    }
+  }
+
+  private async assertClaimHasActiveReinsurerAllocations(
+    prisma: Prisma.TransactionClient,
+    tenantId: string,
+    placementId: string,
+    claimId: string,
+  ): Promise<void> {
+    const allocationCount = await prisma.placementClaimAllocation.count({
+      where: {
+        tenantId,
+        placementId,
+        claimId,
+        status: { not: PlacementClaimAllocationStatus.VOID },
+      },
+    });
+    if (allocationCount <= 0) {
+      throw new BadRequestException(
+        'At least one active reinsurer claim allocation is required before approving claim payable recognition',
       );
     }
   }

@@ -9,6 +9,7 @@ import {
   PlacementPaymentStatus,
   PlacementPaymentType,
   PlacementSettlementMethod,
+  PlacementClaimAllocationStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -155,6 +156,20 @@ type PaymentForEvent = {
       withholdingTaxAmount?: Prisma.Decimal | number | string | null;
     };
   }>;
+};
+
+type ClaimPayableApprovalForEvent = {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  approvalVersion: number;
+  approvedPayableAmount: Prisma.Decimal | number | string;
+  finalLossAmount: Prisma.Decimal | number | string;
+  currency: string;
+  approvedAt: Date;
+  approvedByUserId: string;
+  notes?: string | null;
 };
 
 export type ReinsurerDisbursementRecordedEligibility = {
@@ -674,6 +689,203 @@ export class ReinsuranceFinancialEventPublisher {
         note: {
           ...this.notePayload(note, occurredAt),
           amountRepresentation: 'POSITIVE_MAGNITUDE_WITH_SIGNED_IMPACTS',
+        },
+      },
+    };
+  }
+
+  async prepareClaimPayableApproved(
+    user: RequestUser,
+    approval: ClaimPayableApprovalForEvent,
+  ): Promise<ReinsuranceAccountingEventInput | null> {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; CLAIM_PAYABLE_APPROVED not enqueued for approval ${approval.id}`,
+      );
+      return null;
+    }
+
+    if (approval.tenantId !== user.tenantId) {
+      throw new Error(
+        `Claim payable approval ${approval.id} does not belong to tenant ${user.tenantId}`,
+      );
+    }
+
+    const [claim, allocations] = await Promise.all([
+      this.prisma.placementClaim.findFirst({
+        where: {
+          id: approval.claimId,
+          tenantId: approval.tenantId,
+          placementId: approval.placementId,
+        },
+        select: {
+          id: true,
+          claimNumber: true,
+          currency: true,
+          finalLossAmount: true,
+          placement: {
+            select: {
+              id: true,
+              reference: true,
+              policyNumber: true,
+              title: true,
+              cedantId: true,
+            },
+          },
+        },
+      }),
+      this.prisma.placementClaimAllocation.findMany({
+        where: {
+          tenantId: approval.tenantId,
+          placementId: approval.placementId,
+          claimId: approval.claimId,
+          status: { not: PlacementClaimAllocationStatus.VOID },
+        },
+        select: {
+          id: true,
+          placementClosingId: true,
+          endorsementClosingId: true,
+          participantId: true,
+          endorsementParticipantId: true,
+          counterpartyId: true,
+          signedLinePercent: true,
+          allocatedFinalLossAmount: true,
+          cashCallAmount: true,
+          counterparty: {
+            select: {
+              id: true,
+              type: true,
+              name: true,
+              registrationNumber: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      }),
+    ]);
+
+    if (!claim) {
+      throw new Error(
+        `Claim ${approval.claimId} not found for payable approval ${approval.id}`,
+      );
+    }
+    if (claim.currency !== approval.currency) {
+      throw new Error(
+        `Claim payable approval ${approval.id} currency does not match claim currency`,
+      );
+    }
+    if (allocations.length === 0) {
+      throw new Error(
+        `Claim payable approval ${approval.id} requires at least one active reinsurer allocation`,
+      );
+    }
+    const invalidAllocation = allocations.find(
+      (allocation) =>
+        allocation.counterparty.type !== CounterpartyType.REINSURER,
+    );
+    if (invalidAllocation) {
+      throw new Error(
+        `Claim payable approval ${approval.id} has non-reinsurer allocation counterparty ${invalidAllocation.counterpartyId}`,
+      );
+    }
+
+    const cedant = await this.prisma.counterparty.findFirst({
+      where: {
+        id: claim.placement.cedantId,
+        tenantId: approval.tenantId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        type: true,
+        name: true,
+        registrationNumber: true,
+      },
+    });
+    if (!cedant || cedant.type !== CounterpartyType.CEDANT) {
+      throw new Error(
+        `Cedant counterparty ${claim.placement.cedantId} not found for claim payable approval ${approval.id}`,
+      );
+    }
+
+    const occurredAt = approval.approvedAt.toISOString();
+    const approvedPayableAmount = this.decimalNumber(
+      approval.approvedPayableAmount,
+    );
+    const finalLossAmount = this.decimalNumber(approval.finalLossAmount);
+
+    return {
+      tenantId: approval.tenantId,
+      sourceEventType: 'CLAIM_PAYABLE_APPROVED',
+      sourceRecordType: 'PlacementClaimPayableApproval',
+      sourceRecordId: approval.id,
+      sourceDocumentId: approval.claimId,
+      idempotencyKey: `reinsurance:claim:${approval.claimId}:payable-approved:${approval.approvalVersion}:v1`,
+      occurredAt,
+      currency: approval.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: approval.currency,
+        references: {
+          placementId: claim.placement.id,
+          placementReference: claim.placement.reference,
+          policyNumber: claim.placement.policyNumber,
+          placementTitle: claim.placement.title,
+          claimId: claim.id,
+          claimNumber: claim.claimNumber,
+          approvalId: approval.id,
+          approvalVersion: approval.approvalVersion,
+          approvedAt: occurredAt,
+          approvedByUserId: approval.approvedByUserId,
+        },
+        cedant: {
+          id: cedant.id,
+          type: cedant.type,
+          name: cedant.name,
+          registrationNumber: cedant.registrationNumber ?? null,
+          subledgerExternalRef: cedant.id,
+        },
+        reinsurers: allocations.map((allocation) => ({
+          allocationId: allocation.id,
+          counterpartyId: allocation.counterpartyId,
+          counterpartyType: allocation.counterparty.type,
+          counterpartyName: allocation.counterparty.name,
+          registrationNumber: allocation.counterparty.registrationNumber,
+          subledgerExternalRef: allocation.counterpartyId,
+          placementClosingId: allocation.placementClosingId,
+          endorsementClosingId: allocation.endorsementClosingId,
+          participantId: allocation.participantId,
+          endorsementParticipantId: allocation.endorsementParticipantId,
+          signedLinePercent: this.decimalNumber(allocation.signedLinePercent),
+          allocatedFinalLossAmount: this.optionalDecimalNumber(
+            allocation.allocatedFinalLossAmount,
+          ),
+          cashCallAmount: this.optionalDecimalNumber(allocation.cashCallAmount),
+        })),
+        amounts: {
+          approvedPayableAmount,
+          finalLossAmount,
+          signedClaimPayableImpact: approvedPayableAmount,
+        },
+        claim: {
+          id: claim.id,
+          claimNumber: claim.claimNumber,
+          currency: claim.currency,
+          finalLossAmount,
+        },
+        approval: {
+          id: approval.id,
+          version: approval.approvalVersion,
+          approvedAt: occurredAt,
+          approvedByUserId: approval.approvedByUserId,
+          notes: approval.notes ?? null,
+          recognitionBoundary: 'REINSURER_FINAL_CLAIM_APPROVAL',
+        },
+        policy: {
+          scope:
+            'Reinsurance claims between Cedant and Reinsurers through Broker',
+          postingEngine: 'POSTING_RULES',
+          claimSettlementTaxTreatment: 'NOT_APPLICABLE',
         },
       },
     };
