@@ -36,9 +36,9 @@ facultative offer is not yet known.
 
 ### Documents
 Document endpoints create registry rows with immutable source snapshots and
-renderer-ready payloads for future generated Reinsurance documents. PR1 does
-not render PDFs, upload to S3, create download URLs or send emails. Future file
-storage will use private S3 object storage with signed download URLs.
+backend-rendered PDFs for supported placement and endorsement documents. Private
+storage metadata is retained by the service and clients use signed download
+URLs. Browser-generated previews are not official documents.
 
 ### Placement closings
 Placement closing endpoints persist participant-specific closing snapshots for
@@ -61,35 +61,44 @@ Claim endpoints record loss events first. They capture occurrence details,
 estimated loss and optional final loss amounts. Claim allocations are generated
 explicitly from immutable CONFIRMED placement and endorsement closing snapshots
 to calculate reinsurer liability. Claim cash calls are generated one per
-allocation from those allocation snapshots. Claim notes, settlement payments,
-documents, email workflows and accounting records remain deferred.
+allocation from those allocation snapshots. Phase 1 claim payable approval is a
+claim-level broker confirmation after required reinsurer approvals have been
+obtained externally; it is not an allocation-level approval workflow. Recovery
+receipts and cedant settlements are modeled operationally, while additional
+claim accounting events remain policy-gated unless explicitly activated.
 
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
-are distinct: \`CLOSED\` placements block direct edits but may reopen to
-\`CLOSING\` when no financial lock exists. The first recorded placement payment
-hard-locks future direct mutations and requires the future endorsement workflow.
-Reversal records do not unlock placements. Debit note issuance alone is not a
-hard lock in the MVP policy.
+are distinct. Editable placements can be safely reopened to market after direct
+updates; downstream financial activity requires endorsements instead. Payments,
+claims, active endorsements and terminal lifecycle states block unsafe direct
+mutation. Reversal records preserve financial history and do not erase lock
+history.
 
 ### Endorsements
 Endorsement endpoints create versioned placement adjustment records. The backend
 captures \`originalSnapshot\` at creation and stores proposed changes separately.
-Endorsements may be created once at least one placement closing exists. Before
-	payment they are optional formal version records; after first payment they are
-	the mandatory path for business changes because direct edits are financially
-	locked. Endorsements do not mutate the original placement, participants,
-	closings, payments or notes. Endorsement participants and endorsement closings
-	are endorsement-scoped records for market responses and accepted endorsement
-	business.
+Endorsements do not mutate the original placement, participants, closings,
+payments or notes. Endorsement participants and endorsement closings are
+endorsement-scoped records for market responses, accepted endorsement business,
+force close, close readiness and current effective position calculations.
+Declined endorsement participants may be reinvited through the endpoint that
+preserves prior invitation history.
 
 ### Email foundation
-The email endpoints are a technical foundation for embedded mailbox workflows:
-connection metadata, provider verification, sync proof-of-concept, thread/message
-metadata, manual placement links, placement-scoped conversation reads and
-placement-scoped outbound send/reply persistence. They do not forward email,
-send/download attachments, email generated documents, parse content with AI or
-automatically update placements.
+The email endpoints support mailbox readiness, provider metadata,
+placement-scoped conversation reads and placement email send/reply persistence.
+Claim and cash-call email flows that are still preview-only must remain labeled
+as previews until backend send support exists for those flows.
+
+### Accounting integration
+Accounting integration uses tenant-scoped source events, deterministic
+idempotency keys, transactional outbox rows, automatic dispatcher/retry support,
+reconciliation endpoints and signed internal transport. Active Reinsurance
+events include issued debit/credit notes, endorsement notes, premium receipts
+and reversals, bank-confirmed reinsurer disbursements and reversals, and
+claim-level payable approvals. Policy-gated Claims events must not be described
+as active until implemented.
 
 Documentation is exposed only when \`ENABLE_SWAGGER=true\`; the deployment
 pipeline enables it for development only.

@@ -76,7 +76,7 @@ All endpoints require a valid JWT token via:
 ### Ghana Payroll Calculations
 - **Tier 1**: 0.5% employee, 13% employer contribution
 - **Tier 2**: 5% employee contribution on basic salary
-- **PAYE**: Ghana Revenue Authority 2024 tax bands
+- **PAYE**: configured Ghana Revenue Authority tax bands
 - All monetary values use Decimal precision (no floating point)
 
 ### Response Format

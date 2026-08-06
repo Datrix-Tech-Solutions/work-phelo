@@ -22,6 +22,7 @@ Current environment URLs are listed in the root repository README.
 | `/api/v1/subscription/*`           | Subscription Service |
 | `/api/v1/marketing/*`              | Marketing Service    |
 | `/api/v1/operations/reinsurance/*` | Reinsurance Service  |
+| `/api/v1/accounting/*`             | Accounting Service   |
 
 Downstreams must be configured for the target environment. A route can exist in
 dev but return `503 Service is not configured` in prod if that service is not in
@@ -55,6 +56,7 @@ Browser code should still call same-origin `/api/v1/...` from the app host.
 - `SUBSCRIPTION_SERVICE_URL`
 - `MARKETING_SERVICE_URL`
 - `REINSURANCE_SERVICE_URL`
+- `ACCOUNTING_SERVICE_URL`
 - `ALLOWED_ORIGINS`
 - `ENABLE_SWAGGER`
 

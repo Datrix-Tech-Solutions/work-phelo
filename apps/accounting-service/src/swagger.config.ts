@@ -20,8 +20,12 @@ Tenant-scoped Accounting ledger foundation.
 - Transaction and base-currency amounts are stored on every journal line.
 - Source idempotency keys are tenant-scoped for future operational integrations.
 
-AP/AR invoices, operational source-event posting and financial statements are
-outside this foundation.
+Operational source-event posting is active through the Accounting Source Event
+Inbox and tenant posting rules. Source modules publish business facts only;
+Accounting validates fiscal periods, idempotency, posting rules, subledgers and
+balanced journal creation. Financial confirmation queues are optional adapters
+for operational modules such as Reinsurance, while manual Accounting workflows
+remain independently usable.
       `,
     )
     .setVersion('1.0')
@@ -44,6 +48,10 @@ outside this foundation.
     .addTag('Accounting - Financial Reports')
     .addTag('Accounting - Posting Rules')
     .addTag('Accounting - Source Events')
+    .addTag(
+      'Accounting - Financial Confirmations',
+      'Accounting-owned bank confirmation queues for optional source-module integrations',
+    )
     .addTag('Internal Accounting Source Events')
     .build();
 
