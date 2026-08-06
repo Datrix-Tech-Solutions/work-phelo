@@ -48,7 +48,7 @@ export default function FacultativeFormFields({
     typeof premiumValue === 'number' &&
     Number.isFinite(premiumValue) &&
     sumInsuredValue > 0
-      ? premiumValue / sumInsuredValue
+      ? (premiumValue / sumInsuredValue) * 100
       : null;
   const rateLabel = computedRate != null ? `Rate (${computedRate.toFixed(2)}%)` : 'Rate (%)';
   const riskClassId = watch('riskClassId');

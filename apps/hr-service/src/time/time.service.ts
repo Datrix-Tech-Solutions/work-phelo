@@ -1037,6 +1037,34 @@ export class TimeService {
     return this.transformRecord(updated);
   }
 
+  private static readonly AUTO_CLOCK_OUT_HOURS = 20;
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoClockOutStaleSessions() {
+    const cutoff = new Date(
+      Date.now() - TimeService.AUTO_CLOCK_OUT_HOURS * 3600000,
+    );
+
+    const staleRecords = await this.prisma.clockRecord.findMany({
+      where: { clockOut: null, clockIn: { lt: cutoff } },
+      select: { id: true, clockIn: true },
+    });
+
+    for (const record of staleRecords) {
+      const clockOut = new Date(
+        record.clockIn.getTime() + TimeService.AUTO_CLOCK_OUT_HOURS * 3600000,
+      );
+      await this.prisma.clockRecord.update({
+        where: { id: record.id },
+        data: {
+          clockOut,
+          hoursWorked: TimeService.AUTO_CLOCK_OUT_HOURS.toFixed(2),
+          note: 'Auto-closed after 20 hours of inactivity',
+        },
+      });
+    }
+  }
+
   async getTodayStatus(tenantId: string, userId: string) {
     const employee = await this.getEmployeeByUserId(tenantId, userId);
     const today = new Date();

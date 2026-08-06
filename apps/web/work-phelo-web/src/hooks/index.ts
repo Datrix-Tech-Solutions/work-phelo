@@ -1,4 +1,5 @@
 export * from './useAuth';
+export * from './useModuleThemeScope';
 export * from './hr/usePermission';
 export * from './useTenants';
 export * from './hr/useDepartments';

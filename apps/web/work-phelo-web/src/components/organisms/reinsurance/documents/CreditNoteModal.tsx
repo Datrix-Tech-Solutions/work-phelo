@@ -259,7 +259,7 @@ export function CreditNoteModal({
           )}
           {description && (
             <div className="my-2">
-              <p className="text-sm font-semibold text-gray-400  tracking-wide mb-1">
+              <p className="text-xs font-semibold text-gray-400  tracking-wide mb-1">
                 Kindly Refer:
               </p>
               <div

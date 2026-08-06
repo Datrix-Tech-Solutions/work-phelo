@@ -8,6 +8,7 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { REINSURANCE_NAV_GROUPS } from '@/config/reinsurance-nav';
 import { AppBackground } from '@/components/atoms/AppBackground';
+import { useModuleThemeScope } from '@/hooks';
 
 export default function OperationsLayout({
   children,
@@ -17,6 +18,7 @@ export default function OperationsLayout({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  useModuleThemeScope('operations');
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
