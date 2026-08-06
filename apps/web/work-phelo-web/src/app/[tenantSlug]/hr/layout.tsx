@@ -8,10 +8,12 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
 import { usePermission, usePermissionRule } from '@/hooks/hr/usePermission';
+import { useModuleThemeScope } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
 import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
 import { LeaveReminderModal } from '@/components/organisms/hr/leave/LeaveReminderModal';
+import { TimeCorrectionReminderModal } from '@/components/organisms/hr/time-clock/TimeCorrectionReminderModal';
 import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function HRLayout({
@@ -22,6 +24,7 @@ export default function HRLayout({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  useModuleThemeScope('hr');
   const user = useAuthStore((s) => s.user);
   const isTenantAdmin = user?.role === 'TENANT_ADMIN';
   const firstName = user?.firstName ?? 'User';
@@ -152,6 +155,7 @@ export default function HRLayout({
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
+      {canApproveTimeCorrection && <TimeCorrectionReminderModal tenantSlug={tenantSlug} />}
       {canReadOwnProfile && <AgreementGate />}
     </AppBackground>
   );

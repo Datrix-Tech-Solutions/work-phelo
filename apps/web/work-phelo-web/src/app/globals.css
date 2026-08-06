@@ -216,8 +216,16 @@
 /* Module layout classes — each defines the full derived palette from its identity color.
    --table-header-shadow mixes the same identity color toward transparent (rather than
    white/black like the other tokens) so it reads as a colored ambient glow under the
-   DataTable header pill — see the drop-shadow-[...] on the header bg in DataTable.tsx. */
-.layout-hr {
+   DataTable header pill — see the drop-shadow-[...] on the header bg in DataTable.tsx.
+
+   Each block is also keyed off :root[data-module='...'] (set on <html> by the module's
+   layout, same mechanism as [data-theme]) in addition to the .layout-* class on
+   <AppBackground>. Modal/SidePanel portal to document.body via createPortal, which
+   escapes the .layout-* div's subtree entirely — a class-only scope left every popup
+   button falling back to the plain --brand color instead of the active module's color.
+   :root is a genuine ancestor of portaled content, so the data-module attribute reaches
+   it too. */
+.layout-hr, :root[data-module='hr'] {
   --table-header-bg:     color-mix(in oklch, var(--module-hr) 10%, white);
   --table-header-shadow: color-mix(in oklch, var(--module-hr) 25%, transparent);
   --module-btn-bg:       var(--module-hr);
@@ -227,7 +235,7 @@
   --module-gradient-end: color-mix(in oklch, var(--module-hr) 88%, black);
   --module-border:       color-mix(in oklch, var(--module-hr) 28%, white);
 }
-.layout-operations {
+.layout-operations, :root[data-module='operations'] {
   --table-header-bg:     color-mix(in oklch, var(--module-operations) 10%, white);
   --table-header-shadow: color-mix(in oklch, var(--module-operations) 25%, transparent);
   --module-btn-bg:       var(--module-operations);
@@ -237,7 +245,7 @@
   --module-gradient-end: color-mix(in oklch, var(--module-operations) 88%, black);
   --module-border:       color-mix(in oklch, var(--module-operations) 28%, white);
 }
-.layout-accounting {
+.layout-accounting, :root[data-module='accounting'] {
   --table-header-bg:     color-mix(in oklch, var(--module-accounting) 20%, white);
   --table-header-shadow: color-mix(in oklch, var(--module-accounting) 45%, transparent);
   --module-btn-bg:       var(--module-accounting);
@@ -247,7 +255,7 @@
   --module-gradient-end: color-mix(in oklch, var(--module-accounting) 88%, black);
   --module-border:       color-mix(in oklch, var(--module-accounting) 28%, white);
 }
-.layout-marketing {
+.layout-marketing, :root[data-module='marketing'] {
   --table-header-bg:     color-mix(in oklch, var(--module-marketing) 20%, white);
   --table-header-shadow: color-mix(in oklch, var(--module-marketing) 45%, transparent);
   --module-btn-bg:       var(--module-marketing);
@@ -281,7 +289,7 @@
    green text on dark green background). --module-accent — already a lighter,
    toward-white tint of the same module color, used elsewhere for icons/blobs — gives
    enough contrast without introducing a new color. */
-:root[data-theme='dark'] .layout-hr {
+:root[data-theme='dark'] .layout-hr, :root[data-theme='dark'][data-module='hr'] {
   --table-header-bg: color-mix(in oklch, var(--module-hr) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-hr) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-hr) 32%, black);
@@ -291,7 +299,7 @@
   --tab-active-text:   var(--module-accent);
   --topnav-icon-text:  var(--module-accent);
 }
-:root[data-theme='dark'] .layout-operations {
+:root[data-theme='dark'] .layout-operations, :root[data-theme='dark'][data-module='operations'] {
   --table-header-bg: color-mix(in oklch, var(--module-operations) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-operations) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-operations) 32%, black);
@@ -301,7 +309,7 @@
   --tab-active-text:   var(--module-accent);
   --topnav-icon-text:  var(--module-accent);
 }
-:root[data-theme='dark'] .layout-accounting {
+:root[data-theme='dark'] .layout-accounting, :root[data-theme='dark'][data-module='accounting'] {
   --table-header-bg: color-mix(in oklch, var(--module-accounting) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-accounting) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-accounting) 32%, black);
@@ -311,7 +319,7 @@
   --tab-active-text:   var(--module-accent);
   --topnav-icon-text:  var(--module-accent);
 }
-:root[data-theme='dark'] .layout-marketing {
+:root[data-theme='dark'] .layout-marketing, :root[data-theme='dark'][data-module='marketing'] {
   --table-header-bg: color-mix(in oklch, var(--module-marketing) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-marketing) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-marketing) 32%, black);

@@ -197,7 +197,7 @@ function ChangeTable({
     );
 
   if (changed.length === 0 && changedDetailFields.length === 0) {
-    return <p className="text-base text-gray-400 italic">No revised placement terms recorded.</p>;
+    return <p className="text-sm text-gray-400 italic">No revised placement terms recorded.</p>;
   }
 
   return (
@@ -206,7 +206,7 @@ function ChangeTable({
         <tr className="border-b border-gray-200">
           <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">Field</th>
           <th className="px-3 py-1.5 text-left text-sm font-semibold text-gray-500">Original</th>
-          <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">Proposed</th>
+          <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">Endorsed</th>
         </tr>
       </thead>
       <tbody>
@@ -439,7 +439,7 @@ function RevisedOfferContent({
 
       {proposed && (
         <>
-          <SectionHeading>Original vs Proposed Business</SectionHeading>
+          <SectionHeading>Original vs Endorsed Business</SectionHeading>
           <ChangeTable original={originalPlacement} proposed={proposed} currency={currency} />
         </>
       )}
@@ -456,7 +456,7 @@ function RevisedOfferContent({
               Original
             </th>
             <th className="py-1.5 pl-4 text-left text-sm font-semibold text-gray-500 w-1/3">
-              {confirmedClosing ? 'Revised' : 'Proposed'}
+              {confirmedClosing ? 'Revised' : 'Endorsed'}
             </th>
           </tr>
         </thead>
@@ -520,7 +520,7 @@ function RevisedOfferContent({
 
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-base text-gray-700 space-y-1 list-none mb-2">
+      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>

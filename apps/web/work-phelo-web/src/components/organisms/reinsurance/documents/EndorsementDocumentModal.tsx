@@ -248,7 +248,7 @@ function ChangeTable({
         <tr className="border-b border-gray-200">
           <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">Field</th>
           <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">Original</th>
-          <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">Proposed</th>
+          <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">Endorsed</th>
         </tr>
       </thead>
       <tbody>
@@ -415,7 +415,7 @@ function EndorsementSlipContent({ document }: { document: PlacementDocument }) {
         ]}
       />
 
-      <SectionHeading>Original vs Proposed Business</SectionHeading>
+      <SectionHeading>Original vs Endorsed Business</SectionHeading>
       <ChangeTable original={original} proposed={proposed} currency={placement.currency} />
 
       <SectionHeading>Market Response</SectionHeading>
@@ -629,7 +629,7 @@ function EndorsementCertificateContent({
 
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-base text-gray-700 space-y-1 list-none mb-2">
+      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>

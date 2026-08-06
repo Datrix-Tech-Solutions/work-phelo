@@ -18,6 +18,7 @@ interface DatePickerProps {
   disableFuture?: boolean;
   disablePast?: boolean;
   minDate?: string; // ISO: YYYY-MM-DD — disables all days before this date
+  maxDate?: string; // ISO: YYYY-MM-DD — disables all days after this date
   /** 'md' (default) keeps the standard px-4 py-3 sizing; 'sm' matches FormField/SearchSelect's compact px-2 py-2 sizing. */
   size?: 'sm' | 'md';
 }
@@ -31,6 +32,7 @@ export function DatePicker({
   disableFuture = false,
   disablePast = false,
   minDate,
+  maxDate,
   size = 'sm',
 }: DatePickerProps) {
   const today = new Date();
@@ -100,6 +102,12 @@ export function DatePicker({
         return new Date(d.getFullYear(), d.getMonth(), d.getDate());
       })()
     : null;
+  const maxDateNorm = maxDate
+    ? (() => {
+        const d = new Date(maxDate);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      })()
+    : null;
 
   // A month is disabled if no selectable day exists within it
   const isDisabledMonth = (monthIdx: number) => {
@@ -108,6 +116,7 @@ export function DatePicker({
     if (disableFuture && firstDay > todayNorm) return true;
     if (disablePast && lastDay < todayNorm) return true;
     if (minDateNorm && lastDay < minDateNorm) return true;
+    if (maxDateNorm && firstDay > maxDateNorm) return true;
     return false;
   };
 
@@ -118,6 +127,7 @@ export function DatePicker({
     if (disableFuture && firstDay > todayNorm) return true;
     if (disablePast && lastDay < todayNorm) return true;
     if (minDateNorm && lastDay < minDateNorm) return true;
+    if (maxDateNorm && firstDay > maxDateNorm) return true;
     return false;
   };
 
@@ -237,6 +247,7 @@ export function DatePicker({
                       disableFuture={disableFuture}
                       disablePast={disablePast}
                       minDate={minDate}
+                      maxDate={maxDate}
                     />
                   </>
                 )}
