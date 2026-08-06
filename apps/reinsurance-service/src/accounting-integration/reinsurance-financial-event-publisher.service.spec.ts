@@ -1127,7 +1127,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     expect(eligibility.exclusionReasons).toContain('missing agreed FX rate');
   });
 
-  it('prepares CLAIM_PAYABLE_APPROVED from immutable reinsurer approval facts', async () => {
+  it('prepares CLAIM_PAYABLE_APPROVED from immutable claim-level approval facts', async () => {
     const { actor, service } = makeService();
 
     const event = await service.prepareClaimPayableApproved(actor, {

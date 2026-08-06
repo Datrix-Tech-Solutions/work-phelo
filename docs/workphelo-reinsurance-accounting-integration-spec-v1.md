@@ -171,17 +171,17 @@ Reinsurance source events SHOULD be activated incrementally.
 
 ### 6.2 Claims family
 
-| Event                              | Status              | Source truth                                             |
-| ---------------------------------- | ------------------- | -------------------------------------------------------- |
-| `CLAIM_REGISTERED`                 | Planned non-posting | Claim registration record.                               |
-| `CLAIM_PAYABLE_APPROVED`           | Active              | Immutable reinsurer-final payable approval version.      |
-| `CLAIM_CASH_CALL_ISSUED`           | Policy pending      | Issued `PlacementClaimCashCall`.                         |
-| `CLAIM_CASH_CALL_VOIDED`           | Policy pending      | Voided issued `PlacementClaimCashCall`.                  |
-| `CLAIM_CEDANT_SETTLEMENT_RECORDED` | Policy pending      | `PlacementClaimCedantSettlement` record.                 |
-| `CLAIM_CEDANT_SETTLEMENT_REVERSED` | Policy pending      | linked reversal `PlacementClaimCedantSettlement` record. |
-| `CLAIM_RECOVERY_RECEIPT_RECORDED`  | Policy pending      | `PlacementClaimRecoveryReceipt` record.                  |
-| `CLAIM_RECOVERY_RECEIPT_REVERSED`  | Policy pending      | linked reversal `PlacementClaimRecoveryReceipt` record.  |
-| `CLAIM_CLOSED`                     | Planned non-posting | Claim lifecycle record.                                  |
+| Event                              | Status              | Source truth                                                                                                           |
+| ---------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `CLAIM_REGISTERED`                 | Planned non-posting | Claim registration record.                                                                                             |
+| `CLAIM_PAYABLE_APPROVED`           | Active              | Immutable claim-level payable approval version recorded by the broker after required reinsurer approvals are obtained. |
+| `CLAIM_CASH_CALL_ISSUED`           | Policy pending      | Issued `PlacementClaimCashCall`.                                                                                       |
+| `CLAIM_CASH_CALL_VOIDED`           | Policy pending      | Voided issued `PlacementClaimCashCall`.                                                                                |
+| `CLAIM_CEDANT_SETTLEMENT_RECORDED` | Policy pending      | `PlacementClaimCedantSettlement` record.                                                                               |
+| `CLAIM_CEDANT_SETTLEMENT_REVERSED` | Policy pending      | linked reversal `PlacementClaimCedantSettlement` record.                                                               |
+| `CLAIM_RECOVERY_RECEIPT_RECORDED`  | Policy pending      | `PlacementClaimRecoveryReceipt` record.                                                                                |
+| `CLAIM_RECOVERY_RECEIPT_REVERSED`  | Policy pending      | linked reversal `PlacementClaimRecoveryReceipt` record.                                                                |
+| `CLAIM_CLOSED`                     | Planned non-posting | Claim lifecycle record.                                                                                                |
 
 ### 6.3 Endorsement family
 
@@ -748,7 +748,7 @@ examples, not hardcoded universal journals.
 | `PAYMENT_REVERSED`                | Reversal `PlacementPayment`     | Reversal row creation time                       | Premium receipt reversal                         | Re-increases Cedant receivable | Unaffected                     | Decreases bank/cash only when reversing a cash-affecting receipt    | DR Cedant Premium Receivable / CR Bank/Cash or tenant-configured clearing  | Yes          |
 | `REINSURER_DISBURSEMENT_RECORDED` | `PlacementPayment` row          | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer settlement                   | Unaffected                     | Decreases Reinsurer payable    | Decreases bank/cash only for cash-affecting settlement methods      | DR Reinsurer Payable / CR Bank/Cash or tenant-configured non-cash clearing | Yes          |
 | `REINSURER_DISBURSEMENT_REVERSED` | Reversal `PlacementPayment`     | Reversal row creation time                       | Reinsurer disbursement reversal                  | Unaffected                     | Re-increases Reinsurer payable | Increases bank/cash only when reversing a cash-affecting settlement | DR Bank/Cash or tenant-configured clearing / CR Reinsurer Payable          | Yes          |
-| `CLAIM_PAYABLE_APPROVED`          | `PlacementClaimPayableApproval` | Reinsurer-final approval time                    | Approved Cedant claim payable                    | Unaffected                     | Increases Cedant claim payable | Unaffected                                                          | DR Claim Expense or tenant-configured clearing / CR Cedant Claim Payable   | Yes          |
+| `CLAIM_PAYABLE_APPROVED`          | `PlacementClaimPayableApproval` | Broker claim-level payable approval time         | Approved Cedant claim payable                    | Unaffected                     | Increases Cedant claim payable | Unaffected                                                          | DR Claim Expense or tenant-configured clearing / CR Cedant Claim Payable   | Yes          |
 
 Actual posting behavior depends on active `PostingRule` rows in Accounting.
 Tenants MAY route through clearing accounts, income accounts, expense accounts,

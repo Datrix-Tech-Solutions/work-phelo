@@ -160,7 +160,7 @@ export class ReinsuranceAccountingReadinessService {
         'Debit-note, credit-note, premium-payment, reinsurer-disbursement and claim-payable source-event capture, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records, bank-confirmed reinsurer disbursements including reversals and reinsurer-approved claim payables.'
+          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records, bank-confirmed reinsurer disbursements including reversals and broker-confirmed claim payable approvals.'
           : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };

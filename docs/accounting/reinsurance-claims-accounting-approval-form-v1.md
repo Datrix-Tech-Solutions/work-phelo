@@ -18,6 +18,30 @@ milestone at a time.
 Approved scope: Reinsurance claims between Cedant and Reinsurers through the
 Broker. Direct insurance policyholder claims are out of scope.
 
+## Phase 1 Scope
+
+Current model:
+
+```text
+Claim
+  -> Claim Payable Approval
+  -> Accounting
+```
+
+Phase 1 records one claim-level payable approval after the broker confirms that
+the required reinsurer approvals have been obtained externally. It does not
+record individual approval rows for each participating reinsurer.
+
+Future enhancement:
+
+```text
+Claim
+  -> Allocation Approval
+  -> Derived Claim Payable Approval
+```
+
+Allocation-level approvals remain future work.
+
 ## 1. Approval Instructions
 
 For each decision:
@@ -35,17 +59,17 @@ Claims Accounting events can be implemented safely.
 
 ### CLM-002
 
-| Field                      | Response                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------- |
-| Plain-language question    | When does the Broker officially owe the Cedant?                                    |
-| Recommended Phase 1 answer | When the approved payable amount is approved, with safeguards.                     |
-| Alternative options        | When claim is registered; when final loss is entered; only when cash is paid.      |
-| Example                    | Claim is reviewed at GHS 100,000 and broker approves GHS 80,000 payable to Cedant. |
-| Main business consequence  | Defines when the Cedant liability appears in Accounting.                           |
-| Approved option            | Recognize claim payable when the Reinsurer approves the claim.                     |
-| Approved by                | Finance/Product                                                                    |
-| Approval date              | 2026-08-05                                                                         |
-| Comments                   | Implemented through immutable approval version before Accounting event capture.    |
+| Field                      | Response                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Plain-language question    | When does the Broker officially owe the Cedant?                                                                           |
+| Recommended Phase 1 answer | When the approved payable amount is approved, with safeguards.                                                            |
+| Alternative options        | When claim is registered; when final loss is entered; only when cash is paid.                                             |
+| Example                    | Claim is reviewed at GHS 100,000 and broker approves GHS 80,000 payable to Cedant.                                        |
+| Main business consequence  | Defines when the Cedant liability appears in Accounting.                                                                  |
+| Approved option            | Recognize claim payable when the broker confirms the claim-level payable after required reinsurer approvals are obtained. |
+| Approved by                | Finance/Product                                                                                                           |
+| Approval date              | 2026-08-05                                                                                                                |
+| Comments                   | Implemented through immutable approval version before Accounting event capture.                                           |
 
 ### CLM-003
 

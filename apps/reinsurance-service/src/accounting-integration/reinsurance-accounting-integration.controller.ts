@@ -215,8 +215,7 @@ export class ReinsuranceAccountingIntegrationController {
 
   @Post('reconciliation/claim-payable-approved')
   @ApiOperation({
-    summary:
-      'Reconcile reinsurer-approved claim payables with Accounting outbox',
+    summary: 'Reconcile claim payable approvals with Accounting outbox',
     description:
       'Tenant-scoped support operation. Defaults to dry-run and only targets immutable claim payable approval records missing their deterministic CLAIM_PAYABLE_APPROVED outbox row.',
   })

@@ -1628,9 +1628,9 @@ export class PlacementsController {
   @ApiTags('Reinsurance - Claim Cedant Settlements')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
-    summary: 'Approve reinsurer-final cedant payable amount for a claim',
+    summary: 'Record claim-level payable approval for a claim',
     description:
-      'Records the reinsurer-final claim payable approval used as the Phase 1 Accounting recognition boundary. The operation requires finalLossAmount, at least one active reinsurer allocation and rejects approvals above final loss. It creates an immutable approval version and, when Accounting is enabled, captures CLAIM_PAYABLE_APPROVED transactionally.',
+      "This endpoint records the broker's claim-level payable approval after the required reinsurer approvals have been obtained. It does not record individual participating reinsurer approvals. The operation requires finalLossAmount, at least one active reinsurer allocation and rejects approvals above final loss. It creates an immutable approval version and, when Accounting is enabled, captures CLAIM_PAYABLE_APPROVED transactionally.",
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })

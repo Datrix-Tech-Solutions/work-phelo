@@ -15,7 +15,7 @@ export class ApprovePlacementClaimPayableDto {
     example: 37500,
     minimum: 0.01,
     description:
-      'Reinsurer-final approved amount payable to the cedant. Must match claim currency and cannot exceed finalLossAmount.',
+      'Claim-level payable amount confirmed by the broker after required reinsurer approvals have been obtained. Must match claim currency and cannot exceed finalLossAmount.',
   })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

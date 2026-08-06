@@ -171,7 +171,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
     );
   });
 
-  it('approves reinsurer-final payable and captures accounting event once', async () => {
+  it('records claim-level payable approval and captures accounting event once', async () => {
     prisma.placementClaim.update.mockResolvedValue({
       ...claim,
       approvedPayableAmount: new Prisma.Decimal('90000.00'),
