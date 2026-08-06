@@ -133,7 +133,6 @@ export default function HRLayout({
           showMenuButton
           onMenuClick={() => setCollapsed((v) => !v)}
           userInitials={initials}
-          notificationCount={0}
           logoVariant="image"
         />
         {/* Mobile backdrop: closes sidebar when tapping outside */}

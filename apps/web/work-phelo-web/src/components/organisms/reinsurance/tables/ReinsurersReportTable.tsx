@@ -52,6 +52,18 @@ export function ReinsurersReportTable({
         label: 'Outstanding',
         render: (row) => fmtAmount(row.outstanding, currencySymbol),
       },
+      {
+        key: 'pending',
+        label: 'Pending',
+        render: (row) =>
+          row.pending > 0.0001 ? (
+            <span className="text-amber-600 font-medium">
+              {fmtAmount(row.pending, currencySymbol)}
+            </span>
+          ) : (
+            <span className="text-gray-400">—</span>
+          ),
+      },
     ],
     [currencySymbol],
   );

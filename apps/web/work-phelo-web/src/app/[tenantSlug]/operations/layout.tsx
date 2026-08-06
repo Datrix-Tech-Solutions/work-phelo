@@ -51,7 +51,6 @@ export default function OperationsLayout({
           showMenuButton
           onMenuClick={() => setCollapsed((v) => !v)}
           userInitials={initials}
-          notificationCount={0}
           logoVariant="image"
         />
         {/* Mobile backdrop */}

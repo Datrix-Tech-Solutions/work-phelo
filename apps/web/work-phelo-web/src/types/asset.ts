@@ -8,6 +8,7 @@ export interface Asset {
   assetNumber?: string;
   name: string;
   type: AssetType;
+  customType?: string;
   serialNumber?: string;
   vehicleType?: VehicleType;
   purchaseDate?: string;
@@ -36,6 +37,7 @@ export type VehicleType =
 export interface CreateAssetPayload {
   name: string;
   type: AssetType;
+  customType?: string;
   serialNumber?: string;
   vehicleType?: VehicleType;
   purchaseDate?: string;

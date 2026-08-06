@@ -21,6 +21,7 @@ import {
 interface AssetForm {
   name: string;
   type: string;
+  customType?: string;
   serialNumber?: string;
   vehicleType?: string;
   purchaseDate?: string;
@@ -66,6 +67,7 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
       reset({
         name: asset.name,
         type: asset.type,
+        customType: asset.customType ?? '',
         serialNumber: asset.serialNumber ?? '',
         vehicleType: asset.vehicleType ?? '',
         purchaseDate: asset.purchaseDate ?? '',
@@ -85,7 +87,11 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
 
   const handleFormSubmit = (data: AssetForm) => {
     if (!asset) return;
-    onSubmit(asset.id, data);
+    const payload = { ...data };
+    if (payload.type !== 'OTHER') {
+      delete payload.customType;
+    }
+    onSubmit(asset.id, payload);
     reset({ currency: 'GHS' });
   };
 
@@ -116,9 +122,20 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
           label="Asset Type"
           placeholder="Select type"
           value={typeValue}
-          onChange={(v) => setValue('type', v)}
+          onChange={(v) => {
+            setValue('type', v);
+            if (v !== 'OTHER') setValue('customType', undefined);
+          }}
           options={ASSET_TYPE_OPTIONS}
         />
+        {typeValue === 'OTHER' && (
+          <FormField
+            label="Specify asset type"
+            registration={register('customType', { required: 'Please specify the asset type' })}
+            error={errors.customType}
+            placeholder="eg; Projector"
+          />
+        )}
 
         <FormField
           label={isVehicle ? 'Registration Number' : 'Serial Number'}

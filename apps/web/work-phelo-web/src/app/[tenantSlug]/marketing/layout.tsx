@@ -48,7 +48,6 @@ export default function MarketingLayout({
           showMenuButton
           onMenuClick={() => setCollapsed((v) => !v)}
           userInitials={initials}
-          notificationCount={0}
           logoVariant="image"
         />
         {!collapsed && (

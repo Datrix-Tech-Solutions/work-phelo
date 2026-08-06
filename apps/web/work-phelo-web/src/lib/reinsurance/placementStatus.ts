@@ -1,4 +1,9 @@
-import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
+import {
+  Facultative,
+  FacultativeStatus,
+  PlacementPayment,
+  toStatusLabel,
+} from '@/types/reinsurance';
 
 export type StatusVariant = 'success' | 'warning' | 'neutral' | 'danger';
 
@@ -62,6 +67,34 @@ const STATUS_LABEL_OVERRIDES: Partial<Record<FacultativeStatus, string>> = {
 /** Same as rawStatusLabel, but swaps in business-friendly wording for a few statuses. */
 export function facultativeStatusLabel(status: FacultativeStatus): string {
   return STATUS_LABEL_OVERRIDES[status] ?? rawStatusLabel(status);
+}
+
+export type CedantPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
+
+/** Sum of recorded-but-not-yet-bank-confirmed cedant premium receipts — money that's been
+ *  recorded as received but hasn't moved `netSettled`/`outstanding` yet (those only count
+ *  BANK_CONFIRMED payments), so without this a just-recorded receipt looks like nothing happened. */
+export function pendingPremiumReceived(payments: PlacementPayment[]): number {
+  return payments
+    .filter(
+      (p) => p.type === 'PREMIUM_RECEIVED' && p.status === 'RECORDED' && !p.reversalOfPaymentId,
+    )
+    .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+}
+
+/** Derives Outstanding/Pending/Part Payment/Paid from the same authoritative financial-position
+ *  figures the Premiums page and placement Details page use, plus any pending (unconfirmed)
+ *  premium receipt — keeps all surfaces agreeing on payment status. */
+export function cedantPaymentStatusFromPosition(
+  due: number,
+  paid: number,
+  outstanding: number,
+  pendingReceived: number,
+): CedantPaymentStatus {
+  if (due > 0 && outstanding <= 0.0001) return 'Paid';
+  if (paid > 0) return 'Part Payment';
+  if (pendingReceived > 0.0001) return 'Pending';
+  return 'Outstanding';
 }
 
 export function displayStatusFor(placement: Facultative): {

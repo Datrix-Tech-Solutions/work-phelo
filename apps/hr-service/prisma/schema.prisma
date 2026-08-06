@@ -383,6 +383,7 @@ model Branch {
   updatedAt    DateTime @updatedAt
 
   employees Employee[]
+  assets    Asset[]
 
   @@unique([tenantId, name])
   @@schema("hr")
@@ -595,6 +596,7 @@ model Asset {
   assetNumber        String
   name               String
   type               AssetType
+  customType         String?
   serialNumber       String?
   purchaseDate       DateTime?
   purchaseCost       Decimal?        @db.Decimal(15, 2)
@@ -604,16 +606,19 @@ model Asset {
   status             AssetStatus     @default(AVAILABLE)
   assignedEmployeeId String?
   assignedAt         DateTime?
+  branchId           String?
   isActive           Boolean         @default(true)
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
   assignedEmployee Employee?         @relation("AssignedAssets", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  branch           Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
   assignments      AssetAssignment[]
 
   @@unique([tenantId, assetNumber])
   @@index([tenantId, status])
   @@index([tenantId, assignedEmployeeId])
+  @@index([tenantId, branchId])
   @@schema("hr")
 }
 

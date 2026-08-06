@@ -43,7 +43,6 @@ export default function PortalLayout({
     <AppBackground backgroundImage={background} className="h-dvh overflow-hidden flex flex-col">
       <TopNav
         userInitials={initials}
-        notificationCount={0}
         logoVariant="image"
         //remember to comment out the tabs when pushing to production because the executive dashboard is not ready yet
         tabs={tabs}
