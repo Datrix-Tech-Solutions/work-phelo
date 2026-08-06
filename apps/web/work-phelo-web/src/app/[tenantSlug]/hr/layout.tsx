@@ -12,6 +12,7 @@ import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
 import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
 import { LeaveReminderModal } from '@/components/organisms/hr/leave/LeaveReminderModal';
+import { TimeCorrectionReminderModal } from '@/components/organisms/hr/time-clock/TimeCorrectionReminderModal';
 import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function HRLayout({
@@ -152,6 +153,7 @@ export default function HRLayout({
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
+      {canApproveTimeCorrection && <TimeCorrectionReminderModal tenantSlug={tenantSlug} />}
       {canReadOwnProfile && <AgreementGate />}
     </AppBackground>
   );
