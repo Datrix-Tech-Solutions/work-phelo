@@ -177,14 +177,10 @@ export function useMyAttendanceHistory(page: number = 1) {
   return useQuery<{ data: TimeEntry[]; totalPages: number }>({
     queryKey: ['timeclock', 'history', page],
     queryFn: async () => {
-      try {
-        const res = await api.get('/hr/time/attendance', { params: { mine: 'true' } });
-        const raw = res.data;
-        const records: RawAttendanceRecord[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
-        return { data: records.map(transformAttendanceRecord), totalPages: 1 };
-      } catch {
-        return { data: [], totalPages: 1 };
-      }
+      const res = await api.get('/hr/time/my-history');
+      const raw = res.data;
+      const records: RawAttendanceRecord[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      return { data: records.map(transformAttendanceRecord), totalPages: 1 };
     },
   });
 }

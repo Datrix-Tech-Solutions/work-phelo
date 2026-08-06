@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -31,9 +31,13 @@ import { LiveAttendanceTable } from '@/components/organisms/hr/time-clock/LiveAt
 import { RecordsSection } from '@/components/organisms/hr/time-clock/RecordSection';
 import { CorrectionsSection } from '@/components/organisms/hr/time-clock/CorrectionSection';
 
+const VALID_TABS = ['my', 'live', 'records', 'corrections'] as const;
+type TimeClockTab = (typeof VALID_TABS)[number];
+
 export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
@@ -49,9 +53,11 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const canManageRecords = canViewAttendance || isAdmin;
   const canApproveCorrections = canManageTime || isAdmin;
 
-  const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>(() =>
-    useAuthStore.getState().user?.role === 'TENANT_ADMIN' ? 'live' : 'my',
-  );
+  const [activeTab, setActiveTab] = useState<TimeClockTab>(() => {
+    const tabParam = searchParams.get('tab') as TimeClockTab | null;
+    if (tabParam && VALID_TABS.includes(tabParam)) return tabParam;
+    return useAuthStore.getState().user?.role === 'TENANT_ADMIN' ? 'live' : 'my';
+  });
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<{
     req: { id: string; employeeName?: string; date: string };
