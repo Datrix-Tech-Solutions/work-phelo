@@ -222,6 +222,36 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       counterparty: {
         findFirst: jest.fn().mockResolvedValue(counterparty),
       },
+      placementClaim: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'claim-1',
+          claimNumber: 'CLM-001',
+          currency: 'GHS',
+          finalLossAmount: new Prisma.Decimal('100000.00'),
+          placement,
+        }),
+      },
+      placementClaimAllocation: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'allocation-1',
+            placementClosingId: 'closing-1',
+            endorsementClosingId: null,
+            participantId: 'participant-1',
+            endorsementParticipantId: null,
+            counterpartyId: 'reinsurer-1',
+            signedLinePercent: new Prisma.Decimal('60.0000'),
+            allocatedFinalLossAmount: new Prisma.Decimal('60000.00'),
+            cashCallAmount: null,
+            counterparty: {
+              id: 'reinsurer-1',
+              type: CounterpartyType.REINSURER,
+              name: 'Reliable Re',
+              registrationNumber: 'RE-123',
+            },
+          },
+        ]),
+      },
     };
     const outbox = {
       enqueueAccountingEvent: jest.fn(),
@@ -1095,6 +1125,93 @@ describe('ReinsuranceFinancialEventPublisher', () => {
 
     expect(eligibility.eligible).toBe(false);
     expect(eligibility.exclusionReasons).toContain('missing agreed FX rate');
+  });
+
+  it('prepares CLAIM_PAYABLE_APPROVED from immutable claim-level approval facts', async () => {
+    const { actor, service } = makeService();
+
+    const event = await service.prepareClaimPayableApproved(actor, {
+      id: 'approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      approvalVersion: 1,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+      finalLossAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-30T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+      notes: 'Approved by reinsurer',
+    });
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'CLAIM_PAYABLE_APPROVED',
+      sourceRecordType: 'PlacementClaimPayableApproval',
+      sourceRecordId: 'approval-1',
+      sourceDocumentId: 'claim-1',
+      idempotencyKey: 'reinsurance:claim:claim-1:payable-approved:1:v1',
+      occurredAt: '2026-07-30T10:00:00.000Z',
+      currency: 'GHS',
+    });
+    if (!event) throw new Error('Expected CLAIM_PAYABLE_APPROVED event');
+    const payload = event.payload as {
+      references: Record<string, unknown>;
+      cedant: Record<string, unknown>;
+      reinsurers: Array<Record<string, unknown>>;
+      amounts: Record<string, unknown>;
+    };
+    expect(payload.references).toMatchObject({
+      placementId: 'placement-1',
+      placementReference: 'FAC-2026-001',
+      claimId: 'claim-1',
+      claimNumber: 'CLM-001',
+      approvalId: 'approval-1',
+      approvalVersion: 1,
+      approvedByUserId: 'user-1',
+    });
+    expect(payload.cedant).toMatchObject({
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+      subledgerExternalRef: 'cedant-1',
+    });
+    expect(payload.reinsurers).toEqual([
+      expect.objectContaining({
+        allocationId: 'allocation-1',
+        counterpartyId: 'reinsurer-1',
+        counterpartyType: CounterpartyType.REINSURER,
+        signedLinePercent: 60,
+        allocatedFinalLossAmount: 60000,
+      }),
+    ]);
+    expect(payload.amounts).toEqual({
+      approvedPayableAmount: 90000,
+      finalLossAmount: 100000,
+      signedClaimPayableImpact: 90000,
+    });
+    const serializedPayload = JSON.stringify(event.payload).toLowerCase();
+    expect(serializedPayload).not.toContain('withholding');
+    expect(serializedPayload).not.toContain('nic');
+    expect(serializedPayload).not.toContain('glaccount');
+  });
+
+  it('skips claim payable approval events when Accounting is disabled', async () => {
+    const { actor, service } = makeService({ accountingEnabled: false });
+
+    const event = await service.prepareClaimPayableApproved(actor, {
+      id: 'approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      approvalVersion: 1,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+      finalLossAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-30T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+    });
+
+    expect(event).toBeNull();
   });
 
   it('enqueues prepared events through the transactional outbox', async () => {

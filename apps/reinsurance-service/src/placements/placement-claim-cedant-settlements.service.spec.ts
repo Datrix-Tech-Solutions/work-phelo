@@ -1,9 +1,11 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
+  ReinsuranceAccountingOutboxStatus,
   PlacementClaimCedantSettlementStatus,
   PlacementClaimStatus,
   Prisma,
 } from '../../prisma/generated/client';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
@@ -25,7 +27,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
     tenantSlug: 'broker',
     tenantName: 'Broker',
     firstName: 'Ama',
-    moduleConfig: { operations: true },
+    moduleConfig: { operations: true, accounting: true },
     featureConfig: { operations: { reinsurance: true } },
     permissions: [],
   };
@@ -80,6 +82,13 @@ describe('PlacementClaimCedantSettlementsService', () => {
       findFirst: PrismaMethod;
       update: PrismaMethod;
     };
+    placementClaimAllocation: {
+      count: PrismaMethod;
+    };
+    placementClaimPayableApproval: {
+      findFirst: PrismaMethod;
+      create: PrismaMethod;
+    };
     placementClaimCedantSettlement: {
       findMany: PrismaMethod;
       findFirst: PrismaMethod;
@@ -87,6 +96,10 @@ describe('PlacementClaimCedantSettlementsService', () => {
       update: PrismaMethod;
     };
     $transaction: jest.Mock;
+  };
+  let financialEvents: {
+    prepareClaimPayableApproved: jest.Mock;
+    enqueuePreparedEvent: jest.Mock;
   };
   let service: PlacementClaimCedantSettlementsService;
 
@@ -96,6 +109,13 @@ describe('PlacementClaimCedantSettlementsService', () => {
       placementClaim: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementClaimAllocation: {
+        count: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementClaimPayableApproval: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        create: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementClaimCedantSettlement: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
@@ -109,14 +129,49 @@ describe('PlacementClaimCedantSettlementsService', () => {
     };
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaimAllocation.count.mockResolvedValue(1);
+    prisma.placementClaimPayableApproval.findFirst.mockResolvedValue(null);
+    prisma.placementClaimPayableApproval.create.mockResolvedValue({
+      id: 'approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      approvalVersion: 1,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+      finalLossAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-30T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+      notes: null,
+      createdAt: new Date('2026-07-30T10:00:00.000Z'),
+    });
     prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([]);
+    financialEvents = {
+      prepareClaimPayableApproved: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_PAYABLE_APPROVED',
+        sourceRecordType: 'PlacementClaimPayableApproval',
+        sourceRecordId: 'approval-1',
+        sourceDocumentId: 'claim-1',
+        idempotencyKey: 'reinsurance:claim:claim-1:payable-approved:1:v1',
+        occurredAt: '2026-07-30T10:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { approvedPayableAmount: 90000 } },
+      }),
+      enqueuePreparedEvent: jest.fn().mockResolvedValue({
+        id: 'outbox-1',
+        status: ReinsuranceAccountingOutboxStatus.PENDING,
+        accountingSourceEventId: null,
+      }),
+    };
     service = new PlacementClaimCedantSettlementsService(
       prisma as unknown as PrismaService,
       new ReinsuranceMoneyHelper(),
+      financialEvents as unknown as ReinsuranceFinancialEventPublisher,
     );
   });
 
-  it('approves payable amount only after final loss and within final loss', async () => {
+  it('records claim-level payable approval and captures accounting event once', async () => {
     prisma.placementClaim.update.mockResolvedValue({
       ...claim,
       approvedPayableAmount: new Prisma.Decimal('90000.00'),
@@ -124,8 +179,25 @@ describe('PlacementClaimCedantSettlementsService', () => {
 
     await service.approvePayable(user, 'placement-1', 'claim-1', {
       approvedPayableAmount: 90000,
+      currency: 'GHS',
+      notes: ' Reinsurer approval confirmed ',
     });
 
+    const approvalCreateArgs =
+      firstCallArg<Prisma.PlacementClaimPayableApprovalCreateArgs>(
+        prisma.placementClaimPayableApproval.create,
+      );
+    expect(approvalCreateArgs.data).toMatchObject({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      approvalVersion: 1,
+      approvedPayableAmount: 90000,
+      finalLossAmount: 100000,
+      currency: 'GHS',
+      approvedByUserId: 'user-1',
+      notes: 'Reinsurer approval confirmed',
+    });
     const args = firstCallArg<Prisma.PlacementClaimUpdateArgs>(
       prisma.placementClaim.update,
     );
@@ -134,10 +206,23 @@ describe('PlacementClaimCedantSettlementsService', () => {
       approvedByUserId: 'user-1',
       updatedByUserId: 'user-1',
     });
+    expect(financialEvents.prepareClaimPayableApproved).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
+  });
 
+  it('requires final loss, active allocation, amount within final loss and matching currency', async () => {
     await expect(
       service.approvePayable(user, 'placement-1', 'claim-1', {
         approvedPayableAmount: 100000.01,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(
+      service.approvePayable(user, 'placement-1', 'claim-1', {
+        approvedPayableAmount: 90000,
+        currency: 'USD',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -150,6 +235,69 @@ describe('PlacementClaimCedantSettlementsService', () => {
         approvedPayableAmount: 1,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaimAllocation.count.mockResolvedValue(0);
+    await expect(
+      service.approvePayable(user, 'placement-1', 'claim-1', {
+        approvedPayableAmount: 90000,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('treats duplicate same-version approval as idempotent and blocks mutation', async () => {
+    prisma.placementClaimPayableApproval.findFirst.mockResolvedValue({
+      id: 'approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      approvalVersion: 1,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+      finalLossAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-30T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+      notes: null,
+      createdAt: new Date('2026-07-30T10:00:00.000Z'),
+    });
+
+    const result = await service.approvePayable(
+      user,
+      'placement-1',
+      'claim-1',
+      {
+        approvedPayableAmount: 90000,
+      },
+    );
+
+    expect(result).toBe(claim);
+    expect(prisma.placementClaimPayableApproval.create).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+
+    await expect(
+      service.approvePayable(user, 'placement-1', 'claim-1', {
+        approvedPayableAmount: 85000,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('still approves operationally when Accounting is disabled', async () => {
+    financialEvents.prepareClaimPayableApproved.mockResolvedValue(null);
+    prisma.placementClaim.update.mockResolvedValue({
+      ...claim,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+    });
+
+    await service.approvePayable(
+      { ...user, moduleConfig: { operations: true, accounting: false } },
+      'placement-1',
+      'claim-1',
+      { approvedPayableAmount: 90000 },
+    );
+
+    expect(prisma.placementClaimPayableApproval.create).toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('rejects lowering approved payable below effective cedant settlements', async () => {

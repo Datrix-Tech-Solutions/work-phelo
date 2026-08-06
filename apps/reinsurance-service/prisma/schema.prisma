@@ -714,6 +714,7 @@ model PlacementClaim {
   cashCalls             PlacementClaimCashCall[]
   recoveryReceipts      PlacementClaimRecoveryReceipt[]
   cedantSettlements     PlacementClaimCedantSettlement[]
+  payableApprovals      PlacementClaimPayableApproval[]
   documents             PlacementDocument[]
   attachments           PlacementAttachment[]
 
@@ -721,6 +722,27 @@ model PlacementClaim {
   @@unique([tenantId, placementId, claimNumber])
   @@index([tenantId, placementId, status, createdAt])
   @@index([tenantId, status, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementClaimPayableApproval {
+  id                    String         @id @default(uuid())
+  tenantId              String
+  placementId           String
+  claimId               String
+  approvalVersion       Int            @default(1)
+  approvedPayableAmount Decimal        @db.Decimal(18, 2)
+  finalLossAmount       Decimal        @db.Decimal(18, 2)
+  currency              String
+  approvedAt            DateTime
+  approvedByUserId      String
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  claim                 PlacementClaim @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, claimId, approvalVersion])
+  @@index([tenantId, placementId, claimId, approvedAt])
   @@schema("reinsurance")
 }
 

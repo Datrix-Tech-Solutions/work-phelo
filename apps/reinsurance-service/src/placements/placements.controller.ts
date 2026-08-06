@@ -1628,9 +1628,9 @@ export class PlacementsController {
   @ApiTags('Reinsurance - Claim Cedant Settlements')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
-    summary: 'Approve cedant payable amount for a claim',
+    summary: 'Record claim-level payable approval for a claim',
     description:
-      'Stores the broker-approved amount payable to the cedant. Phase 1 requires finalLossAmount and rejects approvals above that final loss. Reinsurer recovery receipts do not determine this amount.',
+      "This endpoint records the broker's claim-level payable approval after the required reinsurer approvals have been obtained. It does not record individual participating reinsurer approvals. The operation requires finalLossAmount, at least one active reinsurer allocation and rejects approvals above final loss. It creates an immutable approval version and, when Accounting is enabled, captures CLAIM_PAYABLE_APPROVED transactionally.",
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
@@ -1643,7 +1643,7 @@ export class PlacementsController {
   @ApiConflictResponse({
     type: ApiErrorResponseDto,
     description:
-      'Approved payable amount is below the amount already settled to the cedant.',
+      'Approved payable amount is below the amount already settled to the cedant, or a different payable approval has already been recognized.',
   })
   approveClaimPayable(
     @Param('id', ParseUUIDPipe) id: string,

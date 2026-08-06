@@ -212,4 +212,20 @@ export class ReinsuranceAccountingIntegrationController {
       query,
     );
   }
+
+  @Post('reconciliation/claim-payable-approved')
+  @ApiOperation({
+    summary: 'Reconcile claim payable approvals with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable claim payable approval records missing their deterministic CLAIM_PAYABLE_APPROVED outbox row.',
+  })
+  reconcileClaimPayableApprovedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileClaimPayableApprovedEvents(
+      request.user,
+      query,
+    );
+  }
 }
