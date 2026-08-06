@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
+import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import type {
@@ -145,6 +146,10 @@ function fieldValue(value: string | number | null | undefined, fallback = '-') {
   return String(value);
 }
 
+function directionLabel(direction: string) {
+  return direction === 'INBOUND' ? 'Inflow' : direction === 'OUTBOUND' ? 'Outflow' : direction;
+}
+
 export function FinancialConfirmationQueue({
   items,
   isLoading,
@@ -253,7 +258,9 @@ export function FinancialConfirmationQueue({
       key: 'direction',
       label: 'Direction',
       width: '110px',
-      render: (row) => <span className="text-sm font-semibold text-gray-800">{row.direction}</span>,
+      render: (row) => (
+        <span className="text-sm font-semibold text-gray-800">{directionLabel(row.direction)}</span>
+      ),
     },
     {
       key: 'operationalDate',
@@ -274,13 +281,14 @@ export function FinancialConfirmationQueue({
     {
       key: 'source',
       label: 'Source',
-      width: 'minmax(180px, 1fr)',
+      width: '180px',
       render: (row) => <span className="text-sm text-gray-700">{row.sourceDescription}</span>,
     },
     {
       key: 'amount',
       label: 'Amount',
       width: '150px',
+      className: 'text-right',
       render: (row) => (
         <span className="block text-right text-sm font-semibold text-gray-900">
           {fmtAmount(row.amount, row.currency)}
@@ -288,28 +296,22 @@ export function FinancialConfirmationQueue({
       ),
     },
     {
-      key: 'status',
-      label: 'Confirmation',
+      key: 'actions',
+      label: 'Actions',
       width: '160px',
-      render: (row) => (
-        <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-          {row.confirmationStatus.replaceAll('_', ' ')}
-        </span>
-      ),
+      className: 'pr-6',
+      render: (row) =>
+        row.availableConfirmationActions.includes('CONFIRM_BANK_PAYMENT') ? (
+          <TableButton variant="green" onClick={() => openConfirmModal(row)}>
+            Confirm Payment
+          </TableButton>
+        ) : null,
     },
   ];
 
   return (
     <>
       <div className="space-y-4">
-        <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-          <h3 className="text-sm font-semibold text-blue-950">Financial Confirmation Queue</h3>
-          <p className="mt-1 text-sm text-blue-900">
-            Source modules record operational payments. Accounting confirms financial completion
-            here before recognition and posting begin.
-          </p>
-        </div>
-
         <DataTable
           columns={columns}
           data={paged}
@@ -320,21 +322,10 @@ export function FinancialConfirmationQueue({
             setSearch(q);
             setPage(1);
           }}
-          rowActions={(row) =>
-            row.availableConfirmationActions.includes('CONFIRM_BANK_PAYMENT')
-              ? [
-                  {
-                    label: 'Confirm Payment',
-                    onClick: () => openConfirmModal(row),
-                    variant: 'success',
-                  },
-                ]
-              : []
-          }
           emptyMessage={
             isError
-              ? 'Integration queue unavailable. Core Accounting remains available.'
-              : 'No source-module payments are awaiting confirmation'
+              ? 'Data unavailable. Core Accounting remains available.'
+              : 'No payments are awaiting confirmation'
           }
           currentPage={page}
           totalPages={totalPages}

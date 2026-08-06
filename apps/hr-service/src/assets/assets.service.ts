@@ -66,12 +66,15 @@ export class AssetsService {
     return {
       name: dto.name.trim(),
       type: dto.type,
+      customType:
+        dto.type === AssetType.OTHER ? dto.customType?.trim() || null : null,
       serialNumber: dto.serialNumber?.trim() || null,
       purchaseDate: dto.purchaseDate ? new Date(dto.purchaseDate) : null,
       purchaseCost: dto.purchaseCost,
       currency: this.normalizeCurrency(dto.currency),
       condition: dto.condition ?? AssetCondition.GOOD,
       notes: dto.notes?.trim() || null,
+      branchId: dto.branchId ?? null,
     };
   }
 
@@ -80,7 +83,17 @@ export class AssetsService {
   ): Prisma.AssetUncheckedUpdateInput {
     return {
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-      ...(dto.type !== undefined ? { type: dto.type } : {}),
+      ...(dto.type !== undefined
+        ? {
+            type: dto.type,
+            customType:
+              dto.type === AssetType.OTHER
+                ? dto.customType?.trim() || null
+                : null,
+          }
+        : dto.customType !== undefined
+          ? { customType: dto.customType?.trim() || null }
+          : {}),
       ...(dto.serialNumber !== undefined
         ? { serialNumber: dto.serialNumber.trim() || null }
         : {}),
@@ -95,6 +108,7 @@ export class AssetsService {
         : {}),
       ...(dto.condition !== undefined ? { condition: dto.condition } : {}),
       ...(dto.notes !== undefined ? { notes: dto.notes.trim() || null } : {}),
+      ...(dto.branchId !== undefined ? { branchId: dto.branchId || null } : {}),
     };
   }
 
@@ -193,7 +207,22 @@ export class AssetsService {
     return this.serializeAsset(asset);
   }
 
+  private async assertBranchBelongsToTenant(
+    tenantId: string,
+    branchId: string,
+  ) {
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: branchId, tenantId },
+      select: { id: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
+  }
+
   async create(tenantId: string, dto: CreateAssetDto) {
+    if (dto.branchId) {
+      await this.assertBranchBelongsToTenant(tenantId, dto.branchId);
+    }
+
     const assetNumber = await this.generateAssetNumber(tenantId, dto.type);
 
     const asset = await this.prisma.asset.create({
@@ -215,6 +244,10 @@ export class AssetsService {
 
   async update(tenantId: string, id: string, dto: UpdateAssetDto) {
     await this.assertAssetUpdatable(tenantId, id);
+
+    if (dto.branchId) {
+      await this.assertBranchBelongsToTenant(tenantId, dto.branchId);
+    }
 
     const asset = await this.prisma.asset.update({
       where: { id },

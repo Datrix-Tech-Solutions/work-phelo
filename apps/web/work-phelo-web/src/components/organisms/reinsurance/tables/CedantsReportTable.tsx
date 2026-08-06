@@ -48,6 +48,19 @@ export function CedantsReportTable({ rows, currencySymbol, isLoading }: CedantsR
         width: '150px',
         render: (row) => fmtAmount(row.outstanding, currencySymbol),
       },
+      {
+        key: 'pending',
+        label: 'Pending',
+        width: '150px',
+        render: (row) =>
+          row.pending > 0.0001 ? (
+            <span className="text-amber-600 font-medium">
+              {fmtAmount(row.pending, currencySymbol)}
+            </span>
+          ) : (
+            <span className="text-gray-400">—</span>
+          ),
+      },
     ],
     [currencySymbol],
   );

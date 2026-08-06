@@ -66,10 +66,9 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
 
   const handleFormSubmit = (data: AssetForm) => {
     const payload = { ...data };
-    if (payload.type === 'OTHER' && payload.customType) {
-      payload.type = payload.customType;
+    if (payload.type !== 'OTHER') {
+      delete payload.customType;
     }
-    delete payload.customType;
     onSubmit(payload);
     reset({ currency: tenantCurrency });
   };

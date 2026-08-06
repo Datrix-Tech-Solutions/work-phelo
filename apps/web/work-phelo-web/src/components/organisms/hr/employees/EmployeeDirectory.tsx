@@ -9,7 +9,7 @@ import { EmployeeFilterBar } from '@/components/molecules/hr/employees/EmployeeF
 import { Button } from '@/components/atoms/Button';
 import { useEmployees, useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
-import { useLeaveRequests } from '@/hooks/hr/useLeave';
+import { useEmployeesOnLeaveToday } from '@/hooks/hr/useLeave';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { usePermission } from '@/hooks/hr/usePermission';
@@ -19,7 +19,6 @@ import { formatDate } from '@/lib/formatters';
 import { EmploymentStatus } from '@/types/hr';
 
 const RESTRICTED_STATUSES = ['SUSPENDED', 'OFFBOARDED'];
-const TODAY = new Date();
 const PAGE_SIZE = 12;
 
 const STATUS_PILL: Record<EmploymentStatus, { label: string; color: PillColor }> = {
@@ -87,16 +86,8 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / PAGE_SIZE));
   const pagedEmployees = filteredEmployees.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const { data: approvedLeave = [] } = useLeaveRequests('APPROVED');
-  const activeLeave = useMemo(
-    () =>
-      approvedLeave.filter((r) => new Date(r.startDate) <= TODAY && new Date(r.endDate) >= TODAY),
-    [approvedLeave],
-  );
-  const onLeaveEmployeeIds = useMemo(
-    () => new Set(activeLeave.map((r) => r.employeeId)),
-    [activeLeave],
-  );
+  const { data: onLeaveIds = [] } = useEmployeesOnLeaveToday();
+  const onLeaveEmployeeIds = useMemo(() => new Set(onLeaveIds), [onLeaveIds]);
 
   const summary = useMemo(
     () => ({

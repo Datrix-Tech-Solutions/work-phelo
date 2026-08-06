@@ -22,12 +22,15 @@ import { Facultative, PlacementEndorsement, PlacementPayment } from '@/types/rei
 import {
   endorsementKey,
   fetchPlacementFinancialPosition,
+  fetchPlacementPayments,
+  paymentsKey,
   placementFinancialPositionKey,
   useArchivedFacultatives,
   useDeleteFacultative,
   useFacultatives,
   useForceCloseFacultative,
   usePlacementFinancialPosition,
+  usePlacementPayments,
   useRestoreFacultative,
   useCurrentTenantUsers,
 } from '@/hooks';
@@ -35,8 +38,11 @@ import { TenantUser } from '@/types/tenant';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   acceptedPercentFor,
+  cedantPaymentStatusFromPosition,
+  CedantPaymentStatus as PaymentStatus,
   facultativeStatusLabel,
   isEffectivelyClosed,
+  pendingPremiumReceived,
   RAW_STATUS_VARIANT_MAP,
 } from '@/lib/reinsurance/placementStatus';
 import { useToast } from '@/hooks/useToast';
@@ -63,6 +69,7 @@ function fmtDateTime(value: string | null) {
 }
 const CLOSING_PAYMENT_FILTER_OPTIONS = [
   { value: 'Outstanding', label: 'Outstanding' },
+  { value: 'Pending', label: 'Pending' },
   { value: 'Part Payment', label: 'Part Payment' },
   { value: 'Paid', label: 'Paid' },
 ];
@@ -89,29 +96,21 @@ const CLOSING_FILTER_OPTIONS = [
   ...CLOSING_PAYMENT_FILTER_OPTIONS,
 ];
 
-type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
-
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-[10px] text-gray-400',
+  Pending: 'text-[10px] text-amber-600 font-medium',
   'Part Payment': 'text-[10px] text-yellow-600 font-medium',
   Paid: 'text-[10px] text-green-600 font-medium',
 };
 
-/** Derives Outstanding/Part Payment/Paid from the same authoritative financial-position
- *  figures the Premiums page and placement Details page use — keeps all three surfaces
- *  agreeing on payment status instead of each recomputing net premium/paid differently. */
-function statusFromPosition(due: number, paid: number, outstanding: number): PaymentStatus {
-  if (due > 0 && outstanding <= 0.0001) return 'Paid';
-  if (paid > 0) return 'Part Payment';
-  return 'Outstanding';
-}
-
 function PaymentStatusCell({ placement }: { placement: Facultative }) {
   const { data: position } = usePlacementFinancialPosition(placement.id);
+  const { data: payments = [] } = usePlacementPayments(placement.id);
   const due = position?.cedant.currentObligation ?? 0;
   const paid = position?.cedant.netSettled ?? 0;
   const outstanding = position?.cedant.outstanding ?? 0;
-  const paymentStatus = statusFromPosition(due, paid, outstanding);
+  const pending = pendingPremiumReceived(payments);
+  const paymentStatus = cedantPaymentStatusFromPosition(due, paid, outstanding, pending);
 
   return (
     <div className="flex flex-col gap-1">
@@ -287,17 +286,29 @@ export function FacultativeTable({
         : [],
   });
 
+  const closingPaymentsQueries = useQueries({
+    queries:
+      tab === 'closing'
+        ? closingRows.map((row) => ({
+            queryKey: paymentsKey(row.id),
+            queryFn: () => fetchPlacementPayments(row.id),
+          }))
+        : [],
+  });
+
   const paymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
     closingRows.forEach((row, i) => {
       const position = positionQueries[i]?.data;
+      const payments = closingPaymentsQueries[i]?.data ?? [];
       const due = position?.cedant.currentObligation ?? 0;
       const paid = position?.cedant.netSettled ?? 0;
       const outstanding = position?.cedant.outstanding ?? 0;
-      map.set(row.id, statusFromPosition(due, paid, outstanding));
+      const pending = pendingPremiumReceived(payments);
+      map.set(row.id, cedantPaymentStatusFromPosition(due, paid, outstanding, pending));
     });
     return map;
-  }, [closingRows, positionQueries]);
+  }, [closingRows, positionQueries, closingPaymentsQueries]);
 
   const filtered = useMemo(() => {
     let rows = allRows;
@@ -397,13 +408,15 @@ export function FacultativeTable({
     if (tab !== 'placements') return map;
     paged.forEach((row, i) => {
       const position = openPositionQueries[i]?.data;
+      const payments = openPaymentQueries[i]?.data ?? [];
       const due = position?.cedant.currentObligation ?? 0;
       const paid = position?.cedant.netSettled ?? 0;
       const outstanding = position?.cedant.outstanding ?? 0;
-      map.set(row.id, statusFromPosition(due, paid, outstanding));
+      const pending = pendingPremiumReceived(payments);
+      map.set(row.id, cedantPaymentStatusFromPosition(due, paid, outstanding, pending));
     });
     return map;
-  }, [paged, openPositionQueries, tab]);
+  }, [paged, openPositionQueries, openPaymentQueries, tab]);
 
   // Reopen Offer is only valid once no endorsement has been made on the placement —
   // reopening after an endorsement would let the original offer diverge from what's
@@ -559,7 +572,9 @@ export function FacultativeTable({
         onClick: () => setPartialEditTarget(row),
       };
 
-      if (paymentStatus === 'Paid' || paymentStatus === 'Part Payment') {
+      // Anything other than a clean 'Outstanding' (Pending, Part Payment, or Paid) means money
+      // has moved or is in flight — Reopen/Archive only make sense while nothing has happened yet.
+      if (paymentStatus !== 'Outstanding') {
         return [
           { label: 'View Offer', onClick: () => router.push(detailUrl) },
           partialEditAction,

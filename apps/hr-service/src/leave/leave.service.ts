@@ -1421,6 +1421,31 @@ export class LeaveService {
     });
   }
 
+  /**
+   * Company-wide, read-only list of employees currently on approved leave.
+   * Intentionally unrestricted (any authenticated tenant user) — it exposes
+   * nothing beyond a boolean "on leave today" fact per employee, which the
+   * employee directory surfaces to everyone regardless of role.
+   */
+  async getEmployeesOnLeaveToday(tenantId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const requests = await this.prisma.leaveRequest.findMany({
+      where: {
+        tenantId,
+        status: 'APPROVED',
+        startDate: { lte: today },
+        endDate: { gte: today },
+      },
+      select: { employeeId: true },
+    });
+
+    return {
+      employeeIds: Array.from(new Set(requests.map((r) => r.employeeId))),
+    };
+  }
+
   async reviewRequest(
     tenantId: string,
     requestId: string,
@@ -1560,6 +1585,7 @@ export class LeaveService {
     // Notify the employee of the decision (fire-and-forget)
     void this.notifyEmployeeOfLeaveDecision(
       tenantId,
+      requestId,
       request.employeeId,
       request.leaveTypeId,
       reviewer.tenantSlug,
@@ -1871,6 +1897,7 @@ export class LeaveService {
 
   private async notifyEmployeeOfLeaveDecision(
     tenantId: string,
+    requestId: string,
     employeeId: string,
     leaveTypeId: string,
     tenantSlug: string,
@@ -1884,7 +1911,7 @@ export class LeaveService {
       const [employee, leaveType] = await Promise.all([
         this.prisma.employee.findUnique({
           where: { id: employeeId },
-          select: { email: true, firstName: true },
+          select: { email: true, firstName: true, userId: true },
         }),
         this.prisma.leaveType.findUnique({
           where: { id: leaveTypeId },
@@ -1899,19 +1926,41 @@ export class LeaveService {
         return;
       }
 
+      const leaveTypeName = leaveType?.name ?? 'Leave';
+
       await this.rabbitmq.notificationLeaveReviewed({
         tenantId,
         employeeId,
         employeeEmail: employee.email,
         employeeFirstName: employee.firstName,
         status,
-        leaveTypeName: leaveType?.name ?? 'Leave',
+        leaveTypeName,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         totalDays,
         note,
         platformLink: this.buildTenantWorkspaceLink(tenantSlug),
       });
+
+      if (employee.userId) {
+        await this.rabbitmq.notificationInAppCreate({
+          tenantId,
+          recipientUserId: employee.userId,
+          type: 'LEAVE_REVIEWED',
+          title:
+            status === 'APPROVED'
+              ? 'Leave Request Approved'
+              : 'Leave Request Rejected',
+          message:
+            status === 'APPROVED'
+              ? `Your ${leaveTypeName} request from ${startDate.toLocaleDateString('en-GB')} to ${endDate.toLocaleDateString('en-GB')} was approved.`
+              : `Your ${leaveTypeName} request from ${startDate.toLocaleDateString('en-GB')} to ${endDate.toLocaleDateString('en-GB')} was rejected.`,
+          link: this.buildLeaveRequestAppLink(requestId),
+          entityType: 'leaveRequest',
+          entityId: requestId,
+          sourceService: 'hr-service',
+        });
+      }
     } catch (err) {
       this.logger.error(
         `Failed to emit leave reviewed notification for employee ${employeeId}`,

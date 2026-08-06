@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
+import { getAssetTypeLabel } from '@/lib/assetOptions';
 
 interface AvailableAsset {
   id: string;
   name: string;
   type: string;
+  customType?: string;
   condition: string;
   assetNumber: string;
 }
@@ -40,17 +42,6 @@ export function AssignAssetPanel({
     : [];
 
   const selectedAsset = availableAssets.find((a) => a.id === selectedAssetId) ?? null;
-
-  const ASSET_TYPE_LABELS: Record<string, string> = {
-    LAPTOP: 'Laptop',
-    PHONE: 'Phone',
-    MONITOR: 'Monitor',
-    PRINTER: 'Printer',
-    VEHICLE: 'Vehicle',
-    FURNITURE: 'Furniture',
-    SOFTWARE_LICENSE: 'Software License',
-    OTHER: 'Other',
-  };
 
   const CONDITION_LABELS: Record<string, { label: string; text: string; bg: string }> = {
     NEW: { label: 'New', text: 'text-green-700', bg: 'bg-green-50' },
@@ -135,7 +126,7 @@ export function AssignAssetPanel({
                       <p className="text-xs text-gray-400 mt-0.5">{asset.assetNumber}</p>
                     </div>
                     <span className="text-xs font-medium text-gray-500 shrink-0">
-                      {ASSET_TYPE_LABELS[asset.type] || asset.type}
+                      {getAssetTypeLabel(asset)}
                     </span>
                     <span
                       className={`px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${cond.bg} ${cond.text}`}

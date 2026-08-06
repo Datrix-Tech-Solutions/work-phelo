@@ -11,11 +11,19 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
 import {
   fetchPlacementFinancialPosition,
+  fetchPlacementPayments,
+  paymentsKey,
   placementFinancialPositionKey,
   useFacultatives,
   usePlacementFinancialPosition,
+  usePlacementPayments,
 } from '@/hooks';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import {
+  cedantPaymentStatusFromPosition,
+  CedantPaymentStatus as PaymentStatus,
+  pendingPremiumReceived,
+} from '@/lib/reinsurance/placementStatus';
 
 const PAGE_SIZE = 10;
 
@@ -52,10 +60,9 @@ function paymentStatusLabel(status: FacultativeStatus): string {
   return toStatusLabel(status);
 }
 
-type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
-
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-xs text-gray-400',
+  Pending: 'text-xs text-amber-600 font-medium',
   'Part Payment': 'text-xs text-yellow-600 font-medium',
   Paid: 'text-xs text-green-600 font-medium',
 };
@@ -63,6 +70,7 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
 const STATUS_FILTER_OPTIONS = [
   { value: 'Placed', label: 'Placed' },
   { value: 'Closed', label: 'Closed' },
+  { value: 'Pending', label: 'Pending' },
   { value: 'Part Payment', label: 'Part Payment' },
   { value: 'Paid', label: 'Paid' },
 ];
@@ -88,13 +96,13 @@ function PaymentSummaryCell({ placement }: { placement: Facultative }) {
 
 function PaymentStatusCell({ placement }: { placement: Facultative }) {
   const { data: position } = usePlacementFinancialPosition(placement.id);
+  const { data: payments = [] } = usePlacementPayments(placement.id);
   const due = position?.cedant.currentObligation ?? 0;
   const paid = position?.cedant.netSettled ?? 0;
   const outstanding = position?.cedant.outstanding ?? 0;
+  const pending = pendingPremiumReceived(payments);
 
-  let paymentStatus: PaymentStatus = 'Outstanding';
-  if (due > 0 && outstanding <= 0.0001) paymentStatus = 'Paid';
-  else if (paid > 0) paymentStatus = 'Part Payment';
+  const paymentStatus = cedantPaymentStatusFromPosition(due, paid, outstanding, pending);
 
   return (
     <div className="flex flex-col gap-1 items-start">
@@ -232,20 +240,26 @@ export function PaymentsTable() {
     })),
   });
 
+  const paymentsQueries = useQueries({
+    queries: closingRows.map((row) => ({
+      queryKey: paymentsKey(row.id),
+      queryFn: () => fetchPlacementPayments(row.id),
+    })),
+  });
+
   const paymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
     closingRows.forEach((row, i) => {
       const position = positionQueries[i]?.data;
+      const payments = paymentsQueries[i]?.data ?? [];
       const due = position?.cedant.currentObligation ?? 0;
       const paid = position?.cedant.netSettled ?? 0;
       const outstanding = position?.cedant.outstanding ?? 0;
-      let status: PaymentStatus = 'Outstanding';
-      if (due > 0 && outstanding <= 0.0001) status = 'Paid';
-      else if (paid > 0) status = 'Part Payment';
-      map.set(row.id, status);
+      const pending = pendingPremiumReceived(payments);
+      map.set(row.id, cedantPaymentStatusFromPosition(due, paid, outstanding, pending));
     });
     return map;
-  }, [closingRows, positionQueries]);
+  }, [closingRows, positionQueries, paymentsQueries]);
 
   const payableRows = closingRows;
 

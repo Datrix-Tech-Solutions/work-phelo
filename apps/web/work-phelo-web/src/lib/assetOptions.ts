@@ -14,6 +14,13 @@ export const ASSET_TYPE_LABELS: Record<string, string> = Object.fromEntries(
   ASSET_TYPE_OPTIONS.map((o) => [o.value, o.label]),
 );
 
+// Resolves the type label to display for an asset, preferring the user-supplied
+// custom label when the type is 'OTHER'.
+export function getAssetTypeLabel(asset: { type: string; customType?: string | null }): string {
+  if (asset.type === 'OTHER' && asset.customType) return asset.customType;
+  return ASSET_TYPE_LABELS[asset.type] ?? asset.type;
+}
+
 export const ASSET_STATUS_OPTIONS = [
   { value: 'AVAILABLE', label: 'Available' },
   { value: 'ASSIGNED', label: 'Assigned' },

@@ -92,7 +92,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
         <div className="flex flex-col">
           <span className="text-gray-700">{fmtType(row.type)}</span>
           <span className="text-xs text-gray-400">
-            {row.direction === 'INBOUND' ? 'Inbound' : 'Outbound'}
+            {row.direction === 'INBOUND' ? 'Inflow' : 'Outflow'}
           </span>
         </div>
       ),

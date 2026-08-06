@@ -125,6 +125,7 @@ export function EmployeeDetailPanels({
           id: a.id,
           name: a.name,
           type: a.type,
+          customType: a.customType,
           condition: a.condition ?? 'GOOD',
           assetNumber: a.assetNumber ?? '—',
         }))}

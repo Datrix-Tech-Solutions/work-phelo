@@ -13,12 +13,12 @@ import { useFacultatives } from './useFacultatives';
 
 const BASE = '/operations/reinsurance/placements';
 
-const paymentsKey = (placementId: string) =>
+export const paymentsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'payments'] as const;
 export const placementFinancialPositionKey = (placementId: string, asOfDate?: string) =>
   ['reinsurance', 'placements', placementId, 'financial-position', asOfDate ?? 'current'] as const;
 
-async function fetchPlacementPayments(placementId: string): Promise<PlacementPayment[]> {
+export async function fetchPlacementPayments(placementId: string): Promise<PlacementPayment[]> {
   const res = await api.get(`${BASE}/${placementId}/payments`);
   return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
 }

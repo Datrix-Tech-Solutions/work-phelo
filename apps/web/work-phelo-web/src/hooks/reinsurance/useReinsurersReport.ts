@@ -35,6 +35,31 @@ function convertToTarget(
   return (value * sourceRate) / targetRate;
 }
 
+/** Sums a counterparty's disbursements of the given payment status, converting each payment's
+ *  own currency into the report's target currency before summing (payments on one placement
+ *  can carry different settlement currencies from the placement's premium currency). */
+function disbursementTotalFor(
+  payments: PlacementPayment[],
+  counterpartyId: string,
+  status: PlacementPayment['status'],
+  currencies: Currency[],
+  targetRate: number,
+): number {
+  return payments
+    .filter(
+      (pmt) =>
+        pmt.type === 'REINSURER_DISBURSEMENT' &&
+        pmt.status === status &&
+        !pmt.reversalOfPaymentId &&
+        pmt.counterpartyId === counterpartyId,
+    )
+    .reduce(
+      (sum, pmt) =>
+        sum + convertToTarget(parseFloat(pmt.amount), pmt.currency, currencies, targetRate),
+      0,
+    );
+}
+
 export interface ReinsurersReportParams {
   /** Restricts to placements whose inceptionDate (period of insurance start) falls in [startDate, endDate]. */
   startDate?: string;
@@ -51,12 +76,15 @@ export interface ReinsurerReportRow {
   placementCount: number;
   cededPremium: number;
   outstanding: number;
+  /** Recorded but not yet bank-confirmed disbursements — already reflected in `outstanding`, just called out separately. */
+  pending: number;
 }
 
 export interface ReinsurersReportSummary {
   activeReinsurers: number;
   cededPremium: number;
   outstanding: number;
+  pending: number;
   currencySymbol: string;
 }
 
@@ -152,18 +180,20 @@ export function useReinsurersReport(
           const share = parseFloat(pt.sharePercent as string) / 100;
           const cededShare = premiumInTarget * share;
 
-          const disbursed = payments
-            .filter(
-              (pmt) =>
-                pmt.type === 'REINSURER_DISBURSEMENT' &&
-                pmt.status === 'RECORDED' &&
-                pmt.counterpartyId === pt.counterpartyId,
-            )
-            .reduce(
-              (sum, pmt) =>
-                sum + convertToTarget(parseFloat(pmt.amount), pmt.currency, currencies, targetRate),
-              0,
-            );
+          const disbursed = disbursementTotalFor(
+            payments,
+            pt.counterpartyId,
+            'BANK_CONFIRMED',
+            currencies,
+            targetRate,
+          );
+          const pending = disbursementTotalFor(
+            payments,
+            pt.counterpartyId,
+            'RECORDED',
+            currencies,
+            targetRate,
+          );
 
           const existing = map.get(pt.counterpartyId) ?? {
             reinsurerId: pt.counterpartyId,
@@ -171,10 +201,12 @@ export function useReinsurersReport(
             placementCount: 0,
             cededPremium: 0,
             outstanding: 0,
+            pending: 0,
           };
           existing.placementCount += 1;
           existing.cededPremium += cededShare;
           existing.outstanding += Math.max(cededShare - disbursed, 0);
+          existing.pending += pending;
           map.set(pt.counterpartyId, existing);
         });
       },
@@ -189,6 +221,7 @@ export function useReinsurersReport(
       activeReinsurers: rows.length,
       cededPremium: rows.reduce((sum, r) => sum + r.cededPremium, 0),
       outstanding: rows.reduce((sum, r) => sum + r.outstanding, 0),
+      pending: rows.reduce((sum, r) => sum + r.pending, 0),
       currencySymbol: targetCurrency?.symbol ?? targetIso,
     };
   }, [rows, currencies, targetIso]);

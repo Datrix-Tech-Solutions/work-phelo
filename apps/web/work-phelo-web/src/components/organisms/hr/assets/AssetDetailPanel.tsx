@@ -5,7 +5,7 @@ import { Button } from '@/components/atoms/Button';
 import { AssetTypeIcon } from '@/components/atoms/assetIcons';
 import { Asset, AssetStatus, AssetCondition } from '@/types/asset';
 import { useBranchOptions } from '@/hooks';
-import { ASSET_TYPE_LABELS, VEHICLE_TYPE_OPTIONS } from '@/lib/assetOptions';
+import { getAssetTypeLabel, VEHICLE_TYPE_OPTIONS } from '@/lib/assetOptions';
 import { cn } from '@/lib/utils';
 
 const STATUS_STYLES: Record<AssetStatus, { dot: string; text: string; bg: string; label: string }> =
@@ -130,9 +130,7 @@ export function AssetDetailPanel({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-base font-bold text-gray-900 truncate">{asset.name}</p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {ASSET_TYPE_LABELS[asset.type] ?? asset.type}
-            </p>
+            <p className="text-xs text-gray-400 mt-0.5">{getAssetTypeLabel(asset)}</p>
           </div>
           <span
             className={cn(

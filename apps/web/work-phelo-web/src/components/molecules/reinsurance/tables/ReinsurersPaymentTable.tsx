@@ -10,6 +10,7 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TableButton } from '@/components/atoms/TableButton';
 import { RecordDisbursementPanel } from '@/components/organisms/reinsurance/panels/RecordDisbursementPanel';
+import { usePlacementPayments } from '@/hooks';
 
 interface ReinsurersPaymentTableProps {
   placement: Facultative;
@@ -41,6 +42,20 @@ export function ReinsurersPaymentTable({
   const [paymentTarget, setPaymentTarget] = useState<PlacementReinsurerFinancialPosition | null>(
     null,
   );
+
+  const { data: payments = [] } = usePlacementPayments(placement.id);
+
+  const pendingByCounterparty = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const payment of payments) {
+      if (payment.type !== 'REINSURER_DISBURSEMENT') continue;
+      if (payment.status !== 'RECORDED') continue;
+      if (payment.reversalOfPaymentId) continue;
+      const amount = parseFloat(payment.amount) || 0;
+      map.set(payment.counterpartyId, (map.get(payment.counterpartyId) ?? 0) + amount);
+    }
+    return map;
+  }, [payments]);
 
   const rows = useMemo<ReinsurerPositionRow[]>(
     () =>
@@ -84,11 +99,26 @@ export function ReinsurersPaymentTable({
         label: 'Paid',
         width: '130px',
         className: 'text-right',
-        render: (row) => (
-          <span className="text-gray-700 block text-right">
-            {fmt(row.netSettled, financialPosition?.currency ?? placement.currency)}
-          </span>
-        ),
+        render: (row) => {
+          const currency = financialPosition?.currency ?? placement.currency;
+          if (row.netSettled > 0.0001) {
+            return (
+              <span className="block text-right font-bold text-green-600">
+                {fmt(row.netSettled, currency)}
+              </span>
+            );
+          }
+          const pending = pendingByCounterparty.get(row.counterpartyId) ?? 0;
+          if (pending > 0.0001) {
+            return (
+              <span className="block text-right font-medium text-amber-600">
+                {fmt(pending, currency)}
+                {/* <span className="block text-xs font-normal text-amber-500">Pending approval</span> */}
+              </span>
+            );
+          }
+          return <span className="block text-right text-gray-700">{fmt(0, currency)}</span>;
+        },
       },
       {
         key: 'outstanding',
@@ -116,14 +146,21 @@ export function ReinsurersPaymentTable({
         label: 'Actions',
         width: '150px',
         className: 'pr-6',
-        render: (row) => (
-          <TableButton disabled={row.outstanding <= 0.0001} onClick={() => setPaymentTarget(row)}>
-            Disburse Payment
-          </TableButton>
-        ),
+        render: (row) => {
+          const pending = pendingByCounterparty.get(row.counterpartyId) ?? 0;
+          const fullyPending = pending >= row.outstanding - 0.0001;
+          return (
+            <TableButton
+              disabled={row.outstanding <= 0.0001 || fullyPending}
+              onClick={() => setPaymentTarget(row)}
+            >
+              Disburse Payment
+            </TableButton>
+          );
+        },
       },
     ],
-    [financialPosition?.currency, placement.currency],
+    [financialPosition?.currency, placement.currency, pendingByCounterparty],
   );
 
   return (
