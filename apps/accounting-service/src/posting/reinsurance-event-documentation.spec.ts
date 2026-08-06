@@ -2,13 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('Reinsurance accounting event documentation', () => {
-  const spec = readFileSync(
-    join(
-      process.cwd(),
-      '../../docs/workphelo-reinsurance-accounting-integration-spec-v1.md',
-    ),
-    'utf8',
-  );
+  const spec = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
 
   it('documents every active premium accounting event in the AR/AP matrix', () => {
     const activePremiumEvents = [
@@ -22,7 +16,7 @@ describe('Reinsurance accounting event documentation', () => {
       'REINSURER_DISBURSEMENT_REVERSED',
     ];
 
-    expect(spec).toContain('### 10.3 Active Premium Event AR/AP Matrix');
+    expect(spec).toContain('### Active Reinsurance AR/AP Matrix');
     for (const eventName of activePremiumEvents) {
       expect(spec).toContain(`\`${eventName}\``);
     }

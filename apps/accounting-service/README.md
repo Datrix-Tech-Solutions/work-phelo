@@ -72,6 +72,24 @@ source-event families include issued debit/credit notes, endorsement notes,
 premium receipts and reversals, bank-confirmed reinsurer disbursements and
 reversals, and claim-level payable approvals.
 
+### Active Reinsurance AR/AP Matrix
+
+| Event                             | Recognition boundary                             | Business meaning                                  |
+| --------------------------------- | ------------------------------------------------ | ------------------------------------------------- |
+| `DEBIT_NOTE_ISSUED`               | Official placement debit note issue time         | Cedant owes premium to broker                     |
+| `CREDIT_NOTE_ISSUED`              | Official placement credit note issue time        | Broker owes premium share to Reinsurer            |
+| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Official endorsement debit note issue time       | Additional premium due from Cedant                |
+| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Official endorsement credit note issue time      | Return premium or payable adjustment to Reinsurer |
+| `PREMIUM_PAYMENT_RECEIVED`        | Accounting confirmation time (`bankConfirmedAt`) | Cedant payment clears receivable                  |
+| `PAYMENT_REVERSED`                | Reversal row creation time                       | Premium receipt reversal                          |
+| `REINSURER_DISBURSEMENT_RECORDED` | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer settlement                    |
+| `REINSURER_DISBURSEMENT_REVERSED` | Reversal row creation time                       | Reinsurer disbursement reversal                   |
+| `CLAIM_PAYABLE_APPROVED`          | Broker claim-level payable approval time         | Approved Cedant claim payable                     |
+
+Operational Reinsurance payments can be recorded before Accounting recognition.
+No Accounting outbox event is created at that point for bank-confirmed
+workflows; recognition starts at the Accounting-owned confirmation boundary.
+
 Claims events that remain policy-gated must not be treated as active posting
 events until implemented and covered by posting rules.
 
