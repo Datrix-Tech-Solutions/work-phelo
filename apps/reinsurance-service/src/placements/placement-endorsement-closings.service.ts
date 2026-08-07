@@ -976,11 +976,15 @@ export class PlacementEndorsementClosingsService {
     const commissionAmount = (commissionPct / 100) * premiumSnapshot;
     const brokerageAmount = (brokeragePct / 100) * premiumSnapshot;
     const netPremium = premiumSnapshot - commissionAmount - brokerageAmount;
+    const sumInsuredSnapshot =
+      source.sumInsured != null
+        ? (signedLinePercent / 100) * source.sumInsured
+        : null;
 
     return {
       signedLinePercent,
       sharePercent,
-      sumInsuredSnapshot: source.sumInsured,
+      sumInsuredSnapshot,
       premiumSnapshot,
       commissionPercent: commissionPct,
       commissionAmount,
