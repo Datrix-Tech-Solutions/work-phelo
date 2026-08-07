@@ -831,7 +831,8 @@ export type PlacementNoteType =
   | 'DEBIT_NOTE'
   | 'CREDIT_NOTE'
   | 'ENDORSEMENT_DEBIT_NOTE'
-  | 'ENDORSEMENT_CREDIT_NOTE';
+  | 'ENDORSEMENT_CREDIT_NOTE'
+  | 'CURRENT_EFFECTIVE_DEBIT_NOTE';
 
 export type PlacementNoteStatus = 'DRAFT' | 'ISSUED' | 'VOID';
 

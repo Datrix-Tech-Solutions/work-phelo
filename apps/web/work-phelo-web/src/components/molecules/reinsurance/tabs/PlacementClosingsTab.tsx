@@ -20,6 +20,7 @@ import {
   usePlacementDocuments,
   usePlacementNotes,
   useCreatePlacementDebitNote,
+  useCreateEffectiveDebitNote,
   useCreatePlacementCreditNote,
   usePlacementEffectiveView,
 } from '@/hooks';
@@ -93,6 +94,10 @@ function isActiveDebitNote(note: PlacementNote) {
   return note.type === 'DEBIT_NOTE' && isActiveNote(note);
 }
 
+function isActiveEffectiveDebitNote(note: PlacementNote) {
+  return note.type === 'CURRENT_EFFECTIVE_DEBIT_NOTE' && isActiveNote(note);
+}
+
 function isActiveCreditNote(note: PlacementNote, closingId: string) {
   return note.type === 'CREDIT_NOTE' && note.closingId === closingId && isActiveNote(note);
 }
@@ -128,6 +133,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     placement.id,
   );
   const createDebitNote = useCreatePlacementDebitNote(placement.id);
+  const createEffectiveDebitNote = useCreateEffectiveDebitNote(placement.id);
   const createCreditNote = useCreatePlacementCreditNote(placement.id);
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
@@ -145,8 +151,8 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
 
   const isPlacementClosed = placement.status === 'CLOSED';
   const hasAppliedEndorsements = (effectiveView?.appliedEndorsements.length ?? 0) > 0;
-  const isCurrentDebitNoteSupported = !hasAppliedEndorsements;
-  const isNoteBusy = createDebitNote.isPending || createCreditNote.isPending;
+  const isNoteBusy =
+    createDebitNote.isPending || createEffectiveDebitNote.isPending || createCreditNote.isPending;
 
   const rows: ClosingRow[] = closings
     .filter((closing) => closing.status === 'CONFIRMED')
@@ -258,6 +264,8 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   };
 
   const findActiveDebitNote = (notes = placementNotes) => notes.find(isActiveDebitNote);
+  const findActiveEffectiveDebitNote = (notes = placementNotes) =>
+    notes.find(isActiveEffectiveDebitNote);
   const findActiveCreditNote = (closingId: string, notes = placementNotes) =>
     notes.find((note) => isActiveCreditNote(note, closingId));
 
@@ -318,18 +326,25 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     });
   };
 
+  // Once an endorsement has been applied, the original placement debit note only reflects
+  // pre-endorsement business — generate the consolidated current-effective debit note instead,
+  // which the backend derives from original confirmed business plus CLOSED endorsements.
   const handleOpenDebitNote = async () => {
     setDebitNoteViewed(true);
     try {
-      let note = findActiveDebitNote();
+      let note = hasAppliedEndorsements ? findActiveEffectiveDebitNote() : findActiveDebitNote();
       if (!note) {
         try {
-          note = await createDebitNote.mutateAsync();
+          note = hasAppliedEndorsements
+            ? await createEffectiveDebitNote.mutateAsync()
+            : await createDebitNote.mutateAsync();
         } catch (error) {
           const message = extractError(error);
           if (!message.toLowerCase().includes('active debit note')) throw error;
           const refreshed = await refetchPlacementNotes();
-          note = findActiveDebitNote(refreshed.data ?? []);
+          note = hasAppliedEndorsements
+            ? findActiveEffectiveDebitNote(refreshed.data ?? [])
+            : findActiveDebitNote(refreshed.data ?? []);
         }
       }
       if (!note) throw new Error('Active debit note could not be found.');
@@ -449,15 +464,11 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
                   {
                     label: 'View Debit Note',
                     onClick: handleOpenDebitNote,
-                    disabled: !isCurrentDebitNoteSupported,
-                    title: isCurrentDebitNoteSupported
-                      ? undefined
-                      : 'debit note generation is not yet backend-supported after endorsements. Original debit notes remain historical.',
+                    title: hasAppliedEndorsements
+                      ? 'Generates the consolidated current-effective debit note covering original business plus closed endorsements.'
+                      : undefined,
                     className: cn(
-                      'ml-3 bg-transparent',
-                      isCurrentDebitNoteSupported
-                        ? 'text-green-700 border-green-600 hover:bg-green-600 hover:text-white hover:border-green-600 focus:ring-green-600'
-                        : 'text-gray-600 border-gray-400 hover:bg-gray-400 hover:text-white hover:border-gray-400 focus:ring-gray-400',
+                      'ml-3 bg-transparent text-green-700 border-green-600 hover:bg-green-600 hover:text-white hover:border-green-600 focus:ring-green-600',
                       debitNoteViewed ? '' : 'btn-pulse',
                     ),
                   },

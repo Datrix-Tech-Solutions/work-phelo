@@ -312,7 +312,7 @@ describe('PlacementEndorsementClosingsService', () => {
         status: PlacementClosingStatus.DRAFT,
         signedLinePercent: 30,
         sharePercent: 40,
-        sumInsuredSnapshot: 150000,
+        sumInsuredSnapshot: 45000,
         premiumSnapshot: 9000,
         commissionPercent: 10,
         commissionAmount: 900,

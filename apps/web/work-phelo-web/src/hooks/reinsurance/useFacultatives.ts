@@ -348,6 +348,20 @@ export function useCreatePlacementDebitNote(placementId: string) {
   });
 }
 
+export function useCreateEffectiveDebitNote(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post(`${BASE}/${placementId}/effective-debit-note`);
+      return res.data as PlacementNote;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
 export function useCreatePlacementCreditNote(placementId: string) {
   const queryClient = useQueryClient();
   return useMutation({
