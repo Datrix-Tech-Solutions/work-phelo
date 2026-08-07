@@ -35,7 +35,7 @@ export function CompanyHeader({
   const invalidateTenant = () => queryClient.invalidateQueries({ queryKey: ['tenant', id] });
 
   const isSuspended = status === 'SUSPENDED';
-  const workspaceUrl = `workphelo.com/${slug}/`;
+  const workspaceUrl = `app.workphelo.com/${slug}/login`;
 
   return (
     <div className={cardClass('flex items-center justify-between px-5 py-4')}>

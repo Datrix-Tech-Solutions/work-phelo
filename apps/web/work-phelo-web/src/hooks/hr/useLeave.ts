@@ -16,6 +16,7 @@ export const leaveKeys = {
   requestsBase: () => ['leave', 'requests'] as const,
   requests: (status?: string) => ['leave', 'requests', status ?? 'all'] as const,
   myRequests: () => ['leave', 'requests', 'my'] as const,
+  onLeaveToday: () => ['leave', 'requests', 'on-leave-today'] as const,
   balances: (employeeId?: string) => ['leave', 'balances', employeeId ?? 'me'] as const,
 };
 
@@ -175,6 +176,21 @@ export function useMyLeaveRequests() {
     queryFn: async () => {
       const res = await api.get<RawLeaveRequest[]>('/hr/leave/requests/my');
       return res.data.map(transformRequest);
+    },
+  });
+}
+
+/**
+ * Company-wide, read-only list of employees currently on approved leave.
+ * Unlike `useLeaveRequests`, this is not scoped by role — every employee
+ * can see who is on leave today (no request detail, just the fact).
+ */
+export function useEmployeesOnLeaveToday() {
+  return useQuery({
+    queryKey: leaveKeys.onLeaveToday(),
+    queryFn: async () => {
+      const res = await api.get<{ employeeIds: string[] }>('/hr/leave/requests/on-leave-today');
+      return res.data.employeeIds;
     },
   });
 }

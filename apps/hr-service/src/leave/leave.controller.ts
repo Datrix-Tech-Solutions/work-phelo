@@ -271,6 +271,16 @@ export class LeaveController {
     return this.leaveService.getPendingCount(req.user.tenantId, req.user);
   }
 
+  @Get('requests/on-leave-today')
+  @ApiOperation({
+    summary:
+      'Get IDs of employees currently on approved leave — visible to all employees',
+  })
+  @ApiResponse({ status: 200, description: 'On-leave employee IDs returned' })
+  getEmployeesOnLeaveToday(@Req() req: AuthenticatedRequest) {
+    return this.leaveService.getEmployeesOnLeaveToday(req.user.tenantId);
+  }
+
   @Get('requests/my')
   @RequirePermissions(Permission.READ_OWN_LEAVE)
   @ApiOperation({ summary: "Get the logged-in employee's own leave requests" })

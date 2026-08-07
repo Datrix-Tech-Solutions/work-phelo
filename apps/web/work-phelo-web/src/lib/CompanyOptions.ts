@@ -69,5 +69,6 @@ export const INDUSTRY_OPTIONS = [
   { value: 'Manufacturing', label: 'Manufacturing' },
   { value: 'Retail', label: 'Retail' },
   { value: 'Technology', label: 'Technology' },
+  { value: 'Hospitality', label: 'Hospitality' },
   { value: 'Other', label: 'Other' },
 ];
