@@ -358,7 +358,7 @@ export function FinancialConfirmationQueue({
         {selectedItem && (
           <form
             id="confirm-source-bank-payment-form"
-            className="mt-5 space-y-4"
+            className="mt-5 space-y-(--field-stack-gap,0.75rem)"
             onSubmit={submitConfirmation}
           >
             <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700">

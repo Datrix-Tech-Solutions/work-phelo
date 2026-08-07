@@ -43,7 +43,7 @@ export function ReinsurersReportFilters({ onGenerate }: ReinsurersReportFiltersP
   };
 
   return (
-    <div className="flex flex-col gap-5 flex-1 min-h-0">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem) flex-1 min-h-0">
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-2">
           <DatePicker

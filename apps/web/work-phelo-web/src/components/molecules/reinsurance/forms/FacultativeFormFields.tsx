@@ -69,10 +69,10 @@ export default function FacultativeFormFields({
   const riskFields = selectedRiskType?.fields?.filter((f) => f.isActive) ?? [];
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       {/* ── Policy Details ── */}
       <FormSection title="Policy Details">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <Controller
             name="insuranceCompany"
             control={control}
@@ -110,7 +110,7 @@ export default function FacultativeFormFields({
       {/* ── Risk Details ── */}
       {selectedRiskTypeId && (
         <FormSection title="Risk Details">
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
             {riskFields.length > 0 && (
               <div className="grid grid-cols-2 gap-3">
                 {riskFields.map((field) => {
@@ -170,7 +170,10 @@ export default function FacultativeFormFields({
                   }
                   if (field.fieldType === 'CHECKBOX') {
                     return (
-                      <div key={field.id} className="flex flex-col gap-1.5">
+                      <div
+                        key={field.id}
+                        className="flex flex-col gap-(--field-label-gap,0.125rem)"
+                      >
                         <label className="text-sm font-bold text-gray-900">{field.label}</label>
                         <input
                           type="checkbox"
@@ -200,7 +203,7 @@ export default function FacultativeFormFields({
               <div className="flex flex-col gap-2">
                 {extraFields.map((ef, index) => (
                   <div key={ef.fieldArrayId} className="grid grid-cols-2 gap-2 items-end">
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                       <label className="text-sm font-bold text-gray-900">Field Name</label>
                       <input
                         {...register(`extraRiskFields.${index}.label`)}
@@ -209,7 +212,7 @@ export default function FacultativeFormFields({
                       />
                     </div>
                     <div className="flex items-end gap-2">
-                      <div className="flex flex-col gap-1.5 flex-1">
+                      <div className="flex flex-col gap-(--field-label-gap,0.125rem) flex-1">
                         <label className="text-sm font-bold text-gray-900">Value</label>
                         <input
                           {...register(`extraRiskFields.${index}.value`)}
@@ -255,7 +258,7 @@ export default function FacultativeFormFields({
 
       {/* ── Offer Details ── */}
       <FormSection title="Offer Details">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <div className="grid grid-cols-2 gap-3">
             <FormField
               label="Policy Number"
@@ -403,7 +406,7 @@ export default function FacultativeFormFields({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <div
               className={inputClass(
                 undefined,

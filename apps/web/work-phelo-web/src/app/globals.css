@@ -1,12 +1,36 @@
 @import "tailwindcss";
 
+/* Scrollbars are invisible at rest and fade in only while actively scrolling —
+   AutoHideScrollbars (mounted in layout.tsx) has no ":scrolling" CSS pseudo-
+   class to hook, so it adds/removes this `is-scrolling` class on whichever
+   element was just scrolled instead. The thumb's hit-target is never disabled
+   (only its color/width change), so it's draggable the moment it's visible. */
 * {
   -ms-overflow-style: none;
   scrollbar-width: none;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+*.is-scrolling {
+  scrollbar-width: thin;
 }
 
 *::-webkit-scrollbar {
-  display: none;
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+
+*.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
 }
 
 :root {
@@ -49,6 +73,11 @@
   --text-hover-muted:     var(--color-gray-600);
   --focus-ring:           var(--color-gray-400);
 
+  /* Auto-hide scrollbar thumb (see the `.is-scrolling` rules above) — dark
+     mode swaps to a light-on-navy wash for the same reason the other
+     hover/focus tokens above do. */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.35);
+
   /* Idle border for text inputs/pickers/comboboxes (Input, DatePicker, SearchSelect,
      PhoneInput, CurrencyInput, MultiSelect, RichTextEditor). Light mode matches the
      plain border-gray-400 this replaced. Dark mode deliberately does NOT reuse the
@@ -56,6 +85,15 @@
      brightness a 1px border reads as a harsh glowing outline against the dark navy
      background. A soft translucent white keeps the field visibly bounded instead. */
   --input-border: var(--color-gray-400);
+
+  /* Field vertical rhythm — the two spacing knobs every form field goes through, so
+     tightening either one is a single edit here instead of hunting down every atom/form.
+     --field-label-gap: space between a field's label and its input box (Input,
+     PasswordInput, NumberField, CurrencyInput, PhoneInput, DatePicker, endDatePicker,
+     SearchSelect, MultiSelect, MonthDayPicker, CreatableSearchSelect all read it).
+     --field-stack-gap: space between one field and the next inside a form. */
+  --field-label-gap: 0.125rem;
+  --field-stack-gap: 0.75rem;
 
   /* "Strong" glass surfaces (Sidebar, TopNav, ContactCard, DataCard, ModuleButton) —
      kept more opaque than cardClass's own glass for legibility. Dark mode needs a much
@@ -122,6 +160,7 @@
   --text-hover-muted:     #cbd5e1;
   --focus-ring:           rgba(255, 255, 255, 0.35);
   --input-border:         rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb:      rgba(255, 255, 255, 0.35);
   --glass-strong:         rgba(255, 255, 255, 0.08);
   --glass-subtle:         rgba(255, 255, 255, 0.05);
   --qa-tile-bg:           rgba(255, 255, 255, 0.08);

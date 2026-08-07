@@ -177,7 +177,7 @@ export function MultiSelect({
   };
 
   return (
-    <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={containerRef}>
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
       {/* Selected chips */}

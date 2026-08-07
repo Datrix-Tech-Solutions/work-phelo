@@ -214,7 +214,7 @@ export function EditEndorsementPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <FormSection title="Endorsement Details">
           <Controller
             name="effectiveDate"

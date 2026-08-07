@@ -566,7 +566,7 @@ function BankAccountsSection({ tenantId }: { tenantId: string }) {
           />
           <FormField label="SWIFT Code" registration={register('swiftCode')} />
           <FormField label="Sort Code" registration={register('sortCode')} />
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-bold text-gray-900">Default for currency</label>
             <div className="flex h-11.5 items-center gap-3 rounded-input border border-gray-300 bg-white px-4">
               <Toggle enabled={isDefault} onChange={(value) => setValue('isDefault', value)} />

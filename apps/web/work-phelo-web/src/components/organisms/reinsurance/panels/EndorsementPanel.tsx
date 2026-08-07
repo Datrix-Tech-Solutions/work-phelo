@@ -115,16 +115,12 @@ export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: Endo
     onClose();
   };
 
-  // Gate the actual submission behind a confirmation step when the user never touched the
-  // date picker — the field is pre-filled with today's date, so leaving it as-is is ambiguous
-  // between "I want today" and "I forgot to set the effective date".
+  // Always gate the actual submission behind a confirmation step — the effective date drives
+  // backdating/future-dating of the endorsement, so it's worth a final check regardless of
+  // whether the user left the pre-filled today's-date default or picked their own.
   const onSubmit = (values: EndorsementFormValues) => {
-    if (!dirtyFields.effectiveDate) {
-      setConfirmDate(values.effectiveDate);
-      setPendingValues(values);
-      return;
-    }
-    void submitEndorsement(values);
+    setConfirmDate(values.effectiveDate);
+    setPendingValues(values);
   };
 
   const confirmPendingDate = () => {
@@ -235,7 +231,7 @@ export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: Endo
         </div>
       }
     >
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <FormSection title="Endorsement Details">
           <Controller
             name="effectiveDate"
@@ -275,7 +271,11 @@ export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: Endo
         isOpen={!!pendingValues}
         onClose={() => setPendingValues(null)}
         title="Confirm Effective Date"
-        description={`You haven't selected an effective date, so it defaulted to today (${todayFormatted}). Confirm this date or pick another.`}
+        description={
+          dirtyFields.effectiveDate
+            ? 'Confirm the effective date for this endorsement, or pick another.'
+            : `You haven't selected an effective date, so it defaulted to today (${todayFormatted}). Confirm this date or pick another.`
+        }
         footer={
           <>
             <Button variant="outline" onClick={() => setPendingValues(null)}>

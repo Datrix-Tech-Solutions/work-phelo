@@ -51,7 +51,7 @@ export function CreateDistributionPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <ReinsurerDistributionSelect
           value={entries}
           onChange={setEntries}

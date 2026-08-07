@@ -183,7 +183,7 @@ export function MakeClaimPanel({
       }
     >
       {showPicker && (
-        <div className="flex flex-col gap-5 mb-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem) mb-5">
           <SearchSelect
             label="Cedant"
             placeholder="Select cedant…"

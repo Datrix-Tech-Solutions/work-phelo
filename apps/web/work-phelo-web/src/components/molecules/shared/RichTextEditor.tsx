@@ -399,7 +399,7 @@ export function RichTextEditor({
   const sep = <span className="w-px h-4 bg-gray-200 mx-0.5 self-center" />;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
       {/* overflow-visible so the table grid picker popup isn't clipped */}

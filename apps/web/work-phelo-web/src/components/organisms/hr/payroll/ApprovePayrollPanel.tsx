@@ -87,7 +87,7 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
               </div>
             )}
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <p className="text-xs text-gray-500">Approval Note</p>
               <textarea
                 rows={4}

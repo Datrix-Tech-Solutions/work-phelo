@@ -216,9 +216,12 @@ export function LevyTaxesForm() {
         <p className="text-sm text-gray-500 mb-5">
           Configure the tenant-approved rate. No statutory rate is assumed by WorkPhelo.
         </p>
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
+        <form
+          className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+          onSubmit={handleSubmit(onSubmit)}
+        >
           {selectedId ? (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <label className="text-sm font-bold text-gray-900">Type</label>
               <div className="rounded-input border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700">
                 {selectedCharge

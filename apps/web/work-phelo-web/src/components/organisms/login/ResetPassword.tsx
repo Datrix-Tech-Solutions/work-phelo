@@ -76,7 +76,10 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
         For security reasons, you must create a new password before accessing your workspace.
       </p>
 
-      <form onSubmit={handleSubmit(handleReset)} className="flex flex-col gap-4">
+      <form
+        onSubmit={handleSubmit(handleReset)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <div>
           <FormField
             label="Password"
