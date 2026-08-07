@@ -4,6 +4,22 @@ The notification-service owns outbound notification delivery for WorkPhelo. It h
 
 Current environment URLs are listed in the root repository README.
 
+## Gateway Prefix
+
+```text
+/api/v1/notification/*
+```
+
+## Local Development
+
+```bash
+npm run dev --workspace=apps/notification-service
+```
+
+Default local port: `4004`
+
+Local Swagger: `http://localhost:4004/api/docs`
+
 ## SMS Providers
 
 SMS delivery is routed through the public `SmsService` API:

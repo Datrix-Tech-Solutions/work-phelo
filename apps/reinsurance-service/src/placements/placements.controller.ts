@@ -357,7 +357,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'List placement document registry entries',
     description:
-      'Returns generated document registry rows for the placement. PR1 stores immutable source snapshots and renderer payloads only; PDFs, S3 uploads, downloads and emails are deferred.',
+      'Returns generated document registry rows for the placement, including immutable source snapshots, status/version metadata and backend-rendered document references where available.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiOkResponse({ type: PlacementDocumentListResponseDto })
@@ -832,7 +832,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Create placement endorsement',
     description:
-      'Creates a DRAFT versioned adjustment linked to the original placement. The backend captures originalSnapshot at creation. No endorsement participants, closings, notes, payments, claims, documents or frontend changes are created in PR1.',
+      'Creates a DRAFT versioned adjustment linked to the original placement. The backend captures originalSnapshot at creation and stores proposed changes separately; original placement records are not mutated.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiCreatedResponse({ type: PlacementEndorsementResponseDto })
@@ -953,7 +953,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Change placement endorsement status',
     description:
-      'Moves an endorsement through the PR1 lifecycle. CLOSED, DECLINED and VOID are terminal. Status changes do not mutate the original placement.',
+      'Moves an endorsement through its lifecycle. CLOSED, DECLINED and VOID are terminal. Status changes do not mutate the original placement.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -1517,7 +1517,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'List placement claims',
     description:
-      'Returns loss-event claim records for the placement. Claims do not create cash calls, notes, payments or financial locks in PR1.',
+      'Returns loss-event claim records for the placement. Claims are tenant-scoped operational records; allocations, cash calls, recoveries, cedant settlements and payable approvals are handled by their dedicated endpoints.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiOkResponse({ type: PlacementClaimListResponseDto })
@@ -1582,7 +1582,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Update editable placement claim',
     description:
-      'Updates DRAFT, NOTIFIED or RESERVED claims. Setting finalLossAmount stamps finalized metadata. Terminal and settlement-stage claims cannot be edited in PR1.',
+      'Updates DRAFT, NOTIFIED or RESERVED claims. Setting finalLossAmount stamps finalized metadata. Terminal and settlement-stage claims cannot be edited directly.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
@@ -1819,7 +1819,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'List claim cash calls',
     description:
-      'Returns one-allocation-per-cash-call records generated from claim allocation snapshots. Cash calls do not lock placements or settle claims in PR1.',
+      'Returns one-allocation-per-cash-call records generated from claim allocation snapshots. Cash calls are operational demand records; settlement and recovery receipts are handled separately.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
@@ -1913,7 +1913,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Change claim cash call status',
     description:
-      'PR1 supports DRAFT -> ISSUED, DRAFT -> VOID and ISSUED -> VOID only. PAID is reserved for future claim settlement payment linkage.',
+      'Supports DRAFT -> ISSUED, DRAFT -> VOID and ISSUED -> VOID. PAID remains reserved for explicit claim settlement or recovery linkage.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })

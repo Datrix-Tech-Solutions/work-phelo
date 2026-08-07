@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WorkPhelo Web App
 
-## Getting Started
+`work-phelo-web` is the tenant-facing Next.js App Router application for
+WorkPhelo.
 
-First, run the development server:
+## Responsibilities
+
+- Tenant login and module navigation.
+- HR, Accounting, Marketing and Reinsurance user interfaces.
+- Same-origin API calls through `/api/v1/*`.
+- React Query cache management for backend-owned business state.
+- Tenant/module themed shell layouts.
+
+The frontend should not invent official financial, document or lifecycle truth
+when backend endpoints already provide it. Reinsurance and Accounting workflows
+must display backend-derived state and preserve module ownership boundaries.
+
+## Local Development
 
 ```bash
+cd apps/web/work-phelo-web
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Default local URL: `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The API Gateway and any required downstream services must be running locally for
+authenticated module pages.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment Variables
 
-## Learn More
+| Variable                              | Purpose                                                                                                  | Secret |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------ |
+| `NEXT_PUBLIC_API_URL`                 | Browser-visible API base URL, usually `/api/v1` through same-origin rewrites or the deployed API gateway | No     |
+| `NEXT_PUBLIC_APP_BASE_URL`            | Browser-visible app base URL for generated links                                                         | No     |
+| `NEXT_PUBLIC_MSAL_CLIENT_ID`          | Optional Microsoft auth client ID                                                                        | No     |
+| `NEXT_PUBLIC_MSAL_TENANT_ID`          | Optional Microsoft auth tenant ID                                                                        | No     |
+| `NEXT_PUBLIC_MSAL_REDIRECT_URI`       | Optional Microsoft auth redirect URI                                                                     | No     |
+| `NEXT_PUBLIC_MAPTILER_KEY`            | Optional map tile key                                                                                    | No     |
+| `NEXT_PUBLIC_ENABLE_ANNOUNCEMENT_SMS` | Enables SMS option in HR announcement UI when configured                                                 | No     |
 
-To learn more about Next.js, take a look at the following resources:
+Do not place secrets in `NEXT_PUBLIC_*` variables.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Validation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
 
-## Deploy on Vercel
+Run these from `apps/web/work-phelo-web`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The app is built by the dev/prod GitHub Actions workflows. Build args provide
+the public API/app URLs for the target environment.

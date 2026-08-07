@@ -74,16 +74,9 @@ HOME
 # Local UI specs / design references
 roles-ui-spec/
 
-# Local/internal docs
+# Local-only docs directories
 docs/
-!docs/
-docs/*
-!docs/accounting/
-!docs/accounting/reinsurance-posting-policy-register-v1.md
-!docs/testing/
-!docs/testing/test-infrastructure-health.md
-!docs/workphelo-financial-integration-standard-v1.md
-!docs/workphelo-reinsurance-accounting-integration-spec-v1.md
+**/docs/
 
 .compose.local.env
 .env.dev

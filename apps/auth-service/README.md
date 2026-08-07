@@ -58,6 +58,21 @@ Local Swagger: `http://localhost:4001/docs`
 - `MICROSOFT_CLIENT_ID`
 - `MICROSOFT_CLIENT_SECRET`
 - `MICROSOFT_CALLBACK_URL`
+- `SUPER_ADMIN_EMAIL`
+- `SUPER_ADMIN_PASSWORD` for local seed scripts
+- `INTERNAL_SERVICE_AUTH_SECRET`
+- `INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES`
+- `INTERNAL_SERVICE_AUTH_MAX_CLOCK_SKEW_SECONDS`
+- `AUTH_TENANT_ASSET_STORAGE_PROVIDER`
+- `AUTH_TENANT_ASSET_S3_BUCKET`
+- `AUTH_TENANT_ASSET_S3_REGION`
+- `AUTH_TENANT_ASSET_S3_PREFIX`
+- `AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS`
 
 Production app links should use `https://app.workphelo.com`. Development app
 links should use `https://dev-app.workphelo.com`.
+
+Tenant document profile and branding APIs store private tenant identity assets,
+signatories and bank details for downstream document rendering. Asset storage
+uses the configured tenant asset provider; API responses and docs must not
+expose private object keys or credentials.
