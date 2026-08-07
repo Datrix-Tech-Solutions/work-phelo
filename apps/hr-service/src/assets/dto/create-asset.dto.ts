@@ -4,8 +4,10 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AssetCondition, AssetType } from '../../../prisma/generated/client';
@@ -19,6 +21,15 @@ export class CreateAssetDto {
   @ApiProperty({ enum: AssetType, example: AssetType.LAPTOP })
   @IsEnum(AssetType)
   type!: AssetType;
+
+  @ApiPropertyOptional({
+    description: 'Custom label for the asset type, required when type is OTHER',
+    example: 'Projector',
+  })
+  @ValidateIf((dto: CreateAssetDto) => dto.type === AssetType.OTHER)
+  @IsString()
+  @MinLength(1)
+  customType?: string;
 
   @ApiPropertyOptional({
     description: 'Manufacturer serial number',
@@ -62,4 +73,9 @@ export class CreateAssetDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Branch the asset is assigned to' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 }

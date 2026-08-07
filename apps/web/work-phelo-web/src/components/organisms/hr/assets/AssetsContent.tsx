@@ -15,7 +15,7 @@ import AssetCard from '@/components/molecules/AssetCard';
 import { AssetStatsRow } from '@/components/molecules/hr/assets/AssetStatsRow';
 import { AssetType } from '@/components/atoms/assetIcons';
 import { Asset, CreateAssetPayload, UpdateAssetPayload } from '@/types/asset';
-import { ASSET_TYPE_LABELS } from '@/lib/assetOptions';
+import { getAssetTypeLabel } from '@/lib/assetOptions';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
@@ -46,12 +46,14 @@ const PAGE_SIZE = 12;
 type AssetForm = {
   name: string;
   type: string;
+  customType?: string;
   serialNumber?: string;
   purchaseDate?: string;
   purchaseCost?: string;
   currency: string;
   condition?: string;
   notes?: string;
+  branchId?: string;
 };
 
 export function AssetsContent() {
@@ -98,6 +100,10 @@ export function AssetsContent() {
       currency: data.currency?.trim() || 'GHS',
     };
 
+    if (data.type === 'OTHER' && data.customType?.trim()) {
+      payload.customType = data.customType.trim();
+    }
+
     if (data.serialNumber?.trim()) {
       payload.serialNumber = data.serialNumber.trim();
     }
@@ -118,6 +124,10 @@ export function AssetsContent() {
       payload.notes = data.notes.trim();
     }
 
+    if (data.branchId) {
+      payload.branchId = data.branchId;
+    }
+
     return payload;
   };
 
@@ -131,7 +141,7 @@ export function AssetsContent() {
         const match =
           asset.name.toLowerCase().includes(q) ||
           asset.serialNumber?.toLowerCase().includes(q) ||
-          (ASSET_TYPE_LABELS[asset.type] ?? asset.type).toLowerCase().includes(q);
+          getAssetTypeLabel(asset).toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;

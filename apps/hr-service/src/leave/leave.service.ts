@@ -1421,6 +1421,31 @@ export class LeaveService {
     });
   }
 
+  /**
+   * Company-wide, read-only list of employees currently on approved leave.
+   * Intentionally unrestricted (any authenticated tenant user) — it exposes
+   * nothing beyond a boolean "on leave today" fact per employee, which the
+   * employee directory surfaces to everyone regardless of role.
+   */
+  async getEmployeesOnLeaveToday(tenantId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const requests = await this.prisma.leaveRequest.findMany({
+      where: {
+        tenantId,
+        status: LeaveRequestStatus.APPROVED,
+        startDate: { lte: today },
+        endDate: { gte: today },
+      },
+      select: { employeeId: true },
+    });
+
+    return {
+      employeeIds: Array.from(new Set(requests.map((r) => r.employeeId))),
+    };
+  }
+
   async reviewRequest(
     tenantId: string,
     requestId: string,

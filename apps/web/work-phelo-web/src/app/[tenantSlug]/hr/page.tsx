@@ -252,16 +252,7 @@ export default function EmployeeDashboardPage({
             managerName={managerName}
             companyName={user?.tenantName}
           />
-          <QuickActionsCard
-            onApplyLeave={() => setApplyLeaveOpen(true)}
-            onLeave={handleOpenMyLeave}
-            onPayslips={() => setPayslipsOpen(true)}
-            onAssets={() => setAssetsOpen(true)}
-            onSchedules={() => setSchedulesOpen(true)}
-            onProjects={() => setProjectsOpen(true)}
-            leaveBadge={leaveBadgeCount}
-            projectsBadge={projectsBadgeCount}
-          />
+          <UpcomingHolidaysCard holidays={holidays} />
         </div>
 
         <div className="flex flex-col gap-6">
@@ -278,13 +269,23 @@ export default function EmployeeDashboardPage({
         </div>
 
         <div className="flex flex-col gap-6">
+          <QuickActionsCard
+            onApplyLeave={() => setApplyLeaveOpen(true)}
+            onLeave={handleOpenMyLeave}
+            onPayslips={() => setPayslipsOpen(true)}
+            onAssets={() => setAssetsOpen(true)}
+            onSchedules={() => setSchedulesOpen(true)}
+            onProjects={() => setProjectsOpen(true)}
+            leaveBadge={leaveBadgeCount}
+            projectsBadge={projectsBadgeCount}
+          />
+
           <BirthdaysCard
             birthdays={birthdays}
             scrollRef={birthdayRef}
             onScrollLeft={() => scrollBirthdays('left')}
             onScrollRight={() => scrollBirthdays('right')}
           />
-          <UpcomingHolidaysCard holidays={holidays} />
         </div>
       </div>
 

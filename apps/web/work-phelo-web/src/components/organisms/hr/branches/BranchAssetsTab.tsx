@@ -6,7 +6,7 @@ import { AssetTypeIcon } from '@/components/atoms/assetIcons';
 import { AssetDetailPanel } from '@/components/organisms/hr/assets/AssetDetailPanel';
 import { Badge } from '@/components/atoms/Badge';
 import { useAssets } from '@/hooks/hr/useAssets';
-import { ASSET_TYPE_LABELS } from '@/lib/assetOptions';
+import { getAssetTypeLabel } from '@/lib/assetOptions';
 import type { Asset, AssetStatus } from '@/types/asset';
 
 const STATUS_VARIANT: Record<AssetStatus, 'success' | 'info' | 'warning' | 'neutral'> = {
@@ -36,7 +36,7 @@ export function BranchAssetsTab({ branchId }: Props) {
       return (
         a.name.toLowerCase().includes(q) ||
         a.serialNumber?.toLowerCase().includes(q) ||
-        (ASSET_TYPE_LABELS[a.type] ?? a.type).toLowerCase().includes(q)
+        getAssetTypeLabel(a).toLowerCase().includes(q)
       );
     });
   }, [assets, branchId, search]);
@@ -53,7 +53,7 @@ export function BranchAssetsTab({ branchId }: Props) {
           <AssetTypeIcon type={row.type} size="sm" />
           <div>
             <p className="font-medium text-gray-900">{row.name}</p>
-            <p className="text-xs text-gray-400">{ASSET_TYPE_LABELS[row.type] ?? row.type}</p>
+            <p className="text-xs text-gray-400">{getAssetTypeLabel(row)}</p>
           </div>
         </div>
       ),
