@@ -31,7 +31,7 @@ export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       <label className="text-sm font-bold text-gray-900">{label}</label>
       <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-700">
         {value || '—'}
@@ -77,7 +77,7 @@ export function MakeClaimFormFields({
   const effectiveCurrency = effectiveTerms?.currency ?? placement.currency;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       {!hidePlacementInfo && (
         <>
           <ReadOnlyField
@@ -207,7 +207,7 @@ export function MakeClaimFormFields({
           </p>
         </div>
       )}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">Claim Details</label>
         <textarea
           {...register('claimCause', { required: 'Claim cause is required' })}

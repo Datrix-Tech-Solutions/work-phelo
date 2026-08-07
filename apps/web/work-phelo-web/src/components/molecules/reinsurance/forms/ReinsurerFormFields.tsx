@@ -65,7 +65,7 @@ export function ReinsurerFormFields({
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       {/* ── Prefill from cedant ── */}
       <div className="flex flex-col gap-1">
         <SearchSelect
@@ -90,7 +90,7 @@ export function ReinsurerFormFields({
 
       {/* ── Brokerage fee ── */}
       <FormSection title="Financials">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Brokerage Fee (%)</label>
           <div className="relative">
             <input
@@ -131,7 +131,7 @@ export function ReinsurerFormFields({
             placeholder="e.g. info@reinsurancecompany.com"
           />
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <span className="text-sm font-bold text-gray-900">Primary Phone Number</span>
             <PhoneInput
               placeholder="00 000 0000"
@@ -182,7 +182,7 @@ export function ReinsurerFormFields({
                 placeholder="e.g. kwame@example.com"
               />
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                 <span className="text-sm font-bold text-gray-900">Contact Phone</span>
                 <PhoneInput
                   placeholder="00 000 0000"

@@ -102,7 +102,7 @@ function PartialEditFacultativePanelContent({
         </div>
       }
     >
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <FormSection title="Policy Details">
           <div className="grid grid-cols-2 gap-3">
             <DetailField label="Insurance Company" value={placement.cedant.name} />

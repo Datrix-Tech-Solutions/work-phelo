@@ -47,7 +47,7 @@ export function CompanyInformationForm({
     <div>
       {/* Section 1 — Company Data */}
       <ProspectFormSection title="Company Data">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Company Name</label>
           <input
             type="text"
@@ -71,7 +71,7 @@ export function CompanyInformationForm({
 
       {/* Section 2 — Contact Person Data */}
       <ProspectFormSection title="Contact Person Data">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Name</label>
           <input
             type="text"
@@ -90,7 +90,7 @@ export function CompanyInformationForm({
             onChange={(v) => set('phone', v)}
             error={errors?.phone}
           />
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-bold text-gray-900">Email</label>
             <input
               type="email"

@@ -67,7 +67,7 @@ export default function CycleRecipientsPage() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 max-w-xl">
       <FormSection title="Default Appraisal Cycle Recipients">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">
             Default Appraisal Cycle Recipients
           </label>

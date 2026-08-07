@@ -54,17 +54,17 @@ export function PaymentBreakdown({ placement, financialPosition }: PaymentBreakd
       )}
       <DetailField
         horizontal
-        label="Original Obligation"
+        label="Original Premium"
         value={fmt(position?.originalObligation ?? 0, positionCurrency)}
       />
       <DetailField
         horizontal
-        label="Endorsement Adjustments"
+        label="Endorsement Premium"
         value={fmt(position?.endorsementAdjustments ?? 0, positionCurrency)}
       />
       <DetailField
         horizontal
-        label="Current Obligation"
+        label="Current Premium"
         value={
           <span className="font-semibold text-gray-900">
             {fmt(position?.currentObligation ?? 0, positionCurrency)}

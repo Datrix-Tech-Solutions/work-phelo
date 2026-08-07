@@ -103,7 +103,7 @@ export function AgreementGate() {
             {current.version.details}
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-bold text-gray-900">Type your full name to accept</label>
             <input
               type="text"
@@ -159,7 +159,7 @@ export function AgreementGate() {
           </div>
         }
       >
-        <div className="flex flex-col gap-1.5 mt-4">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem) mt-4">
           <label className="text-sm font-bold text-gray-900">Reason</label>
           <textarea
             value={declineReason}

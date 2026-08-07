@@ -154,7 +154,7 @@ export function LeaveRequestDetailPanel({
           </div>
 
           {/* Reviewer note */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
               Note for Employee{' '}
               <span className="normal-case font-normal text-gray-400">(optional)</span>

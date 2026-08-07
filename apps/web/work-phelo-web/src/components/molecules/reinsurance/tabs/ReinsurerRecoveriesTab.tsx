@@ -54,7 +54,7 @@ const PAYMENT_TYPE_OPTIONS = [
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       <label className="text-sm font-bold text-gray-900">{label}</label>
       <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-700">
         {value || '-'}
@@ -142,7 +142,7 @@ function RecordRecoveryReceiptModal({
       <form
         id="record-reinsurer-recovery-form"
         onSubmit={handleSubmit(onSubmit)}
-        className="flex flex-col gap-5"
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
       >
         {row && (
           <div className="grid grid-cols-2 gap-3">

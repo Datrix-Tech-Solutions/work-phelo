@@ -181,7 +181,7 @@ export function RecordDisbursementPanel({
     >
       <form
         id="record-disbursement-form"
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
         onSubmit={submitDisbursement}
       >
         <RecordDisbursementFormFields form={form} sources={sources} />

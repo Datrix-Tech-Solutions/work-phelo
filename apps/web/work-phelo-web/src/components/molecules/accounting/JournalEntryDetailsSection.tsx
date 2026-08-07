@@ -46,7 +46,7 @@ export function JournalEntryDetailsSection({ form }: JournalEntryDetailsSectionP
   return (
     <FormSection title="Entry Details">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <Controller
             name="transactionDate"
             control={control}

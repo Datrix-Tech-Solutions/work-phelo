@@ -256,7 +256,7 @@ export function AddClaimPaymentFormFields({
               </p>
             </div>
             {rowNeedsRate && (
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                 <span className="text-xs text-gray-400">Rate</span>
                 <input
                   type="number"
@@ -267,7 +267,7 @@ export function AddClaimPaymentFormFields({
                 />
               </div>
             )}
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <span className="text-xs text-gray-400">Amount</span>
               <input
                 type="number"
@@ -492,7 +492,7 @@ export function AddClaimPaymentFormFields({
   );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       <Controller
         name="cedantId"
         control={control}

@@ -112,7 +112,7 @@ export function SelfAssessmentForm({ appraisalId, kpis, backHref }: Props) {
             </div>
 
             {/* Comment */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <label className="text-sm font-semibold text-gray-900">Comment</label>
               <textarea
                 rows={3}
