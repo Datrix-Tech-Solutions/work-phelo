@@ -280,7 +280,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
             status: closing.status,
             currency: closing.currency,
             signedLinePercent: closing.signedLinePercent,
-            sumInsuredSnapshot: null,
+            sumInsuredSnapshot: closing.sumInsuredSnapshot,
             premiumSnapshot: closing.grossPremium,
             commissionPercent: closing.commissionPercent,
             commissionAmount: closing.commissionAmount,

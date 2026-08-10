@@ -261,7 +261,12 @@ export function PaymentsTable() {
     return map;
   }, [closingRows, positionQueries, paymentsQueries]);
 
-  const payableRows = closingRows;
+  // Only offers with at least one payment recorded belong here — a placement that's
+  // fully "Outstanding" (nothing paid or even pending) hasn't started a payment workflow yet.
+  const payableRows = useMemo(
+    () => closingRows.filter((r) => paymentStatusMap.get(r.id) !== 'Outstanding'),
+    [closingRows, paymentStatusMap],
+  );
 
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();

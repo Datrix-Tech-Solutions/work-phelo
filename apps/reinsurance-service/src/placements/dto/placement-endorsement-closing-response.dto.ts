@@ -87,9 +87,10 @@ export class PlacementEndorsementClosingResponseDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
-    example: '150000.00',
+    example: '45000.00',
     description:
-      'Endorsement sum insured snapshot from proposedSnapshot/originalSnapshot at closing creation.',
+      'Sum insured snapshot: signedLinePercent × the endorsement sum insured from ' +
+      'proposedSnapshot/originalSnapshot, captured at closing creation.',
   })
   sumInsuredSnapshot!: string | null;
 

@@ -42,6 +42,7 @@ describe('PlacementClosingsService', () => {
     premium: '15000.00',
     commission: '10.0000',
     currency: 'USD',
+    sumInsured: '600000.00',
   };
 
   const acceptedParticipant = {
@@ -68,6 +69,7 @@ describe('PlacementClosingsService', () => {
     status: PlacementClosingStatus.DRAFT,
     signedLinePercent: '30.0000',
     sharePercent: '40.0000',
+    sumInsuredSnapshot: '180000.00',
     grossPremium: '4500.00',
     commissionPercent: '10.0000',
     commissionAmount: '450.00',
@@ -218,6 +220,7 @@ describe('PlacementClosingsService', () => {
         status: PlacementClosingStatus.DRAFT,
         signedLinePercent: 30,
         sharePercent: 40,
+        sumInsuredSnapshot: 180000,
         grossPremium: 4500,
         commissionPercent: 10,
         commissionAmount: 450,
