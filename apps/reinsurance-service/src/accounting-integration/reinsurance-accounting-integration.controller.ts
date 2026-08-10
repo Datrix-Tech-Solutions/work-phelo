@@ -228,4 +228,20 @@ export class ReinsuranceAccountingIntegrationController {
       query,
     );
   }
+
+  @Post('reconciliation/claim-recovery-approved')
+  @ApiOperation({
+    summary: 'Reconcile claim recovery approvals with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable per-allocation claim recovery approval records missing their deterministic CLAIM_RECOVERY_APPROVED outbox row. This does not reconcile recovery receipts or cash movement.',
+  })
+  reconcileClaimRecoveryApprovedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileClaimRecoveryApprovedEvents(
+      request.user,
+      query,
+    );
+  }
 }

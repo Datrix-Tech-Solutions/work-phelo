@@ -401,6 +401,7 @@ model Counterparty {
   placementNotes          PlacementNote[]                   @relation("PlacementNoteCounterparty")
   claimAllocations        PlacementClaimAllocation[]        @relation("PlacementClaimAllocationCounterparty")
   claimCashCalls          PlacementClaimCashCall[]          @relation("PlacementClaimCashCallCounterparty")
+  claimRecoveryApprovals  PlacementClaimRecoveryApproval[]  @relation("PlacementClaimRecoveryApprovalCounterparty")
   claimRecoveryReceipts   PlacementClaimRecoveryReceipt[]   @relation("PlacementClaimRecoveryReceiptCounterparty")
   endorsementParticipants PlacementEndorsementParticipant[] @relation("PlacementEndorsementParticipantCounterparty")
 
@@ -474,6 +475,7 @@ model Placement {
   claims                  PlacementClaim[]
   claimAllocations        PlacementClaimAllocation[]
   claimCashCalls          PlacementClaimCashCall[]
+  claimRecoveryApprovals  PlacementClaimRecoveryApproval[]
   claimRecoveryReceipts   PlacementClaimRecoveryReceipt[]
   claimCedantSettlements  PlacementClaimCedantSettlement[]
   documents               PlacementDocument[]
@@ -712,6 +714,7 @@ model PlacementClaim {
   placement             Placement                        @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
   allocations           PlacementClaimAllocation[]
   cashCalls             PlacementClaimCashCall[]
+  recoveryApprovals     PlacementClaimRecoveryApproval[]
   recoveryReceipts      PlacementClaimRecoveryReceipt[]
   cedantSettlements     PlacementClaimCedantSettlement[]
   payableApprovals      PlacementClaimPayableApproval[]
@@ -773,6 +776,7 @@ model PlacementClaimAllocation {
   endorsementParticipant       PlacementEndorsementParticipant? @relation(fields: [endorsementParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
   counterparty                 Counterparty                     @relation("PlacementClaimAllocationCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
   cashCalls                    PlacementClaimCashCall[]
+  recoveryApprovals            PlacementClaimRecoveryApproval[]
   recoveryReceipts             PlacementClaimRecoveryReceipt[]
 
   @@unique([id, tenantId])
@@ -809,6 +813,7 @@ model PlacementClaimCashCall {
   claim             PlacementClaim                  @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
   allocation        PlacementClaimAllocation        @relation(fields: [allocationId, tenantId], references: [id, tenantId], onDelete: Restrict)
   counterparty      Counterparty                    @relation("PlacementClaimCashCallCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  recoveryApprovals PlacementClaimRecoveryApproval[]
   recoveryReceipts  PlacementClaimRecoveryReceipt[]
   documents         PlacementDocument[]
   attachments       PlacementAttachment[]
@@ -820,6 +825,38 @@ model PlacementClaimCashCall {
   @@index([tenantId, allocationId, status])
   @@index([tenantId, status, placementId])
   @@index([tenantId, counterpartyId, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementClaimRecoveryApproval {
+  id              String                   @id @default(uuid())
+  tenantId        String
+  placementId     String
+  claimId         String
+  allocationId    String
+  cashCallId      String?
+  counterpartyId  String
+  approvalVersion Int                      @default(1)
+  approvedAmount  Decimal                  @db.Decimal(18, 2)
+  eligibleAmount  Decimal                  @db.Decimal(18, 2)
+  currency        String
+  approvedAt      DateTime
+  approvedByUserId String
+  reference       String?
+  notes           String?
+  createdAt       DateTime                 @default(now())
+  placement       Placement                @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claim           PlacementClaim           @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  allocation      PlacementClaimAllocation @relation(fields: [allocationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  cashCall        PlacementClaimCashCall?  @relation(fields: [cashCallId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty    Counterparty             @relation("PlacementClaimRecoveryApprovalCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, allocationId, approvalVersion])
+  @@index([tenantId, placementId, claimId, approvedAt])
+  @@index([tenantId, claimId, allocationId])
+  @@index([tenantId, cashCallId])
+  @@index([tenantId, counterpartyId, approvedAt])
   @@schema("reinsurance")
 }
 

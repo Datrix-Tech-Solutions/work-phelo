@@ -83,6 +83,64 @@ export class PlacementClaimRecoveryReceiptListResponseDto {
   items!: PlacementClaimRecoveryReceiptResponseDto[];
 }
 
+export class PlacementClaimRecoveryApprovalResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  tenantId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  placementId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  claimId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  allocationId!: string;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  cashCallId!: string | null;
+
+  @ApiProperty({ format: 'uuid' })
+  counterpartyId!: string;
+
+  @ApiProperty({ example: 1 })
+  approvalVersion!: number;
+
+  @ApiProperty({ type: String, example: '40000.00' })
+  approvedAmount!: string;
+
+  @ApiProperty({ type: String, example: '100000.00' })
+  eligibleAmount!: string;
+
+  @ApiProperty({ example: 'GHS' })
+  currency!: string;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  approvedAt!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  approvedByUserId!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  reference!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  notes!: string | null;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  createdAt!: string;
+
+  @ApiProperty({ type: PlacementClaimRecoveryCounterpartyDto })
+  counterparty!: PlacementClaimRecoveryCounterpartyDto;
+}
+
+export class PlacementClaimRecoveryApprovalListResponseDto {
+  @ApiProperty({ type: [PlacementClaimRecoveryApprovalResponseDto] })
+  items!: PlacementClaimRecoveryApprovalResponseDto[];
+}
+
 export class PlacementClaimRecoveryPositionCashCallDto {
   @ApiProperty({ format: 'uuid' })
   cashCallId!: string;

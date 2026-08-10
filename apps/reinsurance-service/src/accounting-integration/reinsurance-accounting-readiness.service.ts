@@ -154,13 +154,14 @@ export class ReinsuranceAccountingReadinessService {
             'REINSURER_DISBURSEMENT_RECORDED',
             'REINSURER_DISBURSEMENT_REVERSED',
             'CLAIM_PAYABLE_APPROVED',
+            'CLAIM_RECOVERY_APPROVED',
           ]
         : [],
       readinessMode:
-        'Debit-note, credit-note, premium-payment, reinsurer-disbursement and claim-payable source-event capture, counterparty subledger readiness and outbox dispatch.',
+        'Debit-note, credit-note, premium-payment, reinsurer-disbursement, claim-payable and claim-recovery source-event capture, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records, bank-confirmed reinsurer disbursements including reversals and broker-confirmed claim payable approvals.'
+          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records, bank-confirmed reinsurer disbursements including reversals, broker-confirmed claim payable approvals and approved claim recoveries.'
           : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
@@ -1108,6 +1109,152 @@ export class ReinsuranceAccountingReadinessService {
     };
   }
 
+  async reconcileClaimRecoveryApprovedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
+    const dryRun = options.dryRun ?? true;
+    const limit = Math.min(options.limit ?? 50, 100);
+    if (!accountingEnabled) {
+      return {
+        accountingEnabled,
+        dryRun,
+        inspectedCount: 0,
+        missingCount: 0,
+        enqueuedCount: 0,
+        items: [],
+        message:
+          'Accounting module is not enabled for this tenant; no claim recovery approval events are captured.',
+      };
+    }
+
+    const approvals = await this.prisma.placementClaimRecoveryApproval.findMany(
+      {
+        where: {
+          tenantId: user.tenantId,
+          claim: { placement: { archivedAt: null } },
+        },
+        include: {
+          counterparty: {
+            select: {
+              id: true,
+              type: true,
+              name: true,
+              registrationNumber: true,
+            },
+          },
+        },
+        orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
+        take: limit,
+      },
+    );
+    const keys = approvals.map((approval) =>
+      this.claimRecoveryApprovedIdempotencyKey(approval.id),
+    );
+    const existing = keys.length
+      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
+          where: {
+            tenantId: user.tenantId,
+            idempotencyKey: { in: keys },
+          },
+          select: {
+            id: true,
+            idempotencyKey: true,
+            status: true,
+            accountingSourceEventId: true,
+          },
+        })
+      : [];
+    const existingByKey = new Map(
+      existing.map((event) => [event.idempotencyKey, event]),
+    );
+
+    const items: Array<{
+      approvalId: string;
+      claimId: string;
+      placementId: string;
+      allocationId: string;
+      approvedAt: string;
+      approvalVersion: number;
+      idempotencyKey: string;
+      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
+      outboxId?: string;
+      outboxStatus?: string;
+      accountingSourceEventId?: string | null;
+    }> = [];
+    let enqueuedCount = 0;
+
+    for (const approval of approvals) {
+      const idempotencyKey = this.claimRecoveryApprovedIdempotencyKey(
+        approval.id,
+      );
+      const existingEvent = existingByKey.get(idempotencyKey);
+      if (existingEvent) {
+        items.push({
+          approvalId: approval.id,
+          claimId: approval.claimId,
+          placementId: approval.placementId,
+          allocationId: approval.allocationId,
+          approvedAt: approval.approvedAt.toISOString(),
+          approvalVersion: approval.approvalVersion,
+          idempotencyKey,
+          status: 'PRESENT',
+          outboxId: existingEvent.id,
+          outboxStatus: existingEvent.status,
+          accountingSourceEventId: existingEvent.accountingSourceEventId,
+        });
+        continue;
+      }
+
+      if (dryRun) {
+        items.push({
+          approvalId: approval.id,
+          claimId: approval.claimId,
+          placementId: approval.placementId,
+          allocationId: approval.allocationId,
+          approvedAt: approval.approvedAt.toISOString(),
+          approvalVersion: approval.approvalVersion,
+          idempotencyKey,
+          status: 'MISSING',
+        });
+        continue;
+      }
+
+      const event = await this.financialEvents.prepareClaimRecoveryApproved(
+        user,
+        approval,
+      );
+      if (!event) continue;
+      const outboxRow = await this.prisma.$transaction((tx) =>
+        this.financialEvents.enqueuePreparedEvent(tx, event),
+      );
+      enqueuedCount += 1;
+      items.push({
+        approvalId: approval.id,
+        claimId: approval.claimId,
+        placementId: approval.placementId,
+        allocationId: approval.allocationId,
+        approvedAt: approval.approvedAt.toISOString(),
+        approvalVersion: approval.approvalVersion,
+        idempotencyKey,
+        status: 'ENQUEUED',
+        outboxId: outboxRow.id,
+        outboxStatus: outboxRow.status,
+        accountingSourceEventId: outboxRow.accountingSourceEventId,
+      });
+    }
+
+    return {
+      accountingEnabled,
+      dryRun,
+      inspectedCount: approvals.length,
+      missingCount: items.filter((item) => item.status === 'MISSING').length,
+      enqueuedCount,
+      items,
+    };
+  }
+
   private debitNoteIdempotencyKey(noteId: string) {
     return `reinsurance:debit-note:${noteId}:issued:v1`;
   }
@@ -1145,6 +1292,10 @@ export class ReinsuranceAccountingReadinessService {
     approvalVersion: number,
   ) {
     return `reinsurance:claim:${claimId}:payable-approved:${approvalVersion}:v1`;
+  }
+
+  private claimRecoveryApprovedIdempotencyKey(approvalId: string) {
+    return `reinsurance:claim-recovery:${approvalId}:approved:v1`;
   }
 
   private async reconcilePaymentEvents(
