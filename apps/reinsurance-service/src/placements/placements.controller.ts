@@ -2271,7 +2271,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Get claim recovery position',
     description:
-      'Returns recovery totals from claim allocation snapshots, issued cash calls and immutable recovery receipt records. Cedant settlement remains deferred.',
+      'Returns recovery totals from claim allocation snapshots, issued cash calls, immutable recovery receipt records and Cedant settlement position. RECORDED values are operational; BANK_CONFIRMED values are financial.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
