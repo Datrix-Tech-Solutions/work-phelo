@@ -92,6 +92,7 @@ import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recover
 import { PlacementClaimsService } from './placement-claims.service';
 import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-payable.dto';
 import { ApprovePlacementClaimRecoveryDto } from './dto/approve-placement-claim-recovery.dto';
+import { ConfirmPlacementClaimRecoveryReceiptBankDto } from './dto/confirm-placement-claim-recovery-receipt-bank.dto';
 import { CreatePlacementClaimCedantSettlementDto } from './dto/create-placement-claim-cedant-settlement.dto';
 import { CreatePlacementClaimRecoveryReceiptDto } from './dto/create-placement-claim-recovery-receipt.dto';
 import {
@@ -2378,6 +2379,48 @@ export class PlacementsController {
       id,
       claimId,
       cashCallId,
+      dto,
+    );
+  }
+
+  @Post(':id/claims/:claimId/recovery-receipts/:receiptId/bank-confirm')
+  @ApiTags('Reinsurance - Claim Recoveries')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Financially confirm a claim recovery receipt',
+    description:
+      'Accounting-owned confirmation that a previously RECORDED Reinsurer -> Broker recovery receipt has cleared the bank, offset or settlement process. This is the recognition boundary for CLAIM_RECOVERY_RECEIVED. The endpoint does not modify the operational amount, counterparty, placement, claim, allocation or cash call.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'receiptId',
+    format: 'uuid',
+    description: 'Recovery receipt ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementClaimRecoveryReceiptResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Receipt is not confirmable, confirmation facts are invalid or required FX/reference data is missing.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Recovery receipt is already confirmed or changed status concurrently.',
+  })
+  confirmClaimRecoveryReceiptBank(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('receiptId', ParseUUIDPipe) receiptId: string,
+    @Body() dto: ConfirmPlacementClaimRecoveryReceiptBankDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimRecoveryReceiptsService.confirmBankReceipt(
+      request.user,
+      id,
+      claimId,
+      receiptId,
       dto,
     );
   }

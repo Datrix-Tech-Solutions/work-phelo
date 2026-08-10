@@ -9,6 +9,7 @@ import {
   PlacementPaymentStatus,
   PlacementPaymentType,
   PlacementSettlementMethod,
+  PlacementClaimRecoveryReceiptStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -1335,6 +1336,131 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     });
 
     expect(event).toBeNull();
+  });
+
+  it('prepares CLAIM_RECOVERY_RECEIVED from bank-confirmed receipt facts', async () => {
+    const { actor, service } = makeService();
+
+    const event = await service.prepareClaimRecoveryReceived(actor, {
+      id: 'receipt-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      allocationId: 'allocation-1',
+      cashCallId: 'cash-call-1',
+      recoveryApprovalId: 'recovery-approval-1',
+      counterpartyId: 'reinsurer-1',
+      currency: 'GHS',
+      amount: new Prisma.Decimal('40000.00'),
+      paymentDate: new Date('2026-07-31T09:00:00.000Z'),
+      reference: 'REC-001',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'GHS',
+      bankReference: 'BANK-CONF-001',
+      bankConfirmedAt: new Date('2026-07-31T10:00:00.000Z'),
+      bankChargeAmount: new Prisma.Decimal('15.00'),
+      status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+      reversalOfReceiptId: null,
+    });
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'CLAIM_RECOVERY_RECEIVED',
+      sourceRecordType: 'PlacementClaimRecoveryReceipt',
+      sourceRecordId: 'receipt-1',
+      idempotencyKey:
+        'reinsurance:claim-recovery-receipt:receipt-1:confirmed:v1',
+      occurredAt: '2026-07-31T10:00:00.000Z',
+      currency: 'GHS',
+    });
+    if (!event) throw new Error('Expected CLAIM_RECOVERY_RECEIVED event');
+    const payload = event.payload as {
+      references: Record<string, unknown>;
+      settlement: Record<string, unknown>;
+      amounts: Record<string, unknown>;
+      policy: Record<string, unknown>;
+    };
+    expect(payload.references).toMatchObject({
+      claimId: 'claim-1',
+      allocationId: 'allocation-1',
+      recoveryApprovalId: 'recovery-approval-1',
+      recoveryReceiptId: 'receipt-1',
+      bankReference: 'BANK-CONF-001',
+    });
+    expect(payload.amounts).toEqual({
+      receiptAmount: 40000,
+      signedRecoveryReceivableReduction: 40000,
+      signedCashImpact: 40000,
+      bankChargeAmount: 15,
+    });
+    expect(payload.settlement).toMatchObject({
+      method: PlacementSettlementMethod.BANK_TRANSFER,
+      cashImpact: true,
+      bankChargesAccountingOwned: true,
+    });
+    expect(payload.policy).toMatchObject({
+      claimSettlementTaxTreatment: 'NOT_APPLICABLE',
+      withholdingTaxTreatment: 'NOT_APPLICABLE',
+      nicLevyTreatment: 'NOT_APPLICABLE',
+      recognitionBoundary: 'ACCOUNTING_BANK_CONFIRMATION',
+    });
+  });
+
+  it('prepares CLAIM_RECOVERY_RECEIPT_REVERSED from immutable reversal facts', async () => {
+    const { actor, service } = makeService();
+
+    const event = await service.prepareClaimRecoveryReceiptReversed(actor, {
+      id: 'receipt-reversal-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      allocationId: 'allocation-1',
+      cashCallId: 'cash-call-1',
+      recoveryApprovalId: 'recovery-approval-1',
+      counterpartyId: 'reinsurer-1',
+      currency: 'GHS',
+      amount: new Prisma.Decimal('-40000.00'),
+      paymentDate: new Date('2026-07-31T11:00:00.000Z'),
+      reference: 'REVERSAL:REC-001',
+      settlementMethod: PlacementSettlementMethod.INTERNAL_OFFSET,
+      settlementCurrency: 'GHS',
+      bankReference: 'REVERSAL:BANK-CONF-001',
+      bankConfirmedAt: new Date('2026-07-31T11:00:00.000Z'),
+      bankChargeAmount: new Prisma.Decimal('-15.00'),
+      status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+      reversalOfReceiptId: 'receipt-1',
+    });
+
+    expect(event).toMatchObject({
+      sourceEventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
+      sourceRecordType: 'PlacementClaimRecoveryReceipt',
+      sourceRecordId: 'receipt-reversal-1',
+      sourceDocumentId: 'receipt-1',
+      idempotencyKey:
+        'reinsurance:claim-recovery-receipt:receipt-reversal-1:reversal:v1',
+    });
+    if (!event) {
+      throw new Error('Expected CLAIM_RECOVERY_RECEIPT_REVERSED event');
+    }
+    const payload = event.payload as {
+      references: Record<string, unknown>;
+      settlement: Record<string, unknown>;
+      amounts: Record<string, unknown>;
+    };
+    expect(payload.references).toMatchObject({
+      reversalReceiptId: 'receipt-reversal-1',
+      reversedRecoveryReceiptId: 'receipt-1',
+    });
+    expect(payload.amounts).toEqual({
+      reversalAmount: 40000,
+      signedRecoveryReceivableRestoration: 40000,
+      signedCashImpact: 0,
+      bankChargeReversalAmount: 15,
+    });
+    expect(payload.settlement).toMatchObject({
+      method: PlacementSettlementMethod.INTERNAL_OFFSET,
+      cashImpact: false,
+    });
   });
 
   it('enqueues prepared events through the transactional outbox', async () => {

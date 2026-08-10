@@ -10,6 +10,7 @@ import {
   PlacementPaymentType,
   PlacementSettlementMethod,
   PlacementClaimAllocationStatus,
+  PlacementClaimRecoveryReceiptStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -188,6 +189,30 @@ type ClaimRecoveryApprovalForEvent = {
   approvedByUserId: string;
   reference?: string | null;
   notes?: string | null;
+};
+
+type ClaimRecoveryReceiptForEvent = {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  allocationId: string;
+  cashCallId: string;
+  recoveryApprovalId?: string | null;
+  counterpartyId: string;
+  currency: string;
+  amount: Prisma.Decimal | number | string;
+  paymentDate: Date;
+  reference?: string | null;
+  settlementMethod?: PlacementSettlementMethod | null;
+  settlementCurrency?: string | null;
+  bankReference?: string | null;
+  bankConfirmedAt?: Date | null;
+  agreedExchangeRate?: Prisma.Decimal | number | string | null;
+  bankChargeAmount?: Prisma.Decimal | number | string | null;
+  notes?: string | null;
+  status: PlacementClaimRecoveryReceiptStatus;
+  reversalOfReceiptId?: string | null;
 };
 
 export type ReinsurerDisbursementRecordedEligibility = {
@@ -1089,6 +1114,215 @@ export class ReinsuranceFinancialEventPublisher {
     };
   }
 
+  async prepareClaimRecoveryReceived(
+    user: RequestUser,
+    receipt: ClaimRecoveryReceiptForEvent,
+  ): Promise<ReinsuranceAccountingEventInput | null> {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; CLAIM_RECOVERY_RECEIVED not enqueued for receipt ${receipt.id}`,
+      );
+      return null;
+    }
+
+    if (receipt.tenantId !== user.tenantId) {
+      throw new Error(
+        `Claim recovery receipt ${receipt.id} does not belong to tenant ${user.tenantId}`,
+      );
+    }
+    if (
+      receipt.status !== PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED ||
+      receipt.reversalOfReceiptId
+    ) {
+      throw new Error(
+        `Claim recovery receipt ${receipt.id} is not a valid bank-confirmed recovery receipt`,
+      );
+    }
+
+    const context = await this.claimRecoveryReceiptContext(receipt);
+    const occurredAt = receipt.bankConfirmedAt?.toISOString();
+    if (!occurredAt) {
+      throw new Error(
+        `Claim recovery receipt ${receipt.id} is missing bankConfirmedAt for CLAIM_RECOVERY_RECEIVED`,
+      );
+    }
+    const amount = Math.abs(this.decimalNumber(receipt.amount));
+    const bankCharges = Math.abs(
+      this.optionalDecimalNumber(receipt.bankChargeAmount) ?? 0,
+    );
+    const settlementMethod =
+      receipt.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency = receipt.settlementCurrency ?? receipt.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+
+    return {
+      tenantId: receipt.tenantId,
+      sourceEventType: 'CLAIM_RECOVERY_RECEIVED',
+      sourceRecordType: 'PlacementClaimRecoveryReceipt',
+      sourceRecordId: receipt.id,
+      sourceDocumentId: receipt.claimId,
+      idempotencyKey: `reinsurance:claim-recovery-receipt:${receipt.id}:confirmed:v1`,
+      occurredAt,
+      currency: receipt.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: receipt.currency,
+        ...(receipt.agreedExchangeRate
+          ? { exchangeRate: this.decimalNumber(receipt.agreedExchangeRate) }
+          : {}),
+        references: {
+          placementId: context.claim.placement.id,
+          placementReference: context.claim.placement.reference,
+          policyNumber: context.claim.placement.policyNumber,
+          placementTitle: context.claim.placement.title,
+          claimId: context.claim.id,
+          claimNumber: context.claim.claimNumber,
+          allocationId: context.allocation.id,
+          cashCallId: receipt.cashCallId,
+          recoveryApprovalId: receipt.recoveryApprovalId ?? null,
+          recoveryReceiptId: receipt.id,
+          recoveryReceiptReference: receipt.reference ?? null,
+          bankReference: receipt.bankReference ?? null,
+        },
+        reinsurer: {
+          id: context.allocation.counterparty.id,
+          type: context.allocation.counterparty.type,
+          name: context.allocation.counterparty.name,
+          registrationNumber:
+            context.allocation.counterparty.registrationNumber,
+          subledgerExternalRef: context.allocation.counterparty.id,
+        },
+        allocation: this.claimRecoveryAllocationPayload(context.allocation),
+        amounts: {
+          receiptAmount: amount,
+          signedRecoveryReceivableReduction: amount,
+          signedCashImpact: cashAffecting ? amount : 0,
+          bankChargeAmount: bankCharges,
+        },
+        settlement: {
+          method: settlementMethod,
+          currency: settlementCurrency,
+          bankReference: receipt.bankReference ?? null,
+          bankConfirmedAt: occurredAt,
+          cashImpact: cashAffecting,
+          bankChargesAccountingOwned: true,
+        },
+        policy: {
+          scope:
+            'Reinsurance claims between Cedant and Reinsurers through Broker',
+          postingEngine: 'POSTING_RULES',
+          claimSettlementTaxTreatment: 'NOT_APPLICABLE',
+          withholdingTaxTreatment: 'NOT_APPLICABLE',
+          nicLevyTreatment: 'NOT_APPLICABLE',
+          recognitionBoundary: 'ACCOUNTING_BANK_CONFIRMATION',
+        },
+      },
+    };
+  }
+
+  async prepareClaimRecoveryReceiptReversed(
+    user: RequestUser,
+    receipt: ClaimRecoveryReceiptForEvent,
+  ): Promise<ReinsuranceAccountingEventInput | null> {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; CLAIM_RECOVERY_RECEIPT_REVERSED not enqueued for receipt ${receipt.id}`,
+      );
+      return null;
+    }
+
+    if (receipt.tenantId !== user.tenantId) {
+      throw new Error(
+        `Claim recovery reversal receipt ${receipt.id} does not belong to tenant ${user.tenantId}`,
+      );
+    }
+    if (
+      receipt.status !== PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED ||
+      !receipt.reversalOfReceiptId
+    ) {
+      throw new Error(
+        `Claim recovery receipt ${receipt.id} is not a valid bank-confirmed recovery reversal`,
+      );
+    }
+
+    const context = await this.claimRecoveryReceiptContext(receipt);
+    const occurredAt =
+      receipt.bankConfirmedAt?.toISOString() ?? new Date().toISOString();
+    const amount = Math.abs(this.decimalNumber(receipt.amount));
+    const bankCharges = Math.abs(
+      this.optionalDecimalNumber(receipt.bankChargeAmount) ?? 0,
+    );
+    const settlementMethod =
+      receipt.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency = receipt.settlementCurrency ?? receipt.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+
+    return {
+      tenantId: receipt.tenantId,
+      sourceEventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
+      sourceRecordType: 'PlacementClaimRecoveryReceipt',
+      sourceRecordId: receipt.id,
+      sourceDocumentId: receipt.reversalOfReceiptId,
+      idempotencyKey: `reinsurance:claim-recovery-receipt:${receipt.id}:reversal:v1`,
+      occurredAt,
+      currency: receipt.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: receipt.currency,
+        ...(receipt.agreedExchangeRate
+          ? { exchangeRate: this.decimalNumber(receipt.agreedExchangeRate) }
+          : {}),
+        references: {
+          placementId: context.claim.placement.id,
+          placementReference: context.claim.placement.reference,
+          policyNumber: context.claim.placement.policyNumber,
+          placementTitle: context.claim.placement.title,
+          claimId: context.claim.id,
+          claimNumber: context.claim.claimNumber,
+          allocationId: context.allocation.id,
+          cashCallId: receipt.cashCallId,
+          recoveryApprovalId: receipt.recoveryApprovalId ?? null,
+          reversalReceiptId: receipt.id,
+          reversedRecoveryReceiptId: receipt.reversalOfReceiptId,
+          recoveryReceiptReference: receipt.reference ?? null,
+          bankReference: receipt.bankReference ?? null,
+        },
+        reinsurer: {
+          id: context.allocation.counterparty.id,
+          type: context.allocation.counterparty.type,
+          name: context.allocation.counterparty.name,
+          registrationNumber:
+            context.allocation.counterparty.registrationNumber,
+          subledgerExternalRef: context.allocation.counterparty.id,
+        },
+        allocation: this.claimRecoveryAllocationPayload(context.allocation),
+        amounts: {
+          reversalAmount: amount,
+          signedRecoveryReceivableRestoration: amount,
+          signedCashImpact: cashAffecting ? -amount : 0,
+          bankChargeReversalAmount: bankCharges,
+        },
+        settlement: {
+          method: settlementMethod,
+          currency: settlementCurrency,
+          bankReference: receipt.bankReference ?? null,
+          reversedAt: occurredAt,
+          cashImpact: cashAffecting,
+          bankChargesAccountingOwned: true,
+        },
+        policy: {
+          scope:
+            'Reinsurance claims between Cedant and Reinsurers through Broker',
+          postingEngine: 'POSTING_RULES',
+          claimSettlementTaxTreatment: 'NOT_APPLICABLE',
+          withholdingTaxTreatment: 'NOT_APPLICABLE',
+          nicLevyTreatment: 'NOT_APPLICABLE',
+          recognitionBoundary: 'IMMUTABLE_REVERSAL_ROW',
+        },
+      },
+    };
+  }
+
   preparePremiumPaymentReceived(
     user: RequestUser,
     payment: PaymentForEvent,
@@ -1577,6 +1811,119 @@ export class ReinsuranceFinancialEventPublisher {
     event: ReinsuranceAccountingEventInput,
   ) {
     return this.outbox.enqueueAccountingEvent(tx, event);
+  }
+
+  private async claimRecoveryReceiptContext(
+    receipt: ClaimRecoveryReceiptForEvent,
+  ) {
+    const [claim, allocation] = await Promise.all([
+      this.prisma.placementClaim.findFirst({
+        where: {
+          id: receipt.claimId,
+          tenantId: receipt.tenantId,
+          placementId: receipt.placementId,
+        },
+        select: {
+          id: true,
+          claimNumber: true,
+          currency: true,
+          finalLossAmount: true,
+          estimatedLossAmount: true,
+          placement: {
+            select: {
+              id: true,
+              reference: true,
+              policyNumber: true,
+              title: true,
+              cedantId: true,
+            },
+          },
+        },
+      }),
+      this.prisma.placementClaimAllocation.findFirst({
+        where: {
+          id: receipt.allocationId,
+          tenantId: receipt.tenantId,
+          placementId: receipt.placementId,
+          claimId: receipt.claimId,
+          status: { not: PlacementClaimAllocationStatus.VOID },
+        },
+        select: {
+          id: true,
+          placementClosingId: true,
+          endorsementClosingId: true,
+          participantId: true,
+          endorsementParticipantId: true,
+          counterpartyId: true,
+          signedLinePercent: true,
+          basisAmount: true,
+          allocatedEstimatedLossAmount: true,
+          allocatedFinalLossAmount: true,
+          cashCallAmount: true,
+          counterparty: {
+            select: {
+              id: true,
+              type: true,
+              name: true,
+              registrationNumber: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    if (!claim) {
+      throw new Error(
+        `Claim ${receipt.claimId} not found for recovery receipt ${receipt.id}`,
+      );
+    }
+    if (claim.currency !== receipt.currency) {
+      throw new Error(
+        `Claim recovery receipt ${receipt.id} currency does not match claim currency`,
+      );
+    }
+    if (!allocation) {
+      throw new Error(
+        `Claim allocation ${receipt.allocationId} not found for recovery receipt ${receipt.id}`,
+      );
+    }
+    if (allocation.counterparty.type !== CounterpartyType.REINSURER) {
+      throw new Error(
+        `Claim recovery receipt ${receipt.id} has non-reinsurer allocation counterparty ${allocation.counterpartyId}`,
+      );
+    }
+    if (allocation.counterpartyId !== receipt.counterpartyId) {
+      throw new Error(
+        `Claim recovery receipt ${receipt.id} counterparty does not match allocation`,
+      );
+    }
+
+    return { claim, allocation };
+  }
+
+  private claimRecoveryAllocationPayload(
+    allocation: Awaited<
+      ReturnType<
+        ReinsuranceFinancialEventPublisher['claimRecoveryReceiptContext']
+      >
+    >['allocation'],
+  ) {
+    return {
+      id: allocation.id,
+      placementClosingId: allocation.placementClosingId,
+      endorsementClosingId: allocation.endorsementClosingId,
+      participantId: allocation.participantId,
+      endorsementParticipantId: allocation.endorsementParticipantId,
+      signedLinePercent: this.decimalNumber(allocation.signedLinePercent),
+      basisAmount: this.decimalNumber(allocation.basisAmount),
+      allocatedEstimatedLossAmount: this.decimalNumber(
+        allocation.allocatedEstimatedLossAmount,
+      ),
+      allocatedFinalLossAmount: this.optionalDecimalNumber(
+        allocation.allocatedFinalLossAmount,
+      ),
+      cashCallAmount: this.optionalDecimalNumber(allocation.cashCallAmount),
+    };
   }
 
   private isCashAffectingSettlement(

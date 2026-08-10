@@ -92,6 +92,21 @@ export class ReinsuranceAccountingIntegrationController {
     return this.dispatcher.status();
   }
 
+  @Get('financial-confirmations/claim-recovery-receipts')
+  @ApiOperation({
+    summary:
+      'List claim recovery receipts awaiting Accounting bank confirmation',
+    description:
+      'Tenant-scoped Accounting confirmation queue adapter for RECORDED Reinsurer -> Broker claim recovery receipts. This endpoint exposes operational receipt metadata only; it does not expose source-event payloads, secrets or HMAC data.',
+  })
+  findPendingClaimRecoveryReceiptConfirmations(
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.findPendingClaimRecoveryReceiptConfirmations(
+      request.user,
+    );
+  }
+
   @Post('reconciliation/debit-note-issued')
   @ApiOperation({
     summary: 'Reconcile issued placement debit notes with Accounting outbox',
@@ -240,6 +255,40 @@ export class ReinsuranceAccountingIntegrationController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.readiness.reconcileClaimRecoveryApprovedEvents(
+      request.user,
+      query,
+    );
+  }
+
+  @Post('reconciliation/claim-recovery-received')
+  @ApiOperation({
+    summary:
+      'Reconcile bank-confirmed claim recovery receipts with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets BANK_CONFIRMED claim recovery receipt rows missing their deterministic CLAIM_RECOVERY_RECEIVED outbox row.',
+  })
+  reconcileClaimRecoveryReceivedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileClaimRecoveryReceivedEvents(
+      request.user,
+      query,
+    );
+  }
+
+  @Post('reconciliation/claim-recovery-receipt-reversed')
+  @ApiOperation({
+    summary:
+      'Reconcile claim recovery receipt reversals with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable BANK_CONFIRMED claim recovery receipt reversal rows missing their deterministic CLAIM_RECOVERY_RECEIPT_REVERSED outbox row.',
+  })
+  reconcileClaimRecoveryReceiptReversedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileClaimRecoveryReceiptReversedEvents(
       request.user,
       query,
     );
