@@ -3,6 +3,7 @@ import {
   CounterpartyType,
   PlacementClaimCashCallStatus,
   PlacementClaimRecoveryReceiptStatus,
+  PlacementSettlementMethod,
 } from '../../../prisma/generated/client';
 
 export class PlacementClaimRecoveryCounterpartyDto {
@@ -38,6 +39,9 @@ export class PlacementClaimRecoveryReceiptResponseDto {
   @ApiProperty({ format: 'uuid' })
   cashCallId!: string;
 
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  recoveryApprovalId!: string | null;
+
   @ApiProperty({ format: 'uuid' })
   counterpartyId!: string;
 
@@ -52,6 +56,30 @@ export class PlacementClaimRecoveryReceiptResponseDto {
 
   @ApiPropertyOptional({ type: String, nullable: true })
   reference!: string | null;
+
+  @ApiPropertyOptional({
+    enum: PlacementSettlementMethod,
+    nullable: true,
+  })
+  settlementMethod!: PlacementSettlementMethod | null;
+
+  @ApiPropertyOptional({ example: 'GHS', nullable: true })
+  settlementCurrency!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  bankReference!: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  bankConfirmedAt!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  bankConfirmedByUserId!: string | null;
+
+  @ApiPropertyOptional({ type: String, example: '12.34567800', nullable: true })
+  agreedExchangeRate!: string | null;
+
+  @ApiProperty({ type: String, example: '15.00' })
+  bankChargeAmount!: string;
 
   @ApiPropertyOptional({ type: String, nullable: true })
   notes!: string | null;
@@ -169,6 +197,22 @@ export class PlacementClaimRecoveryPositionCashCallDto {
   @ApiProperty({ type: String, example: '40000.00' })
   recoveredAmount!: string;
 
+  @ApiProperty({
+    type: String,
+    example: '10000.00',
+    description:
+      'Operational receipts recorded but not yet financially confirmed by Accounting.',
+  })
+  recordedAmount!: string;
+
+  @ApiProperty({
+    type: String,
+    example: '40000.00',
+    description:
+      'Bank-confirmed recovery receipts that reduce financial outstanding.',
+  })
+  confirmedAmount!: string;
+
   @ApiProperty({ type: String, example: '10000.00' })
   reversedAmount!: string;
 
@@ -194,6 +238,12 @@ export class PlacementClaimRecoveryPositionTotalsDto {
 
   @ApiProperty({ type: String, example: '40000.00' })
   totalRecovered!: string;
+
+  @ApiProperty({ type: String, example: '10000.00' })
+  totalRecorded!: string;
+
+  @ApiProperty({ type: String, example: '40000.00' })
+  totalConfirmed!: string;
 
   @ApiProperty({ type: String, example: '10000.00' })
   totalReversed!: string;
@@ -223,11 +273,30 @@ export class PlacementClaimCedantSettlementPositionDto {
   @ApiProperty({ type: String, example: '25000.00' })
   settledAmount!: string;
 
+  @ApiProperty({
+    type: String,
+    example: '10000.00',
+    description:
+      'Operational Cedant settlements recorded but not yet financially confirmed by Accounting.',
+  })
+  recordedAmount!: string;
+
+  @ApiProperty({
+    type: String,
+    example: '25000.00',
+    description:
+      'Bank-confirmed Cedant settlements that reduce financial payable outstanding.',
+  })
+  bankConfirmedAmount!: string;
+
   @ApiProperty({ type: String, example: '5000.00' })
   reversedAmount!: string;
 
   @ApiProperty({ type: String, example: '10000.00' })
   outstandingAmount!: string;
+
+  @ApiProperty({ type: String, example: '35000.00' })
+  operationalSettledAmount!: string;
 
   @ApiProperty({
     enum: [

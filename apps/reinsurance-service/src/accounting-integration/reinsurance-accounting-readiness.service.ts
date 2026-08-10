@@ -8,6 +8,8 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
+  PlacementClaimRecoveryReceiptStatus,
+  PlacementClaimCedantSettlementStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -99,6 +101,23 @@ const paymentReconciliationInclude = {
   },
 } satisfies Prisma.PlacementPaymentInclude;
 
+const claimRecoveryReceiptReconciliationInclude = {
+  counterparty: {
+    select: {
+      id: true,
+      type: true,
+      name: true,
+      registrationNumber: true,
+    },
+  },
+} satisfies Prisma.PlacementClaimRecoveryReceiptInclude;
+
+const claimCedantSettlementReconciliationInclude = {
+  reversalSettlements: {
+    select: { id: true },
+  },
+} satisfies Prisma.PlacementClaimCedantSettlementInclude;
+
 type AccountingSubledgerSyncResult =
   | {
       status: 'DISABLED' | 'SKIPPED';
@@ -154,14 +173,18 @@ export class ReinsuranceAccountingReadinessService {
             'REINSURER_DISBURSEMENT_RECORDED',
             'REINSURER_DISBURSEMENT_REVERSED',
             'CLAIM_PAYABLE_APPROVED',
+            'CLAIM_CEDANT_SETTLEMENT_PAID',
+            'CLAIM_CEDANT_SETTLEMENT_REVERSED',
             'CLAIM_RECOVERY_APPROVED',
+            'CLAIM_RECOVERY_RECEIVED',
+            'CLAIM_RECOVERY_RECEIPT_REVERSED',
           ]
         : [],
       readinessMode:
         'Debit-note, credit-note, premium-payment, reinsurer-disbursement, claim-payable and claim-recovery source-event capture, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records, bank-confirmed reinsurer disbursements including reversals, broker-confirmed claim payable approvals and approved claim recoveries.'
+          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records, bank-confirmed reinsurer disbursements including reversals, broker-confirmed claim payable approvals, bank-confirmed cedant claim settlements including reversals, approved claim recoveries and bank-confirmed claim recovery receipts including reversals.'
           : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
@@ -252,6 +275,174 @@ export class ReinsuranceAccountingReadinessService {
       tenantId: user.tenantId,
       limit: options.limit,
     });
+  }
+
+  async findPendingClaimRecoveryReceiptConfirmations(user: RequestUser) {
+    const receipts = await this.prisma.placementClaimRecoveryReceipt.findMany({
+      where: {
+        tenantId: user.tenantId,
+        status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+        reversalOfReceiptId: null,
+        placement: { archivedAt: null },
+      },
+      select: {
+        id: true,
+        placementId: true,
+        claimId: true,
+        allocationId: true,
+        cashCallId: true,
+        recoveryApprovalId: true,
+        counterpartyId: true,
+        currency: true,
+        amount: true,
+        paymentDate: true,
+        reference: true,
+        settlementMethod: true,
+        settlementCurrency: true,
+        agreedExchangeRate: true,
+        status: true,
+        createdAt: true,
+        placement: {
+          select: {
+            id: true,
+            reference: true,
+            policyNumber: true,
+            title: true,
+          },
+        },
+        claim: {
+          select: {
+            id: true,
+            claimNumber: true,
+          },
+        },
+        counterparty: {
+          select: {
+            id: true,
+            type: true,
+            name: true,
+            registrationNumber: true,
+          },
+        },
+      },
+      orderBy: [{ paymentDate: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    return {
+      items: receipts.map((receipt) => ({
+        id: `REINSURANCE_CLAIM_RECOVERY_RECEIPT:${receipt.id}`,
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PlacementClaimRecoveryReceipt',
+        sourceRecordId: receipt.id,
+        sourceParentId: receipt.placementId,
+        sourceReference: receipt.reference ?? receipt.id,
+        action: 'CONFIRM_BANK_RECEIPT',
+        direction: 'INBOUND',
+        status: receipt.status,
+        amount: receipt.amount.toString(),
+        currency: receipt.currency,
+        operationalDate: receipt.paymentDate.toISOString(),
+        settlementMethod: receipt.settlementMethod,
+        settlementCurrency: receipt.settlementCurrency ?? receipt.currency,
+        agreedExchangeRate: receipt.agreedExchangeRate?.toString() ?? null,
+        counterparty: receipt.counterparty,
+        sourceDetailUrl: `/operations/reinsurance/facultative/${receipt.placementId}`,
+        businessSnapshot: {
+          placementId: receipt.placement.id,
+          placementReference: receipt.placement.reference,
+          policyNumber: receipt.placement.policyNumber,
+          placementTitle: receipt.placement.title,
+          claimId: receipt.claim.id,
+          claimNumber: receipt.claim.claimNumber,
+          allocationId: receipt.allocationId,
+          cashCallId: receipt.cashCallId,
+          recoveryApprovalId: receipt.recoveryApprovalId,
+        },
+      })),
+    };
+  }
+
+  async findPendingClaimCedantSettlementConfirmations(user: RequestUser) {
+    const settlements =
+      await this.prisma.placementClaimCedantSettlement.findMany({
+        where: {
+          tenantId: user.tenantId,
+          status: PlacementClaimCedantSettlementStatus.RECORDED,
+          reversalOfSettlementId: null,
+          placement: { archivedAt: null },
+        },
+        select: {
+          id: true,
+          placementId: true,
+          claimId: true,
+          payableApprovalId: true,
+          currency: true,
+          amount: true,
+          settlementDate: true,
+          reference: true,
+          settlementMethod: true,
+          settlementCurrency: true,
+          agreedExchangeRate: true,
+          status: true,
+          createdAt: true,
+          placement: {
+            select: {
+              id: true,
+              reference: true,
+              policyNumber: true,
+              title: true,
+              cedant: {
+                select: {
+                  id: true,
+                  type: true,
+                  name: true,
+                  registrationNumber: true,
+                },
+              },
+            },
+          },
+          claim: {
+            select: {
+              id: true,
+              claimNumber: true,
+            },
+          },
+        },
+        orderBy: [{ settlementDate: 'desc' }, { createdAt: 'desc' }],
+      });
+
+    return {
+      items: settlements.map((settlement) => ({
+        id: `REINSURANCE_CLAIM_CEDANT_SETTLEMENT:${settlement.id}`,
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PlacementClaimCedantSettlement',
+        sourceRecordId: settlement.id,
+        sourceParentId: settlement.placementId,
+        sourceReference: settlement.reference ?? settlement.id,
+        action: 'CONFIRM_BANK_PAYMENT',
+        transactionType: 'CLAIM_CEDANT_SETTLEMENT',
+        direction: 'OUTBOUND',
+        status: settlement.status,
+        amount: settlement.amount.toString(),
+        currency: settlement.currency,
+        operationalDate: settlement.settlementDate.toISOString(),
+        settlementMethod: settlement.settlementMethod,
+        settlementCurrency:
+          settlement.settlementCurrency ?? settlement.currency,
+        agreedExchangeRate: settlement.agreedExchangeRate?.toString() ?? null,
+        counterparty: settlement.placement.cedant,
+        sourceDetailUrl: `/operations/reinsurance/facultative/${settlement.placementId}`,
+        businessSnapshot: {
+          placementId: settlement.placement.id,
+          placementReference: settlement.placement.reference,
+          policyNumber: settlement.placement.policyNumber,
+          placementTitle: settlement.placement.title,
+          claimId: settlement.claim.id,
+          claimNumber: settlement.claim.claimNumber,
+          payableApprovalId: settlement.payableApprovalId,
+        },
+      })),
+    };
   }
 
   async reconcileDebitNoteIssuedEvents(
@@ -1255,6 +1446,332 @@ export class ReinsuranceAccountingReadinessService {
     };
   }
 
+  reconcileClaimCedantSettlementPaidEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    return this.reconcileClaimCedantSettlementEvents(user, options, {
+      disabledMessage:
+        'Accounting module is not enabled for this tenant; no claim cedant settlement events are captured.',
+      where: {
+        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+        reversalOfSettlementId: null,
+        bankConfirmedAt: { not: null },
+      },
+      idempotencyKey: (settlementId) =>
+        this.claimCedantSettlementPaidIdempotencyKey(settlementId),
+      prepare: (settlement) =>
+        this.financialEvents.prepareClaimCedantSettlementPaid(user, settlement),
+    });
+  }
+
+  reconcileClaimCedantSettlementReversedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    return this.reconcileClaimCedantSettlementEvents(user, options, {
+      disabledMessage:
+        'Accounting module is not enabled for this tenant; no claim cedant settlement reversal events are captured.',
+      where: {
+        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+        reversalOfSettlementId: { not: null },
+        bankConfirmedAt: { not: null },
+      },
+      idempotencyKey: (settlementId) =>
+        this.claimCedantSettlementReversedIdempotencyKey(settlementId),
+      prepare: (settlement) =>
+        this.financialEvents.prepareClaimCedantSettlementReversed(
+          user,
+          settlement,
+        ),
+    });
+  }
+
+  private async reconcileClaimCedantSettlementEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+    config: {
+      disabledMessage: string;
+      where: Prisma.PlacementClaimCedantSettlementWhereInput;
+      idempotencyKey: (settlementId: string) => string;
+      prepare: (
+        settlement: Prisma.PlacementClaimCedantSettlementGetPayload<{
+          include: typeof claimCedantSettlementReconciliationInclude;
+        }>,
+      ) => Promise<ReinsuranceAccountingEventInput | null>;
+    },
+  ) {
+    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
+    const dryRun = options.dryRun ?? true;
+    const limit = Math.min(options.limit ?? 50, 100);
+    if (!accountingEnabled) {
+      return {
+        accountingEnabled,
+        dryRun,
+        inspectedCount: 0,
+        missingCount: 0,
+        enqueuedCount: 0,
+        items: [],
+        message: config.disabledMessage,
+      };
+    }
+
+    const settlements =
+      await this.prisma.placementClaimCedantSettlement.findMany({
+        where: {
+          tenantId: user.tenantId,
+          placement: { archivedAt: null },
+          ...config.where,
+        },
+        include: claimCedantSettlementReconciliationInclude,
+        orderBy: [{ bankConfirmedAt: 'asc' }, { id: 'asc' }],
+        take: limit,
+      });
+    const keys = settlements.map((settlement) =>
+      config.idempotencyKey(settlement.id),
+    );
+    const existing = keys.length
+      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
+          where: {
+            tenantId: user.tenantId,
+            idempotencyKey: { in: keys },
+          },
+          select: {
+            id: true,
+            idempotencyKey: true,
+            status: true,
+            accountingSourceEventId: true,
+          },
+        })
+      : [];
+    const existingByKey = new Map(
+      existing.map((event) => [event.idempotencyKey, event]),
+    );
+
+    const items: Array<{
+      settlementId: string;
+      claimId: string;
+      placementId: string;
+      bankConfirmedAt: string | null;
+      idempotencyKey: string;
+      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
+      outboxId?: string;
+      outboxStatus?: string;
+      accountingSourceEventId?: string | null;
+    }> = [];
+    let enqueuedCount = 0;
+
+    for (const settlement of settlements) {
+      const idempotencyKey = config.idempotencyKey(settlement.id);
+      const existingEvent = existingByKey.get(idempotencyKey);
+      const baseItem = {
+        settlementId: settlement.id,
+        claimId: settlement.claimId,
+        placementId: settlement.placementId,
+        bankConfirmedAt: settlement.bankConfirmedAt?.toISOString() ?? null,
+        idempotencyKey,
+      };
+      if (existingEvent) {
+        items.push({
+          ...baseItem,
+          status: 'PRESENT',
+          outboxId: existingEvent.id,
+          outboxStatus: existingEvent.status,
+          accountingSourceEventId: existingEvent.accountingSourceEventId,
+        });
+        continue;
+      }
+      if (dryRun) {
+        items.push({ ...baseItem, status: 'MISSING' });
+        continue;
+      }
+
+      const event = await config.prepare(settlement);
+      if (!event) continue;
+      const outboxRow = await this.prisma.$transaction((tx) =>
+        this.financialEvents.enqueuePreparedEvent(tx, event),
+      );
+      enqueuedCount += 1;
+      items.push({
+        ...baseItem,
+        status: 'ENQUEUED',
+        outboxId: outboxRow.id,
+        outboxStatus: outboxRow.status,
+        accountingSourceEventId: outboxRow.accountingSourceEventId,
+      });
+    }
+
+    return {
+      accountingEnabled,
+      dryRun,
+      inspectedCount: settlements.length,
+      missingCount: items.filter((item) => item.status === 'MISSING').length,
+      enqueuedCount,
+      items,
+    };
+  }
+
+  reconcileClaimRecoveryReceivedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    return this.reconcileClaimRecoveryReceiptEvents(user, options, {
+      disabledMessage:
+        'Accounting module is not enabled for this tenant; no claim recovery receipt events are captured.',
+      where: {
+        status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+        reversalOfReceiptId: null,
+        bankConfirmedAt: { not: null },
+      },
+      idempotencyKey: (receiptId) =>
+        this.claimRecoveryReceivedIdempotencyKey(receiptId),
+      prepare: (receipt) =>
+        this.financialEvents.prepareClaimRecoveryReceived(user, receipt),
+    });
+  }
+
+  reconcileClaimRecoveryReceiptReversedEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+  ) {
+    return this.reconcileClaimRecoveryReceiptEvents(user, options, {
+      disabledMessage:
+        'Accounting module is not enabled for this tenant; no claim recovery receipt reversal events are captured.',
+      where: {
+        status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+        reversalOfReceiptId: { not: null },
+        bankConfirmedAt: { not: null },
+      },
+      idempotencyKey: (receiptId) =>
+        this.claimRecoveryReceiptReversedIdempotencyKey(receiptId),
+      prepare: (receipt) =>
+        this.financialEvents.prepareClaimRecoveryReceiptReversed(user, receipt),
+    });
+  }
+
+  private async reconcileClaimRecoveryReceiptEvents(
+    user: RequestUser,
+    options: { dryRun?: boolean; limit?: number },
+    config: {
+      disabledMessage: string;
+      where: Prisma.PlacementClaimRecoveryReceiptWhereInput;
+      idempotencyKey: (receiptId: string) => string;
+      prepare: (
+        receipt: Prisma.PlacementClaimRecoveryReceiptGetPayload<{
+          include: typeof claimRecoveryReceiptReconciliationInclude;
+        }>,
+      ) => Promise<ReinsuranceAccountingEventInput | null>;
+    },
+  ) {
+    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
+    const dryRun = options.dryRun ?? true;
+    const limit = Math.min(options.limit ?? 50, 100);
+    if (!accountingEnabled) {
+      return {
+        accountingEnabled,
+        dryRun,
+        inspectedCount: 0,
+        missingCount: 0,
+        enqueuedCount: 0,
+        items: [],
+        message: config.disabledMessage,
+      };
+    }
+
+    const receipts = await this.prisma.placementClaimRecoveryReceipt.findMany({
+      where: {
+        tenantId: user.tenantId,
+        placement: { archivedAt: null },
+        ...config.where,
+      },
+      include: claimRecoveryReceiptReconciliationInclude,
+      orderBy: [{ bankConfirmedAt: 'asc' }, { id: 'asc' }],
+      take: limit,
+    });
+    const keys = receipts.map((receipt) => config.idempotencyKey(receipt.id));
+    const existing = keys.length
+      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
+          where: {
+            tenantId: user.tenantId,
+            idempotencyKey: { in: keys },
+          },
+          select: {
+            id: true,
+            idempotencyKey: true,
+            status: true,
+            accountingSourceEventId: true,
+          },
+        })
+      : [];
+    const existingByKey = new Map(
+      existing.map((event) => [event.idempotencyKey, event]),
+    );
+
+    const items: Array<{
+      receiptId: string;
+      claimId: string;
+      placementId: string;
+      allocationId: string;
+      bankConfirmedAt: string | null;
+      idempotencyKey: string;
+      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
+      outboxId?: string;
+      outboxStatus?: string;
+      accountingSourceEventId?: string | null;
+    }> = [];
+    let enqueuedCount = 0;
+
+    for (const receipt of receipts) {
+      const idempotencyKey = config.idempotencyKey(receipt.id);
+      const existingEvent = existingByKey.get(idempotencyKey);
+      const baseItem = {
+        receiptId: receipt.id,
+        claimId: receipt.claimId,
+        placementId: receipt.placementId,
+        allocationId: receipt.allocationId,
+        bankConfirmedAt: receipt.bankConfirmedAt?.toISOString() ?? null,
+        idempotencyKey,
+      };
+      if (existingEvent) {
+        items.push({
+          ...baseItem,
+          status: 'PRESENT',
+          outboxId: existingEvent.id,
+          outboxStatus: existingEvent.status,
+          accountingSourceEventId: existingEvent.accountingSourceEventId,
+        });
+        continue;
+      }
+      if (dryRun) {
+        items.push({ ...baseItem, status: 'MISSING' });
+        continue;
+      }
+
+      const event = await config.prepare(receipt);
+      if (!event) continue;
+      const outboxRow = await this.prisma.$transaction((tx) =>
+        this.financialEvents.enqueuePreparedEvent(tx, event),
+      );
+      enqueuedCount += 1;
+      items.push({
+        ...baseItem,
+        status: 'ENQUEUED',
+        outboxId: outboxRow.id,
+        outboxStatus: outboxRow.status,
+        accountingSourceEventId: outboxRow.accountingSourceEventId,
+      });
+    }
+
+    return {
+      accountingEnabled,
+      dryRun,
+      inspectedCount: receipts.length,
+      missingCount: items.filter((item) => item.status === 'MISSING').length,
+      enqueuedCount,
+      items,
+    };
+  }
+
   private debitNoteIdempotencyKey(noteId: string) {
     return `reinsurance:debit-note:${noteId}:issued:v1`;
   }
@@ -1294,8 +1811,24 @@ export class ReinsuranceAccountingReadinessService {
     return `reinsurance:claim:${claimId}:payable-approved:${approvalVersion}:v1`;
   }
 
+  private claimCedantSettlementPaidIdempotencyKey(settlementId: string) {
+    return `reinsurance:claim-cedant-settlement:${settlementId}:confirmed:v1`;
+  }
+
+  private claimCedantSettlementReversedIdempotencyKey(settlementId: string) {
+    return `reinsurance:claim-cedant-settlement:${settlementId}:reversal:v1`;
+  }
+
   private claimRecoveryApprovedIdempotencyKey(approvalId: string) {
     return `reinsurance:claim-recovery:${approvalId}:approved:v1`;
+  }
+
+  private claimRecoveryReceivedIdempotencyKey(receiptId: string) {
+    return `reinsurance:claim-recovery-receipt:${receiptId}:confirmed:v1`;
+  }
+
+  private claimRecoveryReceiptReversedIdempotencyKey(receiptId: string) {
+    return `reinsurance:claim-recovery-receipt:${receiptId}:reversal:v1`;
   }
 
   private async reconcilePaymentEvents(

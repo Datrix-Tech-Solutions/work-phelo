@@ -8,6 +8,7 @@ import {
   PlacementClaimCedantSettlementStatus,
   PlacementClaimCashCallStatus,
   PlacementClaimRecoveryReceiptStatus,
+  PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -50,11 +51,19 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     claimId: 'claim-1',
     allocationId: 'allocation-1',
     cashCallId: 'cash-call-1',
+    recoveryApprovalId: 'recovery-approval-1',
     counterpartyId: 'reinsurer-1',
     currency: 'GHS',
     amount: new Prisma.Decimal('40000.00'),
     paymentDate: new Date('2026-07-29T12:00:00.000Z'),
     reference: 'BANK-001',
+    settlementMethod: null,
+    settlementCurrency: null,
+    bankReference: null,
+    bankConfirmedAt: null,
+    bankConfirmedByUserId: null,
+    agreedExchangeRate: null,
+    bankChargeAmount: new Prisma.Decimal('0.00'),
     notes: null,
     status: PlacementClaimRecoveryReceiptStatus.RECORDED,
     reversalOfReceiptId: null,
@@ -90,6 +99,15 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       id: 'allocation-1',
       allocatedEstimatedLossAmount: new Prisma.Decimal('100000.00'),
       allocatedFinalLossAmount: null,
+      recoveryApprovals: [
+        {
+          id: 'recovery-approval-1',
+          approvedAmount: new Prisma.Decimal('100000.00'),
+          currency: 'GHS',
+          cashCallId: 'cash-call-1',
+          counterpartyId: 'reinsurer-1',
+        },
+      ],
     },
     recoveryReceipts: [],
   };
@@ -106,8 +124,14 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       findFirst: PrismaMethod;
       create: PrismaMethod;
       update: PrismaMethod;
+      updateMany: PrismaMethod;
     };
     $transaction: jest.Mock;
+  };
+  let financialEvents: {
+    prepareClaimRecoveryReceived: jest.Mock;
+    prepareClaimRecoveryReceiptReversed: jest.Mock;
+    enqueuePreparedEvent: jest.Mock;
   };
   let service: PlacementClaimRecoveryReceiptsService;
 
@@ -127,10 +151,38 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+        updateMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
       $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) =>
         callback(prisma),
       ),
+    };
+    financialEvents = {
+      prepareClaimRecoveryReceived: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_RECOVERY_RECEIVED',
+        sourceRecordType: 'PlacementClaimRecoveryReceipt',
+        sourceRecordId: 'receipt-1',
+        sourceDocumentId: 'claim-1',
+        idempotencyKey:
+          'reinsurance:claim-recovery-receipt:receipt-1:confirmed:v1',
+        occurredAt: '2026-07-30T12:00:00.000Z',
+        currency: 'GHS',
+        payload: {},
+      }),
+      prepareClaimRecoveryReceiptReversed: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
+        sourceRecordType: 'PlacementClaimRecoveryReceipt',
+        sourceRecordId: 'receipt-reversal-1',
+        sourceDocumentId: 'receipt-1',
+        idempotencyKey:
+          'reinsurance:claim-recovery-receipt:receipt-reversal-1:reversal:v1',
+        occurredAt: '2026-07-30T12:00:00.000Z',
+        currency: 'GHS',
+        payload: {},
+      }),
+      enqueuePreparedEvent: jest.fn().mockResolvedValue({ id: 'outbox-1' }),
     };
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementClaim.findFirst.mockResolvedValue({
@@ -146,6 +198,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     service = new PlacementClaimRecoveryReceiptsService(
       prisma as unknown as PrismaService,
       new ReinsuranceMoneyHelper(),
+      financialEvents as never,
     );
   });
 
@@ -214,12 +267,15 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       claimId: 'claim-1',
       allocationId: 'allocation-1',
       cashCallId: 'cash-call-1',
+      recoveryApprovalId: 'recovery-approval-1',
       counterpartyId: 'reinsurer-1',
       currency: 'GHS',
       amount: 40000,
       reference: 'BANK-001',
       status: PlacementClaimRecoveryReceiptStatus.RECORDED,
     });
+    expect(financialEvents.prepareClaimRecoveryReceived).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('allows a second receipt to complete recovery and rejects over-recovery', async () => {
@@ -246,6 +302,79 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
         paymentDate: '2026-07-30T12:00:00.000Z',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('financially confirms a recorded recovery receipt and enqueues the recovery received event', async () => {
+    const confirmed = {
+      ...receipt,
+      status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+      bankConfirmedAt: new Date('2026-07-30T12:00:00.000Z'),
+      bankConfirmedByUserId: 'user-1',
+      bankReference: 'BANK-CONF-001',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'GHS',
+    };
+    prisma.placementClaimRecoveryReceipt.findFirst
+      .mockResolvedValueOnce(receipt)
+      .mockResolvedValueOnce(confirmed);
+    prisma.placementClaimRecoveryReceipt.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    const result = await service.confirmBankReceipt(
+      user,
+      'placement-1',
+      'claim-1',
+      'receipt-1',
+      {
+        bankConfirmedAt: '2026-07-30T12:00:00.000Z',
+        bankReference: 'BANK-CONF-001',
+      },
+    );
+
+    expect(result).toEqual(confirmed);
+    const updateManyArgs =
+      firstCallArg<Prisma.PlacementClaimRecoveryReceiptUpdateManyArgs>(
+        prisma.placementClaimRecoveryReceipt.updateMany,
+      );
+    expect(updateManyArgs.where).toMatchObject({
+      id: 'receipt-1',
+      status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+    });
+    expect(updateManyArgs.data).toMatchObject({
+      status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+      bankConfirmedByUserId: 'user-1',
+      bankReference: 'BANK-CONF-001',
+    });
+    expect(financialEvents.prepareClaimRecoveryReceived).toHaveBeenCalledWith(
+      user,
+      confirmed,
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects duplicate or non-recorded financial confirmation', async () => {
+    prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue({
+      ...receipt,
+      status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+    });
+
+    await expect(
+      service.confirmBankReceipt(user, 'placement-1', 'claim-1', 'receipt-1', {
+        bankConfirmedAt: '2026-07-30T12:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue({
+      ...receipt,
+      status: PlacementClaimRecoveryReceiptStatus.REVERSED,
+    });
+
+    await expect(
+      service.confirmBankReceipt(user, 'placement-1', 'claim-1', 'receipt-1', {
+        bankConfirmedAt: '2026-07-30T12:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects wrong currency and wrong scoped cash call', async () => {
@@ -290,6 +419,20 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       where: { id: 'receipt-1' },
       data: { status: PlacementClaimRecoveryReceiptStatus.REVERSED },
     });
+    const createArgs =
+      firstCallArg<Prisma.PlacementClaimRecoveryReceiptCreateArgs>(
+        prisma.placementClaimRecoveryReceipt.create,
+      );
+    expect(createArgs.data).toMatchObject({
+      status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+      reversalOfReceiptId: 'receipt-1',
+    });
+    expect((createArgs.data.amount as Prisma.Decimal).toString()).toBe(
+      '-40000',
+    );
+    expect(
+      financialEvents.prepareClaimRecoveryReceiptReversed,
+    ).not.toHaveBeenCalled();
 
     prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue({
       ...receipt,
@@ -310,6 +453,42 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     await expect(
       service.reverse(user, 'placement-1', 'claim-1', 'receipt-reversal-1', {}),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('emits reversal event for bank-confirmed recovery receipt reversals', async () => {
+    const confirmedReceipt = {
+      ...receipt,
+      status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+      bankConfirmedAt: new Date('2026-07-30T12:00:00.000Z'),
+      bankConfirmedByUserId: 'accountant-1',
+      bankReference: 'BANK-CONF-001',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'GHS',
+    };
+    const reversal = {
+      ...confirmedReceipt,
+      id: 'receipt-reversal-1',
+      amount: new Prisma.Decimal('-40000.00'),
+      reversalOfReceiptId: 'receipt-1',
+      createdByUserId: 'user-1',
+    };
+    prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue(
+      confirmedReceipt,
+    );
+    prisma.placementClaimRecoveryReceipt.update.mockResolvedValue({
+      ...confirmedReceipt,
+      status: PlacementClaimRecoveryReceiptStatus.REVERSED,
+    });
+    prisma.placementClaimRecoveryReceipt.create.mockResolvedValue(reversal);
+
+    await service.reverse(user, 'placement-1', 'claim-1', 'receipt-1', {
+      notes: 'Correction',
+    });
+
+    expect(
+      financialEvents.prepareClaimRecoveryReceiptReversed,
+    ).toHaveBeenCalledWith(user, reversal);
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
   });
 
   it('builds recovery position totals independently per cash call', async () => {
@@ -341,6 +520,15 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
           id: 'allocation-2',
           allocatedEstimatedLossAmount: new Prisma.Decimal('35000.00'),
           allocatedFinalLossAmount: null,
+          recoveryApprovals: [
+            {
+              id: 'recovery-approval-2',
+              approvedAmount: new Prisma.Decimal('35000.00'),
+              currency: 'GHS',
+              cashCallId: 'cash-call-2',
+              counterpartyId: 'reinsurer-2',
+            },
+          ],
         },
         recoveryReceipts: [],
       },
@@ -355,27 +543,36 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     expect(position.recoveries).toEqual({
       totalAllocated: '135000.00',
       totalCashCalled: '135000.00',
-      totalRecovered: '40000.00',
+      totalRecovered: '0.00',
+      totalRecorded: '40000.00',
+      totalConfirmed: '0.00',
       totalReversed: '10000.00',
-      totalOutstanding: '95000.00',
+      totalOutstanding: '135000.00',
     });
     expect(position.perCashCall).toHaveLength(2);
     expect(position.perCashCall[0]).toMatchObject({
-      recoveredAmount: '40000.00',
+      recoveredAmount: '0.00',
+      recordedAmount: '40000.00',
+      confirmedAmount: '0.00',
       reversedAmount: '10000.00',
-      outstandingAmount: '60000.00',
-      recoveryStatus: 'PARTIALLY_RECOVERED',
+      outstandingAmount: '100000.00',
+      recoveryStatus: 'UNRECOVERED',
     });
     expect(position.perCashCall[1]).toMatchObject({
       recoveredAmount: '0.00',
+      recordedAmount: '0.00',
+      confirmedAmount: '0.00',
       outstandingAmount: '35000.00',
       recoveryStatus: 'UNRECOVERED',
     });
     expect(position.cedantSettlement).toEqual({
       approvedPayableAmount: null,
       settledAmount: '0.00',
+      recordedAmount: '0.00',
+      bankConfirmedAmount: '0.00',
       reversedAmount: '0.00',
       outstandingAmount: '0.00',
+      operationalSettledAmount: '0.00',
       settlementStatus: 'PENDING_APPROVAL',
     });
   });
@@ -415,6 +612,8 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       totalAllocated: '200000.00',
       totalCashCalled: '0.00',
       totalRecovered: '0.00',
+      totalRecorded: '0.00',
+      totalConfirmed: '0.00',
       totalReversed: '40000.00',
       totalOutstanding: '0.00',
     });
@@ -430,6 +629,49 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
         recoveryStatus: 'UNRECOVERED',
       }),
     ]);
+  });
+
+  it('uses only bank-confirmed recovery receipts for financial recovered and outstanding totals', async () => {
+    prisma.placementClaimCashCall.findMany.mockResolvedValue([
+      {
+        ...cashCall,
+        recoveryReceipts: [
+          {
+            ...receipt,
+            id: 'receipt-recorded',
+            amount: new Prisma.Decimal('25000.00'),
+            status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+          },
+          {
+            ...receipt,
+            id: 'receipt-confirmed',
+            amount: new Prisma.Decimal('40000.00'),
+            status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+            bankConfirmedAt: new Date('2026-07-30T12:00:00.000Z'),
+          },
+        ],
+      },
+    ]);
+
+    const position = await service.getRecoveryPosition(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+    );
+
+    expect(position.recoveries).toMatchObject({
+      totalRecovered: '40000.00',
+      totalRecorded: '25000.00',
+      totalConfirmed: '40000.00',
+      totalOutstanding: '60000.00',
+    });
+    expect(position.perCashCall[0]).toMatchObject({
+      recoveredAmount: '40000.00',
+      recordedAmount: '25000.00',
+      confirmedAmount: '40000.00',
+      outstandingAmount: '60000.00',
+      recoveryStatus: 'PARTIALLY_RECOVERED',
+    });
   });
 
   it('reports cedant settlement independently from reinsurer recoveries', async () => {
@@ -451,17 +693,12 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([
       {
         amount: new Prisma.Decimal('50000.00'),
-        status: PlacementClaimCedantSettlementStatus.RECORDED,
+        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
         reversalOfSettlementId: null,
       },
       {
         amount: new Prisma.Decimal('10000.00'),
-        status: PlacementClaimCedantSettlementStatus.REVERSED,
-        reversalOfSettlementId: null,
-      },
-      {
-        amount: new Prisma.Decimal('10000.00'),
-        status: PlacementClaimCedantSettlementStatus.RECORDED,
+        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
         reversalOfSettlementId: 'settlement-reversed',
       },
     ]);
@@ -480,12 +717,15 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     expect(position.cedantSettlement).toEqual({
       approvedPayableAmount: '90000.00',
       settledAmount: '50000.00',
+      recordedAmount: '0.00',
+      bankConfirmedAmount: '50000.00',
       reversedAmount: '10000.00',
       outstandingAmount: '40000.00',
+      operationalSettledAmount: '50000.00',
       settlementStatus: 'PARTIALLY_SETTLED',
     });
     expect(position.funding).toEqual({
-      brokerFundedExposure: '10000.00',
+      brokerFundedExposure: '50000.00',
       recoveredMinusSettled: '0.00',
     });
   });

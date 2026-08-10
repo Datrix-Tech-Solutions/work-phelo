@@ -297,7 +297,12 @@ export class PlacementClaimCashCallsService {
         placementId,
         claimId,
         cashCallId,
-        status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+        status: {
+          in: [
+            PlacementClaimRecoveryReceiptStatus.RECORDED,
+            PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+          ],
+        },
         reversalOfReceiptId: null,
       },
       select: { id: true },

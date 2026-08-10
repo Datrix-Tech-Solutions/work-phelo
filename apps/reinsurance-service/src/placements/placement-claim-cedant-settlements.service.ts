@@ -9,14 +9,16 @@ import {
   PlacementClaimAllocationStatus,
   PlacementClaimCedantSettlementStatus,
   PlacementClaimStatus,
+  PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-payable.dto';
+import { ConfirmPlacementClaimCedantSettlementBankDto } from './dto/confirm-placement-claim-cedant-settlement-bank.dto';
 import { CreatePlacementClaimCedantSettlementDto } from './dto/create-placement-claim-cedant-settlement.dto';
 import { ReversePlacementClaimCedantSettlementDto } from './dto/reverse-placement-claim-cedant-settlement.dto';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 
 const cedantSettlementInclude = {
   reversalSettlements: {
@@ -41,9 +43,12 @@ export interface ClaimCedantSettlementPosition {
   approvedPayableAmount: string | null;
   approvedAt: Date | null;
   approvedByUserId: string | null;
+  recordedAmount: string;
+  bankConfirmedAmount: string;
   settledAmount: string;
   reversedAmount: string;
   outstandingAmount: string;
+  operationalSettledAmount: string;
   settlementStatus: ClaimCedantSettlementStatus;
 }
 
@@ -247,30 +252,60 @@ export class PlacementClaimCedantSettlementsService {
                 'Approved payable amount is required before recording cedant settlement',
               );
             }
+            const payableApproval = await this.resolvePayableApproval(
+              tx,
+              user.tenantId,
+              placementId,
+              claimId,
+              dto.payableApprovalId,
+            );
+            const approvedAmount = this.money.toNumber(
+              payableApproval.approvedPayableAmount,
+            );
+            if (currency !== payableApproval.currency) {
+              throw new BadRequestException(
+                'Cedant settlement currency must match the payable approval currency',
+              );
+            }
 
             const position = await this.calculatePosition(
               tx,
               user.tenantId,
               placementId,
               claimId,
-              approvedPayableAmount,
+              approvedAmount,
               claim,
             );
-            if (amount > Number(position.outstandingAmount)) {
+            const operationalOutstanding =
+              approvedAmount - Number(position.operationalSettledAmount);
+            if (amount > operationalOutstanding) {
               throw new ConflictException(
                 'Cedant settlement amount cannot exceed the outstanding approved payable balance',
               );
             }
+            const settlementCurrency = this.resolveSettlementCurrency(
+              dto.settlementCurrency,
+              currency,
+            );
+            this.assertFxFacts(
+              currency,
+              settlementCurrency,
+              dto.agreedExchangeRate,
+            );
 
             return tx.placementClaimCedantSettlement.create({
               data: {
                 tenantId: user.tenantId,
                 placementId: claim.placementId,
                 claimId: claim.id,
+                payableApprovalId: payableApproval.id,
                 currency,
                 amount,
                 settlementDate: new Date(dto.settlementDate),
                 reference: this.cleanOptional(dto.reference),
+                settlementMethod: dto.settlementMethod ?? null,
+                settlementCurrency,
+                agreedExchangeRate: dto.agreedExchangeRate ?? null,
                 notes: this.cleanOptional(dto.notes),
                 status: PlacementClaimCedantSettlementStatus.RECORDED,
                 createdByUserId: user.id,
@@ -289,6 +324,184 @@ export class PlacementClaimCedantSettlementsService {
     }
 
     throw new ConflictException('Could not record cedant settlement');
+  }
+
+  async confirmBankSettlement(
+    user: RequestUser,
+    placementId: string,
+    claimId: string,
+    settlementId: string,
+    dto: ConfirmPlacementClaimCedantSettlementBankDto,
+  ): Promise<CedantSettlementRecord> {
+    const settlement =
+      await this.prisma.placementClaimCedantSettlement.findFirst({
+        where: {
+          id: settlementId,
+          tenantId: user.tenantId,
+          placementId,
+          claimId,
+        },
+        include: cedantSettlementInclude,
+      });
+    if (!settlement) {
+      throw new NotFoundException(
+        'Placement claim cedant settlement not found',
+      );
+    }
+    if (settlement.reversalOfSettlementId) {
+      throw new BadRequestException(
+        'Cannot financially confirm a reversal cedant settlement',
+      );
+    }
+    if (
+      settlement.status === PlacementClaimCedantSettlementStatus.BANK_CONFIRMED
+    ) {
+      throw new ConflictException(
+        'Cedant settlement has already been financially confirmed',
+      );
+    }
+    if (settlement.status !== PlacementClaimCedantSettlementStatus.RECORDED) {
+      throw new BadRequestException(
+        `Cannot financially confirm a cedant settlement from ${settlement.status}`,
+      );
+    }
+
+    const settlementMethod = this.resolveConfirmationSettlementMethod(
+      settlement,
+      dto.settlementMethod,
+    );
+    const settlementCurrency = this.resolveConfirmationSettlementCurrency(
+      settlement,
+      dto.settlementCurrency,
+    );
+    const bankReference = this.resolveConfirmationBankReference(
+      settlement,
+      dto.bankReference,
+    );
+    const confirmedExchangeRate =
+      dto.confirmedExchangeRate ?? dto.agreedExchangeRate ?? undefined;
+    this.assertConfirmationFacts({
+      settlementMethod,
+      bankReference,
+      operationalReference: settlement.reference,
+      notes: dto.notes,
+    });
+    this.assertFxFacts(
+      settlement.currency,
+      settlementCurrency,
+      confirmedExchangeRate ??
+        this.optionalDecimalToNumber(settlement.agreedExchangeRate),
+    );
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            const claim = await this.findClaim(
+              tx,
+              user.tenantId,
+              placementId,
+              claimId,
+            );
+            const payableApproval = await this.resolvePayableApproval(
+              tx,
+              user.tenantId,
+              placementId,
+              claimId,
+              settlement.payableApprovalId,
+            );
+            const approvedAmount = this.money.toNumber(
+              payableApproval.approvedPayableAmount,
+            );
+            const position = await this.calculatePosition(
+              tx,
+              user.tenantId,
+              placementId,
+              claimId,
+              approvedAmount,
+              claim,
+            );
+            const confirmedOutstanding =
+              approvedAmount - Number(position.bankConfirmedAmount);
+            const amount = this.money.toNumber(settlement.amount);
+            if (amount > confirmedOutstanding) {
+              throw new ConflictException(
+                'Cedant settlement confirmation cannot exceed the outstanding approved payable balance',
+              );
+            }
+
+            const updateResult =
+              await tx.placementClaimCedantSettlement.updateMany({
+                where: {
+                  id: settlementId,
+                  tenantId: user.tenantId,
+                  placementId,
+                  claimId,
+                  status: PlacementClaimCedantSettlementStatus.RECORDED,
+                },
+                data: {
+                  status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+                  payableApprovalId: payableApproval.id,
+                  bankConfirmedAt: new Date(dto.bankConfirmedAt),
+                  bankConfirmedByUserId: user.id,
+                  settlementMethod,
+                  settlementCurrency,
+                  bankReference,
+                  agreedExchangeRate:
+                    confirmedExchangeRate ?? settlement.agreedExchangeRate,
+                  bankChargeAmount: dto.bankChargeAmount ?? 0,
+                  notes: this.appendConfirmationNotes(
+                    settlement.notes,
+                    dto.notes,
+                  ),
+                },
+              });
+            if (updateResult.count !== 1) {
+              throw new ConflictException(
+                'Cedant settlement could not be financially confirmed because its status changed',
+              );
+            }
+
+            const confirmed = await tx.placementClaimCedantSettlement.findFirst(
+              {
+                where: {
+                  id: settlementId,
+                  tenantId: user.tenantId,
+                  placementId,
+                  claimId,
+                },
+                include: cedantSettlementInclude,
+              },
+            );
+            if (!confirmed) {
+              throw new NotFoundException(
+                'Placement claim cedant settlement not found',
+              );
+            }
+
+            const event =
+              await this.financialEvents.prepareClaimCedantSettlementPaid(
+                user,
+                confirmed,
+              );
+            if (event) {
+              await this.financialEvents.enqueuePreparedEvent(tx, event);
+            }
+            return confirmed;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (attempt === 0 && this.isSerializableTransactionConflict(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new ConflictException(
+      'Could not financially confirm cedant settlement',
+    );
   }
 
   async reverse(
@@ -337,24 +550,56 @@ export class PlacementClaimCedantSettlementsService {
               data: { status: PlacementClaimCedantSettlementStatus.REVERSED },
             });
 
-            return tx.placementClaimCedantSettlement.create({
+            const confirmedOriginal =
+              settlement.status ===
+              PlacementClaimCedantSettlementStatus.BANK_CONFIRMED;
+            const reversal = await tx.placementClaimCedantSettlement.create({
               data: {
                 tenantId: settlement.tenantId,
                 placementId: settlement.placementId,
                 claimId: settlement.claimId,
+                payableApprovalId: settlement.payableApprovalId,
                 currency: settlement.currency,
-                amount: settlement.amount,
+                amount: settlement.amount.negated(),
                 settlementDate: new Date(),
                 reference: settlement.reference
                   ? `REVERSAL:${settlement.reference}`
+                  : `REVERSAL:${settlement.id}`,
+                settlementMethod: settlement.settlementMethod,
+                settlementCurrency: settlement.settlementCurrency,
+                bankReference: confirmedOriginal
+                  ? settlement.bankReference
+                    ? `REVERSAL:${settlement.bankReference}`
+                    : `REVERSAL:${settlement.id}`
                   : null,
+                bankConfirmedAt: confirmedOriginal ? new Date() : null,
+                bankConfirmedByUserId: confirmedOriginal ? user.id : null,
+                agreedExchangeRate: settlement.agreedExchangeRate,
+                bankChargeAmount: confirmedOriginal
+                  ? settlement.bankChargeAmount.negated()
+                  : 0,
                 notes: this.cleanOptional(dto.notes),
-                status: PlacementClaimCedantSettlementStatus.RECORDED,
+                status: confirmedOriginal
+                  ? PlacementClaimCedantSettlementStatus.BANK_CONFIRMED
+                  : PlacementClaimCedantSettlementStatus.RECORDED,
                 reversalOfSettlementId: settlement.id,
                 createdByUserId: user.id,
               },
               include: cedantSettlementInclude,
             });
+
+            if (confirmedOriginal) {
+              const event =
+                await this.financialEvents.prepareClaimCedantSettlementReversed(
+                  user,
+                  reversal,
+                );
+              if (event) {
+                await this.financialEvents.enqueuePreparedEvent(tx, event);
+              }
+            }
+
+            return reversal;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
@@ -416,6 +661,19 @@ export class PlacementClaimCedantSettlementsService {
         .filter(
           (settlement) =>
             settlement.status ===
+              PlacementClaimCedantSettlementStatus.BANK_CONFIRMED &&
+            !settlement.reversalOfSettlementId,
+        )
+        .reduce(
+          (sum, settlement) => sum + this.money.toNumber(settlement.amount),
+          0,
+        ),
+    );
+    const recordedAmount = this.money.roundMoney(
+      settlements
+        .filter(
+          (settlement) =>
+            settlement.status ===
               PlacementClaimCedantSettlementStatus.RECORDED &&
             !settlement.reversalOfSettlementId,
         )
@@ -428,9 +686,13 @@ export class PlacementClaimCedantSettlementsService {
       settlements
         .filter((settlement) => !!settlement.reversalOfSettlementId)
         .reduce(
-          (sum, settlement) => sum + this.money.toNumber(settlement.amount),
+          (sum, settlement) =>
+            sum + Math.abs(this.money.toNumber(settlement.amount)),
           0,
         ),
+    );
+    const operationalSettledAmount = this.money.roundMoney(
+      recordedAmount + settledAmount,
     );
     const approved = approvedPayableAmount;
     const outstandingAmount =
@@ -452,9 +714,12 @@ export class PlacementClaimCedantSettlementsService {
         approved === null ? null : this.formatMoney(approved),
       approvedAt: claimRecord.approvedAt,
       approvedByUserId: claimRecord.approvedByUserId,
+      recordedAmount: this.formatMoney(recordedAmount),
+      bankConfirmedAmount: this.formatMoney(settledAmount),
       settledAmount: this.formatMoney(settledAmount),
       reversedAmount: this.formatMoney(reversedAmount),
       outstandingAmount: this.formatMoney(outstandingAmount),
+      operationalSettledAmount: this.formatMoney(operationalSettledAmount),
       settlementStatus,
     };
   }
@@ -519,6 +784,151 @@ export class PlacementClaimCedantSettlementsService {
     ) {
       throw new BadRequestException('Terminal claims cannot be settled');
     }
+  }
+
+  private async resolvePayableApproval(
+    prisma: Prisma.TransactionClient | PrismaService,
+    tenantId: string,
+    placementId: string,
+    claimId: string,
+    payableApprovalId: string | null | undefined,
+  ) {
+    const approval = await prisma.placementClaimPayableApproval.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        claimId,
+        ...(payableApprovalId ? { id: payableApprovalId } : {}),
+      },
+      orderBy: { approvalVersion: 'desc' },
+    });
+    if (!approval) {
+      throw new BadRequestException(
+        'Claim payable approval is required before recording or confirming cedant settlement',
+      );
+    }
+    return approval;
+  }
+
+  private resolveSettlementCurrency(
+    requested: string | undefined,
+    payableCurrency: string,
+  ): string {
+    return this.cleanCurrency(requested ?? payableCurrency);
+  }
+
+  private resolveConfirmationSettlementMethod(
+    settlement: CedantSettlementRecord,
+    requested: PlacementSettlementMethod | undefined,
+  ): PlacementSettlementMethod {
+    if (settlement.settlementMethod) {
+      if (requested && requested !== settlement.settlementMethod) {
+        throw new BadRequestException(
+          'Confirmation cannot change the operational settlement method',
+        );
+      }
+      return settlement.settlementMethod;
+    }
+    return requested ?? PlacementSettlementMethod.BANK_TRANSFER;
+  }
+
+  private resolveConfirmationSettlementCurrency(
+    settlement: CedantSettlementRecord,
+    requested: string | undefined,
+  ): string {
+    if (settlement.settlementCurrency) {
+      const cleanedRequested = this.cleanOptional(requested);
+      if (
+        cleanedRequested &&
+        this.cleanCurrency(cleanedRequested) !== settlement.settlementCurrency
+      ) {
+        throw new BadRequestException(
+          'Confirmation cannot change the operational settlement currency',
+        );
+      }
+      return settlement.settlementCurrency;
+    }
+    return this.cleanCurrency(requested ?? settlement.currency);
+  }
+
+  private resolveConfirmationBankReference(
+    settlement: CedantSettlementRecord,
+    requested: string | undefined,
+  ): string | null {
+    if (settlement.bankReference) {
+      const cleanedRequested = this.cleanOptional(requested);
+      if (cleanedRequested && cleanedRequested !== settlement.bankReference) {
+        throw new BadRequestException(
+          'Confirmation cannot change the bank confirmation reference',
+        );
+      }
+      return settlement.bankReference;
+    }
+    return this.cleanOptional(requested);
+  }
+
+  private assertConfirmationFacts(input: {
+    settlementMethod: PlacementSettlementMethod;
+    bankReference: string | null;
+    operationalReference: string | null;
+    notes?: string;
+  }): void {
+    const referenceRequiredMethods: PlacementSettlementMethod[] = [
+      PlacementSettlementMethod.BANK_TRANSFER,
+      PlacementSettlementMethod.CHEQUE,
+      PlacementSettlementMethod.MOBILE_MONEY,
+    ];
+    const referenceRequired = referenceRequiredMethods.includes(
+      input.settlementMethod,
+    );
+    const hasReference = Boolean(
+      input.bankReference || input.operationalReference,
+    );
+    if (referenceRequired && !hasReference) {
+      throw new BadRequestException(
+        `${input.settlementMethod} confirmation requires a settlement reference`,
+      );
+    }
+    if (
+      input.settlementMethod === PlacementSettlementMethod.OTHER &&
+      !hasReference &&
+      !this.cleanOptional(input.notes)
+    ) {
+      throw new BadRequestException(
+        'OTHER settlement method requires either a reference or confirmation notes',
+      );
+    }
+  }
+
+  private assertFxFacts(
+    payableCurrency: string,
+    settlementCurrency: string,
+    exchangeRate: number | undefined,
+  ): void {
+    if (this.cleanCurrency(payableCurrency) === settlementCurrency) return;
+    if (!exchangeRate) {
+      throw new BadRequestException(
+        'Cross-currency cedant claim settlement requires a persisted agreed FX rate',
+      );
+    }
+  }
+
+  private appendConfirmationNotes(
+    existing: string | null,
+    confirmationNotes: string | undefined,
+  ): string | null {
+    const cleaned = this.cleanOptional(confirmationNotes);
+    if (!cleaned) return existing;
+    return existing
+      ? `${existing}\n\nAccounting confirmation: ${cleaned}`
+      : cleaned;
+  }
+
+  private optionalDecimalToNumber(
+    value: Prisma.Decimal | number | string | null | undefined,
+  ): number | undefined {
+    if (value === null || value === undefined) return undefined;
+    return this.money.toNumber(value);
   }
 
   private formatMoney(value: Prisma.Decimal | number | string): string {

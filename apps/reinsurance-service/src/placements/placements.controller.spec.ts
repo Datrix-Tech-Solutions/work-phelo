@@ -151,6 +151,7 @@ describe('PlacementsController', () => {
     approvePayable: jest.fn(),
     findAll: jest.fn(),
     create: jest.fn(),
+    confirmBankSettlement: jest.fn(),
     reverse: jest.fn(),
   };
   const claimRecoveryApprovalsService = {
@@ -160,6 +161,7 @@ describe('PlacementsController', () => {
   const claimRecoveryReceiptsService = {
     findAll: jest.fn(),
     create: jest.fn(),
+    confirmBankReceipt: jest.fn(),
     reverse: jest.fn(),
     getRecoveryPosition: jest.fn(),
   };
@@ -286,8 +288,10 @@ describe('PlacementsController', () => {
     ['approveClaimPayable', PlacementPermission.EDIT],
     ['approveClaimRecovery', PlacementPermission.EDIT],
     ['createClaimCedantSettlement', PlacementPermission.EDIT],
+    ['confirmClaimCedantSettlementBank', PlacementPermission.EDIT],
     ['reverseClaimCedantSettlement', PlacementPermission.EDIT],
     ['createClaimRecoveryReceipt', PlacementPermission.EDIT],
+    ['confirmClaimRecoveryReceiptBank', PlacementPermission.EDIT],
     ['reverseClaimRecoveryReceipt', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],
     ['voidNote', PlacementPermission.EDIT],
