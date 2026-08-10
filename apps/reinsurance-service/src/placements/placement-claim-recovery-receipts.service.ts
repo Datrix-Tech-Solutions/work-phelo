@@ -9,9 +9,12 @@ import {
   PlacementClaimCedantSettlementStatus,
   PlacementClaimCashCallStatus,
   PlacementClaimRecoveryReceiptStatus,
+  PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfirmPlacementClaimRecoveryReceiptBankDto } from './dto/confirm-placement-claim-recovery-receipt-bank.dto';
 import { CreatePlacementClaimRecoveryReceiptDto } from './dto/create-placement-claim-recovery-receipt.dto';
 import { ReversePlacementClaimRecoveryReceiptDto } from './dto/reverse-placement-claim-recovery-receipt.dto';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
@@ -44,6 +47,15 @@ const cashCallInclude = {
       id: true,
       allocatedEstimatedLossAmount: true,
       allocatedFinalLossAmount: true,
+      recoveryApprovals: {
+        select: {
+          id: true,
+          approvedAmount: true,
+          currency: true,
+          cashCallId: true,
+          counterpartyId: true,
+        },
+      },
     },
   },
   recoveryReceipts: {
@@ -79,6 +91,8 @@ export interface ClaimRecoveryPosition {
     totalAllocated: string;
     totalCashCalled: string;
     totalRecovered: string;
+    totalRecorded: string;
+    totalConfirmed: string;
     totalReversed: string;
     totalOutstanding: string;
   };
@@ -92,6 +106,8 @@ export interface ClaimRecoveryPosition {
     currency: string;
     calledAmount: string;
     recoveredAmount: string;
+    recordedAmount: string;
+    confirmedAmount: string;
     reversedAmount: string;
     outstandingAmount: string;
     recoveryStatus: ClaimRecoveryStatus;
@@ -120,6 +136,7 @@ export class PlacementClaimRecoveryReceiptsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly money: ReinsuranceMoneyHelper,
+    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async findAll(
@@ -164,12 +181,30 @@ export class PlacementClaimRecoveryReceiptsService {
               );
             }
 
+            const recoveryApproval = this.resolveRecoveryApproval(
+              cashCall,
+              dto,
+            );
             const position = this.calculateCashCallPosition(cashCall);
-            if (dto.amount > position.outstandingAmount) {
+            const operationalOutstanding =
+              recoveryApproval.approvedAmount -
+              position.operationalReceivedAmount;
+            if (dto.amount > operationalOutstanding) {
               throw new ConflictException(
-                'Recovery receipt amount cannot exceed the outstanding recovery balance',
+                'Recovery receipt amount cannot exceed the approved recovery balance',
               );
             }
+
+            const settlementCurrency =
+              this.resolveOperationalSettlementCurrency(
+                dto.settlementCurrency,
+                currency,
+              );
+            this.assertReceiptFxFacts(
+              currency,
+              settlementCurrency,
+              dto.agreedExchangeRate,
+            );
 
             return tx.placementClaimRecoveryReceipt.create({
               data: {
@@ -178,11 +213,15 @@ export class PlacementClaimRecoveryReceiptsService {
                 claimId: cashCall.claimId,
                 allocationId: cashCall.allocationId,
                 cashCallId: cashCall.id,
+                recoveryApprovalId: recoveryApproval.id,
                 counterpartyId: cashCall.counterpartyId,
                 currency,
                 amount: dto.amount,
                 paymentDate: new Date(dto.paymentDate),
                 reference: this.cleanOptional(dto.reference),
+                settlementMethod: dto.settlementMethod ?? null,
+                settlementCurrency,
+                agreedExchangeRate: dto.agreedExchangeRate ?? null,
                 notes: this.cleanOptional(dto.notes),
                 status: PlacementClaimRecoveryReceiptStatus.RECORDED,
                 createdByUserId: user.id,
@@ -206,6 +245,119 @@ export class PlacementClaimRecoveryReceiptsService {
     }
 
     throw new ConflictException('Could not record recovery receipt');
+  }
+
+  async confirmBankReceipt(
+    user: RequestUser,
+    placementId: string,
+    claimId: string,
+    receiptId: string,
+    dto: ConfirmPlacementClaimRecoveryReceiptBankDto,
+  ): Promise<RecoveryReceiptRecord> {
+    const receipt = await this.prisma.placementClaimRecoveryReceipt.findFirst({
+      where: {
+        id: receiptId,
+        tenantId: user.tenantId,
+        placementId,
+        claimId,
+      },
+      include: receiptInclude,
+    });
+    if (!receipt) {
+      throw new NotFoundException('Placement claim recovery receipt not found');
+    }
+    if (receipt.reversalOfReceiptId) {
+      throw new BadRequestException(
+        'Cannot financially confirm a reversal recovery receipt',
+      );
+    }
+    if (receipt.status === PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED) {
+      throw new ConflictException(
+        'Recovery receipt has already been financially confirmed',
+      );
+    }
+    if (receipt.status !== PlacementClaimRecoveryReceiptStatus.RECORDED) {
+      throw new BadRequestException(
+        `Cannot financially confirm a recovery receipt from ${receipt.status}`,
+      );
+    }
+
+    const settlementMethod = this.resolveConfirmationSettlementMethod(
+      receipt,
+      dto.settlementMethod,
+    );
+    const settlementCurrency = this.resolveConfirmationSettlementCurrency(
+      receipt,
+      dto.settlementCurrency,
+    );
+    const bankReference = this.resolveConfirmationBankReference(
+      receipt,
+      dto.bankReference,
+    );
+    const confirmedExchangeRate =
+      dto.confirmedExchangeRate ?? dto.agreedExchangeRate ?? undefined;
+    this.assertConfirmationFacts({
+      settlementMethod,
+      bankReference,
+      operationalReference: receipt.reference,
+      notes: dto.notes,
+    });
+    this.assertReceiptFxFacts(
+      receipt.currency,
+      settlementCurrency,
+      confirmedExchangeRate ??
+        this.optionalDecimalToNumber(receipt.agreedExchangeRate),
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.placementClaimRecoveryReceipt.updateMany({
+        where: {
+          id: receiptId,
+          tenantId: user.tenantId,
+          placementId,
+          claimId,
+          status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+        },
+        data: {
+          status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+          bankConfirmedAt: new Date(dto.bankConfirmedAt),
+          bankConfirmedByUserId: user.id,
+          settlementMethod,
+          settlementCurrency,
+          bankReference,
+          agreedExchangeRate:
+            confirmedExchangeRate ?? receipt.agreedExchangeRate,
+          bankChargeAmount: dto.bankChargeAmount ?? 0,
+          notes: this.appendConfirmationNotes(receipt.notes, dto.notes),
+        },
+      });
+
+      if (updateResult.count !== 1) {
+        throw new ConflictException(
+          'Recovery receipt could not be financially confirmed because its status changed',
+        );
+      }
+
+      const confirmed = await tx.placementClaimRecoveryReceipt.findFirst({
+        where: { id: receiptId, tenantId: user.tenantId, placementId, claimId },
+        include: receiptInclude,
+      });
+      if (!confirmed) {
+        throw new NotFoundException(
+          'Placement claim recovery receipt not found',
+        );
+      }
+
+      const event = await this.financialEvents.prepareClaimRecoveryReceived(
+        user,
+        confirmed,
+      );
+      if (event) {
+        await this.financialEvents.enqueuePreparedEvent(tx, event);
+      }
+
+      return confirmed;
+    });
   }
 
   async reverse(
@@ -252,27 +404,59 @@ export class PlacementClaimRecoveryReceiptsService {
               data: { status: PlacementClaimRecoveryReceiptStatus.REVERSED },
             });
 
-            return tx.placementClaimRecoveryReceipt.create({
+            const confirmedOriginal =
+              receipt.status ===
+              PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED;
+            const reversal = await tx.placementClaimRecoveryReceipt.create({
               data: {
                 tenantId: receipt.tenantId,
                 placementId: receipt.placementId,
                 claimId: receipt.claimId,
                 allocationId: receipt.allocationId,
                 cashCallId: receipt.cashCallId,
+                recoveryApprovalId: receipt.recoveryApprovalId,
                 counterpartyId: receipt.counterpartyId,
                 currency: receipt.currency,
-                amount: receipt.amount,
+                amount: receipt.amount.negated(),
                 paymentDate: new Date(),
                 reference: receipt.reference
                   ? `REVERSAL:${receipt.reference}`
+                  : `REVERSAL:${receipt.id}`,
+                settlementMethod: receipt.settlementMethod,
+                settlementCurrency: receipt.settlementCurrency,
+                bankReference: confirmedOriginal
+                  ? receipt.bankReference
+                    ? `REVERSAL:${receipt.bankReference}`
+                    : `REVERSAL:${receipt.id}`
                   : null,
+                bankConfirmedAt: confirmedOriginal ? new Date() : null,
+                bankConfirmedByUserId: confirmedOriginal ? user.id : null,
+                agreedExchangeRate: receipt.agreedExchangeRate,
+                bankChargeAmount: confirmedOriginal
+                  ? receipt.bankChargeAmount.negated()
+                  : 0,
                 notes: this.cleanOptional(dto.notes),
-                status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+                status: confirmedOriginal
+                  ? PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED
+                  : PlacementClaimRecoveryReceiptStatus.RECORDED,
                 reversalOfReceiptId: receipt.id,
                 createdByUserId: user.id,
               },
               include: receiptInclude,
             });
+
+            if (confirmedOriginal) {
+              const event =
+                await this.financialEvents.prepareClaimRecoveryReceiptReversed(
+                  user,
+                  reversal,
+                );
+              if (event) {
+                await this.financialEvents.enqueuePreparedEvent(tx, event);
+              }
+            }
+
+            return reversal;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
@@ -324,6 +508,8 @@ export class PlacementClaimRecoveryReceiptsService {
         currency: cashCall.currency,
         calledAmount: this.formatMoney(cashCall.amount),
         recoveredAmount: this.formatMoney(position.recoveredAmount),
+        recordedAmount: this.formatMoney(position.recordedAmount),
+        confirmedAmount: this.formatMoney(position.confirmedAmount),
         reversedAmount: this.formatMoney(position.reversedAmount),
         outstandingAmount: this.formatMoney(position.outstandingAmount),
         recoveryStatus: position.recoveryStatus,
@@ -349,6 +535,14 @@ export class PlacementClaimRecoveryReceiptsService {
     );
     const totalRecovered = perCashCall.reduce(
       (sum, row) => sum + Number(row.recoveredAmount),
+      0,
+    );
+    const totalRecorded = perCashCall.reduce(
+      (sum, row) => sum + Number(row.recordedAmount),
+      0,
+    );
+    const totalConfirmed = perCashCall.reduce(
+      (sum, row) => sum + Number(row.confirmedAmount),
       0,
     );
     const totalReversed = perCashCall.reduce(
@@ -394,6 +588,8 @@ export class PlacementClaimRecoveryReceiptsService {
         totalAllocated: this.formatMoney(totalAllocated),
         totalCashCalled: this.formatMoney(totalCashCalled),
         totalRecovered: this.formatMoney(totalRecovered),
+        totalRecorded: this.formatMoney(totalRecorded),
+        totalConfirmed: this.formatMoney(totalConfirmed),
         totalReversed: this.formatMoney(totalReversed),
         totalOutstanding: this.formatMoney(totalOutstanding),
       },
@@ -415,7 +611,12 @@ export class PlacementClaimRecoveryReceiptsService {
       where: {
         tenantId,
         cashCallId,
-        status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+        status: {
+          in: [
+            PlacementClaimRecoveryReceiptStatus.RECORDED,
+            PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+          ],
+        },
         reversalOfReceiptId: null,
       },
       select: { id: true },
@@ -474,32 +675,117 @@ export class PlacementClaimRecoveryReceiptsService {
     }
   }
 
+  private resolveRecoveryApproval(
+    cashCall: CashCallWithRecoveryRecords,
+    dto: CreatePlacementClaimRecoveryReceiptDto,
+  ): {
+    id: string;
+    approvedAmount: number;
+    currency: string;
+    cashCallId: string | null;
+    counterpartyId: string;
+  } {
+    const approvals = cashCall.allocation.recoveryApprovals.filter(
+      (approval) =>
+        approval.currency === cashCall.currency &&
+        approval.counterpartyId === cashCall.counterpartyId &&
+        (!approval.cashCallId || approval.cashCallId === cashCall.id),
+    );
+    if (approvals.length === 0) {
+      throw new ConflictException(
+        'Recovery receipt requires an approved claim recovery before cash can be recorded',
+      );
+    }
+
+    if (dto.recoveryApprovalId) {
+      const requested = approvals.find(
+        (approval) => approval.id === dto.recoveryApprovalId,
+      );
+      if (!requested) {
+        throw new NotFoundException(
+          'Placement claim recovery approval not found for this cash call',
+        );
+      }
+      return {
+        ...requested,
+        approvedAmount: this.money.toNumber(requested.approvedAmount),
+      };
+    }
+
+    if (approvals.length > 1) {
+      throw new BadRequestException(
+        'Recovery approval ID is required when multiple approved recoveries exist for this cash call',
+      );
+    }
+
+    const [approval] = approvals;
+    return {
+      ...approval,
+      approvedAmount: this.money.toNumber(approval.approvedAmount),
+    };
+  }
+
+  private approvedRecoveryAmount(
+    cashCall: CashCallWithRecoveryRecords,
+  ): number {
+    const approvals = cashCall.allocation.recoveryApprovals.filter(
+      (approval) =>
+        approval.currency === cashCall.currency &&
+        approval.counterpartyId === cashCall.counterpartyId &&
+        (!approval.cashCallId || approval.cashCallId === cashCall.id),
+    );
+    const approvedAmount = approvals.reduce(
+      (sum, approval) => sum + this.money.toNumber(approval.approvedAmount),
+      0,
+    );
+    return approvedAmount > 0
+      ? this.money.roundMoney(approvedAmount)
+      : this.money.toNumber(cashCall.amount);
+  }
+
   private calculateCashCallPosition(cashCall: CashCallWithRecoveryRecords) {
-    const calledAmount = this.money.toNumber(cashCall.amount);
     const isRecoverable = this.isRecoverableCashCallStatus(cashCall.status);
-    const activeReceipts = cashCall.recoveryReceipts.filter(
+    const recordedReceipts = cashCall.recoveryReceipts.filter(
       (receipt) =>
         receipt.status === PlacementClaimRecoveryReceiptStatus.RECORDED &&
+        !receipt.reversalOfReceiptId,
+    );
+    const confirmedReceipts = cashCall.recoveryReceipts.filter(
+      (receipt) =>
+        receipt.status === PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED &&
         !receipt.reversalOfReceiptId,
     );
     const reversalReceipts = cashCall.recoveryReceipts.filter(
       (receipt) => !!receipt.reversalOfReceiptId,
     );
-    const recoveredAmount = this.money.roundMoney(
-      activeReceipts.reduce(
+    const recordedAmount = this.money.roundMoney(
+      recordedReceipts.reduce(
         (sum, receipt) => sum + this.money.toNumber(receipt.amount),
         0,
       ),
     );
+    const confirmedAmount = this.money.roundMoney(
+      confirmedReceipts.reduce(
+        (sum, receipt) => sum + this.money.toNumber(receipt.amount),
+        0,
+      ),
+    );
+    const recoveredAmount = confirmedAmount;
     const reversedAmount = this.money.roundMoney(
       reversalReceipts.reduce(
-        (sum, receipt) => sum + this.money.toNumber(receipt.amount),
+        (sum, receipt) => sum + Math.abs(this.money.toNumber(receipt.amount)),
         0,
       ),
     );
+    const approvedAmount = this.approvedRecoveryAmount(cashCall);
     const outstandingAmount = Math.max(
       0,
-      this.money.roundMoney(isRecoverable ? calledAmount - recoveredAmount : 0),
+      this.money.roundMoney(
+        isRecoverable ? approvedAmount - confirmedAmount : 0,
+      ),
+    );
+    const operationalReceivedAmount = this.money.roundMoney(
+      recordedAmount + confirmedAmount,
     );
     const recoveryStatus: ClaimRecoveryStatus =
       recoveredAmount <= 0
@@ -510,8 +796,11 @@ export class PlacementClaimRecoveryReceiptsService {
 
     return {
       recoveredAmount,
+      recordedAmount,
+      confirmedAmount,
       reversedAmount,
       outstandingAmount,
+      operationalReceivedAmount,
       recoveryStatus,
     };
   }
@@ -523,6 +812,127 @@ export class PlacementClaimRecoveryReceiptsService {
       status === PlacementClaimCashCallStatus.ISSUED ||
       status === PlacementClaimCashCallStatus.PAID
     );
+  }
+
+  private resolveOperationalSettlementCurrency(
+    requested: string | undefined,
+    receiptCurrency: string,
+  ): string {
+    return this.cleanCurrency(requested ?? receiptCurrency);
+  }
+
+  private resolveConfirmationSettlementMethod(
+    receipt: RecoveryReceiptRecord,
+    requested: PlacementSettlementMethod | undefined,
+  ): PlacementSettlementMethod {
+    if (receipt.settlementMethod) {
+      if (requested && requested !== receipt.settlementMethod) {
+        throw new BadRequestException(
+          'Confirmation cannot change the operational settlement method',
+        );
+      }
+      return receipt.settlementMethod;
+    }
+    return requested ?? PlacementSettlementMethod.BANK_TRANSFER;
+  }
+
+  private resolveConfirmationSettlementCurrency(
+    receipt: RecoveryReceiptRecord,
+    requested: string | undefined,
+  ): string {
+    if (receipt.settlementCurrency) {
+      const cleanedRequested = this.cleanOptional(requested);
+      if (
+        cleanedRequested &&
+        this.cleanCurrency(cleanedRequested) !== receipt.settlementCurrency
+      ) {
+        throw new BadRequestException(
+          'Confirmation cannot change the operational settlement currency',
+        );
+      }
+      return receipt.settlementCurrency;
+    }
+    return this.cleanCurrency(requested ?? receipt.currency);
+  }
+
+  private resolveConfirmationBankReference(
+    receipt: RecoveryReceiptRecord,
+    requested: string | undefined,
+  ): string | null {
+    if (receipt.bankReference) {
+      const cleanedRequested = this.cleanOptional(requested);
+      if (cleanedRequested && cleanedRequested !== receipt.bankReference) {
+        throw new BadRequestException(
+          'Confirmation cannot change the bank confirmation reference',
+        );
+      }
+      return receipt.bankReference;
+    }
+    return this.cleanOptional(requested);
+  }
+
+  private assertConfirmationFacts(input: {
+    settlementMethod: PlacementSettlementMethod;
+    bankReference: string | null;
+    operationalReference: string | null;
+    notes?: string;
+  }): void {
+    const referenceRequiredMethods: PlacementSettlementMethod[] = [
+      PlacementSettlementMethod.BANK_TRANSFER,
+      PlacementSettlementMethod.CHEQUE,
+      PlacementSettlementMethod.MOBILE_MONEY,
+    ];
+    const referenceRequired = referenceRequiredMethods.includes(
+      input.settlementMethod,
+    );
+    const hasReference = Boolean(
+      input.bankReference || input.operationalReference,
+    );
+    if (referenceRequired && !hasReference) {
+      throw new BadRequestException(
+        `${input.settlementMethod} confirmation requires a settlement reference`,
+      );
+    }
+    if (
+      input.settlementMethod === PlacementSettlementMethod.OTHER &&
+      !hasReference &&
+      !this.cleanOptional(input.notes)
+    ) {
+      throw new BadRequestException(
+        'OTHER settlement method requires either a reference or confirmation notes',
+      );
+    }
+  }
+
+  private assertReceiptFxFacts(
+    receiptCurrency: string,
+    settlementCurrency: string,
+    exchangeRate: number | undefined,
+  ): void {
+    if (this.cleanCurrency(receiptCurrency) === settlementCurrency) return;
+    if (!exchangeRate) {
+      throw new BadRequestException(
+        'Cross-currency claim recovery receipt requires a persisted agreed FX rate',
+      );
+    }
+  }
+
+  private appendConfirmationNotes(
+    existing: string | null,
+    confirmationNotes: string | undefined,
+  ): string | null {
+    const cleaned = this.cleanOptional(confirmationNotes);
+    if (!cleaned) return existing;
+    return existing
+      ? `${existing}\n\nAccounting confirmation: ${cleaned}`
+      : cleaned;
+  }
+
+  private optionalDecimalToNumber(
+    value: Prisma.Decimal | number | string | null | undefined,
+  ): number | undefined {
+    if (value === null || value === undefined) return undefined;
+    return this.money.toNumber(value);
   }
 
   private formatMoney(value: Prisma.Decimal | number | string): string {

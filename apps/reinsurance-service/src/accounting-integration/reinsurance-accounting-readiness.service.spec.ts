@@ -8,6 +8,7 @@ import {
   PlacementPaymentStatus,
   PlacementPaymentType,
   PlacementSettlementMethod,
+  PlacementClaimRecoveryReceiptStatus,
   Prisma,
   ReinsuranceAccountingOutboxStatus,
 } from '../../prisma/generated/client';
@@ -31,6 +32,10 @@ describe('ReinsuranceAccountingReadinessService', () => {
     where?: Record<string, unknown>;
   };
   type ClaimRecoveryApprovalFindManyArg = {
+    take?: number;
+    where?: Record<string, unknown>;
+  };
+  type ClaimRecoveryReceiptFindManyArg = {
     take?: number;
     where?: Record<string, unknown>;
   };
@@ -330,6 +335,48 @@ describe('ReinsuranceAccountingReadinessService', () => {
       registrationNumber: null,
     },
   };
+  const claimRecoveryReceipt = {
+    id: 'recovery-receipt-1',
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    claimId: 'claim-1',
+    allocationId: 'allocation-1',
+    cashCallId: 'cash-call-1',
+    recoveryApprovalId: 'recovery-approval-1',
+    counterpartyId: 'reinsurer-1',
+    currency: 'GHS',
+    amount: new Prisma.Decimal('40000.00'),
+    paymentDate: new Date('2026-08-10T10:00:00.000Z'),
+    reference: 'REC-001',
+    settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+    settlementCurrency: 'GHS',
+    agreedExchangeRate: null,
+    status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+    reversalOfReceiptId: null,
+    bankConfirmedAt: null,
+    createdAt: new Date('2026-08-10T10:00:00.000Z'),
+    placement: {
+      id: 'placement-1',
+      reference: 'FAC-001',
+      policyNumber: 'POL-001',
+      title: 'Factory Fire Risk',
+    },
+    claim: {
+      id: 'claim-1',
+      claimNumber: 'CLM-001',
+    },
+    counterparty: {
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+      name: 'Reliable Re',
+      registrationNumber: null,
+    },
+  };
+  const bankConfirmedRecoveryReceipt = {
+    ...claimRecoveryReceipt,
+    status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+    bankConfirmedAt: new Date('2026-08-10T12:00:00.000Z'),
+  };
 
   const makeService = (
     notes: unknown[] = [issuedNote],
@@ -337,6 +384,7 @@ describe('ReinsuranceAccountingReadinessService', () => {
     payments: unknown[] = [payment],
     approvals: unknown[] = [claimPayableApproval],
     recoveryApprovals: unknown[] = [claimRecoveryApproval],
+    recoveryReceipts: unknown[] = [],
   ) => {
     const prisma: {
       placementNote: {
@@ -355,6 +403,12 @@ describe('ReinsuranceAccountingReadinessService', () => {
         findMany: jest.Mock<
           Promise<unknown[]>,
           [ClaimRecoveryApprovalFindManyArg]
+        >;
+      };
+      placementClaimRecoveryReceipt: {
+        findMany: jest.Mock<
+          Promise<unknown[]>,
+          [ClaimRecoveryReceiptFindManyArg]
         >;
       };
       reinsuranceAccountingOutbox: { findMany: jest.Mock };
@@ -379,6 +433,11 @@ describe('ReinsuranceAccountingReadinessService', () => {
         findMany: jest
           .fn<Promise<unknown[]>, [ClaimRecoveryApprovalFindManyArg]>()
           .mockResolvedValue(recoveryApprovals),
+      },
+      placementClaimRecoveryReceipt: {
+        findMany: jest
+          .fn<Promise<unknown[]>, [ClaimRecoveryReceiptFindManyArg]>()
+          .mockResolvedValue(recoveryReceipts),
       },
       reinsuranceAccountingOutbox: {
         findMany: jest.fn().mockResolvedValue(existingOutbox),
@@ -513,6 +572,30 @@ describe('ReinsuranceAccountingReadinessService', () => {
         occurredAt: '2026-07-31T10:00:00.000Z',
         currency: 'GHS',
         payload: { amounts: { approvedRecoveryAmount: 40000 } },
+      }),
+      prepareClaimRecoveryReceived: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_RECOVERY_RECEIVED',
+        sourceRecordType: 'PlacementClaimRecoveryReceipt',
+        sourceRecordId: 'recovery-receipt-1',
+        sourceDocumentId: 'claim-1',
+        idempotencyKey:
+          'reinsurance:claim-recovery-receipt:recovery-receipt-1:confirmed:v1',
+        occurredAt: '2026-08-10T12:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { receiptAmount: 40000 } },
+      }),
+      prepareClaimRecoveryReceiptReversed: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
+        sourceRecordType: 'PlacementClaimRecoveryReceipt',
+        sourceRecordId: 'recovery-receipt-reversal-1',
+        sourceDocumentId: 'recovery-receipt-1',
+        idempotencyKey:
+          'reinsurance:claim-recovery-receipt:recovery-receipt-reversal-1:reversal:v1',
+        occurredAt: '2026-08-10T12:30:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { reversalAmount: 40000 } },
       }),
       enqueuePreparedEvent: jest.fn().mockResolvedValue({
         id: 'outbox-1',
@@ -1425,6 +1508,115 @@ describe('ReinsuranceAccountingReadinessService', () => {
           approvalId: 'recovery-approval-1',
           status: 'ENQUEUED',
           outboxId: 'outbox-1',
+        }),
+      ],
+    });
+  });
+
+  it('lists recorded claim recovery receipts awaiting Accounting confirmation', async () => {
+    const { prisma, service } = makeService(
+      [],
+      [],
+      [],
+      [],
+      [],
+      [claimRecoveryReceipt],
+    );
+
+    const result =
+      await service.findPendingClaimRecoveryReceiptConfirmations(user);
+
+    const findManyArg =
+      prisma.placementClaimRecoveryReceipt.findMany.mock.calls[0]?.[0];
+    expect(findManyArg?.where).toMatchObject({
+      tenantId: 'tenant-1',
+      status: PlacementClaimRecoveryReceiptStatus.RECORDED,
+      reversalOfReceiptId: null,
+      placement: { archivedAt: null },
+    });
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PlacementClaimRecoveryReceipt',
+        sourceRecordId: 'recovery-receipt-1',
+        action: 'CONFIRM_BANK_RECEIPT',
+        direction: 'INBOUND',
+        amount: '40000',
+        currency: 'GHS',
+      }),
+    ]);
+  });
+
+  it('dry-runs bank-confirmed claim recovery receipts missing outbox rows', async () => {
+    const { financialEvents, service } = makeService(
+      [],
+      [],
+      [],
+      [],
+      [],
+      [bankConfirmedRecoveryReceipt],
+    );
+
+    const result = await service.reconcileClaimRecoveryReceivedEvents(user, {
+      dryRun: true,
+    });
+
+    expect(result).toMatchObject({
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          receiptId: 'recovery-receipt-1',
+          status: 'MISSING',
+          idempotencyKey:
+            'reinsurance:claim-recovery-receipt:recovery-receipt-1:confirmed:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.prepareClaimRecoveryReceived).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing claim recovery receipt reversal events', async () => {
+    const reversalReceipt = {
+      ...bankConfirmedRecoveryReceipt,
+      id: 'recovery-receipt-reversal-1',
+      reversalOfReceiptId: 'recovery-receipt-1',
+      amount: new Prisma.Decimal('-40000.00'),
+      bankConfirmedAt: new Date('2026-08-10T12:30:00.000Z'),
+    };
+    const { financialEvents, service } = makeService(
+      [],
+      [],
+      [],
+      [],
+      [],
+      [reversalReceipt],
+    );
+
+    const result = await service.reconcileClaimRecoveryReceiptReversedEvents(
+      user,
+      { dryRun: false },
+    );
+
+    expect(
+      financialEvents.prepareClaimRecoveryReceiptReversed,
+    ).toHaveBeenCalledWith(user, reversalReceipt);
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        sourceEventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
+        idempotencyKey:
+          'reinsurance:claim-recovery-receipt:recovery-receipt-reversal-1:reversal:v1',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          receiptId: 'recovery-receipt-reversal-1',
+          status: 'ENQUEUED',
         }),
       ],
     });

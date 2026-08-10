@@ -159,6 +159,8 @@ Active Reinsurance event families include:
 - `REINSURER_DISBURSEMENT_REVERSED`
 - `CLAIM_PAYABLE_APPROVED`
 - `CLAIM_RECOVERY_APPROVED`
+- `CLAIM_RECOVERY_RECEIVED`
+- `CLAIM_RECOVERY_RECEIPT_REVERSED`
 
 Accounting owns posting rules, journal creation, fiscal period validation and
 financial confirmation queues. Reinsurance publishes business facts only.

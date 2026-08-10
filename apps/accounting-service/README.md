@@ -71,7 +71,7 @@ Reinsurance is currently the first operational source-module integration. Active
 source-event families include issued debit/credit notes, endorsement notes,
 premium receipts and reversals, bank-confirmed reinsurer disbursements and
 reversals, claim-level payable approvals and allocation-level claim recovery
-approvals.
+approvals, plus bank-confirmed claim recovery receipts and reversals.
 
 ### Active Reinsurance AR/AP Matrix
 
@@ -87,6 +87,8 @@ approvals.
 | `REINSURER_DISBURSEMENT_REVERSED` | Reversal row creation time                       | Reinsurer disbursement reversal                   |
 | `CLAIM_PAYABLE_APPROVED`          | Broker claim-level payable approval time         | Approved Cedant claim payable                     |
 | `CLAIM_RECOVERY_APPROVED`         | Formal per-allocation recovery approval time     | Approved Reinsurer recovery receivable            |
+| `CLAIM_RECOVERY_RECEIVED`         | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer claim recovery receipt        |
+| `CLAIM_RECOVERY_RECEIPT_REVERSED` | Reversal row creation time                       | Claim recovery receipt reversal                   |
 
 Operational Reinsurance payments can be recorded before Accounting recognition.
 No Accounting outbox event is created at that point for bank-confirmed
