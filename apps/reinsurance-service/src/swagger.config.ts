@@ -63,9 +63,11 @@ explicitly from immutable CONFIRMED placement and endorsement closing snapshots
 to calculate reinsurer liability. Claim cash calls are generated one per
 allocation from those allocation snapshots. Phase 1 claim payable approval is a
 claim-level broker confirmation after required reinsurer approvals have been
-obtained externally; it is not an allocation-level approval workflow. Recovery
-receipts and cedant settlements are modeled operationally, while additional
-claim accounting events remain policy-gated unless explicitly activated.
+obtained externally; it is not an allocation-level approval workflow. Claim
+recovery approvals are allocation-level Reinsurer receivable recognition records
+and remain separate from cash calls and recovery receipts. Recovery receipts and
+cedant settlements are modeled operationally, while additional claim accounting
+events remain policy-gated unless explicitly activated.
 
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
@@ -97,8 +99,8 @@ idempotency keys, transactional outbox rows, automatic dispatcher/retry support,
 reconciliation endpoints and signed internal transport. Active Reinsurance
 events include issued debit/credit notes, endorsement notes, premium receipts
 and reversals, bank-confirmed reinsurer disbursements and reversals, and
-claim-level payable approvals. Policy-gated Claims events must not be described
-as active until implemented.
+claim-level payable approvals plus allocation-level claim recovery approvals.
+Policy-gated Claims events must not be described as active until implemented.
 
 Documentation is exposed only when \`ENABLE_SWAGGER=true\`; the deployment
 pipeline enables it for development only.
@@ -166,6 +168,10 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Claim Cash Calls',
       'Cash calls generated one-per-claim-allocation from allocation snapshots',
+    )
+    .addTag(
+      'Reinsurance - Claim Recoveries',
+      'Claim recovery approvals, recovery position, cash-call receipts and receipt reversal endpoints',
     )
     .addTag(
       'Reinsurance - Documents',

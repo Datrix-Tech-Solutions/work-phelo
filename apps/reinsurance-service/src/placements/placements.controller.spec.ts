@@ -17,6 +17,7 @@ import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
 import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
+import { PlacementClaimRecoveryApprovalsService } from './placement-claim-recovery-approvals.service';
 import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recovery-receipts.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementClosingsService } from './placement-closings.service';
@@ -152,6 +153,10 @@ describe('PlacementsController', () => {
     create: jest.fn(),
     reverse: jest.fn(),
   };
+  const claimRecoveryApprovalsService = {
+    findAll: jest.fn(),
+    approve: jest.fn(),
+  };
   const claimRecoveryReceiptsService = {
     findAll: jest.fn(),
     create: jest.fn(),
@@ -181,6 +186,7 @@ describe('PlacementsController', () => {
       claimsService as unknown as PlacementClaimsService,
       claimCashCallsService as unknown as PlacementClaimCashCallsService,
       claimCedantSettlementsService as unknown as PlacementClaimCedantSettlementsService,
+      claimRecoveryApprovalsService as unknown as PlacementClaimRecoveryApprovalsService,
       claimRecoveryReceiptsService as unknown as PlacementClaimRecoveryReceiptsService,
     );
 
@@ -227,6 +233,7 @@ describe('PlacementsController', () => {
     ['findClaimCashCall', PlacementPermission.VIEW],
     ['findClaimCedantSettlements', PlacementPermission.VIEW],
     ['getClaimRecoveryPosition', PlacementPermission.VIEW],
+    ['findClaimRecoveryApprovals', PlacementPermission.VIEW],
     ['findClaimRecoveryReceipts', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
     ['createEndorsement', PlacementPermission.CREATE],
@@ -277,6 +284,7 @@ describe('PlacementsController', () => {
     ['changeClaimCashCallStatus', PlacementPermission.EDIT],
     ['voidClaimCashCall', PlacementPermission.EDIT],
     ['approveClaimPayable', PlacementPermission.EDIT],
+    ['approveClaimRecovery', PlacementPermission.EDIT],
     ['createClaimCedantSettlement', PlacementPermission.EDIT],
     ['reverseClaimCedantSettlement', PlacementPermission.EDIT],
     ['createClaimRecoveryReceipt', PlacementPermission.EDIT],
@@ -1268,6 +1276,38 @@ describe('PlacementsController', () => {
       'claim-1',
       'cash-call-1',
       expect.objectContaining({ voidReason: 'Replacement required' }),
+    );
+  });
+
+  it('delegates claim recovery approval reads and mutations with authenticated context', async () => {
+    const controller = createController();
+    claimRecoveryApprovalsService.findAll.mockResolvedValue([]);
+
+    const list = await controller.findClaimRecoveryApprovals(
+      'placement-1',
+      'claim-1',
+      { user } as never,
+    );
+    await controller.approveClaimRecovery(
+      'placement-1',
+      'claim-1',
+      'allocation-1',
+      { approvedAmount: 40000, currency: 'GHS' },
+      { user } as never,
+    );
+
+    expect(claimRecoveryApprovalsService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+    );
+    expect(list).toEqual({ items: [] });
+    expect(claimRecoveryApprovalsService.approve).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'claim-1',
+      'allocation-1',
+      expect.objectContaining({ approvedAmount: 40000, currency: 'GHS' }),
     );
   });
 
