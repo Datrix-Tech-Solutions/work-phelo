@@ -59,6 +59,9 @@ const cashbookInclude = {
     },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
+  offsetSubledgerAccount: {
+    select: { id: true, code: true, name: true, type: true },
+  },
   postedJournalEntry: {
     select: { id: true, journalNumber: true, status: true, postedAt: true },
   },
@@ -341,59 +344,67 @@ export class CashbookService {
   }
 
   async postTransaction(user: RequestUser, transactionId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const transaction = await this.findTransactionForUpdate(
-        tx,
-        user.tenantId,
-        transactionId,
-      );
-      if (transaction.status !== CashbookTransactionStatus.DRAFT) {
-        throw new ConflictException(
-          'Only draft cashbook transactions can be posted',
-        );
-      }
+    return this.prisma.$transaction((tx) =>
+      this.postTransactionInTransaction(tx, user, transactionId),
+    );
+  }
 
-      const journal = await this.journals.createPostedInTransaction(
-        tx,
-        user,
-        await this.buildJournalDto(tx, user.tenantId, transaction),
+  async postTransactionInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    transactionId: string,
+  ) {
+    const transaction = await this.findTransactionForUpdate(
+      tx,
+      user.tenantId,
+      transactionId,
+    );
+    if (transaction.status !== CashbookTransactionStatus.DRAFT) {
+      throw new ConflictException(
+        'Only draft cashbook transactions can be posted',
       );
-      const claimed = await tx.cashbookTransaction.updateMany({
-        where: {
-          id: transaction.id,
-          tenantId: user.tenantId,
-          status: CashbookTransactionStatus.DRAFT,
+    }
+
+    const journal = await this.journals.createPostedInTransaction(
+      tx,
+      user,
+      await this.buildJournalDto(tx, user.tenantId, transaction),
+    );
+    const claimed = await tx.cashbookTransaction.updateMany({
+      where: {
+        id: transaction.id,
+        tenantId: user.tenantId,
+        status: CashbookTransactionStatus.DRAFT,
+      },
+      data: {
+        status: CashbookTransactionStatus.POSTED,
+        postedAt: new Date(),
+        postedByUserId: user.id,
+        postedJournalEntryId: journal.id,
+        updatedByUserId: user.id,
+      },
+    });
+    if (claimed.count !== 1) {
+      throw new ConflictException(
+        'Cashbook transaction was changed by another request',
+      );
+    }
+    await tx.accountingAuditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: 'CASHBOOK_TRANSACTION_POSTED',
+        entityType: 'CashbookTransaction',
+        entityId: transaction.id,
+        changedFields: {
+          journalEntryId: journal.id,
+          journalNumber: journal.journalNumber,
         },
-        data: {
-          status: CashbookTransactionStatus.POSTED,
-          postedAt: new Date(),
-          postedByUserId: user.id,
-          postedJournalEntryId: journal.id,
-          updatedByUserId: user.id,
-        },
-      });
-      if (claimed.count !== 1) {
-        throw new ConflictException(
-          'Cashbook transaction was changed by another request',
-        );
-      }
-      await tx.accountingAuditLog.create({
-        data: {
-          tenantId: user.tenantId,
-          actorUserId: user.id,
-          action: 'CASHBOOK_TRANSACTION_POSTED',
-          entityType: 'CashbookTransaction',
-          entityId: transaction.id,
-          changedFields: {
-            journalEntryId: journal.id,
-            journalNumber: journal.journalNumber,
-          },
-        },
-      });
-      return tx.cashbookTransaction.findUniqueOrThrow({
-        where: { id_tenantId: { id: transaction.id, tenantId: user.tenantId } },
-        include: cashbookInclude,
-      });
+      },
+    });
+    return tx.cashbookTransaction.findUniqueOrThrow({
+      where: { id_tenantId: { id: transaction.id, tenantId: user.tenantId } },
+      include: cashbookInclude,
     });
   }
 
@@ -402,168 +413,175 @@ export class CashbookService {
     transactionId: string,
     dto: ReverseCashbookTransactionDto,
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      const transaction = await this.findTransactionForUpdate(
-        tx,
-        user.tenantId,
-        transactionId,
+    return this.prisma.$transaction((tx) =>
+      this.reverseTransactionInTransaction(tx, user, transactionId, dto),
+    );
+  }
+
+  async reverseTransactionInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    transactionId: string,
+    dto: ReverseCashbookTransactionDto,
+  ) {
+    const transaction = await this.findTransactionForUpdate(
+      tx,
+      user.tenantId,
+      transactionId,
+    );
+    if (transaction.status !== CashbookTransactionStatus.POSTED) {
+      throw new ConflictException(
+        'Only posted cashbook transactions can be reversed',
       );
-      if (transaction.status !== CashbookTransactionStatus.POSTED) {
-        throw new ConflictException(
-          'Only posted cashbook transactions can be reversed',
-        );
-      }
-      if (
-        !transaction.postedJournalEntryId ||
-        !transaction.postedJournalEntry
-      ) {
-        throw new ConflictException(
-          'Posted cashbook transaction is missing its posted journal',
-        );
-      }
-      if (transaction.reversalTransaction) {
-        return tx.cashbookTransaction.findUniqueOrThrow({
-          where: {
-            id_tenantId: {
-              id: transaction.reversalTransaction.id,
-              tenantId: user.tenantId,
-            },
+    }
+    if (!transaction.postedJournalEntryId || !transaction.postedJournalEntry) {
+      throw new ConflictException(
+        'Posted cashbook transaction is missing its posted journal',
+      );
+    }
+    if (transaction.reversalTransaction) {
+      return tx.cashbookTransaction.findUniqueOrThrow({
+        where: {
+          id_tenantId: {
+            id: transaction.reversalTransaction.id,
+            tenantId: user.tenantId,
           },
-          include: cashbookInclude,
-        });
-      }
-
-      const reversalDate = new Date(dto.reversalDate);
-      const period = await this.resolveOpenPeriod(
-        tx,
-        user.tenantId,
-        reversalDate,
-      );
-      const originalJournal = await tx.journalEntry.findFirst({
-        where: {
-          id: transaction.postedJournalEntryId,
-          tenantId: user.tenantId,
-          status: JournalStatus.POSTED,
-        },
-        include: { lines: { orderBy: { lineNumber: 'asc' } } },
-      });
-      if (!originalJournal) {
-        throw new ConflictException(
-          'Original posted journal is not available for reversal',
-        );
-      }
-
-      const reversalJournal = await this.journals.createPostedInTransaction(
-        tx,
-        user,
-        {
-          transactionDate: reversalDate.toISOString(),
-          fiscalPeriodId: period.id,
-          transactionCurrency: originalJournal.transactionCurrency,
-          exchangeRate: Number(originalJournal.exchangeRate.toString()),
-          reference: `REVERSAL-${transaction.reference ?? transaction.id}`,
-          description: `Cashbook reversal of ${transaction.reference ?? transaction.id}: ${dto.reason}`,
-          idempotencyKey: `cashbook:${transaction.id}:reversal:v1`,
-          sourceModule: 'ACCOUNTING',
-          sourceRecordType: 'CASHBOOK_REVERSAL',
-          sourceRecordId: transaction.id,
-          lines: originalJournal.lines.map((line) => ({
-            glAccountId: line.glAccountId,
-            subledgerAccountId: line.subledgerAccountId ?? undefined,
-            costCentreId: line.costCentreId ?? undefined,
-            description: line.description ?? undefined,
-            debit: Number(line.transactionCredit.toString()),
-            credit: Number(line.transactionDebit.toString()),
-          })),
-        },
-      );
-
-      const journalClaimed = await tx.journalEntry.updateMany({
-        where: {
-          id: originalJournal.id,
-          tenantId: user.tenantId,
-          status: JournalStatus.POSTED,
-        },
-        data: {
-          status: JournalStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          updatedByUserId: user.id,
-        },
-      });
-      if (journalClaimed.count !== 1) {
-        throw new ConflictException(
-          'Original journal was changed by another request',
-        );
-      }
-
-      const reversal = await tx.cashbookTransaction.create({
-        data: {
-          tenantId: user.tenantId,
-          cashAccountId: this.reversalCashAccountId(transaction),
-          destinationCashAccountId:
-            this.reversalDestinationCashAccountId(transaction),
-          transactionType: transaction.transactionType,
-          direction: this.reversalDirection(transaction.direction),
-          amount: transaction.amount,
-          currency: transaction.currency,
-          transactionDate: reversalDate,
-          settlementMethod: transaction.settlementMethod,
-          reference: `REVERSAL-${transaction.reference ?? transaction.id}`,
-          counterpartyType: transaction.counterpartyType,
-          counterpartyId: transaction.counterpartyId,
-          externalReference: transaction.externalReference,
-          description: `Reversal: ${dto.reason}`,
-          offsetGlAccountId: transaction.offsetGlAccountId,
-          sourceModule: transaction.sourceModule,
-          sourceRecordId: transaction.sourceRecordId,
-          exchangeRate: transaction.exchangeRate,
-          status: CashbookTransactionStatus.POSTED,
-          createdByUserId: user.id,
-          updatedByUserId: user.id,
-          postedByUserId: user.id,
-          postedAt: new Date(),
-          postedJournalEntryId: reversalJournal.id,
-          reversalOfTransactionId: transaction.id,
         },
         include: cashbookInclude,
       });
+    }
 
-      const claimed = await tx.cashbookTransaction.updateMany({
-        where: {
-          id: transaction.id,
-          tenantId: user.tenantId,
-          status: CashbookTransactionStatus.POSTED,
-        },
-        data: {
-          status: CashbookTransactionStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          reversalJournalEntryId: reversalJournal.id,
-          updatedByUserId: user.id,
-        },
-      });
-      if (claimed.count !== 1) {
-        throw new ConflictException(
-          'Cashbook transaction was changed by another request',
-        );
-      }
-      await tx.accountingAuditLog.create({
-        data: {
-          tenantId: user.tenantId,
-          actorUserId: user.id,
-          action: 'CASHBOOK_TRANSACTION_REVERSED',
-          entityType: 'CashbookTransaction',
-          entityId: transaction.id,
-          changedFields: {
-            reversalTransactionId: reversal.id,
-            reversalJournalEntryId: reversalJournal.id,
-            reason: dto.reason,
-          },
-        },
-      });
-      return reversal;
+    const reversalDate = new Date(dto.reversalDate);
+    const period = await this.resolveOpenPeriod(
+      tx,
+      user.tenantId,
+      reversalDate,
+    );
+    const originalJournal = await tx.journalEntry.findFirst({
+      where: {
+        id: transaction.postedJournalEntryId,
+        tenantId: user.tenantId,
+        status: JournalStatus.POSTED,
+      },
+      include: { lines: { orderBy: { lineNumber: 'asc' } } },
     });
+    if (!originalJournal) {
+      throw new ConflictException(
+        'Original posted journal is not available for reversal',
+      );
+    }
+
+    const reversalJournal = await this.journals.createPostedInTransaction(
+      tx,
+      user,
+      {
+        transactionDate: reversalDate.toISOString(),
+        fiscalPeriodId: period.id,
+        transactionCurrency: originalJournal.transactionCurrency,
+        exchangeRate: Number(originalJournal.exchangeRate.toString()),
+        reference: `REVERSAL-${transaction.reference ?? transaction.id}`,
+        description: `Cashbook reversal of ${transaction.reference ?? transaction.id}: ${dto.reason}`,
+        idempotencyKey: `cashbook:${transaction.id}:reversal:v1`,
+        sourceModule: 'ACCOUNTING',
+        sourceRecordType: 'CASHBOOK_REVERSAL',
+        sourceRecordId: transaction.id,
+        lines: originalJournal.lines.map((line) => ({
+          glAccountId: line.glAccountId,
+          subledgerAccountId: line.subledgerAccountId ?? undefined,
+          costCentreId: line.costCentreId ?? undefined,
+          description: line.description ?? undefined,
+          debit: Number(line.transactionCredit.toString()),
+          credit: Number(line.transactionDebit.toString()),
+        })),
+      },
+    );
+
+    const journalClaimed = await tx.journalEntry.updateMany({
+      where: {
+        id: originalJournal.id,
+        tenantId: user.tenantId,
+        status: JournalStatus.POSTED,
+      },
+      data: {
+        status: JournalStatus.REVERSED,
+        reversedAt: new Date(),
+        reversedByUserId: user.id,
+        updatedByUserId: user.id,
+      },
+    });
+    if (journalClaimed.count !== 1) {
+      throw new ConflictException(
+        'Original journal was changed by another request',
+      );
+    }
+
+    const reversal = await tx.cashbookTransaction.create({
+      data: {
+        tenantId: user.tenantId,
+        cashAccountId: this.reversalCashAccountId(transaction),
+        destinationCashAccountId:
+          this.reversalDestinationCashAccountId(transaction),
+        transactionType: transaction.transactionType,
+        direction: this.reversalDirection(transaction.direction),
+        amount: transaction.amount,
+        currency: transaction.currency,
+        transactionDate: reversalDate,
+        settlementMethod: transaction.settlementMethod,
+        reference: `REVERSAL-${transaction.reference ?? transaction.id}`,
+        counterpartyType: transaction.counterpartyType,
+        counterpartyId: transaction.counterpartyId,
+        externalReference: transaction.externalReference,
+        description: `Reversal: ${dto.reason}`,
+        offsetGlAccountId: transaction.offsetGlAccountId,
+        offsetSubledgerAccountId: transaction.offsetSubledgerAccountId,
+        sourceModule: transaction.sourceModule,
+        sourceRecordId: transaction.sourceRecordId,
+        exchangeRate: transaction.exchangeRate,
+        status: CashbookTransactionStatus.POSTED,
+        createdByUserId: user.id,
+        updatedByUserId: user.id,
+        postedByUserId: user.id,
+        postedAt: new Date(),
+        postedJournalEntryId: reversalJournal.id,
+        reversalOfTransactionId: transaction.id,
+      },
+      include: cashbookInclude,
+    });
+
+    const claimed = await tx.cashbookTransaction.updateMany({
+      where: {
+        id: transaction.id,
+        tenantId: user.tenantId,
+        status: CashbookTransactionStatus.POSTED,
+      },
+      data: {
+        status: CashbookTransactionStatus.REVERSED,
+        reversedAt: new Date(),
+        reversedByUserId: user.id,
+        reversalJournalEntryId: reversalJournal.id,
+        updatedByUserId: user.id,
+      },
+    });
+    if (claimed.count !== 1) {
+      throw new ConflictException(
+        'Cashbook transaction was changed by another request',
+      );
+    }
+    await tx.accountingAuditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: 'CASHBOOK_TRANSACTION_REVERSED',
+        entityType: 'CashbookTransaction',
+        entityId: transaction.id,
+        changedFields: {
+          reversalTransactionId: reversal.id,
+          reversalJournalEntryId: reversalJournal.id,
+          reason: dto.reason,
+        },
+      },
+    });
+    return reversal;
   }
 
   private async createCashbookEntry(
@@ -598,8 +616,10 @@ export class CashbookService {
         externalReference: this.optional(dto.externalReference),
         description: dto.description,
         offsetGlAccountId: dto.offsetGlAccountId,
+        offsetSubledgerAccountId: dto.offsetSubledgerAccountId,
         sourceModule: this.optional(dto.sourceModule),
         sourceRecordId: this.optional(dto.sourceRecordId),
+        exchangeRate: dto.exchangeRate,
         createdByUserId: user.id,
         updatedByUserId: user.id,
       },
@@ -656,6 +676,7 @@ export class CashbookService {
     const offsetLine = transaction.offsetGlAccountId
       ? {
           glAccountId: transaction.offsetGlAccountId,
+          subledgerAccountId: transaction.offsetSubledgerAccountId ?? undefined,
           description: transaction.description,
         }
       : null;

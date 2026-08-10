@@ -182,6 +182,27 @@ export class CashbookEntryDto {
   @IsUUID()
   offsetGlAccountId!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Optional subledger account for offset control-account postings such as customer AR receipts.',
+  })
+  @IsOptional()
+  @IsUUID()
+  offsetSubledgerAccountId?: string;
+
+  @ApiPropertyOptional({
+    example: 1.25,
+    minimum: 0.00000001,
+    description:
+      'Agreed FX rate used when the cashbook transaction currency differs from the tenant base currency.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.00000001)
+  exchangeRate?: number;
+
   @ApiPropertyOptional({ example: 'CRM' })
   @IsOptional()
   @Transform(uppercase)
