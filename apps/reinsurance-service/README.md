@@ -129,13 +129,16 @@ Claim -> Claim Payable Approval -> Accounting Event
 ```
 
 It does not store one approval per participating reinsurer. Allocation-level
-approval remains future work:
+recovery approval is implemented separately for Reinsurer receivable recognition:
 
 ```text
-Claim -> Allocation Approval -> Derived Claim Payable Approval
+Claim Allocation -> Claim Recovery Approval -> Accounting Event
 ```
 
-Other Claims events remain policy-gated unless explicitly implemented.
+Claim recovery approvals are per participating reinsurer/allocation and may be
+recorded cumulatively up to the allocation liability. They do not represent cash
+receipt; recovery receipt and bank-confirmation events remain policy-gated until
+explicitly implemented.
 
 ## Accounting Integration
 
@@ -155,6 +158,7 @@ Active Reinsurance event families include:
 - `REINSURER_DISBURSEMENT_RECORDED`
 - `REINSURER_DISBURSEMENT_REVERSED`
 - `CLAIM_PAYABLE_APPROVED`
+- `CLAIM_RECOVERY_APPROVED`
 
 Accounting owns posting rules, journal creation, fiscal period validation and
 financial confirmation queues. Reinsurance publishes business facts only.

@@ -30,6 +30,10 @@ describe('ReinsuranceAccountingReadinessService', () => {
     take?: number;
     where?: Record<string, unknown>;
   };
+  type ClaimRecoveryApprovalFindManyArg = {
+    take?: number;
+    where?: Record<string, unknown>;
+  };
 
   const user = {
     id: 'user-1',
@@ -302,12 +306,37 @@ describe('ReinsuranceAccountingReadinessService', () => {
     notes: null,
     createdAt: new Date('2026-07-30T10:00:00.000Z'),
   };
+  const claimRecoveryApproval = {
+    id: 'recovery-approval-1',
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    claimId: 'claim-1',
+    allocationId: 'allocation-1',
+    cashCallId: 'cash-call-1',
+    counterpartyId: 'reinsurer-1',
+    approvalVersion: 1,
+    approvedAmount: new Prisma.Decimal('40000.00'),
+    eligibleAmount: new Prisma.Decimal('100000.00'),
+    currency: 'GHS',
+    approvedAt: new Date('2026-07-31T10:00:00.000Z'),
+    approvedByUserId: 'user-1',
+    reference: 'REC-APP-001',
+    notes: null,
+    createdAt: new Date('2026-07-31T10:00:00.000Z'),
+    counterparty: {
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+      name: 'Reliable Re',
+      registrationNumber: null,
+    },
+  };
 
   const makeService = (
     notes: unknown[] = [issuedNote],
     existingOutbox: unknown[] = [],
     payments: unknown[] = [payment],
     approvals: unknown[] = [claimPayableApproval],
+    recoveryApprovals: unknown[] = [claimRecoveryApproval],
   ) => {
     const prisma: {
       placementNote: {
@@ -320,6 +349,12 @@ describe('ReinsuranceAccountingReadinessService', () => {
         findMany: jest.Mock<
           Promise<unknown[]>,
           [ClaimPayableApprovalFindManyArg]
+        >;
+      };
+      placementClaimRecoveryApproval: {
+        findMany: jest.Mock<
+          Promise<unknown[]>,
+          [ClaimRecoveryApprovalFindManyArg]
         >;
       };
       reinsuranceAccountingOutbox: { findMany: jest.Mock };
@@ -339,6 +374,11 @@ describe('ReinsuranceAccountingReadinessService', () => {
         findMany: jest
           .fn<Promise<unknown[]>, [ClaimPayableApprovalFindManyArg]>()
           .mockResolvedValue(approvals),
+      },
+      placementClaimRecoveryApproval: {
+        findMany: jest
+          .fn<Promise<unknown[]>, [ClaimRecoveryApprovalFindManyArg]>()
+          .mockResolvedValue(recoveryApprovals),
       },
       reinsuranceAccountingOutbox: {
         findMany: jest.fn().mockResolvedValue(existingOutbox),
@@ -461,6 +501,18 @@ describe('ReinsuranceAccountingReadinessService', () => {
         occurredAt: '2026-07-30T10:00:00.000Z',
         currency: 'GHS',
         payload: { amounts: { approvedPayableAmount: 90000 } },
+      }),
+      prepareClaimRecoveryApproved: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_RECOVERY_APPROVED',
+        sourceRecordType: 'PlacementClaimRecoveryApproval',
+        sourceRecordId: 'recovery-approval-1',
+        sourceDocumentId: 'claim-1',
+        idempotencyKey:
+          'reinsurance:claim-recovery:recovery-approval-1:approved:v1',
+        occurredAt: '2026-07-31T10:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { approvedRecoveryAmount: 40000 } },
       }),
       enqueuePreparedEvent: jest.fn().mockResolvedValue({
         id: 'outbox-1',
@@ -1296,6 +1348,81 @@ describe('ReinsuranceAccountingReadinessService', () => {
       items: [
         expect.objectContaining({
           approvalId: 'approval-1',
+          status: 'ENQUEUED',
+          outboxId: 'outbox-1',
+        }),
+      ],
+    });
+  });
+
+  it('dry-runs claim recovery approvals missing deterministic outbox rows', async () => {
+    const { financialEvents, prisma, service } = makeService([], [], [], []);
+
+    const result = await service.reconcileClaimRecoveryApprovedEvents(user, {
+      dryRun: true,
+      limit: 10,
+    });
+
+    const findManyArg =
+      prisma.placementClaimRecoveryApproval.findMany.mock.calls[0]?.[0];
+    if (!findManyArg) {
+      throw new Error(
+        'Expected placementClaimRecoveryApproval.findMany to be called',
+      );
+    }
+    expect(findManyArg.take).toBe(10);
+    expect(findManyArg.where).toMatchObject({
+      tenantId: 'tenant-1',
+      claim: { placement: { archivedAt: null } },
+    });
+    expect(result).toMatchObject({
+      accountingEnabled: true,
+      dryRun: true,
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          approvalId: 'recovery-approval-1',
+          claimId: 'claim-1',
+          placementId: 'placement-1',
+          allocationId: 'allocation-1',
+          approvalVersion: 1,
+          status: 'MISSING',
+          idempotencyKey:
+            'reinsurance:claim-recovery:recovery-approval-1:approved:v1',
+        }),
+      ],
+    });
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing claim recovery approval events', async () => {
+    const { financialEvents, service } = makeService([], [], [], []);
+
+    const result = await service.reconcileClaimRecoveryApprovedEvents(user, {
+      dryRun: false,
+    });
+
+    expect(financialEvents.prepareClaimRecoveryApproved).toHaveBeenCalledWith(
+      user,
+      claimRecoveryApproval,
+    );
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        sourceEventType: 'CLAIM_RECOVERY_APPROVED',
+        idempotencyKey:
+          'reinsurance:claim-recovery:recovery-approval-1:approved:v1',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      missingCount: 0,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          approvalId: 'recovery-approval-1',
           status: 'ENQUEUED',
           outboxId: 'outbox-1',
         }),

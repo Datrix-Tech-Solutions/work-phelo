@@ -227,11 +227,31 @@ describe('ReinsuranceFinancialEventPublisher', () => {
           id: 'claim-1',
           claimNumber: 'CLM-001',
           currency: 'GHS',
+          estimatedLossAmount: new Prisma.Decimal('120000.00'),
           finalLossAmount: new Prisma.Decimal('100000.00'),
           placement,
         }),
       },
       placementClaimAllocation: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'allocation-1',
+          placementClosingId: 'closing-1',
+          endorsementClosingId: null,
+          participantId: 'participant-1',
+          endorsementParticipantId: null,
+          counterpartyId: 'reinsurer-1',
+          signedLinePercent: new Prisma.Decimal('60.0000'),
+          basisAmount: new Prisma.Decimal('200000.00'),
+          allocatedEstimatedLossAmount: new Prisma.Decimal('120000.00'),
+          allocatedFinalLossAmount: new Prisma.Decimal('100000.00'),
+          cashCallAmount: new Prisma.Decimal('100000.00'),
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Reliable Re',
+            registrationNumber: 'RE-123',
+          },
+        }),
         findMany: jest.fn().mockResolvedValue([
           {
             id: 'allocation-1',
@@ -241,6 +261,8 @@ describe('ReinsuranceFinancialEventPublisher', () => {
             endorsementParticipantId: null,
             counterpartyId: 'reinsurer-1',
             signedLinePercent: new Prisma.Decimal('60.0000'),
+            basisAmount: new Prisma.Decimal('200000.00'),
+            allocatedEstimatedLossAmount: new Prisma.Decimal('120000.00'),
             allocatedFinalLossAmount: new Prisma.Decimal('60000.00'),
             cashCallAmount: null,
             counterparty: {
@@ -1208,6 +1230,107 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       finalLossAmount: new Prisma.Decimal('100000.00'),
       currency: 'GHS',
       approvedAt: new Date('2026-07-30T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+    });
+
+    expect(event).toBeNull();
+  });
+
+  it('prepares CLAIM_RECOVERY_APPROVED from immutable allocation approval facts', async () => {
+    const { actor, service } = makeService();
+
+    const event = await service.prepareClaimRecoveryApproved(actor, {
+      id: 'recovery-approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      allocationId: 'allocation-1',
+      cashCallId: 'cash-call-1',
+      counterpartyId: 'reinsurer-1',
+      approvalVersion: 1,
+      approvedAmount: new Prisma.Decimal('40000.00'),
+      eligibleAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-31T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+      reference: 'REC-APP-001',
+      notes: 'Formally agreed by reinsurer',
+    });
+
+    expect(event).toMatchObject({
+      tenantId: 'tenant-1',
+      sourceEventType: 'CLAIM_RECOVERY_APPROVED',
+      sourceRecordType: 'PlacementClaimRecoveryApproval',
+      sourceRecordId: 'recovery-approval-1',
+      sourceDocumentId: 'claim-1',
+      idempotencyKey:
+        'reinsurance:claim-recovery:recovery-approval-1:approved:v1',
+      occurredAt: '2026-07-31T10:00:00.000Z',
+      currency: 'GHS',
+    });
+    if (!event) throw new Error('Expected CLAIM_RECOVERY_APPROVED event');
+    const payload = event.payload as {
+      references: Record<string, unknown>;
+      reinsurer: Record<string, unknown>;
+      allocation: Record<string, unknown>;
+      amounts: Record<string, unknown>;
+      approval: Record<string, unknown>;
+    };
+    expect(payload.references).toMatchObject({
+      placementId: 'placement-1',
+      placementReference: 'FAC-2026-001',
+      claimId: 'claim-1',
+      claimNumber: 'CLM-001',
+      allocationId: 'allocation-1',
+      cashCallId: 'cash-call-1',
+      approvalId: 'recovery-approval-1',
+      approvalVersion: 1,
+      approvalReference: 'REC-APP-001',
+    });
+    expect(payload.reinsurer).toMatchObject({
+      id: 'reinsurer-1',
+      type: CounterpartyType.REINSURER,
+      subledgerExternalRef: 'reinsurer-1',
+    });
+    expect(payload.allocation).toMatchObject({
+      id: 'allocation-1',
+      placementClosingId: 'closing-1',
+      signedLinePercent: 60,
+      basisAmount: 200000,
+      allocatedEstimatedLossAmount: 120000,
+      allocatedFinalLossAmount: 100000,
+    });
+    expect(payload.amounts).toEqual({
+      approvedRecoveryAmount: 40000,
+      eligibleRecoveryAmount: 100000,
+      signedRecoveryReceivableImpact: 40000,
+    });
+    expect(payload.approval.recognitionBoundary).toBe(
+      'FORMAL_REINSURER_RECOVERY_APPROVAL',
+    );
+    const serializedPayload = JSON.stringify(event.payload).toLowerCase();
+    expect(serializedPayload).not.toContain('withholdingtax');
+    expect(serializedPayload).not.toContain('niclevy');
+    expect(serializedPayload).not.toContain('bankreference');
+    expect(serializedPayload).not.toContain('paymentdate');
+    expect(payload.references).not.toHaveProperty('recoveryReceiptId');
+  });
+
+  it('skips claim recovery approval events when Accounting is disabled', async () => {
+    const { actor, service } = makeService({ accountingEnabled: false });
+
+    const event = await service.prepareClaimRecoveryApproved(actor, {
+      id: 'recovery-approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      allocationId: 'allocation-1',
+      counterpartyId: 'reinsurer-1',
+      approvalVersion: 1,
+      approvedAmount: new Prisma.Decimal('40000.00'),
+      eligibleAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-31T10:00:00.000Z'),
       approvedByUserId: 'user-1',
     });
 

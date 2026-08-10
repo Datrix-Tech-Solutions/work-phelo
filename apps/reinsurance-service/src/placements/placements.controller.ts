@@ -87,9 +87,11 @@ import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
 import { VoidPlacementClaimCashCallDto } from './dto/void-placement-claim-cash-call.dto';
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
 import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
+import { PlacementClaimRecoveryApprovalsService } from './placement-claim-recovery-approvals.service';
 import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recovery-receipts.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-payable.dto';
+import { ApprovePlacementClaimRecoveryDto } from './dto/approve-placement-claim-recovery.dto';
 import { CreatePlacementClaimCedantSettlementDto } from './dto/create-placement-claim-cedant-settlement.dto';
 import { CreatePlacementClaimRecoveryReceiptDto } from './dto/create-placement-claim-recovery-receipt.dto';
 import {
@@ -97,6 +99,8 @@ import {
   PlacementClaimCedantSettlementResponseDto,
 } from './dto/placement-claim-cedant-settlement-response.dto';
 import {
+  PlacementClaimRecoveryApprovalListResponseDto,
+  PlacementClaimRecoveryApprovalResponseDto,
   PlacementClaimRecoveryPositionResponseDto,
   PlacementClaimRecoveryReceiptListResponseDto,
   PlacementClaimRecoveryReceiptResponseDto,
@@ -184,6 +188,7 @@ export class PlacementsController {
     private readonly claimsService: PlacementClaimsService,
     private readonly claimCashCallsService: PlacementClaimCashCallsService,
     private readonly claimCedantSettlementsService: PlacementClaimCedantSettlementsService,
+    private readonly claimRecoveryApprovalsService: PlacementClaimRecoveryApprovalsService,
     private readonly claimRecoveryReceiptsService: PlacementClaimRecoveryReceiptsService,
   ) {}
 
@@ -2236,6 +2241,72 @@ export class PlacementsController {
       request.user.tenantId,
       id,
       claimId,
+    );
+  }
+
+  @Get(':id/claims/:claimId/recovery-approvals')
+  @ApiTags('Reinsurance - Claim Recoveries')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List claim recovery approvals',
+    description:
+      'Returns immutable per-allocation Reinsurer recovery approval history. Recovery approvals recognize the reinsurer receivable after formal agreement/approval. They are distinct from cash calls, which are operational demands, and recovery receipts, which are future cash movement records.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimRecoveryApprovalListResponseDto })
+  async findClaimRecoveryApprovals(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.claimRecoveryApprovalsService.findAll(
+      request.user.tenantId,
+      id,
+      claimId,
+    );
+    return { items };
+  }
+
+  @Post(':id/claims/:claimId/allocations/:allocationId/recovery-approvals')
+  @ApiTags('Reinsurance - Claim Recoveries')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Approve reinsurer claim recovery receivable',
+    description:
+      'Records a formal per-allocation recovery approval for one reinsurer after the recovery is agreed/approved. This recognizes the receivable and, when Accounting is enabled, captures CLAIM_RECOVERY_APPROVED transactionally. It does not record cash receipt, bank confirmation, withholding tax, NIC levy or bank charges.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'allocationId',
+    format: 'uuid',
+    description: 'Claim allocation ID for the participating reinsurer.',
+  })
+  @ApiCreatedResponse({ type: PlacementClaimRecoveryApprovalResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Allocation is void, counterparty is not a reinsurer, currency mismatches or amount is invalid.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Cumulative recovery approvals would exceed the allocation liability.',
+  })
+  approveClaimRecovery(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('allocationId', ParseUUIDPipe) allocationId: string,
+    @Body() dto: ApprovePlacementClaimRecoveryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimRecoveryApprovalsService.approve(
+      request.user,
+      id,
+      claimId,
+      allocationId,
+      dto,
     );
   }
 
