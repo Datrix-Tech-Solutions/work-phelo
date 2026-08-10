@@ -19,6 +19,10 @@ Tenant-scoped Accounting ledger foundation.
 - Corrections create exact linked reversal journals.
 - Transaction and base-currency amounts are stored on every journal line.
 - Source idempotency keys are tenant-scoped for future operational integrations.
+- Cash, bank and wallet account masters are Accounting-owned and link to active,
+  posting-enabled GL asset accounts.
+- Cashbook entries are draft until posted; posting creates balanced journals and
+  corrections use linked reversals.
 
 Operational source-event posting is active through the Accounting Source Event
 Inbox and tenant posting rules. Source modules publish business facts only;
@@ -43,6 +47,8 @@ remain independently usable.
     .addTag('Accounting - Chart of Accounts')
     .addTag('Accounting - Cost Centres')
     .addTag('Accounting - Subledgers')
+    .addTag('Accounting - Cash Accounts')
+    .addTag('Accounting - Cashbook')
     .addTag('Accounting - Journals')
     .addTag('Accounting - General Ledger')
     .addTag('Accounting - Financial Reports')

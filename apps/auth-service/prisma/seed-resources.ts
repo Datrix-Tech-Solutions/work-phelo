@@ -146,6 +146,16 @@ export const RESOURCES = [
     description: 'Accounting vendor master records and AP subledgers',
   },
   {
+    name: 'accounting.cash-accounts',
+    module: 'ACCOUNTING',
+    description: 'Accounting-owned cash, bank and wallet account masters',
+  },
+  {
+    name: 'accounting.cashbook',
+    module: 'ACCOUNTING',
+    description: 'Standalone Accounting cashbook transaction workflows',
+  },
+  {
     name: 'accounting.journals',
     module: 'ACCOUNTING',
     description: 'Draft, post and reverse journal entries',
