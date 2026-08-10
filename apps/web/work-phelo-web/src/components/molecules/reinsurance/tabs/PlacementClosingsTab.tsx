@@ -80,6 +80,38 @@ function toNumber(val: string | number | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// Temporary client-side override for closings.sumInsuredSnapshot: derives the participant's
+// sum insured share from signedLinePercent × the risk's total sum insured, computed the same
+// way the backend is supposed to. This is preferred over the backend value (not just used when
+// it's missing) because environments that haven't deployed/migrated the fix yet return either
+// no value at all, or the un-scaled full sum insured for every participant. The backend value
+// is only used as a last resort, when signedLinePercent or the total sum insured isn't
+// available client-side to derive from. Remove this override once every environment is
+// confirmed to be returning the correctly-scaled value.
+function deriveSumInsuredShare(
+  signedLinePercent: string | number | null | undefined,
+  totalSumInsured: number | null | undefined,
+): number | null {
+  const pct = toNumber(signedLinePercent);
+  if (pct === null || totalSumInsured == null) return null;
+  return (pct / 100) * totalSumInsured;
+}
+
+// Mirrors the backend's proposed → originalSnapshot.placement fallback chain for the
+// endorsement's total sum insured, for use only by the deriveSumInsuredShare fallback above.
+function endorsementTotalSumInsured(endorsement: PlacementEndorsement | undefined): number | null {
+  if (!endorsement) return null;
+  const proposed = endorsement.proposedSnapshot ?? {};
+  const proposedPlacement = (proposed.placement as Record<string, unknown>) ?? {};
+  const original = endorsement.originalSnapshot ?? {};
+  const originalPlacement = (original.placement as Record<string, unknown>) ?? {};
+  return (
+    toNumber(proposed.sumInsured as string | number | null | undefined) ??
+    toNumber(proposedPlacement.sumInsured as string | number | null | undefined) ??
+    toNumber(originalPlacement.sumInsured as string | number | null | undefined)
+  );
+}
+
 const PARTICIPATION_TYPE_LABEL: Record<EffectivePositionRow['participationType'], string> = {
   ORIGINAL: 'original',
   REVISED: 'endorsed',
@@ -280,7 +312,9 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
             status: closing.status,
             currency: closing.currency,
             signedLinePercent: closing.signedLinePercent,
-            sumInsuredSnapshot: closing.sumInsuredSnapshot,
+            sumInsuredSnapshot:
+              deriveSumInsuredShare(closing.signedLinePercent, placement.sumInsured) ??
+              closing.sumInsuredSnapshot,
             premiumSnapshot: closing.grossPremium,
             commissionPercent: closing.commissionPercent,
             commissionAmount: closing.commissionAmount,
@@ -305,7 +339,11 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
             status: closing.status,
             currency: closing.currency,
             signedLinePercent: closing.signedLinePercent,
-            sumInsuredSnapshot: closing.sumInsuredSnapshot,
+            sumInsuredSnapshot:
+              deriveSumInsuredShare(
+                closing.signedLinePercent,
+                endorsementTotalSumInsured(endorsement) ?? placement.sumInsured,
+              ) ?? closing.sumInsuredSnapshot,
             premiumSnapshot: closing.premiumSnapshot,
             commissionPercent: closing.commissionPercent,
             commissionAmount: closing.commissionAmount,
