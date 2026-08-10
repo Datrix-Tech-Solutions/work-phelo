@@ -796,6 +796,7 @@ export interface PlacementParticipantClosing {
   status: PlacementParticipantClosingStatus;
   signedLinePercent: string;
   sharePercent: string | null;
+  sumInsuredSnapshot: string | null;
   grossPremium: string | null;
   commissionPercent: string | null;
   commissionAmount: string | null;

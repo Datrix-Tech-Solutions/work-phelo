@@ -649,33 +649,34 @@ model PlacementParticipant {
 }
 
 model PlacementClosing {
-  id                String                     @id @default(uuid())
-  tenantId          String
-  placementId       String
-  participantId     String
-  closingNumber     String
-  status            PlacementClosingStatus     @default(DRAFT)
-  signedLinePercent Decimal                    @db.Decimal(7, 4)
-  sharePercent      Decimal?                   @db.Decimal(7, 4)
-  grossPremium      Decimal?                   @db.Decimal(18, 2)
-  commissionPercent Decimal?                   @db.Decimal(7, 4)
-  commissionAmount  Decimal?                   @db.Decimal(18, 2)
-  brokeragePercent  Decimal?                   @db.Decimal(5, 2)
-  brokerageAmount   Decimal?                   @db.Decimal(18, 2)
-  netPremium        Decimal?                   @db.Decimal(18, 2)
-  currency          String?
-  issuedAt          DateTime?
-  confirmedAt       DateTime?
-  createdByUserId   String
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  placement         Placement                  @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  participant       PlacementParticipant       @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  payments          PlacementPayment[]
-  notes             PlacementNote[]
-  documents         PlacementDocument[]
-  attachments       PlacementAttachment[]
-  claimAllocations  PlacementClaimAllocation[]
+  id                 String                     @id @default(uuid())
+  tenantId           String
+  placementId        String
+  participantId      String
+  closingNumber      String
+  status             PlacementClosingStatus     @default(DRAFT)
+  signedLinePercent  Decimal                    @db.Decimal(7, 4)
+  sharePercent       Decimal?                   @db.Decimal(7, 4)
+  sumInsuredSnapshot Decimal?                   @db.Decimal(18, 2)
+  grossPremium       Decimal?                   @db.Decimal(18, 2)
+  commissionPercent  Decimal?                   @db.Decimal(7, 4)
+  commissionAmount   Decimal?                   @db.Decimal(18, 2)
+  brokeragePercent   Decimal?                   @db.Decimal(5, 2)
+  brokerageAmount    Decimal?                   @db.Decimal(18, 2)
+  netPremium         Decimal?                   @db.Decimal(18, 2)
+  currency           String?
+  issuedAt           DateTime?
+  confirmedAt        DateTime?
+  createdByUserId    String
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  placement          Placement                  @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  participant        PlacementParticipant       @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  payments           PlacementPayment[]
+  notes              PlacementNote[]
+  documents          PlacementDocument[]
+  attachments        PlacementAttachment[]
+  claimAllocations   PlacementClaimAllocation[]
 
   @@unique([tenantId, placementId, closingNumber])
   @@index([tenantId, placementId])

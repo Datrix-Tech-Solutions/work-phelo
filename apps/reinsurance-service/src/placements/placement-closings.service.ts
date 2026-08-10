@@ -76,6 +76,7 @@ export class PlacementClosingsService {
         premium: true,
         commission: true,
         currency: true,
+        sumInsured: true,
       },
     });
     if (!placement) throw new NotFoundException('Placement not found');
@@ -88,6 +89,7 @@ export class PlacementClosingsService {
       premium: placement.premium,
       commission: placement.commission,
       currency: placement.currency,
+      sumInsured: placement.sumInsured,
     };
 
     const participant = await this.prisma.placementParticipant.findFirst({
@@ -275,6 +277,7 @@ export class PlacementClosingsService {
       premium: Prisma.Decimal;
       commission: Prisma.Decimal | null;
       currency: string | null;
+      sumInsured: Prisma.Decimal | null;
     },
     participant: {
       sharePercent: Prisma.Decimal | null;
@@ -286,15 +289,19 @@ export class PlacementClosingsService {
     const premium = this.toNumber(placement.premium);
     const commissionPct = this.toNumber(placement.commission);
     const brokeragePct = this.toNumber(participant.brokerageFee);
+    const sumInsured = this.toOptionalNumber(placement.sumInsured);
 
     const grossPremium = (signedLinePercent / 100) * premium;
     const commissionAmount = (commissionPct / 100) * grossPremium;
     const brokerageAmount = (brokeragePct / 100) * grossPremium;
     const netPremium = grossPremium - commissionAmount - brokerageAmount;
+    const sumInsuredSnapshot =
+      sumInsured != null ? (signedLinePercent / 100) * sumInsured : null;
 
     return {
       signedLinePercent,
       sharePercent,
+      sumInsuredSnapshot,
       grossPremium,
       commissionPercent: commissionPct,
       commissionAmount,
