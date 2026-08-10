@@ -118,6 +118,10 @@ describe('PlacementClaimsService', () => {
   let effectiveViewService: {
     getEffectiveView: jest.Mock;
   };
+  let financialCloseReadiness: {
+    assertReadyForSettlementStatus: jest.Mock;
+    assertReadyForClosedStatus: jest.Mock;
+  };
   let lockPolicy: PlacementFinancialLockPolicy;
   let money: ReinsuranceMoneyHelper;
 
@@ -159,11 +163,16 @@ describe('PlacementClaimsService', () => {
     effectiveViewService = {
       getEffectiveView: jest.fn().mockResolvedValue(effectiveView),
     };
+    financialCloseReadiness = {
+      assertReadyForSettlementStatus: jest.fn().mockResolvedValue({}),
+      assertReadyForClosedStatus: jest.fn().mockResolvedValue({}),
+    };
     service = new PlacementClaimsService(
       prisma as unknown as PrismaService,
       new PlacementEffectivePositionService(new ClosingSnapshotReader(money)),
       effectiveViewService as unknown as PlacementEffectiveViewService,
       new ClaimAllocationCalculator(money),
+      financialCloseReadiness as never,
       money,
     );
     lockPolicy = new PlacementFinancialLockPolicy(
@@ -454,6 +463,84 @@ describe('PlacementClaimsService', () => {
         status: PlacementClaimStatus.NOTIFIED,
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('requires financial readiness before moving to SETTLED', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.PARTIALLY_SETTLED,
+    });
+    prisma.placementClaim.update.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.SETTLED,
+    });
+
+    await service.changeStatus(user, 'placement-1', 'claim-1', {
+      status: PlacementClaimStatus.SETTLED,
+    });
+
+    expect(
+      financialCloseReadiness.assertReadyForSettlementStatus,
+    ).toHaveBeenCalledWith('tenant-1', 'placement-1', 'claim-1');
+  });
+
+  it('blocks SETTLED when financial readiness reports outstanding obligations', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.PARTIALLY_SETTLED,
+    });
+    financialCloseReadiness.assertReadyForSettlementStatus.mockRejectedValue(
+      new ConflictException({
+        message: 'Claim cannot be marked settled',
+        blockers: ['CLAIM_PAYABLE_OUTSTANDING'],
+      }),
+    );
+
+    await expect(
+      service.changeStatus(user, 'placement-1', 'claim-1', {
+        status: PlacementClaimStatus.SETTLED,
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.placementClaim.update).not.toHaveBeenCalled();
+  });
+
+  it('requires SETTLED before CLOSED and rechecks financial readiness', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.SETTLED,
+    });
+    prisma.placementClaim.update.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.CLOSED,
+    });
+
+    await service.changeStatus(user, 'placement-1', 'claim-1', {
+      status: PlacementClaimStatus.CLOSED,
+    });
+
+    expect(
+      financialCloseReadiness.assertReadyForClosedStatus,
+    ).toHaveBeenCalledWith('tenant-1', 'placement-1', 'claim-1');
+  });
+
+  it('does not allow CLOSED to bypass SETTLED', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.PARTIALLY_SETTLED,
+    });
+
+    await expect(
+      service.changeStatus(user, 'placement-1', 'claim-1', {
+        status: PlacementClaimStatus.CLOSED,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(
+      financialCloseReadiness.assertReadyForClosedStatus,
+    ).not.toHaveBeenCalled();
   });
 
   it.each([PlacementClaimStatus.CLOSED, PlacementClaimStatus.VOID])(

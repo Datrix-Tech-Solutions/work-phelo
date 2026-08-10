@@ -8,6 +8,7 @@ import {
   PlacementClaimCedantSettlementStatus,
   PlacementClaimCashCallStatus,
   PlacementClaimRecoveryReceiptStatus,
+  PlacementClaimStatus,
   PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
@@ -193,6 +194,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       approvedPayableAmount: null,
       approvedAt: null,
       approvedByUserId: null,
+      status: PlacementClaimStatus.RESERVED,
     });
     prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([]);
     service = new PlacementClaimRecoveryReceiptsService(
@@ -454,6 +456,29 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       service.reverse(user, 'placement-1', 'claim-1', 'receipt-reversal-1', {}),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it.each([PlacementClaimStatus.SETTLED, PlacementClaimStatus.CLOSED])(
+    'blocks recovery receipt reversal when claim is %s',
+    async (status) => {
+      prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue(receipt);
+      prisma.placementClaim.findFirst.mockResolvedValue({
+        id: 'claim-1',
+        status,
+      });
+
+      await expect(
+        service.reverse(user, 'placement-1', 'claim-1', 'receipt-1', {
+          notes: 'Correction',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(
+        prisma.placementClaimRecoveryReceipt.update,
+      ).not.toHaveBeenCalled();
+      expect(
+        prisma.placementClaimRecoveryReceipt.create,
+      ).not.toHaveBeenCalled();
+    },
+  );
 
   it('emits reversal event for bank-confirmed recovery receipt reversals', async () => {
     const confirmedReceipt = {

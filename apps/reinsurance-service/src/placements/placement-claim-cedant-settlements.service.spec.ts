@@ -603,6 +603,31 @@ describe('PlacementClaimCedantSettlementsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it.each([PlacementClaimStatus.SETTLED, PlacementClaimStatus.CLOSED])(
+    'blocks cedant settlement reversal when claim is %s',
+    async (status) => {
+      prisma.placementClaimCedantSettlement.findFirst.mockResolvedValue(
+        settlement,
+      );
+      prisma.placementClaim.findFirst.mockResolvedValue({
+        ...claim,
+        status,
+      });
+
+      await expect(
+        service.reverse(user, 'placement-1', 'claim-1', 'settlement-1', {
+          notes: 'Correction',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(
+        prisma.placementClaimCedantSettlement.update,
+      ).not.toHaveBeenCalled();
+      expect(
+        prisma.placementClaimCedantSettlement.create,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
   it('emits reversal event for bank-confirmed cedant settlement reversals', async () => {
     const confirmedSettlement = {
       ...settlement,

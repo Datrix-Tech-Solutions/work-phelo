@@ -31,6 +31,7 @@ import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
+import { PlacementClaimFinancialCloseReadinessService } from './placement-claim-financial-close-readiness.service';
 
 describe('PlacementsController', () => {
   const service = {
@@ -154,6 +155,9 @@ describe('PlacementsController', () => {
     confirmBankSettlement: jest.fn(),
     reverse: jest.fn(),
   };
+  const claimFinancialCloseReadinessService = {
+    getReadiness: jest.fn(),
+  };
   const claimRecoveryApprovalsService = {
     findAll: jest.fn(),
     approve: jest.fn(),
@@ -188,6 +192,7 @@ describe('PlacementsController', () => {
       claimsService as unknown as PlacementClaimsService,
       claimCashCallsService as unknown as PlacementClaimCashCallsService,
       claimCedantSettlementsService as unknown as PlacementClaimCedantSettlementsService,
+      claimFinancialCloseReadinessService as unknown as PlacementClaimFinancialCloseReadinessService,
       claimRecoveryApprovalsService as unknown as PlacementClaimRecoveryApprovalsService,
       claimRecoveryReceiptsService as unknown as PlacementClaimRecoveryReceiptsService,
     );
@@ -234,6 +239,7 @@ describe('PlacementsController', () => {
     ['findClaimCashCalls', PlacementPermission.VIEW],
     ['findClaimCashCall', PlacementPermission.VIEW],
     ['findClaimCedantSettlements', PlacementPermission.VIEW],
+    ['getClaimFinancialCloseReadiness', PlacementPermission.VIEW],
     ['getClaimRecoveryPosition', PlacementPermission.VIEW],
     ['findClaimRecoveryApprovals', PlacementPermission.VIEW],
     ['findClaimRecoveryReceipts', PlacementPermission.VIEW],
@@ -1143,6 +1149,10 @@ describe('PlacementsController', () => {
     const controller = createController();
     claimsService.findAll.mockResolvedValue([]);
     claimsService.findAllocations.mockResolvedValue([]);
+    claimFinancialCloseReadinessService.getReadiness.mockResolvedValue({
+      claimId: 'claim-1',
+      blockers: [],
+    });
     const createDto = {
       occurrenceDate: '2026-06-03T00:00:00.000Z',
       reportedDate: '2026-06-05T10:00:00.000Z',
@@ -1166,6 +1176,9 @@ describe('PlacementsController', () => {
       { status: PlacementClaimStatus.NOTIFIED },
       { user } as never,
     );
+    await controller.getClaimFinancialCloseReadiness('placement-1', 'claim-1', {
+      user,
+    } as never);
     const allocationList = await controller.findClaimAllocations(
       'placement-1',
       'claim-1',
@@ -1202,6 +1215,9 @@ describe('PlacementsController', () => {
       'claim-1',
       expect.objectContaining({ status: PlacementClaimStatus.NOTIFIED }),
     );
+    expect(
+      claimFinancialCloseReadinessService.getReadiness,
+    ).toHaveBeenCalledWith('tenant-1', 'placement-1', 'claim-1');
     expect(claimsService.findAllocations).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
