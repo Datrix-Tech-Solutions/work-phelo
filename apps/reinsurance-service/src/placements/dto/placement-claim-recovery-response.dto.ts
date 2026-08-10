@@ -273,11 +273,30 @@ export class PlacementClaimCedantSettlementPositionDto {
   @ApiProperty({ type: String, example: '25000.00' })
   settledAmount!: string;
 
+  @ApiProperty({
+    type: String,
+    example: '10000.00',
+    description:
+      'Operational Cedant settlements recorded but not yet financially confirmed by Accounting.',
+  })
+  recordedAmount!: string;
+
+  @ApiProperty({
+    type: String,
+    example: '25000.00',
+    description:
+      'Bank-confirmed Cedant settlements that reduce financial payable outstanding.',
+  })
+  bankConfirmedAmount!: string;
+
   @ApiProperty({ type: String, example: '5000.00' })
   reversedAmount!: string;
 
   @ApiProperty({ type: String, example: '10000.00' })
   outstandingAmount!: string;
+
+  @ApiProperty({ type: String, example: '35000.00' })
+  operationalSettledAmount!: string;
 
   @ApiProperty({
     enum: [

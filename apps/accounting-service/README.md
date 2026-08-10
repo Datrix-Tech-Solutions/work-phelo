@@ -72,23 +72,27 @@ source-event families include issued debit/credit notes, endorsement notes,
 premium receipts and reversals, bank-confirmed reinsurer disbursements and
 reversals, claim-level payable approvals and allocation-level claim recovery
 approvals, plus bank-confirmed claim recovery receipts and reversals.
+Bank-confirmed cedant claim settlements and reversals complete the Cedant-side
+claim payable settlement boundary.
 
 ### Active Reinsurance AR/AP Matrix
 
-| Event                             | Recognition boundary                             | Business meaning                                  |
-| --------------------------------- | ------------------------------------------------ | ------------------------------------------------- |
-| `DEBIT_NOTE_ISSUED`               | Official placement debit note issue time         | Cedant owes premium to broker                     |
-| `CREDIT_NOTE_ISSUED`              | Official placement credit note issue time        | Broker owes premium share to Reinsurer            |
-| `ENDORSEMENT_DEBIT_NOTE_ISSUED`   | Official endorsement debit note issue time       | Additional premium due from Cedant                |
-| `ENDORSEMENT_CREDIT_NOTE_ISSUED`  | Official endorsement credit note issue time      | Return premium or payable adjustment to Reinsurer |
-| `PREMIUM_PAYMENT_RECEIVED`        | Accounting confirmation time (`bankConfirmedAt`) | Cedant payment clears receivable                  |
-| `PAYMENT_REVERSED`                | Reversal row creation time                       | Premium receipt reversal                          |
-| `REINSURER_DISBURSEMENT_RECORDED` | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer settlement                    |
-| `REINSURER_DISBURSEMENT_REVERSED` | Reversal row creation time                       | Reinsurer disbursement reversal                   |
-| `CLAIM_PAYABLE_APPROVED`          | Broker claim-level payable approval time         | Approved Cedant claim payable                     |
-| `CLAIM_RECOVERY_APPROVED`         | Formal per-allocation recovery approval time     | Approved Reinsurer recovery receivable            |
-| `CLAIM_RECOVERY_RECEIVED`         | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer claim recovery receipt        |
-| `CLAIM_RECOVERY_RECEIPT_REVERSED` | Reversal row creation time                       | Claim recovery receipt reversal                   |
+| Event                              | Recognition boundary                             | Business meaning                                  |
+| ---------------------------------- | ------------------------------------------------ | ------------------------------------------------- |
+| `DEBIT_NOTE_ISSUED`                | Official placement debit note issue time         | Cedant owes premium to broker                     |
+| `CREDIT_NOTE_ISSUED`               | Official placement credit note issue time        | Broker owes premium share to Reinsurer            |
+| `ENDORSEMENT_DEBIT_NOTE_ISSUED`    | Official endorsement debit note issue time       | Additional premium due from Cedant                |
+| `ENDORSEMENT_CREDIT_NOTE_ISSUED`   | Official endorsement credit note issue time      | Return premium or payable adjustment to Reinsurer |
+| `PREMIUM_PAYMENT_RECEIVED`         | Accounting confirmation time (`bankConfirmedAt`) | Cedant payment clears receivable                  |
+| `PAYMENT_REVERSED`                 | Reversal row creation time                       | Premium receipt reversal                          |
+| `REINSURER_DISBURSEMENT_RECORDED`  | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer settlement                    |
+| `REINSURER_DISBURSEMENT_REVERSED`  | Reversal row creation time                       | Reinsurer disbursement reversal                   |
+| `CLAIM_PAYABLE_APPROVED`           | Broker claim-level payable approval time         | Approved Cedant claim payable                     |
+| `CLAIM_CEDANT_SETTLEMENT_PAID`     | Accounting confirmation time (`bankConfirmedAt`) | Broker settlement paid to Cedant                  |
+| `CLAIM_CEDANT_SETTLEMENT_REVERSED` | Reversal row creation time                       | Cedant claim settlement reversal                  |
+| `CLAIM_RECOVERY_APPROVED`          | Formal per-allocation recovery approval time     | Approved Reinsurer recovery receivable            |
+| `CLAIM_RECOVERY_RECEIVED`          | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer claim recovery receipt        |
+| `CLAIM_RECOVERY_RECEIPT_REVERSED`  | Reversal row creation time                       | Claim recovery receipt reversal                   |
 
 Operational Reinsurance payments can be recorded before Accounting recognition.
 No Accounting outbox event is created at that point for bank-confirmed

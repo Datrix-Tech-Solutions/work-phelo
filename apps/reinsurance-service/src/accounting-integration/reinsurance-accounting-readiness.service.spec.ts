@@ -8,6 +8,7 @@ import {
   PlacementPaymentStatus,
   PlacementPaymentType,
   PlacementSettlementMethod,
+  PlacementClaimCedantSettlementStatus,
   PlacementClaimRecoveryReceiptStatus,
   Prisma,
   ReinsuranceAccountingOutboxStatus,
@@ -36,6 +37,10 @@ describe('ReinsuranceAccountingReadinessService', () => {
     where?: Record<string, unknown>;
   };
   type ClaimRecoveryReceiptFindManyArg = {
+    take?: number;
+    where?: Record<string, unknown>;
+  };
+  type ClaimCedantSettlementFindManyArg = {
     take?: number;
     where?: Record<string, unknown>;
   };
@@ -377,6 +382,47 @@ describe('ReinsuranceAccountingReadinessService', () => {
     status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
     bankConfirmedAt: new Date('2026-08-10T12:00:00.000Z'),
   };
+  const claimCedantSettlement = {
+    id: 'cedant-settlement-1',
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    claimId: 'claim-1',
+    payableApprovalId: 'approval-1',
+    currency: 'GHS',
+    amount: new Prisma.Decimal('30000.00'),
+    settlementDate: new Date('2026-08-11T10:00:00.000Z'),
+    reference: 'CED-SET-001',
+    settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+    settlementCurrency: 'GHS',
+    agreedExchangeRate: null,
+    bankReference: null,
+    bankConfirmedAt: null,
+    status: PlacementClaimCedantSettlementStatus.RECORDED,
+    reversalOfSettlementId: null,
+    createdAt: new Date('2026-08-11T10:00:00.000Z'),
+    placement: {
+      id: 'placement-1',
+      reference: 'FAC-001',
+      policyNumber: 'POL-001',
+      title: 'Factory Fire Risk',
+      cedant: {
+        id: 'cedant-1',
+        type: CounterpartyType.CEDANT,
+        name: 'Acme Insurance',
+        registrationNumber: null,
+      },
+    },
+    claim: {
+      id: 'claim-1',
+      claimNumber: 'CLM-001',
+    },
+  };
+  const bankConfirmedClaimCedantSettlement = {
+    ...claimCedantSettlement,
+    status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+    bankReference: 'BANK-CED-001',
+    bankConfirmedAt: new Date('2026-08-11T12:00:00.000Z'),
+  };
 
   const makeService = (
     notes: unknown[] = [issuedNote],
@@ -385,6 +431,7 @@ describe('ReinsuranceAccountingReadinessService', () => {
     approvals: unknown[] = [claimPayableApproval],
     recoveryApprovals: unknown[] = [claimRecoveryApproval],
     recoveryReceipts: unknown[] = [],
+    cedantSettlements: unknown[] = [],
   ) => {
     const prisma: {
       placementNote: {
@@ -409,6 +456,12 @@ describe('ReinsuranceAccountingReadinessService', () => {
         findMany: jest.Mock<
           Promise<unknown[]>,
           [ClaimRecoveryReceiptFindManyArg]
+        >;
+      };
+      placementClaimCedantSettlement: {
+        findMany: jest.Mock<
+          Promise<unknown[]>,
+          [ClaimCedantSettlementFindManyArg]
         >;
       };
       reinsuranceAccountingOutbox: { findMany: jest.Mock };
@@ -438,6 +491,11 @@ describe('ReinsuranceAccountingReadinessService', () => {
         findMany: jest
           .fn<Promise<unknown[]>, [ClaimRecoveryReceiptFindManyArg]>()
           .mockResolvedValue(recoveryReceipts),
+      },
+      placementClaimCedantSettlement: {
+        findMany: jest
+          .fn<Promise<unknown[]>, [ClaimCedantSettlementFindManyArg]>()
+          .mockResolvedValue(cedantSettlements),
       },
       reinsuranceAccountingOutbox: {
         findMany: jest.fn().mockResolvedValue(existingOutbox),
@@ -596,6 +654,30 @@ describe('ReinsuranceAccountingReadinessService', () => {
         occurredAt: '2026-08-10T12:30:00.000Z',
         currency: 'GHS',
         payload: { amounts: { reversalAmount: 40000 } },
+      }),
+      prepareClaimCedantSettlementPaid: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
+        sourceRecordType: 'PlacementClaimCedantSettlement',
+        sourceRecordId: 'cedant-settlement-1',
+        sourceDocumentId: 'claim-1',
+        idempotencyKey:
+          'reinsurance:claim-cedant-settlement:cedant-settlement-1:confirmed:v1',
+        occurredAt: '2026-08-11T12:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { settlementAmount: 30000 } },
+      }),
+      prepareClaimCedantSettlementReversed: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+        sourceRecordType: 'PlacementClaimCedantSettlement',
+        sourceRecordId: 'cedant-settlement-reversal-1',
+        sourceDocumentId: 'cedant-settlement-1',
+        idempotencyKey:
+          'reinsurance:claim-cedant-settlement:cedant-settlement-reversal-1:reversal:v1',
+        occurredAt: '2026-08-11T12:30:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { reversalAmount: 30000 } },
       }),
       enqueuePreparedEvent: jest.fn().mockResolvedValue({
         id: 'outbox-1',
@@ -1616,6 +1698,123 @@ describe('ReinsuranceAccountingReadinessService', () => {
       items: [
         expect.objectContaining({
           receiptId: 'recovery-receipt-reversal-1',
+          status: 'ENQUEUED',
+        }),
+      ],
+    });
+  });
+
+  it('lists recorded claim cedant settlements awaiting Accounting confirmation', async () => {
+    const { prisma, service } = makeService(
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [claimCedantSettlement],
+    );
+
+    const result =
+      await service.findPendingClaimCedantSettlementConfirmations(user);
+
+    const findManyArg =
+      prisma.placementClaimCedantSettlement.findMany.mock.calls[0]?.[0];
+    expect(findManyArg?.where).toMatchObject({
+      tenantId: 'tenant-1',
+      status: PlacementClaimCedantSettlementStatus.RECORDED,
+      reversalOfSettlementId: null,
+      placement: { archivedAt: null },
+    });
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PlacementClaimCedantSettlement',
+        sourceRecordId: 'cedant-settlement-1',
+        action: 'CONFIRM_BANK_PAYMENT',
+        direction: 'OUTBOUND',
+        amount: '30000',
+        currency: 'GHS',
+      }),
+    ]);
+  });
+
+  it('dry-runs bank-confirmed claim cedant settlements missing outbox rows', async () => {
+    const { financialEvents, service } = makeService(
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [bankConfirmedClaimCedantSettlement],
+    );
+
+    const result = await service.reconcileClaimCedantSettlementPaidEvents(
+      user,
+      {
+        dryRun: true,
+      },
+    );
+
+    expect(result).toMatchObject({
+      inspectedCount: 1,
+      missingCount: 1,
+      enqueuedCount: 0,
+      items: [
+        expect.objectContaining({
+          settlementId: 'cedant-settlement-1',
+          status: 'MISSING',
+          idempotencyKey:
+            'reinsurance:claim-cedant-settlement:cedant-settlement-1:confirmed:v1',
+        }),
+      ],
+    });
+    expect(
+      financialEvents.prepareClaimCedantSettlementPaid,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('enqueues missing claim cedant settlement reversal events', async () => {
+    const reversalSettlement = {
+      ...bankConfirmedClaimCedantSettlement,
+      id: 'cedant-settlement-reversal-1',
+      reversalOfSettlementId: 'cedant-settlement-1',
+      amount: new Prisma.Decimal('-30000.00'),
+      bankConfirmedAt: new Date('2026-08-11T12:30:00.000Z'),
+    };
+    const { financialEvents, service } = makeService(
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [reversalSettlement],
+    );
+
+    const result = await service.reconcileClaimCedantSettlementReversedEvents(
+      user,
+      { dryRun: false },
+    );
+
+    expect(
+      financialEvents.prepareClaimCedantSettlementReversed,
+    ).toHaveBeenCalledWith(user, reversalSettlement);
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+        idempotencyKey:
+          'reinsurance:claim-cedant-settlement:cedant-settlement-reversal-1:reversal:v1',
+      }),
+    );
+    expect(result).toMatchObject({
+      dryRun: false,
+      enqueuedCount: 1,
+      items: [
+        expect.objectContaining({
+          settlementId: 'cedant-settlement-reversal-1',
           status: 'ENQUEUED',
         }),
       ],
