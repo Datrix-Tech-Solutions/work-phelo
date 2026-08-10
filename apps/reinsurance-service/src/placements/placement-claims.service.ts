@@ -16,6 +16,7 @@ import { ClosingSnapshot } from './closing-snapshot.reader';
 import { CreatePlacementClaimDto } from './dto/create-placement-claim.dto';
 import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
 import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
+import { PlacementClaimFinancialCloseReadinessService } from './placement-claim-financial-close-readiness.service';
 import { PlacementEffectivePositionService } from './placement-effective-position.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
@@ -57,6 +58,7 @@ export class PlacementClaimsService {
     private readonly effectivePositionService: PlacementEffectivePositionService,
     private readonly effectiveViewService: PlacementEffectiveViewService,
     private readonly claimAllocationCalculator: ClaimAllocationCalculator,
+    private readonly financialCloseReadiness: PlacementClaimFinancialCloseReadinessService,
     private readonly money: ReinsuranceMoneyHelper,
   ) {}
 
@@ -220,6 +222,12 @@ export class PlacementClaimsService {
     const claim = await this.findOne(user.tenantId, placementId, claimId);
     if (claim.status === dto.status) return claim;
     this.assertStatusTransition(claim.status, dto.status);
+    await this.assertFinanciallyReadyForStatus(
+      user.tenantId,
+      placementId,
+      claimId,
+      dto.status,
+    );
 
     const now = new Date();
     return this.prisma.placementClaim.update({
@@ -379,6 +387,28 @@ export class PlacementClaimsService {
 
     if (!allowed[from].includes(to)) {
       throw new BadRequestException(`Cannot move claim from ${from} to ${to}`);
+    }
+  }
+
+  private async assertFinanciallyReadyForStatus(
+    tenantId: string,
+    placementId: string,
+    claimId: string,
+    status: PlacementClaimStatus,
+  ): Promise<void> {
+    if (status === PlacementClaimStatus.SETTLED) {
+      await this.financialCloseReadiness.assertReadyForSettlementStatus(
+        tenantId,
+        placementId,
+        claimId,
+      );
+    }
+    if (status === PlacementClaimStatus.CLOSED) {
+      await this.financialCloseReadiness.assertReadyForClosedStatus(
+        tenantId,
+        placementId,
+        claimId,
+      );
     }
   }
 

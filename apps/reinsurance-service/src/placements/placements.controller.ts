@@ -100,6 +100,7 @@ import {
   PlacementClaimCedantSettlementListResponseDto,
   PlacementClaimCedantSettlementResponseDto,
 } from './dto/placement-claim-cedant-settlement-response.dto';
+import { PlacementClaimFinancialCloseReadinessResponseDto } from './dto/placement-claim-financial-close-readiness-response.dto';
 import {
   PlacementClaimRecoveryApprovalListResponseDto,
   PlacementClaimRecoveryApprovalResponseDto,
@@ -109,6 +110,7 @@ import {
 } from './dto/placement-claim-recovery-response.dto';
 import { ReversePlacementClaimCedantSettlementDto } from './dto/reverse-placement-claim-cedant-settlement.dto';
 import { ReversePlacementClaimRecoveryReceiptDto } from './dto/reverse-placement-claim-recovery-receipt.dto';
+import { PlacementClaimFinancialCloseReadinessService } from './placement-claim-financial-close-readiness.service';
 import {
   PlacementClosingListResponseDto,
   PlacementClosingResponseDto,
@@ -190,6 +192,7 @@ export class PlacementsController {
     private readonly claimsService: PlacementClaimsService,
     private readonly claimCashCallsService: PlacementClaimCashCallsService,
     private readonly claimCedantSettlementsService: PlacementClaimCedantSettlementsService,
+    private readonly claimFinancialCloseReadinessService: PlacementClaimFinancialCloseReadinessService,
     private readonly claimRecoveryApprovalsService: PlacementClaimRecoveryApprovalsService,
     private readonly claimRecoveryReceiptsService: PlacementClaimRecoveryReceiptsService,
   ) {}
@@ -1631,6 +1634,34 @@ export class PlacementsController {
     return this.claimsService.changeStatus(request.user, id, claimId, dto);
   }
 
+  @Get(':id/claims/:claimId/financial-close-readiness')
+  @ApiTags('Reinsurance - Claims')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get claim financial close readiness',
+    description:
+      'Returns backend-derived financial readiness for moving a claim to SETTLED or CLOSED. RECORDED settlements/receipts are operational and require Accounting confirmation before they reduce financial outstanding. BANK_CONFIRMED rows are financial. SETTLED means recognized payable/recovery obligations are resolved; CLOSED is the final operational closure from SETTLED. Claim closure is non-posting in Phase 1 and does not emit a CLAIM_CLOSED Accounting event.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimFinancialCloseReadinessResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or claim is missing, archived or belongs to another tenant.',
+  })
+  getClaimFinancialCloseReadiness(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimFinancialCloseReadinessService.getReadiness(
+      request.user.tenantId,
+      id,
+      claimId,
+    );
+  }
+
   @Patch(':id/claims/:claimId/approve-payable')
   @ApiTags('Reinsurance - Claim Cedant Settlements')
   @RequirePermissions(PlacementPermission.EDIT)
@@ -2271,7 +2302,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Get claim recovery position',
     description:
-      'Returns recovery totals from claim allocation snapshots, issued cash calls and immutable recovery receipt records. Cedant settlement remains deferred.',
+      'Returns recovery totals from claim allocation snapshots, issued cash calls, immutable recovery receipt records and Cedant settlement position. RECORDED values are operational; BANK_CONFIRMED values are financial.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })

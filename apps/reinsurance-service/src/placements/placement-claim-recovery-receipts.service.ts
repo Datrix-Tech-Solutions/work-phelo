@@ -9,6 +9,7 @@ import {
   PlacementClaimCedantSettlementStatus,
   PlacementClaimCashCallStatus,
   PlacementClaimRecoveryReceiptStatus,
+  PlacementClaimStatus,
   PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
@@ -401,6 +402,18 @@ export class PlacementClaimRecoveryReceiptsService {
                 'Recovery receipt has already been reversed',
               );
             }
+            const claim = await tx.placementClaim.findFirst({
+              where: {
+                id: claimId,
+                tenantId: user.tenantId,
+                placementId,
+              },
+              select: { status: true },
+            });
+            if (!claim) {
+              throw new NotFoundException('Placement claim not found');
+            }
+            this.assertClaimAllowsFinancialReversal(claim.status);
 
             await tx.placementClaimRecoveryReceipt.update({
               where: { id: receipt.id },
@@ -674,6 +687,19 @@ export class PlacementClaimRecoveryReceiptsService {
     if (status !== PlacementClaimCashCallStatus.ISSUED) {
       throw new BadRequestException(
         'Only issued claim cash calls can receive recovery receipts',
+      );
+    }
+  }
+
+  private assertClaimAllowsFinancialReversal(
+    status: PlacementClaimStatus,
+  ): void {
+    if (
+      status === PlacementClaimStatus.SETTLED ||
+      status === PlacementClaimStatus.CLOSED
+    ) {
+      throw new ConflictException(
+        'Financial recovery reversals are blocked once a claim is settled or closed. Reopen the claim through an authorized workflow before reversing financial history.',
       );
     }
   }

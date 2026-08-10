@@ -544,6 +544,13 @@ export class PlacementClaimCedantSettlementsService {
                 'Cedant settlement has already been reversed',
               );
             }
+            const claim = await this.findClaim(
+              tx,
+              user.tenantId,
+              placementId,
+              claimId,
+            );
+            this.assertClaimAllowsFinancialReversal(claim.status);
 
             await tx.placementClaimCedantSettlement.update({
               where: { id: settlement.id },
@@ -783,6 +790,19 @@ export class PlacementClaimCedantSettlementsService {
       claim.status === PlacementClaimStatus.VOID
     ) {
       throw new BadRequestException('Terminal claims cannot be settled');
+    }
+  }
+
+  private assertClaimAllowsFinancialReversal(
+    status: PlacementClaimStatus,
+  ): void {
+    if (
+      status === PlacementClaimStatus.SETTLED ||
+      status === PlacementClaimStatus.CLOSED
+    ) {
+      throw new ConflictException(
+        'Financial settlement reversals are blocked once a claim is settled or closed. Reopen the claim through an authorized workflow before reversing financial history.',
+      );
     }
   }
 
