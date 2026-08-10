@@ -10,6 +10,8 @@ such as Reinsurance are unavailable or disabled.
 - Fiscal periods, currencies, cost centres and accounting settings.
 - Manual journals, posting, reversal and General Ledger reads.
 - Customers/vendors and subledger references.
+- Cash, bank and wallet account masters.
+- Standalone cashbook receipts, payments, transfers, bank charges and adjustments.
 - Posting rules for source-module events.
 - Source Event Inbox, idempotency, reconciliation and retry state.
 - Financial Confirmation Queue adapters for optional source modules.
@@ -113,6 +115,12 @@ npm run build --workspace=apps/accounting-service
 ## Operational Notes
 
 - Posted journals are immutable; corrections use linked reversals.
+- Posted cashbook transactions are immutable; corrections use linked reversal
+  cashbook rows and reversal journals.
+- Cash/bank accounts store only masked public identifiers. Do not store raw
+  credentials, secrets or provider tokens.
+- Cross-currency cashbook transfers require an explicit agreed exchange rate;
+  Accounting never fetches live FX during posting.
 - Source-event idempotency keys are tenant-scoped and deterministic.
 - Manual Accounting remains supported independently of automation.
 - Posting rules are tenant-owned and determine final debit/credit accounts.

@@ -4,6 +4,8 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingSettingsController } from './accounting-settings.controller';
 import { AccountsController } from './accounts.controller';
+import { CashbookController } from './cashbook.controller';
+import { CashbookService } from './cashbook.service';
 import { InternalSubledgersController } from './internal-subledgers.controller';
 import { JournalPolicy } from './journal.policy';
 import { JournalsController } from './journals.controller';
@@ -16,16 +18,23 @@ import { ReportsService } from './reports.service';
   controllers: [
     AccountingSettingsController,
     AccountsController,
+    CashbookController,
     InternalSubledgersController,
     JournalsController,
     ReportsController,
   ],
   providers: [
     AccountingMasterDataService,
+    CashbookService,
     JournalPolicy,
     JournalsService,
     ReportsService,
   ],
-  exports: [AccountingMasterDataService, JournalsService, ReportsService],
+  exports: [
+    AccountingMasterDataService,
+    CashbookService,
+    JournalsService,
+    ReportsService,
+  ],
 })
 export class LedgerModule {}
