@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PlacementClaimCedantSettlementStatus } from '../../../prisma/generated/client';
+import {
+  PlacementClaimCedantSettlementStatus,
+  PlacementSettlementMethod,
+} from '../../../prisma/generated/client';
 
 export class PlacementClaimCedantSettlementResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -14,6 +17,9 @@ export class PlacementClaimCedantSettlementResponseDto {
   @ApiProperty({ format: 'uuid' })
   claimId!: string;
 
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  payableApprovalId!: string | null;
+
   @ApiProperty({ example: 'GHS' })
   currency!: string;
 
@@ -25,6 +31,27 @@ export class PlacementClaimCedantSettlementResponseDto {
 
   @ApiPropertyOptional({ type: String, nullable: true })
   reference!: string | null;
+
+  @ApiPropertyOptional({ enum: PlacementSettlementMethod, nullable: true })
+  settlementMethod!: PlacementSettlementMethod | null;
+
+  @ApiPropertyOptional({ example: 'GHS', nullable: true })
+  settlementCurrency!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  bankReference!: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  bankConfirmedAt!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  bankConfirmedByUserId!: string | null;
+
+  @ApiPropertyOptional({ type: String, example: '12.34567800', nullable: true })
+  agreedExchangeRate!: string | null;
+
+  @ApiProperty({ type: String, example: '25.00' })
+  bankChargeAmount!: string;
 
   @ApiPropertyOptional({ type: String, nullable: true })
   notes!: string | null;

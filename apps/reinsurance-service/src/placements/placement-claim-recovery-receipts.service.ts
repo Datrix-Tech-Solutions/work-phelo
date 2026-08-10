@@ -116,8 +116,11 @@ export interface ClaimRecoveryPosition {
   cedantSettlement: {
     approvedPayableAmount: string | null;
     settledAmount: string;
+    recordedAmount: string;
+    bankConfirmedAmount: string;
     reversedAmount: string;
     outstandingAmount: string;
+    operationalSettledAmount: string;
     settlementStatus:
       | 'PENDING_APPROVAL'
       | 'APPROVED_UNSETTLED'
@@ -965,6 +968,19 @@ export class PlacementClaimRecoveryReceiptsService {
         .filter(
           (settlement) =>
             settlement.status ===
+              PlacementClaimCedantSettlementStatus.BANK_CONFIRMED &&
+            !settlement.reversalOfSettlementId,
+        )
+        .reduce(
+          (sum, settlement) => sum + this.money.toNumber(settlement.amount),
+          0,
+        ),
+    );
+    const recordedAmount = this.money.roundMoney(
+      settlements
+        .filter(
+          (settlement) =>
+            settlement.status ===
               PlacementClaimCedantSettlementStatus.RECORDED &&
             !settlement.reversalOfSettlementId,
         )
@@ -977,7 +993,8 @@ export class PlacementClaimRecoveryReceiptsService {
       settlements
         .filter((settlement) => !!settlement.reversalOfSettlementId)
         .reduce(
-          (sum, settlement) => sum + this.money.toNumber(settlement.amount),
+          (sum, settlement) =>
+            sum + Math.abs(this.money.toNumber(settlement.amount)),
           0,
         ),
     );
@@ -1003,8 +1020,13 @@ export class PlacementClaimRecoveryReceiptsService {
           ? null
           : this.formatMoney(approvedPayableAmount),
       settledAmount: this.formatMoney(settledAmount),
+      recordedAmount: this.formatMoney(recordedAmount),
+      bankConfirmedAmount: this.formatMoney(settledAmount),
       reversedAmount: this.formatMoney(reversedAmount),
       outstandingAmount: this.formatMoney(outstandingAmount),
+      operationalSettledAmount: this.formatMoney(
+        this.money.roundMoney(recordedAmount + settledAmount),
+      ),
       settlementStatus,
     };
   }

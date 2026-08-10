@@ -568,8 +568,11 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     expect(position.cedantSettlement).toEqual({
       approvedPayableAmount: null,
       settledAmount: '0.00',
+      recordedAmount: '0.00',
+      bankConfirmedAmount: '0.00',
       reversedAmount: '0.00',
       outstandingAmount: '0.00',
+      operationalSettledAmount: '0.00',
       settlementStatus: 'PENDING_APPROVAL',
     });
   });
@@ -690,17 +693,12 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([
       {
         amount: new Prisma.Decimal('50000.00'),
-        status: PlacementClaimCedantSettlementStatus.RECORDED,
+        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
         reversalOfSettlementId: null,
       },
       {
         amount: new Prisma.Decimal('10000.00'),
-        status: PlacementClaimCedantSettlementStatus.REVERSED,
-        reversalOfSettlementId: null,
-      },
-      {
-        amount: new Prisma.Decimal('10000.00'),
-        status: PlacementClaimCedantSettlementStatus.RECORDED,
+        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
         reversalOfSettlementId: 'settlement-reversed',
       },
     ]);
@@ -719,8 +717,11 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     expect(position.cedantSettlement).toEqual({
       approvedPayableAmount: '90000.00',
       settledAmount: '50000.00',
+      recordedAmount: '0.00',
+      bankConfirmedAmount: '50000.00',
       reversedAmount: '10000.00',
       outstandingAmount: '40000.00',
+      operationalSettledAmount: '50000.00',
       settlementStatus: 'PARTIALLY_SETTLED',
     });
     expect(position.funding).toEqual({

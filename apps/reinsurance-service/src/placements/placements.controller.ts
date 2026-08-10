@@ -92,6 +92,7 @@ import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recover
 import { PlacementClaimsService } from './placement-claims.service';
 import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-payable.dto';
 import { ApprovePlacementClaimRecoveryDto } from './dto/approve-placement-claim-recovery.dto';
+import { ConfirmPlacementClaimCedantSettlementBankDto } from './dto/confirm-placement-claim-cedant-settlement-bank.dto';
 import { ConfirmPlacementClaimRecoveryReceiptBankDto } from './dto/confirm-placement-claim-recovery-receipt-bank.dto';
 import { CreatePlacementClaimCedantSettlementDto } from './dto/create-placement-claim-cedant-settlement.dto';
 import { CreatePlacementClaimRecoveryReceiptDto } from './dto/create-placement-claim-recovery-receipt.dto';
@@ -1719,6 +1720,48 @@ export class PlacementsController {
       request.user,
       id,
       claimId,
+      dto,
+    );
+  }
+
+  @Post(':id/claims/:claimId/cedant-settlements/:settlementId/bank-confirm')
+  @ApiTags('Reinsurance - Claim Cedant Settlements')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Financially confirm a cedant claim settlement',
+    description:
+      'Accounting-owned confirmation that a previously RECORDED Broker -> Cedant claim settlement has completed through bank, cash, mobile-money, cheque, offset or journal process. This is the recognition boundary for CLAIM_CEDANT_SETTLEMENT_PAID. The endpoint does not modify the operational amount, Cedant, placement, claim, payable approval or business currency.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'settlementId',
+    format: 'uuid',
+    description: 'Cedant settlement ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementClaimCedantSettlementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Settlement is not confirmable, confirmation facts are invalid or required FX/reference data is missing.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Cedant settlement is already confirmed, changed status concurrently or would over-settle the approved payable.',
+  })
+  confirmClaimCedantSettlementBank(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('settlementId', ParseUUIDPipe) settlementId: string,
+    @Body() dto: ConfirmPlacementClaimCedantSettlementBankDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimCedantSettlementsService.confirmBankSettlement(
+      request.user,
+      id,
+      claimId,
+      settlementId,
       dto,
     );
   }

@@ -3,6 +3,7 @@ import {
   ReinsuranceAccountingOutboxStatus,
   PlacementClaimCedantSettlementStatus,
   PlacementClaimStatus,
+  PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
 import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
@@ -63,10 +64,18 @@ describe('PlacementClaimCedantSettlementsService', () => {
     tenantId: 'tenant-1',
     placementId: 'placement-1',
     claimId: 'claim-1',
+    payableApprovalId: 'approval-1',
     currency: 'GHS',
     amount: new Prisma.Decimal('40000.00'),
     settlementDate: new Date('2026-07-29T12:00:00.000Z'),
     reference: 'PAY-001',
+    settlementMethod: null,
+    settlementCurrency: null,
+    bankReference: null,
+    bankConfirmedAt: null,
+    bankConfirmedByUserId: null,
+    agreedExchangeRate: null,
+    bankChargeAmount: new Prisma.Decimal('0.00'),
     notes: null,
     status: PlacementClaimCedantSettlementStatus.RECORDED,
     reversalOfSettlementId: null,
@@ -94,11 +103,14 @@ describe('PlacementClaimCedantSettlementsService', () => {
       findFirst: PrismaMethod;
       create: PrismaMethod;
       update: PrismaMethod;
+      updateMany: PrismaMethod;
     };
     $transaction: jest.Mock;
   };
   let financialEvents: {
     prepareClaimPayableApproved: jest.Mock;
+    prepareClaimCedantSettlementPaid: jest.Mock;
+    prepareClaimCedantSettlementReversed: jest.Mock;
     enqueuePreparedEvent: jest.Mock;
   };
   let service: PlacementClaimCedantSettlementsService;
@@ -122,6 +134,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+        updateMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
       $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) =>
         callback(prisma),
@@ -157,6 +170,30 @@ describe('PlacementClaimCedantSettlementsService', () => {
         occurredAt: '2026-07-30T10:00:00.000Z',
         currency: 'GHS',
         payload: { amounts: { approvedPayableAmount: 90000 } },
+      }),
+      prepareClaimCedantSettlementPaid: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
+        sourceRecordType: 'PlacementClaimCedantSettlement',
+        sourceRecordId: 'settlement-1',
+        sourceDocumentId: 'claim-1',
+        idempotencyKey:
+          'reinsurance:claim-cedant-settlement:settlement-1:confirmed:v1',
+        occurredAt: '2026-07-30T12:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { settlementAmount: 40000 } },
+      }),
+      prepareClaimCedantSettlementReversed: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-1',
+        sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+        sourceRecordType: 'PlacementClaimCedantSettlement',
+        sourceRecordId: 'settlement-reversal-1',
+        sourceDocumentId: 'settlement-1',
+        idempotencyKey:
+          'reinsurance:claim-cedant-settlement:settlement-reversal-1:reversal:v1',
+        occurredAt: '2026-07-30T13:00:00.000Z',
+        currency: 'GHS',
+        payload: { amounts: { reversalAmount: 40000 } },
       }),
       enqueuePreparedEvent: jest.fn().mockResolvedValue({
         id: 'outbox-1',
@@ -304,7 +341,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
     prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([
       {
         amount: new Prisma.Decimal('60000.00'),
-        status: PlacementClaimCedantSettlementStatus.RECORDED,
+        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
         reversalOfSettlementId: null,
       },
     ]);
@@ -320,6 +357,20 @@ describe('PlacementClaimCedantSettlementsService', () => {
     prisma.placementClaim.findFirst.mockResolvedValue({
       ...claim,
       approvedPayableAmount: new Prisma.Decimal('90000.00'),
+    });
+    prisma.placementClaimPayableApproval.findFirst.mockResolvedValue({
+      id: 'approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      approvalVersion: 1,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+      finalLossAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-30T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+      notes: null,
+      createdAt: new Date('2026-07-30T10:00:00.000Z'),
     });
     prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([
       {
@@ -347,11 +398,16 @@ describe('PlacementClaimCedantSettlementsService', () => {
       tenantId: 'tenant-1',
       placementId: 'placement-1',
       claimId: 'claim-1',
+      payableApprovalId: 'approval-1',
       currency: 'GHS',
       amount: 50000,
       reference: 'PAY-002',
       status: PlacementClaimCedantSettlementStatus.RECORDED,
     });
+    expect(
+      financialEvents.prepareClaimCedantSettlementPaid,
+    ).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
 
     await expect(
       service.create(user, 'placement-1', 'claim-1', {
@@ -375,6 +431,20 @@ describe('PlacementClaimCedantSettlementsService', () => {
       ...claim,
       approvedPayableAmount: new Prisma.Decimal('90000.00'),
     });
+    prisma.placementClaimPayableApproval.findFirst.mockResolvedValue({
+      id: 'approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      approvalVersion: 1,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+      finalLossAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-30T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+      notes: null,
+      createdAt: new Date('2026-07-30T10:00:00.000Z'),
+    });
 
     await expect(
       service.create(user, 'placement-1', 'claim-1', {
@@ -383,6 +453,107 @@ describe('PlacementClaimCedantSettlementsService', () => {
         settlementDate: '2026-07-29T12:00:00.000Z',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('financially confirms a recorded cedant settlement and enqueues paid event', async () => {
+    const confirmed = {
+      ...settlement,
+      status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+      bankConfirmedAt: new Date('2026-07-30T12:00:00.000Z'),
+      bankConfirmedByUserId: 'user-1',
+      bankReference: 'BANK-CED-001',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'GHS',
+    };
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+    });
+    prisma.placementClaimPayableApproval.findFirst.mockResolvedValue({
+      id: 'approval-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      claimId: 'claim-1',
+      approvalVersion: 1,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+      finalLossAmount: new Prisma.Decimal('100000.00'),
+      currency: 'GHS',
+      approvedAt: new Date('2026-07-30T10:00:00.000Z'),
+      approvedByUserId: 'user-1',
+      notes: null,
+      createdAt: new Date('2026-07-30T10:00:00.000Z'),
+    });
+    prisma.placementClaimCedantSettlement.findFirst
+      .mockResolvedValueOnce(settlement)
+      .mockResolvedValueOnce(confirmed);
+    prisma.placementClaimCedantSettlement.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    const result = await service.confirmBankSettlement(
+      user,
+      'placement-1',
+      'claim-1',
+      'settlement-1',
+      {
+        bankConfirmedAt: '2026-07-30T12:00:00.000Z',
+        bankReference: 'BANK-CED-001',
+      },
+    );
+
+    expect(result).toEqual(confirmed);
+    const updateArgs =
+      firstCallArg<Prisma.PlacementClaimCedantSettlementUpdateManyArgs>(
+        prisma.placementClaimCedantSettlement.updateMany,
+      );
+    expect(updateArgs.where).toMatchObject({
+      id: 'settlement-1',
+      status: PlacementClaimCedantSettlementStatus.RECORDED,
+    });
+    expect(updateArgs.data).toMatchObject({
+      status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+      payableApprovalId: 'approval-1',
+      bankConfirmedByUserId: 'user-1',
+      bankReference: 'BANK-CED-001',
+    });
+    expect(
+      financialEvents.prepareClaimCedantSettlementPaid,
+    ).toHaveBeenCalledWith(user, confirmed);
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses only bank-confirmed settlements for payable outstanding', async () => {
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      approvedPayableAmount: new Prisma.Decimal('90000.00'),
+    });
+    prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([
+      {
+        amount: new Prisma.Decimal('30000.00'),
+        status: PlacementClaimCedantSettlementStatus.RECORDED,
+        reversalOfSettlementId: null,
+      },
+      {
+        amount: new Prisma.Decimal('40000.00'),
+        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+        reversalOfSettlementId: null,
+      },
+    ]);
+
+    const position = await service.getPosition(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+    );
+
+    expect(position).toMatchObject({
+      recordedAmount: '30000.00',
+      bankConfirmedAmount: '40000.00',
+      settledAmount: '40000.00',
+      outstandingAmount: '50000.00',
+      operationalSettledAmount: '70000.00',
+      settlementStatus: 'PARTIALLY_SETTLED',
+    });
   });
 
   it('reverses settlement immutably and rejects duplicate reversal', async () => {
@@ -407,6 +578,20 @@ describe('PlacementClaimCedantSettlementsService', () => {
       where: { id: 'settlement-1' },
       data: { status: PlacementClaimCedantSettlementStatus.REVERSED },
     });
+    const createArgs =
+      firstCallArg<Prisma.PlacementClaimCedantSettlementCreateArgs>(
+        prisma.placementClaimCedantSettlement.create,
+      );
+    expect(createArgs.data).toMatchObject({
+      status: PlacementClaimCedantSettlementStatus.RECORDED,
+      reversalOfSettlementId: 'settlement-1',
+    });
+    expect((createArgs.data.amount as Prisma.Decimal).toString()).toBe(
+      '-40000',
+    );
+    expect(
+      financialEvents.prepareClaimCedantSettlementReversed,
+    ).not.toHaveBeenCalled();
 
     prisma.placementClaimCedantSettlement.findFirst.mockResolvedValue({
       ...settlement,
@@ -416,5 +601,41 @@ describe('PlacementClaimCedantSettlementsService', () => {
     await expect(
       service.reverse(user, 'placement-1', 'claim-1', 'settlement-1', {}),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('emits reversal event for bank-confirmed cedant settlement reversals', async () => {
+    const confirmedSettlement = {
+      ...settlement,
+      status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+      bankConfirmedAt: new Date('2026-07-30T12:00:00.000Z'),
+      bankConfirmedByUserId: 'accountant-1',
+      bankReference: 'BANK-CED-001',
+      settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
+      settlementCurrency: 'GHS',
+    };
+    const reversal = {
+      ...confirmedSettlement,
+      id: 'settlement-reversal-1',
+      amount: new Prisma.Decimal('-40000.00'),
+      reversalOfSettlementId: 'settlement-1',
+      createdByUserId: 'user-1',
+    };
+    prisma.placementClaimCedantSettlement.findFirst.mockResolvedValue(
+      confirmedSettlement,
+    );
+    prisma.placementClaimCedantSettlement.update.mockResolvedValue({
+      ...confirmedSettlement,
+      status: PlacementClaimCedantSettlementStatus.REVERSED,
+    });
+    prisma.placementClaimCedantSettlement.create.mockResolvedValue(reversal);
+
+    await service.reverse(user, 'placement-1', 'claim-1', 'settlement-1', {
+      notes: 'Correction',
+    });
+
+    expect(
+      financialEvents.prepareClaimCedantSettlementReversed,
+    ).toHaveBeenCalledWith(user, reversal);
+    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
   });
 });

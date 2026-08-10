@@ -107,6 +107,21 @@ export class ReinsuranceAccountingIntegrationController {
     );
   }
 
+  @Get('financial-confirmations/claim-cedant-settlements')
+  @ApiOperation({
+    summary:
+      'List cedant claim settlements awaiting Accounting bank confirmation',
+    description:
+      'Tenant-scoped Accounting confirmation queue adapter for RECORDED Broker -> Cedant claim settlements. This endpoint exposes operational settlement metadata only; it does not expose source-event payloads, secrets or HMAC data.',
+  })
+  findPendingClaimCedantSettlementConfirmations(
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.findPendingClaimCedantSettlementConfirmations(
+      request.user,
+    );
+  }
+
   @Post('reconciliation/debit-note-issued')
   @ApiOperation({
     summary: 'Reconcile issued placement debit notes with Accounting outbox',
@@ -255,6 +270,40 @@ export class ReinsuranceAccountingIntegrationController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.readiness.reconcileClaimRecoveryApprovedEvents(
+      request.user,
+      query,
+    );
+  }
+
+  @Post('reconciliation/claim-cedant-settlement-paid')
+  @ApiOperation({
+    summary:
+      'Reconcile bank-confirmed cedant claim settlements with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets BANK_CONFIRMED cedant claim settlement rows missing their deterministic CLAIM_CEDANT_SETTLEMENT_PAID outbox row.',
+  })
+  reconcileClaimCedantSettlementPaidEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileClaimCedantSettlementPaidEvents(
+      request.user,
+      query,
+    );
+  }
+
+  @Post('reconciliation/claim-cedant-settlement-reversed')
+  @ApiOperation({
+    summary:
+      'Reconcile cedant claim settlement reversals with Accounting outbox',
+    description:
+      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable BANK_CONFIRMED cedant claim settlement reversal rows missing their deterministic CLAIM_CEDANT_SETTLEMENT_REVERSED outbox row.',
+  })
+  reconcileClaimCedantSettlementReversedEvents(
+    @Query() query: ReconcileDebitNoteAccountingEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.readiness.reconcileClaimCedantSettlementReversedEvents(
       request.user,
       query,
     );

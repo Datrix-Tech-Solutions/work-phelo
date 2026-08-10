@@ -10,6 +10,7 @@ import {
   PlacementPaymentType,
   PlacementSettlementMethod,
   PlacementClaimAllocationStatus,
+  PlacementClaimCedantSettlementStatus,
   PlacementClaimRecoveryReceiptStatus,
   Prisma,
 } from '../../prisma/generated/client';
@@ -213,6 +214,27 @@ type ClaimRecoveryReceiptForEvent = {
   notes?: string | null;
   status: PlacementClaimRecoveryReceiptStatus;
   reversalOfReceiptId?: string | null;
+};
+
+type ClaimCedantSettlementForEvent = {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  payableApprovalId?: string | null;
+  currency: string;
+  amount: Prisma.Decimal | number | string;
+  settlementDate: Date;
+  reference?: string | null;
+  settlementMethod?: PlacementSettlementMethod | null;
+  settlementCurrency?: string | null;
+  bankReference?: string | null;
+  bankConfirmedAt?: Date | null;
+  agreedExchangeRate?: Prisma.Decimal | number | string | null;
+  bankChargeAmount?: Prisma.Decimal | number | string | null;
+  notes?: string | null;
+  status: PlacementClaimCedantSettlementStatus;
+  reversalOfSettlementId?: string | null;
 };
 
 export type ReinsurerDisbursementRecordedEligibility = {
@@ -929,6 +951,216 @@ export class ReinsuranceFinancialEventPublisher {
             'Reinsurance claims between Cedant and Reinsurers through Broker',
           postingEngine: 'POSTING_RULES',
           claimSettlementTaxTreatment: 'NOT_APPLICABLE',
+        },
+      },
+    };
+  }
+
+  async prepareClaimCedantSettlementPaid(
+    user: RequestUser,
+    settlement: ClaimCedantSettlementForEvent,
+  ): Promise<ReinsuranceAccountingEventInput | null> {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; CLAIM_CEDANT_SETTLEMENT_PAID not enqueued for settlement ${settlement.id}`,
+      );
+      return null;
+    }
+
+    if (settlement.tenantId !== user.tenantId) {
+      throw new Error(
+        `Claim cedant settlement ${settlement.id} does not belong to tenant ${user.tenantId}`,
+      );
+    }
+    if (
+      settlement.status !==
+        PlacementClaimCedantSettlementStatus.BANK_CONFIRMED ||
+      settlement.reversalOfSettlementId
+    ) {
+      throw new Error(
+        `Claim cedant settlement ${settlement.id} is not a valid bank-confirmed settlement`,
+      );
+    }
+
+    const context = await this.claimCedantSettlementContext(settlement);
+    const occurredAt = settlement.bankConfirmedAt?.toISOString();
+    if (!occurredAt) {
+      throw new Error(
+        `Claim cedant settlement ${settlement.id} is missing bankConfirmedAt for CLAIM_CEDANT_SETTLEMENT_PAID`,
+      );
+    }
+    const amount = Math.abs(this.decimalNumber(settlement.amount));
+    const bankCharges = Math.abs(
+      this.optionalDecimalNumber(settlement.bankChargeAmount) ?? 0,
+    );
+    const settlementMethod =
+      settlement.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency =
+      settlement.settlementCurrency ?? settlement.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+
+    return {
+      tenantId: settlement.tenantId,
+      sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
+      sourceRecordType: 'PlacementClaimCedantSettlement',
+      sourceRecordId: settlement.id,
+      sourceDocumentId: settlement.claimId,
+      idempotencyKey: `reinsurance:claim-cedant-settlement:${settlement.id}:confirmed:v1`,
+      occurredAt,
+      currency: settlement.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: settlement.currency,
+        ...(settlement.agreedExchangeRate
+          ? { exchangeRate: this.decimalNumber(settlement.agreedExchangeRate) }
+          : {}),
+        references: {
+          placementId: context.claim.placement.id,
+          placementReference: context.claim.placement.reference,
+          policyNumber: context.claim.placement.policyNumber,
+          placementTitle: context.claim.placement.title,
+          claimId: context.claim.id,
+          claimNumber: context.claim.claimNumber,
+          payableApprovalId: context.approval.id,
+          payableApprovalVersion: context.approval.approvalVersion,
+          cedantSettlementId: settlement.id,
+          cedantSettlementReference: settlement.reference ?? null,
+          bankReference: settlement.bankReference ?? null,
+        },
+        cedant: {
+          id: context.cedant.id,
+          type: context.cedant.type,
+          name: context.cedant.name,
+          registrationNumber: context.cedant.registrationNumber ?? null,
+          subledgerExternalRef: context.cedant.id,
+        },
+        amounts: {
+          settlementAmount: amount,
+          approvedPayableAmount: this.decimalNumber(
+            context.approval.approvedPayableAmount,
+          ),
+          signedClaimPayableReduction: amount,
+          signedCashImpact: cashAffecting ? -amount : 0,
+          bankChargeAmount: bankCharges,
+        },
+        settlement: {
+          method: settlementMethod,
+          currency: settlementCurrency,
+          bankReference: settlement.bankReference ?? null,
+          bankConfirmedAt: occurredAt,
+          cashImpact: cashAffecting,
+          bankChargesAccountingOwned: true,
+        },
+        policy: {
+          scope:
+            'Reinsurance claims between Cedant and Reinsurers through Broker',
+          postingEngine: 'POSTING_RULES',
+          claimSettlementTaxTreatment: 'NOT_APPLICABLE',
+          withholdingTaxTreatment: 'NOT_APPLICABLE',
+          nicLevyTreatment: 'NOT_APPLICABLE',
+          recognitionBoundary: 'ACCOUNTING_BANK_CONFIRMATION',
+        },
+      },
+    };
+  }
+
+  async prepareClaimCedantSettlementReversed(
+    user: RequestUser,
+    settlement: ClaimCedantSettlementForEvent,
+  ): Promise<ReinsuranceAccountingEventInput | null> {
+    if (!user.moduleConfig?.accounting) {
+      this.logger.debug(
+        `Accounting disabled for tenant ${user.tenantId}; CLAIM_CEDANT_SETTLEMENT_REVERSED not enqueued for settlement ${settlement.id}`,
+      );
+      return null;
+    }
+
+    if (settlement.tenantId !== user.tenantId) {
+      throw new Error(
+        `Claim cedant settlement reversal ${settlement.id} does not belong to tenant ${user.tenantId}`,
+      );
+    }
+    if (
+      settlement.status !==
+        PlacementClaimCedantSettlementStatus.BANK_CONFIRMED ||
+      !settlement.reversalOfSettlementId
+    ) {
+      throw new Error(
+        `Claim cedant settlement ${settlement.id} is not a valid bank-confirmed reversal`,
+      );
+    }
+
+    const context = await this.claimCedantSettlementContext(settlement);
+    const occurredAt =
+      settlement.bankConfirmedAt?.toISOString() ?? new Date().toISOString();
+    const amount = Math.abs(this.decimalNumber(settlement.amount));
+    const bankCharges = Math.abs(
+      this.optionalDecimalNumber(settlement.bankChargeAmount) ?? 0,
+    );
+    const settlementMethod =
+      settlement.settlementMethod ?? PlacementSettlementMethod.BANK_TRANSFER;
+    const settlementCurrency =
+      settlement.settlementCurrency ?? settlement.currency;
+    const cashAffecting = this.isCashAffectingSettlement(settlementMethod);
+
+    return {
+      tenantId: settlement.tenantId,
+      sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+      sourceRecordType: 'PlacementClaimCedantSettlement',
+      sourceRecordId: settlement.id,
+      sourceDocumentId: settlement.reversalOfSettlementId,
+      idempotencyKey: `reinsurance:claim-cedant-settlement:${settlement.id}:reversal:v1`,
+      occurredAt,
+      currency: settlement.currency,
+      payload: {
+        transactionDate: occurredAt,
+        currency: settlement.currency,
+        ...(settlement.agreedExchangeRate
+          ? { exchangeRate: this.decimalNumber(settlement.agreedExchangeRate) }
+          : {}),
+        references: {
+          placementId: context.claim.placement.id,
+          placementReference: context.claim.placement.reference,
+          policyNumber: context.claim.placement.policyNumber,
+          placementTitle: context.claim.placement.title,
+          claimId: context.claim.id,
+          claimNumber: context.claim.claimNumber,
+          payableApprovalId: context.approval.id,
+          payableApprovalVersion: context.approval.approvalVersion,
+          reversalSettlementId: settlement.id,
+          reversedCedantSettlementId: settlement.reversalOfSettlementId,
+          cedantSettlementReference: settlement.reference ?? null,
+          bankReference: settlement.bankReference ?? null,
+        },
+        cedant: {
+          id: context.cedant.id,
+          type: context.cedant.type,
+          name: context.cedant.name,
+          registrationNumber: context.cedant.registrationNumber ?? null,
+          subledgerExternalRef: context.cedant.id,
+        },
+        amounts: {
+          reversalAmount: amount,
+          signedClaimPayableRestoration: amount,
+          signedCashImpact: cashAffecting ? amount : 0,
+          bankChargeReversalAmount: bankCharges,
+        },
+        settlement: {
+          method: settlementMethod,
+          currency: settlementCurrency,
+          bankReference: settlement.bankReference ?? null,
+          reversedAt: occurredAt,
+          cashImpact: cashAffecting,
+          bankChargesAccountingOwned: true,
+        },
+        policy: {
+          scope:
+            'Reinsurance claims between Cedant and Reinsurers through Broker',
+          postingEngine: 'POSTING_RULES',
+          claimSettlementTaxTreatment: 'NOT_APPLICABLE',
+          withholdingTaxTreatment: 'NOT_APPLICABLE',
+          nicLevyTreatment: 'NOT_APPLICABLE',
+          recognitionBoundary: 'IMMUTABLE_REVERSAL_ROW',
         },
       },
     };
@@ -1811,6 +2043,88 @@ export class ReinsuranceFinancialEventPublisher {
     event: ReinsuranceAccountingEventInput,
   ) {
     return this.outbox.enqueueAccountingEvent(tx, event);
+  }
+
+  private async claimCedantSettlementContext(
+    settlement: ClaimCedantSettlementForEvent,
+  ) {
+    const [claim, approval] = await Promise.all([
+      this.prisma.placementClaim.findFirst({
+        where: {
+          id: settlement.claimId,
+          tenantId: settlement.tenantId,
+          placementId: settlement.placementId,
+        },
+        select: {
+          id: true,
+          claimNumber: true,
+          currency: true,
+          finalLossAmount: true,
+          placement: {
+            select: {
+              id: true,
+              reference: true,
+              policyNumber: true,
+              title: true,
+              cedantId: true,
+            },
+          },
+        },
+      }),
+      this.prisma.placementClaimPayableApproval.findFirst({
+        where: {
+          tenantId: settlement.tenantId,
+          placementId: settlement.placementId,
+          claimId: settlement.claimId,
+          ...(settlement.payableApprovalId
+            ? { id: settlement.payableApprovalId }
+            : {}),
+        },
+        orderBy: { approvalVersion: 'desc' },
+      }),
+    ]);
+
+    if (!claim) {
+      throw new Error(
+        `Claim ${settlement.claimId} not found for cedant settlement ${settlement.id}`,
+      );
+    }
+    if (claim.currency !== settlement.currency) {
+      throw new Error(
+        `Cedant settlement ${settlement.id} currency does not match claim currency`,
+      );
+    }
+    if (!approval) {
+      throw new Error(
+        `Claim payable approval not found for cedant settlement ${settlement.id}`,
+      );
+    }
+    if (approval.currency !== settlement.currency) {
+      throw new Error(
+        `Cedant settlement ${settlement.id} currency does not match payable approval currency`,
+      );
+    }
+
+    const cedant = await this.prisma.counterparty.findFirst({
+      where: {
+        id: claim.placement.cedantId,
+        tenantId: settlement.tenantId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        type: true,
+        name: true,
+        registrationNumber: true,
+      },
+    });
+    if (!cedant || cedant.type !== CounterpartyType.CEDANT) {
+      throw new Error(
+        `Cedant counterparty ${claim.placement.cedantId} not found for cedant settlement ${settlement.id}`,
+      );
+    }
+
+    return { claim, approval, cedant };
   }
 
   private async claimRecoveryReceiptContext(
