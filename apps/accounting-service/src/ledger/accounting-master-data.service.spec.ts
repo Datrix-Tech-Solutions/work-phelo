@@ -75,6 +75,7 @@ describe('AccountingMasterDataService', () => {
       subledgerAccount: {
         create: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
       },
       accountingCustomer: {
@@ -273,6 +274,10 @@ describe('AccountingMasterDataService', () => {
 
   it('updates an existing active Reinsurer subledger by type and external reference', async () => {
     const { prisma, service } = setup();
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      accountsReceivableControlAccountId: 'ar-control',
+      accountsPayableControlAccountId: 'ap-control',
+    });
     prisma.subledgerAccount.findFirst.mockResolvedValue({
       id: 'subledger-1',
       tenantId: actor.tenantId,
@@ -296,6 +301,19 @@ describe('AccountingMasterDataService', () => {
       currency: 'GHS',
     });
 
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.REINSURER,
+        externalRef: 'counterparty-1',
+        controlAccountId: 'ap-control',
+      },
+      include: {
+        controlAccount: {
+          select: { id: true, code: true, name: true },
+        },
+      },
+    });
     const [updateArgs] = prisma.subledgerAccount.update.mock.calls[0] as [
       {
         where: { id_tenantId: { id: string; tenantId: string } };
@@ -314,6 +332,10 @@ describe('AccountingMasterDataService', () => {
 
   it('does not silently reactivate an inactive integrated subledger', async () => {
     const { prisma, service } = setup();
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      accountsReceivableControlAccountId: 'ar-control',
+      accountsPayableControlAccountId: 'ap-control',
+    });
     prisma.subledgerAccount.findFirst.mockResolvedValue({
       id: 'subledger-1',
       tenantId: actor.tenantId,
@@ -331,6 +353,207 @@ describe('AccountingMasterDataService', () => {
       }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.subledgerAccount.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps the same reinsurer premium payable and claims receivable balances separate by control account', async () => {
+    const { prisma, service } = setup();
+    prisma.subledgerAccount.findMany.mockResolvedValue([
+      {
+        id: 'reinsurer-premium-ap-subledger',
+        tenantId: actor.tenantId,
+        code: 'REI-PREMIUM',
+        name: 'Reinsurer A',
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+        controlAccountId: 'premium-payable-control',
+        currency: 'GHS',
+        status: RecordStatus.ACTIVE,
+        controlAccount: {
+          id: 'premium-payable-control',
+          code: '2100',
+          name: 'Premium Payables',
+          category: GLAccountCategory.LIABILITY,
+          normalBalance: NormalBalance.CREDIT,
+        },
+      },
+      {
+        id: 'reinsurer-claims-ar-subledger',
+        tenantId: actor.tenantId,
+        code: 'REI-CLAIMS',
+        name: 'Reinsurer A',
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+        controlAccountId: 'claims-receivable-control',
+        currency: 'GHS',
+        status: RecordStatus.ACTIVE,
+        controlAccount: {
+          id: 'claims-receivable-control',
+          code: '1200',
+          name: 'Claims Recovery Receivables',
+          category: GLAccountCategory.ASSET,
+          normalBalance: NormalBalance.DEBIT,
+        },
+      },
+    ]);
+    prisma.journalLine.findMany.mockResolvedValue([
+      {
+        glAccountId: 'premium-payable-control',
+        subledgerAccountId: 'reinsurer-premium-ap-subledger',
+        transactionDebit: new Prisma.Decimal(0),
+        transactionCredit: new Prisma.Decimal(100),
+        baseDebit: new Prisma.Decimal(0),
+        baseCredit: new Prisma.Decimal(100),
+        journalEntry: {
+          transactionCurrency: 'GHS',
+          baseCurrency: 'GHS',
+        },
+      },
+      {
+        glAccountId: 'claims-receivable-control',
+        subledgerAccountId: 'reinsurer-claims-ar-subledger',
+        transactionDebit: new Prisma.Decimal(100),
+        transactionCredit: new Prisma.Decimal(0),
+        baseDebit: new Prisma.Decimal(100),
+        baseCredit: new Prisma.Decimal(0),
+        journalEntry: {
+          transactionCurrency: 'GHS',
+          baseCurrency: 'GHS',
+        },
+      },
+    ]);
+
+    const result = await service.listSubledgerAccounts(actor.tenantId, {
+      type: SubledgerType.REINSURER,
+      externalRef: 'reinsurer-1',
+    });
+
+    expect(prisma.subledgerAccount.findMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+      },
+      include: {
+        controlAccount: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            category: true,
+            normalBalance: true,
+          },
+        },
+      },
+      orderBy: { code: 'asc' },
+    });
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      id: 'reinsurer-premium-ap-subledger',
+      controlAccountId: 'premium-payable-control',
+    });
+    expect(result[0].balance).toMatchObject({
+      baseBalance: 100,
+      transactionBalance: 100,
+    });
+    expect(result[1]).toMatchObject({
+      id: 'reinsurer-claims-ar-subledger',
+      controlAccountId: 'claims-receivable-control',
+    });
+    expect(result[1].balance).toMatchObject({
+      baseBalance: 100,
+      transactionBalance: 100,
+    });
+  });
+
+  it('keeps the same cedant premium receivable and claims payable balances separate by control account', async () => {
+    const { prisma, service } = setup();
+    prisma.subledgerAccount.findMany.mockResolvedValue([
+      {
+        id: 'cedant-premium-ar-subledger',
+        tenantId: actor.tenantId,
+        code: 'CED-PREMIUM',
+        name: 'Cedant A',
+        type: SubledgerType.CEDANT,
+        externalRef: 'cedant-1',
+        controlAccountId: 'premium-receivable-control',
+        currency: 'GHS',
+        status: RecordStatus.ACTIVE,
+        controlAccount: {
+          id: 'premium-receivable-control',
+          code: '1100',
+          name: 'Premium Receivables',
+          category: GLAccountCategory.ASSET,
+          normalBalance: NormalBalance.DEBIT,
+        },
+      },
+      {
+        id: 'cedant-claims-ap-subledger',
+        tenantId: actor.tenantId,
+        code: 'CED-CLAIMS',
+        name: 'Cedant A',
+        type: SubledgerType.CEDANT,
+        externalRef: 'cedant-1',
+        controlAccountId: 'claims-payable-control',
+        currency: 'GHS',
+        status: RecordStatus.ACTIVE,
+        controlAccount: {
+          id: 'claims-payable-control',
+          code: '2200',
+          name: 'Claims Payables',
+          category: GLAccountCategory.LIABILITY,
+          normalBalance: NormalBalance.CREDIT,
+        },
+      },
+    ]);
+    prisma.journalLine.findMany.mockResolvedValue([
+      {
+        glAccountId: 'premium-receivable-control',
+        subledgerAccountId: 'cedant-premium-ar-subledger',
+        transactionDebit: new Prisma.Decimal(250),
+        transactionCredit: new Prisma.Decimal(0),
+        baseDebit: new Prisma.Decimal(250),
+        baseCredit: new Prisma.Decimal(0),
+        journalEntry: {
+          transactionCurrency: 'GHS',
+          baseCurrency: 'GHS',
+        },
+      },
+      {
+        glAccountId: 'claims-payable-control',
+        subledgerAccountId: 'cedant-claims-ap-subledger',
+        transactionDebit: new Prisma.Decimal(0),
+        transactionCredit: new Prisma.Decimal(90),
+        baseDebit: new Prisma.Decimal(0),
+        baseCredit: new Prisma.Decimal(90),
+        journalEntry: {
+          transactionCurrency: 'GHS',
+          baseCurrency: 'GHS',
+        },
+      },
+    ]);
+
+    const result = await service.listSubledgerAccounts(actor.tenantId, {
+      type: SubledgerType.CEDANT,
+      externalRef: 'cedant-1',
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      id: 'cedant-premium-ar-subledger',
+      controlAccountId: 'premium-receivable-control',
+    });
+    expect(result[0].balance).toMatchObject({
+      baseBalance: 250,
+      transactionBalance: 250,
+    });
+    expect(result[1]).toMatchObject({
+      id: 'cedant-claims-ap-subledger',
+      controlAccountId: 'claims-payable-control',
+    });
+    expect(result[1].balance).toMatchObject({
+      baseBalance: 90,
+      transactionBalance: 90,
+    });
   });
 
   it('derives GL account category and normal balance from account group', async () => {
@@ -621,6 +844,12 @@ describe('AccountingMasterDataService', () => {
       code: 'CUS-0001',
       type: SubledgerType.CUSTOMER,
     });
+    prisma.subledgerAccount.findMany.mockResolvedValue([
+      {
+        id: 'subledger-1',
+        controlAccountId: 'ar-control',
+      },
+    ]);
     prisma.accountingCustomer.create.mockResolvedValue({
       id: 'customer-1',
       tenantId: actor.tenantId,
@@ -789,6 +1018,12 @@ describe('AccountingMasterDataService', () => {
         status: RecordStatus.INACTIVE,
       },
     });
+    prisma.subledgerAccount.findMany.mockResolvedValue([
+      {
+        id: 'subledger-1',
+        controlAccountId: 'ar-control',
+      },
+    ]);
 
     await service.deactivateCustomer(actor, 'customer-1');
 
@@ -848,8 +1083,19 @@ describe('AccountingMasterDataService', () => {
       },
     ]);
     prisma.accountingCustomer.count.mockResolvedValue(2);
+    prisma.subledgerAccount.findMany.mockResolvedValue([
+      {
+        id: 'subledger-1',
+        controlAccountId: 'ar-control',
+      },
+      {
+        id: 'subledger-2',
+        controlAccountId: 'ar-control',
+      },
+    ]);
     prisma.journalLine.findMany.mockResolvedValue([
       {
+        glAccountId: 'ar-control',
         subledgerAccountId: 'subledger-1',
         baseDebit: 100,
         baseCredit: 25,

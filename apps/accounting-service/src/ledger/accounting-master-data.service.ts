@@ -33,6 +33,7 @@ import {
   QueryAccountHierarchyDto,
   QueryFiscalPeriodsDto,
   QueryGLAccountsDto,
+  QuerySubledgerAccountsDto,
   UpdateAccountClassificationDto,
   UpdateAccountGroupDto,
   UpdateAccountingCustomerDto,
@@ -1393,14 +1394,45 @@ export class AccountingMasterDataService {
     });
   }
 
-  listSubledgerAccounts(tenantId: string) {
-    return this.prisma.subledgerAccount.findMany({
-      where: { tenantId },
+  async listSubledgerAccounts(
+    tenantId: string,
+    query: QuerySubledgerAccountsDto = {},
+  ) {
+    const items = await this.prisma.subledgerAccount.findMany({
+      where: {
+        tenantId,
+        ...(query.type ? { type: query.type } : {}),
+        ...(query.externalRef ? { externalRef: query.externalRef } : {}),
+        ...(query.controlAccountId
+          ? { controlAccountId: query.controlAccountId }
+          : {}),
+        ...(query.status ? { status: query.status } : {}),
+      },
       include: {
-        controlAccount: { select: { id: true, code: true, name: true } },
+        controlAccount: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            category: true,
+            normalBalance: true,
+          },
+        },
       },
       orderBy: { code: 'asc' },
     });
+    const balances = await this.calculateSubledgerDimensionBalances(
+      tenantId,
+      items.map((item) => ({
+        subledgerAccountId: item.id,
+        controlAccountId: item.controlAccountId,
+        normalBalance: item.controlAccount.normalBalance,
+      })),
+    );
+    return items.map((item) => ({
+      ...item,
+      balance: balances.get(item.id) ?? this.emptyBalance(),
+    }));
   }
 
   async createSubledgerAccount(
@@ -1484,11 +1516,25 @@ export class AccountingMasterDataService {
   ) {
     const externalRef = this.requiredExternalRef(dto.externalRef);
     const name = this.requiredName(dto.name);
+    const config = await this.getConfiguredControlAccounts(dto.tenantId);
+    const controlAccountId =
+      dto.type === SubledgerType.CEDANT
+        ? config.accountsReceivableControlAccountId
+        : config.accountsPayableControlAccountId;
+    if (!controlAccountId) {
+      throw new BadRequestException(
+        dto.type === SubledgerType.CEDANT
+          ? 'Configure an accounts receivable control account before syncing Cedant subledgers'
+          : 'Configure an accounts payable control account before syncing Reinsurer subledgers',
+      );
+    }
+
     const existing = await this.prisma.subledgerAccount.findFirst({
       where: {
         tenantId: dto.tenantId,
         type: dto.type,
         externalRef,
+        controlAccountId,
       },
       include: {
         controlAccount: { select: { id: true, code: true, name: true } },
@@ -1525,19 +1571,6 @@ export class AccountingMasterDataService {
           controlAccount: { select: { id: true, code: true, name: true } },
         },
       });
-    }
-
-    const config = await this.getConfiguredControlAccounts(dto.tenantId);
-    const controlAccountId =
-      dto.type === SubledgerType.CEDANT
-        ? config.accountsReceivableControlAccountId
-        : config.accountsPayableControlAccountId;
-    if (!controlAccountId) {
-      throw new BadRequestException(
-        dto.type === SubledgerType.CEDANT
-          ? 'Configure an accounts receivable control account before syncing Cedant subledgers'
-          : 'Configure an accounts payable control account before syncing Reinsurer subledgers',
-      );
     }
 
     await this.assertControlAccount(
@@ -2590,6 +2623,48 @@ export class AccountingMasterDataService {
     if (uniqueSubledgerIds.length === 0) {
       return new Map<string, ReturnType<typeof this.emptyBalance>>();
     }
+    const subledgers = await this.prisma.subledgerAccount.findMany({
+      where: { tenantId, id: { in: uniqueSubledgerIds } },
+      select: { id: true, controlAccountId: true },
+    });
+    return this.calculateSubledgerDimensionBalances(
+      tenantId,
+      subledgers.map((subledger) => ({
+        subledgerAccountId: subledger.id,
+        controlAccountId: subledger.controlAccountId,
+        normalBalance,
+      })),
+    );
+  }
+
+  private async calculateSubledgerDimensionBalances(
+    tenantId: string,
+    dimensions: Array<{
+      subledgerAccountId: string;
+      controlAccountId: string;
+      normalBalance: NormalBalance;
+    }>,
+  ) {
+    const uniqueDimensions = Array.from(
+      new Map(
+        dimensions.map((dimension) => [
+          dimension.subledgerAccountId,
+          dimension,
+        ]),
+      ).values(),
+    );
+    if (uniqueDimensions.length === 0) {
+      return new Map<string, ReturnType<typeof this.emptyBalance>>();
+    }
+    const uniqueSubledgerIds = uniqueDimensions.map(
+      (dimension) => dimension.subledgerAccountId,
+    );
+    const dimensionBySubledger = new Map(
+      uniqueDimensions.map((dimension) => [
+        dimension.subledgerAccountId,
+        dimension,
+      ]),
+    );
     const lines = await this.prisma.journalLine.findMany({
       where: {
         tenantId,
@@ -2599,6 +2674,7 @@ export class AccountingMasterDataService {
         },
       },
       select: {
+        glAccountId: true,
         subledgerAccountId: true,
         transactionDebit: true,
         transactionCredit: true,
@@ -2631,6 +2707,10 @@ export class AccountingMasterDataService {
 
     for (const line of lines) {
       if (!line.subledgerAccountId) continue;
+      const dimension = dimensionBySubledger.get(line.subledgerAccountId);
+      if (!dimension || dimension.controlAccountId !== line.glAccountId) {
+        continue;
+      }
       const totals =
         totalsBySubledger.get(line.subledgerAccountId) ?? this.emptyTotals();
       totals.baseDebit += Number(line.baseDebit);
@@ -2641,9 +2721,10 @@ export class AccountingMasterDataService {
       totalsBySubledger.set(line.subledgerAccountId, totals);
     }
 
-    const isDebitNormal = normalBalance === NormalBalance.DEBIT;
     const balances = new Map<string, ReturnType<typeof this.emptyBalance>>();
     for (const [subledgerId, totals] of totalsBySubledger) {
+      const dimension = dimensionBySubledger.get(subledgerId);
+      const isDebitNormal = dimension?.normalBalance === NormalBalance.DEBIT;
       balances.set(subledgerId, {
         baseDebit: totals.baseDebit,
         baseCredit: totals.baseCredit,
