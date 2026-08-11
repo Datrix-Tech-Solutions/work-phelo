@@ -14,6 +14,8 @@ such as Reinsurance are unavailable or disabled.
 - Standalone cashbook receipts, payments, transfers, bank charges and adjustments.
 - Standalone Accounts Receivable invoices, customer credit notes, cashbook-backed
   receipts, allocations and balances.
+- Standalone Accounts Payable bills, vendor credit notes, cashbook-backed
+  payments, allocations and balances.
 - Posting rules for source-module events.
 - Source Event Inbox, idempotency, reconciliation and retry state.
 - Financial Confirmation Queue adapters for optional source modules.
@@ -132,6 +134,15 @@ npm run build --workspace=apps/accounting-service
   journal.
 - Phase 1 AR rejects unsupported cross-currency allocations; agreed FX facts must
   be captured on the originating document or receipt where required.
+- Standalone AP uses the tenant Accounts Payable control account configured in
+  Accounting settings and posts vendor subledger lines through that control
+  account.
+- Vendor payments use Cashbook as the single authoritative cash movement and
+  journal path: payment posting debits AP control and credits Cash/Bank. Payment
+  allocation changes only AP application state and never creates a duplicate GL
+  journal.
+- Phase 1 AP rejects unsupported cross-currency allocations; agreed FX facts must
+  be captured on the originating document or payment where required.
 - Source-event idempotency keys are tenant-scoped and deterministic.
 - Manual Accounting remains supported independently of automation.
 - Posting rules are tenant-owned and determine final debit/credit accounts.

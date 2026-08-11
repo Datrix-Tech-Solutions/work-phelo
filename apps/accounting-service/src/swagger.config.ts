@@ -26,6 +26,9 @@ Tenant-scoped Accounting ledger foundation.
 - Standalone Accounts Receivable uses tenant AR control configuration, customer
   subledgers and cashbook-backed receipts. Allocations update AR application
   state only and never create duplicate cash journals.
+- Standalone Accounts Payable uses tenant AP control configuration, vendor
+  subledgers and cashbook-backed payments. Allocations update AP application
+  state only and never create duplicate cash journals.
 
 Operational source-event posting is active through the Accounting Source Event
 Inbox and tenant posting rules. Source modules publish business facts only;
@@ -53,6 +56,7 @@ remain independently usable.
     .addTag('Accounting - Cash Accounts')
     .addTag('Accounting - Cashbook')
     .addTag('Accounting - Receivables')
+    .addTag('Accounting - Payables')
     .addTag('Accounting - Journals')
     .addTag('Accounting - General Ledger')
     .addTag('Accounting - Financial Reports')

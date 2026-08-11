@@ -10,6 +10,8 @@ import { InternalSubledgersController } from './internal-subledgers.controller';
 import { JournalPolicy } from './journal.policy';
 import { JournalsController } from './journals.controller';
 import { JournalsService } from './journals.service';
+import { PayablesController } from './payables.controller';
+import { PayablesService } from './payables.service';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { ReceivablesController } from './receivables.controller';
@@ -23,6 +25,7 @@ import { ReceivablesService } from './receivables.service';
     CashbookController,
     InternalSubledgersController,
     JournalsController,
+    PayablesController,
     ReceivablesController,
     ReportsController,
   ],
@@ -31,6 +34,7 @@ import { ReceivablesService } from './receivables.service';
     CashbookService,
     JournalPolicy,
     JournalsService,
+    PayablesService,
     ReceivablesService,
     ReportsService,
   ],
@@ -38,6 +42,7 @@ import { ReceivablesService } from './receivables.service';
     AccountingMasterDataService,
     CashbookService,
     JournalsService,
+    PayablesService,
     ReceivablesService,
     ReportsService,
   ],
