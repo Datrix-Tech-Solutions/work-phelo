@@ -153,6 +153,12 @@ export const RESOURCES = [
       'Standalone Accounting accounts receivable documents, receipts and allocations',
   },
   {
+    name: 'accounting.payables',
+    module: 'ACCOUNTING',
+    description:
+      'Standalone Accounting accounts payable documents, payments and allocations',
+  },
+  {
     name: 'accounting.journals',
     module: 'ACCOUNTING',
     description: 'Draft, post and reverse journal entries',
