@@ -178,6 +178,14 @@ export class PlacementPaymentResponseDto {
   })
   bankReference!: string | null;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Accounting cash/bank account selected during financial confirmation for Cashbook integration.',
+  })
+  accountingCashAccountId!: string | null;
+
   @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
   bankConfirmedAt!: string | null;
 

@@ -498,6 +498,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
       {
         bankConfirmedAt: '2026-07-30T12:00:00.000Z',
         bankReference: 'BANK-CED-001',
+        accountingCashAccountId: 'cash-account-1',
       },
     );
 
@@ -515,6 +516,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
       payableApprovalId: 'approval-1',
       bankConfirmedByUserId: 'user-1',
       bankReference: 'BANK-CED-001',
+      accountingCashAccountId: 'cash-account-1',
     });
     expect(
       financialEvents.prepareClaimCedantSettlementPaid,

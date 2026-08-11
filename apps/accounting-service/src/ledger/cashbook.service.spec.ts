@@ -96,8 +96,12 @@ describe('CashbookService', () => {
       externalReference: null,
       description: 'Customer receipt',
       offsetGlAccountId: offsetAccount.id,
+      offsetSubledgerAccountId: null,
+      sourceEventInboxId: null,
       sourceModule: null,
+      sourceEventType: null,
       sourceRecordId: null,
+      sourceReference: null,
       exchangeRate: null,
       status: CashbookTransactionStatus.DRAFT,
       createdByUserId: actor.id,
@@ -118,6 +122,7 @@ describe('CashbookService', () => {
       reversalJournalEntry: null,
       reversalOfTransaction: null,
       reversalTransaction: null,
+      sourceEventInbox: null,
       ...overrides,
     };
   }
@@ -269,6 +274,158 @@ describe('CashbookService', () => {
           sourceRecordId: 'receipt-1',
         }) as unknown,
       }),
+    );
+  });
+
+  it('creates a posted Cashbook transaction for a source cash event and links one journal', async () => {
+    const { journals, prisma, service } = setup();
+    prisma.accountingCashAccount.findFirst.mockResolvedValue(cashAccount());
+    prisma.cashbookTransaction.create.mockResolvedValue(
+      transaction({
+        status: CashbookTransactionStatus.POSTED,
+        sourceEventInboxId: 'source-event-1',
+        sourceModule: 'REINSURANCE',
+        sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+        sourceRecordId: 'payment-1',
+        postedJournalEntryId: 'journal-1',
+      }),
+    );
+
+    const result =
+      await service.createPostedSourceEventTransactionInTransaction(
+        prisma as never,
+        actor,
+        {
+          sourceEventInboxId: 'source-event-1',
+          sourceModule: 'REINSURANCE',
+          sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+          sourceRecordId: 'payment-1',
+          sourceReference: 'PAY-001',
+          cashAccountId: 'cash-account-1',
+          direction: CashbookDirection.INFLOW,
+          amount: 8500,
+          currency: 'GHS',
+          transactionDate: new Date('2026-08-10T00:00:00.000Z'),
+          settlementMethod: AccountingSettlementMethod.BANK_TRANSFER,
+          reference: 'PAY-001',
+          counterpartyType: 'CEDANT',
+          counterpartyId: 'cedant-1',
+          description: 'PREMIUM_PAYMENT_RECEIVED - payment-1',
+          counterLines: [
+            {
+              glAccountId: 'cedant-premium-receivable',
+              subledgerAccountId: 'cedant-subledger-1',
+              description: 'Clear cedant receivable',
+              debit: 0,
+              credit: 8500,
+            },
+          ],
+        },
+      );
+
+    expect(result.transaction.postedJournalEntryId).toBe('journal-1');
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      prisma,
+      actor,
+      expect.objectContaining({
+        idempotencyKey: 'source-event:source-event-1',
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'PREMIUM_PAYMENT_RECEIVED',
+        lines: [
+          expect.objectContaining({
+            glAccountId: activeAssetAccount.id,
+            debit: 8500,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 0,
+            credit: 8500,
+          }),
+        ],
+      }),
+    );
+    const createMock = prisma.cashbookTransaction.create as jest.Mock<
+      unknown,
+      [{ data: Record<string, unknown> }]
+    >;
+    const createCall = createMock.mock.calls[0]?.[0];
+    expect(createCall?.data).toMatchObject({
+      status: CashbookTransactionStatus.POSTED,
+      sourceEventInboxId: 'source-event-1',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      postedJournalEntryId: 'journal-1',
+    });
+  });
+
+  it('rejects source cash events when the Accounting cash account is unavailable for the tenant', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingCashAccount.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createPostedSourceEventTransactionInTransaction(
+        prisma as never,
+        actor,
+        {
+          sourceEventInboxId: 'source-event-1',
+          sourceModule: 'REINSURANCE',
+          sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+          sourceRecordId: 'payment-1',
+          cashAccountId: 'cash-account-other-tenant',
+          direction: CashbookDirection.INFLOW,
+          amount: 8500,
+          currency: 'GHS',
+          transactionDate: new Date('2026-08-10T00:00:00.000Z'),
+          settlementMethod: AccountingSettlementMethod.BANK_TRANSFER,
+          description: 'PREMIUM_PAYMENT_RECEIVED - payment-1',
+          counterLines: [
+            {
+              glAccountId: 'cedant-premium-receivable',
+              description: 'Clear cedant receivable',
+              debit: 0,
+              credit: 8500,
+            },
+          ],
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects source cash events when the cash account currency does not match the settlement currency', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingCashAccount.findFirst.mockResolvedValue(
+      cashAccount({ currency: 'USD' }),
+    );
+
+    await expect(
+      service.createPostedSourceEventTransactionInTransaction(
+        prisma as never,
+        actor,
+        {
+          sourceEventInboxId: 'source-event-1',
+          sourceModule: 'REINSURANCE',
+          sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+          sourceRecordId: 'payment-1',
+          cashAccountId: 'cash-account-1',
+          direction: CashbookDirection.INFLOW,
+          amount: 8500,
+          currency: 'GHS',
+          transactionDate: new Date('2026-08-10T00:00:00.000Z'),
+          settlementMethod: AccountingSettlementMethod.BANK_TRANSFER,
+          description: 'PREMIUM_PAYMENT_RECEIVED - payment-1',
+          counterLines: [
+            {
+              glAccountId: 'cedant-premium-receivable',
+              description: 'Clear cedant receivable',
+              debit: 0,
+              credit: 8500,
+            },
+          ],
+        },
+      ),
+    ).rejects.toThrow(
+      'Source cash event currency must match the Accounting cash account currency',
     );
   });
 

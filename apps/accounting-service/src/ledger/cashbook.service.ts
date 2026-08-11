@@ -78,6 +78,27 @@ type TransactionClient = Prisma.TransactionClient;
 type CashbookRecord = Prisma.CashbookTransactionGetPayload<{
   include: typeof cashbookInclude;
 }>;
+type SourceCashbookDirection = Extract<CashbookDirection, 'INFLOW' | 'OUTFLOW'>;
+
+export type CreateSourceCashbookTransactionInput = {
+  sourceEventInboxId: string;
+  sourceModule: string;
+  sourceEventType: string;
+  sourceRecordId: string;
+  sourceReference?: string | null;
+  cashAccountId: string;
+  direction: SourceCashbookDirection;
+  amount: number;
+  currency: string;
+  transactionDate: Date;
+  settlementMethod: AccountingSettlementMethod;
+  reference?: string | null;
+  counterpartyType?: string | null;
+  counterpartyId?: string | null;
+  description: string;
+  exchangeRate?: number;
+  counterLines: JournalLineDto[];
+};
 
 @Injectable()
 export class CashbookService {
@@ -408,6 +429,124 @@ export class CashbookService {
     });
   }
 
+  async createPostedSourceEventTransactionInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    input: CreateSourceCashbookTransactionInput,
+  ) {
+    const cashAccount = await this.resolveActiveCashAccountInTransaction(
+      tx,
+      user.tenantId,
+      input.cashAccountId,
+    );
+    if (cashAccount.currency !== input.currency) {
+      throw new BadRequestException(
+        'Source cash event currency must match the Accounting cash account currency',
+      );
+    }
+    if (input.counterLines.length < 1) {
+      throw new BadRequestException(
+        'Source cash events require at least one posting-rule counter line',
+      );
+    }
+
+    const transactionType =
+      input.direction === CashbookDirection.INFLOW
+        ? CashbookTransactionType.RECEIPT
+        : CashbookTransactionType.PAYMENT;
+    const cashLine: JournalLineDto =
+      input.direction === CashbookDirection.INFLOW
+        ? {
+            glAccountId: cashAccount.glAccountId,
+            description: input.description,
+            debit: input.amount,
+            credit: 0,
+          }
+        : {
+            glAccountId: cashAccount.glAccountId,
+            description: input.description,
+            debit: 0,
+            credit: input.amount,
+          };
+    const lines =
+      input.direction === CashbookDirection.INFLOW
+        ? [cashLine, ...input.counterLines]
+        : [...input.counterLines, cashLine];
+
+    const period = await this.resolveOpenPeriod(
+      tx,
+      user.tenantId,
+      input.transactionDate,
+    );
+    const journal = await this.journals.createPostedInTransaction(tx, user, {
+      transactionDate: input.transactionDate.toISOString(),
+      fiscalPeriodId: period.id,
+      transactionCurrency: input.currency,
+      exchangeRate: input.exchangeRate,
+      reference:
+        input.reference ?? input.sourceReference ?? input.sourceRecordId,
+      description: input.description,
+      idempotencyKey: `source-event:${input.sourceEventInboxId}`,
+      sourceModule: input.sourceModule,
+      sourceRecordType: input.sourceEventType,
+      sourceRecordId: input.sourceRecordId,
+      lines,
+    });
+
+    const firstCounterLine = input.counterLines[0];
+    const transaction = await tx.cashbookTransaction.create({
+      data: {
+        tenantId: user.tenantId,
+        cashAccountId: cashAccount.id,
+        transactionType,
+        direction: input.direction,
+        amount: input.amount,
+        currency: input.currency,
+        transactionDate: input.transactionDate,
+        settlementMethod: input.settlementMethod,
+        reference: this.optional(input.reference ?? undefined),
+        counterpartyType: this.optional(input.counterpartyType ?? undefined),
+        counterpartyId: this.optional(input.counterpartyId ?? undefined),
+        externalReference: this.optional(input.sourceReference ?? undefined),
+        description: input.description,
+        offsetGlAccountId: firstCounterLine.glAccountId,
+        offsetSubledgerAccountId: firstCounterLine.subledgerAccountId,
+        sourceEventInboxId: input.sourceEventInboxId,
+        sourceModule: input.sourceModule,
+        sourceEventType: input.sourceEventType,
+        sourceRecordId: input.sourceRecordId,
+        sourceReference: this.optional(input.sourceReference ?? undefined),
+        exchangeRate: input.exchangeRate,
+        status: CashbookTransactionStatus.POSTED,
+        createdByUserId: user.id,
+        updatedByUserId: user.id,
+        postedByUserId: user.id,
+        postedAt: new Date(),
+        postedJournalEntryId: journal.id,
+      },
+      include: cashbookInclude,
+    });
+
+    await tx.accountingAuditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: 'SOURCE_CASHBOOK_TRANSACTION_POSTED',
+        entityType: 'CashbookTransaction',
+        entityId: transaction.id,
+        changedFields: {
+          sourceEventInboxId: input.sourceEventInboxId,
+          sourceModule: input.sourceModule,
+          sourceEventType: input.sourceEventType,
+          sourceRecordId: input.sourceRecordId,
+          journalEntryId: journal.id,
+        },
+      },
+    });
+
+    return { transaction, journal };
+  }
+
   async reverseTransaction(
     user: RequestUser,
     transactionId: string,
@@ -732,7 +871,19 @@ export class CashbookService {
   }
 
   private async resolveActiveCashAccount(tenantId: string, id: string) {
-    const account = await this.prisma.accountingCashAccount.findFirst({
+    return this.resolveActiveCashAccountInTransaction(
+      this.prisma,
+      tenantId,
+      id,
+    );
+  }
+
+  private async resolveActiveCashAccountInTransaction(
+    client: TransactionClient | PrismaService,
+    tenantId: string,
+    id: string,
+  ) {
+    const account = await client.accountingCashAccount.findFirst({
       where: { id, tenantId },
       include: cashAccountInclude,
     });

@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Prisma, SourceEventStatus } from '../../prisma/generated/client';
+import { CashbookService } from '../ledger/cashbook.service';
 import { JournalsService } from '../ledger/journals.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InternalSourceEventDto } from './dto/posting.dto';
@@ -78,8 +79,12 @@ describe('SourceEventsService internal ingestion', () => {
     const journals = {
       createPostedInTransaction: jest.fn(),
     };
+    const cashbook = {
+      createPostedSourceEventTransactionInTransaction: jest.fn(),
+    };
     const service = new SourceEventsService(
       prisma as unknown as PrismaService,
+      cashbook as unknown as CashbookService,
       journals as unknown as JournalsService,
     );
     return { journals, prisma, service };

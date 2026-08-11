@@ -104,6 +104,37 @@ Operational Reinsurance payments can be recorded before Accounting recognition.
 No Accounting outbox event is created at that point for bank-confirmed
 workflows; recognition starts at the Accounting-owned confirmation boundary.
 
+### Source Cashbook Bridge
+
+Cash-impact source events now use Cashbook as the authoritative bank/cash
+posting path:
+
+```text
+Source module -> SourceEventInbox -> CashbookTransaction -> JournalEntry
+```
+
+For cash-impact events, Accounting validates the selected `cashAccountId`, uses
+the cash account GL mapping for the cash leg, preserves the posting-rule
+counter leg, creates one posted Cashbook transaction, and links the source event
+to the same posted journal. Non-cash recognition events still post directly
+through Posting Rules into Journals.
+
+Cashbook bridging applies to bank/cash/cheque/mobile-money confirmations for:
+
+- `PREMIUM_PAYMENT_RECEIVED`
+- `PAYMENT_REVERSED`
+- `REINSURER_DISBURSEMENT_RECORDED`
+- `REINSURER_DISBURSEMENT_REVERSED`
+- `CLAIM_RECOVERY_RECEIVED`
+- `CLAIM_RECOVERY_RECEIPT_REVERSED`
+- `CLAIM_CEDANT_SETTLEMENT_PAID`
+- `CLAIM_CEDANT_SETTLEMENT_REVERSED`
+
+`INTERNAL_OFFSET` and `JOURNAL` source settlements do not create Cashbook cash
+movements. Historical source events that already posted journals before this
+bridge are not automatically backfilled; use an explicit reconciliation/backfill
+procedure before relying on Bank Reconciliation for those historical periods.
+
 Claims events that remain policy-gated must not be treated as active posting
 events until implemented and covered by posting rules.
 

@@ -1375,6 +1375,7 @@ describe('PlacementsController', () => {
     const bankConfirmationDto = {
       bankConfirmedAt: '2026-06-05T10:00:00.000Z',
       bankReference: 'BANK-CONF-001',
+      accountingCashAccountId: 'cash-account-1',
       bankChargeAmount: 25,
     };
 

@@ -127,6 +127,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     settlementMethod: null,
     settlementCurrency: null,
     bankReference: null,
+    accountingCashAccountId: null,
     bankConfirmedAt: null,
     agreedExchangeRate: null,
     bankChargeAmount: new Prisma.Decimal('0.00'),
@@ -164,6 +165,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
     settlementCurrency: 'USD',
     bankReference: 'BANK-CONF-001',
+    accountingCashAccountId: 'cash-account-1',
     bankConfirmedAt: new Date('2026-06-07T10:00:00.000Z'),
     agreedExchangeRate: new Prisma.Decimal('12.50000000'),
     bankChargeAmount: new Prisma.Decimal('12.50'),
@@ -700,6 +702,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
       settlementCurrency: 'GHS',
       bankChargeAmount: new Prisma.Decimal('15.00'),
+      accountingCashAccountId: 'cash-account-1',
     };
 
     const event = service.preparePremiumPaymentReceived(
@@ -742,6 +745,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
           status: PlacementPaymentStatus.BANK_CONFIRMED,
           bankConfirmedAt: '2026-06-06T09:15:00.000Z',
           bankReference: 'BANK-CONF-001',
+          accountingCashAccountId: 'cash-account-1',
           settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
           settlementCurrency: 'GHS',
         },
@@ -891,6 +895,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
           status: PlacementPaymentStatus.BANK_CONFIRMED,
           bankConfirmedAt: '2026-06-07T10:00:00.000Z',
           bankReference: 'BANK-CONF-001',
+          accountingCashAccountId: 'cash-account-1',
           settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
           settlementCurrency: 'USD',
         },
@@ -982,6 +987,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       payment: {
         paymentReference: 'CHQ-001',
         bankReference: null,
+        accountingCashAccountId: 'cash-account-1',
         settlementMethod: PlacementSettlementMethod.CHEQUE,
       },
       amounts: {
@@ -1057,6 +1063,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
           isReversal: true,
           reversalOfPaymentId: 'payment-disbursement-1',
           bankReference: 'REVERSAL-BANK-CONF-001',
+          accountingCashAccountId: 'cash-account-1',
           settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
         },
         amounts: {
@@ -1376,6 +1383,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
       settlementCurrency: 'GHS',
       bankReference: 'BANK-CONF-001',
+      accountingCashAccountId: 'cash-account-1',
       bankConfirmedAt: new Date('2026-07-31T10:00:00.000Z'),
       bankChargeAmount: new Prisma.Decimal('15.00'),
       status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
@@ -1415,6 +1423,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     expect(payload.settlement).toMatchObject({
       method: PlacementSettlementMethod.BANK_TRANSFER,
       cashImpact: true,
+      cashAccountId: 'cash-account-1',
       bankChargesAccountingOwned: true,
     });
     expect(payload.policy).toMatchObject({
@@ -1498,6 +1507,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
       settlementCurrency: 'GHS',
       bankReference: 'BANK-CED-001',
+      accountingCashAccountId: 'cash-account-1',
       bankConfirmedAt: new Date('2026-08-10T11:00:00.000Z'),
       bankChargeAmount: new Prisma.Decimal('25.00'),
       agreedExchangeRate: null,
@@ -1549,6 +1559,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     expect(payload.settlement).toMatchObject({
       method: PlacementSettlementMethod.BANK_TRANSFER,
       cashImpact: true,
+      cashAccountId: 'cash-account-1',
       bankChargesAccountingOwned: true,
     });
     expect(payload.policy).toMatchObject({

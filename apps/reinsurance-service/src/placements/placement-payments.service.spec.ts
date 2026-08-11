@@ -313,6 +313,7 @@ describe('PlacementPaymentsService', () => {
       'payment-1',
       {
         bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+        accountingCashAccountId: 'cash-account-1',
         notes: 'Cheque cleared',
       },
     );
@@ -388,6 +389,7 @@ describe('PlacementPaymentsService', () => {
       service.confirmBankPayment(user, 'placement-1', 'payment-1', {
         bankConfirmedAt: '2026-06-05T10:00:00.000Z',
         bankReference: 'BANK-CONF-001',
+        accountingCashAccountId: 'cash-account-1',
       }),
     ).rejects.toThrow('Outbox insert failed');
 
@@ -925,6 +927,7 @@ describe('PlacementPaymentsService', () => {
       {
         bankConfirmedAt: '2026-06-05T10:00:00.000Z',
         bankReference: 'BANK-CONF-001',
+        accountingCashAccountId: 'cash-account-1',
         settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
         settlementCurrency: 'USD',
         confirmedExchangeRate: 1.2,
@@ -1002,6 +1005,7 @@ describe('PlacementPaymentsService', () => {
         {
           bankConfirmedAt: '2026-06-05T10:00:00.000Z',
           bankReference: 'BANK-CONF-001',
+          accountingCashAccountId: 'cash-account-1',
           settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
           settlementCurrency: 'USD',
         },
@@ -1034,6 +1038,7 @@ describe('PlacementPaymentsService', () => {
       service.confirmBankPayment(user, 'placement-1', 'payment-1', {
         bankConfirmedAt: '2026-06-05T10:00:00.000Z',
         bankReference: 'BANK-CONF-001',
+        accountingCashAccountId: 'cash-account-1',
       }),
     ).rejects.toThrow('requires a persisted agreed FX rate');
     expect(prisma.placementPayment.updateMany).not.toHaveBeenCalled();
@@ -1134,6 +1139,7 @@ describe('PlacementPaymentsService', () => {
       'payment-disbursement-1',
       {
         bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+        accountingCashAccountId: 'cash-account-1',
         notes: 'Cheque cleared',
       },
     );
@@ -1178,6 +1184,7 @@ describe('PlacementPaymentsService', () => {
           bankConfirmedAt: '2026-06-05T10:00:00.000Z',
           settlementMethod: PlacementSettlementMethod.BANK_TRANSFER,
           bankReference: 'BANK-CONF-001',
+          accountingCashAccountId: 'cash-account-1',
         },
       ),
     ).rejects.toThrow('cannot change the operational settlement method');
@@ -1206,6 +1213,7 @@ describe('PlacementPaymentsService', () => {
       {
         bankConfirmedAt: '2026-06-05T10:00:00.000Z',
         bankReference: 'BANK-CONF-001',
+        accountingCashAccountId: 'cash-account-1',
       },
     );
 

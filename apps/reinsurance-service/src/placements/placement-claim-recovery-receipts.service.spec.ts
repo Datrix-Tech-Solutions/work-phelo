@@ -331,6 +331,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       {
         bankConfirmedAt: '2026-07-30T12:00:00.000Z',
         bankReference: 'BANK-CONF-001',
+        accountingCashAccountId: 'cash-account-1',
       },
     );
 
@@ -347,6 +348,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
       bankConfirmedByUserId: 'user-1',
       bankReference: 'BANK-CONF-001',
+      accountingCashAccountId: 'cash-account-1',
     });
     expect(financialEvents.prepareClaimRecoveryReceived).toHaveBeenCalledWith(
       user,

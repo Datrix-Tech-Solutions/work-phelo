@@ -89,6 +89,7 @@ type PaymentForEvent = {
   settlementMethod?: PlacementSettlementMethod | null;
   settlementCurrency?: string | null;
   bankReference?: string | null;
+  accountingCashAccountId?: string | null;
   bankConfirmedAt?: Date | null;
   agreedExchangeRate?: Prisma.Decimal | number | string | null;
   bankChargeAmount?: Prisma.Decimal | number | string | null;
@@ -208,6 +209,7 @@ type ClaimRecoveryReceiptForEvent = {
   settlementMethod?: PlacementSettlementMethod | null;
   settlementCurrency?: string | null;
   bankReference?: string | null;
+  accountingCashAccountId?: string | null;
   bankConfirmedAt?: Date | null;
   agreedExchangeRate?: Prisma.Decimal | number | string | null;
   bankChargeAmount?: Prisma.Decimal | number | string | null;
@@ -229,6 +231,7 @@ type ClaimCedantSettlementForEvent = {
   settlementMethod?: PlacementSettlementMethod | null;
   settlementCurrency?: string | null;
   bankReference?: string | null;
+  accountingCashAccountId?: string | null;
   bankConfirmedAt?: Date | null;
   agreedExchangeRate?: Prisma.Decimal | number | string | null;
   bankChargeAmount?: Prisma.Decimal | number | string | null;
@@ -1047,6 +1050,8 @@ export class ReinsuranceFinancialEventPublisher {
           method: settlementMethod,
           currency: settlementCurrency,
           bankReference: settlement.bankReference ?? null,
+          cashAccountId: settlement.accountingCashAccountId ?? null,
+          accountingCashAccountId: settlement.accountingCashAccountId ?? null,
           bankConfirmedAt: occurredAt,
           cashImpact: cashAffecting,
           bankChargesAccountingOwned: true,
@@ -1149,6 +1154,8 @@ export class ReinsuranceFinancialEventPublisher {
           method: settlementMethod,
           currency: settlementCurrency,
           bankReference: settlement.bankReference ?? null,
+          cashAccountId: settlement.accountingCashAccountId ?? null,
+          accountingCashAccountId: settlement.accountingCashAccountId ?? null,
           reversedAt: occurredAt,
           cashImpact: cashAffecting,
           bankChargesAccountingOwned: true,
@@ -1435,6 +1442,8 @@ export class ReinsuranceFinancialEventPublisher {
           method: settlementMethod,
           currency: settlementCurrency,
           bankReference: receipt.bankReference ?? null,
+          cashAccountId: receipt.accountingCashAccountId ?? null,
+          accountingCashAccountId: receipt.accountingCashAccountId ?? null,
           bankConfirmedAt: occurredAt,
           cashImpact: cashAffecting,
           bankChargesAccountingOwned: true,
@@ -1538,6 +1547,8 @@ export class ReinsuranceFinancialEventPublisher {
           method: settlementMethod,
           currency: settlementCurrency,
           bankReference: receipt.bankReference ?? null,
+          cashAccountId: receipt.accountingCashAccountId ?? null,
+          accountingCashAccountId: receipt.accountingCashAccountId ?? null,
           reversedAt: occurredAt,
           cashImpact: cashAffecting,
           bankChargesAccountingOwned: true,
@@ -1635,6 +1646,7 @@ export class ReinsuranceFinancialEventPublisher {
           paymentReference: payment.reference,
           settlementReference: payment.settlementReference ?? null,
           bankReference: payment.bankReference,
+          accountingCashAccountId: payment.accountingCashAccountId ?? null,
           settlementMethod,
           method: settlementMethod,
           currency: payment.currency,
@@ -1744,6 +1756,8 @@ export class ReinsuranceFinancialEventPublisher {
           paymentReference: reversalPayment.reference,
           originalPaymentReference: originalPayment.reference,
           bankReference: reversalPayment.reference,
+          accountingCashAccountId:
+            reversalPayment.accountingCashAccountId ?? null,
           settlementMethod,
           method: settlementMethod,
           settlementCurrency,
@@ -1868,6 +1882,7 @@ export class ReinsuranceFinancialEventPublisher {
           paymentReference: payment.reference,
           settlementReference: payment.settlementReference ?? null,
           bankReference: payment.bankReference,
+          accountingCashAccountId: payment.accountingCashAccountId ?? null,
           settlementMethod,
           method: settlementMethod,
           currency: payment.currency,
@@ -2465,6 +2480,8 @@ export class ReinsuranceFinancialEventPublisher {
           originalPaymentReference: originalPayment.reference,
           settlementReference: reversalPayment.settlementReference ?? null,
           bankReference: reversalPayment.bankReference,
+          accountingCashAccountId:
+            reversalPayment.accountingCashAccountId ?? null,
           settlementMethod,
           method: settlementMethod,
           currency: reversalPayment.currency,

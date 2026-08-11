@@ -881,6 +881,7 @@ model PlacementClaimRecoveryReceipt {
   settlementMethod    PlacementSettlementMethod?
   settlementCurrency  String?
   bankReference       String?
+  accountingCashAccountId String?
   bankConfirmedAt     DateTime?
   bankConfirmedByUserId String?
   agreedExchangeRate  Decimal?                            @db.Decimal(18, 8)
@@ -906,6 +907,7 @@ model PlacementClaimRecoveryReceipt {
   @@index([tenantId, recoveryApprovalId, status, createdAt])
   @@index([tenantId, allocationId, status, createdAt])
   @@index([tenantId, status, bankConfirmedAt])
+  @@index([tenantId, accountingCashAccountId])
   @@index([tenantId, counterpartyId, createdAt])
   @@index([tenantId, reversalOfReceiptId])
   @@schema("reinsurance")
@@ -924,6 +926,7 @@ model PlacementClaimCedantSettlement {
   settlementMethod       PlacementSettlementMethod?
   settlementCurrency     String?
   bankReference          String?
+  accountingCashAccountId String?
   bankConfirmedAt        DateTime?
   bankConfirmedByUserId  String?
   agreedExchangeRate     Decimal?                             @db.Decimal(18, 8)
@@ -945,6 +948,7 @@ model PlacementClaimCedantSettlement {
   @@index([tenantId, claimId, status, createdAt])
   @@index([tenantId, payableApprovalId, status, createdAt])
   @@index([tenantId, status, bankConfirmedAt])
+  @@index([tenantId, accountingCashAccountId])
   @@index([tenantId, reversalOfSettlementId])
   @@schema("reinsurance")
 }
@@ -996,6 +1000,7 @@ model PlacementPayment {
   settlementMethod      PlacementSettlementMethod?
   settlementCurrency    String?
   bankReference         String?
+  accountingCashAccountId String?
   bankConfirmedAt       DateTime?
   bankConfirmedByUserId String?
   agreedExchangeRate    Decimal?                     @db.Decimal(18, 8)
@@ -1022,6 +1027,7 @@ model PlacementPayment {
   @@index([tenantId, placementId, status, createdAt])
   @@index([tenantId, placementId, type, createdAt])
   @@index([tenantId, status, currency, placementId])
+  @@index([tenantId, accountingCashAccountId])
   @@index([tenantId, counterpartyId, createdAt])
   @@index([tenantId, participantId, createdAt])
   @@index([tenantId, closingId, createdAt])

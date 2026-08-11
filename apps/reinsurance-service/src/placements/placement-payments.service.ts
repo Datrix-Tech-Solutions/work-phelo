@@ -347,6 +347,7 @@ export class PlacementPaymentsService {
       settlementMethod,
       bankReference,
       operationalReference: payment.reference,
+      accountingCashAccountId: dto.accountingCashAccountId,
       notes: dto.notes,
     });
     this.assertSettlementFxFacts(
@@ -370,6 +371,7 @@ export class PlacementPaymentsService {
           settlementMethod,
           settlementCurrency,
           bankReference,
+          accountingCashAccountId: dto.accountingCashAccountId ?? null,
           agreedExchangeRate:
             confirmedExchangeRate ?? payment.agreedExchangeRate,
           bankChargeAmount: dto.bankChargeAmount ?? 0,
@@ -454,6 +456,7 @@ export class PlacementPaymentsService {
           bankReference: payment.bankReference
             ? `REVERSAL-${payment.bankReference}`
             : null,
+          accountingCashAccountId: payment.accountingCashAccountId,
           bankConfirmedAt: null,
           bankConfirmedByUserId: null,
           agreedExchangeRate: payment.agreedExchangeRate,
@@ -603,6 +606,7 @@ export class PlacementPaymentsService {
     settlementMethod: PlacementSettlementMethod;
     bankReference: string | null;
     operationalReference: string | null;
+    accountingCashAccountId?: string;
     notes?: string;
   }): void {
     const referenceRequiredMethods: PlacementSettlementMethod[] = [
@@ -620,6 +624,21 @@ export class PlacementPaymentsService {
     if (referenceRequired && !hasReference) {
       throw new BadRequestException(
         `${input.settlementMethod} confirmation requires a settlement reference`,
+      );
+    }
+
+    const cashAccountRequiredMethods: PlacementSettlementMethod[] = [
+      PlacementSettlementMethod.BANK_TRANSFER,
+      PlacementSettlementMethod.CHEQUE,
+      PlacementSettlementMethod.CASH,
+      PlacementSettlementMethod.MOBILE_MONEY,
+    ];
+    if (
+      cashAccountRequiredMethods.includes(input.settlementMethod) &&
+      !input.accountingCashAccountId
+    ) {
+      throw new BadRequestException(
+        `${input.settlementMethod} confirmation requires an Accounting cash account`,
       );
     }
 

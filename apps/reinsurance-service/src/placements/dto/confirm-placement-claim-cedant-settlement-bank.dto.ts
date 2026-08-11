@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -34,6 +35,15 @@ export class ConfirmPlacementClaimCedantSettlementBankDto {
   @IsString()
   @MaxLength(100)
   bankReference?: string;
+
+  @ApiPropertyOptional({
+    example: '56a9d8dd-bf8f-4d6a-a88f-8d1da3b1fd45',
+    description:
+      'Accounting-owned cash/bank account selected for cash-impact confirmations. Required for bank, cash, cheque and mobile-money settlement methods before Accounting can bridge this event into Cashbook.',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountingCashAccountId?: string;
 
   @ApiPropertyOptional({
     enum: PlacementSettlementMethod,

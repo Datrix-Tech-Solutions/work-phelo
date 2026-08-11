@@ -8,12 +8,15 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  AccountingSettlementMethod,
+  CashbookDirection,
   FiscalPeriodStatus,
   PostingDirection,
   Prisma,
   RecordStatus,
   SourceEventStatus,
 } from '../../prisma/generated/client';
+import { CashbookService } from '../ledger/cashbook.service';
 import { CreateJournalDto, JournalLineDto } from '../ledger/dto/accounting.dto';
 import { JournalsService } from '../ledger/journals.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,6 +48,18 @@ const sourceEventInclude = {
       postedAt: true,
     },
   },
+  cashbookTransaction: {
+    select: {
+      id: true,
+      status: true,
+      transactionType: true,
+      direction: true,
+      amount: true,
+      currency: true,
+      cashAccountId: true,
+      postedJournalEntryId: true,
+    },
+  },
 } satisfies Prisma.SourceEventInboxInclude;
 
 const postingRuleForEngineInclude = {
@@ -57,8 +72,84 @@ type SourcePayload = Record<string, unknown>;
 type EngineRule = Prisma.PostingRuleGetPayload<{
   include: typeof postingRuleForEngineInclude;
 }>;
+type SourceCashbookDirection = Extract<CashbookDirection, 'INFLOW' | 'OUTFLOW'>;
 
 const PROCESSING_STALE_AFTER_MS = 15 * 60 * 1000;
+
+type CashEventProfile = {
+  direction: SourceCashbookDirection;
+  cashImpactPath: string;
+};
+
+const CASH_EVENT_PROFILES: Record<string, CashEventProfile> = {
+  'REINSURANCE:PREMIUM_PAYMENT_RECEIVED': {
+    direction: 'INFLOW',
+    cashImpactPath: 'amounts.signedCashImpact',
+  },
+  'REINSURANCE:PAYMENT_REVERSED': {
+    direction: 'OUTFLOW',
+    cashImpactPath: 'amounts.signedCashImpact',
+  },
+  'REINSURANCE:REINSURER_DISBURSEMENT_RECORDED': {
+    direction: 'OUTFLOW',
+    cashImpactPath: 'amounts.signedCashImpact',
+  },
+  'REINSURANCE:REINSURER_DISBURSEMENT_REVERSED': {
+    direction: 'INFLOW',
+    cashImpactPath: 'amounts.signedCashImpact',
+  },
+  'REINSURANCE:CLAIM_RECOVERY_RECEIVED': {
+    direction: 'INFLOW',
+    cashImpactPath: 'amounts.signedCashImpact',
+  },
+  'REINSURANCE:CLAIM_RECOVERY_RECEIPT_REVERSED': {
+    direction: 'OUTFLOW',
+    cashImpactPath: 'amounts.signedCashImpact',
+  },
+  'REINSURANCE:CLAIM_CEDANT_SETTLEMENT_PAID': {
+    direction: 'OUTFLOW',
+    cashImpactPath: 'amounts.signedCashImpact',
+  },
+  'REINSURANCE:CLAIM_CEDANT_SETTLEMENT_REVERSED': {
+    direction: 'INFLOW',
+    cashImpactPath: 'amounts.signedCashImpact',
+  },
+};
+
+const CASH_ACCOUNT_ID_PATHS = [
+  'settlement.cashAccountId',
+  'settlement.accountingCashAccountId',
+  'payment.accountingCashAccountId',
+  'receipt.accountingCashAccountId',
+  'cashbook.cashAccountId',
+  'cashAccountId',
+];
+
+const SETTLEMENT_METHOD_PATHS = [
+  'settlement.method',
+  'settlement.settlementMethod',
+  'payment.settlementMethod',
+  'payment.method',
+  'receipt.settlementMethod',
+  'receipt.method',
+];
+
+const SETTLEMENT_CURRENCY_PATHS = [
+  'settlement.currency',
+  'settlement.settlementCurrency',
+  'payment.settlementCurrency',
+  'receipt.settlementCurrency',
+  'currency',
+];
+
+const REFERENCE_PATHS = [
+  'references.bankReference',
+  'references.settlementReference',
+  'references.paymentReference',
+  'payment.bankReference',
+  'payment.settlementReference',
+  'payment.paymentReference',
+];
 
 @Injectable()
 export class SourceEventsService {
@@ -66,6 +157,7 @@ export class SourceEventsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly cashbook: CashbookService,
     private readonly journals: JournalsService,
   ) {}
 
@@ -326,30 +418,30 @@ export class SourceEventsService {
           rule,
           payload,
         );
-        const period = await this.resolvePeriod(
-          tx,
-          user.tenantId,
+        const cashbookInput = this.sourceCashbookInput(
+          event,
+          payload,
           transactionDate,
-        );
-
-        const journalDto: CreateJournalDto = {
-          transactionDate: transactionDate.toISOString(),
-          fiscalPeriodId: period.id,
-          transactionCurrency: currency,
-          exchangeRate: this.optionalExchangeRate(payload),
-          reference: event.sourceDocumentId ?? event.sourceRecordId,
-          description: `${event.sourceEventType} - ${event.sourceRecordId}`,
-          idempotencyKey: `source-event:${event.id}`,
-          sourceModule: event.sourceModule,
-          sourceRecordType: event.sourceEventType,
-          sourceRecordId: event.sourceRecordId,
+          currency,
           lines,
-        };
-        const journal = await this.journals.createPostedInTransaction(
-          tx,
-          user,
-          journalDto,
         );
+        const journal = cashbookInput
+          ? (
+              await this.cashbook.createPostedSourceEventTransactionInTransaction(
+                tx,
+                user,
+                cashbookInput,
+              )
+            ).journal
+          : await this.createSourceEventJournal(
+              tx,
+              user,
+              event,
+              payload,
+              transactionDate,
+              currency,
+              lines,
+            );
 
         await tx.sourceEventInbox.update({
           where: {
@@ -545,6 +637,173 @@ export class SourceEventsService {
     return { currency: [...currencies][0], lines };
   }
 
+  private sourceCashbookInput(
+    event: {
+      id: string;
+      sourceModule: string;
+      sourceEventType: string;
+      sourceRecordId: string;
+      sourceDocumentId: string | null;
+    },
+    payload: SourcePayload,
+    transactionDate: Date,
+    currency: string,
+    lines: JournalLineDto[],
+  ) {
+    const profile =
+      CASH_EVENT_PROFILES[`${event.sourceModule}:${event.sourceEventType}`];
+    if (!profile) return null;
+
+    const settlementMethod = this.sourceSettlementMethod(payload);
+    const cashImpact = this.absoluteNumber(
+      this.readPayload(payload, profile.cashImpactPath),
+      profile.cashImpactPath,
+    );
+    if (!this.isCashbookSettlementMethod(settlementMethod)) {
+      if (cashImpact > 0) {
+        throw new BadRequestException(
+          `${event.sourceEventType} has cash impact but uses non-cash settlement method ${settlementMethod}`,
+        );
+      }
+      return null;
+    }
+    if (cashImpact <= 0) return null;
+
+    const cashAccountId = this.firstString(payload, CASH_ACCOUNT_ID_PATHS);
+    if (!cashAccountId) {
+      throw new BadRequestException(
+        `${event.sourceEventType} requires an Accounting cashAccountId before it can be posted to Cashbook`,
+      );
+    }
+
+    const settlementCurrency =
+      this.firstString(payload, SETTLEMENT_CURRENCY_PATHS) ?? currency;
+    const cashCurrency = this.currency(
+      settlementCurrency,
+      'settlement currency',
+    );
+    if (cashCurrency !== currency) {
+      throw new BadRequestException(
+        'Source cash event settlement currency must match the posting-rule currency for Phase 1 Cashbook integration',
+      );
+    }
+
+    const cashLineIndex = this.cashLineIndex(
+      lines,
+      profile.direction,
+      cashImpact,
+    );
+    const counterLines = lines.filter(
+      (_line, index) => index !== cashLineIndex,
+    );
+    const sourceReference = this.firstString(payload, REFERENCE_PATHS);
+
+    return {
+      sourceEventInboxId: event.id,
+      sourceModule: event.sourceModule,
+      sourceEventType: event.sourceEventType,
+      sourceRecordId: event.sourceRecordId,
+      sourceReference,
+      cashAccountId,
+      direction: profile.direction,
+      amount: cashImpact,
+      currency: cashCurrency,
+      transactionDate,
+      settlementMethod: this.accountingSettlementMethod(settlementMethod),
+      reference:
+        sourceReference ?? event.sourceDocumentId ?? event.sourceRecordId,
+      counterpartyType: this.firstString(payload, ['counterparty.type']),
+      counterpartyId: this.firstString(payload, ['counterparty.id']),
+      description: `${event.sourceEventType} - ${event.sourceRecordId}`,
+      exchangeRate: this.optionalExchangeRate(payload),
+      counterLines,
+    };
+  }
+
+  private async createSourceEventJournal(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    event: {
+      id: string;
+      sourceModule: string;
+      sourceEventType: string;
+      sourceRecordId: string;
+      sourceDocumentId: string | null;
+    },
+    payload: SourcePayload,
+    transactionDate: Date,
+    currency: string,
+    lines: JournalLineDto[],
+  ) {
+    const period = await this.resolvePeriod(tx, user.tenantId, transactionDate);
+    const journalDto: CreateJournalDto = {
+      transactionDate: transactionDate.toISOString(),
+      fiscalPeriodId: period.id,
+      transactionCurrency: currency,
+      exchangeRate: this.optionalExchangeRate(payload),
+      reference: event.sourceDocumentId ?? event.sourceRecordId,
+      description: `${event.sourceEventType} - ${event.sourceRecordId}`,
+      idempotencyKey: `source-event:${event.id}`,
+      sourceModule: event.sourceModule,
+      sourceRecordType: event.sourceEventType,
+      sourceRecordId: event.sourceRecordId,
+      lines,
+    };
+    return this.journals.createPostedInTransaction(tx, user, journalDto);
+  }
+
+  private cashLineIndex(
+    lines: JournalLineDto[],
+    direction: SourceCashbookDirection,
+    amount: number,
+  ): number {
+    const matches = lines
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => {
+        if (line.subledgerAccountId) return false;
+        if (direction === 'INFLOW') {
+          return (
+            this.amountsEqual(line.debit ?? 0, amount) && line.credit === 0
+          );
+        }
+        return this.amountsEqual(line.credit ?? 0, amount) && line.debit === 0;
+      });
+    if (matches.length !== 1) {
+      throw new BadRequestException(
+        'Cash-impact source events require exactly one posting-rule cash leg matching the signed cash impact',
+      );
+    }
+    return matches[0].index;
+  }
+
+  private sourceSettlementMethod(payload: SourcePayload): string {
+    return (
+      this.firstString(payload, SETTLEMENT_METHOD_PATHS)?.toUpperCase() ??
+      AccountingSettlementMethod.BANK_TRANSFER
+    );
+  }
+
+  private isCashbookSettlementMethod(method: string): boolean {
+    const cashbookMethods: string[] = [
+      AccountingSettlementMethod.BANK_TRANSFER,
+      AccountingSettlementMethod.CHEQUE,
+      AccountingSettlementMethod.CASH,
+      AccountingSettlementMethod.MOBILE_MONEY,
+    ];
+    return cashbookMethods.includes(method);
+  }
+
+  private accountingSettlementMethod(
+    method: string,
+  ): AccountingSettlementMethod {
+    if (method in AccountingSettlementMethod) {
+      return AccountingSettlementMethod[
+        method as keyof typeof AccountingSettlementMethod
+      ];
+    }
+    throw new BadRequestException(`Unsupported settlement method ${method}`);
+  }
+
   private async resolvePeriod(
     tx: Prisma.TransactionClient,
     tenantId: string,
@@ -617,6 +876,32 @@ export class SourceEventsService {
     return current;
   }
 
+  private readOptionalPayload(payload: SourcePayload, path: string): unknown {
+    let current: unknown = payload;
+    for (const segment of path.split('.')) {
+      if (
+        typeof current !== 'object' ||
+        current === null ||
+        Array.isArray(current) ||
+        !(segment in current)
+      ) {
+        return undefined;
+      }
+      current = (current as SourcePayload)[segment];
+    }
+    return current;
+  }
+
+  private firstString(payload: SourcePayload, paths: string[]): string | null {
+    for (const path of paths) {
+      const value = this.readOptionalPayload(payload, path);
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
+
   private positiveAmount(value: unknown, path: string) {
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -625,6 +910,20 @@ export class SourceEventsService {
       );
     }
     return amount;
+  }
+
+  private absoluteNumber(value: unknown, path: string) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) {
+      throw new BadRequestException(
+        `Source event amount ${path} must be numeric`,
+      );
+    }
+    return Math.abs(amount);
+  }
+
+  private amountsEqual(left: number, right: number) {
+    return Math.abs(left - right) < 0.0001;
   }
 
   private currency(value: unknown, path: string) {
