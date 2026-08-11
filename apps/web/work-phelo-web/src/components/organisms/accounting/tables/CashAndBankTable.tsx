@@ -3,6 +3,8 @@
 import { useMemo } from 'react';
 import { FinancialConfirmationQueue } from '@/components/organisms/accounting/tables/FinancialConfirmationQueue';
 import {
+  useConfirmClaimCedantSettlementBankPayment,
+  useConfirmClaimRecoveryReceiptBankPayment,
   useConfirmReinsurerDisbursementBankPayment,
   useReinsuranceBankConfirmationWorkItems,
 } from '@/hooks/accounting/useReinsuranceBankConfirmations';
@@ -17,8 +19,14 @@ export function CashAndBankTable() {
   const addToast = useToastStore((state) => state.addToast);
   const reinsuranceQueue = useReinsuranceBankConfirmationWorkItems();
   const confirmReinsurancePayment = useConfirmReinsurerDisbursementBankPayment();
+  const confirmClaimRecoveryReceipt = useConfirmClaimRecoveryReceiptBankPayment();
+  const confirmClaimCedantSettlement = useConfirmClaimCedantSettlementBankPayment();
 
   const queueItems = useMemo(() => reinsuranceQueue.data ?? [], [reinsuranceQueue.data]);
+  const isConfirming =
+    confirmReinsurancePayment.isPending ||
+    confirmClaimRecoveryReceipt.isPending ||
+    confirmClaimCedantSettlement.isPending;
 
   const confirmWorkItem = async (
     item: AccountingBankConfirmationWorkItem,
@@ -29,15 +37,38 @@ export function CashAndBankTable() {
         throw new Error(`${item.sourceModule} confirmation is not supported yet.`);
       }
 
-      await confirmReinsurancePayment.mutateAsync({
-        placementId: item.sourceParentId,
-        paymentId: item.sourceRecordId,
-        ...payload,
-      });
+      if (item.sourceRecordType === 'PlacementClaimRecoveryReceipt') {
+        const claimId = String(item.businessSnapshot?.claimId ?? item.metadata?.claimId ?? '');
+        if (!claimId) throw new Error('Claim recovery receipt is missing its claim reference.');
+        await confirmClaimRecoveryReceipt.mutateAsync({
+          placementId: item.sourceParentId,
+          claimId,
+          receiptId: item.sourceRecordId,
+          ...payload,
+        });
+      } else if (item.sourceRecordType === 'PlacementClaimCedantSettlement') {
+        const claimId = String(item.businessSnapshot?.claimId ?? item.metadata?.claimId ?? '');
+        if (!claimId) throw new Error('Cedant settlement is missing its claim reference.');
+        await confirmClaimCedantSettlement.mutateAsync({
+          placementId: item.sourceParentId,
+          claimId,
+          settlementId: item.sourceRecordId,
+          ...payload,
+        });
+      } else {
+        await confirmReinsurancePayment.mutateAsync({
+          placementId: item.sourceParentId,
+          paymentId: item.sourceRecordId,
+          ...payload,
+        });
+      }
 
       addToast({
         type: 'success',
-        message: 'Payment financially confirmed and sent to Accounting.',
+        message:
+          item.direction === 'INBOUND'
+            ? 'Receipt financially confirmed and sent to Accounting.'
+            : 'Payment financially confirmed and sent to Accounting.',
       });
     } catch (error) {
       addToast({
@@ -53,7 +84,7 @@ export function CashAndBankTable() {
       items={queueItems}
       isLoading={reinsuranceQueue.isLoading}
       isError={reinsuranceQueue.isError}
-      isConfirming={confirmReinsurancePayment.isPending}
+      isConfirming={isConfirming}
       onConfirm={confirmWorkItem}
     />
   );

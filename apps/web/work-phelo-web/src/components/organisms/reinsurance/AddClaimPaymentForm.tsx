@@ -1,15 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import {
-  AddClaimPaymentFormFields,
-  AddClaimPaymentFormValues,
-  ADD_CLAIM_PAYMENT_DEFAULTS,
-} from '@/components/molecules/reinsurance/forms/AddClaimPaymentFormFields';
-import { useToastStore } from '@/store/toast.store';
 
 interface AddClaimPaymentFormProps {
   onPlacementsChange?: (placementIds: string[]) => void;
@@ -21,51 +16,53 @@ export default function AddClaimPaymentForm({
   defaultOpen = false,
 }: AddClaimPaymentFormProps) {
   const [panelOpen, setPanelOpen] = useState(defaultOpen);
-
-  const addToast = useToastStore((s) => s.addToast);
-
-  const form = useForm<AddClaimPaymentFormValues>({ defaultValues: ADD_CLAIM_PAYMENT_DEFAULTS });
-  const {
-    handleSubmit,
-    formState: { isSubmitting },
-  } = form;
-
-  const onSubmit = async () => {
-    addToast({
-      message:
-        'Claim settlement payments are deferred until the claims recovery settlement flow is implemented.',
-      type: 'error',
-    });
-  };
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   return (
     <>
-      <Button onClick={() => setPanelOpen(true)}>Make Payment</Button>
+      <Button
+        onClick={() => {
+          onPlacementsChange?.([]);
+          setPanelOpen(true);
+        }}
+      >
+        Claim Settlements
+      </Button>
 
       <SidePanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
-        title="Record Claim Payment"
-        description="Select the cedant and claim, then enter the payment details below."
+        title="Record Claim Settlement"
+        description="Claim settlements are recorded against a specific claim, then financially confirmed by Accounting."
         footer={
           <div className="flex items-center justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
-              Cancel
+              Close
             </Button>
-            <Button type="submit" form="add-claim-payment-form" disabled={isSubmitting}>
-              Settlement Deferred
-            </Button>
+            <Link href={`/${tenantSlug}/operations/reinsurance/claims`}>
+              <Button type="button">Open Claims</Button>
+            </Link>
           </div>
         }
       >
-        <form id="add-claim-payment-form" onSubmit={handleSubmit(onSubmit)}>
-          <AddClaimPaymentFormFields
-            form={form}
-            onPlacementsChange={(ids) => {
-              onPlacementsChange?.(ids);
-            }}
-          />
-        </form>
+        <div className="space-y-4 text-sm text-gray-700">
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <p className="font-semibold text-blue-950">Use the claim settlement workflow</p>
+            <p className="mt-2 text-blue-900">
+              Open the claim, review the backend-calculated Cedant settlement position, and record
+              the settlement from the claim details. Accounting will then confirm the bank/cash
+              movement from the Financial Confirmation Queue.
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="font-semibold text-gray-900">Source-owned facts remain read-only</p>
+            <p className="mt-2 text-gray-600">
+              Amount, currency, Cedant, claim reference and operational payment details are owned by
+              Reinsurance. Accounting only supplies confirmation date, reference, cash account, FX
+              and bank charges during financial confirmation.
+            </p>
+          </div>
+        </div>
       </SidePanel>
     </>
   );

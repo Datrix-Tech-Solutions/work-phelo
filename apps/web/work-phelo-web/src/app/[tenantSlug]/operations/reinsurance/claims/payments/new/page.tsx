@@ -61,7 +61,7 @@ export default function AddClaimPaymentPage({
             Claims
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">Make Payment</span>
+          <span className="text-gray-700 font-medium">Claim Settlements</span>
         </nav>
 
         <AddClaimPaymentForm defaultOpen onPlacementsChange={setSelectedPlacementIds} />
@@ -76,7 +76,7 @@ export default function AddClaimPaymentPage({
           </div>
         ) : (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-            Select a cedant and claim to record a payment
+            Open a claim to record a Cedant settlement, then confirm it in Accounting.
           </div>
         )}
       </div>

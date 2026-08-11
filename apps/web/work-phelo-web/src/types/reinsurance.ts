@@ -1074,8 +1074,8 @@ export interface PlacementPayment {
   allocations?: PlacementPaymentAllocation[];
 }
 
-export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'REVERSED';
-export type PlacementClaimCedantSettlementStatus = 'RECORDED' | 'REVERSED';
+export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';
+export type PlacementClaimCedantSettlementStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';
 export type PlacementClaimRecoveryStatus =
   | 'UNRECOVERED'
   | 'PARTIALLY_RECOVERED'
@@ -1093,6 +1093,14 @@ export interface PlacementClaimRecoveryReceipt {
   amount: string;
   paymentDate: string;
   reference: string | null;
+  settlementMethod: PlacementSettlementMethod | null;
+  settlementCurrency: string | null;
+  bankReference: string | null;
+  accountingCashAccountId: string | null;
+  bankConfirmedAt: string | null;
+  bankConfirmedByUserId: string | null;
+  agreedExchangeRate: string | null;
+  bankChargeAmount: string;
   notes: string | null;
   status: PlacementClaimRecoveryReceiptStatus;
   reversalOfReceiptId: string | null;
@@ -1111,6 +1119,14 @@ export interface PlacementClaimCedantSettlement {
   amount: string;
   settlementDate: string;
   reference: string | null;
+  settlementMethod: PlacementSettlementMethod | null;
+  settlementCurrency: string | null;
+  bankReference: string | null;
+  accountingCashAccountId: string | null;
+  bankConfirmedAt: string | null;
+  bankConfirmedByUserId: string | null;
+  agreedExchangeRate: string | null;
+  bankChargeAmount: string;
   notes: string | null;
   status: PlacementClaimCedantSettlementStatus;
   reversalOfSettlementId: string | null;

@@ -7,6 +7,7 @@ import { Input } from '@/components/atoms/Input';
 import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { useCashAccountOptions } from '@/hooks/accounting/useCashAccounts';
 import type {
   AccountingBankConfirmationWorkItem,
   ConfirmBankPaymentPayload,
@@ -27,6 +28,7 @@ const SETTLEMENT_METHODS: SettlementMethod[] = [
 interface ConfirmationForm {
   bankConfirmedAt: string;
   bankReference: string;
+  accountingCashAccountId: string;
   settlementMethod: SettlementMethod;
   settlementCurrency: string;
   confirmedExchangeRate: string;
@@ -37,6 +39,7 @@ interface ConfirmationForm {
 const INITIAL_FORM: ConfirmationForm = {
   bankConfirmedAt: '',
   bankReference: '',
+  accountingCashAccountId: '',
   settlementMethod: 'BANK_TRANSFER',
   settlementCurrency: '',
   confirmedExchangeRate: '',
@@ -121,6 +124,13 @@ function confirmationTitle(method: SettlementMethod, direction?: string) {
   }
 }
 
+function confirmationActionLabel(item: AccountingBankConfirmationWorkItem) {
+  if (item.action === 'CONFIRM_BANK_RECEIPT' || item.direction === 'INBOUND') {
+    return 'Confirm Receipt';
+  }
+  return 'Confirm Payment';
+}
+
 function confirmationReferenceLabel(method: SettlementMethod) {
   switch (method) {
     case 'CHEQUE':
@@ -166,6 +176,11 @@ export function FinancialConfirmationQueue({
   const selectedSettlementMethod = sourceSettlementMethod ?? form.settlementMethod;
   const selectedSettlementCurrency =
     sourceSettlementCurrency ?? form.settlementCurrency.trim().toUpperCase();
+  const selectedRequiresCashAccount = methodAffectsCash(selectedSettlementMethod);
+  const cashAccountOptions = useCashAccountOptions({
+    currency: selectedSettlementCurrency || undefined,
+    isActive: true,
+  });
   const selectedHasOperationalReference = Boolean(selectedItem?.operationalReference);
   const selectedConfirmationTitle = confirmationTitle(
     selectedSettlementMethod,
@@ -199,6 +214,7 @@ export function FinancialConfirmationQueue({
       bankConfirmedAt: defaultDateTimeLocal(),
       settlementMethod: item.businessSnapshot?.settlementMethod ?? 'BANK_TRANSFER',
       settlementCurrency: item.businessSnapshot?.settlementCurrency ?? item.currency,
+      accountingCashAccountId: '',
     });
   };
 
@@ -223,6 +239,9 @@ export function FinancialConfirmationQueue({
     await onConfirm(selectedItem, {
       bankConfirmedAt: new Date(form.bankConfirmedAt).toISOString(),
       bankReference: form.bankReference.trim() || undefined,
+      accountingCashAccountId: selectedRequiresCashAccount
+        ? form.accountingCashAccountId || undefined
+        : undefined,
       settlementMethod: sourceSettlementMethod ? undefined : form.settlementMethod,
       settlementCurrency: sourceSettlementCurrency
         ? undefined
@@ -301,9 +320,10 @@ export function FinancialConfirmationQueue({
       width: '160px',
       className: 'pr-6',
       render: (row) =>
-        row.availableConfirmationActions.includes('CONFIRM_BANK_PAYMENT') ? (
+        row.availableConfirmationActions.includes('CONFIRM_BANK_PAYMENT') ||
+        row.availableConfirmationActions.includes('CONFIRM_BANK_RECEIPT') ? (
           <TableButton variant="green" onClick={() => openConfirmModal(row)}>
-            Confirm Payment
+            {confirmationActionLabel(row)}
           </TableButton>
         ) : null,
     },
@@ -493,6 +513,44 @@ export function FinancialConfirmationQueue({
                   maxLength={3}
                   required
                 />
+              )}
+              {selectedRequiresCashAccount && (
+                <label className="space-y-1">
+                  <span className="block text-sm font-medium text-gray-700">
+                    Accounting Cash/Bank Account
+                  </span>
+                  <select
+                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={form.accountingCashAccountId}
+                    onChange={updateFormFromInput('accountingCashAccountId')}
+                    required
+                    disabled={cashAccountOptions.isLoading}
+                  >
+                    <option value="">
+                      {cashAccountOptions.isLoading
+                        ? 'Loading cash accounts...'
+                        : `Select ${selectedSettlementCurrency || 'settlement'} cash account`}
+                    </option>
+                    {cashAccountOptions.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {cashAccountOptions.isError && (
+                    <span className="text-xs text-red-600">
+                      Unable to load Accounting cash accounts.
+                    </span>
+                  )}
+                  {!cashAccountOptions.isLoading &&
+                    !cashAccountOptions.isError &&
+                    cashAccountOptions.options.length === 0 && (
+                      <span className="text-xs text-amber-700">
+                        No active Accounting cash account is configured for{' '}
+                        {selectedSettlementCurrency || 'this currency'}.
+                      </span>
+                    )}
+                </label>
               )}
               {!selectedHasOperationalReference && (
                 <Input
