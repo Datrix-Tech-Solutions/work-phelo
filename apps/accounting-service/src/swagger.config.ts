@@ -29,6 +29,12 @@ Tenant-scoped Accounting ledger foundation.
 - Standalone Accounts Payable uses tenant AP control configuration, vendor
   subledgers and cashbook-backed payments. Allocations update AP application
   state only and never create duplicate cash journals.
+- Cash-impact source-module events use Cashbook as the authoritative bank/cash
+  posting path: Accounting validates the source-provided cashAccountId, uses the
+  Accounting cash account GL for the cash leg, preserves the posting-rule counter
+  leg, and links SourceEventInbox, CashbookTransaction and JournalEntry.
+- INTERNAL_OFFSET and JOURNAL source settlements are non-cash and do not create
+  Cashbook cash movements.
 
 Operational source-event posting is active through the Accounting Source Event
 Inbox and tenant posting rules. Source modules publish business facts only;

@@ -1,12 +1,14 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  CashbookDirection,
   FiscalPeriodStatus,
   PostingDirection,
   Prisma,
   SourceEventStatus,
   SubledgerType,
 } from '../../prisma/generated/client';
+import { CashbookService } from '../ledger/cashbook.service';
 import { JournalsService } from '../ledger/journals.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSourceEventDto } from './dto/posting.dto';
@@ -211,11 +213,20 @@ describe('SourceEventsService', () => {
     const journals = {
       createPostedInTransaction: jest.fn().mockResolvedValue(journal),
     };
+    const cashbook = {
+      createPostedSourceEventTransactionInTransaction: jest
+        .fn()
+        .mockResolvedValue({
+          transaction: { id: 'cashbook-1' },
+          journal,
+        }),
+    };
     const service = new SourceEventsService(
       prisma as unknown as PrismaService,
+      cashbook as unknown as CashbookService,
       journals as unknown as JournalsService,
     );
-    return { event, journal, journals, prisma, service };
+    return { cashbook, event, journal, journals, prisma, service };
   }
 
   it('generates and posts a balanced journal from the active rule', async () => {
@@ -340,6 +351,237 @@ describe('SourceEventsService', () => {
         ],
       }),
     );
+  });
+
+  it('bridges bank-confirmed premium receipts into Cashbook with the posting-rule counter leg', async () => {
+    const paymentDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordId: 'payment-1',
+      sourceDocumentId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementReference: 'FAC-2026-001',
+          paymentReference: 'PAY-001',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: {
+          paymentAmount: 8500,
+          signedCashImpact: 8500,
+          signedReceivableImpact: -8500,
+          cashAffectingSettlement: true,
+        },
+        payment: {
+          method: 'BANK_TRANSFER',
+          settlementCurrency: 'GHS',
+          accountingCashAccountId: 'cash-account-1',
+        },
+      },
+    };
+    const paymentRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'legacy-bank-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate: 'Legacy cash leg',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Clear cedant receivable {{payload.references.paymentReference}}',
+        },
+      ],
+    };
+    const { cashbook, event, journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      paymentDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(paymentRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, paymentDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(event.journalEntryId).toBe('journal-1');
+    expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
+    expect(
+      cashbook.createPostedSourceEventTransactionInTransaction,
+    ).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceEventInboxId: event.id,
+        sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+        cashAccountId: 'cash-account-1',
+        direction: CashbookDirection.INFLOW,
+        amount: 8500,
+        counterLines: [
+          expect.objectContaining({
+            glAccountId: 'cedant-premium-receivable',
+            subledgerAccountId: 'cedant-subledger-1',
+            debit: 0,
+            credit: 8500,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('fails cash-impact source events that do not include an Accounting cash account', async () => {
+    const paymentDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          paymentId: 'payment-1',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: {
+          paymentAmount: 8500,
+          signedCashImpact: 8500,
+          cashAffectingSettlement: true,
+        },
+        payment: { method: 'BANK_TRANSFER', settlementCurrency: 'GHS' },
+      },
+    };
+    const paymentRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'legacy-bank-clearing',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Premium payment {{payload.references.paymentId}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Clear cedant receivable {{payload.references.paymentId}}',
+        },
+      ],
+    };
+    const { cashbook, event, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      paymentDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(paymentRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, paymentDto);
+
+    expect(result.status).toBe(SourceEventStatus.FAILED);
+    expect(event.failureReason).toContain(
+      'requires an Accounting cashAccountId',
+    );
+    expect(
+      cashbook.createPostedSourceEventTransactionInTransaction,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('does not create Cashbook rows for non-cash internal offset events', async () => {
+    const paymentDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      sourceRecordId: 'payment-1',
+      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          placementId: 'placement-1',
+          placementReference: 'FAC-2026-001',
+          paymentId: 'payment-1',
+        },
+        counterparty: { id: 'cedant-1', type: 'CEDANT' },
+        amounts: {
+          paymentAmount: 8500,
+          signedCashImpact: 0,
+          cashAffectingSettlement: false,
+        },
+        payment: { method: 'INTERNAL_OFFSET', settlementCurrency: 'GHS' },
+      },
+    };
+    const { cashbook, journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      paymentDto,
+    );
+    const internalOffsetRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'premium-clearing',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Internal offset {{payload.references.paymentId}} for {{payload.references.placementReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'cedant-premium-receivable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.paymentAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Clear cedant receivable {{payload.references.paymentId}}',
+        },
+      ],
+    };
+    prisma.postingRule.findFirst.mockResolvedValue(internalOffsetRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+    });
+
+    const result = await service.receive(actor, paymentDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(journals.createPostedInTransaction).toHaveBeenCalled();
+    expect(
+      cashbook.createPostedSourceEventTransactionInTransaction,
+    ).not.toHaveBeenCalled();
   });
 
   it('fails REINSURANCE DEBIT_NOTE_ISSUED cleanly when the cedant subledger is missing', async () => {
@@ -709,6 +951,11 @@ describe('SourceEventsService', () => {
           signedCashImpact: 8500,
           signedReceivableImpact: -8500,
         },
+        payment: {
+          method: 'BANK_TRANSFER',
+          settlementCurrency: 'GHS',
+          accountingCashAccountId: 'cash-account-1',
+        },
       },
     };
     const paymentRule = {
@@ -740,7 +987,7 @@ describe('SourceEventsService', () => {
         },
       ],
     };
-    const { journals, prisma, service } = setup(
+    const { cashbook, journals, prisma, service } = setup(
       SourceEventStatus.RECEIVED,
       paymentDto,
     );
@@ -752,19 +999,22 @@ describe('SourceEventsService', () => {
     const result = await service.receive(actor, paymentDto);
 
     expect(result.status).toBe(SourceEventStatus.POSTED);
-    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+    expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
+    expect(
+      cashbook.createPostedSourceEventTransactionInTransaction,
+    ).toHaveBeenCalledWith(
       expect.anything(),
       actor,
       expect.objectContaining({
+        sourceEventInboxId: 'event-1',
         sourceModule: 'REINSURANCE',
-        sourceRecordType: 'PREMIUM_PAYMENT_RECEIVED',
+        sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
         sourceRecordId: 'payment-1',
-        lines: [
-          expect.objectContaining({
-            glAccountId: 'bank-clearing',
-            debit: 8500,
-            credit: 0,
-          }),
+        cashAccountId: 'cash-account-1',
+        direction: CashbookDirection.INFLOW,
+        amount: 8500,
+        currency: 'GHS',
+        counterLines: [
           expect.objectContaining({
             glAccountId: 'cedant-premium-receivable',
             subledgerAccountId: 'cedant-subledger-1',
@@ -798,6 +1048,11 @@ describe('SourceEventsService', () => {
           signedCashImpact: -8500,
           signedReceivableImpact: 8500,
         },
+        payment: {
+          method: 'BANK_TRANSFER',
+          settlementCurrency: 'GHS',
+          accountingCashAccountId: 'cash-account-1',
+        },
       },
     };
     const reversalRule = {
@@ -829,7 +1084,7 @@ describe('SourceEventsService', () => {
         },
       ],
     };
-    const { journals, prisma, service } = setup(
+    const { cashbook, journals, prisma, service } = setup(
       SourceEventStatus.RECEIVED,
       reversalDto,
     );
@@ -841,25 +1096,27 @@ describe('SourceEventsService', () => {
     const result = await service.receive(actor, reversalDto);
 
     expect(result.status).toBe(SourceEventStatus.POSTED);
-    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+    expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
+    expect(
+      cashbook.createPostedSourceEventTransactionInTransaction,
+    ).toHaveBeenCalledWith(
       expect.anything(),
       actor,
       expect.objectContaining({
+        sourceEventInboxId: 'event-1',
         sourceModule: 'REINSURANCE',
-        sourceRecordType: 'PAYMENT_REVERSED',
+        sourceEventType: 'PAYMENT_REVERSED',
         sourceRecordId: 'payment-reversal-1',
-        idempotencyKey: 'source-event:event-1',
-        lines: [
+        cashAccountId: 'cash-account-1',
+        direction: CashbookDirection.OUTFLOW,
+        amount: 8500,
+        currency: 'GHS',
+        counterLines: [
           expect.objectContaining({
             glAccountId: 'cedant-premium-receivable',
             subledgerAccountId: 'cedant-subledger-1',
             debit: 8500,
             credit: 0,
-          }),
-          expect.objectContaining({
-            glAccountId: 'bank-clearing',
-            debit: 0,
-            credit: 8500,
           }),
         ],
       }),
@@ -893,6 +1150,11 @@ describe('SourceEventsService', () => {
           withholdingTax: 25,
           signedCashImpact: -750,
           signedPayableImpact: -750,
+        },
+        payment: {
+          method: 'BANK_TRANSFER',
+          settlementCurrency: 'USD',
+          accountingCashAccountId: 'cash-account-1',
         },
         allocations: [
           {
@@ -946,7 +1208,7 @@ describe('SourceEventsService', () => {
         },
       ],
     };
-    const { journals, prisma, service } = setup(
+    const { cashbook, journals, prisma, service } = setup(
       SourceEventStatus.RECEIVED,
       disbursementDto,
     );
@@ -966,26 +1228,28 @@ describe('SourceEventsService', () => {
         status: 'ACTIVE',
       },
     });
-    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+    expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
+    expect(
+      cashbook.createPostedSourceEventTransactionInTransaction,
+    ).toHaveBeenCalledWith(
       expect.anything(),
       actor,
       expect.objectContaining({
+        sourceEventInboxId: 'event-1',
         sourceModule: 'REINSURANCE',
-        sourceRecordType: 'REINSURER_DISBURSEMENT_RECORDED',
+        sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
         sourceRecordId: 'payment-disbursement-1',
-        transactionCurrency: 'USD',
+        cashAccountId: 'cash-account-1',
+        direction: CashbookDirection.OUTFLOW,
+        amount: 750,
+        currency: 'USD',
         exchangeRate: 12.5,
-        lines: [
+        counterLines: [
           expect.objectContaining({
             glAccountId: 'reinsurer-premium-payable',
             subledgerAccountId: 'reinsurer-subledger-1',
             debit: 750,
             credit: 0,
-          }),
-          expect.objectContaining({
-            glAccountId: 'bank-clearing',
-            debit: 0,
-            credit: 750,
           }),
         ],
       }),
@@ -1020,6 +1284,11 @@ describe('SourceEventsService', () => {
           withholdingTax: 25,
           signedCashImpact: 750,
           signedPayableImpact: 750,
+        },
+        payment: {
+          method: 'BANK_TRANSFER',
+          settlementCurrency: 'USD',
+          accountingCashAccountId: 'cash-account-1',
         },
         allocations: [
           {
@@ -1073,7 +1342,7 @@ describe('SourceEventsService', () => {
         },
       ],
     };
-    const { journals, prisma, service } = setup(
+    const { cashbook, journals, prisma, service } = setup(
       SourceEventStatus.RECEIVED,
       reversalDto,
     );
@@ -1085,21 +1354,23 @@ describe('SourceEventsService', () => {
     const result = await service.receive(actor, reversalDto);
 
     expect(result.status).toBe(SourceEventStatus.POSTED);
-    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+    expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
+    expect(
+      cashbook.createPostedSourceEventTransactionInTransaction,
+    ).toHaveBeenCalledWith(
       expect.anything(),
       actor,
       expect.objectContaining({
+        sourceEventInboxId: 'event-1',
         sourceModule: 'REINSURANCE',
-        sourceRecordType: 'REINSURER_DISBURSEMENT_REVERSED',
+        sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
         sourceRecordId: 'payment-disbursement-reversal-1',
-        transactionCurrency: 'USD',
+        cashAccountId: 'cash-account-1',
+        direction: CashbookDirection.INFLOW,
+        amount: 750,
+        currency: 'USD',
         exchangeRate: 12.5,
-        lines: [
-          expect.objectContaining({
-            glAccountId: 'bank-clearing',
-            debit: 750,
-            credit: 0,
-          }),
+        counterLines: [
           expect.objectContaining({
             glAccountId: 'reinsurer-premium-payable',
             subledgerAccountId: 'reinsurer-subledger-1',

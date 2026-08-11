@@ -384,6 +384,7 @@ export class PlacementClaimCedantSettlementsService {
       settlementMethod,
       bankReference,
       operationalReference: settlement.reference,
+      accountingCashAccountId: dto.accountingCashAccountId,
       notes: dto.notes,
     });
     this.assertFxFacts(
@@ -447,6 +448,7 @@ export class PlacementClaimCedantSettlementsService {
                   settlementMethod,
                   settlementCurrency,
                   bankReference,
+                  accountingCashAccountId: dto.accountingCashAccountId ?? null,
                   agreedExchangeRate:
                     confirmedExchangeRate ?? settlement.agreedExchangeRate,
                   bankChargeAmount: dto.bankChargeAmount ?? 0,
@@ -578,6 +580,9 @@ export class PlacementClaimCedantSettlementsService {
                   ? settlement.bankReference
                     ? `REVERSAL:${settlement.bankReference}`
                     : `REVERSAL:${settlement.id}`
+                  : null,
+                accountingCashAccountId: confirmedOriginal
+                  ? settlement.accountingCashAccountId
                   : null,
                 bankConfirmedAt: confirmedOriginal ? new Date() : null,
                 bankConfirmedByUserId: confirmedOriginal ? user.id : null,
@@ -891,6 +896,7 @@ export class PlacementClaimCedantSettlementsService {
     settlementMethod: PlacementSettlementMethod;
     bankReference: string | null;
     operationalReference: string | null;
+    accountingCashAccountId?: string;
     notes?: string;
   }): void {
     const referenceRequiredMethods: PlacementSettlementMethod[] = [
@@ -907,6 +913,20 @@ export class PlacementClaimCedantSettlementsService {
     if (referenceRequired && !hasReference) {
       throw new BadRequestException(
         `${input.settlementMethod} confirmation requires a settlement reference`,
+      );
+    }
+    const cashAccountRequiredMethods: PlacementSettlementMethod[] = [
+      PlacementSettlementMethod.BANK_TRANSFER,
+      PlacementSettlementMethod.CHEQUE,
+      PlacementSettlementMethod.CASH,
+      PlacementSettlementMethod.MOBILE_MONEY,
+    ];
+    if (
+      cashAccountRequiredMethods.includes(input.settlementMethod) &&
+      !input.accountingCashAccountId
+    ) {
+      throw new BadRequestException(
+        `${input.settlementMethod} confirmation requires an Accounting cash account`,
       );
     }
     if (
