@@ -147,6 +147,12 @@ export const RESOURCES = [
     description: 'Standalone Accounting cashbook transaction workflows',
   },
   {
+    name: 'accounting.receivables',
+    module: 'ACCOUNTING',
+    description:
+      'Standalone Accounting accounts receivable documents, receipts and allocations',
+  },
+  {
     name: 'accounting.journals',
     module: 'ACCOUNTING',
     description: 'Draft, post and reverse journal entries',

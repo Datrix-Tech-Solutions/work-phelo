@@ -12,6 +12,8 @@ such as Reinsurance are unavailable or disabled.
 - Customers/vendors and subledger references.
 - Cash, bank and wallet account masters.
 - Standalone cashbook receipts, payments, transfers, bank charges and adjustments.
+- Standalone Accounts Receivable invoices, customer credit notes, cashbook-backed
+  receipts, allocations and balances.
 - Posting rules for source-module events.
 - Source Event Inbox, idempotency, reconciliation and retry state.
 - Financial Confirmation Queue adapters for optional source modules.
@@ -121,6 +123,15 @@ npm run build --workspace=apps/accounting-service
   credentials, secrets or provider tokens.
 - Cross-currency cashbook transfers require an explicit agreed exchange rate;
   Accounting never fetches live FX during posting.
+- Standalone AR uses the tenant Accounts Receivable control account configured in
+  Accounting settings and posts customer subledger lines through that control
+  account.
+- Customer receipts use Cashbook as the single authoritative cash movement and
+  journal path: receipt posting debits Cash/Bank and credits AR control. Receipt
+  allocation changes only AR application state and never creates a duplicate GL
+  journal.
+- Phase 1 AR rejects unsupported cross-currency allocations; agreed FX facts must
+  be captured on the originating document or receipt where required.
 - Source-event idempotency keys are tenant-scoped and deterministic.
 - Manual Accounting remains supported independently of automation.
 - Posting rules are tenant-owned and determine final debit/credit accounts.

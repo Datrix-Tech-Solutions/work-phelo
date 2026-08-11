@@ -126,6 +126,28 @@ enum CashbookTransactionStatus {
   @@schema("accounting")
 }
 
+enum AccountingReceivableDocumentType {
+  INVOICE
+  CREDIT_NOTE
+
+  @@schema("accounting")
+}
+
+enum AccountingReceivableStatus {
+  DRAFT
+  POSTED
+  REVERSED
+
+  @@schema("accounting")
+}
+
+enum AccountingReceivableAllocationSource {
+  RECEIPT
+  CREDIT_NOTE
+
+  @@schema("accounting")
+}
+
 model AccountingTenantConfig {
   tenantId                           String     @id
   baseCurrency                       String
@@ -231,6 +253,7 @@ model GLAccount {
   vendorDefaults   AccountingVendor[]       @relation("VendorDefaultExpenseAccount")
   cashAccounts      AccountingCashAccount[]
   cashbookOffsets   CashbookTransaction[]    @relation("CashbookOffsetAccount")
+  receivableOffsets AccountingReceivableDocument[] @relation("ReceivableOffsetAccount")
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -335,6 +358,7 @@ model SubledgerAccount {
   journalLines     JournalLine[]
   customer         AccountingCustomer?
   vendor           AccountingVendor?
+  cashbookOffsets  CashbookTransaction[] @relation("CashbookOffsetSubledger")
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -369,6 +393,9 @@ model AccountingCustomer {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   subledgerAccount   SubledgerAccount @relation(fields: [subledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  receivableDocuments AccountingReceivableDocument[]
+  receivableReceipts  AccountingReceivableReceipt[]
+  receivableAllocations AccountingReceivableAllocation[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -451,6 +478,8 @@ model JournalEntry {
   sourceEvent         SourceEventInbox?
   cashbookPostedTransaction   CashbookTransaction? @relation("CashbookPostedJournal")
   cashbookReversalTransaction CashbookTransaction? @relation("CashbookReversalJournal")
+  receivablePostedDocument    AccountingReceivableDocument? @relation("ReceivablePostedJournal")
+  receivableReversalDocument  AccountingReceivableDocument? @relation("ReceivableReversalJournal")
 
   @@unique([id, tenantId])
   @@unique([tenantId, journalNumber])
@@ -508,6 +537,7 @@ model CashbookTransaction {
   externalReference        String?
   description              String
   offsetGlAccountId        String?
+  offsetSubledgerAccountId String?
   sourceModule             String?
   sourceRecordId           String?
   exchangeRate             Decimal?                  @db.Decimal(18, 8)
@@ -526,10 +556,12 @@ model CashbookTransaction {
   cashAccount              AccountingCashAccount     @relation("CashbookCashAccount", fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   destinationCashAccount   AccountingCashAccount?    @relation("CashbookDestinationCashAccount", fields: [destinationCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   offsetGlAccount          GLAccount?                @relation("CashbookOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  offsetSubledgerAccount   SubledgerAccount?         @relation("CashbookOffsetSubledger", fields: [offsetSubledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   postedJournalEntry       JournalEntry?             @relation("CashbookPostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalJournalEntry     JournalEntry?             @relation("CashbookReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalOfTransaction    CashbookTransaction?      @relation("CashbookTransactionReversal", fields: [reversalOfTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalTransaction      CashbookTransaction?      @relation("CashbookTransactionReversal")
+  receivableReceipt        AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
 
   @@unique([id, tenantId])
   @@unique([postedJournalEntryId, tenantId])
@@ -537,9 +569,137 @@ model CashbookTransaction {
   @@unique([reversalOfTransactionId, tenantId])
   @@index([tenantId, cashAccountId, transactionDate])
   @@index([tenantId, destinationCashAccountId])
+  @@index([tenantId, offsetSubledgerAccountId])
   @@index([tenantId, transactionType, status, transactionDate])
   @@index([tenantId, currency, transactionDate])
   @@index([tenantId, sourceModule, sourceRecordId])
+  @@schema("accounting")
+}
+
+model AccountingReceivableDocument {
+  id                      String                             @id @default(uuid())
+  tenantId                String
+  customerId              String
+  documentType            AccountingReceivableDocumentType
+  documentNumber          String
+  documentDate            DateTime
+  dueDate                 DateTime?
+  currency                String
+  exchangeRate            Decimal?                           @db.Decimal(18, 8)
+  subtotalAmount          Decimal                            @db.Decimal(20, 4)
+  taxAmount               Decimal                            @default(0) @db.Decimal(20, 4)
+  totalAmount             Decimal                            @db.Decimal(20, 4)
+  description             String?
+  externalReference       String?
+  sourceModule            String?
+  sourceRecordId          String?
+  offsetGlAccountId       String
+  originalInvoiceId       String?
+  status                  AccountingReceivableStatus         @default(DRAFT)
+  createdByUserId         String
+  updatedByUserId         String
+  postedByUserId          String?
+  reversedByUserId        String?
+  createdAt               DateTime                           @default(now())
+  updatedAt               DateTime                           @updatedAt
+  postedAt                DateTime?
+  reversedAt              DateTime?
+  postedJournalEntryId    String?
+  reversalJournalEntryId  String?
+  reversalOfDocumentId    String?
+  customer                AccountingCustomer                 @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  offsetGlAccount         GLAccount                          @relation("ReceivableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  postedJournalEntry      JournalEntry?                      @relation("ReceivablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalJournalEntry    JournalEntry?                      @relation("ReceivableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  originalInvoice         AccountingReceivableDocument?      @relation("ReceivableCreditSource", fields: [originalInvoiceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  creditNotes             AccountingReceivableDocument[]     @relation("ReceivableCreditSource")
+  reversalOfDocument      AccountingReceivableDocument?      @relation("ReceivableDocumentReversal", fields: [reversalOfDocumentId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalDocument        AccountingReceivableDocument?      @relation("ReceivableDocumentReversal")
+  receiptAllocations      AccountingReceivableAllocation[]   @relation("ReceivableInvoiceAllocations")
+  creditAllocations       AccountingReceivableAllocation[]   @relation("ReceivableCreditAllocations")
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, documentNumber])
+  @@unique([postedJournalEntryId, tenantId])
+  @@unique([reversalJournalEntryId, tenantId])
+  @@unique([reversalOfDocumentId, tenantId])
+  @@index([tenantId, customerId, documentType, status])
+  @@index([tenantId, documentDate])
+  @@index([tenantId, dueDate])
+  @@index([tenantId, currency])
+  @@index([tenantId, sourceModule, sourceRecordId])
+  @@index([tenantId, originalInvoiceId])
+  @@schema("accounting")
+}
+
+model AccountingReceivableReceipt {
+  id                    String                           @id @default(uuid())
+  tenantId              String
+  customerId            String
+  cashbookTransactionId String
+  receiptNumber         String
+  receiptDate           DateTime
+  currency              String
+  amount                Decimal                          @db.Decimal(20, 4)
+  exchangeRate          Decimal?                         @db.Decimal(18, 8)
+  reference             String?
+  description           String?
+  externalReference     String?
+  sourceModule          String?
+  sourceRecordId        String?
+  status                AccountingReceivableStatus       @default(DRAFT)
+  createdByUserId       String
+  updatedByUserId       String
+  postedByUserId        String?
+  reversedByUserId      String?
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+  postedAt              DateTime?
+  reversedAt            DateTime?
+  reversalOfReceiptId   String?
+  customer              AccountingCustomer               @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  cashbookTransaction   CashbookTransaction              @relation("ReceivableCashbookTransaction", fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfReceipt     AccountingReceivableReceipt?     @relation("ReceivableReceiptReversal", fields: [reversalOfReceiptId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalReceipt       AccountingReceivableReceipt?     @relation("ReceivableReceiptReversal")
+  allocations           AccountingReceivableAllocation[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, receiptNumber])
+  @@unique([cashbookTransactionId, tenantId])
+  @@unique([reversalOfReceiptId, tenantId])
+  @@index([tenantId, customerId, status])
+  @@index([tenantId, receiptDate])
+  @@index([tenantId, currency])
+  @@index([tenantId, sourceModule, sourceRecordId])
+  @@schema("accounting")
+}
+
+model AccountingReceivableAllocation {
+  id              String                              @id @default(uuid())
+  tenantId        String
+  customerId      String
+  invoiceId       String
+  receiptId       String?
+  creditNoteId    String?
+  sourceType      AccountingReceivableAllocationSource
+  amount          Decimal                             @db.Decimal(20, 4)
+  currency        String
+  allocatedAt     DateTime                            @default(now())
+  createdByUserId String
+  reversedAt      DateTime?
+  reversedByUserId String?
+  reversalReason  String?
+  customer        AccountingCustomer                  @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  invoice         AccountingReceivableDocument        @relation("ReceivableInvoiceAllocations", fields: [invoiceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  receipt         AccountingReceivableReceipt?        @relation(fields: [receiptId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  creditNote      AccountingReceivableDocument?       @relation("ReceivableCreditAllocations", fields: [creditNoteId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, customerId, allocatedAt])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, receiptId])
+  @@index([tenantId, creditNoteId])
+  @@index([tenantId, sourceType])
   @@schema("accounting")
 }
 

@@ -23,6 +23,9 @@ Tenant-scoped Accounting ledger foundation.
   posting-enabled GL asset accounts.
 - Cashbook entries are draft until posted; posting creates balanced journals and
   corrections use linked reversals.
+- Standalone Accounts Receivable uses tenant AR control configuration, customer
+  subledgers and cashbook-backed receipts. Allocations update AR application
+  state only and never create duplicate cash journals.
 
 Operational source-event posting is active through the Accounting Source Event
 Inbox and tenant posting rules. Source modules publish business facts only;
@@ -49,6 +52,7 @@ remain independently usable.
     .addTag('Accounting - Subledgers')
     .addTag('Accounting - Cash Accounts')
     .addTag('Accounting - Cashbook')
+    .addTag('Accounting - Receivables')
     .addTag('Accounting - Journals')
     .addTag('Accounting - General Ledger')
     .addTag('Accounting - Financial Reports')

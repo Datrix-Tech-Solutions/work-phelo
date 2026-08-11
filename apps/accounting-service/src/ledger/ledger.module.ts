@@ -12,6 +12,8 @@ import { JournalsController } from './journals.controller';
 import { JournalsService } from './journals.service';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
+import { ReceivablesController } from './receivables.controller';
+import { ReceivablesService } from './receivables.service';
 
 @Module({
   imports: [PrismaModule, AuthModule],
@@ -21,6 +23,7 @@ import { ReportsService } from './reports.service';
     CashbookController,
     InternalSubledgersController,
     JournalsController,
+    ReceivablesController,
     ReportsController,
   ],
   providers: [
@@ -28,12 +31,14 @@ import { ReportsService } from './reports.service';
     CashbookService,
     JournalPolicy,
     JournalsService,
+    ReceivablesService,
     ReportsService,
   ],
   exports: [
     AccountingMasterDataService,
     CashbookService,
     JournalsService,
+    ReceivablesService,
     ReportsService,
   ],
 })
