@@ -268,15 +268,15 @@ function CreditNoteContent({
         </div>
       )}
 
-      <div className="mt-8 flex flex-col gap-2 text-base text-gray-700">
+      <div className="mt-4 flex flex-col gap-1 text-base text-gray-700">
         <p>Thank You.</p>
         <p>Yours faithfully,</p>
         <Image
           src={profile.signatureSrc ?? '/signature.png'}
           alt="Signature"
-          width={160}
-          height={80}
-          className="object-contain mt-2 mb-1"
+          width={120}
+          height={60}
+          className="object-contain mt-1 mb-1"
           unoptimized={!!profile.signatureSrc}
         />
         <div className="flex flex-col gap-0.5">

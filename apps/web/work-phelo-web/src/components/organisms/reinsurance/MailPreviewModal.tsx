@@ -14,6 +14,7 @@ import {
   useUpdateClaimStatus,
   useCreateClaimCashCall,
   useUpdateClaimCashCallStatus,
+  useApproveClaimRecovery,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
@@ -50,6 +51,7 @@ export function MailPreviewModal({
   const updateClaimStatus = useUpdateClaimStatus(placement.id, claim?.id ?? '');
   const createCashCall = useCreateClaimCashCall(placement.id, claim?.id ?? '');
   const updateCashCallStatus = useUpdateClaimCashCallStatus(placement.id, claim?.id ?? '');
+  const approveRecovery = useApproveClaimRecovery(placement.id, claim?.id ?? '');
   const addToast = useToastStore((s) => s.addToast);
 
   const removeRecipient = (email: string) =>
@@ -82,6 +84,14 @@ export function MailPreviewModal({
         if (allocation) {
           const cashCall = await createCashCall.mutateAsync(allocation.id);
           await updateCashCallStatus.mutateAsync({ cashCallId: cashCall.id, status: 'ISSUED' });
+          // Recognizes the receivable for the full demanded amount at send time, so a recovery
+          // approval always exists once a cash call is issued — recording a receipt against it
+          // later (Cash Calls tab) no longer needs a separate approval step of its own.
+          await approveRecovery.mutateAsync({
+            allocationId: allocation.id,
+            approvedAmount: parseFloat(cashCall.amount),
+            cashCallId: cashCall.id,
+          });
         }
       } catch (error) {
         addToast({ message: extractError(error), type: 'error' });
@@ -210,6 +220,7 @@ export function MailPreviewModal({
           onChange={setBody}
           placeholder="Write your message here…"
           minHeight={200}
+          onFilesAdded={(files) => setAttachment(files[0])}
         />
       </div>
     </Modal>

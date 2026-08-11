@@ -33,6 +33,37 @@
   background-color: var(--scrollbar-thumb);
 }
 
+/* Fade-in for ScrollNudgeButtons — the click-to-scroll arrows that appear at
+   the scrollbar track ends on hover/focus, for users who can't drive a
+   scroll gesture directly. */
+@keyframes scroll-nudge-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Toast icon entrance (ToastContainer): the colored circle pops in, then the
+   check/X stroke draws itself. `stroke-dasharray`/`stroke-dashoffset` are set
+   to a value comfortably larger than either icon's actual path length (~20 at
+   16px), so the same keyframe fully hides then reveals the stroke regardless
+   of which icon (Check's single polyline vs X's two crossing lines) it's on. */
+@keyframes toast-icon-pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes toast-icon-draw {
+  from { stroke-dashoffset: 30; }
+  to { stroke-dashoffset: 0; }
+}
+
+.toast-icon-draw path,
+.toast-icon-draw polyline {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: toast-icon-draw 0.6s 0.3s ease-out forwards;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

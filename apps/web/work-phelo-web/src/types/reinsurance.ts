@@ -1074,8 +1074,18 @@ export interface PlacementPayment {
   allocations?: PlacementPaymentAllocation[];
 }
 
-export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'REVERSED';
-export type PlacementClaimCedantSettlementStatus = 'RECORDED' | 'REVERSED';
+export type PlacementClaimRecoveryReceiptStatus =
+  | 'RECORDED'
+  | 'REVERSED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'BANK_CONFIRMED';
+export type PlacementClaimCedantSettlementStatus =
+  | 'RECORDED'
+  | 'REVERSED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'BANK_CONFIRMED';
 export type PlacementClaimRecoveryStatus =
   | 'UNRECOVERED'
   | 'PARTIALLY_RECOVERED'
@@ -1088,11 +1098,19 @@ export interface PlacementClaimRecoveryReceipt {
   claimId: string;
   allocationId: string;
   cashCallId: string;
+  recoveryApprovalId: string | null;
   counterpartyId: string;
   currency: string;
   amount: string;
   paymentDate: string;
   reference: string | null;
+  settlementMethod: PlacementSettlementMethod | null;
+  settlementCurrency: string | null;
+  bankReference: string | null;
+  bankConfirmedAt: string | null;
+  bankConfirmedByUserId: string | null;
+  agreedExchangeRate: string | null;
+  bankChargeAmount: string;
   notes: string | null;
   status: PlacementClaimRecoveryReceiptStatus;
   reversalOfReceiptId: string | null;
@@ -1107,16 +1125,45 @@ export interface PlacementClaimCedantSettlement {
   tenantId: string;
   placementId: string;
   claimId: string;
+  payableApprovalId: string | null;
   currency: string;
   amount: string;
   settlementDate: string;
   reference: string | null;
+  settlementMethod: PlacementSettlementMethod | null;
+  settlementCurrency: string | null;
+  bankReference: string | null;
+  bankConfirmedAt: string | null;
+  bankConfirmedByUserId: string | null;
+  agreedExchangeRate: string | null;
+  bankChargeAmount: string;
   notes: string | null;
   status: PlacementClaimCedantSettlementStatus;
   reversalOfSettlementId: string | null;
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A reinsurer's formal agreement to pay a recovery amount — precedes (and may be referenced by) a recovery receipt. */
+export interface PlacementClaimRecoveryApproval {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  allocationId: string;
+  cashCallId: string | null;
+  counterpartyId: string;
+  approvalVersion: number;
+  approvedAmount: string;
+  eligibleAmount: string;
+  currency: string;
+  approvedAt: string;
+  approvedByUserId: string;
+  reference: string | null;
+  notes: string | null;
+  createdAt: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
 }
 
 export interface PlacementClaimRecoveryPositionCashCall {
@@ -1129,6 +1176,10 @@ export interface PlacementClaimRecoveryPositionCashCall {
   currency: string;
   calledAmount: string;
   recoveredAmount: string;
+  /** Operational receipts recorded but not yet financially confirmed by Accounting. */
+  recordedAmount: string;
+  /** Bank-confirmed recovery receipts that reduce financial outstanding. */
+  confirmedAmount: string;
   reversedAmount: string;
   outstandingAmount: string;
   recoveryStatus: PlacementClaimRecoveryStatus;
@@ -1149,6 +1200,10 @@ export interface PlacementClaimRecoveryPosition {
     totalAllocated: string;
     totalCashCalled: string;
     totalRecovered: string;
+    /** Operational receipts recorded but not yet financially confirmed by Accounting. */
+    totalRecorded: string;
+    /** Bank-confirmed recovery receipts that reduce financial outstanding. */
+    totalConfirmed: string;
     totalReversed: string;
     totalOutstanding: string;
   };
@@ -1156,8 +1211,13 @@ export interface PlacementClaimRecoveryPosition {
   cedantSettlement: {
     approvedPayableAmount: string | null;
     settledAmount: string;
+    /** Operational Cedant settlements recorded but not yet financially confirmed by Accounting. */
+    recordedAmount: string;
+    /** Bank-confirmed Cedant settlements that reduce financial payable outstanding. */
+    bankConfirmedAmount: string;
     reversedAmount: string;
     outstandingAmount: string;
+    operationalSettledAmount: string;
     settlementStatus: 'PENDING_APPROVAL' | 'APPROVED_UNSETTLED' | 'PARTIALLY_SETTLED' | 'SETTLED';
   };
   funding: {
@@ -1172,20 +1232,93 @@ export interface ApprovePlacementClaimPayablePayload {
   notes?: string;
 }
 
+export interface ApprovePlacementClaimRecoveryPayload {
+  approvedAmount: number;
+  currency?: string;
+  cashCallId?: string;
+  reference?: string;
+  notes?: string;
+}
+
 export interface CreatePlacementClaimCedantSettlementPayload {
+  payableApprovalId?: string;
   currency: string;
   amount: number;
   settlementDate: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
+  agreedExchangeRate?: number;
   reference?: string;
   notes?: string;
 }
 
 export interface CreatePlacementClaimRecoveryReceiptPayload {
+  recoveryApprovalId?: string;
   currency: string;
   amount: number;
   paymentDate: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
+  agreedExchangeRate?: number;
   reference?: string;
   notes?: string;
+}
+
+/** Accounting-owned confirmation that a Cedant settlement / recovery receipt cleared the bank. */
+export interface ConfirmPlacementClaimFinancialBankPayload {
+  bankConfirmedAt: string;
+  bankReference?: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
+  confirmedExchangeRate?: number;
+  /** @deprecated use confirmedExchangeRate */
+  agreedExchangeRate?: number;
+  bankChargeAmount?: number;
+  notes?: string;
+}
+
+export type ConfirmPlacementClaimCedantSettlementBankPayload =
+  ConfirmPlacementClaimFinancialBankPayload;
+export type ConfirmPlacementClaimRecoveryReceiptBankPayload =
+  ConfirmPlacementClaimFinancialBankPayload;
+
+/* ── Claim financial-close readiness ── */
+export const PLACEMENT_CLAIM_FINANCIAL_CLOSE_BLOCKERS = [
+  'PAYABLE_NOT_APPROVED',
+  'CLAIM_PAYABLE_OUTSTANDING',
+  'RECOVERY_OUTSTANDING',
+  'CEDANT_SETTLEMENT_CONFIRMATION_PENDING',
+  'RECOVERY_RECEIPT_CONFIRMATION_PENDING',
+] as const;
+
+export type PlacementClaimFinancialCloseBlocker =
+  (typeof PLACEMENT_CLAIM_FINANCIAL_CLOSE_BLOCKERS)[number];
+
+export interface PlacementClaimFinancialCloseReadiness {
+  claimId: string;
+  currentClaimStatus: PlacementClaimStatus;
+  payable: {
+    approvedPayableAmount: string | null;
+    bankConfirmedSettledAmount: string;
+    outstandingPayable: string;
+  };
+  recovery: {
+    approvedRecoveryAmount: string;
+    bankConfirmedRecoveryAmount: string;
+    outstandingRecovery: string;
+  };
+  pendingConfirmations: {
+    recordedCedantSettlementCount: number;
+    recordedCedantSettlementAmount: string;
+    recordedRecoveryReceiptCount: number;
+    recordedRecoveryReceiptAmount: string;
+  };
+  isPayableFullySettled: boolean;
+  areRecoveriesFullyReceived: boolean;
+  hasPendingFinancialConfirmations: boolean;
+  isFinanciallyReadyToSettle: boolean;
+  isFinanciallyReadyToClose: boolean;
+  blockers: PlacementClaimFinancialCloseBlocker[];
 }
 
 export interface CreatePlacementPaymentPayload {
@@ -1380,6 +1513,14 @@ export interface PlacementClaimCashCall {
     id: string;
     status: PlacementClaimAllocationStatus;
   };
+}
+
+export interface UpdatePlacementClaimCashCallStatusPayload {
+  status: Exclude<PlacementClaimCashCallStatus, 'PAID'>;
+}
+
+export interface VoidPlacementClaimCashCallPayload {
+  voidReason: string;
 }
 
 /* ── Facultative form ── */
