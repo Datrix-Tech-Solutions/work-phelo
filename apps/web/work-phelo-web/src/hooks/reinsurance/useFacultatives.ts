@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
@@ -10,6 +11,7 @@ import {
   FacultativeStatus,
   CreateFacultativePayload,
   UpdateFacultativePayload,
+  PlacementParticipant,
   PlacementParticipantPayload,
   UpdateParticipantPayload,
   UpdateParticipantStatusPayload,
@@ -623,6 +625,61 @@ export function usePlacementEndorsementParticipants(
     },
     enabled: !!placementId && !!endorsementId,
   });
+}
+
+/**
+ * All reinsurer participants for a placement, including ones added via any endorsement —
+ * merged into the PlacementParticipant shape. `placement.participants` alone only reflects the
+ * original placement closing, so anything resolved from it misses endorsement-added reinsurers
+ * entirely (e.g. claim allocations generated against an endorsement closing).
+ */
+export function useAllPlacementParticipants(
+  placementId: string,
+  originalParticipants: PlacementParticipant[],
+) {
+  const { data: endorsements = [] } = usePlacementEndorsements(placementId);
+
+  const endorsementParticipantQueries = useQueries({
+    queries: endorsements.map((endorsement) => ({
+      queryKey: endorsementParticipantKey(placementId, endorsement.id),
+      queryFn: async () => {
+        const res = await api.get(
+          `${BASE}/${placementId}/endorsements/${endorsement.id}/participants`,
+        );
+        const raw = res.data?.items ?? res.data ?? [];
+        return raw as PlacementEndorsementParticipant[];
+      },
+      enabled: !!placementId,
+    })),
+  });
+
+  return useMemo<PlacementParticipant[]>(() => {
+    const merged = new Map<string, PlacementParticipant>();
+    originalParticipants.forEach((p) => merged.set(p.counterpartyId, p));
+    endorsementParticipantQueries.forEach((query) => {
+      (query.data ?? []).forEach((ep) => {
+        // An original participant record, if one exists for this counterparty, is more
+        // complete (has role/brokerageFee) — don't let an endorsement row shadow it.
+        if (merged.has(ep.counterpartyId)) return;
+        merged.set(ep.counterpartyId, {
+          id: ep.id,
+          counterpartyId: ep.counterpartyId,
+          role: 'REINSURER',
+          status: ep.status,
+          sharePercent: ep.sharePercent,
+          signedLinePercent: ep.signedLinePercent,
+          brokerageFee: null,
+          notes: ep.notes,
+          createdAt: ep.createdAt,
+          counterparty: {
+            id: ep.counterparty?.id ?? ep.counterpartyId,
+            name: ep.counterparty?.name ?? 'Unknown reinsurer',
+          },
+        });
+      });
+    });
+    return Array.from(merged.values());
+  }, [originalParticipants, endorsementParticipantQueries]);
 }
 
 export function useCreateEndorsementParticipant(

@@ -3,6 +3,9 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { api } from '@/lib/api';
 import {
   ApprovePlacementClaimPayablePayload,
+  ApprovePlacementClaimRecoveryPayload,
+  ConfirmPlacementClaimCedantSettlementBankPayload,
+  ConfirmPlacementClaimRecoveryReceiptBankPayload,
   CreatePlacementClaimCedantSettlementPayload,
   CreatePlacementClaimPayload,
   CreatePlacementClaimRecoveryReceiptPayload,
@@ -12,6 +15,8 @@ import {
   PlacementClaimCashCall,
   PlacementClaimCashCallStatus,
   PlacementClaimCedantSettlement,
+  PlacementClaimFinancialCloseReadiness,
+  PlacementClaimRecoveryApproval,
   PlacementClaimRecoveryPosition,
   PlacementClaimRecoveryReceipt,
   PlacementClaimStatus,
@@ -42,6 +47,12 @@ export const cedantSettlementsKey = (placementId: string, claimId: string) =>
 export const recoveryReceiptsKey = (placementId: string, claimId: string, cashCallId: string) =>
   [...claimKey(placementId, claimId), 'cash-calls', cashCallId, 'recovery-receipts'] as const;
 
+export const recoveryApprovalsKey = (placementId: string, claimId: string) =>
+  [...claimKey(placementId, claimId), 'recovery-approvals'] as const;
+
+export const financialCloseReadinessKey = (placementId: string, claimId: string) =>
+  [...claimKey(placementId, claimId), 'financial-close-readiness'] as const;
+
 function invalidateClaimWorkflow(
   queryClient: ReturnType<typeof useQueryClient>,
   placementId: string,
@@ -54,6 +65,8 @@ function invalidateClaimWorkflow(
     queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
     queryClient.invalidateQueries({ queryKey: recoveryPositionKey(placementId, claimId) });
     queryClient.invalidateQueries({ queryKey: cedantSettlementsKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: recoveryApprovalsKey(placementId, claimId) });
+    queryClient.invalidateQueries({ queryKey: financialCloseReadinessKey(placementId, claimId) });
   }
   queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
 }
@@ -123,6 +136,23 @@ export function useUpdateClaimStatus(placementId: string, claimId: string) {
     onSuccess: () => {
       invalidateClaimWorkflow(queryClient, placementId, claimId);
     },
+  });
+}
+
+/**
+ * Backend-derived readiness for moving a claim to SETTLED or CLOSED — RECORDED
+ * settlements/receipts are operational and don't count until Accounting bank-confirms them.
+ */
+export function useClaimFinancialCloseReadiness(placementId: string, claimId: string) {
+  return useQuery({
+    queryKey: financialCloseReadinessKey(placementId, claimId),
+    queryFn: async () => {
+      const res = await api.get(
+        `${BASE}/${placementId}/claims/${claimId}/financial-close-readiness`,
+      );
+      return res.data as PlacementClaimFinancialCloseReadiness;
+    },
+    enabled: !!placementId && !!claimId,
   });
 }
 
@@ -297,6 +327,56 @@ export function useReverseClaimCedantSettlement(placementId: string, claimId: st
   });
 }
 
+export function useConfirmClaimCedantSettlementBank(placementId: string, claimId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      settlementId,
+      ...payload
+    }: ConfirmPlacementClaimCedantSettlementBankPayload & { settlementId: string }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/cedant-settlements/${settlementId}/bank-confirm`,
+        payload,
+      );
+      return res.data as PlacementClaimCedantSettlement;
+    },
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
+/** Immutable per-allocation reinsurer recovery approval history — precedes recovery receipts. */
+export function useClaimRecoveryApprovals(placementId: string, claimId: string) {
+  return useQuery({
+    queryKey: recoveryApprovalsKey(placementId, claimId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/claims/${claimId}/recovery-approvals`);
+      return (res.data?.items ?? res.data ?? []) as PlacementClaimRecoveryApproval[];
+    },
+    enabled: !!placementId && !!claimId,
+  });
+}
+
+export function useApproveClaimRecovery(placementId: string, claimId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      allocationId,
+      ...payload
+    }: ApprovePlacementClaimRecoveryPayload & { allocationId: string }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/allocations/${allocationId}/recovery-approvals`,
+        payload,
+      );
+      return res.data as PlacementClaimRecoveryApproval;
+    },
+    onSuccess: () => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
 export function useClaimRecoveryReceipts(placementId: string, claimId: string, cashCallId: string) {
   return useQuery({
     queryKey: recoveryReceiptsKey(placementId, claimId, cashCallId),
@@ -369,6 +449,31 @@ export function useReverseClaimRecoveryReceipt() {
   });
 }
 
+export function useConfirmClaimRecoveryReceiptBank() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      placementId,
+      claimId,
+      receiptId,
+      ...payload
+    }: ConfirmPlacementClaimRecoveryReceiptBankPayload & {
+      placementId: string;
+      claimId: string;
+      receiptId: string;
+    }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/claims/${claimId}/recovery-receipts/${receiptId}/bank-confirm`,
+        payload,
+      );
+      return res.data as PlacementClaimRecoveryReceipt;
+    },
+    onSuccess: (_receipt, variables) => {
+      invalidateClaimWorkflow(queryClient, variables.placementId, variables.claimId);
+    },
+  });
+}
+
 export interface RecoveryRow {
   id: string;
   placementId: string;
@@ -386,6 +491,10 @@ export interface RecoveryRow {
   currency: string;
   calledAmount: number;
   recoveredAmount: number;
+  /** Operational receipts recorded but not yet financially confirmed by Accounting. */
+  recordedAmount: number;
+  /** Bank-confirmed recovery receipts that reduce financial outstanding. */
+  confirmedAmount: number;
   reversedAmount: number;
   outstandingAmount: number;
   recoveryStatus: PlacementClaimRecoveryPosition['perCashCall'][number]['recoveryStatus'];
@@ -459,6 +568,8 @@ export function useAllReinsurerClaims(placements: Facultative[]): {
           currency: cashCall.currency,
           calledAmount: parseFloat(cashCall.calledAmount),
           recoveredAmount: parseFloat(cashCall.recoveredAmount),
+          recordedAmount: parseFloat(cashCall.recordedAmount),
+          confirmedAmount: parseFloat(cashCall.confirmedAmount),
           reversedAmount: parseFloat(cashCall.reversedAmount),
           outstandingAmount: parseFloat(cashCall.outstandingAmount),
           recoveryStatus: cashCall.recoveryStatus,

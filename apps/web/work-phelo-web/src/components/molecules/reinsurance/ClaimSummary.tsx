@@ -56,8 +56,7 @@ export function ClaimSummary({ placement }: ClaimSummaryProps) {
         <>
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-900">{reference}</span>
-              {policyNumber && <span className="text-xs text-gray-400">{policyNumber}</span>}
+              <span className="text-sm font-semibold text-gray-900">{policyNumber}</span>
             </div>
             {(title || cedant || classOfBusiness) && (
               <div className="flex items-center gap-3">

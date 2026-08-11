@@ -124,7 +124,10 @@ export function RichTextEditor({
       return;
     }
     if (contentRef.current.innerHTML !== value) contentRef.current.innerHTML = value;
-  }, [value]);
+    // Also re-run when switching back to the "write" tab: that remounts the
+    // contentEditable div as a fresh, empty node, so it needs to be
+    // re-populated even though `value` itself didn't change.
+  }, [value, tab]);
 
   const syncValue = useCallback(() => {
     isInternalChange.current = true;
@@ -381,14 +384,15 @@ export function RichTextEditor({
   // ── File handling ─────────────────────────────────────────────────────────
 
   const handleFileDrop = (e: React.DragEvent) => {
+    if (!onFilesAdded) return; // no handler wired up — let the browser's default drop behavior run
     e.preventDefault();
-    if (e.dataTransfer.files.length) onFilesAdded?.(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) onFilesAdded(e.dataTransfer.files);
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
-    if (e.clipboardData.files.length) {
+    if (onFilesAdded && e.clipboardData.files.length) {
       e.preventDefault();
-      onFilesAdded?.(e.clipboardData.files);
+      onFilesAdded(e.clipboardData.files);
       return;
     }
     setTimeout(syncValue, 0);
@@ -552,9 +556,11 @@ export function RichTextEditor({
               <ToolbarBtn title="Insert image" onMouseDown={handleImageBtn}>
                 <ImageIcon size={15} />
               </ToolbarBtn>
-              <ToolbarBtn title="Attach document" onMouseDown={handleFileBtn}>
-                <FileText size={15} />
-              </ToolbarBtn>
+              {onFilesAdded && (
+                <ToolbarBtn title="Attach document" onMouseDown={handleFileBtn}>
+                  <FileText size={15} />
+                </ToolbarBtn>
+              )}
 
               {sep}
 
@@ -565,15 +571,17 @@ export function RichTextEditor({
                 <Redo2 size={15} />
               </ToolbarBtn>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files?.length) onFilesAdded?.(e.target.files);
-                }}
-              />
+              {onFilesAdded && (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) onFilesAdded(e.target.files);
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -647,26 +655,28 @@ export function RichTextEditor({
         )}
 
         {/* ── Footer ────────────────────────────────────────────────── */}
-        <div className="flex items-center border-t border-gray-100 px-4 py-2 text-xs text-gray-400 rounded-b-input">
-          <span
-            className="flex items-center gap-1 cursor-pointer hover:text-gray-600"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+        {onFilesAdded && (
+          <div className="flex items-center border-t border-gray-100 px-4 py-2 text-xs text-gray-400 rounded-b-input">
+            <span
+              className="flex items-center gap-1 cursor-pointer hover:text-gray-600"
+              onClick={() => fileInputRef.current?.click()}
             >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="m21 15-5-5L5 21" />
-            </svg>
-            Paste, drop, or click to add files
-          </span>
-        </div>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="m21 15-5-5L5 21" />
+              </svg>
+              Paste, drop, or click to add files
+            </span>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-xs text-red-500">{error}</p>}

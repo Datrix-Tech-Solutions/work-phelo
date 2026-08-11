@@ -12,8 +12,9 @@ import {
 } from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
 import {
   useCreatePlacementClaim,
-  useGenerateClaimAllocationsMutation,
   useUpdatePlacementClaim,
+  useClaimAllocations,
+  useGenerateClaimAllocations,
   useFacultatives,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
@@ -83,7 +84,14 @@ export function MakeClaimPanel({
 
   const createClaim = useCreatePlacementClaim();
   const updateClaim = useUpdatePlacementClaim(effectivePlacement?.id ?? '', claim?.id ?? '');
-  const generateClaimAllocations = useGenerateClaimAllocationsMutation();
+  const { data: existingAllocations = [] } = useClaimAllocations(
+    effectivePlacement?.id ?? '',
+    claim?.id ?? '',
+  );
+  const generateAllocations = useGenerateClaimAllocations(
+    effectivePlacement?.id ?? '',
+    claim?.id ?? '',
+  );
   const addToast = useToastStore((s) => s.addToast);
 
   useEffect(() => {
@@ -128,25 +136,40 @@ export function MakeClaimPanel({
     };
 
     try {
+      let allocationsGenerated = false;
+
       if (isEditing) {
         const updatedClaim = await updateClaim.mutateAsync({
           ...payload,
           finalLossAmount: values.finalLossAmount ? parseFloat(values.finalLossAmount) : undefined,
         });
         onSuccess?.(updatedClaim);
+
+        // Once the actual claim amount is entered, treat the claim as final and lock in
+        // per-reinsurer allocations. Occurrence date, currency and loss amounts become
+        // read-only on the backend the moment allocations exist.
+        if (values.finalLossAmount && existingAllocations.length === 0) {
+          try {
+            await generateAllocations.mutateAsync();
+            allocationsGenerated = true;
+          } catch (allocationError) {
+            addToast({
+              message: `Claim updated, but allocations could not be generated: ${extractError(allocationError)}`,
+              type: 'error',
+            });
+          }
+        }
       } else {
         const newClaim = await createClaim.mutateAsync({
           placementId: effectivePlacement.id,
           ...payload,
         });
-        await generateClaimAllocations.mutateAsync({
-          placementId: effectivePlacement.id,
-          claimId: newClaim.id,
-        });
         onSuccess?.(newClaim);
       }
       addToast({
-        message: `Claim ${isEditing ? 'updated' : 'submitted'} successfully`,
+        message: `Claim ${isEditing ? 'updated' : 'submitted'} successfully${
+          allocationsGenerated ? ' — allocations generated' : ''
+        }`,
         type: 'success',
       });
       handleClose();
