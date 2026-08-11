@@ -385,7 +385,8 @@ model SubledgerAccount {
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
-  @@unique([tenantId, type, externalRef])
+  @@unique([tenantId, type, externalRef, controlAccountId])
+  @@index([tenantId, type, externalRef])
   @@index([tenantId, type, status])
   @@index([tenantId, controlAccountId])
   @@schema("accounting")

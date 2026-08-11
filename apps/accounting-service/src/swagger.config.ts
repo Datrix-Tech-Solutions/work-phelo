@@ -29,6 +29,9 @@ Tenant-scoped Accounting ledger foundation.
 - Standalone Accounts Payable uses tenant AP control configuration, vendor
   subledgers and cashbook-backed payments. Allocations update AP application
   state only and never create duplicate cash journals.
+- Counterparty subledger balances are scoped by GL control account. The same
+  legal Cedant/Reinsurer can hold separate premium receivable, claims payable,
+  premium payable and claims receivable dimensions without unintended netting.
 - Cash-impact source-module events use Cashbook as the authoritative bank/cash
   posting path: Accounting validates the source-provided cashAccountId, uses the
   Accounting cash account GL for the cash leg, preserves the posting-rule counter

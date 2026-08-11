@@ -467,6 +467,34 @@ export class UpdateSubledgerAccountDto extends PartialType(
   CreateSubledgerAccountDto,
 ) {}
 
+export class QuerySubledgerAccountsDto {
+  @ApiPropertyOptional({ enum: SubledgerType })
+  @IsOptional()
+  @IsEnum(SubledgerType)
+  type?: SubledgerType;
+
+  @ApiPropertyOptional({ example: 'reinsurance-counterparty-id' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  externalRef?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Filters balances to the Accounting control account / obligation dimension.',
+  })
+  @IsOptional()
+  @IsUUID()
+  controlAccountId?: string;
+
+  @ApiPropertyOptional({ enum: RecordStatus })
+  @IsOptional()
+  @IsEnum(RecordStatus)
+  status?: RecordStatus;
+}
+
 export class EnsureInternalSubledgerDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()

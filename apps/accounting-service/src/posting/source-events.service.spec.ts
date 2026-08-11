@@ -5,6 +5,7 @@ import {
   FiscalPeriodStatus,
   PostingDirection,
   Prisma,
+  RecordStatus,
   SourceEventStatus,
   SubledgerType,
 } from '../../prisma/generated/client';
@@ -27,6 +28,19 @@ describe('SourceEventsService', () => {
     featureConfig: {},
     permissions: [],
   } as RequestUser;
+
+  const activeSubledger = (id: string, currency = 'GHS') => ({
+    id,
+    status: RecordStatus.ACTIVE,
+    currency,
+  });
+
+  const subledgerCreateData = (
+    mock: jest.Mock<
+      Promise<{ id: string }>,
+      [{ data: Record<string, unknown> }]
+    >,
+  ) => mock.mock.calls[0]?.[0].data;
 
   const dto: CreateSourceEventDto = {
     sourceModule: 'OPERATIONS',
@@ -204,6 +218,7 @@ describe('SourceEventsService', () => {
       },
       subledgerAccount: {
         findFirst: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'created-subledger-1' }),
       },
       $transaction: jest.fn(),
     };
@@ -313,9 +328,9 @@ describe('SourceEventsService', () => {
       reinsuranceDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(reinsuranceRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'cedant-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('cedant-subledger-1'),
+    );
 
     const result = await service.receive(actor, reinsuranceDto);
 
@@ -325,7 +340,7 @@ describe('SourceEventsService', () => {
         tenantId: actor.tenantId,
         type: SubledgerType.CEDANT,
         externalRef: 'cedant-1',
-        status: 'ACTIVE',
+        controlAccountId: 'cedant-premium-receivable',
       },
     });
     expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
@@ -414,9 +429,9 @@ describe('SourceEventsService', () => {
       paymentDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(paymentRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'cedant-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('cedant-subledger-1'),
+    );
 
     const result = await service.receive(actor, paymentDto);
 
@@ -501,9 +516,9 @@ describe('SourceEventsService', () => {
       paymentDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(paymentRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'cedant-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('cedant-subledger-1'),
+    );
 
     const result = await service.receive(actor, paymentDto);
 
@@ -571,9 +586,9 @@ describe('SourceEventsService', () => {
       ],
     };
     prisma.postingRule.findFirst.mockResolvedValue(internalOffsetRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'cedant-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('cedant-subledger-1'),
+    );
 
     const result = await service.receive(actor, paymentDto);
 
@@ -584,7 +599,7 @@ describe('SourceEventsService', () => {
     ).not.toHaveBeenCalled();
   });
 
-  it('fails REINSURANCE DEBIT_NOTE_ISSUED cleanly when the cedant subledger is missing', async () => {
+  it('fails REINSURANCE DEBIT_NOTE_ISSUED cleanly when the control-account dimension is inactive', async () => {
     const reinsuranceDto: CreateSourceEventDto = {
       sourceModule: 'REINSURANCE',
       sourceEventType: 'DEBIT_NOTE_ISSUED',
@@ -622,13 +637,17 @@ describe('SourceEventsService', () => {
       reinsuranceDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(reinsuranceRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue(null);
+    prisma.subledgerAccount.findFirst.mockResolvedValue({
+      id: 'cedant-subledger-1',
+      status: RecordStatus.INACTIVE,
+      currency: 'GHS',
+    });
 
     const result = await service.receive(actor, reinsuranceDto);
 
     expect(result.status).toBe(SourceEventStatus.FAILED);
     expect(event.failureReason).toBe(
-      'Active cedant subledger not found for rule line 1',
+      'CEDANT subledger for control account receivable-account is inactive',
     );
     expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
   });
@@ -691,9 +710,9 @@ describe('SourceEventsService', () => {
       creditNoteDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(creditNoteRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'reinsurer-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('reinsurer-subledger-1'),
+    );
 
     const result = await service.receive(actor, creditNoteDto);
 
@@ -703,7 +722,7 @@ describe('SourceEventsService', () => {
         tenantId: actor.tenantId,
         type: SubledgerType.REINSURER,
         externalRef: 'reinsurer-1',
-        status: 'ACTIVE',
+        controlAccountId: 'reinsurer-premium-payable',
       },
     });
     expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
@@ -790,9 +809,9 @@ describe('SourceEventsService', () => {
       endorsementDebitDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(endorsementDebitRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'cedant-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('cedant-subledger-1'),
+    );
 
     const result = await service.receive(actor, endorsementDebitDto);
 
@@ -802,7 +821,7 @@ describe('SourceEventsService', () => {
         tenantId: actor.tenantId,
         type: SubledgerType.CEDANT,
         externalRef: 'cedant-1',
-        status: 'ACTIVE',
+        controlAccountId: 'cedant-premium-receivable',
       },
     });
     expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
@@ -891,9 +910,9 @@ describe('SourceEventsService', () => {
       endorsementCreditDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(endorsementCreditRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'reinsurer-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('reinsurer-subledger-1'),
+    );
 
     const result = await service.receive(actor, endorsementCreditDto);
 
@@ -903,7 +922,7 @@ describe('SourceEventsService', () => {
         tenantId: actor.tenantId,
         type: SubledgerType.REINSURER,
         externalRef: 'reinsurer-1',
-        status: 'ACTIVE',
+        controlAccountId: 'reinsurer-premium-payable',
       },
     });
     expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
@@ -924,6 +943,235 @@ describe('SourceEventsService', () => {
             subledgerAccountId: 'reinsurer-subledger-1',
             debit: 0,
             credit: 1800,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('creates a separate Reinsurer Claims AR subledger dimension from the posting-rule control account', async () => {
+    const recoveryDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'CLAIM_RECOVERY_APPROVED',
+      sourceRecordId: 'claim-recovery-approval-1',
+      sourceDocumentId: 'claim-recovery-approval-1',
+      idempotencyKey:
+        'reinsurance:claim-recovery-approval:claim-recovery-approval-1:approved:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          claimReference: 'CLM-2026-001',
+          approvalReference: 'CRA-001',
+        },
+        counterparty: {
+          id: 'reinsurer-1',
+          type: 'REINSURER',
+          name: 'Reinsurer A',
+        },
+        amounts: {
+          recoveryAmount: 100,
+          signedReceivableImpact: 100,
+        },
+      },
+    };
+    const recoveryRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'CLAIM_RECOVERY_APPROVED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'reinsurer-claims-receivable',
+          subledgerType: SubledgerType.REINSURER,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.recoveryAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Claim recovery {{payload.references.approvalReference}} for {{payload.references.claimReference}}',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'claims-recovery-clearing',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.recoveryAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Claims recovery clearing {{payload.references.approvalReference}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      recoveryDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(recoveryRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue(null);
+    prisma.subledgerAccount.create.mockResolvedValue({
+      id: 'reinsurer-claims-ar-subledger-1',
+    });
+
+    const result = await service.receive(actor, recoveryDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.REINSURER,
+        externalRef: 'reinsurer-1',
+        controlAccountId: 'reinsurer-claims-receivable',
+      },
+    });
+    expect(
+      subledgerCreateData(
+        prisma.subledgerAccount.create as jest.Mock<
+          Promise<{ id: string }>,
+          [{ data: Record<string, unknown> }]
+        >,
+      ),
+    ).toMatchObject({
+      tenantId: actor.tenantId,
+      type: SubledgerType.REINSURER,
+      externalRef: 'reinsurer-1',
+      name: 'Reinsurer A',
+      controlAccountId: 'reinsurer-claims-receivable',
+      currency: 'GHS',
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'CLAIM_RECOVERY_APPROVED',
+        sourceRecordId: 'claim-recovery-approval-1',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'reinsurer-claims-receivable',
+            subledgerAccountId: 'reinsurer-claims-ar-subledger-1',
+            debit: 100,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'claims-recovery-clearing',
+            debit: 0,
+            credit: 100,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('creates a separate Cedant Claims AP subledger dimension from the posting-rule control account', async () => {
+    const payableDto: CreateSourceEventDto = {
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'CLAIM_PAYABLE_APPROVED',
+      sourceRecordId: 'claim-payable-approval-1',
+      sourceDocumentId: 'claim-payable-approval-1',
+      idempotencyKey:
+        'reinsurance:claim-payable-approval:claim-payable-approval-1:approved:v1',
+      payload: {
+        transactionDate: '2026-07-05T10:00:00.000Z',
+        currency: 'GHS',
+        references: {
+          claimReference: 'CLM-2026-001',
+          approvalReference: 'CPA-001',
+        },
+        counterparty: {
+          id: 'cedant-1',
+          type: 'CEDANT',
+          name: 'Cedant A',
+        },
+        amounts: {
+          approvedPayableAmount: 90,
+          signedPayableImpact: 90,
+        },
+      },
+    };
+    const payableRule = {
+      ...rule,
+      sourceModule: 'REINSURANCE',
+      sourceEventType: 'CLAIM_PAYABLE_APPROVED',
+      lines: [
+        {
+          ...rule.lines[0],
+          direction: PostingDirection.DR,
+          glAccountId: 'claims-expense',
+          subledgerType: null,
+          subledgerExternalRefSource: null,
+          amountSource: 'amounts.approvedPayableAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Claim payable {{payload.references.approvalReference}} expense',
+        },
+        {
+          ...rule.lines[1],
+          direction: PostingDirection.CR,
+          glAccountId: 'cedant-claims-payable',
+          subledgerType: SubledgerType.CEDANT,
+          subledgerExternalRefSource: 'counterparty.id',
+          amountSource: 'amounts.approvedPayableAmount',
+          currencySource: 'currency',
+          descriptionTemplate:
+            'Claim payable {{payload.references.approvalReference}} for {{payload.references.claimReference}}',
+        },
+      ],
+    };
+    const { journals, prisma, service } = setup(
+      SourceEventStatus.RECEIVED,
+      payableDto,
+    );
+    prisma.postingRule.findFirst.mockResolvedValue(payableRule);
+    prisma.subledgerAccount.findFirst.mockResolvedValue(null);
+    prisma.subledgerAccount.create.mockResolvedValue({
+      id: 'cedant-claims-ap-subledger-1',
+    });
+
+    const result = await service.receive(actor, payableDto);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(prisma.subledgerAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        type: SubledgerType.CEDANT,
+        externalRef: 'cedant-1',
+        controlAccountId: 'cedant-claims-payable',
+      },
+    });
+    expect(
+      subledgerCreateData(
+        prisma.subledgerAccount.create as jest.Mock<
+          Promise<{ id: string }>,
+          [{ data: Record<string, unknown> }]
+        >,
+      ),
+    ).toMatchObject({
+      tenantId: actor.tenantId,
+      type: SubledgerType.CEDANT,
+      externalRef: 'cedant-1',
+      name: 'Cedant A',
+      controlAccountId: 'cedant-claims-payable',
+      currency: 'GHS',
+    });
+    expect(journals.createPostedInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      actor,
+      expect.objectContaining({
+        sourceModule: 'REINSURANCE',
+        sourceRecordType: 'CLAIM_PAYABLE_APPROVED',
+        lines: [
+          expect.objectContaining({
+            glAccountId: 'claims-expense',
+            debit: 90,
+            credit: 0,
+          }),
+          expect.objectContaining({
+            glAccountId: 'cedant-claims-payable',
+            subledgerAccountId: 'cedant-claims-ap-subledger-1',
+            debit: 0,
+            credit: 90,
           }),
         ],
       }),
@@ -992,9 +1240,9 @@ describe('SourceEventsService', () => {
       paymentDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(paymentRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'cedant-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('cedant-subledger-1'),
+    );
 
     const result = await service.receive(actor, paymentDto);
 
@@ -1089,9 +1337,9 @@ describe('SourceEventsService', () => {
       reversalDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(reversalRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'cedant-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('cedant-subledger-1'),
+    );
 
     const result = await service.receive(actor, reversalDto);
 
@@ -1213,9 +1461,9 @@ describe('SourceEventsService', () => {
       disbursementDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(disbursementRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'reinsurer-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('reinsurer-subledger-1', 'USD'),
+    );
 
     const result = await service.receive(actor, disbursementDto);
 
@@ -1225,7 +1473,7 @@ describe('SourceEventsService', () => {
         tenantId: actor.tenantId,
         type: SubledgerType.REINSURER,
         externalRef: 'reinsurer-1',
-        status: 'ACTIVE',
+        controlAccountId: 'reinsurer-premium-payable',
       },
     });
     expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
@@ -1347,9 +1595,9 @@ describe('SourceEventsService', () => {
       reversalDto,
     );
     prisma.postingRule.findFirst.mockResolvedValue(reversalRule);
-    prisma.subledgerAccount.findFirst.mockResolvedValue({
-      id: 'reinsurer-subledger-1',
-    });
+    prisma.subledgerAccount.findFirst.mockResolvedValue(
+      activeSubledger('reinsurer-subledger-1', 'USD'),
+    );
 
     const result = await service.receive(actor, reversalDto);
 

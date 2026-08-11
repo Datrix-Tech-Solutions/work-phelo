@@ -23,6 +23,27 @@ such as Reinsurance are unavailable or disabled.
 Accounting chooses GL accounts through tenant posting rules. Source modules
 publish business facts only.
 
+### Control Account + Subledger Dimensions
+
+Accounting tracks legal counterparties through subledger accounts, but the
+financial obligation is the combination of:
+
+```text
+GL control account + counterparty subledger
+```
+
+The same legal Cedant or Reinsurer may therefore have multiple active
+subledger dimensions when the obligations are economically different. For
+example, a Reinsurer can have a premium payable balance and a claims recovery
+receivable balance at the same time. Those positions must not net together
+unless Accounting posts an explicit approved settlement or journal.
+
+Posting rules are responsible for selecting the correct control account for
+each source-event line. Source-event posting resolves or creates the
+corresponding CEDANT/REINSURER subledger dimension using the posting-rule GL
+control account, while customer/vendor master sync continues to maintain the
+tenant default AR/AP dimensions.
+
 ## Gateway Prefix
 
 ```text
@@ -99,6 +120,20 @@ claim payable settlement boundary.
 | `CLAIM_RECOVERY_APPROVED`          | Formal per-allocation recovery approval time     | Approved Reinsurer recovery receivable            |
 | `CLAIM_RECOVERY_RECEIVED`          | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer claim recovery receipt        |
 | `CLAIM_RECOVERY_RECEIPT_REVERSED`  | Reversal row creation time                       | Claim recovery receipt reversal                   |
+
+The active control-account dimensions are intentionally separate:
+
+| Obligation dimension | Counterparty type | Typical source events                                  |
+| -------------------- | ----------------- | ------------------------------------------------------ |
+| Cedant Premium AR    | `CEDANT`          | Debit notes, endorsement debit notes, premium receipts |
+| Cedant Claims AP     | `CEDANT`          | Claim payable approvals, cedant claim settlements      |
+| Reinsurer Premium AP | `REINSURER`       | Credit notes, endorsement credit notes, disbursements  |
+| Reinsurer Claims AR  | `REINSURER`       | Claim recovery approvals, recovery receipts            |
+
+Reports and subledger listings should present balances by control-account
+dimension. A Cedant claims payable does not reduce Cedant premium receivable,
+and a Reinsurer claims receivable does not reduce Reinsurer premium payable,
+without an explicit Accounting-approved settlement.
 
 Operational Reinsurance payments can be recorded before Accounting recognition.
 No Accounting outbox event is created at that point for bank-confirmed

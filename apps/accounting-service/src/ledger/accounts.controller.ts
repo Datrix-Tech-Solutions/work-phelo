@@ -37,6 +37,7 @@ import {
   QueryAccountGroupsDto,
   QueryAccountHierarchyDto,
   QueryGLAccountsDto,
+  QuerySubledgerAccountsDto,
   UpdateAccountClassificationDto,
   UpdateAccountGroupDto,
   UpdateAccountingCustomerDto,
@@ -332,10 +333,17 @@ export class AccountsController {
 
   @Get('subledger-accounts')
   @ApiTags('Accounting - Subledgers')
-  @ApiOperation({ summary: 'List tenant subledger accounts' })
+  @ApiOperation({
+    summary: 'List tenant subledger accounts',
+    description:
+      'Returns subledger balances by Accounting control account. The same legal counterparty may therefore appear in separate premium, claims, receivable or payable dimensions without netting across control accounts.',
+  })
   @RequirePermissions(AccountingPermission.ACCOUNTS_VIEW)
-  listSubledgers(@Req() request: Request & { user: RequestUser }) {
-    return this.masterData.listSubledgerAccounts(request.user.tenantId);
+  listSubledgers(
+    @Query() query: QuerySubledgerAccountsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.listSubledgerAccounts(request.user.tenantId, query);
   }
 
   @Post('subledger-accounts')

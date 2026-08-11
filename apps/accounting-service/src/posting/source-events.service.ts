@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   AccountingSettlementMethod,
@@ -149,6 +150,12 @@ const REFERENCE_PATHS = [
   'payment.bankReference',
   'payment.settlementReference',
   'payment.paymentReference',
+];
+
+const SUBLEDGER_NAME_PATHS = [
+  'counterparty.name',
+  'counterparty.legalName',
+  'counterparty.tradingName',
 ];
 
 @Injectable()
@@ -567,6 +574,7 @@ export class SourceEventsService {
       tenantId: string;
       sourceRecordId: string;
       sourceDocumentId: string | null;
+      receivedByUserId: string;
     },
     rule: EngineRule,
     payload: SourcePayload,
@@ -600,19 +608,15 @@ export class SourceEventsService {
         const externalRef = String(
           this.readPayload(payload, ruleLine.subledgerExternalRefSource),
         ).trim();
-        const subledger = await tx.subledgerAccount.findFirst({
-          where: {
-            tenantId: event.tenantId,
-            type: ruleLine.subledgerType,
-            externalRef,
-            status: RecordStatus.ACTIVE,
-          },
-        });
-        if (!subledger) {
-          throw new BadRequestException(
-            `Active ${ruleLine.subledgerType.toLowerCase()} subledger not found for rule line ${ruleLine.sequence}`,
-          );
-        }
+        const subledger = await this.resolvePostingSubledger(
+          tx,
+          event.tenantId,
+          ruleLine,
+          externalRef,
+          currency,
+          payload,
+          event.receivedByUserId,
+        );
         subledgerAccountId = subledger.id;
       }
 
@@ -635,6 +639,67 @@ export class SourceEventsService {
       );
     }
     return { currency: [...currencies][0], lines };
+  }
+
+  private async resolvePostingSubledger(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    ruleLine: EngineRule['lines'][number],
+    externalRef: string,
+    currency: string,
+    payload: SourcePayload,
+    actorUserId: string,
+  ) {
+    const existing = await tx.subledgerAccount.findFirst({
+      where: {
+        tenantId,
+        type: ruleLine.subledgerType!,
+        externalRef,
+        controlAccountId: ruleLine.glAccountId,
+      },
+    });
+    if (existing) {
+      if (existing.status !== RecordStatus.ACTIVE) {
+        throw new ConflictException(
+          `${ruleLine.subledgerType} subledger for control account ${ruleLine.glAccountId} is inactive`,
+        );
+      }
+      if (existing.currency && existing.currency !== currency) {
+        throw new BadRequestException(
+          `${ruleLine.subledgerType} subledger currency does not match source event currency`,
+        );
+      }
+      return existing;
+    }
+
+    if (
+      ruleLine.subledgerType !== 'CEDANT' &&
+      ruleLine.subledgerType !== 'REINSURER'
+    ) {
+      throw new BadRequestException(
+        `Active ${ruleLine.subledgerType!.toLowerCase()} subledger not found for rule line ${ruleLine.sequence}`,
+      );
+    }
+
+    return tx.subledgerAccount.create({
+      data: {
+        tenantId,
+        code: this.integrationSubledgerCode(
+          ruleLine.subledgerType,
+          externalRef,
+          ruleLine.glAccountId,
+        ),
+        name:
+          this.firstString(payload, SUBLEDGER_NAME_PATHS) ??
+          `${ruleLine.subledgerType} ${externalRef}`,
+        type: ruleLine.subledgerType,
+        externalRef,
+        controlAccountId: ruleLine.glAccountId,
+        currency,
+        createdByUserId: actorUserId,
+        updatedByUserId: actorUserId,
+      },
+    });
   }
 
   private sourceCashbookInput(
@@ -933,6 +998,18 @@ export class SourceEventsService {
       );
     }
     return value.trim().toUpperCase();
+  }
+
+  private integrationSubledgerCode(
+    type: 'CEDANT' | 'REINSURER',
+    externalRef: string,
+    controlAccountId: string,
+  ): string {
+    const prefix = type === 'CEDANT' ? 'CED' : 'REI';
+    const digest = createHash('sha1')
+      .update(`${externalRef}:${controlAccountId}`)
+      .digest('hex');
+    return `${prefix}-${digest.slice(0, 12).toUpperCase()}`;
   }
 
   private renderDescription(
