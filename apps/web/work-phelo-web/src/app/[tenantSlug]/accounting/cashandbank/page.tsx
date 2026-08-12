@@ -5,6 +5,7 @@ import { CashAndBankStatsRow } from '@/components/molecules/accounting/CashAndBa
 import { CashAndBankTable } from '@/components/organisms/accounting/tables/CashAndBankTable';
 import { CashAccountsTable } from '@/components/organisms/accounting/tables/CashAccountsTable';
 import { CashbookTable } from '@/components/organisms/accounting/tables/CashbookTable';
+import { ReinsuranceAccountingReadiness } from '@/components/organisms/accounting/ReinsuranceAccountingReadiness';
 import { TabBar, TabItem } from '@/components/molecules/shared/TabBar';
 
 // TODO: replace with useCashAndBankStats() hook once API is ready
@@ -32,6 +33,8 @@ export default function CashAndBankPage() {
       </div>
 
       <CashAndBankStatsRow isLoading={false} {...STATS} />
+
+      <ReinsuranceAccountingReadiness />
 
       <div className="flex flex-col gap-4">
         <TabBar
