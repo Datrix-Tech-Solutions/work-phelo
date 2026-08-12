@@ -19,6 +19,7 @@ export default function AccountingSettingsLayout({ children }: { children: React
     },
     {
       tabs: [
+        { key: 'configuration', label: 'Configuration', href: `${base}/configuration` },
         { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
         { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
         { key: 'currency', label: 'Currency', href: `${base}/currency` },

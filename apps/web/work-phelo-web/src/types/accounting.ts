@@ -713,12 +713,29 @@ export interface AccountingTenantConfig {
   baseCurrency: string | null;
   fiscalYearStartMonth: number;
   decimalPlaces: number;
+  accountsReceivableControlAccountId: string | null;
+  accountsPayableControlAccountId: string | null;
+  accountsReceivableControlAccount?: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+  } | null;
+  accountsPayableControlAccount?: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+  } | null;
+  isConfigured?: boolean;
 }
 
 export interface UpdateAccountingTenantConfigPayload {
   baseCurrency?: string;
   fiscalYearStartMonth?: number;
   decimalPlaces?: number;
+  accountsReceivableControlAccountId?: string;
+  accountsPayableControlAccountId?: string;
 }
 
 export interface ExchangeRate {
