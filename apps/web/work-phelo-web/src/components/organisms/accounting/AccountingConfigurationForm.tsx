@@ -100,7 +100,6 @@ export function AccountingConfigurationForm() {
               value={field.value}
               onChange={field.onChange}
               error={errors.baseCurrency?.message}
-              disabled={isLoadingCurrencies || isPending}
             />
           )}
         />
@@ -114,7 +113,6 @@ export function AccountingConfigurationForm() {
             max: { value: 12, message: 'Enter a month from 1 to 12' },
           })}
           error={errors.fiscalYearStartMonth}
-          disabled={isPending}
         />
         <FormField
           label="Decimal Places"
@@ -126,7 +124,6 @@ export function AccountingConfigurationForm() {
             max: { value: 4, message: 'Enter a value from 0 to 4' },
           })}
           error={errors.decimalPlaces}
-          disabled={isPending}
         />
       </div>
 
@@ -148,7 +145,6 @@ export function AccountingConfigurationForm() {
                 options={receivableAccountOptions}
                 value={field.value}
                 onChange={field.onChange}
-                disabled={isLoadingReceivableAccounts || isPending}
               />
             )}
           />
@@ -166,7 +162,6 @@ export function AccountingConfigurationForm() {
                 options={payableAccountOptions}
                 value={field.value}
                 onChange={field.onChange}
-                disabled={isLoadingPayableAccounts || isPending}
               />
             )}
           />
