@@ -281,7 +281,7 @@ wait_for_container_health() {
     fi
 
     if [[ "$status" == "exited" || "$status" == "dead" || "$health" == "unhealthy" ]]; then
-      print_service_logs "$service_name"
+      print_service_diagnostics "$service_name" "$container_id"
       die "${service_name}: container status=${status} health=${health}"
     fi
 
@@ -290,7 +290,7 @@ wait_for_container_health() {
     log "  … ${service_name} container status=${status} health=${health} (${elapsed}s/${timeout_seconds}s)"
   done
 
-  print_service_logs "$service_name"
+  print_service_diagnostics "$service_name" "$container_id"
   die "${service_name}: timed out waiting for container health"
 }
 
@@ -348,6 +348,40 @@ print_service_logs() {
   log ""
   log "Recent logs for ${service_name}:"
   docker_compose logs --no-color --tail 120 "$service_name" || true
+}
+
+print_service_health_inspect() {
+  local container_id="$1"
+
+  log ""
+  log "Health inspection for ${container_id}:"
+  docker inspect \
+    --format='Container={{.Name}} Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} StartedAt={{.State.StartedAt}} FinishedAt={{.State.FinishedAt}} ExitCode={{.State.ExitCode}} Error={{.State.Error}}' \
+    "$container_id" || true
+
+  log ""
+  log "Healthcheck log entries for ${container_id}:"
+  docker inspect \
+    --format='{{if .State.Health}}{{range .State.Health.Log}}- Start={{.Start}} End={{.End}} ExitCode={{.ExitCode}} Output={{printf "%q" .Output}}{{println}}{{end}}{{else}}No Docker healthcheck log available.{{end}}' \
+    "$container_id" || true
+}
+
+print_service_diagnostics() {
+  local service_name="$1"
+  local container_id="$2"
+
+  log ""
+  log "Compose service status:"
+  docker_compose ps || true
+
+  print_service_logs "$service_name"
+
+  if [[ -n "$container_id" ]]; then
+    print_service_health_inspect "$container_id"
+  else
+    log ""
+    log "No container id found for ${service_name}; skipping health inspection."
+  fi
 }
 
 validate_database_target() {
