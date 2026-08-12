@@ -108,6 +108,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
     $transaction: jest.Mock;
   };
   let financialEvents: {
+    assertAccountingReadyForEvent: jest.Mock;
     prepareClaimPayableApproved: jest.Mock;
     prepareClaimCedantSettlementPaid: jest.Mock;
     prepareClaimCedantSettlementReversed: jest.Mock;
@@ -160,6 +161,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
     });
     prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([]);
     financialEvents = {
+      assertAccountingReadyForEvent: jest.fn().mockResolvedValue(undefined),
       prepareClaimPayableApproved: jest.fn().mockResolvedValue({
         tenantId: 'tenant-1',
         sourceEventType: 'CLAIM_PAYABLE_APPROVED',
@@ -247,6 +249,33 @@ describe('PlacementClaimCedantSettlementsService', () => {
       1,
     );
     expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks claim payable approval before persistence when Accounting readiness fails', async () => {
+    financialEvents.assertAccountingReadyForEvent.mockRejectedValue(
+      new ConflictException({
+        code: 'ACCOUNTING_NOT_READY',
+        blockers: [{ code: 'POSTING_RULE_MISSING' }],
+      }),
+    );
+
+    await expect(
+      service.approvePayable(user, 'placement-1', 'claim-1', {
+        approvedPayableAmount: 90000,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(financialEvents.assertAccountingReadyForEvent).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({
+        eventType: 'CLAIM_PAYABLE_APPROVED',
+        currency: 'GHS',
+      }),
+    );
+    expect(prisma.placementClaimPayableApproval.create).not.toHaveBeenCalled();
+    expect(prisma.placementClaim.update).not.toHaveBeenCalled();
+    expect(financialEvents.prepareClaimPayableApproved).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('requires final loss, active allocation, amount within final loss and matching currency', async () => {

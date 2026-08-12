@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyOrigin,
@@ -300,6 +301,13 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     const outbox = {
       enqueueAccountingEvent: jest.fn(),
     };
+    const client = {
+      checkReinsuranceReadiness: jest.fn().mockResolvedValue({
+        ready: true,
+        checkedAt: '2026-07-01T00:00:00.000Z',
+        eventResults: [],
+      }),
+    };
     const actor = {
       ...user,
       moduleConfig: { accounting: overrides?.accountingEnabled ?? true },
@@ -307,10 +315,72 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     const service = new ReinsuranceFinancialEventPublisher(
       prisma as unknown as PrismaService,
       outbox as unknown as ReinsuranceAccountingOutboxService,
+      client as never,
     );
 
-    return { actor, outbox, prisma, service };
+    return { actor, client, outbox, prisma, service };
   };
+
+  it('skips Accounting readiness preflight when the tenant has Accounting disabled', async () => {
+    const { actor, client, service } = makeService({
+      accountingEnabled: false,
+    });
+
+    await service.assertAccountingReadyForEvent(actor, {
+      eventType: 'CLAIM_PAYABLE_APPROVED',
+      currency: 'GHS',
+      businessDate: '2026-07-30T10:00:00.000Z',
+    });
+
+    expect(client.checkReinsuranceReadiness).not.toHaveBeenCalled();
+  });
+
+  it('throws a controlled conflict when Accounting readiness returns blockers', async () => {
+    const { actor, client, service } = makeService();
+    client.checkReinsuranceReadiness.mockResolvedValueOnce({
+      ready: false,
+      checkedAt: '2026-07-30T10:00:00.000Z',
+      eventResults: [
+        {
+          eventType: 'CLAIM_PAYABLE_APPROVED',
+          ready: false,
+          blockers: [
+            {
+              code: 'POSTING_RULE_MISSING',
+              message: 'No PostingRule is configured.',
+            },
+          ],
+        },
+      ],
+    });
+
+    let error: unknown;
+    try {
+      await service.assertAccountingReadyForEvent(actor, {
+        eventType: 'CLAIM_PAYABLE_APPROVED',
+        currency: 'GHS',
+        businessDate: new Date('2026-07-30T10:00:00.000Z'),
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error).toMatchObject({
+      response: {
+        code: 'ACCOUNTING_NOT_READY',
+        eventType: 'CLAIM_PAYABLE_APPROVED',
+        message:
+          'Accounting is not ready to recognize CLAIM_PAYABLE_APPROVED. Missing PostingRule for CLAIM_PAYABLE_APPROVED.',
+      },
+    });
+    expect(client.checkReinsuranceReadiness).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      eventTypes: ['CLAIM_PAYABLE_APPROVED'],
+      currency: 'GHS',
+      businessDate: '2026-07-30T10:00:00.000Z',
+    });
+  });
 
   it('prepares a WFIS-compliant DEBIT_NOTE_ISSUED event from the note snapshot', async () => {
     const { actor, service } = makeService();

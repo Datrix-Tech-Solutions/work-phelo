@@ -156,6 +156,11 @@ export class PlacementClaimRecoveryApprovalsService {
             const approvalVersion =
               (existingApprovals[0]?.approvalVersion ?? 0) + 1;
             const approvedAt = new Date();
+            await this.financialEvents.assertAccountingReadyForEvent(user, {
+              eventType: 'CLAIM_RECOVERY_APPROVED',
+              currency,
+              businessDate: approvedAt,
+            });
             const approval = await tx.placementClaimRecoveryApproval.create({
               data: {
                 tenantId: user.tenantId,

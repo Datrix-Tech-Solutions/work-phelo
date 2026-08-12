@@ -123,6 +123,7 @@ describe('PlacementPaymentsService', () => {
     getFinancialPosition: jest.Mock;
   };
   let financialEvents: {
+    assertAccountingReadyForEvent: jest.Mock;
     preparePremiumPaymentReceived: jest.Mock<unknown, [unknown, unknown]>;
     preparePaymentReversed: jest.Mock<unknown, [unknown, unknown]>;
     prepareReinsurerDisbursementRecorded: jest.Mock<
@@ -177,6 +178,7 @@ describe('PlacementPaymentsService', () => {
       }),
     };
     financialEvents = {
+      assertAccountingReadyForEvent: jest.fn().mockResolvedValue(undefined),
       preparePremiumPaymentReceived: jest
         .fn<unknown, [unknown, unknown]>()
         .mockReturnValue(null),
@@ -341,6 +343,47 @@ describe('PlacementPaymentsService', () => {
       preparedEvent,
     );
     expect(result.status).toBe(PlacementPaymentStatus.BANK_CONFIRMED);
+  });
+
+  it('leaves a recorded premium receipt unchanged when Accounting readiness fails', async () => {
+    const recordedReceipt = {
+      ...payment,
+      settlementMethod: PlacementSettlementMethod.CHEQUE,
+      settlementCurrency: 'USD',
+      reference: 'CHQ-001',
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce({ id: 'placement-1' })
+      .mockResolvedValueOnce(placement);
+    prisma.placementPayment.findFirst.mockResolvedValueOnce(recordedReceipt);
+    financialEvents.assertAccountingReadyForEvent.mockRejectedValue(
+      new ConflictException({
+        code: 'ACCOUNTING_NOT_READY',
+        blockers: [{ code: 'POSTING_RULE_MISSING' }],
+      }),
+    );
+
+    await expect(
+      service.confirmBankPayment(user, 'placement-1', 'payment-1', {
+        bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+        accountingCashAccountId: 'cash-account-1',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(financialEvents.assertAccountingReadyForEvent).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({
+        eventType: 'PREMIUM_PAYMENT_RECEIVED',
+        currency: 'USD',
+        settlementMethod: PlacementSettlementMethod.CHEQUE,
+        accountingCashAccountId: 'cash-account-1',
+      }),
+    );
+    expect(prisma.placementPayment.updateMany).not.toHaveBeenCalled();
+    expect(
+      financialEvents.preparePremiumPaymentReceived,
+    ).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('rolls back premium confirmation when accounting capture fails', async () => {

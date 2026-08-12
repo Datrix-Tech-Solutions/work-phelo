@@ -59,6 +59,15 @@ Direct local service routes use the global prefix:
 Internal source-event and subledger ensure endpoints intentionally bypass the
 global `/api` prefix and require signed internal-service authentication.
 
+Internal Reinsurance readiness checks use:
+
+```text
+POST /internal/reinsurance/accounting-readiness
+```
+
+The endpoint is HMAC-protected and validates tenant Accounting setup before
+Reinsurance accepts financially recognizable business facts.
+
 ## Local Development
 
 ```bash
@@ -138,6 +147,42 @@ without an explicit Accounting-approved settlement.
 Operational Reinsurance payments can be recorded before Accounting recognition.
 No Accounting outbox event is created at that point for bank-confirmed
 workflows; recognition starts at the Accounting-owned confirmation boundary.
+
+### Reinsurance Posting Readiness
+
+Accounting is authoritative for posting readiness. A tenant can have Accounting
+enabled while still being transaction-not-ready for a specific Reinsurance event
+because required tenant configuration is missing or inactive.
+
+Readiness has two levels:
+
+- Module readiness confirms the tenant has Accounting configuration and
+  high-level setup.
+- Transaction readiness confirms a specific event can be posted for its business
+  date, currency, settlement method and selected cash account.
+
+The readiness preflight checks:
+
+- active tenant Accounting configuration
+- active/effective tenant PostingRule for each event type
+- PostingRule debit/credit shape and subledger-control dimensions
+- active, postable GL accounts referenced by PostingRule lines
+- open fiscal period for the event business date
+- active Accounting currency for the event currency
+- selected or configured Accounting cash account for cash-impact methods
+
+Stable blocker codes include
+`ACCOUNTING_INTEGRATION_DISABLED`, `POSTING_RULE_MISSING`,
+`POSTING_RULE_INACTIVE`, `POSTING_RULE_INVALID`, `CONTROL_ACCOUNT_MISSING`,
+`CONTROL_ACCOUNT_INACTIVE`, `CONTROL_ACCOUNT_NOT_POSTABLE`,
+`CURRENCY_MISSING`, `CURRENCY_INACTIVE`, `FISCAL_PERIOD_MISSING`,
+`FISCAL_PERIOD_CLOSED`, `CASH_ACCOUNT_REQUIRED` and
+`CASH_ACCOUNT_INVALID`.
+
+PostingRules remain tenant-configured. This service does not auto-provision GL
+policy for Reinsurance. Readiness is preventative; SourceEventInbox,
+transactional outbox, dispatcher retry and reconciliation remain the recovery
+path for unexpected runtime failures.
 
 ### Source Cashbook Bridge
 

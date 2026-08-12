@@ -316,6 +316,104 @@ export class InternalSourceEventDto {
   payload!: Record<string, unknown>;
 }
 
+export class InternalReinsuranceAccountingReadinessDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  tenantId!: string;
+
+  @ApiProperty({
+    type: [String],
+    example: ['CLAIM_PAYABLE_APPROVED', 'CLAIM_CEDANT_SETTLEMENT_PAID'],
+    minItems: 1,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @Transform(({ value }: { value: unknown }): unknown => {
+    if (!Array.isArray(value)) return value;
+    return (value as unknown[]).map((item): unknown =>
+      typeof item === 'string' ? item.trim().toUpperCase() : item,
+    );
+  })
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  eventTypes!: string[];
+
+  @ApiPropertyOptional({ example: 'GHS', minLength: 3, maxLength: 3 })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  currency?: string;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  @IsOptional()
+  @IsDateString()
+  businessDate?: string;
+
+  @ApiPropertyOptional({
+    example: 'BANK_TRANSFER',
+    description:
+      'Source settlement method. Cash account readiness is skipped for INTERNAL_OFFSET and JOURNAL.',
+  })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(40)
+  settlementMethod?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  accountingCashAccountId?: string;
+}
+
+export class ReinsuranceAccountingReadinessBlockerDto {
+  @ApiProperty({
+    example: 'POSTING_RULE_MISSING',
+    description: 'Stable blocker code safe for UI/support handling.',
+  })
+  code!: string;
+
+  @ApiProperty({
+    example: 'No PostingRule is configured for CLAIM_PAYABLE_APPROVED.',
+  })
+  message!: string;
+}
+
+export class ReinsuranceAccountingEventReadinessDto {
+  @ApiProperty({ example: 'CLAIM_PAYABLE_APPROVED' })
+  eventType!: string;
+
+  @ApiProperty({ example: false })
+  ready!: boolean;
+
+  @ApiProperty({ example: 'NON_CASH', nullable: true })
+  kind!: string | null;
+
+  @ApiProperty({ example: 'CEDANT_CLAIMS_AP', nullable: true })
+  controlDimension!: string | null;
+
+  @ApiProperty({ example: 'CEDANT', nullable: true })
+  requiredSubledgerType!: string | null;
+
+  @ApiProperty({ example: false })
+  reversalDependsOnOriginalRecognition!: boolean;
+
+  @ApiProperty({ type: [ReinsuranceAccountingReadinessBlockerDto] })
+  blockers!: ReinsuranceAccountingReadinessBlockerDto[];
+}
+
+export class ReinsuranceAccountingReadinessResponseDto {
+  @ApiProperty({ example: false })
+  ready!: boolean;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  checkedAt!: string;
+
+  @ApiProperty({ type: [ReinsuranceAccountingEventReadinessDto] })
+  eventResults!: ReinsuranceAccountingEventReadinessDto[];
+}
+
 export class QuerySourceEventsDto {
   @ApiPropertyOptional({ enum: SourceEventStatus })
   @IsOptional()
