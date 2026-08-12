@@ -222,7 +222,10 @@ docker_compose run --rm accounting-service sh -c "npx prisma@5.22.0 migrate depl
 log "✓ Migrations complete"
 
 section "Deploy"
-docker_compose up -d --remove-orphans --no-build
+if ! docker_compose up -d --remove-orphans --no-build; then
+  print_compose_failure_diagnostics
+  die "Docker Compose rollout failed"
+fi
 log "✓ Compose rollout finished"
 
 section "Container Health"
