@@ -79,3 +79,51 @@ export interface ConfirmBankPaymentPayload {
   bankChargeAmount?: number;
   notes?: string;
 }
+
+export interface ReinsuranceAccountingReadinessBlocker {
+  code: string;
+  message: string;
+}
+
+export interface ReinsuranceAccountingEventReadiness {
+  eventType: string;
+  ready: boolean;
+  kind: string | null;
+  controlDimension: string | null;
+  requiredSubledgerType: string | null;
+  reversalDependsOnOriginalRecognition: boolean;
+  blockers: ReinsuranceAccountingReadinessBlocker[];
+}
+
+export interface ReinsuranceAccountingPostingReadiness {
+  ready: boolean;
+  checkedAt: string;
+  eventResults: ReinsuranceAccountingEventReadiness[];
+  message?: string;
+}
+
+export type ReinsuranceAccountingReadinessGroupKey =
+  | 'premiumAccounting'
+  | 'claimsAccounting'
+  | 'cashConfirmation';
+
+export interface ReinsuranceAccountingReadinessGroup {
+  ready: boolean;
+  events: ReinsuranceAccountingEventReadiness[];
+}
+
+export interface ReinsuranceAccountingIntegrationStatus {
+  accountingEnabled: boolean;
+  integrationConfigured: boolean;
+  baseUrlConfigured: boolean;
+  serviceAuthSecretConfigured: boolean;
+  sourceEventsActive: boolean;
+  activeSourceEvents: string[];
+  postingReadiness: ReinsuranceAccountingPostingReadiness | null;
+  readinessGroups: Record<
+    ReinsuranceAccountingReadinessGroupKey,
+    ReinsuranceAccountingReadinessGroup
+  > | null;
+  readinessMode: string;
+  message: string;
+}

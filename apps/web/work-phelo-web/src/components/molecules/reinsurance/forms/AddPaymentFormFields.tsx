@@ -3,12 +3,12 @@
 import { useEffect, useMemo } from 'react';
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { useQueries } from '@tanstack/react-query';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { useFacultatives, useCurrencyOptions } from '@/hooks';
+import { useCashAccounts, useFacultatives, useCurrencyOptions } from '@/hooks';
 import {
   fetchPlacementFinancialPosition,
   placementFinancialPositionKey,
@@ -86,6 +86,22 @@ export function AddPaymentFormFields({
 
   const { data: facultatives = [] } = useFacultatives();
   const { data: currencyOptions = [] } = useCurrencyOptions();
+  // Bank Name picks from Accounting's configured cash/bank accounts when any exist;
+  // falls back to a plain text field so this form still works before Accounting
+  // has set any up.
+  const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts({
+    isActive: true,
+  });
+  const cashAccountOptions: SearchSelectOption[] = useMemo(
+    () =>
+      cashAccounts.map((account) => ({
+        value: account.name,
+        label: account.name,
+        sublabel: [account.bankName, account.currency].filter(Boolean).join(' · ') || undefined,
+      })),
+    [cashAccounts],
+  );
+  const showCashAccountSelect = !isLoadingCashAccounts && cashAccountOptions.length > 0;
 
   const preFilledPlacement = useMemo(
     () => (placementId ? facultatives.find((f) => f.id === placementId) : undefined),
@@ -296,6 +312,42 @@ export function AddPaymentFormFields({
     </div>
   );
 
+  // Cheque payments always use the plain text field — a cheque's drawee bank
+  // isn't necessarily one of the tenant's own cash/bank accounts.
+  const chequeBankNameField = (
+    <FormField
+      label="Bank Name"
+      registration={register('bankName', { required: 'Bank name is required' })}
+      placeholder="Enter bank name…"
+      error={errors.bankName}
+    />
+  );
+
+  const bankTransferBankNameField = showCashAccountSelect ? (
+    <Controller
+      name="bankName"
+      control={control}
+      rules={{ required: 'Bank name is required' }}
+      render={({ field }) => (
+        <SearchSelect
+          label="Bank Name"
+          placeholder="Select cash/bank account…"
+          options={cashAccountOptions}
+          value={field.value}
+          onChange={field.onChange}
+          error={errors.bankName?.message}
+        />
+      )}
+    />
+  ) : (
+    <FormField
+      label="Bank Name"
+      registration={register('bankName', { required: 'Bank name is required' })}
+      placeholder="Enter bank name…"
+      error={errors.bankName}
+    />
+  );
+
   const chequeFields = paymentType === 'cheque' && (
     <>
       <div className="grid grid-cols-5 gap-4">
@@ -324,12 +376,7 @@ export function AddPaymentFormFields({
         </div>
       </div>
 
-      <FormField
-        label="Bank Name"
-        registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name…"
-        error={errors.bankName}
-      />
+      {chequeBankNameField}
 
       <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
         <Controller
@@ -395,12 +442,7 @@ export function AddPaymentFormFields({
         )}
       />
 
-      <FormField
-        label="Bank Name"
-        registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name…"
-        error={errors.bankName}
-      />
+      {bankTransferBankNameField}
 
       <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
         <Controller

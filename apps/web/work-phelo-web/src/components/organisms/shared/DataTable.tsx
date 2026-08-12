@@ -53,7 +53,7 @@ interface DataTableProps<T extends { id: string | number }> {
     disabled?: boolean;
     title?: string;
   }[];
-  actionButton?: { label: string; onClick: () => void };
+  actionButton?: { label: string; onClick: () => void; disabled?: boolean };
   rowActions?: (row: T) => RowAction[];
   onRowClick?: (row: T) => void;
   currentPage: number;
@@ -291,7 +291,12 @@ export function DataTable<T extends { id: string | number }>({
             ))}
 
             {actionButton && (
-              <Button size="sm" onClick={actionButton.onClick} className="group">
+              <Button
+                size="sm"
+                onClick={actionButton.onClick}
+                disabled={actionButton.disabled}
+                className="group"
+              >
                 {actionButton.label}
                 <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
                   <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />

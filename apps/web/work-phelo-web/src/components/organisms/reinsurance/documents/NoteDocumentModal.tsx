@@ -274,8 +274,8 @@ function CreditNoteContent({
         <Image
           src={profile.signatureSrc ?? '/signature.png'}
           alt="Signature"
-          width={120}
-          height={60}
+          width={100}
+          height={10}
           className="object-contain mt-1 mb-1"
           unoptimized={!!profile.signatureSrc}
         />

@@ -15,11 +15,6 @@ interface ClaimCashCallsTableProps {
   claim: PlacementClaim;
 }
 
-/** Register of cash calls raised against reinsurers for this claim, with a Record Recovery
- * action per row — the same recovery-receipt flow as the standalone cross-placement Recoveries
- * page, scoped to this claim's cash calls. Cash calls themselves are created as a side effect of
- * "Send Mail" on the Overview tab's reinsurers table, which also auto-approves the recovery for
- * that cash call. */
 export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTableProps) {
   const { data: cashCalls = [] } = useClaimCashCalls(placement.id, claim.id);
   const { data: position } = useClaimRecoveryPosition(placement.id, claim.id);
@@ -75,7 +70,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
       {
         key: 'amount',
         label: 'Amount',
-        width: '130px',
+        width: '150px',
         className: 'text-right pr-8',
         render: (row) => (
           <span className="text-gray-900 block text-right">{fmt(row.amount, row.currency)}</span>
@@ -84,7 +79,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
       {
         key: 'recovered',
         label: 'Recovered',
-        width: '130px',
+        width: '150px',
         className: 'text-right pr-8',
         render: (row) => {
           const perCashCall = perCashCallFor(row);
@@ -110,7 +105,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
       {
         key: 'outstanding',
         label: 'Outstanding',
-        width: '130px',
+        width: '150px',
         className: 'text-right pr-8',
         render: (row) => {
           const recovery = buildRecoveryRow(row);
@@ -129,7 +124,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
       {
         key: 'status',
         label: 'Status',
-        width: '90px',
+        width: '80px',
         render: (row) => (
           <Badge
             label={row.status.charAt(0) + row.status.slice(1).toLowerCase()}
@@ -142,7 +137,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
       {
         key: 'issuedAt',
         label: 'Issued',
-        width: '90px',
+        width: '80px',
         render: (row) => <span className="text-gray-600">{fmtDate(row.issuedAt)}</span>,
       },
       {

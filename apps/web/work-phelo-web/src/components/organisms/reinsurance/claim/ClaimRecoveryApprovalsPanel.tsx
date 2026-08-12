@@ -25,11 +25,6 @@ interface ClaimRecoveryApprovalsPanelProps {
   allocations: PlacementClaimAllocation[];
 }
 
-/** Reinsurer recovery, in the order it actually happens: send them their allocated share first
- * (raises + issues their cash call — see the Cash Calls tab for the demand itself and for
- * recording what they actually pay) — only once that's gone out do you have anything to record
- * here, so the amount + Approve control (recording what they responded with) only appears after
- * sending. Fully recorded rows collapse to a status label. */
 export function ClaimRecoveryApprovalsPanel({
   placement,
   claim,
@@ -47,9 +42,6 @@ export function ClaimRecoveryApprovalsPanel({
 
   const claimAmount = parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount);
 
-  // Includes reinsurers added via an endorsement — placement.participants alone only reflects
-  // the original placement closing, so it silently misses those and Preview/Send Mail would
-  // never find a match for them.
   const allParticipants = useAllPlacementParticipants(placement.id, placement.participants ?? []);
 
   const resolveParticipant = useCallback(
@@ -79,8 +71,7 @@ export function ClaimRecoveryApprovalsPanel({
     : [];
   const debitNoteParticipant = debitNoteTarget ? resolveParticipant(debitNoteTarget) : undefined;
 
-  // A cash call only ever gets created via "Send Mail" below, so its existence for an
-  // allocation means their share has already been sent to them.
+  // A cash call(for recoveries) only ever gets created via "Send Mail" below, so its existence for an
   const cashCallByAllocation = useMemo(() => {
     const map = new Map<string, string>();
     cashCalls.forEach((cashCall) => map.set(cashCall.allocationId, cashCall.id));

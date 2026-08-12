@@ -181,8 +181,8 @@ export function CreditNoteModal({
           <Image
             src="/signature.png"
             alt="Signature"
-            width={160}
-            height={80}
+            width={100}
+            height={10}
             style={{ objectFit: 'contain', marginTop: '8px', marginBottom: '4px' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>

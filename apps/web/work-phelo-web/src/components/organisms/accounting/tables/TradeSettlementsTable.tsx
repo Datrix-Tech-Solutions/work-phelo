@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import { AccountingTradeDocument, AccountingTradeDocumentStatus } from '@/types/accounting';
-import { useReceivableInvoices } from '@/hooks';
-import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
+import {
+  AccountingTradeDocumentStatus,
+  AccountingTradeSettlement,
+  AccountingTradeSide,
+} from '@/types/accounting';
+import { usePayablePayments, useReceivableReceipts } from '@/hooks';
+import { AddTradeSettlementPanel } from '@/components/organisms/accounting/panels/AddTradeSettlementPanel';
+import { TradeSettlementDetailPanel } from '@/components/organisms/accounting/panels/TradeSettlementDetailPanel';
 
 const PAGE_SIZE = 10;
 
@@ -30,61 +34,71 @@ function fmtAmount(amount: string, currency: string) {
   return `${currency} ${Number.isFinite(value) ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amount}`;
 }
 
-export function AccountsReceivableTable() {
-  const router = useRouter();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+interface TradeSettlementsTableProps {
+  side: AccountingTradeSide;
+}
+
+export function TradeSettlementsTable({ side }: TradeSettlementsTableProps) {
+  const isReceivable = side === 'RECEIVABLE';
+  const documentLabel = isReceivable ? 'Receipt' : 'Payment';
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [detailTarget, setDetailTarget] = useState<AccountingTradeSettlement | null>(null);
 
-  const { data, isLoading } = useReceivableInvoices({ limit: 100 });
-  const invoices = useMemo(() => data?.items ?? [], [data]);
+  const receivableQuery = useReceivableReceipts(isReceivable ? { limit: 100 } : { limit: 1 });
+  const payableQuery = usePayablePayments(!isReceivable ? { limit: 100 } : { limit: 1 });
+  const { data, isLoading } = isReceivable ? receivableQuery : payableQuery;
+  const settlements = useMemo(() => data?.items ?? [], [data]);
 
   const filtered = useMemo(() => {
-    if (!search) return invoices;
+    if (!search) return settlements;
     const q = search.toLowerCase();
-    return invoices.filter(
+    return settlements.filter(
       (r) =>
-        r.documentNumber.toLowerCase().includes(q) ||
+        r.settlementNumber.toLowerCase().includes(q) ||
         r.party.legalName.toLowerCase().includes(q) ||
+        (r.reference ?? '').toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q),
     );
-  }, [search, invoices]);
+  }, [search, settlements]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const columns = useMemo<Column<AccountingTradeDocument>[]>(
+  const columns = useMemo<Column<AccountingTradeSettlement>[]>(
     () => [
       {
-        key: 'documentNumber',
-        label: 'Invoice No.',
-        width: '140px',
+        key: 'settlementNumber',
+        label: `${documentLabel} No.`,
+        width: '150px',
         render: (row) => (
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-            {row.documentNumber}
+            {row.settlementNumber}
           </span>
         ),
       },
       {
-        key: 'customer',
-        label: 'Customer',
+        key: 'party',
+        label: isReceivable ? 'Customer' : 'Vendor',
         width: 'minmax(150px, 1fr)',
         render: (row) => (
           <span className="text-sm text-gray-800 font-medium">{row.party.legalName}</span>
         ),
       },
       {
-        key: 'documentDate',
-        label: 'Invoice Date',
+        key: 'settlementDate',
+        label: 'Date',
         width: '130px',
-        render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.documentDate)}</span>,
+        render: (row) => (
+          <span className="text-sm text-gray-700">{fmtDate(row.settlementDate)}</span>
+        ),
       },
       {
-        key: 'dueDate',
-        label: 'Due Date',
-        width: '130px',
-        render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.dueDate)}</span>,
+        key: 'reference',
+        label: 'Reference',
+        width: '150px',
+        render: (row) => <span className="text-sm text-gray-700">{row.reference ?? '—'}</span>,
       },
       {
         key: 'amount',
@@ -92,7 +106,7 @@ export function AccountsReceivableTable() {
         width: '150px',
         render: (row) => (
           <span className="block text-right text-sm font-medium text-gray-900">
-            {fmtAmount(row.totalAmount, row.currency)}
+            {fmtAmount(row.amount, row.currency)}
           </span>
         ),
       },
@@ -103,7 +117,7 @@ export function AccountsReceivableTable() {
         render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
       },
     ],
-    [],
+    [isReceivable, documentLabel],
   );
 
   return (
@@ -112,26 +126,29 @@ export function AccountsReceivableTable() {
         columns={columns}
         data={paged}
         isLoading={isLoading}
-        searchPlaceholder="Search invoices…"
+        searchPlaceholder={`Search ${documentLabel.toLowerCase()}s…`}
         searchValue={search}
         onSearch={(q) => {
           setSearch(q);
           setPage(1);
         }}
-        actionButton={{
-          label: 'New Invoice',
-          onClick: () => router.push(`/${tenantSlug}/accounting/accountsreceivable/new`),
-        }}
+        actionButton={{ label: `New ${documentLabel}`, onClick: () => setAddPanelOpen(true) }}
         onRowClick={(row) => setDetailTarget(row)}
-        emptyMessage="No invoices found"
+        emptyMessage={`No ${documentLabel.toLowerCase()}s found`}
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
       />
 
-      <TradeDocumentDetailPanel
-        side="RECEIVABLE"
-        document={detailTarget}
+      <AddTradeSettlementPanel
+        isOpen={addPanelOpen}
+        onClose={() => setAddPanelOpen(false)}
+        side={side}
+      />
+
+      <TradeSettlementDetailPanel
+        side={side}
+        settlement={detailTarget}
         onClose={() => setDetailTarget(null)}
       />
     </>

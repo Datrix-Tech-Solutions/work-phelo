@@ -75,8 +75,6 @@ export interface AccountTypeDefinition {
   description: string | null;
 }
 
-export type JournalEntryStatus = 'Draft' | 'Posted' | 'Reversed' | 'Void';
-
 export interface JournalLine {
   targetAccount: string;
   description: string;
@@ -103,17 +101,6 @@ export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   description: '',
   lines: [{ targetAccount: '', description: '', debit: '', credit: '' }],
 };
-
-export interface JournalEntry {
-  id: string;
-  refNo: string;
-  date: string;
-  currency: string;
-  debitTotal: number;
-  creditTotal: number;
-  createdBy: string;
-  status: JournalEntryStatus;
-}
 
 export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
 
@@ -190,8 +177,6 @@ export interface QueryJournalsParams {
   to?: string;
 }
 
-export type InvoiceStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Paid' | 'Overdue' | 'Void';
-
 export interface InvoiceLine {
   description: string;
   glAccount: string;
@@ -200,6 +185,10 @@ export interface InvoiceLine {
   tax: number | '';
 }
 
+/** `vendor` holds the selected customer/vendor id (picked via SearchSelect, not
+ * free text — the backend keys the invoice/bill to a real party record).
+ * `invoiceNumber` is a user-facing reference only: the backend always generates
+ * its own document number, so this maps to `externalReference` on submit. */
 export interface InvoiceFormValues {
   vendor: string;
   invoiceNumber: string;
@@ -220,26 +209,209 @@ export const INVOICE_DEFAULTS: InvoiceFormValues = {
   lines: [{ description: '', glAccount: '', unitPrice: '', quantity: '', tax: '' }],
 };
 
-export interface AccountsReceivableInvoice {
+export type AccountingTradeSide = 'RECEIVABLE' | 'PAYABLE';
+export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type AccountingTradeDocumentKind = 'INVOICE' | 'CREDIT_NOTE' | 'BILL';
+export type AccountingTradeDocumentPaymentState =
+  | 'DRAFT'
+  | 'REVERSED'
+  | 'PAID'
+  | 'PARTIALLY_PAID'
+  | 'OPEN';
+
+export interface AccountingTradePartyRef {
   id: string;
-  invoiceNumber: string;
-  customer: string;
-  invoiceDate: string;
-  dueDate: string;
-  amount: number;
+  code: string;
+  legalName: string;
   currency: string;
-  status: InvoiceStatus;
 }
 
-export interface AccountsPayableInvoice {
+interface AccountingTradeGLAccountRef {
   id: string;
-  invoiceNumber: string;
-  vendor: string;
-  invoiceDate: string;
-  dueDate: string;
+  code: string;
+  name: string;
+}
+
+interface AccountingTradeJournalRef {
+  id: string;
+  journalNumber: string;
+  status: string;
+  postedAt: string | null;
+}
+
+interface AccountingTradeOriginalDocumentRef {
+  id: string;
+  documentNumber: string;
+  totalAmount: string;
+  status: string;
+}
+
+/** Normalized shape for both AR invoices and AP bills — the backend records are
+ * structurally identical (customerId/vendorId aside), so the frontend reads them
+ * through one shared `party` field instead of juggling two near-duplicate types. */
+export interface AccountingTradeDocument {
+  id: string;
+  side: AccountingTradeSide;
+  documentType: AccountingTradeDocumentKind;
+  documentNumber: string;
+  documentDate: string;
+  dueDate: string | null;
+  currency: string;
+  exchangeRate: string | null;
+  subtotalAmount: string;
+  taxAmount: string;
+  totalAmount: string;
+  description: string | null;
+  externalReference: string | null;
+  sourceModule: string | null;
+  sourceRecordId: string | null;
+  offsetGlAccountId: string;
+  originalDocumentId: string | null;
+  status: AccountingTradeDocumentStatus;
+  createdAt: string;
+  updatedAt: string;
+  postedAt: string | null;
+  reversedAt: string | null;
+  postedJournalEntryId: string | null;
+  reversalJournalEntryId: string | null;
+  reversalOfDocumentId: string | null;
+  party: AccountingTradePartyRef;
+  offsetGlAccount: AccountingTradeGLAccountRef;
+  postedJournalEntry: AccountingTradeJournalRef | null;
+  reversalJournalEntry: AccountingTradeJournalRef | null;
+  originalDocument: AccountingTradeOriginalDocumentRef | null;
+}
+
+export interface QueryTradeDocumentsParams {
+  partyId?: string;
+  status?: AccountingTradeDocumentStatus;
+  currency?: string;
+  fromDate?: string;
+  toDate?: string;
+  dueFrom?: string;
+  dueTo?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateTradeInvoicePayload {
+  partyId: string;
+  documentDate: string;
+  dueDate?: string;
+  currency: string;
+  amount: number;
+  taxAmount?: number;
+  exchangeRate?: number;
+  offsetGlAccountId: string;
+  description?: string;
+  externalReference?: string;
+}
+
+export interface ReverseTradeDocumentPayload {
+  reversalDate: string;
+  reason: string;
+}
+
+export interface AccountingTradeDocumentBalance {
+  currency: string;
+  originalAmount: string;
+  /** Applied receipts (AR) or applied payments (AP), normalized to one field name. */
+  appliedSettlements: string;
+  appliedCreditNotes: string;
+  outstandingAmount: string;
+  paymentState: AccountingTradeDocumentPaymentState;
+}
+
+export interface CreateTradeCreditNotePayload {
+  partyId: string;
+  documentDate: string;
+  currency: string;
+  amount: number;
+  offsetGlAccountId: string;
+  /** Optional posted invoice/bill this credit note applies against. */
+  originalDocumentId?: string;
+  description?: string;
+  externalReference?: string;
+}
+
+/** AR customer receipts and AP vendor payments — cash-account-linked settlements
+ * that post through Cashbook. Structurally identical apart from the party
+ * relation and the receiptDate/paymentDate field name, same as trade documents. */
+export interface AccountingTradeSettlement {
+  id: string;
+  side: AccountingTradeSide;
+  settlementNumber: string;
+  settlementDate: string;
+  currency: string;
+  amount: string;
+  exchangeRate: string | null;
+  reference: string | null;
+  description: string | null;
+  externalReference: string | null;
+  sourceModule: string | null;
+  sourceRecordId: string | null;
+  status: AccountingTradeDocumentStatus;
+  createdAt: string;
+  updatedAt: string;
+  postedAt: string | null;
+  reversedAt: string | null;
+  reversalOfSettlementId: string | null;
+  party: AccountingTradePartyRef;
+  cashbookTransaction: {
+    id: string;
+    status: string;
+    reference: string | null;
+    postedJournalEntryId: string | null;
+    reversalJournalEntryId: string | null;
+  };
+}
+
+export interface QueryTradeSettlementsParams {
+  partyId?: string;
+  cashAccountId?: string;
+  status?: AccountingTradeDocumentStatus;
+  currency?: string;
+  fromDate?: string;
+  toDate?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateTradeSettlementPayload {
+  partyId: string;
+  cashAccountId: string;
   amount: number;
   currency: string;
-  status: InvoiceStatus;
+  settlementDate: string;
+  settlementMethod: AccountingCashbookSettlementMethod;
+  reference?: string;
+  description?: string;
+  exchangeRate?: number;
+}
+
+export type AccountingTradeAllocationSource = 'RECEIPT' | 'PAYMENT' | 'CREDIT_NOTE';
+
+export interface AccountingTradeAllocation {
+  id: string;
+  amount: string;
+  currency: string;
+  allocatedAt: string;
+  sourceType: AccountingTradeAllocationSource;
+  reversedAt: string | null;
+  reversalReason: string | null;
+  document: { id: string; documentNumber: string; totalAmount: string };
+}
+
+export interface CreateTradeAllocationPayload {
+  /** The posted invoice (AR) or bill (AP) this receipt/credit note is being applied to. */
+  documentId: string;
+  amount: number;
+}
+
+export interface ReverseTradeAllocationPayload {
+  reason: string;
 }
 
 export interface AccountingContact {
@@ -297,6 +469,153 @@ export interface QueryCashAccountsParams {
   accountKind?: AccountingCashAccountKind;
   currency?: string;
   isActive?: boolean;
+}
+
+export interface CreateCashAccountPayload {
+  name: string;
+  accountKind: AccountingCashAccountKind;
+  currency: string;
+  glAccountId: string;
+  bankName?: string;
+  accountNumber?: string;
+  branch?: string;
+  description?: string;
+}
+
+export interface UpdateCashAccountPayload extends Partial<CreateCashAccountPayload> {
+  isActive?: boolean;
+}
+
+export type CashbookTransactionType = 'RECEIPT' | 'PAYMENT' | 'TRANSFER' | 'CHARGE' | 'ADJUSTMENT';
+export type CashbookDirection = 'INFLOW' | 'OUTFLOW' | 'TRANSFER';
+export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type AccountingCashbookSettlementMethod =
+  | 'BANK_TRANSFER'
+  | 'CHEQUE'
+  | 'CASH'
+  | 'MOBILE_MONEY'
+  | 'INTERNAL_TRANSFER'
+  | 'JOURNAL'
+  | 'OTHER';
+
+export interface CashbookAccountRef {
+  id: string;
+  name: string;
+  accountKind: AccountingCashAccountKind;
+  currency: string;
+  glAccountId: string;
+  glAccount: { id: string; code: string; name: string };
+}
+
+interface CashbookGLAccountRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface CashbookJournalRef {
+  id: string;
+  journalNumber: string;
+  status: string;
+  postedAt: string | null;
+}
+
+interface CashbookTransactionRef {
+  id: string;
+  reference: string | null;
+  status: string;
+}
+
+export interface CashbookTransaction {
+  id: string;
+  cashAccountId: string;
+  destinationCashAccountId: string | null;
+  transactionType: CashbookTransactionType;
+  direction: CashbookDirection;
+  amount: string;
+  currency: string;
+  transactionDate: string;
+  settlementMethod: AccountingCashbookSettlementMethod;
+  reference: string | null;
+  counterpartyType: string | null;
+  counterpartyId: string | null;
+  externalReference: string | null;
+  description: string;
+  offsetGlAccountId: string | null;
+  offsetSubledgerAccountId: string | null;
+  sourceEventInboxId: string | null;
+  sourceModule: string | null;
+  sourceEventType: string | null;
+  sourceRecordId: string | null;
+  sourceReference: string | null;
+  exchangeRate: string | null;
+  status: CashbookTransactionStatus;
+  createdByUserId: string;
+  updatedByUserId: string;
+  postedByUserId: string | null;
+  reversedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  postedAt: string | null;
+  reversedAt: string | null;
+  postedJournalEntryId: string | null;
+  reversalJournalEntryId: string | null;
+  reversalOfTransactionId: string | null;
+  cashAccount: CashbookAccountRef;
+  destinationCashAccount: CashbookAccountRef | null;
+  offsetGlAccount: CashbookGLAccountRef | null;
+  offsetSubledgerAccount: (CashbookGLAccountRef & { type: string }) | null;
+  postedJournalEntry: CashbookJournalRef | null;
+  reversalJournalEntry: CashbookJournalRef | null;
+  reversalOfTransaction: CashbookTransactionRef | null;
+  reversalTransaction: CashbookTransactionRef | null;
+}
+
+export interface QueryCashbookParams {
+  cashAccountId?: string;
+  transactionType?: CashbookTransactionType;
+  status?: CashbookTransactionStatus;
+  currency?: string;
+  fromDate?: string;
+  toDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateCashbookEntryPayload {
+  cashAccountId: string;
+  amount: number;
+  currency: string;
+  transactionDate: string;
+  settlementMethod: AccountingCashbookSettlementMethod;
+  reference?: string;
+  counterpartyType?: string;
+  counterpartyId?: string;
+  externalReference?: string;
+  description: string;
+  offsetGlAccountId: string;
+  offsetSubledgerAccountId?: string;
+  exchangeRate?: number;
+}
+
+export interface CreateCashbookAdjustmentPayload extends CreateCashbookEntryPayload {
+  direction: 'INFLOW' | 'OUTFLOW';
+}
+
+export interface CreateCashbookTransferPayload {
+  cashAccountId: string;
+  destinationCashAccountId: string;
+  amount: number;
+  currency: string;
+  transactionDate: string;
+  exchangeRate?: number;
+  reference?: string;
+  description: string;
+}
+
+export interface ReverseCashbookTransactionPayload {
+  reversalDate: string;
+  reason: string;
 }
 
 export interface QueryAccountingPartiesParams {
@@ -571,3 +890,88 @@ export interface CreateAccountingCustomerPayload {
 export type UpdateAccountingCustomerPayload = Partial<CreateAccountingCustomerPayload> & {
   isActive?: boolean;
 };
+
+export type PostingRuleDirection = 'DR' | 'CR';
+export type PostingRuleSubledgerType =
+  | 'CUSTOMER'
+  | 'VENDOR'
+  | 'CEDANT'
+  | 'REINSURER'
+  | 'EMPLOYEE'
+  | 'STATUTORY'
+  | 'OTHER';
+
+export interface PostingRuleLine {
+  id: string;
+  sequence: number;
+  direction: PostingRuleDirection;
+  glAccountId: string;
+  subledgerType: PostingRuleSubledgerType | null;
+  subledgerExternalRefSource: string | null;
+  amountSource: string;
+  currencySource: string;
+  descriptionTemplate: string;
+  glAccount: { id: string; code: string; name: string; status: string };
+}
+
+/** Maps one source business event (sourceModule + sourceEventType) to a balanced
+ * set of journal lines. The highest-`version` active rule whose effective date
+ * range covers the event's transaction date is the one the posting engine uses —
+ * no match means the event can't be posted (the `POSTING_RULE_MISSING` blocker
+ * behind "Accounting is not ready to recognize X" errors elsewhere in the app). */
+export interface PostingRule {
+  id: string;
+  name: string;
+  sourceModule: string;
+  sourceEventType: string;
+  version: number;
+  active: boolean;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lines: PostingRuleLine[];
+}
+
+export interface QueryPostingRulesParams {
+  sourceModule?: string;
+  sourceEventType?: string;
+  active?: boolean;
+}
+
+export interface PostingRuleLineInput {
+  sequence: number;
+  direction: PostingRuleDirection;
+  glAccountId: string;
+  subledgerType?: PostingRuleSubledgerType;
+  /** Dot-path into the source event payload used to resolve the subledger's
+   * external reference, e.g. "counterparty.id". Only meaningful with subledgerType set. */
+  subledgerExternalRefSource?: string;
+  /** Dot-path into the source event payload for this line's amount, e.g. "amounts.netPremium". */
+  amountSource: string;
+  /** Dot-path into the source event payload for this line's currency, e.g. "currency". */
+  currencySource: string;
+  /** Supports {{sourceRecordId}}, {{sourceDocumentId}} and {{payload.x}} interpolation. */
+  descriptionTemplate: string;
+}
+
+export interface CreatePostingRulePayload {
+  name: string;
+  sourceModule: string;
+  sourceEventType: string;
+  version: number;
+  active?: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  lines?: PostingRuleLineInput[];
+}
+
+export interface UpdatePostingRulePayload {
+  name?: string;
+  active?: boolean;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+}
+
+export type CreatePostingRuleLinePayload = PostingRuleLineInput;
+export type UpdatePostingRuleLinePayload = Partial<PostingRuleLineInput>;

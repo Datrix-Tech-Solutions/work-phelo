@@ -14,7 +14,6 @@ import {
   useReverseClaimRecoveryReceipt,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
-import { cardClass } from '@/lib/utils';
 import { fmtDate, fmt } from '@/lib/reinsurance/claimFormat';
 import { SETTLEMENT_STATUS_LABEL, SETTLEMENT_STATUS_VARIANT } from '@/lib/reinsurance/claimStatus';
 import { useToastStore } from '@/store/toast.store';
@@ -167,7 +166,7 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
     {
       key: 'date',
       label: 'Date',
-      width: '100px',
+      width: '90px',
       render: (row) => <span className="text-gray-600">{fmtDate(row.date)}</span>,
     },
     {
@@ -186,7 +185,7 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
     {
       key: 'amount',
       label: 'Amount',
-      width: '140px',
+      width: '150px',
       className: 'text-right pr-8',
       render: (row) => (
         <span className="block text-right font-medium text-gray-900">
@@ -247,14 +246,6 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
 
   return (
     <div className="flex flex-col gap-2">
-      <div className={cardClass('p-6 w-full')}>
-        <span className="text-sm font-bold text-gray-900">Financial History</span>
-        <p className="text-xs text-gray-500">
-          Broker → Cedant settlements (Claim Payable) and Reinsurer → Broker recovery receipts
-          (Claim Receivable) for this claim, in one timeline.
-        </p>
-      </div>
-
       <DataTable
         columns={columns}
         data={rows}
