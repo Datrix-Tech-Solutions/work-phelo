@@ -1,24 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import { useMemo, useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
-import { FormField } from '@/components/molecules/shared/FormField';
-import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import {
-  useFacultatives,
-  useAllReinsurerClaims,
-  useCreateClaimRecoveryReceipt,
-  useReverseClaimRecoveryReceipt,
-  RecoveryRow,
-} from '@/hooks';
-import { extractError } from '@/lib/extractError';
-import { useToastStore } from '@/store/toast.store';
+import { useFacultatives, useAllReinsurerClaims, RecoveryRow } from '@/hooks';
+import { RecordRecoveryReceiptModal } from '@/components/organisms/reinsurance/RecordRecoveryReceiptModal';
 
 const PAGE_SIZE = 10;
 
@@ -27,336 +15,6 @@ function fmtAmount(val: number, currency: string) {
 }
 
 type RecoveryTableRow = RecoveryRow;
-
-interface RecordPaymentValues {
-  paymentType: string;
-  chequeNumber: string;
-  valueDate: string;
-  paymentDate: string;
-  amount: string;
-  bankName: string;
-  currency: string;
-}
-
-const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
-  paymentType: '',
-  chequeNumber: '',
-  valueDate: '',
-  paymentDate: '',
-  amount: '',
-  bankName: '',
-  currency: '',
-};
-
-const PAYMENT_TYPE_OPTIONS = [
-  { value: 'bank_transfer', label: 'Bank Transfer' },
-  { value: 'cheque', label: 'Cheque' },
-];
-
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-      <label className="text-sm font-bold text-gray-900">{label}</label>
-      <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-700">
-        {value || '-'}
-      </div>
-    </div>
-  );
-}
-
-function RecordRecoveryReceiptModal({
-  row,
-  onClose,
-}: {
-  row: RecoveryTableRow | null;
-  onClose: () => void;
-}) {
-  const {
-    register,
-    control,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<RecordPaymentValues>({ defaultValues: RECORD_PAYMENT_DEFAULTS });
-
-  const createReceipt = useCreateClaimRecoveryReceipt();
-  const reverseReceipt = useReverseClaimRecoveryReceipt();
-  const addToast = useToastStore((s) => s.addToast);
-
-  const paymentType = useWatch({ control, name: 'paymentType' });
-
-  useEffect(() => {
-    if (row) {
-      reset({
-        ...RECORD_PAYMENT_DEFAULTS,
-        amount: row.outstandingAmount > 0 ? String(row.outstandingAmount) : '',
-        currency: row.currency,
-      });
-    }
-  }, [row, reset]);
-
-  const handleClose = () => {
-    reset(RECORD_PAYMENT_DEFAULTS);
-    onClose();
-  };
-
-  const onSubmit = async (values: RecordPaymentValues) => {
-    if (!row) return;
-    try {
-      const resolvedDate = values.paymentType === 'cheque' ? values.valueDate : values.paymentDate;
-      const amount = Math.round((parseFloat(values.amount) || 0) * 100) / 100;
-
-      const refParts: string[] = [];
-      if (values.chequeNumber) refParts.push(values.chequeNumber);
-      if (values.bankName) refParts.push(values.bankName);
-
-      await createReceipt.mutateAsync({
-        placementId: row.placementId,
-        claimId: row.claimId,
-        cashCallId: row.cashCallId,
-        payload: {
-          amount,
-          currency: row.currency,
-          paymentDate: new Date(resolvedDate).toISOString(),
-          reference: refParts.join(' - ') || undefined,
-          notes: values.bankName ? `Received via ${values.bankName}` : undefined,
-        },
-      });
-      addToast({ message: 'Recovery receipt recorded', type: 'success' });
-      handleClose();
-    } catch (error) {
-      addToast({ message: extractError(error), type: 'error' });
-    }
-  };
-
-  const chequeFields = paymentType === 'cheque' && (
-    <>
-      <div className="grid grid-cols-5 gap-4">
-        <div className="col-span-3">
-          <FormField
-            label="Cheque Number"
-            registration={register('chequeNumber', { required: 'Cheque number is required' })}
-            placeholder="Enter cheque number..."
-            error={errors.chequeNumber}
-          />
-        </div>
-        <div className="col-span-2">
-          <Controller
-            name="valueDate"
-            control={control}
-            rules={{ required: 'Value date is required' }}
-            render={({ field }) => (
-              <DatePicker
-                label="Value Date"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.valueDate?.message}
-                size="sm"
-              />
-            )}
-          />
-        </div>
-      </div>
-
-      <FormField
-        label="Bank Name"
-        registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name..."
-        error={errors.bankName}
-      />
-
-      {row && <ReadOnlyField label="Currency" value={row.currency} />}
-
-      <FormField
-        label="Amount Received"
-        registration={register('amount', { required: 'Amount is required' })}
-        placeholder="0.00"
-        type="number"
-        step="any"
-        error={errors.amount}
-      />
-    </>
-  );
-
-  const bankFields = paymentType === 'bank_transfer' && (
-    <>
-      <Controller
-        name="paymentDate"
-        control={control}
-        rules={{ required: 'Payment date is required' }}
-        render={({ field }) => (
-          <DatePicker
-            label="Payment Date"
-            value={field.value}
-            onChange={field.onChange}
-            error={errors.paymentDate?.message}
-            size="sm"
-          />
-        )}
-      />
-
-      <FormField
-        label="Bank Name"
-        registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name..."
-        error={errors.bankName}
-      />
-
-      {row && <ReadOnlyField label="Currency" value={row.currency} />}
-
-      <FormField
-        label="Amount Received"
-        registration={register('amount', { required: 'Amount is required' })}
-        placeholder="0.00"
-        type="number"
-        step="any"
-        error={errors.amount}
-      />
-    </>
-  );
-
-  return (
-    <SidePanel
-      isOpen={!!row}
-      onClose={handleClose}
-      title={row?.outstandingAmount ? 'Record Recovery Receipt' : 'Recovery Receipt History'}
-      description={row ? `${row.reinsurerName} - ${row.claimNumber}` : undefined}
-      footer={
-        <div className="flex items-center justify-end gap-3">
-          <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
-            Cancel
-          </Button>
-          {!!row?.outstandingAmount && (
-            <Button type="submit" form="record-recovery-receipt-form" isLoading={isSubmitting}>
-              Record Recovery
-            </Button>
-          )}
-        </div>
-      }
-    >
-      <form
-        id="record-recovery-receipt-form"
-        onSubmit={handleSubmit(onSubmit)}
-        className="flex flex-col gap-5"
-      >
-        {row && (
-          <div className="grid grid-cols-2 gap-3">
-            <ReadOnlyField label="Policy Number" value={row.policyNumber} />
-            <ReadOnlyField label="Reinsurer" value={row.reinsurerName} />
-            <ReadOnlyField label="Claim Number" value={row.claimNumber} />
-            <ReadOnlyField label="Cash Call" value={row.cashCallNumber} />
-            <ReadOnlyField
-              label="Outstanding Recovery"
-              value={fmtAmount(row.outstandingAmount, row.currency)}
-            />
-          </div>
-        )}
-
-        {!!row?.outstandingAmount && (
-          <>
-            <Controller
-              name="paymentType"
-              control={control}
-              rules={{ required: 'Payment type is required' }}
-              render={({ field }) => (
-                <SearchSelect
-                  label="Payment Type"
-                  placeholder="Select payment type..."
-                  options={PAYMENT_TYPE_OPTIONS}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={errors.paymentType?.message}
-                  size="sm"
-                />
-              )}
-            />
-
-            {chequeFields}
-            {bankFields}
-          </>
-        )}
-
-        {row && (
-          <div className="flex flex-col gap-3">
-            <div>
-              <h4 className="text-sm font-semibold text-gray-900">Recovery Receipt History</h4>
-              <p className="text-xs text-gray-500">
-                Immutable Reinsurer to Broker receipts for this cash call.
-              </p>
-            </div>
-            <div className="overflow-hidden rounded-xl border border-gray-200">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-left">Amount</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Reference</th>
-                    <th className="px-3 py-2 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {row.receipts.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-4 text-center text-gray-500">
-                        No recovery receipts recorded yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    row.receipts.map((receipt) => (
-                      <tr key={receipt.id} className="border-t border-gray-100">
-                        <td className="px-3 py-2">
-                          {new Date(receipt.paymentDate).toLocaleDateString()}
-                        </td>
-                        <td className="px-3 py-2">
-                          {fmtAmount(parseFloat(receipt.amount), receipt.currency)}
-                        </td>
-                        <td className="px-3 py-2">{receipt.status}</td>
-                        <td className="px-3 py-2">{receipt.reference ?? '-'}</td>
-                        <td className="px-3 py-2 text-right">
-                          {receipt.status === 'RECORDED' && !receipt.reversalOfReceiptId ? (
-                            <TableButton
-                              variant="gray"
-                              onClick={() =>
-                                reverseReceipt.mutate(
-                                  {
-                                    placementId: row.placementId,
-                                    claimId: row.claimId,
-                                    receiptId: receipt.id,
-                                    notes: 'Reversed from recovery history',
-                                  },
-                                  {
-                                    onSuccess: () => {
-                                      addToast({
-                                        message: 'Recovery receipt reversed',
-                                        type: 'success',
-                                      });
-                                      handleClose();
-                                    },
-                                    onError: (error) =>
-                                      addToast({ message: extractError(error), type: 'error' }),
-                                  },
-                                )
-                              }
-                            >
-                              Reverse
-                            </TableButton>
-                          ) : (
-                            <span className="text-xs text-gray-400">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </form>
-    </SidePanel>
-  );
-}
 
 export function RecoveriesTable() {
   const [search, setSearch] = useState('');
@@ -462,9 +120,23 @@ export function RecoveriesTable() {
       key: 'recoveredAmount',
       label: 'Recovered',
       width: '120px',
-      render: (row) => (
-        <span className="text-gray-700 block">{fmtAmount(row.recoveredAmount, row.currency)}</span>
-      ),
+      render: (row) => {
+        if (row.confirmedAmount > 0.0001) {
+          return (
+            <span className="block font-bold text-green-600">
+              {fmtAmount(row.confirmedAmount, row.currency)}
+            </span>
+          );
+        }
+        if (row.recordedAmount > 0.0001) {
+          return (
+            <span className="block font-medium text-amber-600">
+              {fmtAmount(row.recordedAmount, row.currency)}
+            </span>
+          );
+        }
+        return <span className="block text-gray-700">{fmtAmount(0, row.currency)}</span>;
+      },
     },
     {
       key: 'outstandingAmount',
@@ -490,20 +162,32 @@ export function RecoveriesTable() {
       key: 'actions',
       label: 'Actions',
       width: '120px',
-      render: (row) => (
-        <TableButton
-          variant={row.outstandingAmount > 0 && row.cashCallStatus === 'ISSUED' ? 'blue' : 'gray'}
-          disabled={row.cashCallStatus !== 'ISSUED'}
-          tooltip={
-            row.cashCallStatus === 'ISSUED'
-              ? undefined
-              : 'Only issued cash calls can receive recovery receipts.'
-          }
-          onClick={() => setPaymentRow(row)}
-        >
-          {row.outstandingAmount > 0 ? 'Record Recovery' : 'View History'}
-        </TableButton>
-      ),
+      render: (row) => {
+        // A RECORDED (not yet bank-confirmed) receipt already covers what's left — recording
+        // more would over-recover, so wait for that one to clear or get reversed.
+        const fullyPending =
+          row.outstandingAmount > 0.0001 && row.recordedAmount >= row.outstandingAmount - 0.0001;
+        const canRecord =
+          row.cashCallStatus === 'ISSUED' && row.outstandingAmount > 0.0001 && !fullyPending;
+        return (
+          <TableButton
+            variant={canRecord ? 'blue' : 'gray'}
+            disabled={!canRecord}
+            tooltip={
+              row.cashCallStatus !== 'ISSUED'
+                ? 'Only issued cash calls can receive recovery receipts.'
+                : row.outstandingAmount <= 0.0001
+                  ? 'Fully recovered — see the claim History tab for receipts.'
+                  : fullyPending
+                    ? 'Already fully recorded — awaiting bank confirmation.'
+                    : undefined
+            }
+            onClick={() => setPaymentRow(row)}
+          >
+            Record Recovery
+          </TableButton>
+        );
+      },
     },
   ];
 

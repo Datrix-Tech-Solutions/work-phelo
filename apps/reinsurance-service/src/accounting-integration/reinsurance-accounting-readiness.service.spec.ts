@@ -511,6 +511,30 @@ describe('ReinsuranceAccountingReadinessService', () => {
         baseUrlConfigured: true,
         serviceAuthSecretConfigured: true,
       }),
+      checkReinsuranceReadiness: jest.fn().mockResolvedValue({
+        ready: false,
+        checkedAt: '2026-08-11T12:00:00.000Z',
+        eventResults: [
+          {
+            eventType: 'CLAIM_PAYABLE_APPROVED',
+            ready: false,
+            kind: 'NON_CASH',
+            controlDimension: 'CEDANT_CLAIMS_AP',
+            requiredSubledgerType: 'CEDANT',
+            reversalDependsOnOriginalRecognition: false,
+            blockers: [{ code: 'POSTING_RULE_MISSING' }],
+          },
+          {
+            eventType: 'DEBIT_NOTE_ISSUED',
+            ready: true,
+            kind: 'NON_CASH',
+            controlDimension: 'CEDANT_PREMIUM_AR',
+            requiredSubledgerType: 'CEDANT',
+            reversalDependsOnOriginalRecognition: false,
+            blockers: [],
+          },
+        ],
+      }),
     };
     const outbox = {
       processPending: jest.fn(),
@@ -692,8 +716,40 @@ describe('ReinsuranceAccountingReadinessService', () => {
       financialEvents as unknown as ReinsuranceFinancialEventPublisher,
     );
 
-    return { financialEvents, prisma, service };
+    return { client, financialEvents, prisma, service };
   };
+
+  it('reports Accounting integration status with grouped posting readiness', async () => {
+    const { client, service } = makeService();
+
+    const result = await service.status(user);
+
+    const checkReinsuranceReadiness =
+      client.checkReinsuranceReadiness as jest.MockedFunction<
+        (request: {
+          tenantId: string;
+          eventTypes: string[];
+        }) => Promise<unknown>
+      >;
+    const readinessRequest = checkReinsuranceReadiness.mock.calls[0]?.[0];
+    expect(readinessRequest?.tenantId).toBe('tenant-1');
+    expect(readinessRequest?.eventTypes).toEqual(
+      expect.arrayContaining(['DEBIT_NOTE_ISSUED', 'CLAIM_PAYABLE_APPROVED']),
+    );
+    expect(result.integrationConfigured).toBe(true);
+    expect(result.postingReadiness).toMatchObject({
+      ready: false,
+      checkedAt: '2026-08-11T12:00:00.000Z',
+    });
+    expect(result.readinessGroups).toMatchObject({
+      premiumAccounting: {
+        ready: true,
+      },
+      claimsAccounting: {
+        ready: false,
+      },
+    });
+  });
 
   it('dry-runs issued debit notes missing their deterministic outbox row', async () => {
     const { financialEvents, prisma, service } = makeService();

@@ -731,6 +731,7 @@ function EndorsementCard({
 
               <EndorsementCapacitySection
                 isDraft={endorsement.status === 'DRAFT'}
+                isClosed={endorsement.status === 'CLOSED'}
                 original={original}
                 proposed={proposed}
                 endorsementSummary={endorsementSummary}

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
@@ -16,6 +16,10 @@ import {
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReinsuranceAccountingEventInput } from './reinsurance-accounting-event.builder';
+import {
+  ReinsuranceAccountingClient,
+  ReinsuranceAccountingClientError,
+} from './reinsurance-accounting-client';
 import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
 
 type PlacementNoteForEvent = {
@@ -254,7 +258,90 @@ export class ReinsuranceFinancialEventPublisher {
   constructor(
     private readonly prisma: PrismaService,
     private readonly outbox: ReinsuranceAccountingOutboxService,
+    private readonly client: ReinsuranceAccountingClient,
   ) {}
+
+  async assertAccountingReadyForEvent(
+    user: RequestUser,
+    input: {
+      eventType: string;
+      currency?: string | null;
+      businessDate?: Date | string | null;
+      settlementMethod?: string | null;
+      accountingCashAccountId?: string | null;
+    },
+  ): Promise<void> {
+    if (!user.moduleConfig?.accounting) return;
+    const eventType = input.eventType.trim().toUpperCase();
+    try {
+      const readiness = await this.client.checkReinsuranceReadiness({
+        tenantId: user.tenantId,
+        eventTypes: [eventType],
+        ...(input.currency ? { currency: input.currency } : {}),
+        ...(input.businessDate
+          ? {
+              businessDate:
+                input.businessDate instanceof Date
+                  ? input.businessDate.toISOString()
+                  : input.businessDate,
+            }
+          : {}),
+        ...(input.settlementMethod
+          ? { settlementMethod: input.settlementMethod }
+          : {}),
+        ...(input.accountingCashAccountId
+          ? { accountingCashAccountId: input.accountingCashAccountId }
+          : {}),
+      });
+      const result = readiness.eventResults.find(
+        (candidate) => candidate.eventType === eventType,
+      );
+      if (readiness.ready && result?.ready !== false) return;
+      const blockers = result?.blockers ?? [
+        {
+          code: 'POSTING_RULE_INVALID',
+          message: 'Accounting readiness could not validate this event.',
+        },
+      ];
+      throw new ConflictException({
+        code: 'ACCOUNTING_NOT_READY',
+        message: this.readinessFailureMessage(eventType, blockers),
+        eventType,
+        blockers,
+      });
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      if (error instanceof ReinsuranceAccountingClientError) {
+        throw new ConflictException({
+          code: 'ACCOUNTING_NOT_READY',
+          message:
+            'Accounting readiness could not be verified. Resolve Accounting integration setup and retry.',
+          eventType,
+          blockers: [
+            {
+              code: 'POSTING_RULE_INVALID',
+              message: error.message,
+            },
+          ],
+        });
+      }
+      throw error;
+    }
+  }
+
+  private readinessFailureMessage(
+    eventType: string,
+    blockers: Array<{ code: string; message: string }>,
+  ): string {
+    const firstBlocker = blockers[0];
+    if (!firstBlocker) {
+      return `Accounting is not ready to recognize ${eventType}.`;
+    }
+    if (firstBlocker.code === 'POSTING_RULE_MISSING') {
+      return `Accounting is not ready to recognize ${eventType}. Missing PostingRule for ${eventType}.`;
+    }
+    return `Accounting is not ready to recognize ${eventType}. ${firstBlocker.message}`;
+  }
 
   async prepareDebitNoteIssued(
     user: RequestUser,

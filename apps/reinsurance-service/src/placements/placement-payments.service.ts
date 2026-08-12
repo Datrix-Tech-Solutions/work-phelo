@@ -355,6 +355,16 @@ export class PlacementPaymentsService {
       settlementCurrency,
       confirmedExchangeRate,
     );
+    await this.financialEvents.assertAccountingReadyForEvent(user, {
+      eventType:
+        payment.type === PlacementPaymentType.PREMIUM_RECEIVED
+          ? 'PREMIUM_PAYMENT_RECEIVED'
+          : 'REINSURER_DISBURSEMENT_RECORDED',
+      currency: settlementCurrency,
+      businessDate: dto.bankConfirmedAt,
+      settlementMethod,
+      accountingCashAccountId: dto.accountingCashAccountId,
+    });
 
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.placementPayment.updateMany({
@@ -425,6 +435,18 @@ export class PlacementPaymentsService {
       select: paymentEventPlacementSelect,
     });
     if (!placement) throw new NotFoundException('Placement not found');
+    if (payment.status === PlacementPaymentStatus.BANK_CONFIRMED) {
+      await this.financialEvents.assertAccountingReadyForEvent(user, {
+        eventType:
+          payment.type === PlacementPaymentType.PREMIUM_RECEIVED
+            ? 'PAYMENT_REVERSED'
+            : 'REINSURER_DISBURSEMENT_REVERSED',
+        currency: payment.settlementCurrency ?? payment.currency,
+        businessDate: new Date(),
+        settlementMethod: payment.settlementMethod,
+        accountingCashAccountId: payment.accountingCashAccountId,
+      });
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.placementPayment.update({

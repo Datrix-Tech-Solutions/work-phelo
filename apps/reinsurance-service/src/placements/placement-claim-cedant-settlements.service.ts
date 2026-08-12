@@ -152,6 +152,11 @@ export class PlacementClaimCedantSettlementsService {
             }
 
             const approvedAt = new Date();
+            await this.financialEvents.assertAccountingReadyForEvent(user, {
+              eventType: 'CLAIM_PAYABLE_APPROVED',
+              currency: claim.currency,
+              businessDate: approvedAt,
+            });
             const approval = await tx.placementClaimPayableApproval.create({
               data: {
                 tenantId: user.tenantId,
@@ -393,6 +398,13 @@ export class PlacementClaimCedantSettlementsService {
       confirmedExchangeRate ??
         this.optionalDecimalToNumber(settlement.agreedExchangeRate),
     );
+    await this.financialEvents.assertAccountingReadyForEvent(user, {
+      eventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
+      currency: settlementCurrency,
+      businessDate: dto.bankConfirmedAt,
+      settlementMethod,
+      accountingCashAccountId: dto.accountingCashAccountId,
+    });
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -562,6 +574,15 @@ export class PlacementClaimCedantSettlementsService {
             const confirmedOriginal =
               settlement.status ===
               PlacementClaimCedantSettlementStatus.BANK_CONFIRMED;
+            if (confirmedOriginal) {
+              await this.financialEvents.assertAccountingReadyForEvent(user, {
+                eventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+                currency: settlement.settlementCurrency ?? settlement.currency,
+                businessDate: new Date(),
+                settlementMethod: settlement.settlementMethod,
+                accountingCashAccountId: settlement.accountingCashAccountId,
+              });
+            }
             const reversal = await tx.placementClaimCedantSettlement.create({
               data: {
                 tenantId: settlement.tenantId,

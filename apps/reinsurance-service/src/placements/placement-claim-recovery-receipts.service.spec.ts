@@ -130,6 +130,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     $transaction: jest.Mock;
   };
   let financialEvents: {
+    assertAccountingReadyForEvent: jest.Mock;
     prepareClaimRecoveryReceived: jest.Mock;
     prepareClaimRecoveryReceiptReversed: jest.Mock;
     enqueuePreparedEvent: jest.Mock;
@@ -159,6 +160,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       ),
     };
     financialEvents = {
+      assertAccountingReadyForEvent: jest.fn().mockResolvedValue(undefined),
       prepareClaimRecoveryReceived: jest.fn().mockResolvedValue({
         tenantId: 'tenant-1',
         sourceEventType: 'CLAIM_RECOVERY_RECEIVED',

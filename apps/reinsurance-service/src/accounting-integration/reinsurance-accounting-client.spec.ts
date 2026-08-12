@@ -102,6 +102,51 @@ describe('ReinsuranceAccountingClient', () => {
     expect(headers['x-workphelo-signature']).toBe(expectedSignature);
   });
 
+  it('checks Reinsurance posting readiness with the Accounting HMAC path', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ready: true,
+          checkedAt: '2026-07-30T12:00:00.000Z',
+          eventResults: [
+            {
+              eventType: 'CLAIM_PAYABLE_APPROVED',
+              ready: true,
+              blockers: [],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const client = new ReinsuranceAccountingClient();
+    const result = await client.checkReinsuranceReadiness({
+      tenantId: 'tenant-1',
+      eventTypes: ['CLAIM_PAYABLE_APPROVED'],
+      currency: 'GHS',
+      businessDate: '2026-07-30T12:00:00.000Z',
+    });
+
+    const expectedSignature = createHmac(
+      'sha256',
+      process.env.INTERNAL_SERVICE_AUTH_SECRET!,
+    )
+      .update(
+        'reinsurance-service:1710000000:POST:/internal/reinsurance/accounting-readiness',
+      )
+      .digest('hex');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+
+    expect(result.ready).toBe(true);
+    expect(url).toBe(
+      'http://accounting-service:4008/internal/reinsurance/accounting-readiness',
+    );
+    expect(init.method).toBe('POST');
+    expect(headers['x-workphelo-signature']).toBe(expectedSignature);
+  });
+
   it('reports Accounting configuration readiness without making a request', () => {
     const client = new ReinsuranceAccountingClient();
 

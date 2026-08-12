@@ -5,6 +5,8 @@ import { AccountingSourceEventEnvelope } from './reinsurance-accounting-event.bu
 const SERVICE_NAME = 'reinsurance-service';
 const ACCOUNTING_SOURCE_EVENTS_PATH = '/internal/source-events';
 const ACCOUNTING_SUBLEDGER_ENSURE_PATH = '/internal/subledgers/ensure';
+const ACCOUNTING_REINSURANCE_READINESS_PATH =
+  '/internal/reinsurance/accounting-readiness';
 
 export interface AccountingSourceEventResponse {
   id: string;
@@ -39,6 +41,36 @@ export interface AccountingSubledgerResponse {
     code?: string;
     name?: string;
   };
+}
+
+export interface ReinsuranceAccountingReadinessRequest {
+  tenantId: string;
+  eventTypes: string[];
+  currency?: string;
+  businessDate?: string;
+  settlementMethod?: string;
+  accountingCashAccountId?: string;
+}
+
+export interface ReinsuranceAccountingReadinessBlocker {
+  code: string;
+  message: string;
+}
+
+export interface ReinsuranceAccountingEventReadiness {
+  eventType: string;
+  ready: boolean;
+  kind?: string | null;
+  controlDimension?: string | null;
+  requiredSubledgerType?: string | null;
+  reversalDependsOnOriginalRecognition?: boolean;
+  blockers: ReinsuranceAccountingReadinessBlocker[];
+}
+
+export interface ReinsuranceAccountingReadinessResponse {
+  ready: boolean;
+  checkedAt: string;
+  eventResults: ReinsuranceAccountingEventReadiness[];
 }
 
 export class ReinsuranceAccountingClientError extends Error {
@@ -102,6 +134,59 @@ export class ReinsuranceAccountingClient {
       currency: this.stringField(body, 'currency'),
       status: this.stringField(body, 'status'),
       controlAccount: this.objectField(body, 'controlAccount'),
+    };
+  }
+
+  async checkReinsuranceReadiness(
+    request: ReinsuranceAccountingReadinessRequest,
+  ): Promise<ReinsuranceAccountingReadinessResponse> {
+    const body = await this.signedPost(
+      ACCOUNTING_REINSURANCE_READINESS_PATH,
+      request,
+    );
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+      throw new ReinsuranceAccountingClientError(
+        'Accounting readiness response was not valid JSON',
+        true,
+      );
+    }
+    const response = body as Partial<ReinsuranceAccountingReadinessResponse>;
+    return {
+      ready: response.ready === true,
+      checkedAt:
+        typeof response.checkedAt === 'string'
+          ? response.checkedAt
+          : new Date().toISOString(),
+      eventResults: Array.isArray(response.eventResults)
+        ? response.eventResults.map((result) => ({
+            eventType:
+              typeof result.eventType === 'string' ? result.eventType : '',
+            ready: result.ready === true,
+            kind: typeof result.kind === 'string' ? result.kind : null,
+            controlDimension:
+              typeof result.controlDimension === 'string'
+                ? result.controlDimension
+                : null,
+            requiredSubledgerType:
+              typeof result.requiredSubledgerType === 'string'
+                ? result.requiredSubledgerType
+                : null,
+            reversalDependsOnOriginalRecognition:
+              result.reversalDependsOnOriginalRecognition === true,
+            blockers: Array.isArray(result.blockers)
+              ? result.blockers.map((blocker) => ({
+                  code:
+                    typeof blocker.code === 'string'
+                      ? blocker.code
+                      : 'POSTING_RULE_INVALID',
+                  message:
+                    typeof blocker.message === 'string'
+                      ? blocker.message
+                      : 'Accounting readiness blocker could not be parsed.',
+                }))
+              : [],
+          }))
+        : [],
     };
   }
 

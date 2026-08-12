@@ -18,6 +18,8 @@ import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-even
 import {
   ReinsuranceAccountingClient,
   ReinsuranceAccountingClientError,
+  ReinsuranceAccountingEventReadiness,
+  ReinsuranceAccountingReadinessResponse,
 } from './reinsurance-accounting-client';
 import {
   ProcessAccountingOutboxOptions,
@@ -140,6 +142,43 @@ type AccountingSubledgerSyncResult =
       message: string;
     };
 
+const ACTIVE_REINSURANCE_ACCOUNTING_EVENT_TYPES = [
+  'DEBIT_NOTE_ISSUED',
+  'CREDIT_NOTE_ISSUED',
+  'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+  'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+  'PREMIUM_PAYMENT_RECEIVED',
+  'PAYMENT_REVERSED',
+  'REINSURER_DISBURSEMENT_RECORDED',
+  'REINSURER_DISBURSEMENT_REVERSED',
+  'CLAIM_PAYABLE_APPROVED',
+  'CLAIM_CEDANT_SETTLEMENT_PAID',
+  'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+  'CLAIM_RECOVERY_APPROVED',
+  'CLAIM_RECOVERY_RECEIVED',
+  'CLAIM_RECOVERY_RECEIPT_REVERSED',
+] as const;
+
+const READINESS_GROUPS = {
+  premiumAccounting: [
+    'DEBIT_NOTE_ISSUED',
+    'CREDIT_NOTE_ISSUED',
+    'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+    'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+  ],
+  claimsAccounting: ['CLAIM_PAYABLE_APPROVED', 'CLAIM_RECOVERY_APPROVED'],
+  cashConfirmation: [
+    'PREMIUM_PAYMENT_RECEIVED',
+    'PAYMENT_REVERSED',
+    'REINSURER_DISBURSEMENT_RECORDED',
+    'REINSURER_DISBURSEMENT_REVERSED',
+    'CLAIM_CEDANT_SETTLEMENT_PAID',
+    'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+    'CLAIM_RECOVERY_RECEIVED',
+    'CLAIM_RECOVERY_RECEIPT_REVERSED',
+  ],
+} as const;
+
 @Injectable()
 export class ReinsuranceAccountingReadinessService {
   private readonly logger = new Logger(
@@ -153,41 +192,86 @@ export class ReinsuranceAccountingReadinessService {
     private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
-  status(user: RequestUser) {
+  async status(user: RequestUser) {
     const configuration = this.client.configurationStatus();
     const accountingEnabled = Boolean(user.moduleConfig?.accounting);
+    const activeSourceEvents = accountingEnabled
+      ? [...ACTIVE_REINSURANCE_ACCOUNTING_EVENT_TYPES]
+      : [];
+    const postingReadiness =
+      accountingEnabled && configuration.configured
+        ? await this.getPostingReadiness(user, activeSourceEvents)
+        : null;
     return {
       accountingEnabled,
       integrationConfigured: configuration.configured,
       baseUrlConfigured: configuration.baseUrlConfigured,
       serviceAuthSecretConfigured: configuration.serviceAuthSecretConfigured,
       sourceEventsActive: accountingEnabled,
-      activeSourceEvents: accountingEnabled
-        ? [
-            'DEBIT_NOTE_ISSUED',
-            'CREDIT_NOTE_ISSUED',
-            'ENDORSEMENT_DEBIT_NOTE_ISSUED',
-            'ENDORSEMENT_CREDIT_NOTE_ISSUED',
-            'PREMIUM_PAYMENT_RECEIVED',
-            'PAYMENT_REVERSED',
-            'REINSURER_DISBURSEMENT_RECORDED',
-            'REINSURER_DISBURSEMENT_REVERSED',
-            'CLAIM_PAYABLE_APPROVED',
-            'CLAIM_CEDANT_SETTLEMENT_PAID',
-            'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-            'CLAIM_RECOVERY_APPROVED',
-            'CLAIM_RECOVERY_RECEIVED',
-            'CLAIM_RECOVERY_RECEIPT_REVERSED',
-          ]
-        : [],
+      activeSourceEvents,
+      postingReadiness,
+      readinessGroups: postingReadiness
+        ? this.groupPostingReadiness(postingReadiness.eventResults)
+        : null,
       readinessMode:
-        'Debit-note, credit-note, premium-payment, reinsurer-disbursement, claim-payable and claim-recovery source-event capture, counterparty subledger readiness and outbox dispatch.',
+        'Debit-note, credit-note, premium-payment, reinsurer-disbursement, claim-payable and claim-recovery source-event capture, PostingRule preflight, counterparty subledger readiness and outbox dispatch.',
       message: accountingEnabled
         ? configuration.configured
-          ? 'Accounting integration is configured. Reinsurance financial-event capture is active for issued placement and endorsement debit/credit notes, premium payment lifecycle records, bank-confirmed reinsurer disbursements including reversals, broker-confirmed claim payable approvals, bank-confirmed cedant claim settlements including reversals, approved claim recoveries and bank-confirmed claim recovery receipts including reversals.'
+          ? postingReadiness?.ready
+            ? 'Accounting integration is configured and posting readiness preflight is passing for active Reinsurance event families.'
+            : 'Accounting integration is configured, but one or more active Reinsurance event families are not posting-ready.'
           : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
         : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
     };
+  }
+
+  private async getPostingReadiness(
+    user: RequestUser,
+    activeSourceEvents: string[],
+  ): Promise<
+    | ReinsuranceAccountingReadinessResponse
+    | {
+        ready: false;
+        checkedAt: string;
+        eventResults: ReinsuranceAccountingEventReadiness[];
+        message: string;
+      }
+  > {
+    try {
+      return await this.client.checkReinsuranceReadiness({
+        tenantId: user.tenantId,
+        eventTypes: activeSourceEvents,
+      });
+    } catch (error) {
+      const failure = this.failure(error);
+      return {
+        ready: false,
+        checkedAt: new Date().toISOString(),
+        eventResults: [],
+        message: failure.retryable
+          ? 'Accounting posting readiness could not be verified right now.'
+          : failure.message,
+      };
+    }
+  }
+
+  private groupPostingReadiness(
+    eventResults: ReinsuranceAccountingEventReadiness[],
+  ) {
+    return Object.fromEntries(
+      Object.entries(READINESS_GROUPS).map(([group, eventTypes]) => {
+        const events = eventResults.filter((event) =>
+          (eventTypes as readonly string[]).includes(event.eventType),
+        );
+        return [
+          group,
+          {
+            ready: events.length > 0 && events.every((event) => event.ready),
+            events,
+          },
+        ];
+      }),
+    );
   }
 
   async syncCounterpartyById(user: RequestUser, counterpartyId: string) {

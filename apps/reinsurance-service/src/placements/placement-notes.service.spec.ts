@@ -198,6 +198,7 @@ describe('PlacementNotesService', () => {
     calculateCharges: jest.Mock;
   };
   let financialEvents: {
+    assertAccountingReadyForEvent: jest.Mock;
     prepareDebitNoteIssued: jest.Mock;
     prepareCreditNoteIssued: jest.Mock;
     prepareEndorsementDebitNoteIssued: jest.Mock;
@@ -259,6 +260,7 @@ describe('PlacementNotesService', () => {
       ),
     };
     financialEvents = {
+      assertAccountingReadyForEvent: jest.fn().mockResolvedValue(undefined),
       prepareDebitNoteIssued: jest.fn().mockResolvedValue(null),
       prepareCreditNoteIssued: jest.fn().mockResolvedValue(null),
       prepareEndorsementDebitNoteIssued: jest.fn().mockResolvedValue(null),
@@ -1240,6 +1242,34 @@ describe('PlacementNotesService', () => {
       status: PlacementNoteStatus.ISSUED,
     });
     expect(financialEvents.prepareDebitNoteIssued).toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('blocks note issuance before persistence when Accounting readiness fails', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(note);
+    financialEvents.assertAccountingReadyForEvent.mockRejectedValue(
+      new ConflictException({
+        code: 'ACCOUNTING_NOT_READY',
+        blockers: [{ code: 'POSTING_RULE_MISSING' }],
+      }),
+    );
+
+    await expect(
+      service.issue(user, 'placement-1', 'note-1', {
+        status: PlacementNoteStatus.ISSUED,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(financialEvents.assertAccountingReadyForEvent).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({
+        eventType: 'DEBIT_NOTE_ISSUED',
+        currency: note.currency,
+      }),
+    );
+    expect(prisma.placementNote.update).not.toHaveBeenCalled();
+    expect(financialEvents.prepareDebitNoteIssued).not.toHaveBeenCalled();
     expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 

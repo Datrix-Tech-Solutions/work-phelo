@@ -657,6 +657,21 @@ export class PlacementNotesService {
     }
 
     const issuedAt = new Date();
+    if (note.postingEnabled !== false) {
+      const eventType =
+        note.type === PlacementNoteType.DEBIT_NOTE
+          ? 'DEBIT_NOTE_ISSUED'
+          : note.type === PlacementNoteType.CREDIT_NOTE
+            ? 'CREDIT_NOTE_ISSUED'
+            : null;
+      if (eventType) {
+        await this.financialEvents.assertAccountingReadyForEvent(user, {
+          eventType,
+          currency: note.currency,
+          businessDate: issuedAt,
+        });
+      }
+    }
     const accountingEvent =
       note.postingEnabled === false
         ? null
@@ -741,6 +756,19 @@ export class PlacementNotesService {
     }
 
     const issuedAt = new Date();
+    const eventType =
+      note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE
+        ? 'ENDORSEMENT_DEBIT_NOTE_ISSUED'
+        : note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
+          ? 'ENDORSEMENT_CREDIT_NOTE_ISSUED'
+          : null;
+    if (eventType) {
+      await this.financialEvents.assertAccountingReadyForEvent(user, {
+        eventType,
+        currency: note.currency,
+        businessDate: issuedAt,
+      });
+    }
     const accountingEvent =
       note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE
         ? await this.financialEvents.prepareEndorsementDebitNoteIssued(

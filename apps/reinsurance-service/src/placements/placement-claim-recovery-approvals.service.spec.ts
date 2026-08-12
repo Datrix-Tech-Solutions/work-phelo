@@ -103,6 +103,7 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
     $transaction: jest.Mock;
   };
   let financialEvents: {
+    assertAccountingReadyForEvent: jest.Mock;
     prepareClaimRecoveryApproved: jest.Mock;
     enqueuePreparedEvent: jest.Mock;
   };
@@ -139,6 +140,7 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
     prisma.placementClaimRecoveryApproval.findMany.mockResolvedValue([]);
     prisma.placementClaimRecoveryApproval.create.mockResolvedValue(approval);
     financialEvents = {
+      assertAccountingReadyForEvent: jest.fn().mockResolvedValue(undefined),
       prepareClaimRecoveryApproved: jest.fn().mockResolvedValue({
         tenantId: 'tenant-1',
         sourceEventType: 'CLAIM_RECOVERY_APPROVED',
@@ -241,6 +243,33 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(prisma.placementClaimRecoveryApproval.create).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
+  });
+
+  it('blocks recovery approval before persistence when Accounting readiness fails', async () => {
+    financialEvents.assertAccountingReadyForEvent.mockRejectedValue(
+      new ConflictException({
+        code: 'ACCOUNTING_NOT_READY',
+        blockers: [{ code: 'POSTING_RULE_MISSING' }],
+      }),
+    );
+
+    await expect(
+      service.approve(user, 'placement-1', 'claim-1', 'allocation-1', {
+        approvedAmount: 40000,
+        currency: 'GHS',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(financialEvents.assertAccountingReadyForEvent).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({
+        eventType: 'CLAIM_RECOVERY_APPROVED',
+        currency: 'GHS',
+      }),
+    );
+    expect(prisma.placementClaimRecoveryApproval.create).not.toHaveBeenCalled();
+    expect(financialEvents.prepareClaimRecoveryApproved).not.toHaveBeenCalled();
     expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
