@@ -10,6 +10,7 @@ import { ChartOfAccountsTree } from '@/components/organisms/accounting/ChartOfAc
 import { AddClassificationPanel } from '@/components/organisms/accounting/panels/AddClassificationPanel';
 import { AddParentAccountPanel } from '@/components/organisms/accounting/panels/AddParentAccountPanel';
 import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
+import { GLAccountDetail } from '@/components/organisms/accounting/GLAccountDetail';
 import { GLAccount } from '@/types/accounting';
 
 const STATUS_OPTIONS: SearchSelectOption[] = [
@@ -91,7 +92,7 @@ export default function ChartOfAccountsPage() {
         )}
         rightPanel={
           selectedAccount ? (
-            <h3 className="text-base font-semibold text-gray-900">{selectedAccount.name}</h3>
+            <GLAccountDetail account={selectedAccount} />
           ) : (
             <p className="text-sm text-gray-400">Select a leaf account to view its details</p>
           )
