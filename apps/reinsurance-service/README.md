@@ -167,6 +167,22 @@ Active Reinsurance event families include:
 Accounting owns posting rules, journal creation, fiscal period validation and
 financial confirmation queues. Reinsurance publishes business facts only.
 
+When Accounting is enabled for a tenant, Reinsurance performs an Accounting
+readiness preflight before irreversible financial boundaries such as note
+issuance, claim payable/recovery approvals, bank confirmations and reversals.
+The preflight calls Accounting over the signed internal API and blocks the
+operation with a controlled conflict if PostingRules, control-account shape,
+currency, fiscal period or cash-account setup is not ready.
+
+If Accounting is disabled for the tenant, Reinsurance preserves the established
+operational behavior and does not block business actions merely because
+Accounting automation is unavailable. Reconciliation remains the fallback for
+unexpected delivery or posting failures after a valid preflight.
+
+`GET /api/v1/operations/reinsurance/accounting-integration/status` returns
+configured/active flags plus grouped PostingRule readiness for Premium
+Accounting, Claims Accounting and Cash Confirmation setup.
+
 ## Key Environment Variables
 
 | Variable                                       | Required                        | Secret                         | Purpose                            |

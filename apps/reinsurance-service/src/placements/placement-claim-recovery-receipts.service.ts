@@ -313,6 +313,13 @@ export class PlacementClaimRecoveryReceiptsService {
       confirmedExchangeRate ??
         this.optionalDecimalToNumber(receipt.agreedExchangeRate),
     );
+    await this.financialEvents.assertAccountingReadyForEvent(user, {
+      eventType: 'CLAIM_RECOVERY_RECEIVED',
+      currency: settlementCurrency,
+      businessDate: dto.bankConfirmedAt,
+      settlementMethod,
+      accountingCashAccountId: dto.accountingCashAccountId,
+    });
 
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.placementClaimRecoveryReceipt.updateMany({
@@ -425,6 +432,15 @@ export class PlacementClaimRecoveryReceiptsService {
             const confirmedOriginal =
               receipt.status ===
               PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED;
+            if (confirmedOriginal) {
+              await this.financialEvents.assertAccountingReadyForEvent(user, {
+                eventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
+                currency: receipt.settlementCurrency ?? receipt.currency,
+                businessDate: new Date(),
+                settlementMethod: receipt.settlementMethod,
+                accountingCashAccountId: receipt.accountingCashAccountId,
+              });
+            }
             const reversal = await tx.placementClaimRecoveryReceipt.create({
               data: {
                 tenantId: receipt.tenantId,
