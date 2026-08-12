@@ -4,25 +4,20 @@ import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import { AccountsPayableInvoice, InvoiceStatus } from '@/types/accounting';
+import { AccountingTradeDocument, AccountingTradeDocumentStatus } from '@/types/accounting';
+import { usePayableBills } from '@/hooks';
+import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
 
 const PAGE_SIZE = 10;
 
-// TODO: replace with useAccountsPayableInvoices() hook once API is ready
-const MOCK_DATA: AccountsPayableInvoice[] = [];
-
-type BadgeVariant = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
-
-const STATUS_VARIANTS: Record<InvoiceStatus, BadgeVariant> = {
-  Draft: 'neutral',
-  'Pending Approval': 'warning',
-  Approved: 'info',
-  Paid: 'success',
-  Overdue: 'danger',
-  Void: 'neutral',
+const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral' | 'danger'> = {
+  DRAFT: 'neutral',
+  POSTED: 'success',
+  REVERSED: 'danger',
 };
 
-function fmtDate(iso: string) {
+function fmtDate(iso: string | null) {
+  if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -30,101 +25,115 @@ function fmtDate(iso: string) {
   });
 }
 
-function fmtAmount(amount: number, currency: string) {
-  return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtAmount(amount: string, currency: string) {
+  const value = Number(amount);
+  return `${currency} ${Number.isFinite(value) ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amount}`;
 }
-
-const COLUMNS: Column<AccountsPayableInvoice>[] = [
-  {
-    key: 'invoiceNumber',
-    label: 'Invoice No.',
-    width: '140px',
-    render: (row) => (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-        {row.invoiceNumber}
-      </span>
-    ),
-  },
-  {
-    key: 'vendor',
-    label: 'Vendor',
-    width: 'minmax(150px, 1fr)',
-    render: (row) => <span className="text-sm text-gray-800 font-medium">{row.vendor}</span>,
-  },
-  {
-    key: 'invoiceDate',
-    label: 'Invoice Date',
-    width: '130px',
-    render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.invoiceDate)}</span>,
-  },
-  {
-    key: 'dueDate',
-    label: 'Due Date',
-    width: '130px',
-    render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.dueDate)}</span>,
-  },
-  {
-    key: 'amount',
-    label: 'Amount',
-    width: '150px',
-    render: (row) => (
-      <span className="block text-right text-sm font-medium text-gray-900">
-        {fmtAmount(row.amount, row.currency)}
-      </span>
-    ),
-  },
-  {
-    key: 'status',
-    label: 'Status',
-    width: '120px',
-    render: (row) => <Badge label={row.status} variant={STATUS_VARIANTS[row.status]} />,
-  },
-];
 
 export function AccountsPayableTable() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
+
+  const { data, isLoading } = usePayableBills({ limit: 100 });
+  const bills = useMemo(() => data?.items ?? [], [data]);
 
   const filtered = useMemo(() => {
-    if (!search) return MOCK_DATA;
+    if (!search) return bills;
     const q = search.toLowerCase();
-    return MOCK_DATA.filter(
+    return bills.filter(
       (r) =>
-        r.invoiceNumber.toLowerCase().includes(q) ||
-        r.vendor.toLowerCase().includes(q) ||
+        r.documentNumber.toLowerCase().includes(q) ||
+        r.party.legalName.toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q),
     );
-  }, [search]);
+  }, [search, bills]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const columns = useMemo<Column<AccountingTradeDocument>[]>(
+    () => [
+      {
+        key: 'documentNumber',
+        label: 'Invoice No.',
+        width: '140px',
+        render: (row) => (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
+            {row.documentNumber}
+          </span>
+        ),
+      },
+      {
+        key: 'vendor',
+        label: 'Vendor',
+        width: 'minmax(150px, 1fr)',
+        render: (row) => (
+          <span className="text-sm text-gray-800 font-medium">{row.party.legalName}</span>
+        ),
+      },
+      {
+        key: 'documentDate',
+        label: 'Invoice Date',
+        width: '130px',
+        render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.documentDate)}</span>,
+      },
+      {
+        key: 'dueDate',
+        label: 'Due Date',
+        width: '130px',
+        render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.dueDate)}</span>,
+      },
+      {
+        key: 'amount',
+        label: 'Amount',
+        width: '150px',
+        render: (row) => (
+          <span className="block text-right text-sm font-medium text-gray-900">
+            {fmtAmount(row.totalAmount, row.currency)}
+          </span>
+        ),
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        width: '120px',
+        render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
+      },
+    ],
+    [],
+  );
+
   return (
-    <DataTable
-      columns={COLUMNS}
-      data={paged}
-      isLoading={false}
-      searchPlaceholder="Search invoices…"
-      searchValue={search}
-      onSearch={(q) => {
-        setSearch(q);
-        setPage(1);
-      }}
-      actionButton={{
-        label: 'New Invoice',
-        onClick: () => router.push(`/${tenantSlug}/accounting/accountspayable/new`),
-      }}
-      rowActions={() => [
-        { label: 'View', onClick: () => {} },
-        { label: 'Approve', onClick: () => {} },
-        { label: 'Void', onClick: () => {}, danger: true },
-      ]}
-      emptyMessage="No invoices found"
-      currentPage={page}
-      totalPages={totalPages}
-      onPageChange={setPage}
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={paged}
+        isLoading={isLoading}
+        searchPlaceholder="Search invoices…"
+        searchValue={search}
+        onSearch={(q) => {
+          setSearch(q);
+          setPage(1);
+        }}
+        actionButton={{
+          label: 'New Invoice',
+          onClick: () => router.push(`/${tenantSlug}/accounting/accountspayable/new`),
+        }}
+        onRowClick={(row) => setDetailTarget(row)}
+        emptyMessage="No invoices found"
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      />
+
+      <TradeDocumentDetailPanel
+        side="PAYABLE"
+        document={detailTarget}
+        onClose={() => setDetailTarget(null)}
+      />
+    </>
   );
 }

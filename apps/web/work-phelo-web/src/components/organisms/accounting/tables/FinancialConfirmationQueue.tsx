@@ -4,9 +4,10 @@ import { useMemo, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
+import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { Modal } from '@/components/organisms/shared/Modal';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { useCashAccountOptions } from '@/hooks/accounting/useCashAccounts';
 import type {
   AccountingBankConfirmationWorkItem,
@@ -103,6 +104,11 @@ function methodLabel(method: SettlementMethod) {
   return method.replaceAll('_', ' ');
 }
 
+const SETTLEMENT_METHOD_OPTIONS: SearchSelectOption[] = SETTLEMENT_METHODS.map((method) => ({
+  value: method,
+  label: methodLabel(method),
+}));
+
 function confirmationTitle(method: SettlementMethod, direction?: string) {
   const inbound = direction === 'INBOUND';
   switch (method) {
@@ -156,8 +162,15 @@ function fieldValue(value: string | number | null | undefined, fallback = '-') {
   return String(value);
 }
 
-function directionLabel(direction: string) {
-  return direction === 'INBOUND' ? 'Inflow' : direction === 'OUTBOUND' ? 'Outflow' : direction;
+const TRANSACTION_TYPE_LABELS: Record<string, string> = {
+  PREMIUM_RECEIVED: 'PREMIUM RECEIVABLE',
+  REINSURER_DISBURSEMENT: 'PREMIUM PAYABLE',
+  CLAIM_RECOVERY_RECEIPT: 'CLAIM RECEIVABLE',
+  CLAIM_CEDANT_SETTLEMENT: 'CLAIM PAYABLE',
+};
+
+function transactionTypeLabel(transactionType: string) {
+  return TRANSACTION_TYPE_LABELS[transactionType] ?? transactionType.replaceAll('_', ' ');
 }
 
 export function FinancialConfirmationQueue({
@@ -171,6 +184,9 @@ export function FinancialConfirmationQueue({
   const [page, setPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState<AccountingBankConfirmationWorkItem | null>(null);
   const [form, setForm] = useState<ConfirmationForm>(INITIAL_FORM);
+  // SearchSelect is a custom widget, not a native <select>, so it doesn't get free
+  // HTML5 "required" validation — track a submit attempt to surface field errors instead.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const sourceSettlementMethod = selectedItem?.businessSnapshot?.settlementMethod ?? null;
   const sourceSettlementCurrency = selectedItem?.businessSnapshot?.settlementCurrency ?? null;
   const selectedSettlementMethod = sourceSettlementMethod ?? form.settlementMethod;
@@ -209,6 +225,7 @@ export function FinancialConfirmationQueue({
 
   const openConfirmModal = (item: AccountingBankConfirmationWorkItem) => {
     setSelectedItem(item);
+    setSubmitAttempted(false);
     setForm({
       ...INITIAL_FORM,
       bankConfirmedAt: defaultDateTimeLocal(),
@@ -222,6 +239,7 @@ export function FinancialConfirmationQueue({
     if (isConfirming) return;
     setSelectedItem(null);
     setForm(INITIAL_FORM);
+    setSubmitAttempted(false);
   };
 
   const updateForm = (key: keyof ConfirmationForm, value: string) => {
@@ -229,13 +247,16 @@ export function FinancialConfirmationQueue({
   };
   const updateFormFromInput =
     (key: keyof ConfirmationForm) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       updateForm(key, event.target.value);
     };
 
   const submitConfirmation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedItem) return;
+    setSubmitAttempted(true);
+    if (!sourceSettlementMethod && !form.settlementMethod) return;
+    if (selectedRequiresCashAccount && !form.accountingCashAccountId) return;
     await onConfirm(selectedItem, {
       bankConfirmedAt: new Date(form.bankConfirmedAt).toISOString(),
       bankReference: form.bankReference.trim() || undefined,
@@ -270,28 +291,28 @@ export function FinancialConfirmationQueue({
       label: 'Transaction',
       width: '190px',
       render: (row) => (
-        <span className="text-sm text-gray-700">{row.transactionType.replaceAll('_', ' ')}</span>
+        <span className="text-sm text-gray-700">{transactionTypeLabel(row.transactionType)}</span>
       ),
     },
-    {
-      key: 'direction',
-      label: 'Direction',
-      width: '110px',
-      render: (row) => (
-        <span className="text-sm font-semibold text-gray-800">{directionLabel(row.direction)}</span>
-      ),
-    },
+    // {
+    //   key: 'direction',
+    //   label: 'Direction',
+    //   width: '110px',
+    //   render: (row) => (
+    //     <span className="text-sm font-semibold text-gray-800">{directionLabel(row.direction)}</span>
+    //   ),
+    // },
     {
       key: 'operationalDate',
       label: 'Operational Date',
-      width: '145px',
+      width: '120px',
       render: (row) => (
         <span className="text-sm text-gray-700">{fmtDate(row.operationalDate)}</span>
       ),
     },
     {
       key: 'counterparty',
-      label: 'Counterparty',
+      label: 'Customer',
       width: 'minmax(180px, 1fr)',
       render: (row) => (
         <span className="text-sm font-medium text-gray-900">{row.counterpartyName}</span>
@@ -353,14 +374,13 @@ export function FinancialConfirmationQueue({
         />
       </div>
 
-      <Modal
+      <SidePanel
         isOpen={!!selectedItem}
         onClose={closeConfirmModal}
         title={selectedConfirmationTitle}
-        description="Capture the Accounting confirmation facts for this source-module payment."
-        width="max-w-2xl"
+        description="Capture the Accounting confirmation facts for this transaction."
         footer={
-          <>
+          <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={closeConfirmModal}>
               Cancel
             </Button>
@@ -372,7 +392,7 @@ export function FinancialConfirmationQueue({
             >
               {selectedConfirmationTitle}
             </Button>
-          </>
+          </div>
         }
       >
         {selectedItem && (
@@ -389,7 +409,7 @@ export function FinancialConfirmationQueue({
               </div>
               <div className="mt-1">Source module: {selectedItem.sourceModule}</div>
               <div className="mt-1">
-                Transaction: {selectedItem.transactionType.replaceAll('_', ' ')}
+                Transaction: {transactionTypeLabel(selectedItem.transactionType)}
               </div>
               <div className="mt-1">
                 Operational ref: {selectedItem.operationalReference ?? '-'}
@@ -397,11 +417,6 @@ export function FinancialConfirmationQueue({
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <h4 className="text-sm font-semibold text-slate-900">Business Snapshot</h4>
-              <p className="mt-1 text-xs text-slate-500">
-                Read-only source facts supplied by the operational module. Accounting confirms
-                settlement execution below.
-              </p>
               <div className="mt-3 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                 <div>
                   <div className="text-xs uppercase tracking-wide text-slate-500">Placement</div>
@@ -489,21 +504,18 @@ export function FinancialConfirmationQueue({
                 required
               />
               {!sourceSettlementMethod && (
-                <label className="space-y-1">
-                  <span className="block text-sm font-medium text-gray-700">Settlement Method</span>
-                  <select
-                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    value={form.settlementMethod}
-                    onChange={updateFormFromInput('settlementMethod')}
-                    required
-                  >
-                    {SETTLEMENT_METHODS.map((method) => (
-                      <option key={method} value={method}>
-                        {methodLabel(method)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SearchSelect
+                  label="Settlement Method"
+                  placeholder="Select settlement method…"
+                  options={SETTLEMENT_METHOD_OPTIONS}
+                  value={form.settlementMethod}
+                  onChange={(value) => updateForm('settlementMethod', value)}
+                  error={
+                    submitAttempted && !form.settlementMethod
+                      ? 'Settlement method is required'
+                      : undefined
+                  }
+                />
               )}
               {!sourceSettlementCurrency && (
                 <Input
@@ -515,28 +527,23 @@ export function FinancialConfirmationQueue({
                 />
               )}
               {selectedRequiresCashAccount && (
-                <label className="space-y-1">
-                  <span className="block text-sm font-medium text-gray-700">
-                    Accounting Cash/Bank Account
-                  </span>
-                  <select
-                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                <div className="flex flex-col gap-1">
+                  <SearchSelect
+                    label="Accounting Cash/Bank Account"
+                    placeholder={
+                      cashAccountOptions.isLoading
+                        ? 'Loading cash accounts…'
+                        : `Select ${selectedSettlementCurrency || 'settlement'} cash account…`
+                    }
+                    options={cashAccountOptions.options}
                     value={form.accountingCashAccountId}
-                    onChange={updateFormFromInput('accountingCashAccountId')}
-                    required
-                    disabled={cashAccountOptions.isLoading}
-                  >
-                    <option value="">
-                      {cashAccountOptions.isLoading
-                        ? 'Loading cash accounts...'
-                        : `Select ${selectedSettlementCurrency || 'settlement'} cash account`}
-                    </option>
-                    {cashAccountOptions.options.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => updateForm('accountingCashAccountId', value)}
+                    error={
+                      submitAttempted && !form.accountingCashAccountId
+                        ? 'Cash/bank account is required'
+                        : undefined
+                    }
+                  />
                   {cashAccountOptions.isError && (
                     <span className="text-xs text-red-600">
                       Unable to load Accounting cash accounts.
@@ -550,7 +557,7 @@ export function FinancialConfirmationQueue({
                         {selectedSettlementCurrency || 'this currency'}.
                       </span>
                     )}
-                </label>
+                </div>
               )}
               {!selectedHasOperationalReference && (
                 <Input
@@ -598,7 +605,7 @@ export function FinancialConfirmationQueue({
             />
           </form>
         )}
-      </Modal>
+      </SidePanel>
     </>
   );
 }

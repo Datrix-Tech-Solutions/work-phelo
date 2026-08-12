@@ -238,8 +238,8 @@ export function EndorsementClosingSnapshotModal({
         <Image
           src="/signature.png"
           alt="Signature"
-          width={160}
-          height={80}
+          width={100}
+          height={10}
           className="object-contain mt-2"
         />
       </div>

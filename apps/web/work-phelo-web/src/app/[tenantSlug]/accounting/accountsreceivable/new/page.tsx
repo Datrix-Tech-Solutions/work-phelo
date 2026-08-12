@@ -36,8 +36,9 @@ export default function NewReceivableInvoicePage({
 
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         <NewInvoiceForm
-          vendorLabel="Customer"
+          side="RECEIVABLE"
           onCancel={() => router.push(`/${tenantSlug}/accounting/accountsreceivable`)}
+          onCreated={() => router.push(`/${tenantSlug}/accounting/accountsreceivable`)}
         />
       </div>
     </div>

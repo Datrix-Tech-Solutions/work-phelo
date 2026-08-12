@@ -22,6 +22,7 @@ export default function AccountingSettingsLayout({ children }: { children: React
         { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
         { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
         { key: 'currency', label: 'Currency', href: `${base}/currency` },
+        { key: 'posting-rules', label: 'Posting Rules', href: `${base}/posting-rules` },
       ],
     },
     {

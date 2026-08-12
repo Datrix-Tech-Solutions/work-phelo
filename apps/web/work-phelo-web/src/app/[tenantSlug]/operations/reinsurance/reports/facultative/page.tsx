@@ -1,15 +1,10 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
-import { TwoPanelShell } from '@/components/organisms/shared/TwoPanelShell';
-import { ReportHero } from '@/components/molecules/shared/ReportHero';
-import { FacultativeReportFilters } from '@/components/molecules/reinsurance/reports/FacultativeReportFilters';
-import { FacultativeReportSummary } from '@/components/molecules/reinsurance/reports/FacultativeReportSummary';
+import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { FacultativeReportTable } from '@/components/organisms/reinsurance/tables/FacultativeReportTable';
-import { useFacultativeReport } from '@/hooks';
-import { FacultativeReportParams } from '@/hooks/reinsurance/useFacultativeReport';
 
 export default function FacultativeReportPage({
   params,
@@ -18,15 +13,10 @@ export default function FacultativeReportPage({
 }) {
   const { tenantSlug } = use(params);
   const base = `/${tenantSlug}/operations/reinsurance/reports`;
-  const [reportParams, setReportParams] = useState<FacultativeReportParams | null>(null);
-
-  const { rows, currencyTotals, isLoading } = useFacultativeReport(reportParams ?? {}, {
-    enabled: reportParams !== null,
-  });
 
   return (
-    <TwoPanelShell
-      header={
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className={`${pageBreadcrumb} shrink-0`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link href={base} className="hover:text-gray-700 transition-colors">
             Reports
@@ -34,29 +24,11 @@ export default function FacultativeReportPage({
           <Icons.ChevronRight className="w-5 h-5" />
           <span className="text-gray-700 font-medium">Facultative</span>
         </nav>
-      }
-      leftPanel={<FacultativeReportFilters onGenerate={setReportParams} />}
-      rightPanel={
-        <>
-          <ReportHero
-            title="Facultative"
-            startDate={reportParams?.startDate}
-            endDate={reportParams?.endDate}
-          />
-          {!reportParams ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-sm text-gray-400">Select a date range to generate report</p>
-            </div>
-          ) : (
-            <div className="flex-1 min-h-0 flex flex-col gap-4">
-              <FacultativeReportSummary currencyTotals={currencyTotals} isLoading={isLoading} />
-              <div className="flex-1 min-h-0">
-                <FacultativeReportTable rows={rows} isLoading={isLoading} />
-              </div>
-            </div>
-          )}
-        </>
-      }
-    />
+      </div>
+
+      <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto flex flex-col`}>
+        <FacultativeReportTable />
+      </div>
+    </div>
   );
 }

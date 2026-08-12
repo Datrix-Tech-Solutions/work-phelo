@@ -161,14 +161,14 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
                       >
                         Kindly confirm your acceptance or otherwise
                       </p>
-                      <div style={{ display: 'flex', gap: '70px' }}>
+                      <div style={{ display: 'flex', gap: '50px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <span style={{ fontSize: '10px', color: '#6b7280' }}>Accepted by</span>
                           <div
                             style={{
                               width: '224px',
                               borderBottom: '1px solid #9ca3af',
-                              marginTop: '72px',
+                              marginTop: '50px',
                             }}
                           />
                         </div>
@@ -178,7 +178,7 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
                             style={{
                               width: '224px',
                               borderBottom: '1px solid #9ca3af',
-                              marginTop: '72px',
+                              marginTop: '50px',
                             }}
                           />
                         </div>

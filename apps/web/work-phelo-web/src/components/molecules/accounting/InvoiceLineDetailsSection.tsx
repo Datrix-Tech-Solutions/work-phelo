@@ -6,9 +6,6 @@ import { inputClass } from '@/lib/utils';
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
 import { InvoiceFormValues, InvoiceLine } from '@/types/accounting';
 
-// TODO: populate from chart of accounts API
-const GL_ACCOUNT_OPTIONS: SearchSelectOption[] = [];
-
 const EMPTY_LINE: InvoiceLine = {
   description: '',
   glAccount: '',
@@ -23,9 +20,15 @@ function fmt(value: number) {
 
 interface InvoiceLineDetailsSectionProps {
   form: UseFormReturn<InvoiceFormValues>;
+  glAccountOptions: SearchSelectOption[];
+  isLoadingGLAccounts?: boolean;
 }
 
-export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionProps) {
+export function InvoiceLineDetailsSection({
+  form,
+  glAccountOptions,
+  isLoadingGLAccounts,
+}: InvoiceLineDetailsSectionProps) {
   const {
     register,
     control,
@@ -75,8 +78,8 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
             rules={{ required: true }}
             render={({ field }) => (
               <SearchSelect
-                placeholder="Select account…"
-                options={GL_ACCOUNT_OPTIONS}
+                placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select account…'}
+                options={glAccountOptions}
                 value={field.value}
                 onChange={field.onChange}
                 error={err ? '' : undefined}

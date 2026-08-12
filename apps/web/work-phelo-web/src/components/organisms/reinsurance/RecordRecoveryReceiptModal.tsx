@@ -7,8 +7,8 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useCreateClaimRecoveryReceipt, RecoveryRow } from '@/hooks';
+import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { useCashAccounts, useCreateClaimRecoveryReceipt, RecoveryRow } from '@/hooks';
 import { DetailField } from '@/components/atoms/DetailField';
 import { extractError } from '@/lib/extractError';
 import { cardClass } from '@/lib/utils';
@@ -70,6 +70,19 @@ export function RecordRecoveryReceiptModal({
 
   const paymentType = useWatch({ control, name: 'paymentType' });
 
+  // Bank Name picks from Accounting's configured cash/bank accounts for bank
+  // transfers, when any exist; falls back to plain text otherwise. Cheques always
+  // use plain text — a cheque's drawee bank isn't necessarily one of ours.
+  const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts({
+    isActive: true,
+  });
+  const cashAccountOptions: SearchSelectOption[] = cashAccounts.map((account) => ({
+    value: account.name,
+    label: account.name,
+    sublabel: [account.bankName, account.currency].filter(Boolean).join(' · ') || undefined,
+  }));
+  const showCashAccountSelect = !isLoadingCashAccounts && cashAccountOptions.length > 0;
+
   useEffect(() => {
     if (row) {
       reset({
@@ -114,6 +127,41 @@ export function RecordRecoveryReceiptModal({
     }
   };
 
+  const chequeBankNameField = (
+    <FormField
+      label="Bank Name"
+      registration={register('bankName', { required: 'Bank name is required' })}
+      placeholder="Enter bank name..."
+      error={errors.bankName}
+    />
+  );
+
+  const bankTransferBankNameField = showCashAccountSelect ? (
+    <Controller
+      name="bankName"
+      control={control}
+      rules={{ required: 'Bank name is required' }}
+      render={({ field }) => (
+        <SearchSelect
+          label="Bank Name"
+          placeholder="Select cash/bank account..."
+          options={cashAccountOptions}
+          value={field.value}
+          onChange={field.onChange}
+          error={errors.bankName?.message}
+          size="sm"
+        />
+      )}
+    />
+  ) : (
+    <FormField
+      label="Bank Name"
+      registration={register('bankName', { required: 'Bank name is required' })}
+      placeholder="Enter bank name..."
+      error={errors.bankName}
+    />
+  );
+
   const chequeFields = paymentType === 'cheque' && (
     <>
       <div className="grid grid-cols-5 gap-4">
@@ -143,12 +191,7 @@ export function RecordRecoveryReceiptModal({
         </div>
       </div>
 
-      <FormField
-        label="Bank Name"
-        registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name..."
-        error={errors.bankName}
-      />
+      {chequeBankNameField}
 
       <Controller
         name="amount"
@@ -183,12 +226,7 @@ export function RecordRecoveryReceiptModal({
         )}
       />
 
-      <FormField
-        label="Bank Name"
-        registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name..."
-        error={errors.bankName}
-      />
+      {bankTransferBankNameField}
 
       <Controller
         name="amount"

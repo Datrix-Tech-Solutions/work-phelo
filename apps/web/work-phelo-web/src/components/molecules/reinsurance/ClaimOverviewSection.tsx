@@ -11,7 +11,7 @@ type ClaimTab = 'overview' | 'cashCalls' | 'history';
 
 const CLAIM_TABS = [
   { key: 'overview', label: 'Overview' },
-  { key: 'cashCalls', label: 'Cash Calls' },
+  { key: 'cashCalls', label: 'Recoveries' },
   { key: 'history', label: 'History' },
 ];
 
