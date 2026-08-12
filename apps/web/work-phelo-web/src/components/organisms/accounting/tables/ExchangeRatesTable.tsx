@@ -31,6 +31,7 @@ const DEFAULTS: RateFormValues = {
   rate: '',
   effectiveAt: '',
 };
+const PAGE_SIZE = 10;
 
 function toDateTimeLocal(value: string) {
   const date = new Date(value);
@@ -51,11 +52,11 @@ function fmtDate(value: string) {
 export function ExchangeRatesTable() {
   const toast = useToast();
   const { data = [], isLoading } = useExchangeRates();
-  const { options: currencyOptions, isLoading: isLoadingCurrencies } =
-    useAccountingCurrencyOptions();
+  const { options: currencyOptions } = useAccountingCurrencyOptions();
   const { mutateAsync: createRate, isPending: isCreating } = useCreateExchangeRate();
   const { mutateAsync: updateRate, isPending: isUpdating } = useUpdateExchangeRate();
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ExchangeRate | null>(null);
   const {
@@ -177,16 +178,21 @@ export function ExchangeRatesTable() {
     ],
     [],
   );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
       <DataTable
         columns={columns}
-        data={filtered}
+        data={paged}
         isLoading={isLoading}
         searchPlaceholder="Search currency pairs…"
         searchValue={search}
-        onSearch={setSearch}
+        onSearch={(value) => {
+          setSearch(value);
+          setPage(1);
+        }}
         actionButton={{ label: 'Add Exchange Rate', onClick: openCreate }}
         rowActions={(row) => [
           { label: 'Edit', onClick: () => openEdit(row) },
@@ -195,6 +201,9 @@ export function ExchangeRatesTable() {
             : []),
         ]}
         emptyMessage="No exchange rates found"
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
       />
 
       <SidePanel
@@ -225,7 +234,6 @@ export function ExchangeRatesTable() {
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.fromCurrency?.message}
-                disabled={Boolean(editTarget) || isLoadingCurrencies || isPending}
               />
             )}
           />
@@ -240,7 +248,6 @@ export function ExchangeRatesTable() {
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.toCurrency?.message}
-                disabled={Boolean(editTarget) || isLoadingCurrencies || isPending}
               />
             )}
           />
