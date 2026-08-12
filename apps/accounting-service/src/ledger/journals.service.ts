@@ -75,10 +75,16 @@ export class JournalsService {
     try {
       return await this.prisma.journalEntry.create({
         data: {
-          tenantId: user.tenantId,
           journalNumber: this.journalNumber('JE'),
           transactionDate: draft.transactionDate,
-          fiscalPeriodId: draft.fiscalPeriodId,
+          fiscalPeriod: {
+            connect: {
+              id_tenantId: {
+                id: draft.fiscalPeriodId,
+                tenantId: user.tenantId,
+              },
+            },
+          },
           transactionCurrency: draft.transactionCurrency,
           baseCurrency: draft.baseCurrency,
           exchangeRate: draft.exchangeRate,
@@ -157,12 +163,18 @@ export class JournalsService {
     const now = new Date();
     return tx.journalEntry.create({
       data: {
-        tenantId: user.tenantId,
         journalNumber: this.journalNumber('AUTO'),
         status: JournalStatus.POSTED,
         transactionDate: draft.transactionDate,
         postingDate: now,
-        fiscalPeriodId: draft.fiscalPeriodId,
+        fiscalPeriod: {
+          connect: {
+            id_tenantId: {
+              id: draft.fiscalPeriodId,
+              tenantId: user.tenantId,
+            },
+          },
+        },
         transactionCurrency: draft.transactionCurrency,
         baseCurrency: draft.baseCurrency,
         exchangeRate: draft.exchangeRate,
@@ -262,7 +274,14 @@ export class JournalsService {
       },
       data: {
         transactionDate: draft.transactionDate,
-        fiscalPeriodId: draft.fiscalPeriodId,
+        fiscalPeriod: {
+          connect: {
+            id_tenantId: {
+              id: draft.fiscalPeriodId,
+              tenantId: user.tenantId,
+            },
+          },
+        },
         transactionCurrency: draft.transactionCurrency,
         baseCurrency: draft.baseCurrency,
         exchangeRate: draft.exchangeRate,
@@ -426,12 +445,18 @@ export class JournalsService {
 
       return tx.journalEntry.create({
         data: {
-          tenantId: user.tenantId,
           journalNumber: this.journalNumber('REV'),
           status: JournalStatus.POSTED,
           transactionDate: reversalDate,
           postingDate: new Date(),
-          fiscalPeriodId: period.id,
+          fiscalPeriod: {
+            connect: {
+              id_tenantId: {
+                id: period.id,
+                tenantId: user.tenantId,
+              },
+            },
+          },
           transactionCurrency: original.transactionCurrency,
           baseCurrency: original.baseCurrency,
           exchangeRate: original.exchangeRate,
@@ -440,18 +465,53 @@ export class JournalsService {
           sourceModule: original.sourceModule,
           sourceRecordType: original.sourceRecordType,
           sourceRecordId: original.sourceRecordId,
-          reversalOfJournalId: original.id,
+          reversalOfJournal: {
+            connect: {
+              id_tenantId: {
+                id: original.id,
+                tenantId: user.tenantId,
+              },
+            },
+          },
           createdByUserId: user.id,
           updatedByUserId: user.id,
           postedByUserId: user.id,
           postedAt: new Date(),
           lines: {
             create: original.lines.map((line, index) => ({
-              tenantId: user.tenantId,
               lineNumber: index + 1,
-              glAccountId: line.glAccountId,
-              subledgerAccountId: line.subledgerAccountId,
-              costCentreId: line.costCentreId,
+              glAccount: {
+                connect: {
+                  id_tenantId: {
+                    id: line.glAccountId,
+                    tenantId: user.tenantId,
+                  },
+                },
+              },
+              ...(line.subledgerAccountId
+                ? {
+                    subledgerAccount: {
+                      connect: {
+                        id_tenantId: {
+                          id: line.subledgerAccountId,
+                          tenantId: user.tenantId,
+                        },
+                      },
+                    },
+                  }
+                : {}),
+              ...(line.costCentreId
+                ? {
+                    costCentre: {
+                      connect: {
+                        id_tenantId: {
+                          id: line.costCentreId,
+                          tenantId: user.tenantId,
+                        },
+                      },
+                    },
+                  }
+                : {}),
               description: line.description,
               transactionDebit: line.transactionCredit,
               transactionCredit: line.transactionDebit,
@@ -814,16 +874,44 @@ export class JournalsService {
     lines: JournalLineDto[],
     exchangeRate: Prisma.Decimal,
     decimalPlaces: number,
-  ): Prisma.JournalLineUncheckedCreateWithoutJournalEntryInput[] {
+  ): Prisma.JournalLineCreateWithoutJournalEntryInput[] {
     return lines.map((line, index) => {
       const debit = new Prisma.Decimal(line.debit ?? 0);
       const credit = new Prisma.Decimal(line.credit ?? 0);
       return {
-        tenantId,
         lineNumber: index + 1,
-        glAccountId: line.glAccountId,
-        subledgerAccountId: line.subledgerAccountId,
-        costCentreId: line.costCentreId,
+        glAccount: {
+          connect: {
+            id_tenantId: {
+              id: line.glAccountId,
+              tenantId,
+            },
+          },
+        },
+        ...(line.subledgerAccountId
+          ? {
+              subledgerAccount: {
+                connect: {
+                  id_tenantId: {
+                    id: line.subledgerAccountId,
+                    tenantId,
+                  },
+                },
+              },
+            }
+          : {}),
+        ...(line.costCentreId
+          ? {
+              costCentre: {
+                connect: {
+                  id_tenantId: {
+                    id: line.costCentreId,
+                    tenantId,
+                  },
+                },
+              },
+            }
+          : {}),
         description: this.optional(line.description),
         transactionDebit: debit,
         transactionCredit: credit,

@@ -1,6 +1,6 @@
 export type AccountingSourceModule = 'REINSURANCE' | (string & {});
 export type AccountingConfirmationDirection = 'INBOUND' | 'OUTBOUND';
-export type AccountingConfirmationAction = 'CONFIRM_BANK_PAYMENT';
+export type AccountingConfirmationAction = 'CONFIRM_BANK_PAYMENT' | 'CONFIRM_BANK_RECEIPT';
 export type SettlementMethod =
   | 'BANK_TRANSFER'
   | 'CHEQUE'
@@ -11,9 +11,18 @@ export type SettlementMethod =
   | 'OTHER';
 
 export interface AccountingConfirmationBusinessSnapshot {
+  placementId?: string | null;
   placementReference?: string | null;
+  policyNumber?: string | null;
+  placementTitle?: string | null;
   endorsementReference?: string | null;
   closingReference?: string | null;
+  claimId?: string | null;
+  claimNumber?: string | null;
+  allocationId?: string | null;
+  cashCallId?: string | null;
+  recoveryApprovalId?: string | null;
+  payableApprovalId?: string | null;
   counterpartyName?: string | null;
   cedantName?: string | null;
   reinsurerName?: string | null;
@@ -39,6 +48,8 @@ export interface AccountingBankConfirmationWorkItem {
   sourceParentId: string;
   sourceReference: string;
   transactionType: string;
+  sourceRecordType?: string;
+  action?: AccountingConfirmationAction;
   direction: AccountingConfirmationDirection;
   counterpartyId: string;
   sourceDescription: string;
@@ -60,6 +71,7 @@ export interface AccountingBankConfirmationWorkItem {
 export interface ConfirmBankPaymentPayload {
   bankConfirmedAt: string;
   bankReference?: string;
+  accountingCashAccountId?: string;
   settlementMethod?: SettlementMethod;
   settlementCurrency?: string;
   confirmedExchangeRate?: number;

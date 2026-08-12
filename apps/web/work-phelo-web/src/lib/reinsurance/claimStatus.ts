@@ -44,16 +44,12 @@ export const SETTLEMENT_STATUS_VARIANT: Record<
   RECORDED: 'warning',
   BANK_CONFIRMED: 'success',
   REVERSED: 'danger',
-  FAILED: 'danger',
-  CANCELLED: 'neutral',
 };
 
 export const SETTLEMENT_STATUS_LABEL: Record<PlacementClaimCedantSettlement['status'], string> = {
   RECORDED: 'Recorded',
   BANK_CONFIRMED: 'Bank Confirmed',
   REVERSED: 'Reversed',
-  FAILED: 'Failed',
-  CANCELLED: 'Cancelled',
 };
 
 export const FINANCIAL_CLOSE_BLOCKER_LABEL: Record<string, string> = {

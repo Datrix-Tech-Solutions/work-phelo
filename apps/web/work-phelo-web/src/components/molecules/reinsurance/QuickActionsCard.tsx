@@ -25,7 +25,7 @@ const ACTIONS: QuickAction[] = [
   { label: 'New Fac Offer', icon: ShieldCheck, href: 'facultative', color: '#2a78d6' },
   { label: 'New Treaty', icon: ScrollText, href: 'treaty', color: '#1baf7a' },
   { label: 'Make Claim', icon: BanknoteArrowUp, href: 'claims/new', color: '#e34948' },
-  { label: 'Make Payment', icon: BanknoteArrowDown, href: 'payments/new', color: '#eb6834' },
+  { label: 'Claim Settlements', icon: BanknoteArrowDown, href: 'payments/new', color: '#eb6834' },
 ];
 
 interface QuickActionsCardProps {

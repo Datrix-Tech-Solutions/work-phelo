@@ -523,7 +523,9 @@ describe('JournalsService', () => {
       reversalDate: '2026-07-20',
       reason: 'Correction',
     })) as unknown as {
-      reversalOfJournalId: string;
+      reversalOfJournal: {
+        connect: { id_tenantId: { id: string; tenantId: string } };
+      };
       lines: {
         create: Array<{
           transactionDebit: Prisma.Decimal;
@@ -532,7 +534,10 @@ describe('JournalsService', () => {
       };
     };
 
-    expect(reversal.reversalOfJournalId).toBe(posted.id);
+    expect(reversal.reversalOfJournal.connect.id_tenantId).toEqual({
+      id: posted.id,
+      tenantId: actor.tenantId,
+    });
     expect(reversal.lines.create[0].transactionDebit.toString()).toBe('0');
     expect(reversal.lines.create[0].transactionCredit.toString()).toBe('100');
     expect(prisma.journalEntry.updateMany).toHaveBeenCalledTimes(1);

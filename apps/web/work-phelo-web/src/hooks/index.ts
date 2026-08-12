@@ -49,6 +49,7 @@ export * from './accounting/useCurrencies';
 export * from './accounting/useAccountingConfig';
 export * from './accounting/useExchangeRates';
 export * from './accounting/useGLAccounts';
+export * from './accounting/useCashAccounts';
 export * from './accounting/useFiscalPeriods';
 export * from './accounting/useVendors';
 export * from './accounting/useCustomers';

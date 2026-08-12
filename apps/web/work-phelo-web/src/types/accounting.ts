@@ -268,6 +268,37 @@ export interface AccountingSubledgerRef {
   status: string;
 }
 
+export type AccountingCashAccountKind = 'BANK' | 'CASH' | 'MOBILE_MONEY' | 'OTHER';
+
+export interface AccountingCashAccount {
+  id: string;
+  name: string;
+  accountKind: AccountingCashAccountKind;
+  currency: string;
+  glAccountId: string;
+  bankName: string | null;
+  accountNumber: string | null;
+  branch: string | null;
+  description: string | null;
+  isActive: boolean;
+  createdByUserId: string;
+  updatedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  glAccount: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+  };
+}
+
+export interface QueryCashAccountsParams {
+  accountKind?: AccountingCashAccountKind;
+  currency?: string;
+  isActive?: boolean;
+}
+
 export interface QueryAccountingPartiesParams {
   search?: string;
   isActive?: boolean;
