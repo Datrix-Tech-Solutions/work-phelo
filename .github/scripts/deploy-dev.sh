@@ -160,9 +160,9 @@ write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
   "JWT_SECRET=${JWT_SECRET}" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
   "AUTH_SERVICE_URL=http://auth-service:4001" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS=${REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS}"
-  
 
 write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
   "PORT=4008" \
@@ -170,7 +170,9 @@ write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
   "NODE_ENV=production" \
   "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema accounting)" \
-  "JWT_SECRET=${JWT_SECRET}"
+  "JWT_SECRET=${JWT_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 log "✓ Service env files written"
 
 section "Compose Validation"
