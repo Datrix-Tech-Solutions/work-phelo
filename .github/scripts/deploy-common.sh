@@ -384,6 +384,41 @@ print_service_diagnostics() {
   fi
 }
 
+print_compose_failure_diagnostics() {
+  local inspected=0
+
+  log ""
+  log "Compose service status:"
+  docker_compose ps || true
+
+  local service_name
+  while IFS= read -r service_name; do
+    [[ -n "$service_name" ]] || continue
+
+    local container_id
+    container_id="$(docker_compose ps -q "$service_name" | head -1 || true)"
+    [[ -n "$container_id" ]] || continue
+
+    local status
+    local health
+    status="$(docker inspect --format='{{.State.Status}}' "$container_id" 2>/dev/null || printf 'unknown')"
+    health="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || printf 'none')"
+
+    if [[ "$status" == "running" && ( "$health" == "healthy" || "$health" == "none" ) ]]; then
+      continue
+    fi
+
+    inspected=$((inspected + 1))
+    print_service_logs "$service_name"
+    print_service_health_inspect "$container_id"
+  done < <(docker_compose config --services 2>/dev/null || true)
+
+  if (( inspected == 0 )); then
+    log ""
+    log "No non-ready service containers were available for health inspection."
+  fi
+}
+
 validate_database_target() {
   local deploy_env="$1"
   local db_url="${DATABASE_URL:-}"
