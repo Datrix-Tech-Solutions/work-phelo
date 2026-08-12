@@ -1,8 +1,12 @@
-import { RequestMethod, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { isSwaggerEnabled } from '@work-phelo/config';
 import { AppModule } from './app.module';
+import {
+  ACCOUNTING_GLOBAL_PREFIX,
+  ACCOUNTING_GLOBAL_PREFIX_EXCLUSIONS,
+} from './config/global-prefix';
 import { assertAccountingRuntimeEnv } from './config/runtime-env';
 import { setupSwagger } from './swagger.config';
 
@@ -17,17 +21,8 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  app.setGlobalPrefix('api', {
-    exclude: [
-      {
-        path: 'internal/source-events',
-        method: RequestMethod.POST,
-      },
-      {
-        path: 'internal/subledgers/ensure',
-        method: RequestMethod.POST,
-      },
-    ],
+  app.setGlobalPrefix(ACCOUNTING_GLOBAL_PREFIX, {
+    exclude: ACCOUNTING_GLOBAL_PREFIX_EXCLUSIONS,
   });
   if (isSwaggerEnabled()) setupSwagger(app);
 
