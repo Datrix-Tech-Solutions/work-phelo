@@ -1,6 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
 import { cardClass } from '@/lib/utils';
 import { useReinsuranceAccountingIntegrationStatus } from '@/hooks';
 import type {
@@ -19,7 +20,7 @@ function groupBlockers(group: ReinsuranceAccountingReadinessGroup) {
 }
 
 export function ReinsuranceAccountingReadiness() {
-  const { data, isLoading, isError } = useReinsuranceAccountingIntegrationStatus();
+  const { data, isLoading, isError, refetch } = useReinsuranceAccountingIntegrationStatus();
 
   if (isLoading) {
     return (
@@ -27,7 +28,27 @@ export function ReinsuranceAccountingReadiness() {
     );
   }
 
-  if (isError || !data) {
+  if (isError) {
+    return (
+      <section
+        className={cardClass('flex flex-wrap items-center justify-between gap-3 p-4')}
+        role="alert"
+        aria-live="polite"
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">Reinsurance Accounting Readiness</h3>
+          <p className="mt-1 text-sm text-gray-600">
+            Unable to load Accounting readiness. Check your access and try again.
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={() => void refetch()}>
+          Try again
+        </Button>
+      </section>
+    );
+  }
+
+  if (!data) {
     return null;
   }
 
