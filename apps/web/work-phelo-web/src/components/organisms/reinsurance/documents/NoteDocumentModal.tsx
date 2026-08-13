@@ -220,7 +220,7 @@ function CreditNoteContent({
               <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
                 {row.pct ?? ''}
               </td>
-              <td className="py-2 pl-4 text-right w-1/3 break-words text-gray-800">
+              <td className="py-2 pl-4 text-right w-1/3 wrap-break-word text-gray-800">
                 {row.value ?? ''}
               </td>
             </tr>
