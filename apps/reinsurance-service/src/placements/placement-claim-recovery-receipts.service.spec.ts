@@ -433,9 +433,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       status: PlacementClaimRecoveryReceiptStatus.RECORDED,
       reversalOfReceiptId: 'receipt-1',
     });
-    expect((createArgs.data.amount as Prisma.Decimal).toString()).toBe(
-      '-40000',
-    );
+    expect((createArgs.data.amount as Prisma.Decimal).toString()).toBe('40000');
     expect(
       financialEvents.prepareClaimRecoveryReceiptReversed,
     ).not.toHaveBeenCalled();
@@ -497,7 +495,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     const reversal = {
       ...confirmedReceipt,
       id: 'receipt-reversal-1',
-      amount: new Prisma.Decimal('-40000.00'),
+      amount: new Prisma.Decimal('40000.00'),
       reversalOfReceiptId: 'receipt-1',
       createdByUserId: 'user-1',
     };
