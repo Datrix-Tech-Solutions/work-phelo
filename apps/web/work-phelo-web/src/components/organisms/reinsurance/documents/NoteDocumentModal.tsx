@@ -220,7 +220,7 @@ function CreditNoteContent({
               <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
                 {row.pct ?? ''}
               </td>
-              <td className="py-2 pl-4 text-right w-1/3 whitespace-nowrap text-gray-800">
+              <td className="py-2 pl-4 text-right w-1/3 break-words text-gray-800">
                 {row.value ?? ''}
               </td>
             </tr>
@@ -248,7 +248,7 @@ function CreditNoteContent({
                   {row.pct ?? ''}
                 </td>
                 <td
-                  className={`py-2 pl-4 text-right w-1/3 whitespace-nowrap ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-800'}`}
+                  className={`py-2 pl-4 text-right w-1/3 wrap-break-word ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-800'}`}
                 >
                   {row.value ?? ''}
                 </td>
@@ -268,7 +268,7 @@ function CreditNoteContent({
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-1 text-base text-gray-700">
+      <div className="mt-2 flex flex-col gap-1 text-base text-gray-700">
         <p>Thank You.</p>
         <p>Yours faithfully,</p>
         <Image

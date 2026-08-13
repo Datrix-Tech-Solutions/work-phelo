@@ -7,6 +7,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { CompanyLogo } from '@/components/atoms/CompanyLogo';
 import { DocumentPrintLayout } from '@/components/organisms/reinsurance/documents/DocumentPrintLayout';
+import { renderPrintRootToPdf } from '@/lib/reinsurance/renderDocumentPdf';
 
 const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
 
@@ -40,12 +41,45 @@ export function DocumentPreviewModal({
 }: DocumentPreviewModalProps) {
   const handlePrint = () => {
     const el = document.getElementById('irisk-print-root');
-    if (el) el.style.display = 'block';
-    const previousTitle = document.title;
-    document.title = fileName ?? documentTitle;
-    window.print();
-    document.title = previousTitle;
-    if (el) el.style.display = 'none';
+    if (!el) return;
+    const printTitle = fileName ?? documentTitle;
+
+    // Open the tab synchronously (before any other work) so popup blockers
+    // treat it as a direct result of the click.
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      // Popup blocked — fall back to printing the current tab in place.
+      el.style.display = 'block';
+      const previousTitle = document.title;
+      document.title = printTitle;
+      window.print();
+      document.title = previousTitle;
+      el.style.display = 'none';
+      onPrint();
+      return;
+    }
+
+    printWindow.document.title = printTitle;
+    printWindow.document.body.innerHTML =
+      '<p style="font-family: sans-serif; padding: 24px; color: #6b7280;">Preparing document…</p>';
+
+    el.style.display = 'block';
+    renderPrintRootToPdf(el, printTitle)
+      .then((blob) => {
+        if (printWindow.closed) return;
+        const url = URL.createObjectURL(blob);
+        printWindow.location.href = url;
+      })
+      .catch((error) => {
+        console.error('Failed to generate print PDF', error);
+        if (printWindow.closed) return;
+        printWindow.document.body.innerHTML =
+          '<p style="font-family: sans-serif; padding: 24px; color: #b91c1c;">Could not generate the document. Please try again.</p>';
+      })
+      .finally(() => {
+        el.style.display = 'none';
+      });
+
     onPrint();
   };
 

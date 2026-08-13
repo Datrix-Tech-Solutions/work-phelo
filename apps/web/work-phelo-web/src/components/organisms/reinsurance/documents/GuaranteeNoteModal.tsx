@@ -152,7 +152,7 @@ export function GuaranteeNoteModal({
             alt="Signature"
             width={100}
             height={10}
-            style={{ objectFit: 'contain', marginTop: '8px', marginBottom: '4px' }}
+            style={{ objectFit: 'contain', marginTop: '4px', marginBottom: '2px' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>

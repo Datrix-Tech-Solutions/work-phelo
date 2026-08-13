@@ -21,6 +21,7 @@
     "@tanstack/react-query-devtools": "^5.96.1",
     "axios": "^1.14.0",
     "clsx": "^2.1.1",
+    "html2canvas-pro": "^2.3.5",
     "js-cookie": "^3.0.5",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
