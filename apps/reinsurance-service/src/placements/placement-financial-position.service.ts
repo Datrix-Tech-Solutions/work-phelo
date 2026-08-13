@@ -27,6 +27,7 @@ type EffectiveSnapshot = {
   counterpartyName: string;
   closingId: string;
   netPremium: number;
+  cedantPremium: number;
   currency: string | null;
 };
 
@@ -80,6 +81,7 @@ export class PlacementFinancialPositionService {
       const reinsurers = new Map<string, ReinsurerPositionAccumulator>();
       const currentSnapshots: EffectiveSnapshot[] = [];
       const adjustments: PlacementFinancialPositionAdjustmentDto[] = [];
+      let cedantEndorsementAdjustments = 0;
       const currencies = new Set<string>();
 
       for (const closing of originalClosings) {
@@ -92,6 +94,11 @@ export class PlacementFinancialPositionService {
           counterpartyName: closing.participant.counterparty.name,
           closingId: closing.id,
           netPremium,
+          cedantPremium: this.cedantReceivableAmount(
+            closing.grossPremium,
+            closing.commissionAmount,
+            closing.netPremium,
+          ),
           currency,
         };
         currentSnapshots.push(snapshot);
@@ -117,6 +124,11 @@ export class PlacementFinancialPositionService {
           counterpartyName: closing.endorsementParticipant.counterparty.name,
           closingId: closing.id,
           netPremium: this.money.toNumber(closing.netPremium),
+          cedantPremium: this.cedantReceivableAmount(
+            closing.premiumSnapshot,
+            closing.commissionAmount,
+            closing.netPremium,
+          ),
           currency,
         };
 
@@ -130,6 +142,10 @@ export class PlacementFinancialPositionService {
             previousIndex >= 0 ? currentSnapshots[previousIndex] : null;
 
           if (previous) {
+            cedantEndorsementAdjustments = this.round(
+              cedantEndorsementAdjustments +
+                (snapshot.cedantPremium - previous.cedantPremium),
+            );
             if (previous.counterpartyId === snapshot.counterpartyId) {
               this.addAdjustment({
                 reinsurers,
@@ -175,6 +191,9 @@ export class PlacementFinancialPositionService {
 
             currentSnapshots.splice(previousIndex, 1, snapshot);
           } else {
+            cedantEndorsementAdjustments = this.round(
+              cedantEndorsementAdjustments + snapshot.cedantPremium,
+            );
             this.addAdjustment({
               reinsurers,
               adjustments,
@@ -191,6 +210,9 @@ export class PlacementFinancialPositionService {
             currentSnapshots.push(snapshot);
           }
         } else {
+          cedantEndorsementAdjustments = this.round(
+            cedantEndorsementAdjustments + snapshot.cedantPremium,
+          );
           this.addAdjustment({
             reinsurers,
             adjustments,
@@ -216,13 +238,17 @@ export class PlacementFinancialPositionService {
       const currency = [...currencies][0] ?? placement.currency ?? null;
       const originalObligation = this.round(
         originalClosings.reduce(
-          (total, closing) => total + this.money.toNumber(closing.netPremium),
+          (total, closing) =>
+            total +
+            this.cedantReceivableAmount(
+              closing.grossPremium,
+              closing.commissionAmount,
+              closing.netPremium,
+            ),
           0,
         ),
       );
-      const endorsementAdjustments = this.round(
-        adjustments.reduce((total, adjustment) => total + adjustment.amount, 0),
-      );
+      const endorsementAdjustments = this.round(cedantEndorsementAdjustments);
       const currentObligation = this.round(
         originalObligation + endorsementAdjustments,
       );
@@ -308,6 +334,8 @@ export class PlacementFinancialPositionService {
       select: {
         id: true,
         participantId: true,
+        grossPremium: true,
+        commissionAmount: true,
         netPremium: true,
         currency: true,
         participant: {
@@ -345,6 +373,8 @@ export class PlacementFinancialPositionService {
         id: true,
         endorsementId: true,
         endorsementParticipantId: true,
+        premiumSnapshot: true,
+        commissionAmount: true,
         netPremium: true,
         currency: true,
         endorsement: {
@@ -516,6 +546,26 @@ export class PlacementFinancialPositionService {
   private cleanCurrencyOrNull(value: string | null): string | null {
     const cleaned = value?.trim().toUpperCase();
     return cleaned || null;
+  }
+
+  /**
+   * Cedant premium receipts settle the same amount billed by the placement
+   * debit note: gross premium less cedant commission. Brokerage is a separate
+   * broker/reinsurer-side deduction and must not reduce the cedant receivable.
+   * Fall back to netPremium for historic snapshots that predate gross/commission
+   * fields so existing tenant history remains readable.
+   */
+  private cedantReceivableAmount(
+    grossPremium: Prisma.Decimal | number | string | null | undefined,
+    commissionAmount: Prisma.Decimal | number | string | null | undefined,
+    netPremium: Prisma.Decimal | number | string | null | undefined,
+  ) {
+    if (grossPremium === null || grossPremium === undefined) {
+      return this.money.toNumber(netPremium);
+    }
+    return this.round(
+      this.money.toNumber(grossPremium) - this.money.toNumber(commissionAmount),
+    );
   }
 
   private positionFor(

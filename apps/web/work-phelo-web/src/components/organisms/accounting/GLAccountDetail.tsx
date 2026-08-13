@@ -9,6 +9,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { useDeactivateGLAccount, useUpdateGLAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { GLAccountLedger } from '@/components/organisms/accounting/GLAccountLedger';
 import type { GLAccount } from '@/types/accounting';
 
 interface GLAccountDetailProps {
@@ -113,6 +114,8 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
           </label>
         </div>
       </div>
+
+      <GLAccountLedger accountId={account.id} />
 
       <div className="mt-auto flex flex-wrap justify-between gap-3 border-t border-gray-200 pt-5">
         {account.status === 'ACTIVE' ? (

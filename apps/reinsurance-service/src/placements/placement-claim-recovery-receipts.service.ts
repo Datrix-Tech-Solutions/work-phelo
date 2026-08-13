@@ -451,7 +451,11 @@ export class PlacementClaimRecoveryReceiptsService {
                 recoveryApprovalId: receipt.recoveryApprovalId,
                 counterpartyId: receipt.counterpartyId,
                 currency: receipt.currency,
-                amount: receipt.amount.negated(),
+                // Recovery receipt amounts are constrained to positive values.
+                // The immutable reversal link and reversal event carry the
+                // financial direction; position calculations exclude reversal
+                // rows from recovered amounts and report them separately.
+                amount: receipt.amount,
                 paymentDate: new Date(),
                 reference: receipt.reference
                   ? `REVERSAL:${receipt.reference}`

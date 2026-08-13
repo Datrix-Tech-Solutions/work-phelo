@@ -21,6 +21,8 @@ describe('PlacementFinancialPositionService', () => {
     id: 'closing-a',
     participantId: 'participant-a',
     netPremium: new Prisma.Decimal('60000.00'),
+    grossPremium: new Prisma.Decimal('60000.00'),
+    commissionAmount: new Prisma.Decimal('0.00'),
     currency: 'GHS',
     participant: {
       counterpartyId: 'reinsurer-a',
@@ -32,6 +34,8 @@ describe('PlacementFinancialPositionService', () => {
     id: 'closing-b',
     participantId: 'participant-b',
     netPremium: new Prisma.Decimal('40000.00'),
+    grossPremium: new Prisma.Decimal('40000.00'),
+    commissionAmount: new Prisma.Decimal('0.00'),
     currency: 'GHS',
     participant: {
       counterpartyId: 'reinsurer-b',
@@ -114,6 +118,36 @@ describe('PlacementFinancialPositionService', () => {
         position: 'PAYABLE',
       }),
     ]);
+  });
+
+  it('uses the debit-note basis for cedant receipts while retaining net premium for reinsurer payables', async () => {
+    tx.placementClosing.findMany.mockResolvedValue([
+      {
+        ...originalClosingA,
+        grossPremium: new Prisma.Decimal('31200.00'),
+        commissionAmount: new Prisma.Decimal('4680.00'),
+        netPremium: new Prisma.Decimal('24180.00'),
+      },
+    ]);
+
+    const result = await service.getFinancialPosition(
+      tenantId,
+      placementId,
+      asOfDate,
+    );
+
+    expect(result.cedant).toMatchObject({
+      originalObligation: 26520,
+      currentObligation: 26520,
+      outstanding: 26520,
+    });
+    expect(result.reinsurers).toContainEqual(
+      expect.objectContaining({
+        counterpartyId: 'reinsurer-a',
+        originalPayable: 24180,
+        outstanding: 24180,
+      }),
+    );
   });
 
   it('subtracts only bank-confirmed non-reversed premium receipts from cedant outstanding', async () => {

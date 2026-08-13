@@ -44,10 +44,50 @@ export interface CreateGLAccountPayload {
 
 export type UpdateGLAccountPayload = Partial<CreateGLAccountPayload>;
 
+export interface GLAccountLedgerEntry {
+  id: string;
+  description: string | null;
+  baseDebit: string;
+  baseCredit: string;
+  runningBalance: string;
+  journalEntry: {
+    journalNumber: string;
+    transactionDate: string;
+    reference: string | null;
+    description: string;
+    baseCurrency: string;
+  };
+}
+
+export interface GLAccountLedger {
+  entries: GLAccountLedgerEntry[];
+  closingBalance: string;
+}
+
 export interface QueryGLAccountsParams {
   category?: GLAccountCategory;
   status?: GLAccountStatus;
 }
+
+export type CostCentreStatus = 'ACTIVE' | 'INACTIVE';
+
+export interface CostCentre {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  externalRef: string | null;
+  status: CostCentreStatus;
+}
+
+export interface CreateCostCentrePayload {
+  code: string;
+  name: string;
+  description?: string;
+  externalRef?: string;
+}
+
+export type UpdateCostCentrePayload = Partial<CreateCostCentrePayload>;
 
 export type FiscalPeriodStatus = 'OPEN' | 'CLOSED' | 'LOCKED';
 

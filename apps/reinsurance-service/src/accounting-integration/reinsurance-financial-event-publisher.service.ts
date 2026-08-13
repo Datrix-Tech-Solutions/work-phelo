@@ -2486,13 +2486,19 @@ export class ReinsuranceFinancialEventPublisher {
     }
 
     const paymentAmount = Math.abs(this.decimalNumber(reversalPayment.amount));
-    const allocatedAmount = this.roundMoney(
+    const allocationTotal = this.roundMoney(
       (reversalPayment.allocations ?? []).reduce(
         (total, allocation) =>
           total + Math.abs(this.decimalNumber(allocation.allocatedAmount)),
         0,
       ),
     );
+    // Allocations are optional for an operational disbursement. In that case
+    // the immutable payment amount is the only payable amount available to
+    // restore, and must be used by the reversal posting rule.
+    const allocatedAmount = reversalPayment.allocations?.length
+      ? allocationTotal
+      : paymentAmount;
     const bankCharges = Math.abs(
       this.optionalDecimalNumber(reversalPayment.bankChargeAmount) ?? 0,
     );
