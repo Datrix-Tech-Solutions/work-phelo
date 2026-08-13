@@ -24,6 +24,7 @@ export default function AccountingSettingsLayout({ children }: { children: React
         { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
         { key: 'cost-centres', label: 'Cost Centres', href: `${base}/cost-centres` },
         { key: 'currency', label: 'Currency', href: `${base}/currency` },
+        { key: 'exchange-rates', label: 'Exchange Rates', href: `${base}/exchange-rates` },
         { key: 'posting-rules', label: 'Posting Rules', href: `${base}/posting-rules` },
       ],
     },

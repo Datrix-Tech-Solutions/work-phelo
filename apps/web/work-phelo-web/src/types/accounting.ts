@@ -181,6 +181,14 @@ export interface AccountTypeDefinition {
   description: string | null;
 }
 
+export interface AccountCategoryDefinition {
+  code: GLAccountCategory;
+  name: string;
+  normalBalance: NormalBalance;
+  financialStatement: 'BALANCE_SHEET' | 'INCOME_STATEMENT';
+  displayOrder: number;
+}
+
 export interface JournalLine {
   targetAccount: string;
   description: string;
