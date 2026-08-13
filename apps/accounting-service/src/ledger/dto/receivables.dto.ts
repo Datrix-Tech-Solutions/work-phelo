@@ -272,6 +272,25 @@ export class QueryReceivableDocumentsDto {
   limit?: number;
 }
 
+export class QueryReceivableAgingDto {
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    description: 'Defaults to today.',
+  })
+  @IsOptional()
+  @IsDateString()
+  asOfDate?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Optionally limit the aging to one customer.',
+  })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+}
+
 export class QueryReceiptsDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

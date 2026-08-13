@@ -272,6 +272,25 @@ export class QueryPayableDocumentsDto {
   limit?: number;
 }
 
+export class QueryPayableAgingDto {
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    description: 'Defaults to today.',
+  })
+  @IsOptional()
+  @IsDateString()
+  asOfDate?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Optionally limit the aging to one vendor.',
+  })
+  @IsOptional()
+  @IsUUID()
+  vendorId?: string;
+}
+
 export class QueryPayablePaymentsDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

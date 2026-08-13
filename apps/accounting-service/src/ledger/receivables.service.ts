@@ -26,6 +26,7 @@ import {
   CreateReceivableReceiptDto,
   CreateReceiptAllocationDto,
   QueryReceiptsDto,
+  QueryReceivableAgingDto,
   QueryReceivableDocumentsDto,
   ReverseAllocationDto,
   ReverseReceivableDto,
@@ -167,6 +168,129 @@ export class ReceivablesService {
     return Array.from(totals.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([currency, amount]) => ({ currency, amount: this.money(amount) }));
+  }
+
+  async aging(tenantId: string, query: QueryReceivableAgingDto) {
+    const asOfDate = this.asOfDate(query.asOfDate);
+    const rows = await this.openItems(tenantId, asOfDate, query.customerId);
+    return this.agingResult(asOfDate, rows);
+  }
+
+  async statement(tenantId: string, customerId: string, asOf?: string) {
+    const asOfDate = this.asOfDate(asOf);
+    const customer = await this.resolveCustomer(tenantId, customerId);
+    const rows = await this.openItems(tenantId, asOfDate, customerId);
+    return {
+      asOfDate,
+      customer: {
+        id: customer.id,
+        code: customer.code,
+        legalName: customer.legalName,
+      },
+      ...this.agingResult(asOfDate, rows),
+      documents: rows,
+    };
+  }
+
+  private async openItems(
+    tenantId: string,
+    asOfDate: Date,
+    customerId?: string,
+  ) {
+    const [invoices, allocations] = await Promise.all([
+      this.prisma.accountingReceivableDocument.findMany({
+        where: {
+          tenantId,
+          customerId,
+          documentType: AccountingReceivableDocumentType.INVOICE,
+          status: AccountingReceivableStatus.POSTED,
+          documentDate: { lte: asOfDate },
+        },
+        select: {
+          id: true,
+          documentNumber: true,
+          documentDate: true,
+          dueDate: true,
+          currency: true,
+          totalAmount: true,
+          customer: { select: { id: true, code: true, legalName: true } },
+        },
+        orderBy: [{ dueDate: 'asc' }, { documentDate: 'asc' }],
+      }),
+      this.prisma.accountingReceivableAllocation.findMany({
+        where: { tenantId, reversedAt: null, allocatedAt: { lte: asOfDate } },
+        select: { invoiceId: true, amount: true },
+      }),
+    ]);
+    const applied = new Map<string, Prisma.Decimal>();
+    for (const allocation of allocations)
+      applied.set(
+        allocation.invoiceId,
+        (applied.get(allocation.invoiceId) ?? zero).plus(allocation.amount),
+      );
+    return invoices
+      .map((invoice) => ({
+        ...invoice,
+        outstandingAmount: this.money(
+          invoice.totalAmount.minus(applied.get(invoice.id) ?? zero),
+        ),
+      }))
+      .filter((invoice) =>
+        new Prisma.Decimal(invoice.outstandingAmount).greaterThan(0),
+      );
+  }
+
+  private agingResult(
+    asOfDate: Date,
+    rows: Awaited<ReturnType<ReceivablesService['openItems']>>,
+  ) {
+    const buckets = ['CURRENT', '1_30', '31_60', '61_90', 'OVER_90'] as const;
+    const totals = new Map<
+      string,
+      Record<(typeof buckets)[number], Prisma.Decimal>
+    >();
+    for (const row of rows) {
+      const total =
+        totals.get(row.currency) ??
+        (Object.fromEntries(buckets.map((bucket) => [bucket, zero])) as Record<
+          (typeof buckets)[number],
+          Prisma.Decimal
+        >);
+      const age = row.dueDate
+        ? Math.max(
+            0,
+            Math.floor((asOfDate.getTime() - row.dueDate.getTime()) / 86400000),
+          )
+        : 0;
+      const bucket =
+        age === 0
+          ? 'CURRENT'
+          : age <= 30
+            ? '1_30'
+            : age <= 60
+              ? '31_60'
+              : age <= 90
+                ? '61_90'
+                : 'OVER_90';
+      total[bucket] = total[bucket].plus(row.outstandingAmount);
+      totals.set(row.currency, total);
+    }
+    return {
+      agingByCurrency: Array.from(totals.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([currency, amounts]) => ({
+          currency,
+          ...Object.fromEntries(
+            buckets.map((bucket) => [bucket, this.money(amounts[bucket])]),
+          ),
+        })),
+    };
+  }
+
+  private asOfDate(value?: string) {
+    const date = value ? new Date(value) : new Date();
+    date.setHours(23, 59, 59, 999);
+    return date;
   }
 
   async createInvoice(user: RequestUser, dto: CreateReceivableInvoiceDto) {

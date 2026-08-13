@@ -31,6 +31,7 @@ import {
   CreateReceiptAllocationDto,
   QueryReceiptsDto,
   QueryReceivableDocumentsDto,
+  QueryReceivableAgingDto,
   ReverseAllocationDto,
   ReverseReceivableDto,
 } from './dto/receivables.dto';
@@ -74,6 +75,33 @@ export class ReceivablesController {
   @RequirePermissions(AccountingPermission.RECEIVABLES_VIEW)
   summary(@Req() request: Request & { user: RequestUser }) {
     return this.service.summary(request.user.tenantId);
+  }
+
+  @Get('aging')
+  @ApiOperation({
+    summary: 'Get Accounts Receivable aging by customer and currency',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_VIEW)
+  aging(
+    @Query() query: QueryReceivableAgingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.aging(request.user.tenantId, query);
+  }
+
+  @Get('customers/:customerId/statement')
+  @ApiOperation({ summary: 'Get a customer open-items statement as of a date' })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_VIEW)
+  statement(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Query() query: QueryReceivableAgingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.statement(
+      request.user.tenantId,
+      customerId,
+      query.asOfDate,
+    );
   }
 
   @Get('invoices/:invoiceId')
