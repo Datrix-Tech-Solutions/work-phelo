@@ -30,6 +30,7 @@ import {
   CreatePaymentAllocationDto,
   CreateVendorCreditAllocationDto,
   QueryPayableDocumentsDto,
+  QueryPayableAgingDto,
   QueryPayablePaymentsDto,
   ReversePayableAllocationDto,
   ReversePayableDto,
@@ -67,6 +68,33 @@ export class PayablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.listBills(request.user.tenantId, query);
+  }
+
+  @Get('aging')
+  @ApiOperation({
+    summary: 'Get Accounts Payable aging by vendor and currency',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_VIEW)
+  aging(
+    @Query() query: QueryPayableAgingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.aging(request.user.tenantId, query);
+  }
+
+  @Get('vendors/:vendorId/statement')
+  @ApiOperation({ summary: 'Get a vendor open-items statement as of a date' })
+  @RequirePermissions(AccountingPermission.PAYABLES_VIEW)
+  statement(
+    @Param('vendorId', ParseUUIDPipe) vendorId: string,
+    @Query() query: QueryPayableAgingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.statement(
+      request.user.tenantId,
+      vendorId,
+      query.asOfDate,
+    );
   }
 
   @Get('summary')

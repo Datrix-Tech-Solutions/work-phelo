@@ -381,4 +381,38 @@ describe('PayablesService', () => {
       },
     ]);
   });
+
+  it('ages only open posted bills using allocations recorded by the as-of date', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingPayableDocument.findMany.mockResolvedValueOnce([
+      bill({
+        id: 'current',
+        dueDate: new Date('2026-08-10'),
+        totalAmount: new Prisma.Decimal(100),
+      }),
+      bill({
+        id: 'overdue',
+        dueDate: new Date('2026-06-01'),
+        totalAmount: new Prisma.Decimal(250),
+      }),
+    ]);
+    prisma.accountingPayableAllocation.findMany.mockResolvedValueOnce([
+      { billId: 'overdue', amount: new Prisma.Decimal(50) },
+    ]);
+
+    await expect(
+      service.aging(actor.tenantId, { asOfDate: '2026-08-10' }),
+    ).resolves.toEqual({
+      agingByCurrency: [
+        {
+          currency: 'GHS',
+          CURRENT: '100.0000',
+          '1_30': '0.0000',
+          '31_60': '0.0000',
+          '61_90': '200.0000',
+          OVER_90: '0.0000',
+        },
+      ],
+    });
+  });
 });
