@@ -429,6 +429,26 @@ export interface AccountingTradeDocumentBalance {
   paymentState: AccountingTradeDocumentPaymentState;
 }
 
+export interface AccountingCurrencyTotal {
+  currency: string;
+  amount: string;
+}
+
+export interface AccountsReceivableSummary {
+  outstandingByCurrency: AccountingCurrencyTotal[];
+  overdueInvoices: number;
+  dueThisWeek: number;
+  collectedMtdByCurrency: AccountingCurrencyTotal[];
+}
+
+export interface AccountsPayableSummary {
+  outstandingByCurrency: AccountingCurrencyTotal[];
+  overdueInvoices: number;
+  dueThisWeek: number;
+  pendingApproval: number;
+  paidMtdByCurrency: AccountingCurrencyTotal[];
+}
+
 export interface CreateTradeCreditNotePayload {
   partyId: string;
   documentDate: string;
