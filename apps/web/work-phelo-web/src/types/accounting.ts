@@ -64,6 +64,72 @@ export interface GLAccountLedger {
   closingBalance: string;
 }
 
+export interface FinancialReportAccount {
+  id: string;
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  normalBalance?: NormalBalance;
+  classification: { id: string | null; code: string; name: string; category: GLAccountCategory };
+  accountGroup: { id: string | null; code: string; name: string };
+}
+
+export interface GeneralLedgerReport {
+  openingBalance: string;
+  totalDebit: string;
+  totalCredit: string;
+  closingBalance: string;
+  lines: Array<{
+    id: string;
+    journalDate: string;
+    postingDate: string | null;
+    journalNumber: string;
+    journalStatus: JournalRecordStatus;
+    description: string | null;
+    account: FinancialReportAccount;
+    debit: string;
+    credit: string;
+    runningBalance: string;
+    transactionCurrency: string;
+  }>;
+}
+
+export interface TrialBalanceReport {
+  asOfDate: string;
+  accounts: Record<
+    GLAccountCategory,
+    Array<{
+      account: FinancialReportAccount;
+      debitBalance: string;
+      creditBalance: string;
+    }>
+  >;
+  totalDebit: string;
+  totalCredit: string;
+  imbalanceAmount: string;
+}
+
+export interface IncomeStatementReport {
+  fromDate: string;
+  toDate: string;
+  revenueAccounts: Array<{ account: FinancialReportAccount; amount: string }>;
+  expenseAccounts: Array<{ account: FinancialReportAccount; amount: string }>;
+  totalRevenue: string;
+  totalExpenses: string;
+  netProfitOrLoss: string;
+}
+
+export interface BalanceSheetReport {
+  asOfDate: string;
+  assets: Array<{ account: FinancialReportAccount; amount: string }>;
+  liabilities: Array<{ account: FinancialReportAccount; amount: string }>;
+  equity: Array<{ account: FinancialReportAccount; amount: string }>;
+  totalAssets: string;
+  totalLiabilities: string;
+  totalEquity: string;
+  imbalanceAmount: string;
+}
+
 export interface QueryGLAccountsParams {
   category?: GLAccountCategory;
   status?: GLAccountStatus;
@@ -361,6 +427,26 @@ export interface AccountingTradeDocumentBalance {
   appliedCreditNotes: string;
   outstandingAmount: string;
   paymentState: AccountingTradeDocumentPaymentState;
+}
+
+export interface AccountingCurrencyTotal {
+  currency: string;
+  amount: string;
+}
+
+export interface AccountsReceivableSummary {
+  outstandingByCurrency: AccountingCurrencyTotal[];
+  overdueInvoices: number;
+  dueThisWeek: number;
+  collectedMtdByCurrency: AccountingCurrencyTotal[];
+}
+
+export interface AccountsPayableSummary {
+  outstandingByCurrency: AccountingCurrencyTotal[];
+  overdueInvoices: number;
+  dueThisWeek: number;
+  pendingApproval: number;
+  paidMtdByCurrency: AccountingCurrencyTotal[];
 }
 
 export interface CreateTradeCreditNotePayload {

@@ -69,6 +69,13 @@ export class ReceivablesController {
     return this.service.listInvoices(request.user.tenantId, query);
   }
 
+  @Get('summary')
+  @ApiOperation({ summary: 'Get tenant Accounts Receivable dashboard summary' })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_VIEW)
+  summary(@Req() request: Request & { user: RequestUser }) {
+    return this.service.summary(request.user.tenantId);
+  }
+
   @Get('invoices/:invoiceId')
   @ApiOperation({ summary: 'Get a standalone customer invoice' })
   @RequirePermissions(AccountingPermission.RECEIVABLES_VIEW)
