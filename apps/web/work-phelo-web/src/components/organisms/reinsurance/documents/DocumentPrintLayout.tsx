@@ -33,6 +33,7 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
     >
       {/* Watermark */}
       <div
+        data-print-watermark
         style={{
           position: 'fixed',
           inset: 0,
@@ -55,6 +56,7 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
 
       {/* Fixed header — repeats on every page */}
       <div
+        data-print-header
         style={{
           position: 'fixed',
           top: 0,
@@ -78,6 +80,7 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
 
       {/* Fixed footer — sticks to bottom of every page */}
       <div
+        data-print-footer
         style={{
           position: 'fixed',
           bottom: 0,
@@ -128,6 +131,7 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
           <tr>
             <td style={{ padding: '0 48px', verticalAlign: 'top' }}>
               <div
+                data-print-content
                 style={{
                   maxWidth: '640px',
                   margin: '0 auto',

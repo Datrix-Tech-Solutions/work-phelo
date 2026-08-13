@@ -211,7 +211,7 @@ export function ClosingLetterModal({
               <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
                 {row.pct ?? ''}
               </td>
-              <td className="py-2 pl-4 text-right w-1/3 whitespace-nowrap text-gray-800">
+              <td className="py-2 pl-4 text-right w-1/3 wrap-break-word text-gray-800">
                 {row.value ?? ''}
               </td>
             </tr>
@@ -239,7 +239,7 @@ export function ClosingLetterModal({
                   {row.pct ?? ''}
                 </td>
                 <td
-                  className={`py-2 pl-4 text-right w-1/3 whitespace-nowrap ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-800'}`}
+                  className={`py-2 pl-4 text-right w-1/3 wrap-break-word ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-800'}`}
                 >
                   {row.value ?? ''}
                 </td>
@@ -249,7 +249,7 @@ export function ClosingLetterModal({
         </tbody>
       </table>
 
-      <div className="mt-8 flex flex-col gap-2 text-base text-gray-700">
+      <div className="mt-4 flex flex-col gap-2 text-base text-gray-700">
         <p>Thank You.</p>
         <p>Yours faithfully,</p>
         <Image
