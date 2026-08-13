@@ -32,6 +32,8 @@ import {
 } from './dto/receivables.dto';
 import { JournalsService } from './journals.service';
 
+const zero = new Prisma.Decimal(0);
+
 const receivableDocumentInclude = {
   customer: {
     select: {
@@ -92,6 +94,80 @@ export class ReceivablesService {
     private readonly cashbook: CashbookService,
     private readonly journals: JournalsService,
   ) {}
+
+  async summary(tenantId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(today);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const [invoices, allocations, receipts] = await Promise.all([
+      this.prisma.accountingReceivableDocument.findMany({
+        where: {
+          tenantId,
+          documentType: AccountingReceivableDocumentType.INVOICE,
+          status: AccountingReceivableStatus.POSTED,
+        },
+        select: { id: true, totalAmount: true, currency: true, dueDate: true },
+      }),
+      this.prisma.accountingReceivableAllocation.findMany({
+        where: { tenantId, reversedAt: null },
+        select: { invoiceId: true, amount: true },
+      }),
+      this.prisma.accountingReceivableReceipt.findMany({
+        where: {
+          tenantId,
+          status: AccountingReceivableStatus.POSTED,
+          receiptDate: { gte: monthStart },
+        },
+        select: { currency: true, amount: true },
+      }),
+    ]);
+    const applied = new Map<string, Prisma.Decimal>();
+    for (const allocation of allocations)
+      applied.set(
+        allocation.invoiceId,
+        (applied.get(allocation.invoiceId) ?? zero).plus(allocation.amount),
+      );
+    const outstanding = new Map<string, Prisma.Decimal>();
+    let overdueInvoices = 0;
+    let dueThisWeek = 0;
+    for (const invoice of invoices) {
+      const balance = invoice.totalAmount.minus(
+        applied.get(invoice.id) ?? zero,
+      );
+      if (balance.lessThanOrEqualTo(0)) continue;
+      outstanding.set(
+        invoice.currency,
+        (outstanding.get(invoice.currency) ?? zero).plus(balance),
+      );
+      if (invoice.dueDate && invoice.dueDate < today) overdueInvoices += 1;
+      if (
+        invoice.dueDate &&
+        invoice.dueDate >= today &&
+        invoice.dueDate <= weekEnd
+      )
+        dueThisWeek += 1;
+    }
+    const collected = new Map<string, Prisma.Decimal>();
+    for (const receipt of receipts)
+      collected.set(
+        receipt.currency,
+        (collected.get(receipt.currency) ?? zero).plus(receipt.amount),
+      );
+    return {
+      outstandingByCurrency: this.summaryTotals(outstanding),
+      overdueInvoices,
+      dueThisWeek,
+      collectedMtdByCurrency: this.summaryTotals(collected),
+    };
+  }
+
+  private summaryTotals(totals: Map<string, Prisma.Decimal>) {
+    return Array.from(totals.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([currency, amount]) => ({ currency, amount: this.money(amount) }));
+  }
 
   async createInvoice(user: RequestUser, dto: CreateReceivableInvoiceDto) {
     const [customer, config] = await Promise.all([

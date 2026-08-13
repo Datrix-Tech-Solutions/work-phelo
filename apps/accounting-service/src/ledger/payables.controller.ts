@@ -69,6 +69,13 @@ export class PayablesController {
     return this.service.listBills(request.user.tenantId, query);
   }
 
+  @Get('summary')
+  @ApiOperation({ summary: 'Get tenant Accounts Payable dashboard summary' })
+  @RequirePermissions(AccountingPermission.PAYABLES_VIEW)
+  summary(@Req() request: Request & { user: RequestUser }) {
+    return this.service.summary(request.user.tenantId);
+  }
+
   @Get('bills/:billId')
   @ApiOperation({ summary: 'Get a standalone vendor bill' })
   @RequirePermissions(AccountingPermission.PAYABLES_VIEW)

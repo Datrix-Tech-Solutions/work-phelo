@@ -31,6 +31,8 @@ import {
 } from './dto/payables.dto';
 import { JournalsService } from './journals.service';
 
+const zero = new Prisma.Decimal(0);
+
 const payableDocumentInclude = {
   vendor: {
     select: {
@@ -91,6 +93,82 @@ export class PayablesService {
     private readonly cashbook: CashbookService,
     private readonly journals: JournalsService,
   ) {}
+
+  async summary(tenantId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(today);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const [bills, allocations, payments] = await Promise.all([
+      this.prisma.accountingPayableDocument.findMany({
+        where: {
+          tenantId,
+          documentType: AccountingPayableDocumentType.BILL,
+          status: AccountingPayableStatus.POSTED,
+        },
+        select: { id: true, totalAmount: true, currency: true, dueDate: true },
+      }),
+      this.prisma.accountingPayableAllocation.findMany({
+        where: { tenantId, reversedAt: null },
+        select: { billId: true, amount: true },
+      }),
+      this.prisma.accountingPayablePayment.findMany({
+        where: {
+          tenantId,
+          status: AccountingPayableStatus.POSTED,
+          paymentDate: { gte: monthStart },
+        },
+        select: { currency: true, amount: true },
+      }),
+    ]);
+    const applied = new Map<string, Prisma.Decimal>();
+    for (const allocation of allocations)
+      applied.set(
+        allocation.billId,
+        (applied.get(allocation.billId) ?? zero).plus(allocation.amount),
+      );
+    const outstanding = new Map<string, Prisma.Decimal>();
+    let overdueInvoices = 0;
+    let dueThisWeek = 0;
+    for (const bill of bills) {
+      const balance = bill.totalAmount.minus(applied.get(bill.id) ?? zero);
+      if (balance.lessThanOrEqualTo(0)) continue;
+      outstanding.set(
+        bill.currency,
+        (outstanding.get(bill.currency) ?? zero).plus(balance),
+      );
+      if (bill.dueDate && bill.dueDate < today) overdueInvoices += 1;
+      if (bill.dueDate && bill.dueDate >= today && bill.dueDate <= weekEnd)
+        dueThisWeek += 1;
+    }
+    const paid = new Map<string, Prisma.Decimal>();
+    for (const payment of payments)
+      paid.set(
+        payment.currency,
+        (paid.get(payment.currency) ?? zero).plus(payment.amount),
+      );
+    const pendingApproval = await this.prisma.accountingPayableDocument.count({
+      where: {
+        tenantId,
+        documentType: AccountingPayableDocumentType.BILL,
+        status: AccountingPayableStatus.DRAFT,
+      },
+    });
+    return {
+      outstandingByCurrency: this.summaryTotals(outstanding),
+      overdueInvoices,
+      dueThisWeek,
+      pendingApproval,
+      paidMtdByCurrency: this.summaryTotals(paid),
+    };
+  }
+
+  private summaryTotals(totals: Map<string, Prisma.Decimal>) {
+    return Array.from(totals.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([currency, amount]) => ({ currency, amount: this.money(amount) }));
+  }
 
   async createBill(user: RequestUser, dto: CreatePayableBillDto) {
     const [vendor, config] = await Promise.all([
