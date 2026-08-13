@@ -5,7 +5,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { Input } from '@/components/atoms/Input';
 import { FormSection } from '@/components/atoms/FormSection';
 import { Icons } from '@/components/atoms/icons';
 import { useAddCounterpartyContact, useRemoveCounterpartyContact } from '@/hooks';
@@ -174,10 +174,12 @@ export function AddContactPanel({ counterparty, onClose }: AddContactPanelProps)
 
             <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <span className="text-sm font-bold text-gray-900">Phone Number</span>
-              <PhoneInput
+              <Input
+                type="tel"
+                inputMode="numeric"
                 placeholder="00 000 0000"
                 value={phoneValue ?? ''}
-                onChange={(v) => setValue('phone', v)}
+                onChange={(e) => setValue('phone', e.target.value.replace(/\D/g, ''))}
                 error={errors.phone?.message}
               />
             </div>
