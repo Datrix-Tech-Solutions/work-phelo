@@ -1177,6 +1177,37 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     ]);
   });
 
+  it('uses the payment amount for an unallocated disbursement reversal', () => {
+    const { actor, service } = makeService();
+    const reversal = {
+      ...reinsurerDisbursement,
+      id: 'payment-disbursement-reversal-unallocated-1',
+      amount: new Prisma.Decimal('-750.00'),
+      status: PlacementPaymentStatus.RECORDED,
+      reversalOfPaymentId: 'payment-disbursement-1',
+      reversalOfPayment: {
+        id: 'payment-disbursement-1',
+        amount: reinsurerDisbursement.amount,
+        currency: reinsurerDisbursement.currency,
+        paymentDate: reinsurerDisbursement.paymentDate,
+        reference: reinsurerDisbursement.reference,
+        status: PlacementPaymentStatus.REVERSED,
+      },
+      allocations: [],
+    };
+
+    const event = service.prepareReinsurerDisbursementReversed(actor, reversal);
+
+    expect(event?.payload).toMatchObject({
+      amounts: {
+        paymentAmount: 750,
+        allocatedAmount: 750,
+        signedPayableImpact: 750,
+      },
+      allocation: { allocationCount: 0 },
+    });
+  });
+
   it('skips reinsurer disbursement events when Accounting is disabled', () => {
     const { actor, service } = makeService({ accountingEnabled: false });
 
