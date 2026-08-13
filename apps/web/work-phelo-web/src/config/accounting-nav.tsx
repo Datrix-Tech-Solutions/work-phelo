@@ -51,9 +51,9 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         key: 'general-ledger',
         label: 'General Ledger',
         icon: <GeneralLedgerIcon />,
-        href: '',
+        href: 'general-ledger',
         enabled: true,
-        active: false,
+        active: true,
         exact: true,
       },
       {
