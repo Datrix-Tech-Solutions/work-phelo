@@ -49,6 +49,26 @@ export interface QueryGLAccountsParams {
   status?: GLAccountStatus;
 }
 
+export type CostCentreStatus = 'ACTIVE' | 'INACTIVE';
+
+export interface CostCentre {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  externalRef: string | null;
+  status: CostCentreStatus;
+}
+
+export interface CreateCostCentrePayload {
+  code: string;
+  name: string;
+  description?: string;
+  externalRef?: string;
+}
+
+export type UpdateCostCentrePayload = Partial<CreateCostCentrePayload>;
+
 export type FiscalPeriodStatus = 'OPEN' | 'CLOSED' | 'LOCKED';
 
 export interface FiscalPeriod {
