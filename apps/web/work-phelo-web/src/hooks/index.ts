@@ -55,6 +55,7 @@ export * from './accounting/useCostCentres';
 export * from './accounting/useCashAccounts';
 export * from './accounting/useCashbook';
 export * from './accounting/useTradeDocuments';
+export * from './accounting/useAgingReports';
 export * from './accounting/useTradeSummaries';
 export * from './accounting/useTradeSettlements';
 export * from './accounting/useFiscalPeriods';

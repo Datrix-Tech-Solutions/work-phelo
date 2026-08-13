@@ -6,7 +6,7 @@ import { Icons } from '@/components/atoms/icons';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { CustomerOverview } from '@/components/molecules/accounting/CustomerOverview';
 import { AccountingContactsTab } from '@/components/molecules/accounting/AccountingContactsTab';
-import { AccountTransactionsTable } from '@/components/organisms/accounting/tables/AccountTransactionsTable';
+import { PartyStatementTable } from '@/components/organisms/accounting/PartyStatementTable';
 import { AccountingContact } from '@/types/accounting';
 import { useAccountingConfig, useCustomer } from '@/hooks';
 
@@ -70,7 +70,9 @@ export default function CustomerDetailPage({
               onTabChange={(t) => setActiveTab(t as CustomerTab)}
             />
             <div className="pt-5">
-              {activeTab === 'transactions' && <AccountTransactionsTable />}
+              {activeTab === 'transactions' && (
+                <PartyStatementTable side="receivables" partyId={customerId} />
+              )}
               {activeTab === 'contacts' && <AccountingContactsTab contacts={contacts} />}
             </div>
           </div>
