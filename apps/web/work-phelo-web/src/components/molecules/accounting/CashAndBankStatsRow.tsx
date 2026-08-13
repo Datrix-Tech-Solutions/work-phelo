@@ -17,7 +17,7 @@ export function CashAndBankStatsRow({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0">
       <KpiCard
-        label="Total Cash Position"
+        label="Net Cash Position (Posted)"
         value={totalCashPosition}
         icon={Icons.CircleDollarSign}
         iconColor="var(--module-accounting, #2a78d6)"
