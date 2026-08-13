@@ -44,6 +44,26 @@ export interface CreateGLAccountPayload {
 
 export type UpdateGLAccountPayload = Partial<CreateGLAccountPayload>;
 
+export interface GLAccountLedgerEntry {
+  id: string;
+  description: string | null;
+  baseDebit: string;
+  baseCredit: string;
+  runningBalance: string;
+  journalEntry: {
+    journalNumber: string;
+    transactionDate: string;
+    reference: string | null;
+    description: string;
+    baseCurrency: string;
+  };
+}
+
+export interface GLAccountLedger {
+  entries: GLAccountLedgerEntry[];
+  closingBalance: string;
+}
+
 export interface QueryGLAccountsParams {
   category?: GLAccountCategory;
   status?: GLAccountStatus;
