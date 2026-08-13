@@ -908,6 +908,31 @@ export interface AccountTransaction {
   currency: string;
 }
 
+export type AgingBucket = 'CURRENT' | '1_30' | '31_60' | '61_90' | 'OVER_90';
+
+export interface AccountingAgingCurrencyTotal extends Record<AgingBucket, string> {
+  currency: string;
+}
+
+export interface AccountingOpenItem {
+  id: string;
+  documentNumber: string;
+  documentDate: string;
+  dueDate: string | null;
+  currency: string;
+  totalAmount: string;
+  outstandingAmount: string;
+}
+
+export interface AccountingAgingReport {
+  agingByCurrency: AccountingAgingCurrencyTotal[];
+}
+
+export interface AccountingPartyStatement extends AccountingAgingReport {
+  asOfDate: string;
+  documents: AccountingOpenItem[];
+}
+
 export interface AccountClassification {
   id: string;
   code: string;
