@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef, Ref, MutableRefObject } from 'react';
+import { useState, useEffect, useRef, Ref, MutableRefObject } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   EndorsementParticipantClosing,
@@ -93,7 +93,6 @@ function EndorsementCard({
     useState<EndorsementParticipantClosing | null>(null);
   const [documentPreview, setDocumentPreview] = useState<PlacementDocument | null>(null);
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
-  const [mailPreviewCounterpartyId, setMailPreviewCounterpartyId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
   const [pendingValidation, setPendingValidation] = useState<{
     row: EndorsementParticipantRow;
@@ -110,20 +109,6 @@ function EndorsementCard({
 
   const { data: reinsurers = [] } = useReinsurers();
 
-  const reinsurerEmails = useMemo<Record<string, string[]>>(
-    () =>
-      Object.fromEntries(
-        reinsurers.map((r) => {
-          const emails: string[] = [];
-          if (r.email) emails.push(r.email);
-          r.contacts.forEach((c) => {
-            if (c.email) emails.push(c.email);
-          });
-          return [r.id, emails];
-        }),
-      ),
-    [reinsurers],
-  );
   const {
     mutate: updateStatus,
     mutateAsync: updateStatusAsync,
@@ -373,6 +358,18 @@ function EndorsementCard({
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
     }
+  };
+
+  const handleMailReinsurer = (counterpartyId: string) => {
+    const participant = latestEndorsementParticipantByCounterpartyId.get(counterpartyId);
+    if (participant && participant.status === 'INVITED') {
+      updateEndorsementParticipantStatus
+        .mutateAsync({ participantId: participant.id, status: 'OFFER_SENT' })
+        .catch((error) => {
+          useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+        });
+    }
+    setMailedIds((prev) => new Set([...prev, counterpartyId]));
   };
 
   const handleRejectEndorsementParticipant = async (row: EndorsementParticipantRow) => {
@@ -760,7 +757,7 @@ function EndorsementCard({
                   hasAvailableCapacity={leftoverFacOffer > 0}
                   onAddParticipant={() => setAddPanelOpen(true)}
                   onPreviewMarketDocument={handlePreviewMarketDocument}
-                  onMailReinsurer={(counterpartyId) => setMailPreviewCounterpartyId(counterpartyId)}
+                  onMailReinsurer={handleMailReinsurer}
                   onAccept={handleAcceptEndorsement}
                   onReject={handleRejectEndorsementParticipant}
                   onEditRevision={handleEditRevisedOffer}
@@ -827,30 +824,6 @@ function EndorsementCard({
         onCloseEndorsementSlipPreview={() => setEndorsementSlipPreviewOpen(false)}
         marketPreview={marketPreview}
         onCloseMarketPreview={() => setMarketPreview(null)}
-        mailPreviewCounterpartyId={mailPreviewCounterpartyId}
-        mailBrokerageFee={
-          endorsementRows.find((r) => r.counterpartyId === mailPreviewCounterpartyId)
-            ?.brokerageFee ?? 0
-        }
-        mailRecipients={reinsurerEmails[mailPreviewCounterpartyId ?? ''] ?? []}
-        onSendMail={() => {
-          if (mailPreviewCounterpartyId) {
-            const participant =
-              latestEndorsementParticipantByCounterpartyId.get(mailPreviewCounterpartyId);
-            if (participant && participant.status === 'INVITED') {
-              updateEndorsementParticipantStatus
-                .mutateAsync({ participantId: participant.id, status: 'OFFER_SENT' })
-                .catch((error) => {
-                  useToastStore
-                    .getState()
-                    .addToast({ message: extractError(error), type: 'error' });
-                });
-            }
-            setMailedIds((prev) => new Set([...prev, mailPreviewCounterpartyId]));
-          }
-          setMailPreviewCounterpartyId(null);
-        }}
-        onCloseMailPreview={() => setMailPreviewCounterpartyId(null)}
         addPanelOpen={addPanelOpen}
         onCloseAddPanel={() => setAddPanelOpen(false)}
         onAddReinsurers={handleAddReinsurers}

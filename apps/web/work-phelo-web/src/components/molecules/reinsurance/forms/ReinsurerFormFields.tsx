@@ -6,7 +6,7 @@ import type { Control, UseFormRegister, UseFormSetValue, FieldErrors } from 'rea
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { Input } from '@/components/atoms/Input';
 import { Icons } from '@/components/atoms/icons';
 import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/forms/CounterpartyAddressFields';
 import { CONTACT_PERSON_DEFAULTS } from '@/types/reinsurance';
@@ -133,10 +133,12 @@ export function ReinsurerFormFields({
 
           <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <span className="text-sm font-bold text-gray-900">Primary Phone Number</span>
-            <PhoneInput
+            <Input
+              type="tel"
+              inputMode="numeric"
               placeholder="00 000 0000"
               value={primaryPhone ?? ''}
-              onChange={(v) => setValue('phone', v)}
+              onChange={(e) => setValue('phone', e.target.value.replace(/\D/g, ''))}
               error={errors.phone?.message}
             />
           </div>
@@ -184,10 +186,14 @@ export function ReinsurerFormFields({
 
               <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                 <span className="text-sm font-bold text-gray-900">Contact Phone</span>
-                <PhoneInput
+                <Input
+                  type="tel"
+                  inputMode="numeric"
                   placeholder="00 000 0000"
                   value={watchedContacts?.[index]?.phone ?? ''}
-                  onChange={(v) => setValue(`contacts.${index}.phone`, v)}
+                  onChange={(e) =>
+                    setValue(`contacts.${index}.phone`, e.target.value.replace(/\D/g, ''))
+                  }
                   error={errors.contacts?.[index]?.phone?.message}
                 />
               </div>

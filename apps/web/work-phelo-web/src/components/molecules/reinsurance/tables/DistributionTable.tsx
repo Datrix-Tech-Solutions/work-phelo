@@ -5,7 +5,6 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
-import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { Facultative, PlacementParticipantStatus, toDisplayStatus } from '@/types/reinsurance';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
 import { cn } from '@/lib/utils';
@@ -78,8 +77,6 @@ export function DistributionTable({
   onRevert,
   onReopen,
 }: DistributionTableProps) {
-  const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
-  const [mailPreviewId, setMailPreviewId] = useState<string | null>(null);
   const [slipPreviewId, setSlipPreviewId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftShare, setDraftShare] = useState('');
@@ -110,32 +107,6 @@ export function DistributionTable({
     if (!isNaN(parsed)) onBrokerageCommit(row, Math.min(100, Math.max(0, parsed)));
     setEditingBrokerageId(null);
     setDraftBrokerage('');
-  };
-
-  const handleSend = () => {
-    if (!mailPreviewId) return;
-    const row = entries.find((e) => e.id === mailPreviewId);
-    if (row) onMailSent(row);
-    setMailedIds((prev) => new Set([...prev, mailPreviewId]));
-    setMailPreviewId(null);
-  };
-
-  const handleAccept = (row: DistributionEntry) => {
-    onAccept(row);
-    setMailedIds((prev) => {
-      const n = new Set(prev);
-      n.delete(row.id);
-      return n;
-    });
-  };
-
-  const handleDecline = (row: DistributionEntry) => {
-    onDecline(row);
-    setMailedIds((prev) => {
-      const n = new Set(prev);
-      n.delete(row.id);
-      return n;
-    });
   };
 
   const columns: Column<DistributionEntry>[] = [
@@ -271,7 +242,6 @@ export function DistributionTable({
       label: 'Actions',
       width: '150px',
       render: (row) => {
-        const mailed = mailedIds.has(row.id);
         const isFinalized = row.status === 'CLOSED' || Boolean(row.hasConfirmedClosing);
         const responded = row.status === 'DECLINED' || row.status === 'ACCEPTED' || isFinalized;
         const isBusy = busyIds?.has(row.id) ?? false;
@@ -286,11 +256,11 @@ export function DistributionTable({
           !isFinalized;
         const showAccept =
           !isPlacementLocked &&
-          (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
+          (row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
           !responded;
         const showDecline =
           !isPlacementLocked &&
-          (mailed || row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
+          (row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
           !responded;
         const showRevert = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
         const showClose = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
@@ -318,9 +288,12 @@ export function DistributionTable({
             {showMail && (
               <button
                 type="button"
-                title="Send mail"
-                onClick={() => setMailPreviewId(row.id)}
-                className={`text-green-500 hover:text-green-700 transition-colors ${row.status === 'INVITED' ? 'mail-pending-bounce' : ''}`}
+                title="Mark as offer sent"
+                onClick={() => {
+                  if (!isBusy) onMailSent(row);
+                }}
+                disabled={isBusy}
+                className={`text-green-500 hover:text-green-700 transition-colors ${disabledActionClass} ${row.status === 'INVITED' ? 'mail-pending-bounce' : ''}`}
               >
                 <Icons.Mail className="w-5 h-5" />
               </button>
@@ -330,7 +303,7 @@ export function DistributionTable({
                 type="button"
                 title={isBusy ? 'Accepting line...' : 'Accept Offer'}
                 onClick={() => {
-                  if (!isBusy) handleAccept(row);
+                  if (!isBusy) onAccept(row);
                 }}
                 disabled={isBusy}
                 className={`text-green-500 hover:text-green-600 transition-colors ${disabledActionClass}`}
@@ -343,7 +316,7 @@ export function DistributionTable({
                 type="button"
                 title="Decline Offer"
                 onClick={() => {
-                  if (!isBusy) handleDecline(row);
+                  if (!isBusy) onDecline(row);
                 }}
                 disabled={isBusy}
                 className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
@@ -408,7 +381,6 @@ export function DistributionTable({
     },
   ];
 
-  const mailPreviewEntry = entries.find((e) => e.id === mailPreviewId);
   const slipPreviewEntry = entries.find((e) => e.id === slipPreviewId);
 
   return (
@@ -421,16 +393,6 @@ export function DistributionTable({
         totalPages={1}
         onPageChange={() => {}}
         noInternalScroll
-      />
-
-      <MailPreviewModal
-        key={mailPreviewId ?? ''}
-        isOpen={!!mailPreviewId}
-        placement={placement}
-        brokerageFee={mailPreviewEntry?.brokerageFee ?? 0}
-        recipients={mailPreviewEntry?.emails ?? []}
-        onSend={handleSend}
-        onClose={() => setMailPreviewId(null)}
       />
 
       <SlipPreviewModal
