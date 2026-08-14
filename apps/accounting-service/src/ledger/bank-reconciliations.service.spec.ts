@@ -80,14 +80,37 @@ describe('BankReconciliationsService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(reconciliation()),
       },
+      bankStatementLine: { findMany: jest.fn().mockResolvedValue([]) },
       accountingAuditLog: {
         create: jest.fn().mockResolvedValue({ id: 'audit-1' }),
       },
     };
+    const transaction = {
+      bankStatementLine: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      bankReconciliation: {
+        update: jest.fn().mockResolvedValue(reconciliation()),
+      },
+      accountingAuditLog: {
+        create: jest.fn().mockResolvedValue({ id: 'audit-2' }),
+      },
+    };
+    const transactionPrisma = {
+      ...prisma,
+      $transaction: jest
+        .fn()
+        .mockImplementation((callback: (tx: typeof transaction) => unknown) =>
+          callback(transaction),
+        ),
+    };
     return {
-      prisma,
+      prisma: transactionPrisma,
+      transaction,
       service: new BankReconciliationsService(
-        prisma as unknown as PrismaService,
+        transactionPrisma as unknown as PrismaService,
       ),
     };
   }
@@ -145,5 +168,44 @@ describe('BankReconciliationsService', () => {
         where: { id: 'other-tenant-record', tenantId: actor.tenantId },
       }),
     );
+  });
+
+  it('imports validated CSV lines into a draft reconciliation without matching cashbook rows', async () => {
+    const { service, transaction } = setup();
+    const file = {
+      originalname: 'ecobank-august.csv',
+      mimetype: 'text/csv',
+      size: 134,
+      buffer: Buffer.from(
+        'transactionDate,valueDate,amount,currency,description,bankReference,counterpartyName,runningBalance\n2026-08-05,2026-08-05,250.50,GHS,"Premium receipt, August",ECO-001,Acme Client,1250.50\n',
+      ),
+    };
+
+    await expect(
+      service.importStatementLines(actor, 'reconciliation-1', file),
+    ).resolves.toEqual({
+      reconciliationId: 'reconciliation-1',
+      importedLineCount: 1,
+    });
+
+    expect(transaction.bankStatementLine.createMany).toHaveBeenCalledTimes(1);
+    expect(transaction.bankReconciliation.update).toHaveBeenCalledTimes(1);
+    expect(transaction.accountingAuditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects duplicate statement lines in one CSV before persisting them', async () => {
+    const { service } = setup();
+    const file = {
+      originalname: 'duplicate.csv',
+      mimetype: 'text/csv',
+      size: 120,
+      buffer: Buffer.from(
+        'transactionDate,amount,currency,bankReference\n2026-08-05,250.50,GHS,ECO-001\n2026-08-05,250.50,GHS,ECO-001\n',
+      ),
+    };
+
+    await expect(
+      service.importStatementLines(actor, 'reconciliation-1', file),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

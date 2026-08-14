@@ -8,13 +8,18 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiCookieAuth,
+  ApiConsumes,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireModule } from '../auth/decorators/module.decorator';
@@ -60,6 +65,43 @@ export class BankReconciliationsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.create(request.user, dto);
+  }
+
+  @Post(':reconciliationId/statement-lines/import')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 1024 * 1024 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description:
+            'CSV with transactionDate, amount and currency columns. Optional columns: valueDate, description, bankReference, counterpartyName, runningBalance.',
+        },
+      },
+    },
+  })
+  @ApiOperation({
+    summary: 'Import validated CSV statement lines into a draft reconciliation',
+    description:
+      'Imports immutable statement lines only. It does not match Cashbook transactions or create accounting entries.',
+  })
+  @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_MANAGE)
+  importStatementLines(
+    @Param('reconciliationId', ParseUUIDPipe) reconciliationId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.importStatementLines(
+      request.user,
+      reconciliationId,
+      file,
+    );
   }
 
   @Get(':reconciliationId')
