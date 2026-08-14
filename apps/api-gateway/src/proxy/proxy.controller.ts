@@ -258,6 +258,15 @@ export class ProxyController {
       'content-type': req.headers['content-type'] || 'application/json',
     };
 
+    if (
+      service === 'accounting' &&
+      /^\/api\/v1\/accounting\/docs(?:\/.*|-json|-yaml)?$/.test(req.path)
+    ) {
+      forwardHeaders['x-workphelo-gateway-docs'] = 'accounting';
+      forwardHeaders['x-forwarded-host'] = req.headers.host;
+      forwardHeaders['x-forwarded-proto'] = req.protocol;
+    }
+
     if (req.headers.cookie) {
       forwardHeaders.cookie = req.headers.cookie;
     }
