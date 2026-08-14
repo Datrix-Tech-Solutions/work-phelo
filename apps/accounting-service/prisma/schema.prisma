@@ -126,6 +126,22 @@ enum CashbookTransactionStatus {
   @@schema("accounting")
 }
 
+enum BankReconciliationStatus {
+  DRAFT
+  COMPLETED
+  VOID
+
+  @@schema("accounting")
+}
+
+enum BankStatementLineStatus {
+  UNMATCHED
+  MATCHED
+  IGNORED
+
+  @@schema("accounting")
+}
+
 enum AccountingReceivableDocumentType {
   INVOICE
   CREDIT_NOTE
@@ -539,6 +555,7 @@ model AccountingCashAccount {
   glAccount       GLAccount                 @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   transactions    CashbookTransaction[]     @relation("CashbookCashAccount")
   transferIns     CashbookTransaction[]     @relation("CashbookDestinationCashAccount")
+  reconciliations BankReconciliation[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
@@ -546,6 +563,63 @@ model AccountingCashAccount {
   @@index([tenantId, accountKind, isActive])
   @@index([tenantId, currency, isActive])
   @@index([tenantId, glAccountId])
+  @@schema("accounting")
+}
+
+model BankReconciliation {
+  id                      String                   @id @default(uuid())
+  tenantId                String
+  cashAccountId           String
+  statementReference      String
+  statementStartDate      DateTime
+  statementEndDate        DateTime
+  openingBalance          Decimal                  @db.Decimal(20, 4)
+  closingBalance          Decimal                  @db.Decimal(20, 4)
+  currency                String
+  status                  BankReconciliationStatus @default(DRAFT)
+  createdByUserId         String
+  updatedByUserId         String
+  completedByUserId       String?
+  voidedByUserId          String?
+  completedAt             DateTime?
+  voidedAt                DateTime?
+  voidReason              String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  cashAccount             AccountingCashAccount    @relation(fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  statementLines          BankStatementLine[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, cashAccountId, statementReference])
+  @@index([tenantId, cashAccountId, status, statementEndDate])
+  @@index([tenantId, status, statementEndDate])
+  @@schema("accounting")
+}
+
+model BankStatementLine {
+  id                   String                  @id @default(uuid())
+  tenantId             String
+  reconciliationId     String
+  lineNumber           Int
+  transactionDate      DateTime
+  valueDate            DateTime?
+  amount               Decimal                 @db.Decimal(20, 4)
+  currency             String
+  description          String?
+  bankReference        String?
+  counterpartyName     String?
+  runningBalance       Decimal?                @db.Decimal(20, 4)
+  sourceFingerprint    String
+  status               BankStatementLineStatus @default(UNMATCHED)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  reconciliation       BankReconciliation      @relation(fields: [reconciliationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([reconciliationId, lineNumber])
+  @@unique([tenantId, reconciliationId, sourceFingerprint])
+  @@index([tenantId, reconciliationId, status, transactionDate])
+  @@index([tenantId, bankReference])
   @@schema("accounting")
 }
 

@@ -6,6 +6,8 @@ import { AccountingSettingsController } from './accounting-settings.controller';
 import { AccountsController } from './accounts.controller';
 import { CashbookController } from './cashbook.controller';
 import { CashbookService } from './cashbook.service';
+import { BankReconciliationsController } from './bank-reconciliations.controller';
+import { BankReconciliationsService } from './bank-reconciliations.service';
 import { InternalSubledgersController } from './internal-subledgers.controller';
 import { JournalPolicy } from './journal.policy';
 import { JournalsController } from './journals.controller';
@@ -23,6 +25,7 @@ import { ReceivablesService } from './receivables.service';
     AccountingSettingsController,
     AccountsController,
     CashbookController,
+    BankReconciliationsController,
     InternalSubledgersController,
     JournalsController,
     PayablesController,
@@ -32,6 +35,7 @@ import { ReceivablesService } from './receivables.service';
   providers: [
     AccountingMasterDataService,
     CashbookService,
+    BankReconciliationsService,
     JournalPolicy,
     JournalsService,
     PayablesService,
