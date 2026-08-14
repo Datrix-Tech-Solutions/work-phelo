@@ -218,6 +218,48 @@ export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
 
 export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
 
+export type SourceEventStatus = 'RECEIVED' | 'PROCESSING' | 'POSTED' | 'FAILED' | 'IGNORED';
+
+export interface SourceEventInboxItem {
+  id: string;
+  sourceModule: string;
+  sourceEventType: string;
+  sourceRecordId: string;
+  sourceDocumentId: string | null;
+  idempotencyKey: string;
+  status: SourceEventStatus;
+  failureReason: string | null;
+  retryCount: number;
+  createdAt: string;
+  processedAt: string | null;
+  postingRule: {
+    id: string;
+    name: string;
+    sourceModule: string;
+    sourceEventType: string;
+    version: number;
+  } | null;
+  journalEntry: {
+    id: string;
+    journalNumber: string;
+    status: JournalRecordStatus;
+    transactionDate: string;
+    transactionCurrency: string;
+    baseCurrency: string;
+    postedAt: string | null;
+  } | null;
+  cashbookTransaction: {
+    id: string;
+    status: JournalRecordStatus;
+    transactionType: string;
+    direction: string;
+    amount: string;
+    currency: string;
+    cashAccountId: string;
+    postedJournalEntryId: string | null;
+  } | null;
+}
+
 export interface JournalLineRecord {
   id: string;
   glAccountId: string;

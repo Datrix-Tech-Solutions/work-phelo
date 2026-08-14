@@ -65,6 +65,14 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         active: true,
       },
       {
+        key: 'source-events',
+        label: 'Posting Inbox',
+        icon: <JournalEntriesIcon />,
+        href: 'source-events',
+        enabled: true,
+        active: true,
+      },
+      {
         key: 'accounts-payable',
         label: 'Accounts Payable',
         icon: <AccountsPayableIcon />,
