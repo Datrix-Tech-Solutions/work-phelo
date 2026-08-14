@@ -78,9 +78,12 @@ export function DocumentPreviewModal({
       })
       .finally(() => {
         el.style.display = 'none';
+        // Deferred until the capture is done: several callers use onPrint to close
+        // this modal, which unmounts the portaled #irisk-print-root. Firing it any
+        // earlier races html2canvas's async clone-and-capture of that same element,
+        // causing "Unable to find element in cloned iframe".
+        onPrint();
       });
-
-    onPrint();
   };
 
   return (

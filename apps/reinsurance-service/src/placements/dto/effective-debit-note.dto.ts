@@ -60,8 +60,14 @@ export class EffectiveDebitNotePreviewResponseDto {
   @ApiProperty({ example: 120000 })
   grossAmount!: number;
 
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 10 })
+  commissionPercent!: number | null;
+
   @ApiPropertyOptional({ type: Number, nullable: true, example: 12000 })
   commissionAmount!: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 7.5 })
+  brokeragePercent!: number | null;
 
   @ApiPropertyOptional({ type: Number, nullable: true, example: 9000 })
   brokerageAmount!: number | null;
