@@ -23,6 +23,9 @@ interface SearchSelectProps {
   size?: 'sm' | 'md';
   /** Fires on every keystroke — lets callers drive async option sources (e.g. geocoding search). */
   onQueryChange?: (query: string) => void;
+  /** Rendered inside the control's own box, alongside the clear/chevron icons (e.g. a
+   *  visibility toggle). Not a native <button> internally, so it nests safely here. */
+  rightSlot?: React.ReactNode;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -40,6 +43,7 @@ export function SearchSelect({
   error,
   size = 'sm',
   onQueryChange,
+  rightSlot,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -241,6 +245,7 @@ export function SearchSelect({
         />
 
         <div className="flex items-center gap-1 shrink-0 ml-2">
+          {rightSlot}
           {/* Clear button — only when something is selected */}
           {value && !open && (
             <button

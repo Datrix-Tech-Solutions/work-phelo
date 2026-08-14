@@ -61,7 +61,7 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className="p-1.5 rounded-lg text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-600)) hover:bg-(--surface-hover,var(--color-gray-100)) transition-colors"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-700)) hover:[&>svg]:stroke-[2.5] transition-colors"
       >
         <Icons.EllipsisVertical />
       </button>

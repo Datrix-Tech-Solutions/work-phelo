@@ -4,6 +4,7 @@ import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
+import { cardClass } from '@/lib/utils';
 import { useFacultatives } from '@/hooks';
 import { PaymentBreakdown } from '@/components/molecules/reinsurance/PaymentBreakdown';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
@@ -50,7 +51,7 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
             })}
           </div>
         ) : (
-          <div className="max-w-sm">
+          <div className={cardClass('max-w-sm p-5')}>
             <PaymentBreakdown />
           </div>
         )}

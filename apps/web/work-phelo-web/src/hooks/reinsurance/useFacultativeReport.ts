@@ -6,6 +6,7 @@ import { Facultative, FacultativeStatus } from '@/types/reinsurance';
 const ACCEPTED_STATUSES = new Set(['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED']);
 const OPEN_STATUSES = new Set(['DRAFT', 'MARKETING']);
 const QUALIFYING_PARTICIPANT_STATUSES = new Set(['ACCEPTED', 'CLOSED']);
+const REINSURER_ROLES = new Set(['REINSURER', 'LEAD_REINSURER', 'CO_REINSURER']);
 
 /** Sums sharePercent for participants that have accepted or closed — a closed reinsurer still counts as accepted. */
 function acceptedPercentFor(p: Facultative): number {
@@ -13,6 +14,13 @@ function acceptedPercentFor(p: Facultative): number {
     .filter((pt) => QUALIFYING_PARTICIPANT_STATUSES.has(pt.status))
     .reduce((total, pt) => total + (pt.sharePercent ? parseFloat(pt.sharePercent) : 0), 0);
   return Math.round(sum * 100) / 100;
+}
+
+/** Counts reinsurer-role participants that have accepted or closed — matches acceptedPercentFor's scope. */
+function reinsurerCountFor(p: Facultative): number {
+  return p.participants.filter(
+    (pt) => REINSURER_ROLES.has(pt.role) && QUALIFYING_PARTICIPANT_STATUSES.has(pt.status),
+  ).length;
 }
 
 export interface FacultativeReportParams {
@@ -35,10 +43,13 @@ export interface FacultativeReportRow {
   sumInsured: number | null;
   premium: number | null;
   currency: string | null;
+  commission: number | null;
   totalOfferedPercent: number;
   totalAcceptedPercent: number;
+  reinsurerCount: number;
   status: FacultativeStatus;
   inceptionDate: string | null;
+  expiryDate: string | null;
 }
 
 export interface FacultativeReportSummary {
@@ -103,10 +114,13 @@ export function useFacultativeReport(
         sumInsured: p.sumInsured,
         premium: p.premium,
         currency: p.currency,
+        commission: p.commission,
         totalOfferedPercent: p.totalOfferedPercent,
         totalAcceptedPercent: acceptedPercentFor(p),
+        reinsurerCount: reinsurerCountFor(p),
         status: p.status,
         inceptionDate: p.inceptionDate,
+        expiryDate: p.expiryDate,
       }));
   }, [filtered]);
 

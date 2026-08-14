@@ -35,6 +35,11 @@ import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 
+/** Reserved key in businessDetails/offerDetails holding the list of schema fieldKeys the
+ *  tenant has opted to hide from generated documents (Slip, Notes, …) for that section.
+ *  Mirrors the frontend's FIELD_VISIBILITY_KEY in placementFormDetails.ts — keep in sync. */
+const FIELD_VISIBILITY_KEY = '__fieldVisibility';
+
 const placementInclude = {
   cedant: {
     select: {
@@ -1329,6 +1334,7 @@ export class PlacementsService {
     for (const [key, entryValue] of Object.entries(
       value as Record<string, unknown>,
     )) {
+      if (key === FIELD_VISIBILITY_KEY) continue;
       if (key !== 'customFields') {
         entries.push({
           key,
@@ -2866,6 +2872,10 @@ export class PlacementsService {
         result[key] = this.trimCustomFieldsJsonValue(entry);
         continue;
       }
+      if (key === FIELD_VISIBILITY_KEY) {
+        result[key] = this.trimFieldVisibilityJsonValue(entry);
+        continue;
+      }
       result[key] = this.trimJsonValue(entry, fieldName);
     }
 
@@ -2884,8 +2894,14 @@ export class PlacementsService {
         ...(typeof field.displayOrder === 'number'
           ? { displayOrder: field.displayOrder }
           : {}),
+        showOnDocument: field.showOnDocument !== false,
       };
     }) as Prisma.InputJsonValue;
+  }
+
+  private trimFieldVisibilityJsonValue(value: unknown): Prisma.InputJsonValue {
+    this.validateFieldVisibility(value);
+    return (value as string[]).map((key) => key.trim());
   }
 
   private trimJsonValue(
@@ -3056,6 +3072,10 @@ export class PlacementsService {
         this.validateCustomFields(provided[key]);
         continue;
       }
+      if (key === FIELD_VISIBILITY_KEY) {
+        this.validateFieldVisibility(provided[key]);
+        continue;
+      }
       if (!definedKeys.has(key)) {
         throw new BadRequestException(
           `Unknown field key '${key}' in ${sectionName}`,
@@ -3163,6 +3183,22 @@ export class PlacementsService {
       ) {
         throw new BadRequestException(
           `Custom field at index ${index} displayOrder must be a number`,
+        );
+      }
+    });
+  }
+
+  private validateFieldVisibility(value: unknown): void {
+    if (value === undefined || value === null) return;
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(
+        `Field '${FIELD_VISIBILITY_KEY}' must be an array of field keys`,
+      );
+    }
+    value.forEach((key, index) => {
+      if (typeof key !== 'string' || key.trim().length === 0) {
+        throw new BadRequestException(
+          `${FIELD_VISIBILITY_KEY} entry at index ${index} must be a non-empty string`,
         );
       }
     });

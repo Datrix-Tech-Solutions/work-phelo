@@ -78,6 +78,8 @@ import {
   CircleCheckBig,
   MapPin,
   Receipt,
+  FileText,
+  FileX2,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -112,6 +114,8 @@ export const Icons = {
   RotateCcw,
   Save,
   Receipt,
+  FileText,
+  FileX2,
 
   // Time & Status
   Clock,

@@ -7,15 +7,16 @@ import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement } from '@/hooks';
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { PaymentOverview } from '@/components/molecules/reinsurance/stats/PaymentOverview';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
 import { PaymentHistoryTab } from '@/components/molecules/reinsurance/tabs/PaymentHistoryTab';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
-type PaymentTab = 'overview' | 'history';
+type PaymentTab = 'details' | 'history';
 
 const TABS = [
-  { key: 'overview', label: 'Overview' },
+  { key: 'details', label: 'Details' },
   { key: 'history', label: 'Payment History' },
 ];
 
@@ -32,7 +33,7 @@ export default function PaymentDetailPage({
     isLoading: placementLoading,
     isError: placementError,
   } = useFacultativePlacement(id);
-  const [activeTab, setActiveTab] = useState<PaymentTab>('overview');
+  const [activeTab, setActiveTab] = useState<PaymentTab>('details');
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -74,6 +75,8 @@ export default function PaymentDetailPage({
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
         {placement ? (
           <div className="flex flex-col gap-6">
+            <PaymentOverview placement={placement} />
+
             <div className="flex flex-col">
               <TabBar
                 tabs={TABS}
@@ -82,7 +85,9 @@ export default function PaymentDetailPage({
               />
 
               <div className="pt-5">
-                {activeTab === 'overview' && <BusinessPaymentSection placement={placement} />}
+                {activeTab === 'details' && (
+                  <BusinessPaymentSection placement={placement} showBreakdown={false} />
+                )}
                 {activeTab === 'history' && (
                   <PaymentHistoryTab placementId={id} placement={placement} />
                 )}

@@ -1,14 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { useFieldArray, useWatch } from 'react-hook-form';
 import type { Control, UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-form';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Input } from '@/components/atoms/Input';
 import { Icons } from '@/components/atoms/icons';
 import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/forms/CounterpartyAddressFields';
 import { CONTACT_PERSON_DEFAULTS } from '@/types/reinsurance';
 import type { CedantFormValues } from '@/types/reinsurance';
+import { useReinsurers } from '@/hooks';
+import { codeToCountry } from '@/lib/geo';
 
 interface CedantFormFieldsProps {
   control: Control<CedantFormValues>;
@@ -29,8 +33,47 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
   // Contact phones via watching the entire contacts array
   const watchedContacts = useWatch({ control, name: 'contacts' });
 
+  const { data: reinsurers = [] } = useReinsurers();
+  const [prefillId, setPrefillId] = useState('');
+
+  const reinsurerOptions = reinsurers.map((r) => ({ value: r.id, label: r.name }));
+
+  const handlePrefill = (reinsurerId: string) => {
+    setPrefillId(reinsurerId);
+    const reinsurer = reinsurers.find((r) => r.id === reinsurerId);
+    if (!reinsurer) return;
+
+    setValue('name', reinsurer.name);
+    setValue('email', reinsurer.email ?? '');
+    setValue('phone', reinsurer.phone ?? '');
+
+    const additionalContacts = reinsurer.contacts
+      .filter((c) => !c.isPrimary)
+      .map((c) => ({ fullName: c.fullName, email: c.email ?? '', phone: c.phone ?? '' }));
+    setValue('contacts', additionalContacts);
+
+    const primaryAddr = reinsurer.addresses.find((a) => a.isPrimary) ?? reinsurer.addresses[0];
+    if (primaryAddr) {
+      setValue('address.country', codeToCountry(primaryAddr.country));
+      setValue('address.state', primaryAddr.state ?? '');
+      setValue('address.city', primaryAddr.city ?? '');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
+      {/* ── Prefill from reinsurer ── */}
+      <div className="flex flex-col gap-1">
+        <SearchSelect
+          label="Prefill from Reinsurer"
+          placeholder="Search reinsurer to prefill…"
+          options={reinsurerOptions}
+          value={prefillId}
+          onChange={handlePrefill}
+        />
+        <p className="text-xs text-gray-400">Selecting a reinsurer prefills the fields below.</p>
+      </div>
+
       {/* ── Basic info ── */}
       <FormSection title="Basic Info">
         <FormField

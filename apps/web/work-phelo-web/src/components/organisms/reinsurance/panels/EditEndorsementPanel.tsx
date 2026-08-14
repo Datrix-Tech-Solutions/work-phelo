@@ -20,6 +20,7 @@ import { extractError } from '@/lib/extractError';
 import { toDateOnly } from '@/lib/utils';
 import {
   extractPlacementCustomFields,
+  extractRiskDetailsVisibility,
   mergePlacementRiskDetails,
   splitPlacementDetails,
 } from '@/lib/reinsurance/placementFormDetails';
@@ -65,6 +66,7 @@ function endorsementToFormValues(
     periodFrom: String(snap.inceptionDate ?? placement.inceptionDate ?? ''),
     periodTo: String(snap.expiryDate ?? placement.expiryDate ?? ''),
     riskDetails: mergePlacementRiskDetails(businessDetails, offerDetails),
+    riskDetailsVisibility: extractRiskDetailsVisibility(businessDetails, offerDetails),
     extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, schemaKeys),
     comment: endorsement.reason ?? '',
     effectiveDate: endorsement.effectiveDate
@@ -149,6 +151,7 @@ export function EditEndorsementPanel({
         values.riskDetails,
         selectedRiskType?.fields ?? [],
         values.extraRiskFields ?? [],
+        values.riskDetailsVisibility ?? {},
       );
 
       await updateEndorsement({

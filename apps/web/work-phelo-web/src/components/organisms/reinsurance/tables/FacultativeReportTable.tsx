@@ -119,14 +119,22 @@ export function FacultativeReportTable() {
       {
         key: 'sumInsured',
         label: 'Sum Insured',
-        width: '150px',
+        width: '120px',
+        className: 'text-right',
         render: (row) => fmtAmount(row.sumInsured, row.currency),
       },
       {
         key: 'premium',
         label: 'Premium',
         width: '150px',
+        className: 'text-right',
         render: (row) => fmtAmount(row.premium, row.currency),
+      },
+      {
+        key: 'commission',
+        label: 'Commission',
+        width: '100px',
+        render: (row) => (row.commission != null ? `${row.commission}%` : '—'),
       },
       {
         key: 'totalAcceptedPercent',
@@ -135,10 +143,22 @@ export function FacultativeReportTable() {
         render: (row) => `${row.totalAcceptedPercent}%`,
       },
       {
+        key: 'reinsurerCount',
+        label: 'Reinsurers',
+        width: '100px',
+        render: (row) => row.reinsurerCount.toLocaleString(),
+      },
+      {
         key: 'inceptionDate',
         label: 'Inception',
         width: '150px',
         render: (row) => fmtDate(row.inceptionDate),
+      },
+      {
+        key: 'expiryDate',
+        label: 'Expiry',
+        width: '150px',
+        render: (row) => fmtDate(row.expiryDate),
       },
       {
         key: 'status',
@@ -172,7 +192,7 @@ export function FacultativeReportTable() {
           }
           extraFilters={
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="w-38">
+              <div className="w-50">
                 <DatePicker
                   size="sm"
                   placeholder="Period start"
@@ -180,7 +200,7 @@ export function FacultativeReportTable() {
                   onChange={setStartDate}
                 />
               </div>
-              <div className="w-38">
+              <div className="w-50">
                 <DatePicker
                   size="sm"
                   placeholder="Period end"

@@ -13,7 +13,7 @@ import {
   fetchPlacementFinancialPosition,
   placementFinancialPositionKey,
 } from '@/hooks/reinsurance/usePayments';
-import { cn, inputClass } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 export interface AddPaymentFormValues {
@@ -272,23 +272,33 @@ export function AddPaymentFormFields({
             {rowNeedsRate && (
               <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                 <span className="text-xs text-gray-400">Rate</span>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="0.00"
-                  className={cn(inputClass(), 'w-20 px-2 py-2 text-xs text-right')}
-                  {...register(`allocationRates.${f.id}` as `allocationRates.${string}`)}
+                <Controller
+                  name={`allocationRates.${f.id}` as `allocationRates.${string}`}
+                  control={control}
+                  render={({ field }) => (
+                    <NumberField
+                      value={field.value ? Number(field.value) : 0}
+                      onChange={(n) => field.onChange(n ? String(n) : '')}
+                      placeholder="0.00"
+                      className="w-20 px-2 py-2 text-xs text-right"
+                    />
+                  )}
                 />
               </div>
             )}
             <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <span className="text-xs text-gray-400">Amount</span>
-              <input
-                type="number"
-                step="any"
-                placeholder="0.00"
-                className={cn(inputClass(), 'w-32 px-2 py-2 text-xs text-right')}
-                {...register(`allocations.${f.id}` as `allocations.${string}`)}
+              <Controller
+                name={`allocations.${f.id}` as `allocations.${string}`}
+                control={control}
+                render={({ field }) => (
+                  <NumberField
+                    value={field.value ? Number(field.value) : 0}
+                    onChange={(n) => field.onChange(n ? String(n) : '')}
+                    placeholder="0.00"
+                    className="w-32 px-2 py-2 text-xs text-right"
+                  />
+                )}
               />
             </div>
           </div>

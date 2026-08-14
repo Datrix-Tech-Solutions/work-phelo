@@ -1,28 +1,25 @@
 import { ReactNode } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
-import { Badge } from '@/components/atoms/Badge';
-import { cardClass } from '@/lib/utils';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { fmt, fmtDate } from '@/lib/reinsurance/claimFormat';
-import { CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT } from '@/lib/reinsurance/claimStatus';
 import { Facultative, PlacementClaim } from '@/types/reinsurance';
 
 interface ClaimDetailsPanelProps {
   placement: Facultative;
   claim?: PlacementClaim;
   deductionRate: number;
-  /** Rendered right below the status badge — kept as a slot so this stays a pure/presentational
+  /** Rendered right below the fact grid — kept as a slot so this stays a pure/presentational
    * molecule while the caller wires up the (hook-driven) status actions organism. */
   statusActions?: ReactNode;
 }
 
-/** Read-only placement + claim summary card — policy terms on top, claim facts below once a
- * claim exists. */
+/** Read-only placement + claim summary — a fact grid in the same `DetailField` tile format as
+ * `FacultativeOverview`, rendered inside `ClaimOverview`'s `CollapsibleOverview` card. */
 export function ClaimDetailsPanel({
   placement,
   claim,
   deductionRate,
-  statusActions,
+  // statusActions,
 }: ClaimDetailsPanelProps) {
   const { facultativeOffer, sumInsured, premium, commission, currency, createdAt } = placement;
 
@@ -38,92 +35,51 @@ export function ClaimDetailsPanel({
       : facPremium;
 
   return (
-    <div className={cardClass('flex flex-col gap-3 p-5')}>
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-900">
-            {displayPolicyNumber(placement.policyNumber)}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {placement.cedant?.name && (
-            <span className="text-xs text-gray-600">{placement.cedant.name}</span>
-          )}
-          {placement.cedant?.name && placement.title && (
-            <span className="text-gray-400 text-xs">·</span>
-          )}
-          {placement.title && <span className="text-xs text-gray-400">{placement.title}</span>}
-          {placement.classOfBusiness && (
-            <>
-              <span className="text-gray-400 text-xs">·</span>
-              <span className="text-xs text-gray-400">{placement.classOfBusiness}</span>
-            </>
-          )}
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
+        <DetailField label="Policy No." value={displayPolicyNumber(placement.policyNumber)} />
+        <DetailField label="Reinsured" value={placement.cedant?.name ?? '—'} />
+        <DetailField label="Insured" value={placement.title ?? '—'} />
+        <DetailField label="Class of Risk" value={placement.classOfBusiness ?? '—'} />
+        <DetailField
+          label="Period of Insurance"
+          value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
+        />
+        <DetailField
+          label="Facultative Offer"
+          value={facultativeOffer != null ? `${facultativeOffer}%` : '—'}
+        />
+        <DetailField label="Fac. Sum Insured" value={fmt(facSumInsured, currency)} />
+        <DetailField label="Fac. Premium" value={fmt(netPremium, currency)} />
+        <DetailField label="Created At" value={fmtDate(createdAt)} />
+
+        {claim && (
+          <>
+            <DetailField label="Claim Number" value={claim.claimNumber} />
+            <DetailField label="Occurrence Date" value={fmtDate(claim.occurrenceDate)} />
+            <DetailField label="Reported Date" value={fmtDate(claim.reportedDate)} />
+            <DetailField label="Claim Cause" value={claim.claimCause} />
+            {claim.occurrenceDetails && (
+              <DetailField label="Details" value={claim.occurrenceDetails} />
+            )}
+            <DetailField
+              label="Estimated Loss"
+              value={fmt(claim.estimatedLossAmount, claim.currency)}
+            />
+            {claim.finalLossAmount && (
+              <DetailField label="Final Loss" value={fmt(claim.finalLossAmount, claim.currency)} />
+            )}
+            {claim.approvedPayableAmount && (
+              <DetailField
+                label="Approved Payable"
+                value={fmt(claim.approvedPayableAmount, claim.currency)}
+              />
+            )}
+          </>
+        )}
       </div>
 
-      <hr className="border-gray-100" />
-
-      <DetailField
-        horizontal
-        label="Facultative Offer"
-        value={facultativeOffer != null ? `${facultativeOffer}%` : '—'}
-      />
-      <DetailField horizontal label="Fac. Sum Insured" value={fmt(facSumInsured, currency)} />
-      <DetailField
-        horizontal
-        label="Period of Insurance"
-        value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
-      />
-      <DetailField
-        horizontal
-        label="Fac. Premium"
-        value={<span className="font-semibold text-gray-900">{fmt(netPremium, currency)}</span>}
-      />
-      <DetailField horizontal label="Created At" value={fmtDate(createdAt)} />
-
-      {claim && (
-        <>
-          <hr className="border-gray-100" />
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-gray-900">{claim.claimNumber}</span>
-            <Badge
-              label={CLAIM_STATUS_LABEL[claim.status]}
-              variant={CLAIM_STATUS_VARIANT[claim.status]}
-            />
-          </div>
-
-          {statusActions}
-
-          <DetailField horizontal label="Occurrence Date" value={fmtDate(claim.occurrenceDate)} />
-          <DetailField horizontal label="Reported Date" value={fmtDate(claim.reportedDate)} />
-          <DetailField horizontal label="Claim Cause" value={claim.claimCause} />
-          {claim.occurrenceDetails && (
-            <DetailField horizontal label="Details" value={claim.occurrenceDetails} />
-          )}
-          <DetailField
-            horizontal
-            label="Estimated Loss"
-            value={
-              <span className="font-semibold text-gray-900">
-                {fmt(claim.estimatedLossAmount, claim.currency)}
-              </span>
-            }
-          />
-          {claim.finalLossAmount && (
-            <DetailField
-              horizontal
-              label="Final Loss"
-              value={
-                <span className="font-semibold text-gray-900">
-                  {fmt(claim.finalLossAmount, claim.currency)}
-                </span>
-              }
-            />
-          )}
-        </>
-      )}
+      {/* {statusActions} */}
     </div>
   );
 }

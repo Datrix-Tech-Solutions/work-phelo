@@ -7,9 +7,47 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
 import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
+import { Icons } from '@/components/atoms/icons';
 import { FacultativeFormValues } from '@/types/reinsurance';
 import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions, useRiskTypes } from '@/hooks';
 import { cn, inputClass } from '@/lib/utils';
+
+function DocumentVisibilityToggle({
+  visible,
+  onToggle,
+}: {
+  visible: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggle();
+        }
+      }}
+      title={
+        visible ? 'Shown on documents — click to hide' : 'Hidden from documents — click to show'
+      }
+      className={cn(
+        'inline-flex shrink-0 cursor-pointer rounded p-1 transition-colors',
+        visible
+          ? 'text-(--module-btn-bg,var(--color-brand)) hover:bg-orange-50'
+          : 'text-gray-300 hover:text-gray-400 hover:bg-gray-50',
+      )}
+    >
+      {visible ? <Icons.FileText className="w-4 h-4" /> : <Icons.FileX2 className="w-4 h-4" />}
+    </span>
+  );
+}
 
 interface FacultativeFormFieldsProps {
   form: UseFormReturn<FacultativeFormValues>;
@@ -60,8 +98,9 @@ export default function FacultativeFormFields({
 
   const selectedRiskTypeId = watch('riskType');
 
-  const { options: cedantOptions } = useCedantOptions();
-  const { data: riskTypeOptions = [] } = useRiskTypeOptions(riskClassId);
+  const { options: cedantOptions, isLoading: isLoadingCedants } = useCedantOptions();
+  const { data: riskTypeOptions = [], isLoading: isLoadingRiskTypes } =
+    useRiskTypeOptions(riskClassId);
   const { data: currencyOptions = [] } = useCurrencyOptions();
   const { data: allRiskTypes = [] } = useRiskTypes();
 
@@ -80,7 +119,7 @@ export default function FacultativeFormFields({
             render={({ field }) => (
               <SearchSelect
                 label="Insurance Company"
-                placeholder="Select insurance company…"
+                placeholder={isLoadingCedants ? 'Loading…' : 'Select insurance company…'}
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.insuranceCompany?.message}
@@ -96,7 +135,13 @@ export default function FacultativeFormFields({
             render={({ field }) => (
               <SearchSelect
                 label="Risk Type"
-                placeholder={riskClassId ? 'Select risk type…' : 'Select a risk class first…'}
+                placeholder={
+                  isLoadingRiskTypes
+                    ? 'Loading…'
+                    : riskClassId
+                      ? 'Select risk type…'
+                      : 'Select a risk class first…'
+                }
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.riskType?.message}
@@ -115,6 +160,22 @@ export default function FacultativeFormFields({
               <div className="grid grid-cols-2 gap-3">
                 {riskFields.map((field) => {
                   const name = `riskDetails.${field.fieldKey}` as const;
+                  const visibilityName = `riskDetailsVisibility.${field.fieldKey}` as const;
+
+                  const visibilityToggle = (
+                    <Controller
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      name={visibilityName as any}
+                      control={control}
+                      render={({ field: vf }) => (
+                        <DocumentVisibilityToggle
+                          visible={vf.value !== false}
+                          onToggle={() => vf.onChange(vf.value === false)}
+                        />
+                      )}
+                    />
+                  );
+
                   if (field.fieldType === 'TEXTAREA') {
                     return (
                       <div key={field.id} className="col-span-2">
@@ -126,6 +187,7 @@ export default function FacultativeFormFields({
                             required: field.required ? `${field.label} is required` : false,
                           })}
                           placeholder={field.placeholder ?? ''}
+                          rightElement={visibilityToggle}
                         />
                       </div>
                     );
@@ -145,6 +207,7 @@ export default function FacultativeFormFields({
                             options={field.options!.map((o) => ({ value: o, label: o }))}
                             value={String(f.value ?? '')}
                             onChange={f.onChange}
+                            rightSlot={visibilityToggle}
                           />
                         )}
                       />
@@ -163,6 +226,7 @@ export default function FacultativeFormFields({
                             label={field.label}
                             value={String(f.value ?? '')}
                             onChange={f.onChange}
+                            rightSlot={visibilityToggle}
                           />
                         )}
                       />
@@ -175,11 +239,14 @@ export default function FacultativeFormFields({
                         className="flex flex-col gap-(--field-label-gap,0.125rem)"
                       >
                         <label className="text-sm font-bold text-gray-900">{field.label}</label>
-                        <input
-                          type="checkbox"
-                          {...register(name as 'riskDetails')}
-                          className="w-4 h-4 accent-orange-500"
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            {...register(name as 'riskDetails')}
+                            className="w-4 h-4 accent-orange-500"
+                          />
+                          {visibilityToggle}
+                        </div>
                       </div>
                     );
                   }
@@ -192,6 +259,7 @@ export default function FacultativeFormFields({
                         required: field.required ? `${field.label} is required` : false,
                       })}
                       placeholder={field.placeholder ?? ''}
+                      rightElement={visibilityToggle}
                     />
                   );
                 })}
@@ -211,22 +279,36 @@ export default function FacultativeFormFields({
                         placeholder="e.g. Extra Title"
                       />
                     </div>
-                    <div className="flex items-end gap-2">
+                    <div className="flex items-end gap-1.5">
                       <div className="flex flex-col gap-(--field-label-gap,0.125rem) flex-1">
                         <label className="text-sm font-bold text-gray-900">Value</label>
-                        <input
-                          {...register(`extraRiskFields.${index}.value`)}
-                          className={cn(inputClass())}
-                          placeholder="e.g. Extra details"
-                        />
+                        <div className="relative">
+                          <input
+                            {...register(`extraRiskFields.${index}.value`)}
+                            className={cn(inputClass(undefined, 'pr-9'))}
+                            placeholder="e.g. Extra details"
+                          />
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                            <Controller
+                              name={`extraRiskFields.${index}.showOnDocument`}
+                              control={control}
+                              render={({ field: vf }) => (
+                                <DocumentVisibilityToggle
+                                  visible={vf.value !== false}
+                                  onToggle={() => vf.onChange(vf.value === false)}
+                                />
+                              )}
+                            />
+                          </div>
+                        </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => removeExtra(index)}
-                        className="mb-0.5 text-gray-400 hover:text-red-500 transition-colors text-lg leading-none"
+                        className="mb-2 text-gray-400 hover:text-red-500 transition-colors text-lg leading-none"
                         title="Remove field"
                       >
-                        ×
+                        <Icons.Trash2 className="w-5 h-5" />
                       </button>
                     </div>
                   </div>
@@ -246,6 +328,7 @@ export default function FacultativeFormFields({
                   value: '',
                   type: 'TEXT',
                   displayOrder: extraFields.length + 1,
+                  showOnDocument: true,
                 })
               }
               className="self-start text-sm font-medium flex items-center gap-1 transition-colors text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover))"

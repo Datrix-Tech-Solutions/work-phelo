@@ -15,9 +15,18 @@ function fmt(val: number, currency: string | null) {
 interface BusinessPaymentSectionProps {
   placement: Facultative;
   paidAmount?: number;
+  /** Set false when the caller already shows `PaymentOverview` (which itself wraps
+   * `PaymentBreakdown`) above this section — e.g. the payment detail page's Overview tab —
+   * so the fact panel isn't rendered twice. Defaults true for the flat "new payment" flow,
+   * which has no persistent overview above it. */
+  showBreakdown?: boolean;
 }
 
-export function BusinessPaymentSection({ placement, paidAmount }: BusinessPaymentSectionProps) {
+export function BusinessPaymentSection({
+  placement,
+  paidAmount,
+  showBreakdown = true,
+}: BusinessPaymentSectionProps) {
   const [total, setTotal] = useState(0);
   const { data: financialPosition } = usePlacementFinancialPosition(placement.id);
   const currency = financialPosition?.currency ?? placement.currency;
@@ -25,9 +34,11 @@ export function BusinessPaymentSection({ placement, paidAmount }: BusinessPaymen
   return (
     <div className={cardClass('flex flex-col gap-4 p-4')}>
       <div className="flex flex-col md:flex-row gap-4 items-start">
-        <div className="w-full md:flex-1 min-w-0">
-          <PaymentBreakdown placement={placement} financialPosition={financialPosition} />
-        </div>
+        {showBreakdown && (
+          <div className={cardClass('w-full md:flex-1 min-w-0 p-5')}>
+            <PaymentBreakdown placement={placement} financialPosition={financialPosition} />
+          </div>
+        )}
         <div className="w-full md:flex-2 min-w-0">
           <ReinsurersPaymentTable
             placement={placement}

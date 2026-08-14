@@ -82,6 +82,8 @@ export interface ReinsurerReportRow {
 
 export interface ReinsurersReportSummary {
   activeReinsurers: number;
+  totalPlacements: number;
+  reinsurersWithOutstanding: number;
   cededPremium: number;
   outstanding: number;
   pending: number;
@@ -219,6 +221,8 @@ export function useReinsurersReport(
     const targetCurrency = currencies.find((c) => c.isoCode === targetIso);
     return {
       activeReinsurers: rows.length,
+      totalPlacements: rows.reduce((sum, r) => sum + r.placementCount, 0),
+      reinsurersWithOutstanding: rows.filter((r) => r.outstanding > 0).length,
       cededPremium: rows.reduce((sum, r) => sum + r.cededPremium, 0),
       outstanding: rows.reduce((sum, r) => sum + r.outstanding, 0),
       pending: rows.reduce((sum, r) => sum + r.pending, 0),

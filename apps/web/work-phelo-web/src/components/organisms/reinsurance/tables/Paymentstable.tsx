@@ -139,6 +139,7 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'sumInsured',
     label: 'Sum Insured',
     width: '130px',
+    className: 'text-right',
     render: (row) => (
       <span className="font-small text-gray-900 whitespace-nowrap">
         {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
@@ -149,6 +150,7 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
     width: '130px',
+    className: 'text-right',
     render: (row) => {
       const facSumInsured =
         row.sumInsured != null && row.facultativeOffer != null
@@ -166,15 +168,13 @@ const COLUMNS: Column<Facultative>[] = [
     label: 'Participants',
     width: '90px',
     render: (row) => {
-      const total = row.participants?.length ?? 0;
+      // const total = row.participants?.length ?? 0;
       const accepted =
         row.participants?.filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED').length ??
         0;
       return (
         <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-gray-900">
-            {accepted} / {total}
-          </span>
+          <span className="font-semibold text-gray-900">{accepted}</span>
           <span className="text-xs text-gray-400">accepted</span>
         </div>
       );
