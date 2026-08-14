@@ -1535,12 +1535,18 @@ export interface FacultativeFormValues {
   periodTo: string;
   comment: string;
   riskDetails: Record<string, unknown>;
+  /** Per-fieldKey opt-out from appearing on generated documents (Slip, Notes, etc.).
+   *  Absent/true = shown; false = hidden. Only applies to document rendering — the
+   *  field always stays visible on this form. */
+  riskDetailsVisibility: Record<string, boolean>;
   extraRiskFields: {
     id?: string;
     label: string;
     value: string;
     type?: 'TEXT';
     displayOrder?: number;
+    /** Same opt-out as riskDetailsVisibility, but inline since extra fields aren't keyed by a schema fieldKey. */
+    showOnDocument?: boolean;
   }[];
 }
 
@@ -1562,6 +1568,7 @@ export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   periodTo: '',
   comment: '',
   riskDetails: {},
+  riskDetailsVisibility: {},
   extraRiskFields: [],
 };
 

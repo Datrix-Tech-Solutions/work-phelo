@@ -3,6 +3,9 @@
 import { useMemo, useState } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Button } from '@/components/atoms/Button';
+import { Input } from '@/components/atoms/Input';
+import { NumberField } from '@/components/atoms/NumberField';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import {
   useApproveClaimPayable,
   useClaimAllocations,
@@ -177,45 +180,25 @@ export function ClaimCedantSettlementPanel({
 
       {approvedPayableAmount && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 rounded-lg bg-gray-50 p-3">
-          <label className="flex flex-col gap-(--field-label-gap,0.125rem) text-xs font-semibold text-gray-700">
-            Settlement Date
-            <input
-              type="date"
-              value={settlementDate}
-              onChange={(event) => setSettlementDate(event.target.value)}
-              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
-            />
-          </label>
-          <label className="flex flex-col gap-(--field-label-gap,0.125rem) text-xs font-semibold text-gray-700">
-            Amount
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={settlementAmount}
-              onChange={(event) => setSettlementAmount(event.target.value)}
-              placeholder={outstandingAmount}
-              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
-            />
-          </label>
-          <label className="flex flex-col gap-(--field-label-gap,0.125rem) text-xs font-semibold text-gray-700">
-            Reference
-            <input
-              value={reference}
-              onChange={(event) => setReference(event.target.value)}
-              placeholder="Payment reference"
-              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
-            />
-          </label>
-          <label className="flex flex-col gap-(--field-label-gap,0.125rem) text-xs font-semibold text-gray-700">
-            Notes
-            <input
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Optional notes"
-              className="rounded-input border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
-            />
-          </label>
+          <DatePicker label="Settlement Date" value={settlementDate} onChange={setSettlementDate} />
+          <NumberField
+            label="Amount"
+            value={settlementAmount ? Number(settlementAmount) : 0}
+            onChange={(n) => setSettlementAmount(n ? String(n) : '')}
+            placeholder={outstandingAmount}
+          />
+          <Input
+            label="Reference"
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            placeholder="Payment reference"
+          />
+          <Input
+            label="Notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Optional notes"
+          />
           <div className="flex items-end">
             <Button
               type="button"

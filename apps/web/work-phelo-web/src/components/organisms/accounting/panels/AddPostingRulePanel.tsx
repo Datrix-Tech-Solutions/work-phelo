@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -15,6 +16,7 @@ import { useCreatePostingRule, useGLAccountOptions } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { getPostingRulePathGuidance } from '@/config/reinsurance-posting-rule-guidance';
+import { cn } from '@/lib/utils';
 
 interface AddPostingRulePanelProps {
   isOpen: boolean;
@@ -29,6 +31,8 @@ type LineFormValues = {
   amountSource: string;
   currencySource: string;
   descriptionTemplate: string;
+  /** Guided mode only — what this line represents in plain language. Not sent to the API. */
+  roleLabel?: string;
 };
 
 type FormValues = {
@@ -64,25 +68,304 @@ const DEFAULTS: FormValues = {
   ],
 };
 
-// The active reinsurance event families a rule can be written against today —
-// see ACTIVE_REINSURANCE_ACCOUNTING_EVENT_TYPES on the reinsurance-service side.
-// Free-text entry still works via CreatableSearchSelect for anything not listed.
-const SOURCE_EVENT_TYPE_OPTIONS: CreatableOption[] = [
-  'DEBIT_NOTE_ISSUED',
-  'CREDIT_NOTE_ISSUED',
-  'ENDORSEMENT_DEBIT_NOTE_ISSUED',
-  'ENDORSEMENT_CREDIT_NOTE_ISSUED',
-  'PREMIUM_PAYMENT_RECEIVED',
-  'PAYMENT_REVERSED',
-  'REINSURER_DISBURSEMENT_RECORDED',
-  'REINSURER_DISBURSEMENT_REVERSED',
-  'CLAIM_PAYABLE_APPROVED',
-  'CLAIM_CEDANT_SETTLEMENT_PAID',
-  'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-  'CLAIM_RECOVERY_APPROVED',
-  'CLAIM_RECOVERY_RECEIVED',
-  'CLAIM_RECOVERY_RECEIPT_REVERSED',
-].map((value) => ({ value, label: value.replaceAll('_', ' ') }));
+// ---------------------------------------------------------------------------
+// Guided event templates
+//
+// Mirrors the readiness rules accounting-service enforces for Reinsurance
+// events (accounting-service/src/posting/reinsurance-accounting-readiness.catalog.ts
+// + the AR/AP matrix in accounting-service/README.md) and the exact payload
+// paths reinsurance-financial-event-publisher.service.ts sends for each event
+// — including that claim events nest the counterparty under `cedant.id` /
+// `reinsurer.id`, while premium events nest it under `counterparty.id`.
+// Picking a template pre-fills the correct DR/CR direction, subledger tag,
+// external ref path, and amount path — the details that trip people up (e.g.
+// the "must preserve CEDANT_PREMIUM_AR using a CEDANT subledger line" error)
+// — so the user only has to choose which GL account plays each role.
+// ---------------------------------------------------------------------------
+
+type EventTemplateLine = {
+  direction: PostingRuleDirection;
+  roleLabel: string;
+  subledgerType?: PostingRuleSubledgerType;
+  subledgerExternalRefSource?: string;
+  amountSource: string;
+};
+
+type EventTemplate = {
+  eventType: string;
+  label: string;
+  description: string;
+  controlDimensionLabel: string;
+  lines: [EventTemplateLine, EventTemplateLine];
+};
+
+const EVENT_TEMPLATES: EventTemplate[] = [
+  {
+    eventType: 'DEBIT_NOTE_ISSUED',
+    label: 'Debit note issued',
+    description: 'Cedant owes premium — a debit note has been issued.',
+    controlDimensionLabel: 'Cedant Premium Receivable (AR)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Cedant Premium Receivable',
+        subledgerType: 'CEDANT',
+        subledgerExternalRefSource: 'counterparty.id',
+        amountSource: 'amounts.netPremium',
+      },
+      {
+        direction: 'CR',
+        roleLabel: 'Premium Income / Clearing',
+        amountSource: 'amounts.netPremium',
+      },
+    ],
+  },
+  {
+    eventType: 'CREDIT_NOTE_ISSUED',
+    label: 'Credit note issued',
+    description: 'Broker owes a premium share to the reinsurer — a credit note has been issued.',
+    controlDimensionLabel: 'Reinsurer Premium Payable (AP)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Premium Expense / Clearing',
+        amountSource: 'amounts.creditMagnitude',
+      },
+      {
+        direction: 'CR',
+        roleLabel: 'Reinsurer Premium Payable',
+        subledgerType: 'REINSURER',
+        subledgerExternalRefSource: 'counterparty.id',
+        amountSource: 'amounts.creditMagnitude',
+      },
+    ],
+  },
+  {
+    eventType: 'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+    label: 'Endorsement debit note issued',
+    description: 'Additional premium is due from the cedant after an endorsement.',
+    controlDimensionLabel: 'Cedant Premium Receivable (AR)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Cedant Premium Receivable',
+        subledgerType: 'CEDANT',
+        subledgerExternalRefSource: 'counterparty.id',
+        amountSource: 'amounts.adjustmentMagnitude',
+      },
+      {
+        direction: 'CR',
+        roleLabel: 'Premium Income / Clearing',
+        amountSource: 'amounts.adjustmentMagnitude',
+      },
+    ],
+  },
+  {
+    eventType: 'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+    label: 'Endorsement credit note issued',
+    description:
+      'A return premium or payable adjustment is due to the reinsurer after an endorsement.',
+    controlDimensionLabel: 'Reinsurer Premium Payable (AP)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Premium Expense / Clearing',
+        amountSource: 'amounts.adjustmentMagnitude',
+      },
+      {
+        direction: 'CR',
+        roleLabel: 'Reinsurer Premium Payable',
+        subledgerType: 'REINSURER',
+        subledgerExternalRefSource: 'counterparty.id',
+        amountSource: 'amounts.adjustmentMagnitude',
+      },
+    ],
+  },
+  {
+    eventType: 'PREMIUM_PAYMENT_RECEIVED',
+    label: 'Premium payment received',
+    description: "The cedant's premium payment clears their receivable.",
+    controlDimensionLabel: 'Cedant Premium Receivable (AR)',
+    lines: [
+      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.paymentAmount' },
+      {
+        direction: 'CR',
+        roleLabel: 'Cedant Premium Receivable',
+        subledgerType: 'CEDANT',
+        subledgerExternalRefSource: 'counterparty.id',
+        amountSource: 'amounts.paymentAmount',
+      },
+    ],
+  },
+  {
+    eventType: 'PAYMENT_REVERSED',
+    label: 'Premium payment reversed',
+    description: 'A cedant premium receipt is being reversed.',
+    controlDimensionLabel: 'Cedant Premium Receivable (AR)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Cedant Premium Receivable',
+        subledgerType: 'CEDANT',
+        subledgerExternalRefSource: 'counterparty.id',
+        amountSource: 'amounts.paymentAmount',
+      },
+      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.paymentAmount' },
+    ],
+  },
+  {
+    eventType: 'REINSURER_DISBURSEMENT_RECORDED',
+    label: 'Reinsurer disbursement recorded',
+    description: 'A confirmed payment to the reinsurer clears what is owed to them.',
+    controlDimensionLabel: 'Reinsurer Premium Payable (AP)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Reinsurer Premium Payable',
+        subledgerType: 'REINSURER',
+        subledgerExternalRefSource: 'counterparty.id',
+        amountSource: 'amounts.allocatedAmount',
+      },
+      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.allocatedAmount' },
+    ],
+  },
+  {
+    eventType: 'REINSURER_DISBURSEMENT_REVERSED',
+    label: 'Reinsurer disbursement reversed',
+    description: 'A reinsurer disbursement is being reversed.',
+    controlDimensionLabel: 'Reinsurer Premium Payable (AP)',
+    lines: [
+      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.allocatedAmount' },
+      {
+        direction: 'CR',
+        roleLabel: 'Reinsurer Premium Payable',
+        subledgerType: 'REINSURER',
+        subledgerExternalRefSource: 'counterparty.id',
+        amountSource: 'amounts.allocatedAmount',
+      },
+    ],
+  },
+  {
+    eventType: 'CLAIM_PAYABLE_APPROVED',
+    label: 'Claim payable approved',
+    description: 'An approved claim payable is owed to the cedant.',
+    controlDimensionLabel: 'Cedant Claims Payable (AP)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Claims Expense',
+        amountSource: 'amounts.approvedPayableAmount',
+      },
+      {
+        direction: 'CR',
+        roleLabel: 'Cedant Claims Payable',
+        subledgerType: 'CEDANT',
+        subledgerExternalRefSource: 'cedant.id',
+        amountSource: 'amounts.approvedPayableAmount',
+      },
+    ],
+  },
+  {
+    eventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
+    label: 'Cedant claim settlement paid',
+    description: 'The broker settlement paid to the cedant clears the claims payable.',
+    controlDimensionLabel: 'Cedant Claims Payable (AP)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Cedant Claims Payable',
+        subledgerType: 'CEDANT',
+        subledgerExternalRefSource: 'cedant.id',
+        amountSource: 'amounts.settlementAmount',
+      },
+      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.settlementAmount' },
+    ],
+  },
+  {
+    eventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+    label: 'Cedant claim settlement reversed',
+    description: 'A cedant claim settlement is being reversed.',
+    controlDimensionLabel: 'Cedant Claims Payable (AP)',
+    lines: [
+      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.reversalAmount' },
+      {
+        direction: 'CR',
+        roleLabel: 'Cedant Claims Payable',
+        subledgerType: 'CEDANT',
+        subledgerExternalRefSource: 'cedant.id',
+        amountSource: 'amounts.reversalAmount',
+      },
+    ],
+  },
+  {
+    eventType: 'CLAIM_RECOVERY_APPROVED',
+    label: 'Claim recovery approved',
+    description: 'An approved recovery receivable is owed by the reinsurer.',
+    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Reinsurer Claims Receivable',
+        subledgerType: 'REINSURER',
+        subledgerExternalRefSource: 'reinsurer.id',
+        amountSource: 'amounts.approvedRecoveryAmount',
+      },
+      {
+        direction: 'CR',
+        roleLabel: 'Claims Recovery Income / Clearing',
+        amountSource: 'amounts.approvedRecoveryAmount',
+      },
+    ],
+  },
+  {
+    eventType: 'CLAIM_RECOVERY_RECEIVED',
+    label: 'Claim recovery received',
+    description: 'A confirmed reinsurer claim recovery receipt clears the receivable.',
+    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
+    lines: [
+      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.receiptAmount' },
+      {
+        direction: 'CR',
+        roleLabel: 'Reinsurer Claims Receivable',
+        subledgerType: 'REINSURER',
+        subledgerExternalRefSource: 'reinsurer.id',
+        amountSource: 'amounts.receiptAmount',
+      },
+    ],
+  },
+  {
+    eventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
+    label: 'Claim recovery receipt reversed',
+    description: 'A claim recovery receipt is being reversed.',
+    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
+    lines: [
+      {
+        direction: 'DR',
+        roleLabel: 'Reinsurer Claims Receivable',
+        subledgerType: 'REINSURER',
+        subledgerExternalRefSource: 'reinsurer.id',
+        amountSource: 'amounts.reversalAmount',
+      },
+      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.reversalAmount' },
+    ],
+  },
+];
+
+const EVENT_TEMPLATE_BY_TYPE = new Map(EVENT_TEMPLATES.map((t) => [t.eventType, t]));
+
+const GUIDED_EVENT_OPTIONS: SearchSelectOption[] = EVENT_TEMPLATES.map((t) => ({
+  value: t.eventType,
+  label: t.label,
+  sublabel: t.controlDimensionLabel,
+}));
+
+// Advanced mode: free-text entry still works via CreatableSearchSelect for
+// anything not in the guided catalog — see ACTIVE_REINSURANCE_ACCOUNTING_EVENT_TYPES
+// on the reinsurance-service side.
+const SOURCE_EVENT_TYPE_OPTIONS: CreatableOption[] = EVENT_TEMPLATES.map((t) => ({
+  value: t.eventType,
+  label: t.eventType.replaceAll('_', ' '),
+}));
 
 const DIRECTION_OPTIONS: SearchSelectOption[] = [
   { value: 'DR', label: 'Debit (DR)' },
@@ -99,20 +382,35 @@ const SUBLEDGER_TYPE_OPTIONS: SearchSelectOption[] = [
   { value: 'OTHER', label: 'Other' },
 ];
 
+function lineFromTemplate(line: EventTemplateLine): LineFormValues {
+  return {
+    direction: line.direction,
+    glAccountId: '',
+    subledgerType: line.subledgerType ?? '',
+    subledgerExternalRefSource: line.subledgerExternalRefSource ?? '',
+    amountSource: line.amountSource,
+    currencySource: 'currency',
+    descriptionTemplate: '',
+    roleLabel: line.roleLabel,
+  };
+}
+
 export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProps) {
   const toast = useToast();
   const { mutateAsync: createRule, isPending } = useCreatePostingRule();
   const { options: glAccountOptions, isLoading: isLoadingGLAccounts } = useGLAccountOptions();
+  const [mode, setMode] = useState<'guided' | 'advanced'>('guided');
 
   const {
     register,
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
+  const { fields, append, remove, replace } = useFieldArray({ control, name: 'lines' });
   const sourceModule = useWatch({ control, name: 'sourceModule' });
   const sourceEventType = useWatch({ control, name: 'sourceEventType' });
   const pathGuidance = getPostingRulePathGuidance(sourceModule, sourceEventType);
@@ -130,7 +428,16 @@ export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProp
 
   const handleClose = () => {
     reset(DEFAULTS);
+    setMode('guided');
     onClose();
+  };
+
+  const handleSelectGuidedEvent = (eventType: string) => {
+    const template = EVENT_TEMPLATE_BY_TYPE.get(eventType);
+    setValue('sourceEventType', eventType, { shouldValidate: true });
+    if (template) {
+      replace(template.lines.map(lineFromTemplate));
+    }
   };
 
   const onSubmit = async (data: FormValues) => {
@@ -182,7 +489,20 @@ export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProp
       isOpen={isOpen}
       onClose={handleClose}
       title="New Posting Rule"
-      description="Map a source business event to the balanced journal lines it should post. Created inactive — review before activating."
+      description={
+        mode === 'guided'
+          ? 'Pick the business event — the required debit/credit lines are filled in for you. Just choose the GL accounts.'
+          : 'Map a source business event to the balanced journal lines it should post. Created inactive — review before activating.'
+      }
+      descriptionAction={
+        <button
+          type="button"
+          onClick={() => setMode(mode === 'guided' ? 'advanced' : 'guided')}
+          className="text-xs font-semibold text-orange-600 hover:text-orange-700"
+        >
+          {mode === 'guided' ? 'Advanced setup' : 'Back to guided setup'}
+        </button>
+      }
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -202,186 +522,268 @@ export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProp
           placeholder="e.g. Premium debit note issued"
         />
 
-        <div className="grid grid-cols-2 gap-3">
-          <FormField
-            label="Source Module"
-            registration={register('sourceModule', {
-              required: 'Source module is required',
-              setValueAs: (v: string) => v.toUpperCase(),
-            })}
-            error={errors.sourceModule}
-            placeholder="e.g. REINSURANCE"
-          />
-          <FormField
-            label="Version"
-            type="number"
-            registration={register('version', {
-              required: 'Version is required',
-              min: { value: 1, message: 'Version must be at least 1' },
-              valueAsNumber: true,
-            })}
-            error={errors.version}
-          />
-        </div>
-
-        <Controller
-          name="sourceEventType"
-          control={control}
-          rules={{ required: 'Source event type is required' }}
-          render={({ field }) => (
-            <CreatableSearchSelect
-              label="Source Event Type"
-              placeholder="Select or type an event type…"
-              options={SOURCE_EVENT_TYPE_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.sourceEventType?.message}
+        {mode === 'advanced' && (
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              label="Source Module"
+              registration={register('sourceModule', {
+                required: 'Source module is required',
+                setValueAs: (v: string) => v.toUpperCase(),
+              })}
+              error={errors.sourceModule}
+              placeholder="e.g. REINSURANCE"
             />
-          )}
-        />
+            <FormField
+              label="Version"
+              type="number"
+              registration={register('version', {
+                required: 'Version is required',
+                min: { value: 1, message: 'Version must be at least 1' },
+                valueAsNumber: true,
+              })}
+              error={errors.version}
+            />
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-3">
+        {mode === 'guided' ? (
+          <Controller
+            name="sourceEventType"
+            control={control}
+            rules={{ required: 'Select a business event' }}
+            render={({ field }) => (
+              <>
+                <SearchSelect
+                  label="Business Event"
+                  placeholder="Select the event this rule handles…"
+                  options={GUIDED_EVENT_OPTIONS}
+                  value={field.value}
+                  onChange={handleSelectGuidedEvent}
+                  error={errors.sourceEventType?.message}
+                />
+                {EVENT_TEMPLATE_BY_TYPE.get(field.value) && (
+                  <p className="-mt-1 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-800">
+                    {EVENT_TEMPLATE_BY_TYPE.get(field.value)?.description}
+                  </p>
+                )}
+              </>
+            )}
+          />
+        ) : (
+          <Controller
+            name="sourceEventType"
+            control={control}
+            rules={{ required: 'Source event type is required' }}
+            render={({ field }) => (
+              <CreatableSearchSelect
+                label="Source Event Type"
+                placeholder="Select or type an event type…"
+                options={SOURCE_EVENT_TYPE_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.sourceEventType?.message}
+              />
+            )}
+          />
+        )}
+
+        <div className={cn('grid gap-3', mode === 'advanced' ? 'grid-cols-2' : 'grid-cols-1')}>
           <FormField
             label="Effective From"
             type="date"
             registration={register('effectiveFrom', { required: 'Effective from is required' })}
             error={errors.effectiveFrom}
           />
-          <FormField
-            label="Effective To"
-            type="date"
-            registration={register('effectiveTo')}
-            error={errors.effectiveTo}
-            placeholder="Optional — open-ended if blank"
-          />
+          {mode === 'advanced' && (
+            <FormField
+              label="Effective To"
+              type="date"
+              registration={register('effectiveTo')}
+              error={errors.effectiveTo}
+              placeholder="Optional — open-ended if blank"
+            />
+          )}
         </div>
 
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-gray-900">Lines</span>
-            <Button type="button" variant="outline" onClick={() => append({ ...EMPTY_LINE })}>
-              Add Line
-            </Button>
+            {mode === 'advanced' && (
+              <Button type="button" variant="outline" onClick={() => append({ ...EMPTY_LINE })}>
+                Add Line
+              </Button>
+            )}
           </div>
 
-          {fields.map((field, index) => (
-            <div
-              key={field.id}
-              className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-500">Line {index + 1}</span>
-                {fields.length > 2 && (
-                  <button
-                    type="button"
-                    onClick={() => remove(index)}
-                    className="text-xs font-medium text-red-600 hover:text-red-700"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
+          {fields.map((field, index) => {
+            const roleLabel =
+              field.roleLabel ||
+              (field.subledgerType ? `${field.subledgerType} control line` : `Line ${index + 1}`);
 
-              <div className="grid grid-cols-2 gap-3">
-                <Controller
-                  name={`lines.${index}.direction`}
-                  control={control}
-                  rules={{ required: 'Required' }}
-                  render={({ field: f }) => (
-                    <SearchSelect
-                      label="Direction"
-                      placeholder="Select…"
-                      options={DIRECTION_OPTIONS}
-                      value={f.value}
-                      onChange={f.onChange}
-                      error={errors.lines?.[index]?.direction?.message}
-                    />
+            if (mode === 'guided') {
+              return (
+                <div
+                  key={field.id}
+                  className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-bold',
+                          field.direction === 'DR'
+                            ? 'bg-blue-50 text-blue-700'
+                            : 'bg-emerald-50 text-emerald-700',
+                        )}
+                      >
+                        {field.direction || '—'}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900">{roleLabel}</span>
+                    </div>
+                    {field.subledgerType && (
+                      <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+                        {field.subledgerType} subledger
+                      </span>
+                    )}
+                  </div>
+                  <Controller
+                    name={`lines.${index}.glAccountId`}
+                    control={control}
+                    rules={{ required: 'Required' }}
+                    render={({ field: f }) => (
+                      <SearchSelect
+                        label="GL Account"
+                        placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select GL account…'}
+                        options={glAccountOptions}
+                        value={f.value}
+                        onChange={f.onChange}
+                        error={errors.lines?.[index]?.glAccountId?.message}
+                      />
+                    )}
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={field.id}
+                className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-500">Line {index + 1}</span>
+                  {fields.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => remove(index)}
+                      className="text-xs font-medium text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
                   )}
-                />
-                <Controller
-                  name={`lines.${index}.glAccountId`}
-                  control={control}
-                  rules={{ required: 'Required' }}
-                  render={({ field: f }) => (
-                    <SearchSelect
-                      label="GL Account"
-                      placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select GL account…'}
-                      options={glAccountOptions}
-                      value={f.value}
-                      onChange={f.onChange}
-                      error={errors.lines?.[index]?.glAccountId?.message}
-                    />
-                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Controller
+                    name={`lines.${index}.direction`}
+                    control={control}
+                    rules={{ required: 'Required' }}
+                    render={({ field: f }) => (
+                      <SearchSelect
+                        label="Direction"
+                        placeholder="Select…"
+                        options={DIRECTION_OPTIONS}
+                        value={f.value}
+                        onChange={f.onChange}
+                        error={errors.lines?.[index]?.direction?.message}
+                      />
+                    )}
+                  />
+                  <Controller
+                    name={`lines.${index}.glAccountId`}
+                    control={control}
+                    rules={{ required: 'Required' }}
+                    render={({ field: f }) => (
+                      <SearchSelect
+                        label="GL Account"
+                        placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select GL account…'}
+                        options={glAccountOptions}
+                        value={f.value}
+                        onChange={f.onChange}
+                        error={errors.lines?.[index]?.glAccountId?.message}
+                      />
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Controller
+                    name={`lines.${index}.subledgerType`}
+                    control={control}
+                    render={({ field: f }) => (
+                      <SearchSelect
+                        label="Subledger Type (optional)"
+                        placeholder="None — control account only"
+                        options={SUBLEDGER_TYPE_OPTIONS}
+                        value={f.value}
+                        onChange={f.onChange}
+                      />
+                    )}
+                  />
+                  <Controller
+                    name={`lines.${index}.subledgerExternalRefSource`}
+                    control={control}
+                    render={({ field: f }) => (
+                      <CreatableSearchSelect
+                        label="Subledger Ref Source"
+                        placeholder="e.g. counterparty.id"
+                        options={subledgerReferenceOptions}
+                        value={f.value}
+                        onChange={f.onChange}
+                      />
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Controller
+                    name={`lines.${index}.amountSource`}
+                    control={control}
+                    rules={{ required: 'Required' }}
+                    render={({ field: f }) => (
+                      <CreatableSearchSelect
+                        label="Amount Source"
+                        placeholder="e.g. amounts.netPremium"
+                        options={amountSourceOptions}
+                        value={f.value}
+                        onChange={f.onChange}
+                        error={errors.lines?.[index]?.amountSource?.message}
+                      />
+                    )}
+                  />
+                  <Controller
+                    name={`lines.${index}.currencySource`}
+                    control={control}
+                    render={({ field: f }) => (
+                      <CreatableSearchSelect
+                        label="Currency Source"
+                        placeholder="Defaults to “currency”"
+                        options={currencySourceOptions}
+                        value={f.value}
+                        onChange={f.onChange}
+                      />
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  label="Description Template"
+                  registration={register(`lines.${index}.descriptionTemplate`)}
+                  placeholder="Defaults to the rule name + {{sourceRecordId}}"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Controller
-                  name={`lines.${index}.subledgerType`}
-                  control={control}
-                  render={({ field: f }) => (
-                    <SearchSelect
-                      label="Subledger Type (optional)"
-                      placeholder="None — control account only"
-                      options={SUBLEDGER_TYPE_OPTIONS}
-                      value={f.value}
-                      onChange={f.onChange}
-                    />
-                  )}
-                />
-                <Controller
-                  name={`lines.${index}.subledgerExternalRefSource`}
-                  control={control}
-                  render={({ field: f }) => (
-                    <CreatableSearchSelect
-                      label="Subledger Ref Source"
-                      placeholder="e.g. counterparty.id"
-                      options={subledgerReferenceOptions}
-                      value={f.value}
-                      onChange={f.onChange}
-                    />
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Controller
-                  name={`lines.${index}.amountSource`}
-                  control={control}
-                  rules={{ required: 'Required' }}
-                  render={({ field: f }) => (
-                    <CreatableSearchSelect
-                      label="Amount Source"
-                      placeholder="e.g. amounts.netPremium"
-                      options={amountSourceOptions}
-                      value={f.value}
-                      onChange={f.onChange}
-                      error={errors.lines?.[index]?.amountSource?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  name={`lines.${index}.currencySource`}
-                  control={control}
-                  render={({ field: f }) => (
-                    <CreatableSearchSelect
-                      label="Currency Source"
-                      placeholder="Defaults to “currency”"
-                      options={currencySourceOptions}
-                      value={f.value}
-                      onChange={f.onChange}
-                    />
-                  )}
-                />
-              </div>
-
-              <FormField
-                label="Description Template"
-                registration={register(`lines.${index}.descriptionTemplate`)}
-                placeholder="Defaults to the rule name + {{sourceRecordId}}"
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </SidePanel>

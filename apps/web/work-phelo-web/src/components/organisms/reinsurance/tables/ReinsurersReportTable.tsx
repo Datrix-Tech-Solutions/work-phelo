@@ -126,7 +126,7 @@ export function ReinsurersReportTable() {
           }
           extraFilters={
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="w-38">
+              <div className="w-50">
                 <DatePicker
                   size="sm"
                   placeholder="Period start"
@@ -134,7 +134,7 @@ export function ReinsurersReportTable() {
                   onChange={setStartDate}
                 />
               </div>
-              <div className="w-38">
+              <div className="w-50">
                 <DatePicker
                   size="sm"
                   placeholder="Period end"

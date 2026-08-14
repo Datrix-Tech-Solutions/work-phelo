@@ -12,16 +12,6 @@ import {
 import { ReportCard } from '@/components/molecules/shared/ReportCard';
 import { useCedantsReport, useReinsurersReport, useFacultativeReport } from '@/hooks';
 
-function fmtAmount(value: number, symbol: string): string {
-  const abs = Math.abs(value);
-  let formatted: string;
-  if (abs >= 1_000_000_000) formatted = `${(value / 1_000_000_000).toFixed(2)}B`;
-  else if (abs >= 1_000_000) formatted = `${(value / 1_000_000).toFixed(2)}M`;
-  else if (abs >= 1_000) formatted = `${(value / 1_000).toFixed(2)}K`;
-  else formatted = value.toFixed(2);
-  return symbol ? `${symbol} ${formatted}` : formatted;
-}
-
 export default function ReinsuranceReportsPage() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -53,16 +43,12 @@ export default function ReinsuranceReportsPage() {
               value: loadingCedants ? '—' : String(cedantsSummary.activeCedants),
             },
             {
-              label: 'Total Premium',
-              value: loadingCedants
-                ? '—'
-                : fmtAmount(cedantsSummary.totalPremium, cedantsSummary.currencySymbol),
+              label: 'Total Offers',
+              value: loadingCedants ? '—' : String(cedantsSummary.totalPlacements),
             },
             {
-              label: 'Outstanding',
-              value: loadingCedants
-                ? '—'
-                : fmtAmount(cedantsSummary.outstanding, cedantsSummary.currencySymbol),
+              label: 'With Outstanding Balance',
+              value: loadingCedants ? '—' : String(cedantsSummary.cedantsWithOutstanding),
             },
           ]}
           onClick={() => router.push(`${base}/cedants`)}
@@ -79,16 +65,12 @@ export default function ReinsuranceReportsPage() {
               value: loadingReinsurers ? '—' : String(reinsurersSummary.activeReinsurers),
             },
             {
-              label: 'Ceded Premium',
-              value: loadingReinsurers
-                ? '—'
-                : fmtAmount(reinsurersSummary.cededPremium, reinsurersSummary.currencySymbol),
+              label: 'Total Placements',
+              value: loadingReinsurers ? '—' : String(reinsurersSummary.totalPlacements),
             },
             {
-              label: 'Outstanding',
-              value: loadingReinsurers
-                ? '—'
-                : fmtAmount(reinsurersSummary.outstanding, reinsurersSummary.currencySymbol),
+              label: 'With Outstanding Balance',
+              value: loadingReinsurers ? '—' : String(reinsurersSummary.reinsurersWithOutstanding),
             },
           ]}
           onClick={() => router.push(`${base}/reinsurers`)}

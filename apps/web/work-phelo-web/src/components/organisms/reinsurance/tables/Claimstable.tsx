@@ -95,6 +95,7 @@ const COLUMNS: Column<ClaimTableRow>[] = [
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
     width: '150px',
+    className: 'text-right',
     render: (row) => {
       const placement = row.placement;
       const facSumInsured =
@@ -112,6 +113,7 @@ const COLUMNS: Column<ClaimTableRow>[] = [
     key: 'premium',
     label: 'Net Premium',
     width: '150px',
+    className: 'text-right',
     render: (row) => (
       <span className="font-medium text-gray-900 whitespace-nowrap">
         <NetPremiumCell row={row.placement} />

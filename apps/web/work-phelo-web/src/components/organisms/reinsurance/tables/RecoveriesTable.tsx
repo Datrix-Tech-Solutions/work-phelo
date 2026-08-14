@@ -5,14 +5,31 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { Badge } from '@/components/atoms/Badge';
 import { useFacultatives, useAllReinsurerClaims, RecoveryRow } from '@/hooks';
 import { RecordRecoveryReceiptModal } from '@/components/organisms/reinsurance/RecordRecoveryReceiptModal';
+import { PlacementClaimRecoveryStatus } from '@/types/reinsurance';
 
 const PAGE_SIZE = 10;
 
 function fmtAmount(val: number, currency: string) {
   return `${currency} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+const RECOVERY_STATUS_LABEL: Record<PlacementClaimRecoveryStatus, string> = {
+  UNRECOVERED: 'Unrecovered',
+  PARTIALLY_RECOVERED: 'Partially Recovered',
+  FULLY_RECOVERED: 'Fully Recovered',
+};
+
+const RECOVERY_STATUS_VARIANT: Record<
+  PlacementClaimRecoveryStatus,
+  'success' | 'warning' | 'neutral'
+> = {
+  UNRECOVERED: 'neutral',
+  PARTIALLY_RECOVERED: 'warning',
+  FULLY_RECOVERED: 'success',
+};
 
 type RecoveryTableRow = RecoveryRow;
 
@@ -110,6 +127,7 @@ export function RecoveriesTable() {
       key: 'calledAmount',
       label: 'Called Amount',
       width: '120px',
+      className: 'text-right',
       render: (row) => (
         <span className="font-medium text-gray-900 block">
           {fmtAmount(row.calledAmount, row.currency)}
@@ -120,6 +138,7 @@ export function RecoveriesTable() {
       key: 'recoveredAmount',
       label: 'Recovered',
       width: '120px',
+      className: 'text-right',
       render: (row) => {
         if (row.confirmedAmount > 0.0001) {
           return (
@@ -142,6 +161,7 @@ export function RecoveriesTable() {
       key: 'outstandingAmount',
       label: 'Outstanding',
       width: '120px',
+      className: 'text-right',
       render: (row) => (
         <span
           className={`font-medium ${
@@ -155,8 +175,13 @@ export function RecoveriesTable() {
     {
       key: 'recoveryStatus',
       label: 'Status',
-      width: '120px',
-      render: (row) => <span className="text-gray-700">{row.recoveryStatus}</span>,
+      width: '100px',
+      render: (row) => (
+        <Badge
+          label={RECOVERY_STATUS_LABEL[row.recoveryStatus]}
+          variant={RECOVERY_STATUS_VARIANT[row.recoveryStatus]}
+        />
+      ),
     },
     {
       key: 'actions',

@@ -20,6 +20,7 @@ import { extractError } from '@/lib/extractError';
 import { toDateOnly } from '@/lib/utils';
 import {
   extractPlacementCustomFields,
+  extractRiskDetailsVisibility,
   mergePlacementRiskDetails,
   splitPlacementDetails,
 } from '@/lib/reinsurance/placementFormDetails';
@@ -64,6 +65,7 @@ function placementToFormValues(
     periodFrom: effectiveTerms?.inceptionDate ?? placement.inceptionDate ?? '',
     periodTo: effectiveTerms?.expiryDate ?? placement.expiryDate ?? '',
     riskDetails: mergePlacementRiskDetails(businessDetails, offerDetails),
+    riskDetailsVisibility: extractRiskDetailsVisibility(businessDetails, offerDetails),
     extraRiskFields: extractPlacementCustomFields(businessDetails, offerDetails, schemaKeys),
     comment: '',
     effectiveDate: new Date().toISOString().split('T')[0],
@@ -140,6 +142,7 @@ export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: Endo
         values.riskDetails,
         selectedRiskType?.fields ?? [],
         values.extraRiskFields ?? [],
+        values.riskDetailsVisibility ?? {},
       );
 
       const proposedSnapshot = {

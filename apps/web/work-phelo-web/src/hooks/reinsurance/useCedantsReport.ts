@@ -68,6 +68,8 @@ export interface CedantReportRow {
 
 export interface CedantsReportSummary {
   activeCedants: number;
+  totalPlacements: number;
+  cedantsWithOutstanding: number;
   totalPremium: number;
   outstanding: number;
   pending: number;
@@ -179,6 +181,8 @@ export function useCedantsReport(
     const targetCurrency = currencies.find((c) => c.isoCode === targetIso);
     return {
       activeCedants: rows.length,
+      totalPlacements: rows.reduce((sum, r) => sum + r.placementCount, 0),
+      cedantsWithOutstanding: rows.filter((r) => r.outstanding > 0).length,
       totalPremium: rows.reduce((sum, r) => sum + r.totalPremium, 0),
       outstanding: rows.reduce((sum, r) => sum + r.outstanding, 0),
       pending: rows.reduce((sum, r) => sum + r.pending, 0),

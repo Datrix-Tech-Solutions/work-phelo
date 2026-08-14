@@ -11,6 +11,8 @@ interface FormFieldProps {
   readOnly?: boolean;
   rows?: number;
   step?: string | number;
+  /** Rendered inside the input's own box, overlaid on the right edge. */
+  rightElement?: React.ReactNode;
 }
 
 export function FormField({
@@ -22,6 +24,7 @@ export function FormField({
   readOnly,
   rows,
   step,
+  rightElement,
 }: FormFieldProps) {
   if (type === 'password') {
     return (
@@ -62,6 +65,7 @@ export function FormField({
       error={error?.message}
       rows={rows}
       step={step}
+      rightElement={rightElement}
       {...registration}
     />
   );

@@ -55,6 +55,7 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
         values.riskDetails,
         selectedRiskType?.fields ?? [],
         values.extraRiskFields ?? [],
+        values.riskDetailsVisibility ?? {},
       );
 
       await createFacultative({

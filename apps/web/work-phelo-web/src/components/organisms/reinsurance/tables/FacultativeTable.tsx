@@ -165,6 +165,7 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'premium',
     label: 'Fac Premium',
     width: '100px',
+    className: 'text-right',
     render: (row) => (
       <span className="font-semibold text-gray-900">
         {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
@@ -174,8 +175,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'totalAcceptedPercent',
     label: 'Signing Progress',
-    width: '140px',
-    className: 'pr-6',
+    width: '150px',
     render: (row) => {
       const facOffer = row.facultativeOffer ?? 0;
       const closedPercent = acceptedPercentFor(row);
@@ -228,12 +228,30 @@ const SUM_INSURED_COLUMN: Column<Facultative> = {
   key: 'sumInsured',
   label: '100% Sum Insured',
   width: '150px',
-  className: 'pr-6',
+  className: 'text-right',
   render: (row) => (
     <span className="font-semibold text-gray-900">
       {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
     </span>
   ),
+};
+
+// Closing tab: participants are frozen once closed, so the total is redundant noise —
+// just show how many accepted.
+const CLOSED_PARTICIPANTS_COLUMN: Column<Facultative> = {
+  key: 'participants' as keyof Facultative,
+  label: 'Participants',
+  width: '90px',
+  render: (row) => {
+    const closed =
+      row.participants?.filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED').length ?? 0;
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-semibold text-gray-900">{closed}</span>
+        <span className="text-xs text-gray-400">Accepted</span>
+      </div>
+    );
+  },
 };
 
 export function FacultativeTable({
@@ -460,7 +478,21 @@ export function FacultativeTable({
       userId ? (userNameById.get(userId) ?? 'Unknown user') : 'Unknown user';
 
     if (tab === 'closing') {
-      return COLUMNS.map((col) => (col.key === 'totalAcceptedPercent' ? SUM_INSURED_COLUMN : col));
+      return COLUMNS.map((col) => {
+        if (col.key === 'totalAcceptedPercent') return SUM_INSURED_COLUMN;
+        if (col.key === 'participants') return CLOSED_PARTICIPANTS_COLUMN;
+        return col;
+      });
+    }
+
+    if (tab === 'placements') {
+      const withoutStatus = COLUMNS.filter((col) => col.key !== 'status');
+      const premiumIndex = withoutStatus.findIndex((col) => col.key === 'premium');
+      return [
+        ...withoutStatus.slice(0, premiumIndex + 1),
+        SUM_INSURED_COLUMN,
+        ...withoutStatus.slice(premiumIndex + 1),
+      ];
     }
 
     if (tab !== 'archived') return COLUMNS;
