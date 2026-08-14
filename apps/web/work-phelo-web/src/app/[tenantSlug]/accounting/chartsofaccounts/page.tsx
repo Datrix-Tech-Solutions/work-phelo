@@ -13,14 +13,14 @@ import { AddClassificationPanel } from '@/components/organisms/accounting/panels
 import { AddParentAccountPanel } from '@/components/organisms/accounting/panels/AddParentAccountPanel';
 import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
 import { GLAccountDetail } from '@/components/organisms/accounting/GLAccountDetail';
-import { GLAccount } from '@/types/accounting';
+import { GLAccount, GLAccountStatus } from '@/types/accounting';
 import { useSeedStandardAccountHierarchy } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
 const STATUS_OPTIONS: SearchSelectOption[] = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Inactive', label: 'Inactive' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Inactive' },
 ];
 
 type OpenPanel = 'classification' | 'parent-account' | 'leaf-account' | null;
@@ -113,6 +113,8 @@ export default function ChartOfAccountsPage() {
             onExpand={expand}
             selectedAccountId={selectedAccount?.id}
             onSelectAccount={setSelectedAccount}
+            search={search}
+            status={(status || undefined) as GLAccountStatus | undefined}
           />
         )}
         rightPanel={

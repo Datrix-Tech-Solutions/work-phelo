@@ -25,6 +25,7 @@ import {
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { getPostingRulePathGuidance } from '@/config/reinsurance-posting-rule-guidance';
 
 interface PostingRuleDetailPanelProps {
   rule: PostingRule | null;
@@ -231,14 +232,6 @@ const SUBLEDGER_TYPE_OPTIONS: SearchSelectOption[] = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-const PAYLOAD_PATH_SUGGESTIONS: CreatableOption[] = [
-  'amounts.netPremium',
-  'amounts.grossPremium',
-  'amounts.signedCashImpact',
-  'currency',
-  'settlement.currency',
-].map((value) => ({ value, label: value }));
-
 function lineToFormValues(line: PostingRuleLine): LineFormValues {
   return {
     direction: line.direction,
@@ -267,6 +260,18 @@ export function PostingRuleLineFormModal({
   const createLine = useCreatePostingRuleLine();
   const updateLine = useUpdatePostingRuleLine();
   const isPending = createLine.isPending || updateLine.isPending;
+  const pathGuidance = getPostingRulePathGuidance(rule?.sourceModule, rule?.sourceEventType);
+  const amountSourceOptions: CreatableOption[] = pathGuidance.amountSources.map((value) => ({
+    value,
+    label: value,
+  }));
+  const currencySourceOptions: CreatableOption[] = pathGuidance.currencySources.map((value) => ({
+    value,
+    label: value,
+  }));
+  const subledgerReferenceOptions: CreatableOption[] = pathGuidance.subledgerReferenceSources.map(
+    (value) => ({ value, label: value }),
+  );
 
   const {
     register,
@@ -377,10 +382,18 @@ export function PostingRuleLineFormModal({
               />
             )}
           />
-          <FormField
-            label="Subledger Ref Source"
-            registration={register('subledgerExternalRefSource')}
-            placeholder="e.g. counterparty.id"
+          <Controller
+            name="subledgerExternalRefSource"
+            control={control}
+            render={({ field }) => (
+              <CreatableSearchSelect
+                label="Subledger Ref Source"
+                placeholder="e.g. counterparty.id"
+                options={subledgerReferenceOptions}
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
           />
         </div>
 
@@ -393,7 +406,7 @@ export function PostingRuleLineFormModal({
               <CreatableSearchSelect
                 label="Amount Source"
                 placeholder="e.g. amounts.netPremium"
-                options={PAYLOAD_PATH_SUGGESTIONS}
+                options={amountSourceOptions}
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.amountSource?.message}
@@ -407,7 +420,7 @@ export function PostingRuleLineFormModal({
               <CreatableSearchSelect
                 label="Currency Source"
                 placeholder="Defaults to “currency”"
-                options={PAYLOAD_PATH_SUGGESTIONS}
+                options={currencySourceOptions}
                 value={field.value}
                 onChange={field.onChange}
               />

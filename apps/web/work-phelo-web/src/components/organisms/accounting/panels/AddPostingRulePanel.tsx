@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -14,6 +14,7 @@ import {
 import { useCreatePostingRule, useGLAccountOptions } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { getPostingRulePathGuidance } from '@/config/reinsurance-posting-rule-guidance';
 
 interface AddPostingRulePanelProps {
   isOpen: boolean;
@@ -83,14 +84,6 @@ const SOURCE_EVENT_TYPE_OPTIONS: CreatableOption[] = [
   'CLAIM_RECOVERY_RECEIPT_REVERSED',
 ].map((value) => ({ value, label: value.replaceAll('_', ' ') }));
 
-const PAYLOAD_PATH_SUGGESTIONS: CreatableOption[] = [
-  'amounts.netPremium',
-  'amounts.grossPremium',
-  'amounts.signedCashImpact',
-  'currency',
-  'settlement.currency',
-].map((value) => ({ value, label: value }));
-
 const DIRECTION_OPTIONS: SearchSelectOption[] = [
   { value: 'DR', label: 'Debit (DR)' },
   { value: 'CR', label: 'Credit (CR)' },
@@ -120,6 +113,20 @@ export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProp
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
+  const sourceModule = useWatch({ control, name: 'sourceModule' });
+  const sourceEventType = useWatch({ control, name: 'sourceEventType' });
+  const pathGuidance = getPostingRulePathGuidance(sourceModule, sourceEventType);
+  const amountSourceOptions: CreatableOption[] = pathGuidance.amountSources.map((value) => ({
+    value,
+    label: value,
+  }));
+  const currencySourceOptions: CreatableOption[] = pathGuidance.currencySources.map((value) => ({
+    value,
+    label: value,
+  }));
+  const subledgerReferenceOptions: CreatableOption[] = pathGuidance.subledgerReferenceSources.map(
+    (value) => ({ value, label: value }),
+  );
 
   const handleClose = () => {
     reset(DEFAULTS);
@@ -322,10 +329,18 @@ export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProp
                     />
                   )}
                 />
-                <FormField
-                  label="Subledger Ref Source"
-                  registration={register(`lines.${index}.subledgerExternalRefSource`)}
-                  placeholder="e.g. counterparty.id"
+                <Controller
+                  name={`lines.${index}.subledgerExternalRefSource`}
+                  control={control}
+                  render={({ field: f }) => (
+                    <CreatableSearchSelect
+                      label="Subledger Ref Source"
+                      placeholder="e.g. counterparty.id"
+                      options={subledgerReferenceOptions}
+                      value={f.value}
+                      onChange={f.onChange}
+                    />
+                  )}
                 />
               </div>
 
@@ -338,7 +353,7 @@ export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProp
                     <CreatableSearchSelect
                       label="Amount Source"
                       placeholder="e.g. amounts.netPremium"
-                      options={PAYLOAD_PATH_SUGGESTIONS}
+                      options={amountSourceOptions}
                       value={f.value}
                       onChange={f.onChange}
                       error={errors.lines?.[index]?.amountSource?.message}
@@ -352,7 +367,7 @@ export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProp
                     <CreatableSearchSelect
                       label="Currency Source"
                       placeholder="Defaults to “currency”"
-                      options={PAYLOAD_PATH_SUGGESTIONS}
+                      options={currencySourceOptions}
                       value={f.value}
                       onChange={f.onChange}
                     />
