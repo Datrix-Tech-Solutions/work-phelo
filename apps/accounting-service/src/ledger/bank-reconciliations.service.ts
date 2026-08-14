@@ -4,8 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
-import { Prisma, RecordStatus } from '../../prisma/generated/client';
+import {
+  BankReconciliationStatus,
+  Prisma,
+  RecordStatus,
+} from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateBankReconciliationDto,
@@ -25,6 +30,28 @@ const reconciliationInclude = {
   },
   _count: { select: { statementLines: true } },
 } satisfies Prisma.BankReconciliationInclude;
+
+type ImportFile = Pick<
+  Express.Multer.File,
+  'buffer' | 'mimetype' | 'originalname' | 'size'
+>;
+
+type StatementLineInput = {
+  rowNumber: number;
+  transactionDate: Date;
+  valueDate: Date | null;
+  amount: number;
+  currency: string;
+  description: string | null;
+  bankReference: string | null;
+  counterpartyName: string | null;
+  runningBalance: number | null;
+  sourceFingerprint: string;
+};
+
+const MAX_CSV_BYTES = 1024 * 1024;
+const MAX_CSV_ROWS = 5000;
+const REQUIRED_STATEMENT_COLUMNS = ['transactionDate', 'amount', 'currency'];
 
 @Injectable()
 export class BankReconciliationsService {
@@ -127,6 +154,109 @@ export class BankReconciliationsService {
     }
   }
 
+  async importStatementLines(
+    user: RequestUser,
+    reconciliationId: string,
+    file: ImportFile | undefined,
+  ) {
+    this.assertCsvFile(file);
+    const reconciliation = await this.prisma.bankReconciliation.findFirst({
+      where: { id: reconciliationId, tenantId: user.tenantId },
+      select: {
+        id: true,
+        tenantId: true,
+        currency: true,
+        status: true,
+        statementStartDate: true,
+        statementEndDate: true,
+      },
+    });
+    if (!reconciliation)
+      throw new NotFoundException('Bank reconciliation not found');
+    if (reconciliation.status !== BankReconciliationStatus.DRAFT) {
+      throw new ConflictException(
+        'Statement lines can only be imported into a draft reconciliation',
+      );
+    }
+
+    const lines = this.parseStatementCsv(
+      file.buffer.toString('utf8'),
+      reconciliation,
+    );
+    const fingerprints = lines.map((line) => line.sourceFingerprint);
+    try {
+      await this.prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.bankStatementLine.findMany({
+            where: {
+              tenantId: user.tenantId,
+              reconciliationId,
+              sourceFingerprint: { in: fingerprints },
+            },
+            select: { sourceFingerprint: true },
+          });
+          if (existing.length > 0) {
+            throw new ConflictException(
+              'This file contains statement lines that have already been imported into this reconciliation',
+            );
+          }
+          const lastLine = await tx.bankStatementLine.findFirst({
+            where: { tenantId: user.tenantId, reconciliationId },
+            orderBy: { lineNumber: 'desc' },
+            select: { lineNumber: true },
+          });
+          const firstLineNumber = (lastLine?.lineNumber ?? 0) + 1;
+
+          await tx.bankStatementLine.createMany({
+            data: lines.map((line, index) => ({
+              tenantId: user.tenantId,
+              reconciliationId,
+              lineNumber: firstLineNumber + index,
+              transactionDate: line.transactionDate,
+              valueDate: line.valueDate,
+              amount: line.amount,
+              currency: line.currency,
+              description: line.description,
+              bankReference: line.bankReference,
+              counterpartyName: line.counterpartyName,
+              runningBalance: line.runningBalance,
+              sourceFingerprint: line.sourceFingerprint,
+            })),
+          });
+          await tx.bankReconciliation.update({
+            where: {
+              id_tenantId: { id: reconciliationId, tenantId: user.tenantId },
+            },
+            data: { updatedByUserId: user.id },
+          });
+          await tx.accountingAuditLog.create({
+            data: {
+              tenantId: user.tenantId,
+              actorUserId: user.id,
+              action: 'BANK_STATEMENT_LINES_IMPORT',
+              entityType: 'BankReconciliation',
+              entityId: reconciliationId,
+              changedFields: {
+                fileName: file.originalname,
+                lineCount: lines.length,
+              } as Prisma.InputJsonValue,
+            },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (this.isUniqueConstraint(error)) {
+        throw new ConflictException(
+          'A matching statement line already exists; refresh and retry the import',
+        );
+      }
+      throw error;
+    }
+
+    return { reconciliationId, importedLineCount: lines.length };
+  }
+
   private async recordAudit(
     user: RequestUser,
     action: string,
@@ -143,6 +273,183 @@ export class BankReconciliationsService {
         changedFields: changedFields as Prisma.InputJsonValue,
       },
     });
+  }
+
+  private assertCsvFile(
+    file: ImportFile | undefined,
+  ): asserts file is ImportFile {
+    if (!file) throw new BadRequestException('CSV file is required');
+    if (file.size === 0) throw new BadRequestException('CSV file is empty');
+    if (file.size > MAX_CSV_BYTES) {
+      throw new BadRequestException(
+        `CSV file must be ${MAX_CSV_BYTES} bytes or smaller`,
+      );
+    }
+    if (!file.originalname.toLowerCase().endsWith('.csv')) {
+      throw new BadRequestException('Only CSV files are supported');
+    }
+  }
+
+  private parseStatementCsv(
+    csv: string,
+    reconciliation: {
+      currency: string;
+      statementStartDate: Date;
+      statementEndDate: Date;
+    },
+  ): StatementLineInput[] {
+    const rows = this.parseCsvRows(csv.replace(/^\uFEFF/, ''));
+    if (rows.length < 2)
+      throw new BadRequestException(
+        'CSV must contain a header and at least one line',
+      );
+    const headers = rows[0].map((header) => header.trim());
+    const headerIndexes = new Map(
+      headers.map((header, index) => [header.toLowerCase(), index]),
+    );
+    const missing = REQUIRED_STATEMENT_COLUMNS.filter(
+      (column) => !headerIndexes.has(column.toLowerCase()),
+    );
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `CSV is missing required columns: ${missing.join(', ')}`,
+      );
+    }
+    const dataRows = rows
+      .slice(1)
+      .filter((cells) => cells.some((cell) => cell.trim() !== ''));
+    if (dataRows.length === 0) {
+      throw new BadRequestException(
+        'CSV must contain at least one statement line',
+      );
+    }
+    if (dataRows.length > MAX_CSV_ROWS) {
+      throw new BadRequestException(
+        `CSV can contain at most ${MAX_CSV_ROWS} statement lines`,
+      );
+    }
+    const fingerprints = new Set<string>();
+    return dataRows.map((cells, index) => {
+      const rowNumber = index + 2;
+      const value = (column: string) =>
+        cells[headerIndexes.get(column.toLowerCase()) ?? -1]?.trim() ?? '';
+      const transactionDate = this.parseDate(
+        value('transactionDate'),
+        'transactionDate',
+        rowNumber,
+      );
+      const valueDate = value('valueDate')
+        ? this.parseDate(value('valueDate'), 'valueDate', rowNumber)
+        : null;
+      if (
+        transactionDate < reconciliation.statementStartDate ||
+        transactionDate > reconciliation.statementEndDate
+      ) {
+        throw new BadRequestException(
+          `Row ${rowNumber}: transactionDate is outside the reconciliation statement range`,
+        );
+      }
+      const amount = this.parseAmount(value('amount'), 'amount', rowNumber);
+      if (amount === 0)
+        throw new BadRequestException(
+          `Row ${rowNumber}: amount must not be zero`,
+        );
+      const currency = value('currency').toUpperCase();
+      if (currency !== reconciliation.currency) {
+        throw new BadRequestException(
+          `Row ${rowNumber}: currency must match the reconciliation currency`,
+        );
+      }
+      const runningBalance = value('runningBalance')
+        ? this.parseAmount(value('runningBalance'), 'runningBalance', rowNumber)
+        : null;
+      const description = value('description') || null;
+      const bankReference = value('bankReference') || null;
+      const counterpartyName = value('counterpartyName') || null;
+      const sourceFingerprint = this.fingerprint([
+        transactionDate.toISOString(),
+        valueDate?.toISOString() ?? '',
+        amount.toFixed(4),
+        currency,
+        description ?? '',
+        bankReference ?? '',
+        counterpartyName ?? '',
+        runningBalance?.toFixed(4) ?? '',
+      ]);
+      if (fingerprints.has(sourceFingerprint)) {
+        throw new BadRequestException(
+          `Row ${rowNumber}: duplicate statement line in CSV`,
+        );
+      }
+      fingerprints.add(sourceFingerprint);
+      return {
+        rowNumber,
+        transactionDate,
+        valueDate,
+        amount,
+        currency,
+        description,
+        bankReference,
+        counterpartyName,
+        runningBalance,
+        sourceFingerprint,
+      };
+    });
+  }
+
+  private parseCsvRows(csv: string) {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let value = '';
+    let inQuotes = false;
+    for (let index = 0; index < csv.length; index += 1) {
+      const char = csv[index];
+      const next = csv[index + 1];
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          value += '"';
+          index += 1;
+        } else inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        row.push(value);
+        value = '';
+      } else if ((char === '\n' || char === '\r') && !inQuotes) {
+        row.push(value);
+        rows.push(row);
+        row = [];
+        value = '';
+        if (char === '\r' && next === '\n') index += 1;
+      } else value += char;
+    }
+    if (inQuotes)
+      throw new BadRequestException(
+        'CSV contains an unterminated quoted value',
+      );
+    if (value.length > 0 || row.length > 0) rows.push([...row, value]);
+    return rows;
+  }
+
+  private parseDate(value: string, column: string, rowNumber: number) {
+    const date = new Date(value);
+    if (!value || Number.isNaN(date.getTime())) {
+      throw new BadRequestException(
+        `Row ${rowNumber}: ${column} must be a valid ISO date`,
+      );
+    }
+    return date;
+  }
+
+  private parseAmount(value: string, column: string, rowNumber: number) {
+    if (!/^-?\d+(\.\d{1,4})?$/.test(value)) {
+      throw new BadRequestException(
+        `Row ${rowNumber}: ${column} must be a number with at most 4 decimals`,
+      );
+    }
+    return Number(value);
+  }
+
+  private fingerprint(values: string[]) {
+    return createHash('sha256').update(values.join('\u001F')).digest('hex');
   }
 
   private startOfDay(value: string) {
