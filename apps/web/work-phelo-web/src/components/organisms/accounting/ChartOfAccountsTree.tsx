@@ -9,6 +9,7 @@ import {
   AccountGroup,
   GLAccount,
   GLAccountCategory,
+  GLAccountStatus,
 } from '@/types/accounting';
 
 const CATEGORIES: { value: GLAccountCategory; label: string; code: string; color: string }[] = [
@@ -216,6 +217,7 @@ interface TypeNodeProps {
   classifications: AccountClassification[];
   groups: AccountGroup[];
   glAccounts: GLAccount[];
+  unclassifiedAccounts: GLAccount[];
   selectedAccountId?: string;
   onSelectAccount?: (account: GLAccount) => void;
 }
@@ -229,6 +231,7 @@ function TypeNode({
   classifications,
   groups,
   glAccounts,
+  unclassifiedAccounts,
   selectedAccountId,
   onSelectAccount,
 }: TypeNodeProps) {
@@ -253,15 +256,15 @@ function TypeNode({
           )}
           <span className="text-xs font-semibold text-gray-400 shrink-0">{code}</span>
           <span className="font-medium">{label}</span>
-          <span className="ml-auto text-xs text-gray-400">{classifications.length}</span>
+          <span className="ml-auto text-xs text-gray-400">
+            {classifications.length + (unclassifiedAccounts.length > 0 ? 1 : 0)}
+          </span>
         </button>
       </div>
 
       {open && (
         <div className="ml-6 border-l border-gray-100 pl-3 flex flex-col">
-          {classifications.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-gray-400">No classifications</p>
-          ) : (
+          {classifications.length > 0 &&
             classifications.map((classification) => (
               <ClassificationNode
                 key={classification.id}
@@ -272,7 +275,39 @@ function TypeNode({
                 selectedAccountId={selectedAccountId}
                 onSelectAccount={onSelectAccount}
               />
-            ))
+            ))}
+          {unclassifiedAccounts.length > 0 && (
+            <div className="mt-1 rounded-lg bg-amber-50 px-3 py-2">
+              <p className="text-xs font-semibold text-amber-800">Unclassified accounts</p>
+              <p className="mt-0.5 text-xs text-amber-700">
+                Assign these accounts to a standard group when their hierarchy is ready.
+              </p>
+              <div className="mt-2 flex flex-col">
+                {unclassifiedAccounts.map((account) => {
+                  const isSelected = account.id === selectedAccountId;
+                  return (
+                    <button
+                      key={account.id}
+                      type="button"
+                      onClick={() => onSelectAccount?.(account)}
+                      className={cn(
+                        'flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-gray-600 hover:bg-amber-100',
+                        isSelected && (SELECTED_TINTS[color] ?? 'bg-gray-100'),
+                      )}
+                    >
+                      <FileText className={cn('h-4 w-4 shrink-0', color)} />
+                      <span className="shrink-0 text-xs font-semibold text-gray-400">
+                        {account.code}
+                      </span>
+                      <span className="truncate">{account.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {classifications.length === 0 && unclassifiedAccounts.length === 0 && (
+            <p className="px-3 py-2 text-xs text-gray-400">No accounts</p>
           )}
         </div>
       )}
@@ -287,6 +322,8 @@ interface ChartOfAccountsTreeProps {
   onExpand?: () => void;
   selectedAccountId?: string;
   onSelectAccount?: (account: GLAccount) => void;
+  search?: string;
+  status?: GLAccountStatus;
 }
 
 export function ChartOfAccountsTree({
@@ -294,6 +331,8 @@ export function ChartOfAccountsTree({
   onExpand,
   selectedAccountId,
   onSelectAccount,
+  search = '',
+  status,
 }: ChartOfAccountsTreeProps) {
   const { data: classificationsData, isLoading: isLoadingClassifications } =
     useAccountClassifications();
@@ -302,12 +341,44 @@ export function ChartOfAccountsTree({
 
   const classifications = useMemo(() => classificationsData?.items ?? [], [classificationsData]);
   const groups = useMemo(() => groupsData?.items ?? [], [groupsData]);
-  const glAccounts = useMemo(() => glAccountsData ?? [], [glAccountsData]);
+  const glAccounts = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return (glAccountsData ?? []).filter((account) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        account.code.toLowerCase().includes(normalizedSearch) ||
+        account.name.toLowerCase().includes(normalizedSearch) ||
+        account.description?.toLowerCase().includes(normalizedSearch);
+      return matchesSearch && (!status || account.status === status);
+    });
+  }, [glAccountsData, search, status]);
+
+  const hasAccountFilter = Boolean(search.trim() || status);
+  const visibleGroups = useMemo(
+    () =>
+      hasAccountFilter
+        ? groups.filter((group) =>
+            glAccounts.some((account) => account.accountGroupId === group.id),
+          )
+        : groups,
+    [glAccounts, groups, hasAccountFilter],
+  );
+  const visibleClassifications = useMemo(
+    () =>
+      hasAccountFilter
+        ? classifications.filter((classification) =>
+            visibleGroups.some((group) => group.classificationId === classification.id),
+          )
+        : classifications,
+    [classifications, hasAccountFilter, visibleGroups],
+  );
 
   const isLoading = isLoadingClassifications || isLoadingGroups || isLoadingGLAccounts;
 
   // Lifted so a rail click can force a specific type open once expanded.
-  const [openTypes, setOpenTypes] = useState<Set<GLAccountCategory>>(new Set());
+  const [openTypes, setOpenTypes] = useState<Set<GLAccountCategory>>(
+    () => new Set(CATEGORIES.map(({ value }) => value)),
+  );
 
   const toggleType = (value: GLAccountCategory) => {
     setOpenTypes((prev) => {
@@ -355,9 +426,12 @@ export function ChartOfAccountsTree({
             color={cat.color}
             open={openTypes.has(cat.value)}
             onToggle={() => toggleType(cat.value)}
-            classifications={classifications.filter((c) => c.category === cat.value)}
-            groups={groups}
+            classifications={visibleClassifications.filter((c) => c.category === cat.value)}
+            groups={visibleGroups}
             glAccounts={glAccounts}
+            unclassifiedAccounts={glAccounts.filter(
+              (account) => account.category === cat.value && !account.accountGroupId,
+            )}
             selectedAccountId={selectedAccountId}
             onSelectAccount={onSelectAccount}
           />
