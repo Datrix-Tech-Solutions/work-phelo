@@ -27,6 +27,8 @@ export const AccountingPermission = {
   CASHBOOK_CREATE: 'accounting.cashbook:CREATE',
   CASHBOOK_POST: 'accounting.cashbook:APPROVE',
   CASHBOOK_REVERSE: 'accounting.cashbook:DELETE',
+  BANK_RECONCILIATIONS_VIEW: 'accounting.bank-reconciliations:VIEW',
+  BANK_RECONCILIATIONS_MANAGE: 'accounting.bank-reconciliations:EDIT',
   RECEIVABLES_VIEW: 'accounting.receivables:VIEW',
   RECEIVABLES_CREATE: 'accounting.receivables:CREATE',
   RECEIVABLES_POST: 'accounting.receivables:APPROVE',
