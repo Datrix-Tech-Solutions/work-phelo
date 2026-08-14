@@ -90,6 +90,24 @@ describe('BankReconciliationsService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'statement-line-1',
+          status: 'MATCHED',
+          matchedCashbookTransactionId: 'cashbook-1',
+        }),
+      },
+      cashbookTransaction: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'cashbook-1',
+          transactionDate: new Date('2026-08-05T00:00:00.000Z'),
+          amount: new Prisma.Decimal('250.50'),
+          currency: 'GHS',
+          direction: 'INFLOW',
+          reference: 'REC-001',
+          externalReference: null,
+          description: 'Premium receipt',
+        }),
       },
       bankReconciliation: {
         update: jest.fn().mockResolvedValue(reconciliation()),
@@ -207,5 +225,65 @@ describe('BankReconciliationsService', () => {
     await expect(
       service.importStatementLines(actor, 'reconciliation-1', file),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('matches an unmatched bank line only to an exact posted Cashbook candidate', async () => {
+    const { service, transaction } = setup();
+    transaction.bankStatementLine.findFirst.mockResolvedValue({
+      id: 'statement-line-1',
+      tenantId: actor.tenantId,
+      reconciliationId: 'reconciliation-1',
+      amount: new Prisma.Decimal('250.50'),
+      currency: 'GHS',
+      transactionDate: new Date('2026-08-05T00:00:00.000Z'),
+      status: 'UNMATCHED',
+      matchedCashbookTransactionId: null,
+      reconciliation: { cashAccountId: dto.cashAccountId, status: 'DRAFT' },
+    });
+
+    await expect(
+      service.matchStatementLine(
+        actor,
+        'reconciliation-1',
+        'statement-line-1',
+        {
+          cashbookTransactionId: 'cashbook-1',
+        },
+      ),
+    ).resolves.toMatchObject({
+      id: 'statement-line-1',
+      status: 'MATCHED',
+    });
+
+    expect(transaction.cashbookTransaction.findFirst).toHaveBeenCalledTimes(1);
+    expect(transaction.bankStatementLine.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a requested Cashbook row that is not an exact candidate', async () => {
+    const { service, transaction } = setup();
+    transaction.bankStatementLine.findFirst.mockResolvedValue({
+      id: 'statement-line-1',
+      tenantId: actor.tenantId,
+      reconciliationId: 'reconciliation-1',
+      amount: new Prisma.Decimal('-250.50'),
+      currency: 'GHS',
+      transactionDate: new Date('2026-08-05T00:00:00.000Z'),
+      status: 'UNMATCHED',
+      matchedCashbookTransactionId: null,
+      reconciliation: { cashAccountId: dto.cashAccountId, status: 'DRAFT' },
+    });
+    transaction.cashbookTransaction.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.matchStatementLine(
+        actor,
+        'reconciliation-1',
+        'statement-line-1',
+        {
+          cashbookTransactionId: 'cashbook-not-eligible',
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(transaction.bankStatementLine.updateMany).not.toHaveBeenCalled();
   });
 });

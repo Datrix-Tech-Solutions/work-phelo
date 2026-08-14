@@ -8,13 +8,18 @@ import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   BankReconciliationStatus,
+  BankStatementLineStatus,
+  CashbookDirection,
+  CashbookTransactionStatus,
   Prisma,
   RecordStatus,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateBankReconciliationDto,
+  MatchBankStatementLineDto,
   QueryBankReconciliationsDto,
+  QueryBankStatementLinesDto,
 } from './dto/bank-reconciliations.dto';
 
 const reconciliationInclude = {
@@ -52,6 +57,17 @@ type StatementLineInput = {
 const MAX_CSV_BYTES = 1024 * 1024;
 const MAX_CSV_ROWS = 5000;
 const REQUIRED_STATEMENT_COLUMNS = ['transactionDate', 'amount', 'currency'];
+
+const matchedCashbookSelect = {
+  id: true,
+  transactionDate: true,
+  amount: true,
+  currency: true,
+  direction: true,
+  reference: true,
+  externalReference: true,
+  description: true,
+} satisfies Prisma.CashbookTransactionSelect;
 
 @Injectable()
 export class BankReconciliationsService {
@@ -148,6 +164,140 @@ export class BankReconciliationsService {
       if (this.isUniqueConstraint(error)) {
         throw new ConflictException(
           'A bank reconciliation already exists for this cash account and statement reference',
+        );
+      }
+      throw error;
+    }
+  }
+
+  async listStatementLines(
+    tenantId: string,
+    reconciliationId: string,
+    query: QueryBankStatementLinesDto,
+  ) {
+    await this.get(tenantId, reconciliationId);
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(Math.max(1, query.limit ?? 25), 100);
+    const where: Prisma.BankStatementLineWhereInput = {
+      tenantId,
+      reconciliationId,
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.bankStatementLine.findMany({
+        where,
+        include: {
+          matchedCashbookTransaction: { select: matchedCashbookSelect },
+        },
+        orderBy: { lineNumber: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.bankStatementLine.count({ where }),
+    ]);
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  async listMatchCandidates(
+    tenantId: string,
+    reconciliationId: string,
+    statementLineId: string,
+  ) {
+    const line = await this.findUnmatchedStatementLine(
+      this.prisma,
+      tenantId,
+      reconciliationId,
+      statementLineId,
+    );
+    return this.prisma.cashbookTransaction.findMany({
+      where: this.exactCashbookMatchWhere(line),
+      select: matchedCashbookSelect,
+      orderBy: [{ transactionDate: 'asc' }, { createdAt: 'asc' }],
+      take: 25,
+    });
+  }
+
+  async matchStatementLine(
+    user: RequestUser,
+    reconciliationId: string,
+    statementLineId: string,
+    dto: MatchBankStatementLineDto,
+  ) {
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const line = await this.findUnmatchedStatementLine(
+            tx,
+            user.tenantId,
+            reconciliationId,
+            statementLineId,
+          );
+          const cashbookTransaction = await tx.cashbookTransaction.findFirst({
+            where: {
+              ...this.exactCashbookMatchWhere(line),
+              id: dto.cashbookTransactionId,
+            },
+            select: matchedCashbookSelect,
+          });
+          if (!cashbookTransaction) {
+            throw new BadRequestException(
+              'Cashbook transaction is not an exact eligible match for this statement line',
+            );
+          }
+          const claimed = await tx.bankStatementLine.updateMany({
+            where: {
+              id: statementLineId,
+              tenantId: user.tenantId,
+              reconciliationId,
+              status: BankStatementLineStatus.UNMATCHED,
+              matchedCashbookTransactionId: null,
+            },
+            data: {
+              status: BankStatementLineStatus.MATCHED,
+              matchedCashbookTransactionId: cashbookTransaction.id,
+              matchedByUserId: user.id,
+              matchedAt: new Date(),
+            },
+          });
+          if (claimed.count !== 1) {
+            throw new ConflictException(
+              'Statement line was changed by another request',
+            );
+          }
+          await tx.accountingAuditLog.create({
+            data: {
+              tenantId: user.tenantId,
+              actorUserId: user.id,
+              action: 'BANK_STATEMENT_LINE_MATCH',
+              entityType: 'BankStatementLine',
+              entityId: statementLineId,
+              changedFields: {
+                reconciliationId,
+                cashbookTransactionId: cashbookTransaction.id,
+              } as Prisma.InputJsonValue,
+            },
+          });
+          return tx.bankStatementLine.findUniqueOrThrow({
+            where: {
+              id_tenantId: { id: statementLineId, tenantId: user.tenantId },
+            },
+            include: {
+              matchedCashbookTransaction: { select: matchedCashbookSelect },
+            },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (this.isUniqueConstraint(error)) {
+        throw new ConflictException(
+          'Cashbook transaction is already matched in this reconciliation',
         );
       }
       throw error;
@@ -273,6 +423,76 @@ export class BankReconciliationsService {
         changedFields: changedFields as Prisma.InputJsonValue,
       },
     });
+  }
+
+  private async findUnmatchedStatementLine(
+    client: Pick<Prisma.TransactionClient, 'bankStatementLine'>,
+    tenantId: string,
+    reconciliationId: string,
+    statementLineId: string,
+  ) {
+    const line = await client.bankStatementLine.findFirst({
+      where: { id: statementLineId, tenantId, reconciliationId },
+      select: {
+        id: true,
+        tenantId: true,
+        reconciliationId: true,
+        amount: true,
+        currency: true,
+        transactionDate: true,
+        status: true,
+        matchedCashbookTransactionId: true,
+        reconciliation: {
+          select: { cashAccountId: true, status: true },
+        },
+      },
+    });
+    if (!line) throw new NotFoundException('Bank statement line not found');
+    if (line.reconciliation.status !== BankReconciliationStatus.DRAFT) {
+      throw new ConflictException(
+        'Statement lines can only be matched in a draft reconciliation',
+      );
+    }
+    if (
+      line.status !== BankStatementLineStatus.UNMATCHED ||
+      line.matchedCashbookTransactionId
+    ) {
+      throw new ConflictException('Bank statement line is already matched');
+    }
+    return line;
+  }
+
+  private exactCashbookMatchWhere(line: {
+    tenantId: string;
+    amount: Prisma.Decimal;
+    currency: string;
+    transactionDate: Date;
+    reconciliation: { cashAccountId: string };
+  }): Prisma.CashbookTransactionWhereInput {
+    const isInflow = line.amount.greaterThan(0);
+    const cashAccountId = line.reconciliation.cashAccountId;
+    return {
+      tenantId: line.tenantId,
+      status: CashbookTransactionStatus.POSTED,
+      currency: line.currency,
+      amount: line.amount.abs(),
+      transactionDate: {
+        gte: this.startOfDay(line.transactionDate.toISOString()),
+        lte: this.endOfDay(line.transactionDate.toISOString()),
+      },
+      OR: isInflow
+        ? [
+            { cashAccountId, direction: CashbookDirection.INFLOW },
+            {
+              destinationCashAccountId: cashAccountId,
+              direction: CashbookDirection.TRANSFER,
+            },
+          ]
+        : [
+            { cashAccountId, direction: CashbookDirection.OUTFLOW },
+            { cashAccountId, direction: CashbookDirection.TRANSFER },
+          ],
+    };
   }
 
   private assertCsvFile(
