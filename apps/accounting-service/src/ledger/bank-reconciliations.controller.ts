@@ -31,7 +31,9 @@ import { AccountingPermission } from './accounting.permissions';
 import { BankReconciliationsService } from './bank-reconciliations.service';
 import {
   CreateBankReconciliationDto,
+  MatchBankStatementLineDto,
   QueryBankReconciliationsDto,
+  QueryBankStatementLinesDto,
 } from './dto/bank-reconciliations.dto';
 
 @Controller('bank-reconciliations')
@@ -101,6 +103,64 @@ export class BankReconciliationsController {
       request.user,
       reconciliationId,
       file,
+    );
+  }
+
+  @Get(':reconciliationId/statement-lines')
+  @ApiOperation({
+    summary: 'List imported bank statement lines for a reconciliation',
+  })
+  @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_VIEW)
+  listStatementLines(
+    @Param('reconciliationId', ParseUUIDPipe) reconciliationId: string,
+    @Query() query: QueryBankStatementLinesDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.listStatementLines(
+      request.user.tenantId,
+      reconciliationId,
+      query,
+    );
+  }
+
+  @Get(':reconciliationId/statement-lines/:statementLineId/candidates')
+  @ApiOperation({
+    summary:
+      'List exact posted Cashbook matches for an unmatched statement line',
+    description:
+      'Candidates must have the same tenant, cash account, date, currency, absolute amount and cash direction. No match is created by this endpoint.',
+  })
+  @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_VIEW)
+  listMatchCandidates(
+    @Param('reconciliationId', ParseUUIDPipe) reconciliationId: string,
+    @Param('statementLineId', ParseUUIDPipe) statementLineId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.listMatchCandidates(
+      request.user.tenantId,
+      reconciliationId,
+      statementLineId,
+    );
+  }
+
+  @Post(':reconciliationId/statement-lines/:statementLineId/match')
+  @ApiOperation({
+    summary: 'Match a statement line to an exact posted Cashbook transaction',
+    description:
+      'Creates a controlled reconciliation link only. It does not post a journal, complete the reconciliation, or create an adjustment.',
+  })
+  @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_MANAGE)
+  matchStatementLine(
+    @Param('reconciliationId', ParseUUIDPipe) reconciliationId: string,
+    @Param('statementLineId', ParseUUIDPipe) statementLineId: string,
+    @Body() dto: MatchBankStatementLineDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.matchStatementLine(
+      request.user,
+      reconciliationId,
+      statementLineId,
+      dto,
     );
   }
 

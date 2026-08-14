@@ -597,26 +597,31 @@ model BankReconciliation {
 }
 
 model BankStatementLine {
-  id                   String                  @id @default(uuid())
-  tenantId             String
-  reconciliationId     String
-  lineNumber           Int
-  transactionDate      DateTime
-  valueDate            DateTime?
-  amount               Decimal                 @db.Decimal(20, 4)
-  currency             String
-  description          String?
-  bankReference        String?
-  counterpartyName     String?
-  runningBalance       Decimal?                @db.Decimal(20, 4)
-  sourceFingerprint    String
-  status               BankStatementLineStatus @default(UNMATCHED)
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  reconciliation       BankReconciliation      @relation(fields: [reconciliationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  id                           String                  @id @default(uuid())
+  tenantId                     String
+  reconciliationId             String
+  lineNumber                   Int
+  transactionDate              DateTime
+  valueDate                    DateTime?
+  amount                       Decimal                 @db.Decimal(20, 4)
+  currency                     String
+  description                  String?
+  bankReference                String?
+  counterpartyName             String?
+  runningBalance               Decimal?                @db.Decimal(20, 4)
+  sourceFingerprint            String
+  status                       BankStatementLineStatus @default(UNMATCHED)
+  matchedCashbookTransactionId String?
+  matchedByUserId              String?
+  matchedAt                    DateTime?
+  createdAt                    DateTime                @default(now())
+  updatedAt                    DateTime                @updatedAt
+  reconciliation               BankReconciliation      @relation(fields: [reconciliationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  matchedCashbookTransaction   CashbookTransaction?    @relation("BankStatementLineMatchedCashbook", fields: [matchedCashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([reconciliationId, lineNumber])
+  @@unique([reconciliationId, matchedCashbookTransactionId])
   @@unique([tenantId, reconciliationId, sourceFingerprint])
   @@index([tenantId, reconciliationId, status, transactionDate])
   @@index([tenantId, bankReference])
@@ -668,6 +673,7 @@ model CashbookTransaction {
   reversalJournalEntry     JournalEntry?                @relation("CashbookReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalOfTransaction    CashbookTransaction?         @relation("CashbookTransactionReversal", fields: [reversalOfTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalTransaction      CashbookTransaction?         @relation("CashbookTransactionReversal")
+  bankStatementMatches     BankStatementLine[]          @relation("BankStatementLineMatchedCashbook")
   receivableReceipt        AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
   payablePayment           AccountingPayablePayment?    @relation("PayableCashbookTransaction")
 

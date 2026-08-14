@@ -10,7 +10,10 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BankReconciliationStatus } from '../../../prisma/generated/client';
+import {
+  BankReconciliationStatus,
+  BankStatementLineStatus,
+} from '../../../prisma/generated/client';
 
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -74,4 +77,29 @@ export class QueryBankReconciliationsDto {
   @IsOptional()
   @IsDateString()
   toDate?: string;
+}
+
+export class MatchBankStatementLineDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  cashbookTransactionId!: string;
+}
+
+export class QueryBankStatementLinesDto {
+  @ApiPropertyOptional({ enum: BankStatementLineStatus })
+  @IsOptional()
+  @IsEnum(BankStatementLineStatus)
+  status?: BankStatementLineStatus;
+
+  @ApiPropertyOptional({ example: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  page?: number;
+
+  @ApiPropertyOptional({ example: 25, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  limit?: number;
 }
