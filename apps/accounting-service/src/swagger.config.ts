@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Request } from 'express';
 
 export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
@@ -48,9 +49,7 @@ remain independently usable.
       `,
     )
     .setVersion('1.0')
-    .addServer('/api/v1/accounting', 'API Gateway')
-    .addServer('/api', 'Direct accounting-service')
-    .addCookieAuth('access_token')
+    .addCookieAuth('access_token', undefined, 'access_token')
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
       'access-token',
@@ -78,10 +77,49 @@ remain independently usable.
     .addTag('Internal Accounting Source Events')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  // Paths remain relative to the selected server. This prevents Swagger from
+  // generating `/api/v1/accounting/api/...` when its document is proxied by
+  // the Gateway.
+  const document = SwaggerModule.createDocument(app, config, {
+    ignoreGlobalPrefix: true,
+  });
   SwaggerModule.setup('docs', app, document, {
     useGlobalPrefix: true,
     jsonDocumentUrl: 'docs-json',
     yamlDocumentUrl: 'docs-yaml',
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+    patchDocumentOnRequest: (request, _response, baseDocument) => {
+      const swaggerRequest = request as Request;
+      const isGatewayRequest =
+        swaggerRequest.headers['x-workphelo-gateway-docs'] === 'accounting';
+      const forwardedProto = swaggerRequest.headers['x-forwarded-proto'];
+      const protocol = Array.isArray(forwardedProto)
+        ? forwardedProto[0]
+        : (forwardedProto ?? swaggerRequest.protocol);
+      const forwardedHost = swaggerRequest.headers['x-forwarded-host'];
+      const host = isGatewayRequest
+        ? Array.isArray(forwardedHost)
+          ? forwardedHost[0]
+          : forwardedHost
+        : swaggerRequest.headers.host;
+
+      return {
+        ...baseDocument,
+        servers: host
+          ? [
+              {
+                url: `${protocol}://${host}${
+                  isGatewayRequest ? '/api/v1/accounting' : '/api'
+                }`,
+                description: isGatewayRequest
+                  ? 'API Gateway'
+                  : 'Direct accounting-service',
+              },
+            ]
+          : baseDocument.servers,
+      };
+    },
   });
 }

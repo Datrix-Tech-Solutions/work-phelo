@@ -11,17 +11,26 @@ describe('setupSwagger', () => {
     const app = {} as INestApplication;
     const document = { openapi: '3.0.0' };
 
-    jest
+    const createDocumentSpy = jest
       .spyOn(SwaggerModule, 'createDocument')
       .mockReturnValue(document as never);
     const setupSpy = jest.spyOn(SwaggerModule, 'setup').mockImplementation();
 
     setupSwagger(app);
 
-    expect(setupSpy).toHaveBeenCalledWith('docs', app, document, {
-      useGlobalPrefix: true,
-      jsonDocumentUrl: 'docs-json',
-      yamlDocumentUrl: 'docs-yaml',
+    expect(setupSpy).toHaveBeenCalledWith(
+      'docs',
+      app,
+      document,
+      expect.objectContaining({
+        useGlobalPrefix: true,
+        jsonDocumentUrl: 'docs-json',
+        yamlDocumentUrl: 'docs-yaml',
+        swaggerOptions: { persistAuthorization: true },
+      }),
+    );
+    expect(createDocumentSpy).toHaveBeenCalledWith(app, expect.anything(), {
+      ignoreGlobalPrefix: true,
     });
   });
 });
