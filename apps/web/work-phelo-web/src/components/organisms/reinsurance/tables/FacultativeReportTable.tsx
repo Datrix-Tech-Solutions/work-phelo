@@ -23,6 +23,7 @@ import {
 import { FACULTATIVE_STATUSES, FacultativeStatus } from '@/types/reinsurance';
 import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { exportToCsv } from '@/lib/exportCsv';
 
 const PAGE_SIZE = 10;
 
@@ -178,6 +179,36 @@ export function FacultativeReportTable() {
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paged = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const handleExport = () => {
+    const headers = [
+      'Policy Number',
+      'Cedant',
+      'Risk Type',
+      'Sum Insured',
+      'Premium',
+      'Commission',
+      'Accepted %',
+      'Reinsurers',
+      'Inception',
+      'Expiry',
+      'Status',
+    ];
+    const data = rows.map((row) => [
+      displayPolicyNumber(row.policyNumber),
+      row.cedantName,
+      row.classOfBusiness ?? '',
+      fmtAmount(row.sumInsured, row.currency),
+      fmtAmount(row.premium, row.currency),
+      row.commission != null ? `${row.commission}%` : '',
+      `${row.totalAcceptedPercent}%`,
+      row.reinsurerCount,
+      fmtDate(row.inceptionDate),
+      fmtDate(row.expiryDate),
+      facultativeStatusLabel(row.status),
+    ]);
+    exportToCsv(`facultative-report-${new Date().toISOString().slice(0, 10)}.csv`, headers, data);
+  };
+
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0">
       {reportParams && <ReportCurrencySummaryCards totals={currencyTotals} isLoading={isLoading} />}
@@ -190,6 +221,7 @@ export function FacultativeReportTable() {
           onRowClick={(row) =>
             router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.id}`)
           }
+          onExport={reportParams && rows.length > 0 ? handleExport : undefined}
           extraFilters={
             <div className="flex items-center gap-2 flex-wrap">
               <div className="w-50">

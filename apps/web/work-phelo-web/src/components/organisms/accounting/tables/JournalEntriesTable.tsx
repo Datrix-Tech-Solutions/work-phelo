@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { JournalEntryRecord, JournalRecordStatus } from '@/types/accounting';
+import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
+import { formatJournalNumber } from '@/lib/formatters';
 import { useJournals } from '@/hooks';
 import { JournalDetailPanel } from '@/components/organisms/accounting/panels/JournalDetailPanel';
 
@@ -65,18 +67,18 @@ export function JournalEntriesTable() {
     () => [
       {
         key: 'journalNumber',
-        label: 'Ref No.',
-        width: '150px',
+        label: 'Journal ID',
+        width: '200px',
         render: (row) => (
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-            {row.journalNumber}
+            {formatJournalNumber(row.journalNumber)}
           </span>
         ),
       },
       {
         key: 'transactionDate',
         label: 'Date',
-        width: '130px',
+        width: '100px',
         render: (row) => (
           <span className="text-gray-700 text-sm">{fmtDate(row.transactionDate)}</span>
         ),
@@ -85,12 +87,16 @@ export function JournalEntriesTable() {
         key: 'description',
         label: 'Description',
         width: 'minmax(150px, 1fr)',
-        render: (row) => <span className="text-gray-700 text-sm">{row.description}</span>,
+        render: (row) => (
+          <span className="text-gray-700 text-sm" title={row.description}>
+            {formatSourceEventDescription(row.description)}
+          </span>
+        ),
       },
       {
         key: 'transactionCurrency',
         label: 'Currency',
-        width: '100px',
+        width: '50px',
         render: (row) => (
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
             {row.transactionCurrency}
@@ -101,6 +107,7 @@ export function JournalEntriesTable() {
         key: 'debitTotal',
         label: 'Debit Total',
         width: '150px',
+        className: 'text-right',
         render: (row) => (
           <span className="block text-right text-sm font-medium text-gray-900">
             {fmtAmount(lineTotals(row).debit, row.transactionCurrency)}
@@ -111,6 +118,7 @@ export function JournalEntriesTable() {
         key: 'creditTotal',
         label: 'Credit Total',
         width: '150px',
+        className: 'text-right',
         render: (row) => (
           <span className="block text-right text-sm font-medium text-gray-900">
             {fmtAmount(lineTotals(row).credit, row.transactionCurrency)}
@@ -120,7 +128,7 @@ export function JournalEntriesTable() {
       {
         key: 'status',
         label: 'Status',
-        width: '110px',
+        width: '100px',
         render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
       },
     ],
@@ -148,6 +156,7 @@ export function JournalEntriesTable() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       <JournalDetailPanel journal={detailTarget} onClose={() => setDetailTarget(null)} />

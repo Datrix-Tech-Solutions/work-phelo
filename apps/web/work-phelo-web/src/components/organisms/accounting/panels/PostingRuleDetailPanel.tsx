@@ -26,6 +26,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { getPostingRulePathGuidance } from '@/config/reinsurance-posting-rule-guidance';
+import { getSourceEventLabel } from '@/config/reinsurance-event-catalog';
 
 interface PostingRuleDetailPanelProps {
   rule: PostingRule | null;
@@ -90,7 +91,9 @@ export function PostingRuleDetailPanel({
       onClose={onClose}
       title={rule?.name ?? 'Posting Rule'}
       description={
-        rule ? `${rule.sourceModule} · ${rule.sourceEventType} · v${rule.version}` : undefined
+        rule
+          ? `${rule.sourceModule} · ${getSourceEventLabel(rule.sourceEventType)} · v${rule.version}`
+          : undefined
       }
       footer={
         <div className="flex justify-end gap-3">
@@ -119,7 +122,7 @@ export function PostingRuleDetailPanel({
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Source Module" value={rule.sourceModule} />
-            <Field label="Source Event Type" value={rule.sourceEventType.replaceAll('_', ' ')} />
+            <Field label="Source Event Type" value={getSourceEventLabel(rule.sourceEventType)} />
             <Field label="Version" value={rule.version} />
             <Field label="Effective From" value={fmtDate(rule.effectiveFrom)} />
             <Field label="Effective To" value={fmtDate(rule.effectiveTo)} />
