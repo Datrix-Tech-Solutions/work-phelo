@@ -5,6 +5,7 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { PostingRule, PostingRuleLine } from '@/types/accounting';
+import { getSourceEventLabel } from '@/config/reinsurance-event-catalog';
 import { usePostingRules } from '@/hooks';
 import { AddPostingRulePanel } from '@/components/organisms/accounting/panels/AddPostingRulePanel';
 import {
@@ -84,7 +85,7 @@ export function PostingRulesTable() {
         label: 'Source Event Type',
         width: 'minmax(180px, 1fr)',
         render: (row) => (
-          <span className="text-sm text-gray-700">{row.sourceEventType.replaceAll('_', ' ')}</span>
+          <span className="text-sm text-gray-700">{getSourceEventLabel(row.sourceEventType)}</span>
         ),
       },
       {

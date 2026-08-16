@@ -10,6 +10,7 @@ import { CashbookTransaction, CashbookTransactionStatus } from '@/types/accounti
 import { usePostCashbookTransaction, useReverseCashbookTransaction } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { formatJournalNumber } from '@/lib/formatters';
 
 interface CashbookTransactionDetailPanelProps {
   transaction: CashbookTransaction | null;
@@ -185,7 +186,8 @@ export function CashbookTransactionDetailPanel({
 
             {transaction.postedJournalEntry && (
               <div className="rounded-xl border border-green-100 bg-green-50 p-3 text-sm text-green-900">
-                Posted as journal {transaction.postedJournalEntry.journalNumber} on{' '}
+                Posted as journal{' '}
+                {formatJournalNumber(transaction.postedJournalEntry.journalNumber)} on{' '}
                 {fmtDate(transaction.postedJournalEntry.postedAt)}.
               </div>
             )}
