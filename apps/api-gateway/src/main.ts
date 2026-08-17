@@ -12,7 +12,16 @@ async function bootstrap() {
   assertGatewayRuntimeEnv();
   const app = await NestFactory.create(AppModule);
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      // Swagger's local HTTP requests would otherwise be upgraded to HTTPS by
+      // Helmet, while the development Gateway intentionally has no TLS.
+      contentSecurityPolicy:
+        process.env.NODE_ENV === 'production'
+          ? undefined
+          : { directives: { upgradeInsecureRequests: null } },
+    }),
+  );
   app.use(cookieParser());
 
   app.useGlobalPipes(
