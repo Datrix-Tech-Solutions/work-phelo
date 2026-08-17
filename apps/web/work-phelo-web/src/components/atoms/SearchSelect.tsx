@@ -26,6 +26,9 @@ interface SearchSelectProps {
   /** Rendered inside the control's own box, alongside the clear/chevron icons (e.g. a
    *  visibility toggle). Not a native <button> internally, so it nests safely here. */
   rightSlot?: React.ReactNode;
+  /** For filter bars: prepends a selectable "All" option (value `''`) — makes the already-implicit
+   *  "nothing selected = no filter" state a visible, explicit choice instead of just an empty field. */
+  showAllOption?: boolean;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -44,6 +47,7 @@ export function SearchSelect({
   size = 'sm',
   onQueryChange,
   rightSlot,
+  showAllOption = false,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -85,7 +89,12 @@ export function SearchSelect({
     if (!open && e.propertyName === 'grid-template-rows') setShowDropdown(false);
   };
 
-  const selected = options.find((o) => o.value === value);
+  const effectiveOptions = useMemo(
+    () => (showAllOption ? [{ value: '', label: 'All' }, ...options] : options),
+    [options, showAllOption],
+  );
+
+  const selected = effectiveOptions.find((o) => o.value === value);
 
   /* What the input shows:
      - when open: whatever the user is typing (query)
@@ -106,13 +115,13 @@ export function SearchSelect({
   }, []);
 
   const filtered = useMemo(() => {
-    if (!query) return options;
+    if (!query) return effectiveOptions;
     const q = query.toLowerCase();
-    return options.filter(
+    return effectiveOptions.filter(
       (o) =>
         o.label.toLowerCase().includes(q) || (o.sublabel && o.sublabel.toLowerCase().includes(q)),
     );
-  }, [options, query]);
+  }, [effectiveOptions, query]);
 
   /* keep the highlighted option in range as the filtered list changes — adjusted during
      render (rather than an effect) per React's guidance for state that mirrors a prop/derived value */

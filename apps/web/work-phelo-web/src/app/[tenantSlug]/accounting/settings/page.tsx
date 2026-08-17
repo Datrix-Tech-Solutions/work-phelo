@@ -6,5 +6,5 @@ export default async function AccountingSettingsPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
-  redirect(`/${tenantSlug}/accounting/settings/vendors`);
+  redirect(`/${tenantSlug}/accounting/settings/entities`);
 }

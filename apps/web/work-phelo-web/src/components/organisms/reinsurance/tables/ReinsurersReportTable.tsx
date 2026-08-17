@@ -146,6 +146,7 @@ export function ReinsurersReportTable() {
               <div className="w-36">
                 <SearchSelect
                   size="sm"
+                  showAllOption
                   placeholder="Risk type"
                   options={riskTypeOptions}
                   value={riskTypeId}
@@ -155,6 +156,7 @@ export function ReinsurersReportTable() {
               <div className="w-32">
                 <SearchSelect
                   size="sm"
+                  showAllOption
                   placeholder="Currency"
                   options={currencyOptions}
                   value={currency}
@@ -164,6 +166,7 @@ export function ReinsurersReportTable() {
               <div className="w-32">
                 <SearchSelect
                   size="sm"
+                  showAllOption
                   placeholder="Status"
                   options={STATUS_OPTIONS}
                   value={status}
@@ -173,6 +176,7 @@ export function ReinsurersReportTable() {
               <div className="w-44">
                 <MultiSelect
                   size="sm"
+                  variant="inline"
                   placeholder="Reinsurers"
                   options={reinsurerOptions}
                   value={reinsurerIds}

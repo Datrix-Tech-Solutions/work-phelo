@@ -43,6 +43,13 @@ const endorsementParticipantInclude = {
       registrationNumber: true,
     },
   },
+  // `PlacementEndorsementParticipant` has no brokerageFee column of its own — participants
+  // carried over from the base placement inherit theirs from the original participant record.
+  originalParticipant: {
+    select: {
+      brokerageFee: true,
+    },
+  },
 } satisfies Prisma.PlacementEndorsementParticipantInclude;
 
 type EndorsementParticipantRecord =
@@ -132,15 +139,7 @@ export class PlacementEndorsementClosingsService {
           placementId,
           endorsementId,
         },
-        include: {
-          counterparty: {
-            select: {
-              id: true,
-              name: true,
-              registrationNumber: true,
-            },
-          },
-        },
+        include: endorsementParticipantInclude,
       });
     if (!participant) {
       throw new NotFoundException(
@@ -939,13 +938,6 @@ export class PlacementEndorsementClosingsService {
         this.asRecord(proposed.placement).commission,
         originalPlacement.commission,
       ),
-      brokeragePercent: this.firstOptionalNumber(
-        proposed.brokeragePercent,
-        proposed.preliminaryBrokerage,
-        this.asRecord(proposed.placement).brokeragePercent,
-        this.asRecord(proposed.placement).preliminaryBrokerage,
-        originalPlacement.preliminaryBrokerage,
-      ),
       currency: this.firstString(
         proposed.currency,
         this.asRecord(proposed.placement).currency,
@@ -959,18 +951,24 @@ export class PlacementEndorsementClosingsService {
       premium: number;
       sumInsured: number | null;
       commission: number | null;
-      brokeragePercent: number | null;
       currency: string | null;
     },
     participant: {
       sharePercent: Prisma.Decimal | null;
       signedLinePercent: Prisma.Decimal | null;
+      originalParticipant?: { brokerageFee: Prisma.Decimal | null } | null;
     },
     signedLinePercent: number,
   ) {
     const sharePercent = this.toOptionalNumber(participant.sharePercent);
     const commissionPct = source.commission ?? 0;
-    const brokeragePct = source.brokeragePercent ?? 0;
+    // Brokerage is per-participant (each reinsurer's own brokerage cut), mirroring the
+    // original closing path in placement-closings.service.ts — not a placement-level rate.
+    // Participants added fresh within the endorsement (no originalParticipant) have no
+    // brokerage fee to inherit yet, so they default to 0.
+    const brokeragePct = this.toNumber(
+      participant.originalParticipant?.brokerageFee ?? null,
+    );
 
     const premiumSnapshot = (signedLinePercent / 100) * source.premium;
     const commissionAmount = (commissionPct / 100) * premiumSnapshot;

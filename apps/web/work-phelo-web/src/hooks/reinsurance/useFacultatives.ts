@@ -300,14 +300,17 @@ export function useDeleteParticipant(placementId: string) {
   });
 }
 
+export async function fetchPlacementClosings(
+  placementId: string,
+): Promise<PlacementParticipantClosing[]> {
+  const res = await api.get(`${BASE}/${placementId}/closings`);
+  return (res.data?.items ?? res.data ?? []) as PlacementParticipantClosing[];
+}
+
 export function usePlacementClosings(placementId: string) {
   return useQuery({
     queryKey: placementClosingsKey(placementId),
-    queryFn: async () => {
-      const res = await api.get(`${BASE}/${placementId}/closings`);
-      const raw = res.data?.items ?? res.data ?? [];
-      return raw as PlacementParticipantClosing[];
-    },
+    queryFn: () => fetchPlacementClosings(placementId),
     enabled: !!placementId,
   });
 }

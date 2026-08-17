@@ -1,6 +1,10 @@
 'use client';
 
-import { Facultative, PlacementFinancialPosition } from '@/types/reinsurance';
+import {
+  EffectivePlacementView,
+  Facultative,
+  PlacementFinancialPosition,
+} from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { fmtDate } from '@/lib/reinsurance/claimFormat';
@@ -13,13 +17,18 @@ function fmt(val: number, currency: string | null) {
 interface PaymentBreakdownProps {
   placement?: Facultative | null;
   financialPosition?: PlacementFinancialPosition | null;
+  effectiveView?: EffectivePlacementView | null;
 }
 
 /** Placement facts + premium position figures, in the same `DetailField` tile grid format as
  * `FacultativeOverview`/`ClaimDetailsPanel`. Rendered inside `PaymentOverview`'s
  * `CollapsibleOverview` card, so it stays unboxed here rather than wrapping itself in another
  * card. */
-export function PaymentBreakdown({ placement, financialPosition }: PaymentBreakdownProps) {
+export function PaymentBreakdown({
+  placement,
+  financialPosition,
+  effectiveView,
+}: PaymentBreakdownProps) {
   const { policyNumber, title, cedant, classOfBusiness, inceptionDate, expiryDate, currency } =
     placement ?? {
       policyNumber: null,
@@ -35,6 +44,13 @@ export function PaymentBreakdown({ placement, financialPosition }: PaymentBreakd
   const positionCurrency = financialPosition?.currency ?? currency;
   const outstanding = position?.outstanding ?? 0;
   const isCredit = position?.position === 'CREDIT_BALANCE' || outstanding < 0;
+
+  // Brokerage isn't a single rate set on the offer — it's the sum of each participating
+  // reinsurer's brokerage cut, aggregated server-side from confirmed closings.
+  const brokerageAmount = effectiveView?.effectiveTotals.brokerageAmount ?? null;
+  const grossPremium = effectiveView?.effectiveTotals.grossPremium ?? null;
+  const brokeragePercent =
+    brokerageAmount != null && grossPremium ? (brokerageAmount / grossPremium) * 100 : null;
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
@@ -57,6 +73,14 @@ export function PaymentBreakdown({ placement, financialPosition }: PaymentBreakd
       <DetailField
         label="Current Premium"
         value={fmt(position?.currentObligation ?? 0, positionCurrency)}
+      />
+      <DetailField
+        label="Brokerage"
+        value={
+          brokerageAmount != null
+            ? `${fmt(brokerageAmount, positionCurrency)}${brokeragePercent != null ? ` (${brokeragePercent.toFixed(2)}%)` : ''}`
+            : '—'
+        }
       />
       <DetailField label="Received" value={fmt(position?.netSettled ?? 0, positionCurrency)} />
       <DetailField

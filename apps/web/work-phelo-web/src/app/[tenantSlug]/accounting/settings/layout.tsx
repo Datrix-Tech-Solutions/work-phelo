@@ -13,6 +13,7 @@ export default function AccountingSettingsLayout({ children }: { children: React
   const groups: TabGroup[] = [
     {
       tabs: [
+        { key: 'entities', label: 'Entities', href: `${base}/entities` },
         { key: 'vendors', label: 'Vendors', href: `${base}/vendors` },
         { key: 'customers', label: 'Customers', href: `${base}/customers` },
       ],

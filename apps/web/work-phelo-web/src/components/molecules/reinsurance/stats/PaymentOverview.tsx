@@ -4,7 +4,11 @@ import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { Badge } from '@/components/atoms/Badge';
 import { PaymentBreakdown } from '@/components/molecules/reinsurance/PaymentBreakdown';
 import { Facultative } from '@/types/reinsurance';
-import { usePlacementFinancialPosition, usePlacementPayments } from '@/hooks';
+import {
+  usePlacementEffectiveView,
+  usePlacementFinancialPosition,
+  usePlacementPayments,
+} from '@/hooks';
 import {
   CedantPaymentStatus,
   cedantPaymentStatusFromPosition,
@@ -28,6 +32,7 @@ interface PaymentOverviewProps {
 export function PaymentOverview({ placement }: PaymentOverviewProps) {
   const { data: financialPosition } = usePlacementFinancialPosition(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
+  const { data: effectiveView } = usePlacementEffectiveView(placement.id);
 
   const due = financialPosition?.cedant.currentObligation ?? 0;
   const paid = financialPosition?.cedant.netSettled ?? 0;
@@ -44,7 +49,11 @@ export function PaymentOverview({ placement }: PaymentOverviewProps) {
         </>
       }
     >
-      <PaymentBreakdown placement={placement} financialPosition={financialPosition} />
+      <PaymentBreakdown
+        placement={placement}
+        financialPosition={financialPosition}
+        effectiveView={effectiveView}
+      />
     </CollapsibleOverview>
   );
 }

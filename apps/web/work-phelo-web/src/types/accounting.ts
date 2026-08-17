@@ -814,6 +814,75 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
+export type SubledgerType =
+  | 'CUSTOMER'
+  | 'VENDOR'
+  | 'CEDANT'
+  | 'REINSURER'
+  | 'EMPLOYEE'
+  | 'STATUTORY'
+  | 'OTHER';
+
+/** Types creatable manually from Accounting Settings → Entities. CEDANT and REINSURER
+ *  subledgers are provisioned by the reinsurance service via its internal ensure endpoint —
+ *  creating them here risks colliding with (or orphaning from) that flow. */
+export const MANUAL_SUBLEDGER_TYPES: SubledgerType[] = [
+  'CUSTOMER',
+  'VENDOR',
+  'EMPLOYEE',
+  'STATUTORY',
+  'OTHER',
+];
+
+export const SUBLEDGER_TYPE_LABELS: Record<SubledgerType, string> = {
+  CUSTOMER: 'Customer',
+  VENDOR: 'Vendor',
+  CEDANT: 'Cedant',
+  REINSURER: 'Reinsurer',
+  EMPLOYEE: 'Employee',
+  STATUTORY: 'Statutory',
+  OTHER: 'Other',
+};
+
+export interface SubledgerAccount {
+  id: string;
+  code: string;
+  name: string;
+  type: SubledgerType;
+  externalRef: string | null;
+  controlAccountId: string;
+  controlAccount: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+    normalBalance: NormalBalance;
+  };
+  currency: string | null;
+  status: GLAccountStatus;
+  balance: AccountingSubledgerBalance;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSubledgerAccountPayload {
+  code: string;
+  name: string;
+  type: SubledgerType;
+  externalRef?: string;
+  controlAccountId: string;
+  currency?: string;
+}
+
+export type UpdateSubledgerAccountPayload = Partial<CreateSubledgerAccountPayload>;
+
+export interface QuerySubledgerAccountsParams {
+  type?: SubledgerType;
+  externalRef?: string;
+  controlAccountId?: string;
+  status?: GLAccountStatus;
+}
+
 export interface AccountingVendor {
   id: string;
   code: string;
@@ -1110,14 +1179,7 @@ export type UpdateAccountingCustomerPayload = Partial<CreateAccountingCustomerPa
 };
 
 export type PostingRuleDirection = 'DR' | 'CR';
-export type PostingRuleSubledgerType =
-  | 'CUSTOMER'
-  | 'VENDOR'
-  | 'CEDANT'
-  | 'REINSURER'
-  | 'EMPLOYEE'
-  | 'STATUTORY'
-  | 'OTHER';
+export type PostingRuleSubledgerType = SubledgerType;
 
 export interface PostingRuleLine {
   id: string;

@@ -148,6 +148,7 @@ export function CustomersTable() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       <AddCustomerPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />

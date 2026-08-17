@@ -61,6 +61,7 @@ export * from './accounting/useTradeSettlements';
 export * from './accounting/useFiscalPeriods';
 export * from './accounting/useVendors';
 export * from './accounting/useCustomers';
+export * from './accounting/useSubledgers';
 export * from './accounting/useAccountClassifications';
 export * from './accounting/useAccountCategories';
 export * from './accounting/useAccountGroups';
