@@ -467,9 +467,9 @@ export class PlacementNotesService {
             status: PlacementNoteStatus.DRAFT,
             currency: preview.currency,
             grossAmount: preview.grossAmount,
-            commissionPercent: null,
+            commissionPercent: preview.commissionPercent,
             commissionAmount: preview.commissionAmount,
-            brokeragePercent: null,
+            brokeragePercent: preview.brokeragePercent,
             brokerageAmount: preview.brokerageAmount,
             nicLevyPercent: 0,
             nicLevyAmount: this.sumSourceNoteAmount(
@@ -1091,6 +1091,9 @@ export class PlacementNotesService {
       postingEnabled: false,
       sourceNoteIds: sourceNoteReferences.map((source) => source.id),
     });
+    const grossAmount =
+      effectiveView.effectiveTotals.grossPremium ||
+      financialPosition.cedant.currentObligation;
 
     return {
       placementId,
@@ -1100,10 +1103,20 @@ export class PlacementNotesService {
       originalObligation: financialPosition.cedant.originalObligation,
       endorsementAdjustments: financialPosition.cedant.endorsementAdjustments,
       currentEffectiveObligation: financialPosition.cedant.currentObligation,
-      grossAmount:
-        effectiveView.effectiveTotals.grossPremium ||
-        financialPosition.cedant.currentObligation,
+      grossAmount,
+      // The effective view pools business across original participants plus
+      // applied endorsements, so a single commissionPercent/brokeragePercent
+      // can't be reused verbatim — derive the blended rate the summed amounts
+      // actually represent against grossAmount (same approach as debitSnapshot).
+      commissionPercent:
+        grossAmount > 0
+          ? (effectiveView.effectiveTotals.commissionAmount / grossAmount) * 100
+          : null,
       commissionAmount: effectiveView.effectiveTotals.commissionAmount,
+      brokeragePercent:
+        grossAmount > 0
+          ? (effectiveView.effectiveTotals.brokerageAmount / grossAmount) * 100
+          : null,
       brokerageAmount: effectiveView.effectiveTotals.brokerageAmount,
       netAmount: financialPosition.cedant.currentObligation,
       effectiveVersionKey,

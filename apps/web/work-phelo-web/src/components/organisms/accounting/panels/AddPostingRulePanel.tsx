@@ -16,6 +16,11 @@ import { useCreatePostingRule, useGLAccountOptions } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { getPostingRulePathGuidance } from '@/config/reinsurance-posting-rule-guidance';
+import {
+  EVENT_TEMPLATES,
+  EVENT_TEMPLATE_BY_TYPE,
+  type EventTemplateLine,
+} from '@/config/reinsurance-event-catalog';
 import { cn } from '@/lib/utils';
 
 interface AddPostingRulePanelProps {
@@ -68,290 +73,12 @@ const DEFAULTS: FormValues = {
   ],
 };
 
-// ---------------------------------------------------------------------------
-// Guided event templates
-//
-// Mirrors the readiness rules accounting-service enforces for Reinsurance
-// events (accounting-service/src/posting/reinsurance-accounting-readiness.catalog.ts
-// + the AR/AP matrix in accounting-service/README.md) and the exact payload
-// paths reinsurance-financial-event-publisher.service.ts sends for each event
-// — including that claim events nest the counterparty under `cedant.id` /
-// `reinsurer.id`, while premium events nest it under `counterparty.id`.
-// Picking a template pre-fills the correct DR/CR direction, subledger tag,
-// external ref path, and amount path — the details that trip people up (e.g.
-// the "must preserve CEDANT_PREMIUM_AR using a CEDANT subledger line" error)
-// — so the user only has to choose which GL account plays each role.
-// ---------------------------------------------------------------------------
-
-type EventTemplateLine = {
-  direction: PostingRuleDirection;
-  roleLabel: string;
-  subledgerType?: PostingRuleSubledgerType;
-  subledgerExternalRefSource?: string;
-  amountSource: string;
-};
-
-type EventTemplate = {
-  eventType: string;
-  label: string;
-  description: string;
-  controlDimensionLabel: string;
-  lines: [EventTemplateLine, EventTemplateLine];
-};
-
-const EVENT_TEMPLATES: EventTemplate[] = [
-  {
-    eventType: 'DEBIT_NOTE_ISSUED',
-    label: 'Debit note issued',
-    description: 'Cedant owes premium — a debit note has been issued.',
-    controlDimensionLabel: 'Cedant Premium Receivable (AR)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Cedant Premium Receivable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'counterparty.id',
-        amountSource: 'amounts.netPremium',
-      },
-      {
-        direction: 'CR',
-        roleLabel: 'Premium Income / Clearing',
-        amountSource: 'amounts.netPremium',
-      },
-    ],
-  },
-  {
-    eventType: 'CREDIT_NOTE_ISSUED',
-    label: 'Credit note issued',
-    description: 'Broker owes a premium share to the reinsurer — a credit note has been issued.',
-    controlDimensionLabel: 'Reinsurer Premium Payable (AP)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Premium Expense / Clearing',
-        amountSource: 'amounts.creditMagnitude',
-      },
-      {
-        direction: 'CR',
-        roleLabel: 'Reinsurer Premium Payable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'counterparty.id',
-        amountSource: 'amounts.creditMagnitude',
-      },
-    ],
-  },
-  {
-    eventType: 'ENDORSEMENT_DEBIT_NOTE_ISSUED',
-    label: 'Endorsement debit note issued',
-    description: 'Additional premium is due from the cedant after an endorsement.',
-    controlDimensionLabel: 'Cedant Premium Receivable (AR)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Cedant Premium Receivable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'counterparty.id',
-        amountSource: 'amounts.adjustmentMagnitude',
-      },
-      {
-        direction: 'CR',
-        roleLabel: 'Premium Income / Clearing',
-        amountSource: 'amounts.adjustmentMagnitude',
-      },
-    ],
-  },
-  {
-    eventType: 'ENDORSEMENT_CREDIT_NOTE_ISSUED',
-    label: 'Endorsement credit note issued',
-    description:
-      'A return premium or payable adjustment is due to the reinsurer after an endorsement.',
-    controlDimensionLabel: 'Reinsurer Premium Payable (AP)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Premium Expense / Clearing',
-        amountSource: 'amounts.adjustmentMagnitude',
-      },
-      {
-        direction: 'CR',
-        roleLabel: 'Reinsurer Premium Payable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'counterparty.id',
-        amountSource: 'amounts.adjustmentMagnitude',
-      },
-    ],
-  },
-  {
-    eventType: 'PREMIUM_PAYMENT_RECEIVED',
-    label: 'Premium payment received',
-    description: "The cedant's premium payment clears their receivable.",
-    controlDimensionLabel: 'Cedant Premium Receivable (AR)',
-    lines: [
-      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.paymentAmount' },
-      {
-        direction: 'CR',
-        roleLabel: 'Cedant Premium Receivable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'counterparty.id',
-        amountSource: 'amounts.paymentAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'PAYMENT_REVERSED',
-    label: 'Premium payment reversed',
-    description: 'A cedant premium receipt is being reversed.',
-    controlDimensionLabel: 'Cedant Premium Receivable (AR)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Cedant Premium Receivable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'counterparty.id',
-        amountSource: 'amounts.paymentAmount',
-      },
-      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.paymentAmount' },
-    ],
-  },
-  {
-    eventType: 'REINSURER_DISBURSEMENT_RECORDED',
-    label: 'Reinsurer disbursement recorded',
-    description: 'A confirmed payment to the reinsurer clears what is owed to them.',
-    controlDimensionLabel: 'Reinsurer Premium Payable (AP)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Reinsurer Premium Payable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'counterparty.id',
-        amountSource: 'amounts.allocatedAmount',
-      },
-      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.allocatedAmount' },
-    ],
-  },
-  {
-    eventType: 'REINSURER_DISBURSEMENT_REVERSED',
-    label: 'Reinsurer disbursement reversed',
-    description: 'A reinsurer disbursement is being reversed.',
-    controlDimensionLabel: 'Reinsurer Premium Payable (AP)',
-    lines: [
-      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.allocatedAmount' },
-      {
-        direction: 'CR',
-        roleLabel: 'Reinsurer Premium Payable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'counterparty.id',
-        amountSource: 'amounts.allocatedAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_PAYABLE_APPROVED',
-    label: 'Claim payable approved',
-    description: 'An approved claim payable is owed to the cedant.',
-    controlDimensionLabel: 'Cedant Claims Payable (AP)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Claims Expense',
-        amountSource: 'amounts.approvedPayableAmount',
-      },
-      {
-        direction: 'CR',
-        roleLabel: 'Cedant Claims Payable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'cedant.id',
-        amountSource: 'amounts.approvedPayableAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
-    label: 'Cedant claim settlement paid',
-    description: 'The broker settlement paid to the cedant clears the claims payable.',
-    controlDimensionLabel: 'Cedant Claims Payable (AP)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Cedant Claims Payable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'cedant.id',
-        amountSource: 'amounts.settlementAmount',
-      },
-      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.settlementAmount' },
-    ],
-  },
-  {
-    eventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-    label: 'Cedant claim settlement reversed',
-    description: 'A cedant claim settlement is being reversed.',
-    controlDimensionLabel: 'Cedant Claims Payable (AP)',
-    lines: [
-      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.reversalAmount' },
-      {
-        direction: 'CR',
-        roleLabel: 'Cedant Claims Payable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'cedant.id',
-        amountSource: 'amounts.reversalAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_RECOVERY_APPROVED',
-    label: 'Claim recovery approved',
-    description: 'An approved recovery receivable is owed by the reinsurer.',
-    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Reinsurer Claims Receivable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'reinsurer.id',
-        amountSource: 'amounts.approvedRecoveryAmount',
-      },
-      {
-        direction: 'CR',
-        roleLabel: 'Claims Recovery Income / Clearing',
-        amountSource: 'amounts.approvedRecoveryAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_RECOVERY_RECEIVED',
-    label: 'Claim recovery received',
-    description: 'A confirmed reinsurer claim recovery receipt clears the receivable.',
-    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
-    lines: [
-      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.receiptAmount' },
-      {
-        direction: 'CR',
-        roleLabel: 'Reinsurer Claims Receivable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'reinsurer.id',
-        amountSource: 'amounts.receiptAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
-    label: 'Claim recovery receipt reversed',
-    description: 'A claim recovery receipt is being reversed.',
-    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Reinsurer Claims Receivable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'reinsurer.id',
-        amountSource: 'amounts.reversalAmount',
-      },
-      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.reversalAmount' },
-    ],
-  },
-];
-
-const EVENT_TEMPLATE_BY_TYPE = new Map(EVENT_TEMPLATES.map((t) => [t.eventType, t]));
+// Guided event templates — see @/config/reinsurance-event-catalog for the
+// full catalog. Picking a template pre-fills the correct DR/CR direction,
+// subledger tag, external ref path, and amount path — the details that trip
+// people up (e.g. the "must preserve CEDANT_PREMIUM_AR using a CEDANT
+// subledger line" error) — so the user only has to choose which GL account
+// plays each role.
 
 const GUIDED_EVENT_OPTIONS: SearchSelectOption[] = EVENT_TEMPLATES.map((t) => ({
   value: t.eventType,
@@ -364,7 +91,7 @@ const GUIDED_EVENT_OPTIONS: SearchSelectOption[] = EVENT_TEMPLATES.map((t) => ({
 // on the reinsurance-service side.
 const SOURCE_EVENT_TYPE_OPTIONS: CreatableOption[] = EVENT_TEMPLATES.map((t) => ({
   value: t.eventType,
-  label: t.eventType.replaceAll('_', ' '),
+  label: t.label,
 }));
 
 const DIRECTION_OPTIONS: SearchSelectOption[] = [

@@ -10,6 +10,8 @@ import { JournalEntryRecord, JournalRecordStatus } from '@/types/accounting';
 import { useFiscalPeriods, usePostJournal, useReverseJournal } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
+import { formatJournalNumber } from '@/lib/formatters';
 
 interface JournalDetailPanelProps {
   journal: JournalEntryRecord | null;
@@ -96,9 +98,8 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
       <SidePanel
         isOpen={!!journal}
         onClose={handleClose}
-        title={journal?.journalNumber ?? 'Journal'}
-        description={journal?.description}
-        width="sm:w-[640px]"
+        title={journal ? formatJournalNumber(journal.journalNumber) : 'Journal'}
+        description={journal ? formatSourceEventDescription(journal.description) : undefined}
         footer={
           journal?.status === 'DRAFT' ? (
             <div className="flex justify-end gap-3">
@@ -173,7 +174,12 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-gray-600">{line.description ?? '—'}</td>
+                        <td
+                          className="px-3 py-2 text-gray-600"
+                          title={line.description ?? undefined}
+                        >
+                          {formatSourceEventDescription(line.description)}
+                        </td>
                         <td className="px-3 py-2 text-right text-gray-900">
                           {Number(line.transactionDebit) > 0
                             ? fmtAmount(Number(line.transactionDebit), journal.transactionCurrency)

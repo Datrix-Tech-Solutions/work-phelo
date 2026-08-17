@@ -8,6 +8,8 @@ import { useProcessSourceEvent, useRetrySourceEvent, useSourceEvents } from '@/h
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { extractError } from '@/lib/extractError';
 import { useToast } from '@/hooks/useToast';
+import { getSourceEventLabel } from '@/config/reinsurance-event-catalog';
+import { formatJournalNumber } from '@/lib/formatters';
 import type { SourceEventInboxItem, SourceEventStatus } from '@/types/accounting';
 
 const PAGE_SIZE = 10;
@@ -45,7 +47,7 @@ export function SourceEventsTable() {
   const process = async (event: SourceEventInboxItem) => {
     try {
       await processEvent.mutateAsync(event.id);
-      toast.success(`Posted ${event.sourceEventType.replaceAll('_', ' ').toLowerCase()}.`);
+      toast.success(`Posted ${getSourceEventLabel(event.sourceEventType).toLowerCase()}.`);
     } catch (error) {
       toast.error(extractError(error, 'Unable to post source event'));
     }
@@ -54,7 +56,7 @@ export function SourceEventsTable() {
   const retry = async (event: SourceEventInboxItem) => {
     try {
       await retryEvent.mutateAsync(event.id);
-      toast.success(`Retried ${event.sourceEventType.replaceAll('_', ' ').toLowerCase()}.`);
+      toast.success(`Retried ${getSourceEventLabel(event.sourceEventType).toLowerCase()}.`);
     } catch (error) {
       toast.error(extractError(error, 'Unable to retry source event'));
     }
@@ -93,7 +95,7 @@ export function SourceEventsTable() {
       render: (event) => (
         <div>
           <div className="font-medium text-gray-900">
-            {event.sourceEventType.replaceAll('_', ' ')}
+            {getSourceEventLabel(event.sourceEventType)}
           </div>
           <div className="text-xs text-gray-500">
             {event.sourceModule} · {event.sourceRecordId}
@@ -123,7 +125,7 @@ export function SourceEventsTable() {
       width: '150px',
       render: (event) => (
         <span className="text-sm font-medium text-gray-700">
-          {event.journalEntry?.journalNumber ?? '—'}
+          {event.journalEntry ? formatJournalNumber(event.journalEntry.journalNumber) : '—'}
         </span>
       ),
     },

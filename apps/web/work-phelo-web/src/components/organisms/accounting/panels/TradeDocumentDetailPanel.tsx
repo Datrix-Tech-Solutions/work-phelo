@@ -26,6 +26,7 @@ import {
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { formatJournalNumber } from '@/lib/formatters';
 
 interface TradeDocumentDetailPanelProps {
   side: AccountingTradeSide;
@@ -263,8 +264,8 @@ export function TradeDocumentDetailPanel({
 
             {document.postedJournalEntry && (
               <div className="rounded-xl border border-green-100 bg-green-50 p-3 text-sm text-green-900">
-                Posted as journal {document.postedJournalEntry.journalNumber} on{' '}
-                {fmtDate(document.postedJournalEntry.postedAt)}.
+                Posted as journal {formatJournalNumber(document.postedJournalEntry.journalNumber)}{' '}
+                on {fmtDate(document.postedJournalEntry.postedAt)}.
               </div>
             )}
           </div>
