@@ -5,8 +5,11 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { useAccountingCurrencyOptions, useCreateCustomer } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 interface AddCustomerPanelProps {
   isOpen: boolean;
@@ -14,32 +17,28 @@ interface AddCustomerPanelProps {
 }
 
 type FormValues = {
-  customerCode: string;
-  customerName: string;
-  customerCategory: string;
+  code: string;
+  legalName: string;
+  currency: string;
   contactName: string;
   contactNumber: string;
   email: string;
 };
 
 const DEFAULTS: FormValues = {
-  customerCode: '',
-  customerName: '',
-  customerCategory: '',
+  code: '',
+  legalName: '',
+  currency: '',
   contactName: '',
   contactNumber: '',
   email: '',
 };
 
-const CATEGORY_OPTIONS: SearchSelectOption[] = [
-  { value: 'supplier', label: 'Supplier' },
-  { value: 'service-provider', label: 'Service Provider' },
-  { value: 'contractor', label: 'Contractor' },
-  { value: 'consultant', label: 'Consultant' },
-  { value: 'other', label: 'Other' },
-];
-
 export function AddCustomerPanel({ isOpen, onClose }: AddCustomerPanelProps) {
+  const toast = useToast();
+  const createCustomer = useCreateCustomer();
+  const { options: currencyOptions, isLoading: isLoadingCurrencies } =
+    useAccountingCurrencyOptions();
   const {
     register,
     handleSubmit,
@@ -53,10 +52,21 @@ export function AddCustomerPanel({ isOpen, onClose }: AddCustomerPanelProps) {
     onClose();
   };
 
-  const onSubmit = () => {
-    // Not wired to useCreateCustomer yet: the backend requires `currency` (not on this
-    // form) and has no "category"/multi-contact fields to send customerCategory/contacts to.
-    handleClose();
+  const onSubmit = async (data: FormValues) => {
+    try {
+      await createCustomer.mutateAsync({
+        code: data.code,
+        legalName: data.legalName,
+        currency: data.currency,
+        primaryContactName: data.contactName || undefined,
+        phone: data.contactNumber || undefined,
+        email: data.email || undefined,
+      });
+      toast.success('Customer created successfully.');
+      handleClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to create customer'));
+    }
   };
 
   return (
@@ -67,41 +77,46 @@ export function AddCustomerPanel({ isOpen, onClose }: AddCustomerPanelProps) {
       description="Register a new customer to your accounting records."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={createCustomer.isPending}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)}>Add Customer</Button>
+          <Button
+            isLoading={createCustomer.isPending}
+            loadingText="Creating…"
+            onClick={handleSubmit(onSubmit)}
+          >
+            Add Customer
+          </Button>
         </div>
       }
     >
       <div className="flex flex-col gap-6">
         <FormField
           label="Customer Code"
-          type="number"
-          registration={register('customerCode', { required: 'Customer code is required' })}
-          error={errors.customerCode}
-          placeholder="e.g. 2001"
+          registration={register('code', { required: 'Customer code is required' })}
+          error={errors.code}
+          placeholder="e.g. CUS-0001"
         />
 
         <FormField
           label="Customer Name"
-          registration={register('customerName', { required: 'Customer name is required' })}
-          error={errors.customerName}
+          registration={register('legalName', { required: 'Customer name is required' })}
+          error={errors.legalName}
           placeholder="e.g. Acme Supplies Ltd."
         />
 
         <Controller
-          name="customerCategory"
+          name="currency"
           control={control}
-          rules={{ required: 'Customer category is required' }}
+          rules={{ required: 'Currency is required' }}
           render={({ field }) => (
             <SearchSelect
-              label="Customer Category"
-              placeholder="Select category…"
-              options={CATEGORY_OPTIONS}
+              label="Currency"
+              placeholder={isLoadingCurrencies ? 'Loading currencies…' : 'Select currency…'}
+              options={currencyOptions}
               value={field.value}
               onChange={field.onChange}
-              error={errors.customerCategory?.message}
+              error={errors.currency?.message}
             />
           )}
         />
