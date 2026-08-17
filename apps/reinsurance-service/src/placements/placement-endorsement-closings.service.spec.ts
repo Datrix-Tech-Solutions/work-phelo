@@ -76,6 +76,9 @@ describe('PlacementEndorsementClosingsService', () => {
       name: 'Ghana Re',
       registrationNumber: null,
     },
+    originalParticipant: {
+      brokerageFee: '7.50',
+    },
   };
 
   const closingWithParticipant = {

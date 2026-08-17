@@ -1,15 +1,8 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { useMemo, useState } from 'react';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-import {
-  RecordDisbursementFormFields,
-  RECORD_DISBURSEMENT_DEFAULTS,
-  DisbursementFormValues,
-  SettlementSource,
-} from '@/components/molecules/reinsurance/forms/RecordDisbursementFormFields';
 import { useCreatePlacementPayment, usePlacementClosings, usePlacementPayments } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
@@ -30,6 +23,14 @@ function parseMoney(value: string | number | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+type DisbursementSource = {
+  closingId?: string;
+  endorsementClosingId?: string;
+  participantId?: string;
+  outstanding: number;
+  currency: string;
+};
+
 interface RecordDisbursementPanelProps {
   placement: Facultative;
   financialPosition?: PlacementFinancialPosition | null;
@@ -37,6 +38,10 @@ interface RecordDisbursementPanelProps {
   onClose: () => void;
 }
 
+/** Confirms the full outstanding shown for a reinsurer in `ReinsurersPaymentTable` — no manual
+ * amount/method/date entry. Behind the scenes it still settles each outstanding source (the
+ * original placement closing and any endorsement adjustments) with its own payment record, so
+ * the reinsurer's share stays traceable per closing even though the user only sees one number. */
 export function RecordDisbursementPanel({
   placement,
   financialPosition,
@@ -47,10 +52,9 @@ export function RecordDisbursementPanel({
   const addToast = useToastStore((s) => s.addToast);
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm<DisbursementFormValues>({ defaultValues: RECORD_DISBURSEMENT_DEFAULTS });
-
-  const sources = useMemo<SettlementSource[]>(() => {
+  const sources = useMemo<DisbursementSource[]>(() => {
     if (!target) return [];
     const originalSources = closings
       .filter(
@@ -70,12 +74,8 @@ export function RecordDisbursementPanel({
           .reduce((sum, payment) => sum + parseMoney(payment.amount), 0);
         const amount = parseMoney(closing.netPremium);
         return {
-          value: `placement:${closing.id}`,
-          label: `Original Placement · ${closing.closingNumber}`,
-          sublabel: `${fmt(Math.max(0, amount - paid), closing.currency)} outstanding`,
           closingId: closing.id,
           participantId: closing.participantId,
-          amount,
           outstanding: Math.max(0, amount - paid),
           currency: closing.currency ?? financialPosition?.currency ?? placement.currency ?? '',
         };
@@ -95,11 +95,7 @@ export function RecordDisbursementPanel({
             )
             .reduce((sum, payment) => sum + parseMoney(payment.amount), 0);
           return {
-            value: `endorsement:${adjustment.closingId}`,
-            label: `Endorsement ${adjustment.endorsementNumber ?? 'Adjustment'}`,
-            sublabel: `${fmt(Math.max(0, adjustment.amount - paid), adjustment.currency)} outstanding`,
             endorsementClosingId: adjustment.closingId,
-            amount: adjustment.amount,
             outstanding: Math.max(0, adjustment.amount - paid),
             currency: adjustment.currency,
           };
@@ -110,82 +106,73 @@ export function RecordDisbursementPanel({
     );
   }, [closings, financialPosition?.currency, target, payments, placement.currency]);
 
-  useEffect(() => {
-    if (!target) return;
-    const firstSource = sources[0];
-    form.reset({
-      sourceId: firstSource?.value ?? '',
-      settlementMethod: 'BANK_TRANSFER',
-      amount: firstSource ? String(Math.min(target.outstanding, firstSource.outstanding)) : '',
-      paymentDate: new Date().toISOString(),
-      reference: '',
-      notes: 'Operational reinsurer disbursement',
-    });
-  }, [form, target, sources]);
-
   const handleClose = () => {
+    if (isSubmitting) return;
     onClose();
-    form.reset(RECORD_DISBURSEMENT_DEFAULTS);
   };
 
-  const submitDisbursement = form.handleSubmit(async (values) => {
+  const handleConfirm = async () => {
     if (!target) return;
-    const source = sources.find((item) => item.value === values.sourceId);
-    if (!source) {
+    if (sources.length === 0) {
       addToast({
-        message: 'Select a confirmed closing source before recording payment.',
+        message: 'No confirmed closing found to settle this outstanding amount against.',
         type: 'error',
       });
       return;
     }
+    setIsSubmitting(true);
     try {
-      await createPayment.mutateAsync({
-        placementId: placement.id,
-        type: 'REINSURER_DISBURSEMENT',
-        direction: 'OUTBOUND',
-        counterpartyId: target.counterpartyId,
-        closingId: source.closingId,
-        endorsementClosingId: source.endorsementClosingId,
-        participantId: source.participantId,
-        amount: parseMoney(values.amount),
-        currency: source.currency,
-        settlementMethod: values.settlementMethod,
-        settlementCurrency: source.currency,
-        paymentDate: new Date(values.paymentDate).toISOString(),
-        reference: values.reference || undefined,
-        notes: values.notes || undefined,
-      });
+      for (const source of sources) {
+        await createPayment.mutateAsync({
+          placementId: placement.id,
+          type: 'REINSURER_DISBURSEMENT',
+          direction: 'OUTBOUND',
+          counterpartyId: target.counterpartyId,
+          closingId: source.closingId,
+          endorsementClosingId: source.endorsementClosingId,
+          participantId: source.participantId,
+          amount: source.outstanding,
+          currency: source.currency,
+          settlementMethod: 'BANK_TRANSFER',
+          settlementCurrency: source.currency,
+          paymentDate: new Date().toISOString(),
+          notes: 'Operational reinsurer disbursement',
+        });
+      }
       addToast({ message: 'Reinsurer disbursement recorded successfully', type: 'success' });
-      handleClose();
+      onClose();
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setIsSubmitting(false);
     }
-  });
+  };
+
+  if (!target) return null;
+
+  const currency = financialPosition?.currency ?? placement.currency;
 
   return (
-    <SidePanel
+    <Modal
       isOpen={!!target}
       onClose={handleClose}
-      title="Record Reinsurer Disbursement"
-      description="Record the operational payment made to the Reinsurer. Accounting will confirm the bank transaction separately."
+      title="Confirm Reinsurer Disbursement"
       footer={
-        <div className="flex items-center justify-end gap-3">
-          <Button type="button" variant="outline" onClick={handleClose}>
+        <>
+          <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" form="record-disbursement-form" disabled={createPayment.isPending}>
-            {createPayment.isPending ? 'Saving…' : 'Record Disbursement'}
+          <Button type="button" onClick={handleConfirm} disabled={isSubmitting}>
+            {isSubmitting ? 'Recording…' : 'Confirm'}
           </Button>
-        </div>
+        </>
       }
     >
-      <form
-        id="record-disbursement-form"
-        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
-        onSubmit={submitDisbursement}
-      >
-        <RecordDisbursementFormFields form={form} sources={sources} />
-      </form>
-    </SidePanel>
+      <p className="text-sm text-gray-700 leading-relaxed">
+        Disburse{' '}
+        <span className="font-semibold text-gray-900">{fmt(target.outstanding, currency)}</span> to{' '}
+        <span className="font-semibold text-gray-900">{target.counterpartyName}</span>?
+      </p>
+    </Modal>
   );
 }
