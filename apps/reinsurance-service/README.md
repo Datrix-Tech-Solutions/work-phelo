@@ -142,10 +142,13 @@ explicitly implemented.
 
 ## Accounting Integration
 
-When Accounting is enabled for a tenant, Reinsurance captures supported
-financial events in a transactional outbox. The dispatcher can automatically
-deliver pending rows to Accounting using signed internal transport. Reconciliation
-endpoints remain available for dry-run checks and repair.
+Reinsurance-to-Accounting is an explicit tenant module relationship
+(`operations.reinsurance->accounting`). Both modules can be enabled while this
+relationship remains disconnected. Only when Reinsurance, Accounting and the
+explicit relationship are all enabled does Reinsurance capture supported
+financial events in a transactional outbox and dispatch them over signed
+internal transport. Disconnected tenants retain their modules independently;
+pending outbox history is retained but is not delivered.
 
 Active Reinsurance event families include:
 
@@ -167,17 +170,25 @@ Active Reinsurance event families include:
 Accounting owns posting rules, journal creation, fiscal period validation and
 financial confirmation queues. Reinsurance publishes business facts only.
 
-When Accounting is enabled for a tenant, Reinsurance performs an Accounting
+When the explicit integration is active, Reinsurance performs an Accounting
 readiness preflight before irreversible financial boundaries such as note
 issuance, claim payable/recovery approvals, bank confirmations and reversals.
 The preflight calls Accounting over the signed internal API and blocks the
 operation with a controlled conflict if PostingRules, control-account shape,
 currency, fiscal period or cash-account setup is not ready.
 
-If Accounting is disabled for the tenant, Reinsurance preserves the established
+If the integration is disconnected, Reinsurance preserves the established
 operational behavior and does not block business actions merely because
-Accounting automation is unavailable. Reconciliation remains the fallback for
-unexpected delivery or posting failures after a valid preflight.
+Accounting automation is unavailable. The readiness endpoint reports the
+intentional disconnected state without calling Accounting. Manual dispatcher,
+reconciliation and subledger-sync operations refuse to bypass that setting.
+
+Operational integration endpoints use
+`operations.reinsurance.accounting-operations:VIEW` for dispatcher diagnostics
+and `:EDIT` for manual dispatch, reconciliation and subledger synchronization.
+The existing `TENANT_ADMIN`/`SUPER_ADMIN` bypass remains intentionally unchanged
+for compatibility; maker-checker and broader SoD policy are deferred. Ordinary
+placement bank-confirmation permissions are unchanged.
 
 `GET /api/v1/operations/reinsurance/accounting-integration/status` returns
 configured/active flags plus grouped PostingRule readiness for Premium

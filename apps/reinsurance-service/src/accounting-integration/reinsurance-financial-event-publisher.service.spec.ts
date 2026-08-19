@@ -27,8 +27,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     tenantSlug: 'broker',
     tenantName: 'Broker',
     firstName: 'Ama',
-    moduleConfig: { accounting: true },
+    moduleConfig: { operations: true, accounting: true },
     featureConfig: { operations: { reinsurance: true } },
+    integrationConfig: { 'operations.reinsurance->accounting': true },
     permissions: [],
   } as RequestUser;
 
@@ -310,7 +311,10 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     };
     const actor = {
       ...user,
-      moduleConfig: { accounting: overrides?.accountingEnabled ?? true },
+      moduleConfig: {
+        operations: true,
+        accounting: overrides?.accountingEnabled ?? true,
+      },
     } as RequestUser;
     const service = new ReinsuranceFinancialEventPublisher(
       prisma as unknown as PrismaService,

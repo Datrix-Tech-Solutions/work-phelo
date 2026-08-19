@@ -52,7 +52,12 @@ export function ReinsuranceAccountingReadiness() {
     return null;
   }
 
-  const configured = data.accountingEnabled && data.integrationConfigured;
+  // A deliberately disconnected tenant has no Accounting readiness obligation.
+  if (!data.integrationActive) {
+    return null;
+  }
+
+  const configured = data.integrationConfigured;
 
   return (
     <section className={cardClass('p-4')} aria-labelledby="reinsurance-accounting-readiness-title">

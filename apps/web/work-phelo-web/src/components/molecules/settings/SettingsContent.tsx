@@ -8,6 +8,7 @@ import { AppearanceTab } from '@/components/molecules/settings/AppearanceTab';
 import { TabItem } from '@/components/molecules/shared/TabBar';
 import { useAuthStore } from '@/store/auth.store';
 import { SelfServiceTab } from './SelfServiceTab';
+import { ReinsuranceAccountingIntegrationControl } from '@/components/organisms/shared/ReinsuranceAccountingIntegrationControl';
 
 type SettingsTab = 'security' | 'appearance' | 'self-service';
 
@@ -46,6 +47,14 @@ export function SettingsContent() {
           {activeTab === 'security' && <ChangePasswordTab />}
           {activeTab === 'appearance' && <AppearanceTab />}
           {activeTab === 'self-service' && <SelfServiceTab />}
+          {activeTab === 'self-service' && user?.tenantId && (
+            <div className="mt-6">
+              <ReinsuranceAccountingIntegrationControl
+                tenantId={user.tenantId}
+                canManage={user.role === 'SUPER_ADMIN'}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

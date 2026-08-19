@@ -5,6 +5,8 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReinsuranceAccountingOutboxStatus } from '../../prisma/generated/client';
+import { ReinsuranceAccountingIntegrationConfigClient } from './reinsurance-accounting-integration-config.client';
 import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
 
 const DEFAULT_ENABLED = true;
@@ -62,6 +64,7 @@ export class ReinsuranceAccountingOutboxDispatcher
   constructor(
     private readonly prisma: PrismaService,
     private readonly outbox: ReinsuranceAccountingOutboxService,
+    private readonly integrationConfig?: ReinsuranceAccountingIntegrationConfigClient,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -132,25 +135,57 @@ export class ReinsuranceAccountingOutboxDispatcher
 
   private async runBatch(trigger: string): Promise<void> {
     try {
-      const result = await this.outbox.processPending(this.prisma, {
-        limit: this.config.batchSize,
-        maxAttempts: this.config.maxAttempts,
-        processingTimeoutMs: this.config.processingTimeoutMs,
-        retryDelayMs: this.config.retryDelayMs,
-      });
-      this.lastBatchAt = new Date();
-      this.lastResult = {
-        processedCount: result.processedCount,
-        deliveredCount: result.deliveredCount,
-        failedCount: result.failedCount,
-        skippedCount: result.skippedCount,
-      };
-      this.lastError = null;
-      if (result.processedCount > 0) {
-        this.logger.log(
-          `Accounting outbox dispatcher batch trigger=${trigger} processed=${result.processedCount} delivered=${result.deliveredCount} failed=${result.failedCount} skipped=${result.skippedCount}`,
-        );
+      if (!this.integrationConfig) {
+        const result = await this.outbox.processPending(this.prisma, {
+          limit: this.config.batchSize,
+          maxAttempts: this.config.maxAttempts,
+          processingTimeoutMs: this.config.processingTimeoutMs,
+          retryDelayMs: this.config.retryDelayMs,
+        });
+        this.recordResult(trigger, result);
+        return;
       }
+      const candidates = await this.prisma.reinsuranceAccountingOutbox.findMany(
+        {
+          where: {
+            status: {
+              in: [
+                ReinsuranceAccountingOutboxStatus.PENDING,
+                ReinsuranceAccountingOutboxStatus.FAILED,
+                ReinsuranceAccountingOutboxStatus.PROCESSING,
+              ],
+            },
+          },
+          select: { tenantId: true },
+          distinct: ['tenantId'],
+          take: this.config.batchSize,
+        },
+      );
+      const totals: AccountingOutboxDispatcherBatchSummary = {
+        processedCount: 0,
+        deliveredCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+      };
+      for (const { tenantId } of candidates) {
+        const state = await this.integrationConfig.get(tenantId);
+        if (!state.active) {
+          totals.skippedCount += 1;
+          continue;
+        }
+        const result = await this.outbox.processPending(this.prisma, {
+          tenantId,
+          limit: this.config.batchSize,
+          maxAttempts: this.config.maxAttempts,
+          processingTimeoutMs: this.config.processingTimeoutMs,
+          retryDelayMs: this.config.retryDelayMs,
+        });
+        totals.processedCount += result.processedCount;
+        totals.deliveredCount += result.deliveredCount;
+        totals.failedCount += result.failedCount;
+        totals.skippedCount += result.skippedCount;
+      }
+      this.recordResult(trigger, totals);
     } catch (error) {
       this.lastBatchAt = new Date();
       const message =
@@ -160,6 +195,20 @@ export class ReinsuranceAccountingOutboxDispatcher
       this.lastError = 'Last dispatcher batch failed; see service logs.';
       this.logger.error(
         `Accounting outbox dispatcher batch failed trigger=${trigger}: ${message}`,
+      );
+    }
+  }
+
+  private recordResult(
+    trigger: string,
+    result: AccountingOutboxDispatcherBatchSummary,
+  ): void {
+    this.lastBatchAt = new Date();
+    this.lastResult = result;
+    this.lastError = null;
+    if (result.processedCount > 0) {
+      this.logger.log(
+        `Accounting outbox dispatcher batch trigger=${trigger} processed=${result.processedCount} delivered=${result.deliveredCount} failed=${result.failedCount} skipped=${result.skippedCount}`,
       );
     }
   }

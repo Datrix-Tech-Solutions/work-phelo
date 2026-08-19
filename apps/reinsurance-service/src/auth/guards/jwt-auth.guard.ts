@@ -45,6 +45,7 @@ export class JwtAuthGuard implements CanActivate {
         firstName: payload.firstName ?? '',
         moduleConfig: payload.moduleConfig ?? {},
         featureConfig: payload.featureConfig ?? {},
+        integrationConfig: payload.integrationConfig ?? {},
         permissions: this.resolvePermissions(request, payload, secret),
       };
 

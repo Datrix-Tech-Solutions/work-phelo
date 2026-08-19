@@ -80,6 +80,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           string,
           Record<string, boolean>
         >) ?? {},
+      integrationConfig:
+        (user.tenant.integrationConfig as Record<string, boolean>) ?? {},
       permissions,
     };
   }
