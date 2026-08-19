@@ -113,6 +113,23 @@ export function useCreatePlacementClaim() {
   });
 }
 
+/** Unbound (vs. useUpdatePlacementClaim) so a single instance can delete any row of a table
+ *  spanning multiple placements — pass the ids per call instead of binding them up front. */
+export function useDeletePlacementClaim() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ placementId, claimId }: { placementId: string; claimId: string }) => {
+      await api.delete(`${BASE}/${placementId}/claims/${claimId}`);
+    },
+    onSuccess: (_data, { placementId, claimId }) => {
+      queryClient.setQueryData<PlacementClaim[]>(claimsKey(placementId), (current = []) =>
+        (current ?? []).filter((item) => item.id !== claimId),
+      );
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
 export function useUpdatePlacementClaim(placementId: string, claimId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -598,6 +615,7 @@ export interface ClaimsSummary {
   totalClaimedAmount: number;
   openClaims: number;
   settledClaims: number;
+  closedClaims: number;
   isLoading: boolean;
 }
 
@@ -624,6 +642,7 @@ export function useClaimsSummary(placements: Facultative[]): ClaimsSummary {
     let totalClaimedAmount = 0;
     let openClaims = 0;
     let settledClaims = 0;
+    let closedClaims = 0;
 
     claimQueries.forEach((query) => {
       const claims = query.data ?? [];
@@ -633,10 +652,11 @@ export function useClaimsSummary(placements: Facultative[]): ClaimsSummary {
         totalClaimedAmount += parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount);
         if (OPEN_CLAIM_STATUSES.includes(claim.status)) openClaims += 1;
         if (SETTLED_CLAIM_STATUSES.includes(claim.status)) settledClaims += 1;
+        if (claim.status === 'CLOSED') closedClaims += 1;
       });
     });
 
-    return { totalClaims, totalClaimedAmount, openClaims, settledClaims };
+    return { totalClaims, totalClaimedAmount, openClaims, settledClaims, closedClaims };
   }, [claimQueries]);
 
   return { ...summary, isLoading };

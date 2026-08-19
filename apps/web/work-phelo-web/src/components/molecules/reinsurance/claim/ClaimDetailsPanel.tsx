@@ -1,20 +1,25 @@
-import { ReactNode } from 'react';
+import { ReactNode, useMemo } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { fmt, fmtDate } from '@/lib/reinsurance/claimFormat';
+import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
+import { usePremiumPaymentContext } from '@/hooks';
 import { Facultative, PlacementClaim } from '@/types/reinsurance';
+
+function fmtFieldValue(val: unknown): string {
+  if (val == null) return '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  return String(val);
+}
 
 interface ClaimDetailsPanelProps {
   placement: Facultative;
   claim?: PlacementClaim;
   deductionRate: number;
-  /** Rendered right below the fact grid — kept as a slot so this stays a pure/presentational
-   * molecule while the caller wires up the (hook-driven) status actions organism. */
+
   statusActions?: ReactNode;
 }
 
-/** Read-only placement + claim summary — a fact grid in the same `DetailField` tile format as
- * `FacultativeOverview`, rendered inside `ClaimOverview`'s `CollapsibleOverview` card. */
 export function ClaimDetailsPanel({
   placement,
   claim,
@@ -34,6 +39,18 @@ export function ClaimDetailsPanel({
       ? facPremium * (1 - commission / 100) - facPremium * deductionRate
       : facPremium;
 
+  const riskEntries = useMemo(
+    () => [
+      ...placementDetailEntries(placement.businessDetails),
+      ...placementDetailEntries(placement.offerDetails),
+    ],
+    [placement.businessDetails, placement.offerDetails],
+  );
+
+  const { statusText: premiumPaymentStatusText, latestPaymentDate } = usePremiumPaymentContext(
+    placement.id,
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
@@ -51,7 +68,15 @@ export function ClaimDetailsPanel({
         />
         <DetailField label="Fac. Sum Insured" value={fmt(facSumInsured, currency)} />
         <DetailField label="Fac. Premium" value={fmt(netPremium, currency)} />
-        <DetailField label="Created At" value={fmtDate(createdAt)} />
+        <DetailField label="Claim entry Date" value={fmtDate(createdAt)} />
+        <DetailField label="Premium Payment Status" value={premiumPaymentStatusText} />
+        <DetailField
+          label="Last Payment Date"
+          value={latestPaymentDate ? fmtDate(latestPaymentDate) : '—'}
+        />
+        {riskEntries.map((entry) => (
+          <DetailField key={entry.key} label={entry.label} value={fmtFieldValue(entry.value)} />
+        ))}
 
         {claim && (
           <>
@@ -63,11 +88,14 @@ export function ClaimDetailsPanel({
               <DetailField label="Details" value={claim.occurrenceDetails} />
             )}
             <DetailField
-              label="Estimated Loss"
+              label="Claim Amount"
               value={fmt(claim.estimatedLossAmount, claim.currency)}
             />
             {claim.finalLossAmount && (
-              <DetailField label="Final Loss" value={fmt(claim.finalLossAmount, claim.currency)} />
+              <DetailField
+                label="Actual Claim"
+                value={fmt(claim.finalLossAmount, claim.currency)}
+              />
             )}
             {claim.approvedPayableAmount && (
               <DetailField

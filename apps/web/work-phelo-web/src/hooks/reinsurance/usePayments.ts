@@ -10,6 +10,12 @@ import {
   PlacementParticipantClosing,
 } from '@/types/reinsurance';
 import { useFacultatives } from './useFacultatives';
+import {
+  cedantPaymentStatusFromPosition,
+  pendingPremiumReceived,
+  latestConfirmedPremiumPaymentDate,
+  PREMIUM_PAYMENT_STATUS_TEXT,
+} from '@/lib/reinsurance/placementStatus';
 
 const BASE = '/operations/reinsurance/placements';
 
@@ -47,6 +53,26 @@ export function usePlacementFinancialPosition(placementId: string, asOfDate?: st
     queryFn: () => fetchPlacementFinancialPosition(placementId, asOfDate),
     enabled: !!placementId,
   });
+}
+
+/** Premium payment status/latest-payment-date for a placement, in the plain-sentence wording
+ *  used by the claim panel and claim overview — shares the same authoritative figures as the
+ *  Premiums page and placement Details page via the same query keys/cache. */
+export function usePremiumPaymentContext(placementId: string) {
+  const { data: financialPosition } = usePlacementFinancialPosition(placementId);
+  const { data: payments = [] } = usePlacementPayments(placementId);
+
+  const status = cedantPaymentStatusFromPosition(
+    financialPosition?.cedant.currentObligation ?? 0,
+    financialPosition?.cedant.netSettled ?? 0,
+    financialPosition?.cedant.outstanding ?? 0,
+    pendingPremiumReceived(payments),
+  );
+
+  return {
+    statusText: PREMIUM_PAYMENT_STATUS_TEXT[status],
+    latestPaymentDate: latestConfirmedPremiumPaymentDate(payments),
+  };
 }
 
 export function useCreatePlacementPayment() {

@@ -29,6 +29,9 @@ interface SearchSelectProps {
   /** For filter bars: prepends a selectable "All" option (value `''`) — makes the already-implicit
    *  "nothing selected = no filter" state a visible, explicit choice instead of just an empty field. */
   showAllOption?: boolean;
+  /** Label for that "All" option. Defaults to "All {placeholder}" (e.g. "All Currency") so the
+   *  field names its own dimension once collapsed, rather than showing a bare, ambiguous "All". */
+  allLabel?: string;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -48,6 +51,7 @@ export function SearchSelect({
   onQueryChange,
   rightSlot,
   showAllOption = false,
+  allLabel,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -90,8 +94,11 @@ export function SearchSelect({
   };
 
   const effectiveOptions = useMemo(
-    () => (showAllOption ? [{ value: '', label: 'All' }, ...options] : options),
-    [options, showAllOption],
+    () =>
+      showAllOption
+        ? [{ value: '', label: allLabel ?? `All ${placeholder}` }, ...options]
+        : options,
+    [options, showAllOption, allLabel, placeholder],
   );
 
   const selected = effectiveOptions.find((o) => o.value === value);

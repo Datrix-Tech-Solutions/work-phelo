@@ -50,6 +50,7 @@ export interface GLAccountLedgerEntry {
   baseDebit: string;
   baseCredit: string;
   runningBalance: string;
+  subledgerAccount: { id: string; code: string; name: string } | null;
   journalEntry: {
     journalNumber: string;
     transactionDate: string;

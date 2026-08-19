@@ -28,6 +28,9 @@ interface MultiSelectProps {
   /** 'default' shows selected values as removable chips above the field. 'inline' (for filter bars)
    *  keeps everything to a single row — no chips above, selections summarized inside the field itself. */
   variant?: 'default' | 'inline';
+  /** Label for the inline variant's "All" row/empty state. Defaults to "All {placeholder}"
+   *  (e.g. "All Status") so the field names its own dimension rather than showing a bare "All". */
+  allLabel?: string;
 }
 
 export function MultiSelect({
@@ -40,7 +43,9 @@ export function MultiSelect({
   hideChips = false,
   size = 'sm',
   variant = 'default',
+  allLabel,
 }: MultiSelectProps) {
+  const resolvedAllLabel = allLabel ?? `All ${placeholder}`;
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   /* drives the actual grid-rows/opacity styles, one frame behind `open` on the
@@ -106,8 +111,9 @@ export function MultiSelect({
   /* Inline (filter-bar) mode gets a pinned "All" row — clicking it clears the selection rather
    *  than toggling into it, since an empty value array already means "no filter, show everything". */
   const effectiveOptions = useMemo(
-    () => (variant === 'inline' ? [{ value: ALL_VALUE, label: 'All' }, ...options] : options),
-    [options, variant],
+    () =>
+      variant === 'inline' ? [{ value: ALL_VALUE, label: resolvedAllLabel }, ...options] : options,
+    [options, variant, resolvedAllLabel],
   );
 
   const activateOption = (opt: MultiSelectOption) => {
@@ -246,7 +252,7 @@ export function MultiSelect({
         >
           {selected.length === 0
             ? variant === 'inline'
-              ? 'All'
+              ? resolvedAllLabel
               : placeholder
             : variant === 'inline'
               ? selected.map((o) => o.label).join(', ')

@@ -36,6 +36,7 @@ export function ClaimsStatsRow() {
     totalClaimedAmount,
     openClaims,
     settledClaims,
+    closedClaims,
     isLoading: loadingClaims,
   } = useClaimsSummary(closingPlacements);
 
@@ -43,7 +44,7 @@ export function ClaimsStatsRow() {
   const settlementRate = totalClaims > 0 ? (settledClaims / totalClaims) * 100 : 0;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
       <KpiCard
         label="Total Claims"
         value={totalClaims}
@@ -63,6 +64,13 @@ export function ClaimsStatsRow() {
         value={openClaims}
         icon={Icons.Clock}
         iconColor="#4a3aa7"
+        isLoading={isLoading}
+      />
+      <KpiCard
+        label="Closed Claims"
+        value={closedClaims}
+        icon={Icons.CircleCheckBig}
+        iconColor="#6b7280"
         isLoading={isLoading}
       />
       <KpiCard

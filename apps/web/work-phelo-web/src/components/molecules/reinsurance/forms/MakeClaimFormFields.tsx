@@ -1,11 +1,12 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { cn, inputClass } from '@/lib/utils';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useCurrencyOptions, usePlacementEffectiveView } from '@/hooks';
+import { useCurrencyOptions, usePlacementEffectiveView, usePremiumPaymentContext } from '@/hooks';
 import { Facultative } from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
@@ -17,6 +18,9 @@ export interface MakeClaimFormValues {
   claimCause: string;
   occurrenceDetails: string;
   currency: string;
+  /** Conversion rate into the placement's currency — only used when `currency` differs
+   * from the placement's own currency. */
+  rate: string;
 }
 
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
@@ -27,6 +31,7 @@ export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
   claimCause: '',
   occurrenceDetails: '',
   currency: '',
+  rate: '',
 };
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
@@ -43,11 +48,11 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 interface MakeClaimFormFieldsProps {
   form: UseFormReturn<MakeClaimFormValues>;
   placement: Facultative;
-  /** Skip the read-only Policy Number/Cedant/Class of Business rows — use when
-   * that info is already shown by the caller's own placement picker. */
+
   hidePlacementInfo?: boolean;
-  /** Show the Actual Claim Amount field — only relevant once a claim already exists. */
   isEditing?: boolean;
+
+  mode?: 'notification' | 'actual';
 }
 
 export function MakeClaimFormFields({
@@ -55,15 +60,41 @@ export function MakeClaimFormFields({
   placement,
   hidePlacementInfo,
   isEditing,
+  mode = 'notification',
 }: MakeClaimFormFieldsProps) {
   const {
     register,
     control,
+    setValue,
     formState: { errors },
   } = form;
 
   const { data: currencyOptions = [] } = useCurrencyOptions();
   const occurrenceDate = useWatch({ control, name: 'occurrenceDate' });
+  const claimCurrency = useWatch({ control, name: 'currency' });
+  const rateValue = useWatch({ control, name: 'rate' });
+  const showRate = !!claimCurrency && !!placement.currency && claimCurrency !== placement.currency;
+  // Amounts are entered in `claimCurrency` but persisted (and compared against sum insured)
+  // in the placement's currency, so validation needs to convert by the same rate submit does.
+  const conversionRate = showRate ? parseFloat(rateValue) || 1 : 1;
+
+  useEffect(() => {
+    if (!showRate) setValue('rate', '');
+  }, [showRate, setValue]);
+
+  // Premium payment context — same authoritative figures the Premiums page and placement
+  // Details page use, so this agrees with what's shown everywhere else.
+  const { statusText: premiumPaymentStatusText, latestPaymentDate } = usePremiumPaymentContext(
+    placement.id,
+  );
+  const latestPaymentDateText = latestPaymentDate
+    ? new Date(latestPaymentDate).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : null;
+
   const effectiveAsOfDate = occurrenceDate ? new Date(occurrenceDate).toISOString() : undefined;
   const { data: effectiveView, isFetching: isLoadingEffectiveTerms } = usePlacementEffectiveView(
     placement.id,
@@ -92,6 +123,15 @@ export function MakeClaimFormFields({
           <hr className="border-gray-100" />
         </>
       )}
+      <div className="flex flex-col gap-1 text-sm">
+        <p className="text-gray-700">{premiumPaymentStatusText}</p>
+        {latestPaymentDateText && (
+          <div>
+            <p className="text-gray-700">{latestPaymentDateText}</p>
+            <p className="text-xs text-gray-400">Last Payment Date</p>
+          </div>
+        )}
+      </div>
       <Controller
         name="occurrenceDate"
         control={control}
@@ -110,7 +150,7 @@ export function MakeClaimFormFields({
         }}
         render={({ field }) => (
           <DatePicker
-            label="Occurrence Date"
+            label="Date of Loss"
             value={field.value}
             onChange={field.onChange}
             error={errors.occurrenceDate?.message}
@@ -119,10 +159,10 @@ export function MakeClaimFormFields({
       />
       {occurrenceDate && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-900">
-          <p className="font-semibold">Effective claim context</p>
+          <p className="font-semibold">Potential loss amount</p>
           <p className="mt-1">
             {isLoadingEffectiveTerms
-              ? 'Loading effective terms for this loss date…'
+              ? 'Loading potential loss for this date…'
               : [
                   effectiveCurrency ? `Currency ${effectiveCurrency}` : null,
                   effectiveSumInsured != null
@@ -140,38 +180,51 @@ export function MakeClaimFormFields({
           </p>
         </div>
       )}
-      <Controller
-        name="estimatedLossAmount"
-        control={control}
-        rules={{
-          min: { value: 0.01, message: 'Estimated loss amount is required' },
-          validate: (value) => {
-            const amount = parseFloat(value);
-            if (effectiveSumInsured != null && amount > effectiveSumInsured) {
-              return `Estimated loss amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
-            }
-            return true;
-          },
-        }}
-        render={({ field }) => (
-          <NumberField
-            label="Estimated Loss Amount"
-            value={field.value ? Number(field.value) : 0}
-            onChange={(n) => field.onChange(String(n))}
-            error={errors.estimatedLossAmount?.message}
-            placeholder="0.00"
+
+      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
+        <Controller
+          name="currency"
+          control={control}
+          rules={{ required: 'Currency is required' }}
+          render={({ field }) => (
+            <SearchSelect
+              label="Currency"
+              placeholder="Select currency…"
+              options={currencyOptions}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.currency?.message}
+            />
+          )}
+        />
+        {showRate && (
+          <Controller
+            name="rate"
+            control={control}
+            rules={{ min: { value: 0.000001, message: 'Rate is required' } }}
+            render={({ field }) => (
+              <NumberField
+                label={`Rate to ${placement.currency}`}
+                value={field.value ? Number(field.value) : 0}
+                onChange={(n) => field.onChange(String(n))}
+                error={errors.rate?.message}
+                placeholder="0.00"
+              />
+            )}
           />
         )}
-      />
-
-      {isEditing && (
+      </div>
+      {(isEditing || mode === 'actual') && (
         <Controller
           name="finalLossAmount"
           control={control}
           rules={{
+            ...(mode === 'actual' && {
+              min: { value: 0.01, message: 'Actual claim amount is required' },
+            }),
             validate: (value) => {
               if (!value || Number(value) === 0) return true;
-              const amount = parseFloat(value);
+              const amount = parseFloat(value) * conversionRate;
               if (effectiveSumInsured != null && amount > effectiveSumInsured) {
                 return `Actual claim amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
               }
@@ -190,21 +243,31 @@ export function MakeClaimFormFields({
         />
       )}
 
-      <Controller
-        name="currency"
-        control={control}
-        rules={{ required: 'Currency is required' }}
-        render={({ field }) => (
-          <SearchSelect
-            label="Currency"
-            placeholder="Select currency…"
-            options={currencyOptions}
-            value={field.value}
-            onChange={field.onChange}
-            error={errors.currency?.message}
-          />
-        )}
-      />
+      {mode !== 'actual' && (
+        <Controller
+          name="estimatedLossAmount"
+          control={control}
+          rules={{
+            min: { value: 0.01, message: 'Estimated loss amount is required' },
+            validate: (value) => {
+              const amount = parseFloat(value) * conversionRate;
+              if (effectiveSumInsured != null && amount > effectiveSumInsured) {
+                return `Estimated loss amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
+              }
+              return true;
+            },
+          }}
+          render={({ field }) => (
+            <NumberField
+              label="Estimated Loss Amount"
+              value={field.value ? Number(field.value) : 0}
+              onChange={(n) => field.onChange(String(n))}
+              error={errors.estimatedLossAmount?.message}
+              placeholder="0.00"
+            />
+          )}
+        />
+      )}
 
       <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">Claim Details</label>
