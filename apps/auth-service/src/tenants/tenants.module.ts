@@ -7,6 +7,7 @@ import { TenantBrandingService } from './tenant-branding.service';
 import { TenantAssetStorageService } from './tenant-asset-storage.service';
 import { TenantDocumentProfileController } from './tenant-document-profile.controller';
 import { TenantDocumentProfileInternalController } from './tenant-document-profile-internal.controller';
+import { TenantIntegrationInternalController } from './tenant-integration-internal.controller';
 import { TenantDocumentProfileService } from './tenant-document-profile.service';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
 import { AuditModule } from '../audit/audit.module';
@@ -17,6 +18,7 @@ import { AuditModule } from '../audit/audit.module';
     TenantsController,
     TenantDocumentProfileController,
     TenantDocumentProfileInternalController,
+    TenantIntegrationInternalController,
   ],
   providers: [
     TenantLifecycleService,

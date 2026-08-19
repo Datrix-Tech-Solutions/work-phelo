@@ -53,8 +53,9 @@ describe('ReinsuranceAccountingReadinessService', () => {
     tenantSlug: 'broker',
     tenantName: 'Broker',
     firstName: 'Ama',
-    moduleConfig: { accounting: true },
+    moduleConfig: { operations: true, accounting: true },
     featureConfig: { operations: { reinsurance: true } },
+    integrationConfig: { 'operations.reinsurance->accounting': true },
     permissions: [],
   } as RequestUser;
 

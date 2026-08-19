@@ -16,6 +16,7 @@ export interface JwtPayload {
   companyRoleId?: string | null;
   moduleConfig?: Record<string, boolean>;
   featureConfig?: Record<string, Record<string, boolean>>;
+  integrationConfig?: Record<string, boolean>;
   permissions?: string[];
   iat?: number;
   exp?: number;
@@ -33,5 +34,6 @@ export interface RequestUser {
   companyRoleId?: string | null;
   moduleConfig: Record<string, boolean>;
   featureConfig: Record<string, Record<string, boolean>>;
+  integrationConfig?: Record<string, boolean>;
   permissions: string[];
 }

@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
@@ -159,6 +164,8 @@ const ACTIVE_REINSURANCE_ACCOUNTING_EVENT_TYPES = [
   'CLAIM_RECOVERY_RECEIPT_REVERSED',
 ] as const;
 
+const REINSURANCE_ACCOUNTING_INTEGRATION = 'operations.reinsurance->accounting';
+
 const READINESS_GROUPS = {
   premiumAccounting: [
     'DEBIT_NOTE_ISSUED',
@@ -195,19 +202,31 @@ export class ReinsuranceAccountingReadinessService {
   async status(user: RequestUser) {
     const configuration = this.client.configurationStatus();
     const accountingEnabled = Boolean(user.moduleConfig?.accounting);
-    const activeSourceEvents = accountingEnabled
+    const reinsuranceEnabled = Boolean(
+      user.moduleConfig?.operations &&
+      user.featureConfig?.operations?.reinsurance,
+    );
+    const integrationEnabled = Boolean(
+      user.integrationConfig?.[REINSURANCE_ACCOUNTING_INTEGRATION],
+    );
+    const integrationActive =
+      reinsuranceEnabled && accountingEnabled && integrationEnabled;
+    const activeSourceEvents = integrationActive
       ? [...ACTIVE_REINSURANCE_ACCOUNTING_EVENT_TYPES]
       : [];
     const postingReadiness =
-      accountingEnabled && configuration.configured
+      integrationActive && configuration.configured
         ? await this.getPostingReadiness(user, activeSourceEvents)
         : null;
     return {
       accountingEnabled,
+      reinsuranceEnabled,
+      integrationEnabled,
+      integrationActive,
       integrationConfigured: configuration.configured,
       baseUrlConfigured: configuration.baseUrlConfigured,
       serviceAuthSecretConfigured: configuration.serviceAuthSecretConfigured,
-      sourceEventsActive: accountingEnabled,
+      sourceEventsActive: integrationActive,
       activeSourceEvents,
       postingReadiness,
       readinessGroups: postingReadiness
@@ -215,13 +234,16 @@ export class ReinsuranceAccountingReadinessService {
         : null,
       readinessMode:
         'Debit-note, credit-note, premium-payment, reinsurer-disbursement, claim-payable and claim-recovery source-event capture, PostingRule preflight, counterparty subledger readiness and outbox dispatch.',
-      message: accountingEnabled
-        ? configuration.configured
-          ? postingReadiness?.ready
-            ? 'Accounting integration is configured and posting readiness preflight is passing for active Reinsurance event families.'
-            : 'Accounting integration is configured, but one or more active Reinsurance event families are not posting-ready.'
-          : 'Accounting is enabled. Reinsurance financial-event capture is active, but delivery is missing Accounting integration configuration.'
-        : 'Accounting module is not enabled for this tenant; Reinsurance business workflows continue without Accounting outbox events.',
+      message:
+        !reinsuranceEnabled || !accountingEnabled
+          ? 'Reinsurance and Accounting are not both enabled for this tenant; they operate independently.'
+          : !integrationEnabled
+            ? 'Reinsurance and Accounting are intentionally disconnected for this tenant.'
+            : configuration.configured
+              ? postingReadiness?.ready
+                ? 'Accounting integration is configured and posting readiness preflight is passing for active Reinsurance event families.'
+                : 'Accounting integration is configured, but one or more active Reinsurance event families are not posting-ready.'
+              : 'Reinsurance Accounting integration is enabled, but delivery is missing Accounting integration configuration.',
     };
   }
 
@@ -290,13 +312,13 @@ export class ReinsuranceAccountingReadinessService {
     user: RequestUser,
     counterparty: CounterpartyRecord,
   ): Promise<AccountingSubledgerSyncResult> {
-    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
+    const accountingEnabled = this.isIntegrationActive(user);
     if (!accountingEnabled) {
       return {
         status: 'DISABLED',
         accountingEnabled,
         message:
-          'Accounting module is not enabled for this tenant; subledger sync skipped.',
+          'Reinsurance Accounting integration is disabled for this tenant; subledger sync skipped.',
       };
     }
 
@@ -355,10 +377,28 @@ export class ReinsuranceAccountingReadinessService {
   }
 
   processPending(user: RequestUser, options: ProcessAccountingOutboxOptions) {
+    this.assertIntegrationActive(user);
     return this.outbox.processPending(this.prisma, {
       tenantId: user.tenantId,
       limit: options.limit,
     });
+  }
+
+  assertIntegrationActive(user: RequestUser): void {
+    if (!this.isIntegrationActive(user)) {
+      throw new ConflictException(
+        'Reinsurance Accounting integration is disabled for this tenant.',
+      );
+    }
+  }
+
+  private isIntegrationActive(user: RequestUser): boolean {
+    return Boolean(
+      user.moduleConfig?.operations &&
+      user.featureConfig?.operations?.reinsurance &&
+      user.moduleConfig?.accounting &&
+      user.integrationConfig?.[REINSURANCE_ACCOUNTING_INTEGRATION],
+    );
   }
 
   async findPendingClaimRecoveryReceiptConfirmations(user: RequestUser) {

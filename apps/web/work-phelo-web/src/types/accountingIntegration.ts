@@ -114,6 +114,9 @@ export interface ReinsuranceAccountingReadinessGroup {
 
 export interface ReinsuranceAccountingIntegrationStatus {
   accountingEnabled: boolean;
+  reinsuranceEnabled: boolean;
+  integrationEnabled: boolean;
+  integrationActive: boolean;
   integrationConfigured: boolean;
   baseUrlConfigured: boolean;
   serviceAuthSecretConfigured: boolean;

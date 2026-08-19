@@ -7,6 +7,7 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -31,6 +32,8 @@ import {
   ReconcilePaymentAccountingEventsDto,
 } from './reinsurance-accounting-readiness.dto';
 import { ReinsuranceAccountingOutboxDispatcher } from './reinsurance-accounting-outbox-dispatcher.service';
+import { ReinsuranceAccountingIntegrationActiveGuard } from './reinsurance-accounting-integration-active.guard';
+import { ReinsuranceAccountingOperationAuditInterceptor } from './reinsurance-accounting-operation-audit.interceptor';
 import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
 
 @Controller('accounting-integration')
@@ -40,7 +43,6 @@ import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('operations')
 @RequireFeature('operations', 'reinsurance')
-@RequirePermissions('operations.reinsurance.dashboard:VIEW')
 export class ReinsuranceAccountingIntegrationController {
   constructor(
     private readonly readiness: ReinsuranceAccountingReadinessService,
@@ -48,6 +50,7 @@ export class ReinsuranceAccountingIntegrationController {
   ) {}
 
   @Get('status')
+  @RequirePermissions('operations.reinsurance.dashboard:VIEW')
   @ApiOperation({
     summary: 'Get Reinsurance Accounting integration readiness status',
   })
@@ -56,6 +59,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('counterparties/:counterpartyId/subledger/sync')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Synchronize one Cedant/Reinsurer counterparty to Accounting',
     description:
@@ -69,6 +75,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('outbox/process-pending')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Dispatch pending Reinsurance Accounting outbox events',
     description:
@@ -82,6 +91,7 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Get('outbox/dispatcher/status')
+  @RequirePermissions('operations.reinsurance.accounting-operations:VIEW')
   @ApiOperation({
     summary: 'Get Reinsurance Accounting outbox dispatcher status',
     description:
@@ -93,6 +103,7 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Get('financial-confirmations/claim-recovery-receipts')
+  @RequirePermissions('operations.reinsurance.dashboard:VIEW')
   @ApiOperation({
     summary:
       'List claim recovery receipts awaiting Accounting bank confirmation',
@@ -108,6 +119,7 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Get('financial-confirmations/claim-cedant-settlements')
+  @RequirePermissions('operations.reinsurance.dashboard:VIEW')
   @ApiOperation({
     summary:
       'List cedant claim settlements awaiting Accounting bank confirmation',
@@ -123,6 +135,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/debit-note-issued')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Reconcile issued placement debit notes with Accounting outbox',
     description:
@@ -136,6 +151,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/credit-note-issued')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Reconcile issued placement credit notes with Accounting outbox',
     description:
@@ -149,6 +167,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/endorsement-debit-note-issued')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Reconcile issued endorsement debit notes with Accounting outbox',
     description:
@@ -165,6 +186,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/endorsement-credit-note-issued')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Reconcile issued endorsement credit notes with Accounting outbox',
     description:
@@ -181,6 +205,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/premium-payment-received')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Reconcile recorded premium payments with Accounting outbox',
     description:
@@ -197,6 +224,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/payment-reversed')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Reconcile premium payment reversals with Accounting outbox',
     description:
@@ -210,6 +240,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/reinsurer-disbursement-recorded')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
       'Reconcile bank-confirmed reinsurer disbursements with Accounting outbox',
@@ -227,6 +260,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/reinsurer-disbursement-reversed')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
       'Reconcile reversed reinsurer disbursements with Accounting outbox',
@@ -244,6 +280,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-payable-approved')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Reconcile claim payable approvals with Accounting outbox',
     description:
@@ -260,6 +299,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-recovery-approved')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Reconcile claim recovery approvals with Accounting outbox',
     description:
@@ -276,6 +318,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-cedant-settlement-paid')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
       'Reconcile bank-confirmed cedant claim settlements with Accounting outbox',
@@ -293,6 +338,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-cedant-settlement-reversed')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
       'Reconcile cedant claim settlement reversals with Accounting outbox',
@@ -310,6 +358,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-recovery-received')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
       'Reconcile bank-confirmed claim recovery receipts with Accounting outbox',
@@ -327,6 +378,9 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-recovery-receipt-reversed')
+  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
+  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
+  @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
       'Reconcile claim recovery receipt reversals with Accounting outbox',

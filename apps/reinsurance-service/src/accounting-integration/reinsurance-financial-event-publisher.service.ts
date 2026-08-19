@@ -251,6 +251,17 @@ export type ReinsurerDisbursementRecordedEligibility = {
   idempotencyKey: string;
 };
 
+const REINSURANCE_ACCOUNTING_INTEGRATION = 'operations.reinsurance->accounting';
+
+function isAccountingIntegrationActive(user: RequestUser): boolean {
+  return Boolean(
+    user.moduleConfig?.operations &&
+    user.featureConfig?.operations?.reinsurance &&
+    user.moduleConfig?.accounting &&
+    user.integrationConfig?.[REINSURANCE_ACCOUNTING_INTEGRATION],
+  );
+}
+
 @Injectable()
 export class ReinsuranceFinancialEventPublisher {
   private readonly logger = new Logger(ReinsuranceFinancialEventPublisher.name);
@@ -271,7 +282,7 @@ export class ReinsuranceFinancialEventPublisher {
       accountingCashAccountId?: string | null;
     },
   ): Promise<void> {
-    if (!user.moduleConfig?.accounting) return;
+    if (!isAccountingIntegrationActive(user)) return;
     const eventType = input.eventType.trim().toUpperCase();
     try {
       const readiness = await this.client.checkReinsuranceReadiness({
@@ -348,7 +359,7 @@ export class ReinsuranceFinancialEventPublisher {
     note: PlacementNoteForEvent,
     issuedAt: Date,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; DEBIT_NOTE_ISSUED not enqueued for note ${note.id}`,
       );
@@ -472,7 +483,7 @@ export class ReinsuranceFinancialEventPublisher {
     note: PlacementNoteForEvent,
     issuedAt: Date,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CREDIT_NOTE_ISSUED not enqueued for note ${note.id}`,
       );
@@ -620,7 +631,7 @@ export class ReinsuranceFinancialEventPublisher {
     note: PlacementNoteForEvent,
     issuedAt: Date,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; ENDORSEMENT_DEBIT_NOTE_ISSUED not enqueued for note ${note.id}`,
       );
@@ -727,7 +738,7 @@ export class ReinsuranceFinancialEventPublisher {
     note: PlacementNoteForEvent,
     issuedAt: Date,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; ENDORSEMENT_CREDIT_NOTE_ISSUED not enqueued for note ${note.id}`,
       );
@@ -853,7 +864,7 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     approval: ClaimPayableApprovalForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_PAYABLE_APPROVED not enqueued for approval ${approval.id}`,
       );
@@ -1050,7 +1061,7 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     settlement: ClaimCedantSettlementForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_CEDANT_SETTLEMENT_PAID not enqueued for settlement ${settlement.id}`,
       );
@@ -1160,7 +1171,7 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     settlement: ClaimCedantSettlementForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_CEDANT_SETTLEMENT_REVERSED not enqueued for settlement ${settlement.id}`,
       );
@@ -1264,7 +1275,7 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     approval: ClaimRecoveryApprovalForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_RECOVERY_APPROVED not enqueued for approval ${approval.id}`,
       );
@@ -1444,7 +1455,7 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     receipt: ClaimRecoveryReceiptForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_RECOVERY_RECEIVED not enqueued for receipt ${receipt.id}`,
       );
@@ -1552,7 +1563,7 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     receipt: ClaimRecoveryReceiptForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_RECOVERY_RECEIPT_REVERSED not enqueued for receipt ${receipt.id}`,
       );
@@ -1657,7 +1668,7 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     payment: PaymentForEvent,
   ): ReinsuranceAccountingEventInput | null {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; PREMIUM_PAYMENT_RECEIVED not enqueued for payment ${payment.id}`,
       );
@@ -1765,7 +1776,7 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     reversalPayment: PaymentForEvent,
   ): ReinsuranceAccountingEventInput | null {
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; PAYMENT_REVERSED not enqueued for payment ${reversalPayment.id}`,
       );
@@ -2037,7 +2048,7 @@ export class ReinsuranceFinancialEventPublisher {
     payment: PaymentForEvent,
   ): ReinsurerDisbursementRecordedEligibility {
     const exclusionReasons: string[] = [];
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       exclusionReasons.push('accounting disabled');
     }
     if (payment.type !== PlacementPaymentType.REINSURER_DISBURSEMENT) {
@@ -2131,7 +2142,7 @@ export class ReinsuranceFinancialEventPublisher {
 
     const uniqueReasons = [...new Set(exclusionReasons)];
     return {
-      accountingEnabled: Boolean(user.moduleConfig?.accounting),
+      accountingEnabled: isAccountingIntegrationActive(user),
       eligible: uniqueReasons.length === 0,
       exclusionReasons: uniqueReasons,
       idempotencyKey: this.reinsurerDisbursementRecordedIdempotencyKey(
@@ -2844,7 +2855,7 @@ export class ReinsuranceFinancialEventPublisher {
     payment: PaymentForEvent,
   ): ReinsurerDisbursementRecordedEligibility {
     const exclusionReasons: string[] = [];
-    if (!user.moduleConfig?.accounting) {
+    if (!isAccountingIntegrationActive(user)) {
       exclusionReasons.push('accounting disabled');
     }
     if (payment.type !== PlacementPaymentType.REINSURER_DISBURSEMENT) {
@@ -2935,7 +2946,7 @@ export class ReinsuranceFinancialEventPublisher {
 
     const uniqueReasons = [...new Set(exclusionReasons)];
     return {
-      accountingEnabled: Boolean(user.moduleConfig?.accounting),
+      accountingEnabled: isAccountingIntegrationActive(user),
       eligible: uniqueReasons.length === 0,
       exclusionReasons: uniqueReasons,
       idempotencyKey: this.reinsurerDisbursementReversedIdempotencyKey(

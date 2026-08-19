@@ -4,6 +4,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { CounterpartyEventPublisher } from './counterparty-event.publisher';
 import { EmailEventPublisher } from './email-event.publisher';
 import { PlacementEventPublisher } from './placement-event.publisher';
+import { ReinsuranceAccountingOperationAuditPublisher } from '../accounting-integration/reinsurance-accounting-operation-audit.publisher';
 
 @Module({
   imports: [
@@ -32,11 +33,13 @@ import { PlacementEventPublisher } from './placement-event.publisher';
     CounterpartyEventPublisher,
     EmailEventPublisher,
     PlacementEventPublisher,
+    ReinsuranceAccountingOperationAuditPublisher,
   ],
   exports: [
     CounterpartyEventPublisher,
     EmailEventPublisher,
     PlacementEventPublisher,
+    ReinsuranceAccountingOperationAuditPublisher,
   ],
 })
 export class RabbitMQModule {}

@@ -185,6 +185,11 @@ export const RESOURCES = [
     description: 'Reinsurance operations dashboard',
   },
   {
+    name: 'operations.reinsurance.accounting-operations',
+    module: 'OPERATIONS',
+    description: 'Reinsurance Accounting integration operational diagnostics and support actions',
+  },
+  {
     name: 'operations.reinsurance.placements',
     module: 'OPERATIONS',
     description: 'Reinsurance placement workflows',

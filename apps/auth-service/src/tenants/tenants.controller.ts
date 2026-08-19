@@ -479,6 +479,37 @@ export class TenantsController {
     return this.config.updateModules(id, dto, req.user.id);
   }
 
+  @Get(':id/integrations/reinsurance-accounting')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  getReinsuranceAccountingIntegration(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    if (req.user.role === 'TENANT_ADMIN' && id !== req.user.tenantId) {
+      throw new ForbiddenException('You can only access your own company.');
+    }
+    return this.config.getReinsuranceAccountingIntegration(id);
+  }
+
+  @Patch(':id/integrations/reinsurance-accounting')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  updateReinsuranceAccountingIntegration(
+    @Param('id') id: string,
+    @Body() dto: { enabled: boolean },
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.config.updateReinsuranceAccountingIntegration(
+      id,
+      Boolean(dto.enabled),
+      req.user.id,
+    );
+  }
+
   @Patch(':id/features')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
