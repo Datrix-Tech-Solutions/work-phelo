@@ -31,7 +31,7 @@ export default function NewClaimPage({ params }: { params: Promise<{ tenantSlug:
             Claims
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">Make New Claim</span>
+          <span className="text-gray-700 font-medium">Add New Claim</span>
         </nav>
 
         <Button onClick={() => setPanelOpen(true)}>Make Claim</Button>

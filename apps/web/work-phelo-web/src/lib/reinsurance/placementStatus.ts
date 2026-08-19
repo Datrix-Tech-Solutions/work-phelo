@@ -97,6 +97,26 @@ export function cedantPaymentStatusFromPosition(
   return 'Outstanding';
 }
 
+/** Plain-English wording for CedantPaymentStatus, for surfaces that show it as a sentence
+ *  rather than a status badge (e.g. the claim panel/overview). */
+export const PREMIUM_PAYMENT_STATUS_TEXT: Record<CedantPaymentStatus, string> = {
+  Paid: 'Premium fully paid',
+  'Part Payment': 'Premium partly paid',
+  Pending: 'Premium payment pending',
+  Outstanding: 'Premium not yet paid',
+};
+
+/** Most recent bank-confirmed, non-reversed premium receipt date, or null if there isn't one. */
+export function latestConfirmedPremiumPaymentDate(payments: PlacementPayment[]): string | null {
+  const confirmed = payments.filter(
+    (p) => p.type === 'PREMIUM_RECEIVED' && p.status === 'BANK_CONFIRMED' && !p.reversalOfPaymentId,
+  );
+  return confirmed.reduce<string | null>(
+    (latest, p) => (!latest || p.paymentDate > latest ? p.paymentDate : latest),
+    null,
+  );
+}
+
 export function displayStatusFor(placement: Facultative): {
   label: string;
   variant: StatusVariant;

@@ -20,13 +20,6 @@ interface ClaimOverviewTabProps {
   claim?: PlacementClaim;
 }
 
-/** The "Details" tab of the claim detail page: the per-reinsurer shares table — which also owns
- * Preview/Send Mail (raises + issues their cash call) — and the cedant settlement panel.
- * Placement/claim facts + status controls now live in the persistent `ClaimOverview` card above
- * the tabs, not here. There's no separate "approve recovery" step here: what a reinsurer actually
- * pays back is recorded directly against their cash call in the Cash Calls tab, and that recovery
- * total is what the cedant payable is based on. Cash Calls and settlement History live in their
- * own sibling tabs, driven by the parent `ClaimOverviewSection` tab bar. */
 export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
   const { data: reinsurers = [] } = useReinsurers();
   const { data: allocations = [] } = useClaimAllocations(placement.id, claim?.id ?? '');

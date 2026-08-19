@@ -15,6 +15,7 @@ import {
   useUpdatePlacementClaim,
   useClaimAllocations,
   useGenerateClaimAllocations,
+  useGenerateClaimAllocationsMutation,
   useFacultatives,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
@@ -28,8 +29,9 @@ interface MakeClaimPanelProps {
   placement?: Facultative;
   claim?: PlacementClaim;
   onSuccess?: (claim: PlacementClaim) => void;
-  /** Fires as the user narrows down a placement in the built-in picker (only used when `placement` isn't passed in). */
   onPlacementChange?: (placementId: string) => void;
+
+  mode?: 'notification' | 'actual';
 }
 
 export function MakeClaimPanel({
@@ -39,6 +41,7 @@ export function MakeClaimPanel({
   claim,
   onSuccess,
   onPlacementChange,
+  mode = 'notification',
 }: MakeClaimPanelProps) {
   const isEditing = !!claim;
   const showPicker = !placement;
@@ -92,12 +95,14 @@ export function MakeClaimPanel({
     effectivePlacement?.id ?? '',
     claim?.id ?? '',
   );
+  const generateAllocationsForClaim = useGenerateClaimAllocationsMutation();
   const addToast = useToastStore((s) => s.addToast);
 
   useEffect(() => {
     if (isOpen) {
       if (claim) {
         reset({
+          ...MAKE_CLAIM_DEFAULTS,
           estimatedLossAmount: claim.estimatedLossAmount,
           finalLossAmount: claim.finalLossAmount ?? '',
           occurrenceDate: claim.occurrenceDate.split('T')[0],
@@ -127,12 +132,27 @@ export function MakeClaimPanel({
   const onSubmit = async (values: MakeClaimFormValues) => {
     if (!effectivePlacement) return;
 
+    const isActualCreate = mode === 'actual' && !isEditing;
+    const amount = isActualCreate ? values.finalLossAmount : values.estimatedLossAmount;
+
+    // Claims are always recorded in the placement's own currency — sum-insured checks and
+    // allocations downstream all assume that. Picking a different currency just means the
+    // amounts entered need converting via the rate before anything is sent.
+    const businessCurrency = effectivePlacement.currency ?? values.currency;
+    const needsConversion = values.currency !== businessCurrency;
+    const rate = needsConversion ? parseFloat(values.rate) || 1 : 1;
+    const convert = (raw: string) => {
+      const parsed = parseFloat(raw);
+      if (isNaN(parsed)) return parsed;
+      return needsConversion ? Math.round(parsed * rate * 100) / 100 : parsed;
+    };
+
     const payload = {
       occurrenceDate: new Date(values.occurrenceDate).toISOString(),
       reportedDate: new Date().toISOString(),
       claimCause: values.claimCause,
-      currency: values.currency,
-      estimatedLossAmount: parseFloat(values.estimatedLossAmount),
+      currency: businessCurrency,
+      estimatedLossAmount: convert(amount),
     };
 
     try {
@@ -141,13 +161,10 @@ export function MakeClaimPanel({
       if (isEditing) {
         const updatedClaim = await updateClaim.mutateAsync({
           ...payload,
-          finalLossAmount: values.finalLossAmount ? parseFloat(values.finalLossAmount) : undefined,
+          finalLossAmount: values.finalLossAmount ? convert(values.finalLossAmount) : undefined,
         });
         onSuccess?.(updatedClaim);
 
-        // Once the actual claim amount is entered, treat the claim as final and lock in
-        // per-reinsurer allocations. Occurrence date, currency and loss amounts become
-        // read-only on the backend the moment allocations exist.
         if (values.finalLossAmount && existingAllocations.length === 0) {
           try {
             await generateAllocations.mutateAsync();
@@ -163,8 +180,24 @@ export function MakeClaimPanel({
         const newClaim = await createClaim.mutateAsync({
           placementId: effectivePlacement.id,
           ...payload,
+          finalLossAmount: isActualCreate ? convert(amount) : undefined,
         });
         onSuccess?.(newClaim);
+
+        if (isActualCreate) {
+          try {
+            await generateAllocationsForClaim.mutateAsync({
+              placementId: effectivePlacement.id,
+              claimId: newClaim.id,
+            });
+            allocationsGenerated = true;
+          } catch (allocationError) {
+            addToast({
+              message: `Claim created, but allocations could not be generated: ${extractError(allocationError)}`,
+              type: 'error',
+            });
+          }
+        }
       }
       addToast({
         message: `Claim ${isEditing ? 'updated' : 'submitted'} successfully${
@@ -182,7 +215,7 @@ export function MakeClaimPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title={isEditing ? 'Edit Claim' : 'Make Claim'}
+      title={isEditing ? 'Edit Claim' : mode === 'actual' ? 'Add Claim' : 'Make Claim'}
       description={
         effectivePlacement
           ? `Claim for ${displayPolicyNumber(effectivePlacement.policyNumber)}`
@@ -199,14 +232,14 @@ export function MakeClaimPanel({
               loadingText={isEditing ? 'Updating…' : 'Submitting…'}
               onClick={handleSubmit(onSubmit)}
             >
-              {isEditing ? 'Update Claim' : 'Submit Claim'}
+              {isEditing ? 'Update Claim' : mode === 'actual' ? 'Add Claim' : 'Submit Claim'}
             </Button>
           </div>
         ) : undefined
       }
     >
       {showPicker && (
-        <div className="flex flex-col gap-(--field-stack-gap,0.75rem) mb-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <SearchSelect
             label="Cedant"
             placeholder="Select cedant…"
@@ -240,6 +273,7 @@ export function MakeClaimPanel({
           placement={effectivePlacement}
           hidePlacementInfo={showPicker}
           isEditing={isEditing}
+          mode={mode}
         />
       )}
     </SidePanel>

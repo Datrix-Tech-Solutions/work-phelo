@@ -23,12 +23,6 @@ interface ClaimCedantSettlementPanelProps {
   claim: PlacementClaim;
 }
 
-/** Broker → Cedant settlement status + the two actions that drive it: approving the payable
- * amount (locked to the sum of what each reinsurer is allocated to pay — the target the broker is
- * working toward, known as soon as allocations exist; this is a one-shot, irreversible action on
- * the backend), then recording settlement payments against it, as many times as needed, as
- * recoveries or broker funding allow. The settlement audit trail itself lives in the "History"
- * tab (`ClaimFinancialHistoryTable`). */
 export function ClaimCedantSettlementPanel({
   placementId,
   claim,
@@ -49,9 +43,6 @@ export function ClaimCedantSettlementPanel({
   const outstandingAmount = position?.cedantSettlement.outstandingAmount ?? '0.00';
   const canRecordSettlement = !!approvedPayableAmount && parseFloat(outstandingAmount) > 0;
 
-  // What's actually owed to the cedant: the sum of each reinsurer's allocated share — what
-  // they're each on the hook to pay — not what's been recovered from them so far. Recovery
-  // timing is tracked separately via Broker Exposure below.
   const nonVoidAllocations = useMemo(
     () => allocations.filter((a) => a.status !== 'VOID'),
     [allocations],
@@ -136,9 +127,6 @@ export function ClaimCedantSettlementPanel({
       )}
       <div className={cardClass('p-6 w-full')}>
         <span className="text-sm font-bold text-gray-900">Cedant Claim Settlement</span>
-        <p className="text-xs text-gray-500 pb-2">
-          Broker → Cedant settlement is approved and tracked separately from reinsurer recoveries.
-        </p>
         <DetailField horizontal label="Final Loss" value={fmt(finalLossAmount, claim.currency)} />
         <DetailField
           horizontal

@@ -40,6 +40,15 @@ function lineTotals(journal: JournalEntryRecord) {
   );
 }
 
+function clientNames(journal: JournalEntryRecord) {
+  const names = new Set(
+    journal.lines
+      .map((line) => line.subledgerAccount?.name)
+      .filter((name): name is string => Boolean(name)),
+  );
+  return Array.from(names);
+}
+
 export function JournalEntriesTable() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -56,7 +65,8 @@ export function JournalEntriesTable() {
       (r) =>
         r.journalNumber.toLowerCase().includes(q) ||
         r.description.toLowerCase().includes(q) ||
-        r.transactionCurrency.toLowerCase().includes(q),
+        r.transactionCurrency.toLowerCase().includes(q) ||
+        clientNames(r).some((name) => name.toLowerCase().includes(q)),
     );
   }, [search, data]);
 
@@ -86,12 +96,25 @@ export function JournalEntriesTable() {
       {
         key: 'description',
         label: 'Description',
-        width: 'minmax(150px, 1fr)',
+        width: 'minmax(100px, 1fr)',
         render: (row) => (
           <span className="text-gray-700 text-sm" title={row.description}>
             {formatSourceEventDescription(row.description)}
           </span>
         ),
+      },
+      {
+        key: 'client',
+        label: 'Client',
+        width: 'minmax(120px, 1fr)',
+        render: (row) => {
+          const names = clientNames(row);
+          return (
+            <span className="text-gray-700 text-sm" title={names.join(', ')}>
+              {names.length > 0 ? names.join(', ') : '—'}
+            </span>
+          );
+        },
       },
       {
         key: 'transactionCurrency',
