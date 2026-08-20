@@ -14,8 +14,12 @@ import {
   useReverseClaimRecoveryReceipt,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
-import { fmtDate, fmt } from '@/lib/reinsurance/claimFormat';
-import { SETTLEMENT_STATUS_LABEL, SETTLEMENT_STATUS_VARIANT } from '@/lib/reinsurance/claimStatus';
+import {
+  fmtDate,
+  fmt,
+  OFFSET_CLAIM_RECEIPT_NOTE,
+  DIRECT_TO_CEDANT_RECEIPT_NOTE,
+} from '@/lib/reinsurance/claimFormat';
 import { useToastStore } from '@/store/toast.store';
 import {
   ConfirmPlacementClaimFinancialBankPayload,
@@ -56,6 +60,19 @@ const TYPE_VARIANT: Record<HistoryRowType, 'info' | 'success'> = {
   PAYABLE: 'info',
   RECEIVABLE: 'success',
 };
+
+/** Receivable rows only ever carry a Mode of Payment marker via `notes` (no dedicated backend
+ *  field yet — see RecordRecoveryReceiptModal). Payable rows still use the settlement's own
+ *  `settlementMethod`, since cedant settlements never went through that redesign. */
+function modeOfPaymentLabel(row: HistoryRow): string {
+  if (row.type === 'PAYABLE') {
+    return row.settlement?.settlementMethod?.replaceAll('_', ' ') ?? '—';
+  }
+  const notes = row.receipt?.notes;
+  if (notes === OFFSET_CLAIM_RECEIPT_NOTE) return 'Offset Claim';
+  if (notes === DIRECT_TO_CEDANT_RECEIPT_NOTE) return 'Direct to Cedant';
+  return 'To Broker';
+}
 
 /** Unified financial history for this claim, one timeline sorted by date: "Claim Payable" rows
  * are Broker → Cedant settlements, "Claim Receivable" rows are Reinsurer → Broker recovery
@@ -194,22 +211,19 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
       ),
     },
     {
-      key: 'status',
-      label: 'Status',
-      width: '130px',
+      key: 'modeOfPayment',
+      label: 'Mode of Payment',
+      width: '150px',
       render: (row) => (
-        <Badge
-          label={SETTLEMENT_STATUS_LABEL[row.status]}
-          variant={SETTLEMENT_STATUS_VARIANT[row.status]}
-        />
+        <span className="text-xs font-bold text-blue-900">{modeOfPaymentLabel(row)}</span>
       ),
     },
-    {
-      key: 'reference',
-      label: 'Reference',
-      width: 'minmax(120px, 1fr)',
-      render: (row) => <span className="text-gray-600">{row.reference ?? '—'}</span>,
-    },
+    // {
+    //   key: 'reference',
+    //   label: 'Reference',
+    //   width: 'minmax(120px, 1fr)',
+    //   render: (row) => <span className="text-gray-600">{row.reference ?? '—'}</span>,
+    // },
     {
       key: 'actions',
       label: 'Actions',

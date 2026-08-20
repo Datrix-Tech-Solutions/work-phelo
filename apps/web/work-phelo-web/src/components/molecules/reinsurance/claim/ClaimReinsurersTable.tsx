@@ -12,8 +12,7 @@ interface ClaimReinsurersTableProps {
   claimAmount?: number | null;
   isActualAmount?: boolean;
   currency?: string | null;
-  /** Allocation ids that already have a cash call — Send Mail is a one-shot action per
-   * reinsurer, so those rows collapse to a status label instead. */
+
   sentAllocationIds: Set<string>;
   onMail: (participant: PlacementParticipant) => void;
   onPreview: (participant: PlacementParticipant) => void;
@@ -29,10 +28,6 @@ type ClaimReinsurerRow = {
   createdAt: string | null;
 };
 
-/** Per-reinsurer claim share — real allocation rows once generated, otherwise an estimate
- * derived from accepted participants. This is also where a claim actually gets sent to a
- * reinsurer: Preview shows the debit note, Send Mail raises + issues their cash call. What they
- * pay back afterward is recorded directly against that cash call, in the Cash Calls tab. */
 export function ClaimReinsurersTable({
   participants,
   allocations,
@@ -123,17 +118,21 @@ export function ClaimReinsurersTable({
           if (!participant) {
             return <span className="text-xs text-gray-400">—</span>;
           }
-          if (sentAllocationIds.has(row.id)) {
-            return <span className="text-xs text-gray-400">Sent</span>;
+          if (!isActualAmount) {
+            return <span className="text-xs text-gray-400">Awaiting actual claim amount</span>;
           }
           return (
             <div className="flex items-center gap-2">
               <TableButton variant="blue" onClick={() => onPreview(participant)}>
                 Preview
               </TableButton>
-              <TableButton variant="green" onClick={() => onMail(participant)}>
-                Send Mail
-              </TableButton>
+              {sentAllocationIds.has(row.id) ? (
+                <span className="text-xs text-gray-400">Mail sent</span>
+              ) : (
+                <TableButton variant="green" onClick={() => onMail(participant)}>
+                  Send Mail
+                </TableButton>
+              )}
             </div>
           );
         },

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
-import { Facultative, PlacementParticipant } from '@/types/reinsurance';
+import { Facultative, PlacementClaimAllocation, PlacementParticipant } from '@/types/reinsurance';
 import { useReinsurers, useRiskTypes } from '@/hooks';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
@@ -30,6 +30,9 @@ interface ClaimDebitNoteModalProps {
   placement: Facultative;
   participant: PlacementParticipant;
   claimAmount?: number | null;
+  /** Confirmed-closing-snapshot allocation for this reinsurer, when one exists — carries the
+   * endorsement-adjusted share/amount, which can differ from the live participant record. */
+  allocation?: PlacementClaimAllocation;
   onPrint: () => void;
   onClose: () => void;
 }
@@ -39,6 +42,7 @@ export function ClaimDebitNoteModal({
   placement,
   participant,
   claimAmount,
+  allocation,
   onPrint,
   onClose,
 }: ClaimDebitNoteModalProps) {
@@ -62,8 +66,17 @@ export function ClaimDebitNoteModal({
 
   const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
-  const sharePercent = parseFloat(participant.sharePercent ?? '0');
-  const amountDue = claimAmount != null ? (sharePercent / 100) * claimAmount : null;
+  // Prefer the allocation — a confirmed-closing snapshot that already folds in any endorsement
+  // adjustments — over the live participant record, which can drift from what was actually
+  // allocated once an endorsement has since changed the reinsurer's share.
+  const sharePercent = allocation
+    ? parseFloat(allocation.signedLinePercent)
+    : parseFloat(participant.sharePercent ?? '0');
+  const amountDue = allocation
+    ? parseFloat(allocation.allocatedFinalLossAmount ?? allocation.allocatedEstimatedLossAmount)
+    : claimAmount != null
+      ? (sharePercent / 100) * claimAmount
+      : null;
 
   const afterContent = (
     <div

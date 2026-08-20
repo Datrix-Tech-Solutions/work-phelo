@@ -14,9 +14,15 @@ import {
   Facultative,
   FacultativeStatus,
   PlacementClaim,
+  PlacementClaimAllocation,
   PlacementClaimRecoveryPosition,
 } from '@/types/reinsurance';
-import { useFacultatives, recoveryPositionKey, useDeletePlacementClaim } from '@/hooks';
+import {
+  useFacultatives,
+  recoveryPositionKey,
+  allocationsKey,
+  useDeletePlacementClaim,
+} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
@@ -255,6 +261,23 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   });
   const isLoadingRecovery = isFinancialTab && recoveryQueries.some((q) => q.isLoading);
 
+  // recovery-position's own totalAllocated reads 0 from the backend, so the "every allocation
+  // cash-called" check below sums the allocations directly instead — same figure the Claim
+  // Allocations table's "Total Allocated Claim" bar uses.
+  const allocationQueries = useQueries({
+    queries: finalizedRows.map((row) => ({
+      queryKey: allocationsKey(row.placement.id, row.claim.id),
+      queryFn: async () => {
+        const res = await api.get(
+          `/operations/reinsurance/placements/${row.placement.id}/claims/${row.claim.id}/allocations`,
+        );
+        return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
+      },
+      enabled: isFinancialTab,
+    })),
+  });
+  const isLoadingAllocations = isFinancialTab && allocationQueries.some((q) => q.isLoading);
+
   const claimRows = useMemo<ClaimTableRow[]>(() => {
     if (tab === 'notification') {
       // Only claims still awaiting an actual amount — once finalLossAmount is set, the
@@ -268,17 +291,27 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     return finalizedRows
       .map((row, i): ClaimTableRow | null => {
         const position = recoveryQueries[i]?.data;
-        if (!position) return null;
+        const allocations = allocationQueries[i]?.data;
+        if (!position || !allocations) return null;
+        const totalAllocated = allocations.reduce(
+          (sum, a) =>
+            sum + parseFloat(a.allocatedFinalLossAmount ?? a.allocatedEstimatedLossAmount),
+          0,
+        );
         const totalCashCalled = parseFloat(position.recoveries.totalCashCalled);
         const totalOutstanding = parseFloat(position.recoveries.totalOutstanding);
         const totalConfirmed = parseFloat(position.recoveries.totalConfirmed);
         const totalReversed = parseFloat(position.recoveries.totalReversed);
-        const isFullyRecovered = totalCashCalled > 0 && totalOutstanding === 0;
+        // Fully recovered requires every allocation to have been cash-called (not just that
+        // whatever's been called is covered) — otherwise a reinsurer who was never sent a
+        // cash call would silently make the claim look closed.
+        const allAllocationsCalled = totalAllocated > 0 && totalCashCalled >= totalAllocated - 0.01;
+        const isFullyRecovered = allAllocationsCalled && totalOutstanding <= 0.01;
         if (tab === 'closed' ? !isFullyRecovered : isFullyRecovered) return null;
         return { ...row, recoveredAmount: totalConfirmed - totalReversed };
       })
       .filter((row): row is ClaimTableRow => row !== null);
-  }, [tab, closingRows, claimQueries, finalizedRows, recoveryQueries]);
+  }, [tab, closingRows, claimQueries, finalizedRows, recoveryQueries, allocationQueries]);
 
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -329,7 +362,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
       <DataTable
         columns={columns}
         data={paged}
-        isLoading={isLoading || isLoadingClaims || isLoadingRecovery}
+        isLoading={isLoading || isLoadingClaims || isLoadingRecovery || isLoadingAllocations}
         searchPlaceholder="Search claims…"
         searchValue={search}
         onRowClick={(row) =>
