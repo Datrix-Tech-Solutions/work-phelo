@@ -46,6 +46,9 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
   const mailAllocation = mailTarget
     ? allocations.find((a) => a.counterpartyId === mailTarget.counterpartyId)
     : undefined;
+  const debitNoteAllocation = debitNoteTarget
+    ? allocations.find((a) => a.counterpartyId === debitNoteTarget.counterpartyId)
+    : undefined;
 
   const reinsurerEmails = useMemo<Record<string, string[]>>(
     () =>
@@ -127,6 +130,7 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
           placement={placement}
           participant={debitNoteTarget}
           claimAmount={claimAmount}
+          allocation={debitNoteAllocation}
           onPrint={() => {}}
           onClose={() => setDebitNoteTarget(null)}
         />

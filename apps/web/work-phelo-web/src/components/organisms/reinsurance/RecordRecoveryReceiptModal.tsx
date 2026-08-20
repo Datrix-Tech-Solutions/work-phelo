@@ -8,13 +8,23 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { useCashAccounts, useCreateClaimRecoveryReceipt, RecoveryRow } from '@/hooks';
+import {
+  useCashAccounts,
+  useCreateClaimRecoveryReceipt,
+  useCurrencyOptions,
+  RecoveryRow,
+} from '@/hooks';
 import { DetailField } from '@/components/atoms/DetailField';
 import { extractError } from '@/lib/extractError';
 import { cardClass } from '@/lib/utils';
 import { useToastStore } from '@/store/toast.store';
+import {
+  OFFSET_CLAIM_RECEIPT_NOTE,
+  DIRECT_TO_CEDANT_RECEIPT_NOTE,
+} from '@/lib/reinsurance/claimFormat';
 
 interface RecordPaymentValues {
+  mode: string;
   paymentType: string;
   chequeNumber: string;
   valueDate: string;
@@ -22,9 +32,13 @@ interface RecordPaymentValues {
   amount: string;
   bankName: string;
   currency: string;
+  /** Conversion rate into the cash call's own currency — only used when `currency` differs
+   * from it, on the Direct to Cedant path. */
+  rate: string;
 }
 
 const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
+  mode: '',
   paymentType: '',
   chequeNumber: '',
   valueDate: '',
@@ -32,24 +46,24 @@ const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
   amount: '',
   bankName: '',
   currency: '',
+  rate: '',
 };
+
+const MODE_OPTIONS = [
+  { value: 'broker', label: 'To Broker' },
+  { value: 'cedant', label: 'Direct to Cedant' },
+];
 
 const PAYMENT_TYPE_OPTIONS = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'cheque', label: 'Cheque' },
+  { value: 'offset_claim', label: 'Offset Claim' },
 ];
 
 function fmtAmount(val: number, currency: string) {
   return `${currency} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/**
- * Record a reinsurer recovery receipt against an issued cash call. Receipt history (with
- * bank-confirm / reverse) lives in the claim's History tab (`ClaimFinancialHistoryTable`)
- * now, not here — this modal is just the record-payment form. Shared by the standalone
- * cross-placement Recoveries page and the claim detail page's Cash Calls tab — both just need a
- * `RecoveryRow`-shaped row.
- */
 export function RecordRecoveryReceiptModal({
   row,
   onClose,
@@ -62,17 +76,29 @@ export function RecordRecoveryReceiptModal({
     control,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
-  } = useForm<RecordPaymentValues>({ defaultValues: RECORD_PAYMENT_DEFAULTS });
+  } = useForm<RecordPaymentValues>({
+    defaultValues: RECORD_PAYMENT_DEFAULTS,
+    shouldUnregister: true,
+  });
 
   const createReceipt = useCreateClaimRecoveryReceipt();
   const addToast = useToastStore((s) => s.addToast);
 
+  const mode = useWatch({ control, name: 'mode' });
   const paymentType = useWatch({ control, name: 'paymentType' });
+  const directCurrency = useWatch({ control, name: 'currency' });
+  const { data: currencyOptions = [] } = useCurrencyOptions();
+  const isDirectEntry = mode === 'cedant' || paymentType === 'offset_claim';
 
-  // Bank Name picks from Accounting's configured cash/bank accounts for bank
-  // transfers, when any exist; falls back to plain text otherwise. Cheques always
-  // use plain text — a cheque's drawee bank isn't necessarily one of ours.
+  const showRate =
+    isDirectEntry && !!directCurrency && !!row?.currency && directCurrency !== row.currency;
+
+  useEffect(() => {
+    if (!showRate) setValue('rate', '');
+  }, [showRate, setValue]);
+
   const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts({
     isActive: true,
   });
@@ -99,10 +125,38 @@ export function RecordRecoveryReceiptModal({
   };
 
   const onSubmit = async (values: RecordPaymentValues) => {
-    if (!row) return;
+    if (!row) {
+      addToast({ message: 'No cash call selected — please reopen this panel.', type: 'error' });
+      return;
+    }
     try {
-      const resolvedDate = values.paymentType === 'cheque' ? values.valueDate : values.paymentDate;
       const amount = Math.round((parseFloat(values.amount) || 0) * 100) / 100;
+
+      const isDirectEntry = values.mode === 'cedant' || values.paymentType === 'offset_claim';
+      if (isDirectEntry) {
+        const needsConversion = values.currency !== row.currency;
+        const convertedAmount = needsConversion
+          ? Math.round(amount * (parseFloat(values.rate) || 1) * 100) / 100
+          : amount;
+
+        await createReceipt.mutateAsync({
+          placementId: row.placementId,
+          claimId: row.claimId,
+          cashCallId: row.cashCallId,
+          payload: {
+            amount: convertedAmount,
+            currency: row.currency,
+            paymentDate: new Date(values.paymentDate).toISOString(),
+            notes:
+              values.mode === 'cedant' ? DIRECT_TO_CEDANT_RECEIPT_NOTE : OFFSET_CLAIM_RECEIPT_NOTE,
+          },
+        });
+        addToast({ message: 'Recovery receipt recorded', type: 'success' });
+        handleClose();
+        return;
+      }
+
+      const resolvedDate = values.paymentType === 'cheque' ? values.valueDate : values.paymentDate;
 
       const refParts: string[] = [];
       if (values.chequeNumber) refParts.push(values.chequeNumber);
@@ -127,41 +181,12 @@ export function RecordRecoveryReceiptModal({
     }
   };
 
-  const chequeBankNameField = (
-    <FormField
-      label="Bank Name"
-      registration={register('bankName', { required: 'Bank name is required' })}
-      placeholder="Enter bank name..."
-      error={errors.bankName}
-    />
-  );
-
-  const bankTransferBankNameField = showCashAccountSelect ? (
-    <Controller
-      name="bankName"
-      control={control}
-      rules={{ required: 'Bank name is required' }}
-      render={({ field }) => (
-        <SearchSelect
-          label="Bank Name"
-          placeholder="Select cash/bank account..."
-          options={cashAccountOptions}
-          value={field.value}
-          onChange={field.onChange}
-          error={errors.bankName?.message}
-          size="sm"
-        />
-      )}
-    />
-  ) : (
-    <FormField
-      label="Bank Name"
-      registration={register('bankName', { required: 'Bank name is required' })}
-      placeholder="Enter bank name..."
-      error={errors.bankName}
-    />
-  );
-
+  // Bank Name's register()/Controller calls are inlined directly inside each conditional block
+  // below (like chequeNumber/valueDate already are) rather than factored into always-computed
+  // consts — react-hook-form doesn't reliably pick up changed `rules` on a field that's already
+  // registered from an earlier render, so the only solid way to make a field's requirement
+  // conditional is to only ever call register()/Controller for it at all when its branch is
+  // actually active.
   const chequeFields = paymentType === 'cheque' && (
     <>
       <div className="grid grid-cols-5 gap-4">
@@ -191,7 +216,12 @@ export function RecordRecoveryReceiptModal({
         </div>
       </div>
 
-      {chequeBankNameField}
+      <FormField
+        label="Bank Name"
+        registration={register('bankName', { required: 'Bank name is required' })}
+        placeholder="Enter bank name..."
+        error={errors.bankName}
+      />
 
       <Controller
         name="amount"
@@ -226,7 +256,31 @@ export function RecordRecoveryReceiptModal({
         )}
       />
 
-      {bankTransferBankNameField}
+      {showCashAccountSelect ? (
+        <Controller
+          name="bankName"
+          control={control}
+          rules={{ required: 'Bank name is required' }}
+          render={({ field }) => (
+            <SearchSelect
+              label="Bank Name"
+              placeholder="Select cash/bank account..."
+              options={cashAccountOptions}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.bankName?.message}
+              size="sm"
+            />
+          )}
+        />
+      ) : (
+        <FormField
+          label="Bank Name"
+          registration={register('bankName', { required: 'Bank name is required' })}
+          placeholder="Enter bank name..."
+          error={errors.bankName}
+        />
+      )}
 
       <Controller
         name="amount"
@@ -244,6 +298,72 @@ export function RecordRecoveryReceiptModal({
     </>
   );
 
+  const directEntryFields = isDirectEntry && (
+    <>
+      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
+        <Controller
+          name="currency"
+          control={control}
+          rules={{ required: 'Currency is required' }}
+          render={({ field }) => (
+            <SearchSelect
+              label="Currency"
+              placeholder="Select currency..."
+              options={currencyOptions}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.currency?.message}
+              size="sm"
+            />
+          )}
+        />
+        {showRate && (
+          <Controller
+            name="rate"
+            control={control}
+            rules={{ min: { value: 0.000001, message: 'Rate is required' } }}
+            render={({ field }) => (
+              <NumberField
+                label={`Rate to ${row?.currency ?? ''}`}
+                value={field.value ? Number(field.value) : 0}
+                onChange={(n) => field.onChange(String(n))}
+                error={errors.rate?.message}
+                placeholder="0.00"
+              />
+            )}
+          />
+        )}
+      </div>
+      <Controller
+        name="amount"
+        control={control}
+        rules={{ required: 'Amount is required' }}
+        render={({ field }) => (
+          <NumberField
+            label="Amount"
+            value={field.value ? Number(field.value) : 0}
+            onChange={(n) => field.onChange(n ? String(n) : '')}
+            error={errors.amount?.message}
+          />
+        )}
+      />
+      <Controller
+        name="paymentDate"
+        control={control}
+        rules={{ required: 'Date of payment is required' }}
+        render={({ field }) => (
+          <DatePicker
+            label="Date of Payment"
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.paymentDate?.message}
+            size="sm"
+          />
+        )}
+      />
+    </>
+  );
+
   return (
     <SidePanel
       isOpen={!!row}
@@ -255,7 +375,24 @@ export function RecordRecoveryReceiptModal({
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" form="record-recovery-receipt-form" isLoading={isSubmitting}>
+          <Button
+            type="button"
+            onClick={() => {
+              handleSubmit(onSubmit, (formErrors) => {
+                // A field can fail validation while being registered from a branch that's no
+                // longer rendered, so its own error text has nowhere to show. Surface it here
+                // instead of letting the click silently do nothing.
+                const [firstError] = Object.values(formErrors);
+                addToast({
+                  message: firstError?.message ?? 'Please check the form and try again.',
+                  type: 'error',
+                });
+              })().catch((error) => {
+                addToast({ message: extractError(error), type: 'error' });
+              });
+            }}
+            isLoading={isSubmitting}
+          >
             Record Recovery
           </Button>
         </div>
@@ -298,24 +435,44 @@ export function RecordRecoveryReceiptModal({
         className="flex flex-col gap-5 mt-5"
       >
         <Controller
-          name="paymentType"
+          name="mode"
           control={control}
-          rules={{ required: 'Payment type is required' }}
+          rules={{ required: 'Mode of payment is required' }}
           render={({ field }) => (
             <SearchSelect
-              label="Payment Type"
-              placeholder="Select payment type..."
-              options={PAYMENT_TYPE_OPTIONS}
+              label="Mode of Payment"
+              placeholder="Select mode of payment..."
+              options={MODE_OPTIONS}
               value={field.value}
               onChange={field.onChange}
-              error={errors.paymentType?.message}
+              error={errors.mode?.message}
               size="sm"
             />
           )}
         />
 
+        {mode === 'broker' && (
+          <Controller
+            name="paymentType"
+            control={control}
+            rules={{ required: 'Payment type is required' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Payment Type"
+                placeholder="Select payment type..."
+                options={PAYMENT_TYPE_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.paymentType?.message}
+                size="sm"
+              />
+            )}
+          />
+        )}
+
         {chequeFields}
         {bankFields}
+        {directEntryFields}
       </form>
     </SidePanel>
   );

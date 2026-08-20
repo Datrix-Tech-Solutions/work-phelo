@@ -6,13 +6,22 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { RecordRecoveryReceiptModal } from '@/components/organisms/reinsurance/RecordRecoveryReceiptModal';
 import { useClaimCashCalls, useClaimRecoveryPosition, RecoveryRow } from '@/hooks';
-import { fmt, fmtDate } from '@/lib/reinsurance/claimFormat';
+import { fmt, OFFSET_CLAIM_RECEIPT_NOTE } from '@/lib/reinsurance/claimFormat';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { Facultative, PlacementClaim, PlacementClaimCashCall } from '@/types/reinsurance';
 
 interface ClaimCashCallsTableProps {
   placement: Facultative;
   claim: PlacementClaim;
+}
+
+const MS_PER_HOUR = 1000 * 60 * 60;
+
+function formatAging(ms: number): string {
+  const totalHours = Math.floor(ms / MS_PER_HOUR);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return days > 0 ? `${days}d ${hours}hr` : `${hours}hr`;
 }
 
 export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTableProps) {
@@ -124,21 +133,53 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
       {
         key: 'status',
         label: 'Status',
-        width: '80px',
-        render: (row) => (
-          <Badge
-            label={row.status.charAt(0) + row.status.slice(1).toLowerCase()}
-            variant={
-              row.status === 'VOID' ? 'danger' : row.status === 'ISSUED' ? 'warning' : 'neutral'
-            }
-          />
-        ),
+        width: '120px',
+        render: (row) => {
+          if (row.status === 'VOID') return <Badge label="Void" variant="danger" />;
+          if (row.status === 'DRAFT') return <Badge label="Draft" variant="neutral" />;
+
+          const perCashCall = perCashCallFor(row);
+
+          const hasOffsetReceipt = (perCashCall?.receipts ?? []).some(
+            (receipt) => receipt.notes === OFFSET_CLAIM_RECEIPT_NOTE,
+          );
+
+          const recoveryStatus = perCashCall?.recoveryStatus;
+          const statusBadge =
+            recoveryStatus === 'FULLY_RECOVERED' ? (
+              <Badge label="Paid" variant="success" />
+            ) : recoveryStatus === 'PARTIALLY_RECOVERED' ? (
+              <Badge label="Part Payment" variant="warning" />
+            ) : (
+              <Badge label="Outstanding" variant="neutral" />
+            );
+
+          return (
+            <div className="flex flex-col items-start gap-1">
+              {statusBadge}
+              {hasOffsetReceipt && <span className="text-xs font-bold text-blue-900">Offset</span>}
+            </div>
+          );
+        },
       },
       {
-        key: 'issuedAt',
-        label: 'Issued',
-        width: '80px',
-        render: (row) => <span className="text-gray-600">{fmtDate(row.issuedAt)}</span>,
+        key: 'aging',
+        label: 'Aging',
+        width: '100px',
+        render: (row) => {
+          if (!row.issuedAt) return <span className="text-xs text-gray-400">—</span>;
+          const recoveryStatus = perCashCallFor(row)?.recoveryStatus;
+
+          if (
+            row.status === 'DRAFT' ||
+            row.status === 'VOID' ||
+            recoveryStatus === 'FULLY_RECOVERED'
+          ) {
+            return <span className="text-xs text-gray-400">—</span>;
+          }
+          const elapsedMs = Date.now() - new Date(row.issuedAt).getTime();
+          return <span className="text-gray-600">{formatAging(elapsedMs)}</span>;
+        },
       },
       {
         key: 'actions',
@@ -150,8 +191,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
           const outstanding = recovery?.outstandingAmount ?? 0;
           const perCashCall = perCashCallFor(row);
           const recorded = parseFloat(perCashCall?.recordedAmount ?? '0');
-          // A RECORDED (not yet bank-confirmed) receipt already covers what's left — recording
-          // more would over-recover, so wait for that one to clear or get reversed.
+
           const fullyPending = outstanding > 0.0001 && recorded >= outstanding - 0.0001;
           const canRecord =
             row.status === 'ISSUED' && !!recovery && outstanding > 0.0001 && !fullyPending;
