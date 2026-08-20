@@ -32,6 +32,10 @@ interface SearchSelectProps {
   /** Label for that "All" option. Defaults to "All {placeholder}" (e.g. "All Currency") so the
    *  field names its own dimension once collapsed, rather than showing a bare, ambiguous "All". */
   allLabel?: string;
+  /** Rendered in place of the plain "No results found" message when the filtered list is
+   *  empty — lets callers offer a quick action (e.g. "No account found — Create account").
+   *  Receives the typed query and a `close` callback to dismiss the dropdown afterwards. */
+  emptyState?: (ctx: { query: string; close: () => void }) => React.ReactNode;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -52,6 +56,7 @@ export function SearchSelect({
   rightSlot,
   showAllOption = false,
   allLabel,
+  emptyState,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -312,7 +317,17 @@ export function SearchSelect({
                 style={{ maxHeight: Math.min(208, dropdownPos.maxHeight) }}
               >
                 {filtered.length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
+                  emptyState ? (
+                    emptyState({
+                      query,
+                      close: () => {
+                        closeDropdown();
+                        setQuery('');
+                      },
+                    })
+                  ) : (
+                    <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
+                  )
                 ) : (
                   filtered.map((opt, idx) => (
                     <button
