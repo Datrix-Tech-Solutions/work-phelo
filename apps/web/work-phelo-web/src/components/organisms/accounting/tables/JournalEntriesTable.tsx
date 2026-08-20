@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { JournalEntryRecord, JournalRecordStatus } from '@/types/accounting';
@@ -9,6 +8,7 @@ import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog
 import { formatJournalNumber } from '@/lib/formatters';
 import { useJournals } from '@/hooks';
 import { JournalDetailPanel } from '@/components/organisms/accounting/panels/JournalDetailPanel';
+import { NewJournalEntryForm } from '@/components/organisms/accounting/forms/NewJournalEntryForm';
 
 const PAGE_SIZE = 10;
 
@@ -50,11 +50,10 @@ function clientNames(journal: JournalEntryRecord) {
 }
 
 export function JournalEntriesTable() {
-  const router = useRouter();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<JournalEntryRecord | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const { data = [], isLoading } = useJournals();
 
@@ -172,7 +171,7 @@ export function JournalEntriesTable() {
         }}
         actionButton={{
           label: 'New Entry',
-          onClick: () => router.push(`/${tenantSlug}/accounting/journalentry/new`),
+          onClick: () => setIsCreateOpen(true),
         }}
         onRowClick={(row) => setDetailTarget(row)}
         emptyMessage="No journal entries found"
@@ -183,6 +182,12 @@ export function JournalEntriesTable() {
       />
 
       <JournalDetailPanel journal={detailTarget} onClose={() => setDetailTarget(null)} />
+
+      <NewJournalEntryForm
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSaved={() => setIsCreateOpen(false)}
+      />
     </>
   );
 }

@@ -192,6 +192,9 @@ export interface AccountCategoryDefinition {
 
 export interface JournalLine {
   targetAccount: string;
+  /** Required when targetAccount is a control account (i.e. a GL account that subledger
+   *  accounts post through) — the backend rejects control-account lines without one. */
+  subledgerAccountId: string;
   description: string;
   debit: number | '';
   credit: number | '';
@@ -214,7 +217,10 @@ export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   exchangeRate: '',
   reference: '',
   description: '',
-  lines: [{ targetAccount: '', description: '', debit: '', credit: '' }],
+  lines: [
+    { targetAccount: '', subledgerAccountId: '', description: '', debit: '', credit: '' },
+    { targetAccount: '', subledgerAccountId: '', description: '', debit: '', credit: '' },
+  ],
 };
 
 export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED';

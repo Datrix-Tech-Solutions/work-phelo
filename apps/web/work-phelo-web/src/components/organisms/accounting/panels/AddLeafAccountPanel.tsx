@@ -6,7 +6,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { GLAccountCategory } from '@/types/accounting';
+import { GLAccount, GLAccountCategory } from '@/types/accounting';
 import { useAccountClassifications, useAccountGroups, useCreateGLAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -14,6 +14,10 @@ import { extractError } from '@/lib/extractError';
 interface AddLeafAccountPanelProps {
   isOpen: boolean;
   onClose: () => void;
+
+  initialName?: string;
+
+  onCreated?: (account: GLAccount) => void;
 }
 
 type FormValues = {
@@ -40,7 +44,12 @@ const TYPE_OPTIONS: SearchSelectOption[] = [
   { value: 'EXPENSE', label: 'Expense' },
 ];
 
-export function AddLeafAccountPanel({ isOpen, onClose }: AddLeafAccountPanelProps) {
+export function AddLeafAccountPanel({
+  isOpen,
+  onClose,
+  initialName,
+  onCreated,
+}: AddLeafAccountPanelProps) {
   const toast = useToast();
   const { mutateAsync: createAccount, isPending } = useCreateGLAccount();
 
@@ -52,6 +61,11 @@ export function AddLeafAccountPanel({ isOpen, onClose }: AddLeafAccountPanelProp
     setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
+
+  // Seed the name from whatever the caller had already typed each time the panel opens.
+  useEffect(() => {
+    if (isOpen) reset({ ...DEFAULTS, accountName: initialName ?? '' });
+  }, [isOpen, initialName, reset]);
 
   const accountType = useWatch({ control, name: 'accountType' });
   const classificationId = useWatch({ control, name: 'classificationId' });
@@ -84,12 +98,13 @@ export function AddLeafAccountPanel({ isOpen, onClose }: AddLeafAccountPanelProp
 
   const onSubmit = async (data: FormValues) => {
     try {
-      await createAccount({
+      const account = await createAccount({
         code: data.accountCode,
         name: data.accountName,
         accountGroupId: data.parentAccountId,
       });
       toast.success('Account created successfully');
+      onCreated?.(account);
       handleClose();
     } catch (err) {
       toast.error(extractError(err, 'Failed to create account'));

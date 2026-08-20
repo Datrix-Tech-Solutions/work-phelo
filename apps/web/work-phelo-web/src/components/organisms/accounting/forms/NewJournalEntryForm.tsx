@@ -1,28 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { JournalEntryDetailsSection } from '@/components/molecules/accounting/JournalEntryDetailsSection';
 import { JournalLinesSection } from '@/components/molecules/accounting/JournalLinesSection';
 import { JournalEntryFormValues, JOURNAL_ENTRY_DEFAULTS } from '@/types/accounting';
-// import { Icons } from '@/components/atoms/icons';
 import { cardClass } from '@/lib/utils';
 import { useCreateJournal } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
 interface NewJournalEntryFormProps {
-  onCancel: () => void;
+  isOpen: boolean;
+  onClose: () => void;
   onSaved: () => void;
 }
 
-export function NewJournalEntryForm({ onCancel, onSaved }: NewJournalEntryFormProps) {
+export function NewJournalEntryForm({ isOpen, onClose, onSaved }: NewJournalEntryFormProps) {
   const form = useForm<JournalEntryFormValues>({ defaultValues: JOURNAL_ENTRY_DEFAULTS });
   const [showCancelModal, setShowCancelModal] = useState(false);
   const toast = useToast();
   const { mutateAsync: createJournal, isPending } = useCreateJournal();
+
+  // Start each fresh open with a clean form
+  useEffect(() => {
+    if (isOpen) form.reset(JOURNAL_ENTRY_DEFAULTS);
+  }, [isOpen, form]);
+
+  const handleCancel = () => {
+    setShowCancelModal(false);
+    onClose();
+  };
 
   const onSubmit = async (data: JournalEntryFormValues) => {
     if (!data.fiscalPeriodId) {
@@ -52,6 +63,7 @@ export function NewJournalEntryForm({ onCancel, onSaved }: NewJournalEntryFormPr
         description: data.description,
         lines: lines.map((l) => ({
           glAccountId: l.targetAccount,
+          subledgerAccountId: l.subledgerAccountId || undefined,
           description: l.description || undefined,
           debit: Number(l.debit) || 0,
           credit: Number(l.credit) || 0,
@@ -66,41 +78,40 @@ export function NewJournalEntryForm({ onCancel, onSaved }: NewJournalEntryFormPr
 
   return (
     <>
-      <div className="flex flex-col gap-6">
-        {/* Entry details card */}
-        <div className={cardClass('p-6')}>
-          <JournalEntryDetailsSection form={form} />
-        </div>
+      <SidePanel
+        isOpen={isOpen}
+        onClose={() => setShowCancelModal(true)}
+        title="New Journal Entry"
+        description="Record a manual journal entry"
+        width="sm:w-[1020px] sm:max-w-[100vw]"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isPending}>
+              Cancel
+            </Button>
+            {/* No backend workflow status for "review" yet (JournalStatus is only
+                DRAFT/POSTED/REVERSED) — this creates the same draft as "Save as Draft". */}
+            <Button
+              variant="primary"
+              isLoading={isPending}
+              loadingText="Saving…"
+              onClick={form.handleSubmit(onSubmit)}
+            >
+              Submit for Review
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-6">
+          {/* Entry details card */}
+          <div className={cardClass('p-6')}>
+            <JournalEntryDetailsSection form={form} />
+          </div>
 
-        {/* Journal lines */}
-        <JournalLinesSection form={form} />
-
-        {/* Action row */}
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isPending}>
-            Cancel
-          </Button>
-          {/* <Button
-            variant="secondary"
-            icon={<Icons.Save className="w-4 h-4" />}
-            isLoading={isPending}
-            loadingText="Saving…"
-            onClick={form.handleSubmit(onSubmit)}
-          >
-            Save as Draft
-          </Button> */}
-          {/* No backend workflow status for "review" yet (JournalStatus is only
-              DRAFT/POSTED/REVERSED) — this creates the same draft as "Save as Draft". */}
-          <Button
-            variant="primary"
-            isLoading={isPending}
-            loadingText="Saving…"
-            onClick={form.handleSubmit(onSubmit)}
-          >
-            Submit for Review
-          </Button>
+          {/* Journal lines */}
+          <JournalLinesSection form={form} />
         </div>
-      </div>
+      </SidePanel>
 
       <Modal
         isOpen={showCancelModal}
@@ -112,7 +123,7 @@ export function NewJournalEntryForm({ onCancel, onSaved }: NewJournalEntryFormPr
             <Button variant="outline" onClick={() => setShowCancelModal(false)}>
               Go Back
             </Button>
-            <Button variant="danger" onClick={onCancel}>
+            <Button variant="danger" onClick={handleCancel}>
               Yes, Cancel
             </Button>
           </>
