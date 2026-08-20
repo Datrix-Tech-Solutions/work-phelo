@@ -94,6 +94,29 @@ describe('ProxyController Reinsurance foundation', () => {
     );
   });
 
+  it('strips caller-supplied forwarded authorization context headers', async () => {
+    const controller = new ProxyController();
+    const request = {
+      path: '/api/v1/operations/reinsurance/placements',
+      headers: {
+        'x-user-permissions': JSON.stringify([
+          'operations.reinsurance.settings:EDIT',
+        ]),
+        'x-gateway-permissions-signature': 'forged',
+      },
+      cookies: {},
+      method: 'GET',
+    };
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+
+    await controller.proxy(request as never, { status } as never);
+
+    expect(request.headers['x-user-permissions']).toBeUndefined();
+    expect(request.headers['x-gateway-permissions-signature']).toBeUndefined();
+    expect(status).toHaveBeenCalledWith(401);
+  });
+
   it('makes dev Swagger docs public for deployed services', () => {
     const controller = new ProxyController() as unknown as {
       isPublicPath(path: string): boolean;
