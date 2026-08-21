@@ -252,7 +252,7 @@ export function MakeClaimFormFields({
             validate: (value) => {
               const amount = parseFloat(value) * conversionRate;
               if (effectiveSumInsured != null && amount > effectiveSumInsured) {
-                return `Claim amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
+                return `Claim amount cannot exceed the sum insured (${effectiveSumInsured.toLocaleString()})`;
               }
               return true;
             },
