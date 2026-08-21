@@ -69,7 +69,7 @@ export function TableButton({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setTooltipPos(null)}
         className={cn(
-          'text-xs font-medium border hover:text-white hover:scale-[1.2] active:scale-[0.97] rounded px-2 py-1 transition-all disabled:opacity-50 disabled:cursor-wait disabled:hover:scale-100',
+          'text-xs font-medium border hover:text-white hover:scale-[1.2] active:scale-[0.97] rounded px-2 py-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100',
           VARIANT_CLASSES[variant],
           className,
         )}

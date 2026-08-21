@@ -248,18 +248,18 @@ export function MakeClaimFormFields({
           name="estimatedLossAmount"
           control={control}
           rules={{
-            min: { value: 0.01, message: 'Estimated loss amount is required' },
+            min: { value: 0.01, message: 'Claim amount is required' },
             validate: (value) => {
               const amount = parseFloat(value) * conversionRate;
               if (effectiveSumInsured != null && amount > effectiveSumInsured) {
-                return `Estimated loss amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
+                return `Claim amount cannot exceed the sum insured (${effectiveSumInsured.toLocaleString()})`;
               }
               return true;
             },
           }}
           render={({ field }) => (
             <NumberField
-              label="Estimated Loss Amount"
+              label="Claim Amount"
               value={field.value ? Number(field.value) : 0}
               onChange={(n) => field.onChange(String(n))}
               error={errors.estimatedLossAmount?.message}

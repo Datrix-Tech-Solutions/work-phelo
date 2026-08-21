@@ -8,6 +8,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClaimAllocationStatus,
   PlacementClaimStatus,
+  PlacementType,
   Prisma,
 } from '../../../prisma/generated/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -20,6 +21,12 @@ import { PlacementClaimFinancialCloseReadinessService } from './close/financial-
 import { PlacementEffectivePositionService } from '../placement-effective-position.service';
 import { PlacementEffectiveViewService } from '../placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
+
+/** Offer-type code used in the claim number prefix (CLM{code}-yymmdd-XXXX). Only
+ *  FACULTATIVE exists today — extend this when other placement types get claims. */
+const PLACEMENT_TYPE_CODE: Record<PlacementType, string> = {
+  FACULTATIVE: 'FAC',
+};
 
 const claimAllocationInclude = {
   counterparty: {
@@ -109,7 +116,7 @@ export class PlacementClaimsService {
       const claimNumber = await this.nextClaimNumber(
         tx,
         user.tenantId,
-        placementId,
+        placement.placementType,
       );
       const finalLossAmount =
         dto.finalLossAmount === undefined ? null : dto.finalLossAmount;
@@ -331,6 +338,7 @@ export class PlacementClaimsService {
       select: {
         id: true,
         currency: true,
+        placementType: true,
       },
     });
     if (!placement) throw new NotFoundException('Placement not found');
@@ -344,19 +352,25 @@ export class PlacementClaimsService {
     await this.findPlacement(tenantId, placementId);
   }
 
+  /** CLM{offer type code}-yymmdd-XXXX, e.g. CLMFAC-260821-0001 — offer type from the
+   *  placement's own type, date is when the claim is being recorded (not the loss date,
+   *  which the user enters and could be well in the past), and XXXX is a lifetime count of
+   *  every claim ever created for the tenant (never resets, not scoped per placement — a
+   *  claim number is unique tenant-wide now, see the claimNumber unique constraint).
+   *  Claims created before this scheme keep their old CLM-XXX numbers untouched. */
   private async nextClaimNumber(
     tx: Prisma.TransactionClient,
     tenantId: string,
-    placementId: string,
+    placementType: PlacementType,
   ): Promise<string> {
-    const count = await tx.placementClaim.count({
-      where: {
-        tenantId,
-        placementId,
-        claimNumber: { startsWith: 'CLM-' },
-      },
-    });
-    return `CLM-${String(count + 1).padStart(3, '0')}`;
+    const count = await tx.placementClaim.count({ where: { tenantId } });
+    const now = new Date();
+    const yy = String(now.getFullYear() % 100).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `CLM${PLACEMENT_TYPE_CODE[placementType]}-${yy}${mm}${dd}-${String(
+      count + 1,
+    ).padStart(4, '0')}`;
   }
 
   private assertStatusTransition(

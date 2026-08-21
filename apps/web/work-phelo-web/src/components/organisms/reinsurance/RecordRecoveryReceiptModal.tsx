@@ -11,6 +11,7 @@ import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelec
 import {
   useCashAccounts,
   useCreateClaimRecoveryReceipt,
+  useConfirmClaimRecoveryReceiptBank,
   useCurrencyOptions,
   RecoveryRow,
 } from '@/hooks';
@@ -22,6 +23,7 @@ import {
   OFFSET_CLAIM_RECEIPT_NOTE,
   DIRECT_TO_CEDANT_RECEIPT_NOTE,
 } from '@/lib/reinsurance/claimFormat';
+import { PlacementSettlementMethod } from '@/types/reinsurance';
 
 interface RecordPaymentValues {
   mode: string;
@@ -84,6 +86,7 @@ export function RecordRecoveryReceiptModal({
   });
 
   const createReceipt = useCreateClaimRecoveryReceipt();
+  const confirmReceiptBank = useConfirmClaimRecoveryReceiptBank();
   const addToast = useToastStore((s) => s.addToast);
 
   const mode = useWatch({ control, name: 'mode' });
@@ -131,15 +134,27 @@ export function RecordRecoveryReceiptModal({
     }
     try {
       const amount = Math.round((parseFloat(values.amount) || 0) * 100) / 100;
-
       const isDirectEntry = values.mode === 'cedant' || values.paymentType === 'offset_claim';
+
+      // Every branch below picks a settlementMethod (and, where needed, notes) that already
+      // satisfies the bank-confirm endpoint's conditional requirements using data this form
+      // already collects — a reference from Create for Cheque/Bank Transfer, or a method
+      // (Other/Internal Offset) that doesn't need one — so the receipt can be confirmed in the
+      // same action instead of needing a separate trip to the History tab.
+      let confirmedAt: string;
+      let settlementMethod: PlacementSettlementMethod;
+      let confirmNotes: string | undefined;
+      let newReceipt;
+
       if (isDirectEntry) {
         const needsConversion = values.currency !== row.currency;
         const convertedAmount = needsConversion
           ? Math.round(amount * (parseFloat(values.rate) || 1) * 100) / 100
           : amount;
+        const notes =
+          values.mode === 'cedant' ? DIRECT_TO_CEDANT_RECEIPT_NOTE : OFFSET_CLAIM_RECEIPT_NOTE;
 
-        await createReceipt.mutateAsync({
+        newReceipt = await createReceipt.mutateAsync({
           placementId: row.placementId,
           claimId: row.claimId,
           cashCallId: row.cashCallId,
@@ -147,34 +162,56 @@ export function RecordRecoveryReceiptModal({
             amount: convertedAmount,
             currency: row.currency,
             paymentDate: new Date(values.paymentDate).toISOString(),
-            notes:
-              values.mode === 'cedant' ? DIRECT_TO_CEDANT_RECEIPT_NOTE : OFFSET_CLAIM_RECEIPT_NOTE,
+            notes,
           },
         });
-        addToast({ message: 'Recovery receipt recorded', type: 'success' });
-        handleClose();
-        return;
+        confirmedAt = new Date(values.paymentDate).toISOString();
+        // OTHER needs a reference or notes — Direct to Cedant has no reference, so pass the
+        // same notes again (the confirm check reads its own request's notes, not the
+        // receipt's stored ones). Internal Offset needs neither.
+        settlementMethod = values.mode === 'cedant' ? 'OTHER' : 'INTERNAL_OFFSET';
+        confirmNotes = values.mode === 'cedant' ? notes : undefined;
+      } else {
+        const resolvedDate =
+          values.paymentType === 'cheque' ? values.valueDate : values.paymentDate;
+        const refParts: string[] = [];
+        if (values.chequeNumber) refParts.push(values.chequeNumber);
+        if (values.bankName) refParts.push(values.bankName);
+
+        newReceipt = await createReceipt.mutateAsync({
+          placementId: row.placementId,
+          claimId: row.claimId,
+          cashCallId: row.cashCallId,
+          payload: {
+            amount,
+            currency: row.currency,
+            paymentDate: new Date(resolvedDate).toISOString(),
+            reference: refParts.join(' - ') || undefined,
+            notes: values.bankName ? `Received via ${values.bankName}` : undefined,
+          },
+        });
+        confirmedAt = new Date(resolvedDate).toISOString();
+        settlementMethod = values.paymentType === 'cheque' ? 'CHEQUE' : 'BANK_TRANSFER';
       }
 
-      const resolvedDate = values.paymentType === 'cheque' ? values.valueDate : values.paymentDate;
-
-      const refParts: string[] = [];
-      if (values.chequeNumber) refParts.push(values.chequeNumber);
-      if (values.bankName) refParts.push(values.bankName);
-
-      await createReceipt.mutateAsync({
-        placementId: row.placementId,
-        claimId: row.claimId,
-        cashCallId: row.cashCallId,
-        payload: {
-          amount,
-          currency: row.currency,
-          paymentDate: new Date(resolvedDate).toISOString(),
-          reference: refParts.join(' - ') || undefined,
-          notes: values.bankName ? `Received via ${values.bankName}` : undefined,
-        },
-      });
       addToast({ message: 'Recovery receipt recorded', type: 'success' });
+
+      try {
+        await confirmReceiptBank.mutateAsync({
+          placementId: row.placementId,
+          claimId: row.claimId,
+          receiptId: newReceipt.id,
+          bankConfirmedAt: confirmedAt,
+          settlementMethod,
+          notes: confirmNotes,
+        });
+      } catch (confirmError) {
+        addToast({
+          message: `Recorded, but confirming it failed: ${extractError(confirmError)} — confirm it from the History tab.`,
+          type: 'error',
+        });
+      }
+
       handleClose();
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });

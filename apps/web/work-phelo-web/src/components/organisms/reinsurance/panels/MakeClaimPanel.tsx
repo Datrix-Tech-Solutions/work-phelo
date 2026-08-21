@@ -135,9 +135,6 @@ export function MakeClaimPanel({
     const isActualCreate = mode === 'actual' && !isEditing;
     const amount = isActualCreate ? values.finalLossAmount : values.estimatedLossAmount;
 
-    // Claims are always recorded in the placement's own currency — sum-insured checks and
-    // allocations downstream all assume that. Picking a different currency just means the
-    // amounts entered need converting via the rate before anything is sent.
     const businessCurrency = effectivePlacement.currency ?? values.currency;
     const needsConversion = values.currency !== businessCurrency;
     const rate = needsConversion ? parseFloat(values.rate) || 1 : 1;

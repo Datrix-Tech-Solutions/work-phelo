@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pageHeader, pagePx, pageContent } from '@/lib/layout';
 import { ClaimsTable } from '@/components/organisms/reinsurance/tables/Claimstable';
@@ -15,8 +16,17 @@ const TABS = [
   { key: 'closed', label: 'Closed Claims' },
 ];
 
+const VALID_TABS: ClaimsPageTab[] = ['notification', 'open', 'closed'];
+
 export default function ReinsuranceClaimsPage() {
-  const [activeTab, setActiveTab] = useState<ClaimsPageTab>('notification');
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  // Landing here from a claim's breadcrumb (Back to Claims) reopens the tab it came from,
+  // e.g. after viewing a claim from Closed Claims. Falls back to Notification otherwise.
+  const initialTab = VALID_TABS.includes(requestedTab as ClaimsPageTab)
+    ? (requestedTab as ClaimsPageTab)
+    : 'notification';
+  const [activeTab, setActiveTab] = useState<ClaimsPageTab>(initialTab);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

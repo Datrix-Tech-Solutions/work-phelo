@@ -1,28 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Badge } from '@/components/atoms/Badge';
-import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { ClaimBankConfirmModal } from '@/components/organisms/reinsurance/ClaimBankConfirmModal';
-import {
-  useClaimCedantSettlements,
-  useClaimRecoveryPosition,
-  useConfirmClaimCedantSettlementBank,
-  useConfirmClaimRecoveryReceiptBank,
-  useReverseClaimCedantSettlement,
-  useReverseClaimRecoveryReceipt,
-} from '@/hooks';
-import { extractError } from '@/lib/extractError';
+import { useClaimCedantSettlements, useClaimRecoveryPosition } from '@/hooks';
 import {
   fmtDate,
   fmt,
   OFFSET_CLAIM_RECEIPT_NOTE,
   DIRECT_TO_CEDANT_RECEIPT_NOTE,
 } from '@/lib/reinsurance/claimFormat';
-import { useToastStore } from '@/store/toast.store';
 import {
-  ConfirmPlacementClaimFinancialBankPayload,
   Facultative,
   PlacementClaim,
   PlacementClaimCedantSettlement,
@@ -44,9 +32,7 @@ interface HistoryRow {
   cashCallNumber: string | null;
   amount: string;
   currency: string;
-  status: PlacementClaimCedantSettlement['status'];
   reference: string | null;
-  isReversible: boolean;
   settlement?: PlacementClaimCedantSettlement;
   receipt?: PlacementClaimRecoveryReceipt;
 }
@@ -79,14 +65,8 @@ function modeOfPaymentLabel(row: HistoryRow): string {
  * receipts — same underlying data as before, just merged with a Type tag instead of split across
  * two tables. */
 export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialHistoryTableProps) {
-  const addToast = useToastStore((s) => s.addToast);
   const { data: settlements = [] } = useClaimCedantSettlements(placement.id, claim.id);
   const { data: position } = useClaimRecoveryPosition(placement.id, claim.id);
-  const reverseSettlement = useReverseClaimCedantSettlement(placement.id, claim.id);
-  const confirmSettlementBank = useConfirmClaimCedantSettlementBank(placement.id, claim.id);
-  const reverseReceipt = useReverseClaimRecoveryReceipt();
-  const confirmReceiptBank = useConfirmClaimRecoveryReceiptBank();
-  const [confirmTarget, setConfirmTarget] = useState<HistoryRow | null>(null);
 
   const rows = useMemo<HistoryRow[]>(() => {
     const payableRows: HistoryRow[] = settlements.map((settlement) => ({
@@ -97,9 +77,7 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
       cashCallNumber: null,
       amount: settlement.amount,
       currency: settlement.currency,
-      status: settlement.status,
       reference: settlement.reference,
-      isReversible: settlement.status === 'RECORDED' && !settlement.reversalOfSettlementId,
       settlement,
     }));
 
@@ -112,9 +90,7 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
         cashCallNumber: cashCall.cashCallNumber,
         amount: receipt.amount,
         currency: receipt.currency,
-        status: receipt.status,
         reference: receipt.reference,
-        isReversible: receipt.status === 'RECORDED' && !receipt.reversalOfReceiptId,
         receipt,
       })),
     );
@@ -123,55 +99,6 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
   }, [settlements, position, placement.cedant.name]);
-
-  const handleReverse = async (row: HistoryRow) => {
-    const notes =
-      window.prompt(
-        `Reason for reversing this ${row.type === 'PAYABLE' ? 'cedant settlement' : 'recovery receipt'}?`,
-      ) ?? undefined;
-    try {
-      if (row.type === 'PAYABLE' && row.settlement) {
-        await reverseSettlement.mutateAsync({ settlementId: row.settlement.id, notes });
-        addToast({ message: 'Cedant settlement reversed', type: 'success' });
-      } else if (row.receipt) {
-        await reverseReceipt.mutateAsync({
-          placementId: placement.id,
-          claimId: claim.id,
-          receiptId: row.receipt.id,
-          notes,
-        });
-        addToast({ message: 'Recovery receipt reversed', type: 'success' });
-      }
-    } catch (error) {
-      addToast({ message: extractError(error), type: 'error' });
-    }
-  };
-
-  const handleConfirmBank = async (payload: ConfirmPlacementClaimFinancialBankPayload) => {
-    if (!confirmTarget) return;
-    try {
-      if (confirmTarget.type === 'PAYABLE' && confirmTarget.settlement) {
-        await confirmSettlementBank.mutateAsync({
-          settlementId: confirmTarget.settlement.id,
-          ...payload,
-        });
-        addToast({ message: 'Cedant settlement financially confirmed', type: 'success' });
-      } else if (confirmTarget.receipt) {
-        await confirmReceiptBank.mutateAsync({
-          placementId: placement.id,
-          claimId: claim.id,
-          receiptId: confirmTarget.receipt.id,
-          ...payload,
-        });
-        addToast({ message: 'Recovery receipt financially confirmed', type: 'success' });
-      }
-      setConfirmTarget(null);
-    } catch (error) {
-      addToast({ message: extractError(error), type: 'error' });
-    }
-  };
-
-  const isConfirming = confirmSettlementBank.isPending || confirmReceiptBank.isPending;
 
   const columns: Column<HistoryRow>[] = [
     {
@@ -224,38 +151,6 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
     //   width: 'minmax(120px, 1fr)',
     //   render: (row) => <span className="text-gray-600">{row.reference ?? '—'}</span>,
     // },
-    {
-      key: 'actions',
-      label: 'Actions',
-      width: '160px',
-      render: (row) =>
-        row.isReversible ? (
-          <div className="flex items-center gap-2">
-            <TableButton
-              variant="green"
-              isLoading={isConfirming}
-              onClick={(event) => {
-                event.stopPropagation();
-                setConfirmTarget(row);
-              }}
-            >
-              Confirm Bank
-            </TableButton>
-            <TableButton
-              variant="gray"
-              isLoading={reverseSettlement.isPending || reverseReceipt.isPending}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleReverse(row);
-              }}
-            >
-              Reverse
-            </TableButton>
-          </div>
-        ) : (
-          <span className="text-xs text-gray-400">Historical</span>
-        ),
-    },
   ];
 
   return (
@@ -269,33 +164,6 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
         onPageChange={() => {}}
         noInternalScroll
       />
-
-      {confirmTarget && (
-        <ClaimBankConfirmModal
-          isOpen
-          title={
-            confirmTarget.type === 'PAYABLE'
-              ? 'Confirm Cedant Settlement Bank Clearance'
-              : 'Confirm Recovery Receipt Bank Clearance'
-          }
-          amount={confirmTarget.amount}
-          currency={confirmTarget.currency}
-          counterpartyName={confirmTarget.counterpartyName}
-          sourceSettlementMethod={
-            confirmTarget.settlement?.settlementMethod ??
-            confirmTarget.receipt?.settlementMethod ??
-            null
-          }
-          sourceSettlementCurrency={
-            confirmTarget.settlement?.settlementCurrency ??
-            confirmTarget.receipt?.settlementCurrency ??
-            null
-          }
-          isSubmitting={isConfirming}
-          onClose={() => setConfirmTarget(null)}
-          onConfirm={handleConfirmBank}
-        />
-      )}
     </div>
   );
 }

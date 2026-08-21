@@ -601,28 +601,24 @@ export function useAllReinsurerClaims(placements: Facultative[]): {
   return { rows, isLoading: isLoading || positionQueries.some((q) => q.isLoading) };
 }
 
-const OPEN_CLAIM_STATUSES: PlacementClaimStatus[] = [
-  'DRAFT',
-  'NOTIFIED',
-  'RESERVED',
-  'PARTIALLY_SETTLED',
-];
-
 const SETTLED_CLAIM_STATUSES: PlacementClaimStatus[] = ['SETTLED', 'CLOSED'];
 
 export interface ClaimsSummary {
   totalClaims: number;
-  totalClaimedAmount: number;
-  openClaims: number;
+  /** Claims with claim.status SETTLED or CLOSED — the cedant-payable workflow's own
+   * progress marker, set manually via ClaimStatusActions. Independent of reinsurer
+   * recovery, which is tracked separately by useClaimsByTab. */
   settledClaims: number;
-  closedClaims: number;
   isLoading: boolean;
 }
 
 /**
- * Aggregate counts/amounts across every claim on the given placements — one query per
- * placement, sharing the cache with usePlacementClaims via claimsKey. Expects `placements`
- * to already be filtered to the set worth querying (e.g. placed/closing offers).
+ * Aggregate counts across every claim on the given placements — one query per placement,
+ * sharing the cache with usePlacementClaims via claimsKey. Expects `placements` to already
+ * be filtered to the set worth querying (e.g. placed/closing offers).
+ *
+ * Doesn't cover open/closed counts — those depend on reinsurer recovery, not claim.status,
+ * so they come from useClaimsByTab instead (see its docstring).
  */
 export function useClaimsSummary(placements: Facultative[]): ClaimsSummary {
   const claimQueries = useQueries({
@@ -639,25 +635,211 @@ export function useClaimsSummary(placements: Facultative[]): ClaimsSummary {
 
   const summary = useMemo(() => {
     let totalClaims = 0;
-    let totalClaimedAmount = 0;
-    let openClaims = 0;
     let settledClaims = 0;
-    let closedClaims = 0;
 
     claimQueries.forEach((query) => {
       const claims = query.data ?? [];
       claims.forEach((claim) => {
         if (claim.status === 'VOID') return;
         totalClaims += 1;
-        totalClaimedAmount += parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount);
-        if (OPEN_CLAIM_STATUSES.includes(claim.status)) openClaims += 1;
         if (SETTLED_CLAIM_STATUSES.includes(claim.status)) settledClaims += 1;
-        if (claim.status === 'CLOSED') closedClaims += 1;
       });
     });
 
-    return { totalClaims, totalClaimedAmount, openClaims, settledClaims, closedClaims };
+    return { totalClaims, settledClaims };
   }, [claimQueries]);
 
   return { ...summary, isLoading };
+}
+
+export interface ClaimTabRow {
+  id: string;
+  placement: Facultative;
+  claim: PlacementClaim;
+  /** Bank-confirmed amount recovered from reinsurers so far, net of reversals — only set
+   * once the claim has left Notification (finalLossAmount present) and its recovery
+   * data has loaded, i.e. on rows in `open`/`closed` below. */
+  recoveredAmount?: number;
+  /** When the last bank-confirmed recovery receipt landed across every cash call on the
+   * claim — the moment outstanding recovery hit zero. Set alongside `recoveredAmount`;
+   * only meaningful (non-null) once the claim is actually in `closed`. */
+  recoveredAt?: string | null;
+}
+
+export interface ClaimsByTab {
+  /** Claims still awaiting an actual loss amount. */
+  notification: ClaimTabRow[];
+  /** Finalized claims not yet fully recovered from reinsurers. */
+  open: ClaimTabRow[];
+  /** Finalized claims fully recovered from reinsurers. */
+  closed: ClaimTabRow[];
+  /** Claims list only — enough to show the Notification tab. */
+  isLoadingClaims: boolean;
+  /** Recovery-position/allocations fan-out — needed for the Open/Closed tabs and for
+   *  the open/closed counts, not for Notification. */
+  isLoadingFinancials: boolean;
+}
+
+/**
+ * Partitions every claim on the given placements into the Claims page's three tabs.
+ * "Fully recovered" (Closed) vs. not (Open) is derived from the recovery-position and
+ * allocations endpoints, not claim.status — reinsurer recovery is tracked independently
+ * of the claim's own settlement status with the cedant. Shared by ClaimsTable and
+ * ClaimsStatsRow so the tab tables and the KPI counts never disagree, and so both draw
+ * on the same cached queries instead of double-fetching.
+ */
+export function useClaimsByTab(placements: Facultative[]): ClaimsByTab {
+  const claimQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: claimsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/claims`);
+        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
+      },
+    })),
+  });
+  const isLoadingClaims = claimQueries.some((q) => q.isLoading);
+
+  const notification = useMemo<ClaimTabRow[]>(
+    () =>
+      placements.flatMap((placement, i) =>
+        (claimQueries[i]?.data ?? [])
+          .filter((claim) => claim.finalLossAmount == null)
+          .map((claim) => ({ id: claim.id, placement, claim })),
+      ),
+    [placements, claimQueries],
+  );
+
+  const finalizedRows = useMemo<ClaimTabRow[]>(
+    () =>
+      placements.flatMap((placement, i) =>
+        (claimQueries[i]?.data ?? [])
+          .filter((claim) => claim.finalLossAmount != null)
+          .map((claim) => ({ id: claim.id, placement, claim })),
+      ),
+    [placements, claimQueries],
+  );
+
+  const recoveryQueries = useQueries({
+    queries: finalizedRows.map((row) => ({
+      queryKey: recoveryPositionKey(row.placement.id, row.claim.id),
+      queryFn: async () => {
+        const res = await api.get(
+          `${BASE}/${row.placement.id}/claims/${row.claim.id}/recovery-position`,
+        );
+        return res.data as PlacementClaimRecoveryPosition;
+      },
+    })),
+  });
+
+  // recovery-position's own totalAllocated reads 0 from the backend, so "every allocation
+  // cash-called" is checked by summing the allocations directly instead — same figure the
+  // Claim Allocations table's "Total Allocated Claim" bar uses.
+  const allocationQueries = useQueries({
+    queries: finalizedRows.map((row) => ({
+      queryKey: allocationsKey(row.placement.id, row.claim.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${row.placement.id}/claims/${row.claim.id}/allocations`);
+        return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
+      },
+    })),
+  });
+  const isLoadingFinancials =
+    recoveryQueries.some((q) => q.isLoading) || allocationQueries.some((q) => q.isLoading);
+
+  const { open, closed } = useMemo(() => {
+    const open: ClaimTabRow[] = [];
+    const closed: ClaimTabRow[] = [];
+    finalizedRows.forEach((row, i) => {
+      const position = recoveryQueries[i]?.data;
+      const allocations = allocationQueries[i]?.data;
+      if (!position || !allocations) return;
+      const totalAllocated = allocations.reduce(
+        (sum, a) => sum + parseFloat(a.allocatedFinalLossAmount ?? a.allocatedEstimatedLossAmount),
+        0,
+      );
+      const totalCashCalled = parseFloat(position.recoveries.totalCashCalled);
+      const totalOutstanding = parseFloat(position.recoveries.totalOutstanding);
+      const totalConfirmed = parseFloat(position.recoveries.totalConfirmed);
+      const totalReversed = parseFloat(position.recoveries.totalReversed);
+      // Fully recovered requires every allocation to have been cash-called (not just that
+      // whatever's been called is covered) — otherwise a reinsurer who was never sent a
+      // cash call would silently make the claim look closed.
+      const allAllocationsCalled = totalAllocated > 0 && totalCashCalled >= totalAllocated - 0.01;
+      const isFullyRecovered = allAllocationsCalled && totalOutstanding <= 0.01;
+      // The claim became fully recovered the moment its last bank-confirmed receipt landed,
+      // across whichever reinsurer/cash call happened to close it out.
+      const confirmedTimes = position.perCashCall
+        .flatMap((cc) => cc.receipts)
+        .filter((r) => r.status === 'BANK_CONFIRMED' && r.bankConfirmedAt)
+        .map((r) => new Date(r.bankConfirmedAt as string).getTime());
+      const recoveredAt =
+        confirmedTimes.length > 0 ? new Date(Math.max(...confirmedTimes)).toISOString() : null;
+      const enriched = { ...row, recoveredAmount: totalConfirmed - totalReversed, recoveredAt };
+      (isFullyRecovered ? closed : open).push(enriched);
+    });
+    return { open, closed };
+  }, [finalizedRows, recoveryQueries, allocationQueries]);
+
+  return { notification, open, closed, isLoadingClaims, isLoadingFinancials };
+}
+
+export type ClaimTabBucket = 'notification' | 'open' | 'closed';
+
+/**
+ * Same Notification/Open/Closed classification as useClaimsByTab, for a single claim whose
+ * placement/claim you already have in hand (e.g. the claim detail page) — reuses the
+ * single-claim recovery-position/allocations hooks and their cache instead of fetching this
+ * placement's whole claims list just to classify the one claim you're already looking at.
+ */
+export function useClaimTabBucket(
+  placementId: string,
+  claim: PlacementClaim | undefined,
+): { bucket: ClaimTabBucket; recoveredAt: string | null; isLoading: boolean } {
+  const isFinalized = !!claim && claim.finalLossAmount != null;
+  // Hooks must run unconditionally — pass an empty id when there's no claim (or it's still
+  // an estimate) yet, which their own `enabled` guards already treat as "don't fetch".
+  const { data: position, isLoading: isLoadingPosition } = useClaimRecoveryPosition(
+    placementId,
+    isFinalized ? claim!.id : '',
+  );
+  const { data: allocations, isLoading: isLoadingAllocations } = useClaimAllocations(
+    placementId,
+    isFinalized ? claim!.id : '',
+  );
+
+  if (!isFinalized) {
+    return { bucket: 'notification', recoveredAt: null, isLoading: false };
+  }
+
+  const isLoading = isLoadingPosition || isLoadingAllocations;
+  if (isLoading || !position || !allocations) {
+    // Assume still-open while financial data loads — matches useClaimsByTab's behaviour of
+    // not classifying a row as closed until the recovery figures actually confirm it.
+    return { bucket: 'open', recoveredAt: null, isLoading: true };
+  }
+
+  const totalAllocated = allocations.reduce(
+    (sum, a) => sum + parseFloat(a.allocatedFinalLossAmount ?? a.allocatedEstimatedLossAmount),
+    0,
+  );
+  const totalCashCalled = parseFloat(position.recoveries.totalCashCalled);
+  const totalOutstanding = parseFloat(position.recoveries.totalOutstanding);
+  const allAllocationsCalled = totalAllocated > 0 && totalCashCalled >= totalAllocated - 0.01;
+  const isFullyRecovered = allAllocationsCalled && totalOutstanding <= 0.01;
+
+  if (!isFullyRecovered) {
+    return { bucket: 'open', recoveredAt: null, isLoading: false };
+  }
+
+  // Same as useClaimsByTab: the claim became fully recovered the moment its last
+  // bank-confirmed receipt landed, across whichever reinsurer/cash call closed it out.
+  const confirmedTimes = position.perCashCall
+    .flatMap((cc) => cc.receipts)
+    .filter((r) => r.status === 'BANK_CONFIRMED' && r.bankConfirmedAt)
+    .map((r) => new Date(r.bankConfirmedAt as string).getTime());
+  const recoveredAt =
+    confirmedTimes.length > 0 ? new Date(Math.max(...confirmedTimes)).toISOString() : null;
+
+  return { bucket: 'closed', recoveredAt, isLoading: false };
 }
