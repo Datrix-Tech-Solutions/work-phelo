@@ -4,7 +4,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { CounterpartyEventPublisher } from './counterparty-event.publisher';
 import { EmailEventPublisher } from './email-event.publisher';
 import { PlacementEventPublisher } from './placement-event.publisher';
-import { ReinsuranceAccountingOperationAuditPublisher } from '../accounting-integration/reinsurance-accounting-operation-audit.publisher';
+import { ReinsuranceAccountingOperationAuditPublisher } from '../accounting-integration/audit/operation-audit.publisher';
 
 @Module({
   imports: [

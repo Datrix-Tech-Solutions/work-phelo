@@ -19,7 +19,7 @@ import {
   ReinsuranceChargeRateType,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/events/financial-event.publisher';
 import { EffectiveDebitNotePreviewResponseDto } from './dto/effective-debit-note.dto';
 import {
   AppliedChargeSnapshot,

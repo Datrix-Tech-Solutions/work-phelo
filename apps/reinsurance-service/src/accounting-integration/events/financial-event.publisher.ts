@@ -13,14 +13,14 @@ import {
   PlacementClaimCedantSettlementStatus,
   PlacementClaimRecoveryReceiptStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceAccountingEventInput } from './reinsurance-accounting-event.builder';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ReinsuranceAccountingEventInput } from './accounting-event.builder';
 import {
   ReinsuranceAccountingClient,
   ReinsuranceAccountingClientError,
-} from './reinsurance-accounting-client';
-import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
+} from '../client/accounting.client';
+import { ReinsuranceAccountingOutboxService } from '../outbox/outbox.service';
 
 type PlacementNoteForEvent = {
   id: string;

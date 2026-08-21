@@ -7,7 +7,7 @@ import {
 import { Observable, tap } from 'rxjs';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
-import { ReinsuranceAccountingOperationAuditPublisher } from './reinsurance-accounting-operation-audit.publisher';
+import { ReinsuranceAccountingOperationAuditPublisher } from './operation-audit.publisher';
 
 @Injectable()
 export class ReinsuranceAccountingOperationAuditInterceptor implements NestInterceptor {

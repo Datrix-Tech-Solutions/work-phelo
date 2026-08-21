@@ -1,13 +1,13 @@
 import {
   Prisma,
   ReinsuranceAccountingOutboxStatus,
-} from '../../prisma/generated/client';
+} from '../../../prisma/generated/client';
 import {
   ReinsuranceAccountingClient,
   ReinsuranceAccountingClientError,
-} from './reinsurance-accounting-client';
-import { ReinsuranceAccountingEventBuilder } from './reinsurance-accounting-event.builder';
-import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
+} from '../client/accounting.client';
+import { ReinsuranceAccountingEventBuilder } from '../events/accounting-event.builder';
+import { ReinsuranceAccountingOutboxService } from './outbox.service';
 
 type Row = Prisma.ReinsuranceAccountingOutboxGetPayload<object>;
 

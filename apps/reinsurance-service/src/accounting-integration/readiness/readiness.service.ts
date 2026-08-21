@@ -16,20 +16,20 @@ import {
   PlacementClaimRecoveryReceiptStatus,
   PlacementClaimCedantSettlementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceAccountingEventInput } from './reinsurance-accounting-event.builder';
-import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-event-publisher.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ReinsuranceAccountingEventInput } from '../events/accounting-event.builder';
+import { ReinsuranceFinancialEventPublisher } from '../events/financial-event.publisher';
 import {
   ReinsuranceAccountingClient,
   ReinsuranceAccountingClientError,
   ReinsuranceAccountingEventReadiness,
   ReinsuranceAccountingReadinessResponse,
-} from './reinsurance-accounting-client';
+} from '../client/accounting.client';
 import {
   ProcessAccountingOutboxOptions,
   ReinsuranceAccountingOutboxService,
-} from './reinsurance-accounting-outbox.service';
+} from '../outbox/outbox.service';
 
 type CounterpartyRecord = Prisma.CounterpartyGetPayload<object>;
 

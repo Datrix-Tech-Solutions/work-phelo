@@ -1,17 +1,17 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
-import { ReinsuranceAccountingOperationAuditInterceptor } from './reinsurance-accounting-operation-audit.interceptor';
+import { ReinsuranceAccountingOperationAuditInterceptor } from './audit/operation-audit.interceptor';
 import { PrismaModule } from '../prisma/prisma.module';
-import { ReinsuranceAccountingClient } from './reinsurance-accounting-client';
-import { ReinsuranceAccountingIntegrationConfigClient } from './reinsurance-accounting-integration-config.client';
-import { ReinsuranceAccountingIntegrationActiveGuard } from './reinsurance-accounting-integration-active.guard';
-import { ReinsuranceAccountingEventBuilder } from './reinsurance-accounting-event.builder';
+import { ReinsuranceAccountingClient } from './client/accounting.client';
+import { ReinsuranceAccountingIntegrationConfigClient } from './client/integration-config.client';
+import { ReinsuranceAccountingIntegrationActiveGuard } from './guards/integration-active.guard';
+import { ReinsuranceAccountingEventBuilder } from './events/accounting-event.builder';
 import { ReinsuranceAccountingIntegrationController } from './reinsurance-accounting-integration.controller';
-import { ReinsuranceAccountingOutboxDispatcher } from './reinsurance-accounting-outbox-dispatcher.service';
-import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
-import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
-import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-event-publisher.service';
+import { ReinsuranceAccountingOutboxDispatcher } from './outbox/outbox-dispatcher.service';
+import { ReinsuranceAccountingOutboxService } from './outbox/outbox.service';
+import { ReinsuranceAccountingReadinessService } from './readiness/readiness.service';
+import { ReinsuranceFinancialEventPublisher } from './events/financial-event.publisher';
 
 @Module({
   imports: [PrismaModule, AuthModule, RabbitMQModule],

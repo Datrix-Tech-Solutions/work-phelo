@@ -1,4 +1,4 @@
-import { ReinsuranceAccountingEventBuilder } from './reinsurance-accounting-event.builder';
+import { ReinsuranceAccountingEventBuilder } from './accounting-event.builder';
 
 describe('ReinsuranceAccountingEventBuilder', () => {
   const builder = new ReinsuranceAccountingEventBuilder();

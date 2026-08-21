@@ -12,12 +12,12 @@ import {
   PlacementClaimRecoveryReceiptStatus,
   Prisma,
   ReinsuranceAccountingOutboxStatus,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceAccountingClient } from './reinsurance-accounting-client';
-import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
-import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
-import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-event-publisher.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ReinsuranceAccountingClient } from '../client/accounting.client';
+import { ReinsuranceAccountingOutboxService } from '../outbox/outbox.service';
+import { ReinsuranceAccountingReadinessService } from './readiness.service';
+import { ReinsuranceFinancialEventPublisher } from '../events/financial-event.publisher';
 
 describe('ReinsuranceAccountingReadinessService', () => {
   type PlacementNoteFindManyArg = {

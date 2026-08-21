@@ -17,7 +17,7 @@ import {
   PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/events/financial-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmPlacementPaymentBankDto } from './dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';

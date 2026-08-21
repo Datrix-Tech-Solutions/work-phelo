@@ -13,10 +13,10 @@ import {
   PlacementClaimCedantSettlementStatus,
   PlacementClaimRecoveryReceiptStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
-import { ReinsuranceFinancialEventPublisher } from './reinsurance-financial-event-publisher.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ReinsuranceAccountingOutboxService } from '../outbox/outbox.service';
+import { ReinsuranceFinancialEventPublisher } from './financial-event.publisher';
 
 describe('ReinsuranceFinancialEventPublisher', () => {
   const user = {
