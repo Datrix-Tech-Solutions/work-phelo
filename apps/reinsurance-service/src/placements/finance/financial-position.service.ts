@@ -10,14 +10,14 @@ import {
   PlacementPaymentStatus,
   PlacementPaymentType,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   FinancialPositionState,
   PlacementFinancialPositionAdjustmentDto,
   PlacementFinancialPositionResponseDto,
-} from './dto/placement-financial-position-response.dto';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+} from '../dto/placement-financial-position-response.dto';
+import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 type EffectiveSnapshot = {
   participantId?: string;

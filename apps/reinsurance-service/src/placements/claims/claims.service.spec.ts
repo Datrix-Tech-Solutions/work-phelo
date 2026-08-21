@@ -17,8 +17,8 @@ import { ClosingSnapshotReader } from '../closing-snapshot.reader';
 import { PlacementEffectivePositionService } from '../placement-effective-position.service';
 import { PlacementEffectiveViewService } from '../placement-effective-view.service';
 import { PlacementClaimsService } from './claims.service';
-import { PlacementFinancialActivityReader } from '../placement-financial-activity.reader';
-import { PlacementFinancialLockPolicy } from '../placement-financial-lock.policy';
+import { PlacementFinancialActivityReader } from '../finance/financial-activity.reader';
+import { PlacementFinancialLockPolicy } from '../finance/financial-lock.policy';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 describe('PlacementClaimsService', () => {

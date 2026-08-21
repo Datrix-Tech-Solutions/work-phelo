@@ -19,7 +19,7 @@ import {
 } from '../../prisma/generated/client';
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
-import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
 import { PlacementsService } from './placements.service';
 
 describe('PlacementsService', () => {

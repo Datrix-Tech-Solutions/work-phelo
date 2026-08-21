@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { PlacementPaymentType } from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementFinancialLockSource } from './dto/placement-lock-status.dto';
+import { PlacementPaymentType } from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementFinancialLockSource } from '../dto/placement-lock-status.dto';
 
 export type PlacementFinancialActivity = {
   source: Exclude<PlacementFinancialLockSource, 'NONE' | 'STATUS_TERMINAL'>;

@@ -21,7 +21,7 @@ import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/ev
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmPlacementPaymentBankDto } from './dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
-import { PlacementFinancialPositionService } from './placement-financial-position.service';
+import { PlacementFinancialPositionService } from './finance/financial-position.service';
 
 const paymentInclude = {
   placement: {

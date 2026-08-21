@@ -1,6 +1,6 @@
-import { PlacementPaymentType, Prisma } from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
+import { PlacementPaymentType, Prisma } from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementFinancialActivityReader } from './financial-activity.reader';
 
 describe('PlacementFinancialActivityReader', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

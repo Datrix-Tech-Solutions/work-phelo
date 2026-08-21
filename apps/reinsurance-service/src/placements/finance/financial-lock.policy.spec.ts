@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { PlacementStatus } from '../../prisma/generated/client';
-import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
-import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementStatus } from '../../../prisma/generated/client';
+import { PlacementFinancialActivityReader } from './financial-activity.reader';
+import { PlacementFinancialLockPolicy } from './financial-lock.policy';
 
 describe('PlacementFinancialLockPolicy', () => {
   const placement = {
