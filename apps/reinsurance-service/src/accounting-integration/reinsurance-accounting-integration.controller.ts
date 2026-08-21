@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  GoneException,
   Param,
   ParseUUIDPipe,
   Post,
@@ -105,32 +106,26 @@ export class ReinsuranceAccountingIntegrationController {
   @Get('financial-confirmations/claim-recovery-receipts')
   @RequirePermissions('operations.reinsurance.dashboard:VIEW')
   @ApiOperation({
-    summary:
-      'List claim recovery receipts awaiting Accounting bank confirmation',
+    summary: 'Claim recovery receipt Accounting confirmation queue is retired',
     description:
-      'Tenant-scoped Accounting confirmation queue adapter for RECORDED Reinsurer -> Broker claim recovery receipts. This endpoint exposes operational receipt metadata only; it does not expose source-event payloads, secrets or HMAC data.',
+      'Reinsurance Claims are financially confirmed inside Reinsurance and no longer enter the Accounting confirmation queue.',
   })
-  findPendingClaimRecoveryReceiptConfirmations(
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.findPendingClaimRecoveryReceiptConfirmations(
-      request.user,
+  findPendingClaimRecoveryReceiptConfirmations() {
+    throw new GoneException(
+      'Reinsurance claim recovery receipts are financially confirmed inside Reinsurance and no longer enter Accounting confirmation queues.',
     );
   }
 
   @Get('financial-confirmations/claim-cedant-settlements')
   @RequirePermissions('operations.reinsurance.dashboard:VIEW')
   @ApiOperation({
-    summary:
-      'List cedant claim settlements awaiting Accounting bank confirmation',
+    summary: 'Claim cedant settlement Accounting confirmation queue is retired',
     description:
-      'Tenant-scoped Accounting confirmation queue adapter for RECORDED Broker -> Cedant claim settlements. This endpoint exposes operational settlement metadata only; it does not expose source-event payloads, secrets or HMAC data.',
+      'Reinsurance Claims are financially confirmed inside Reinsurance and no longer enter the Accounting confirmation queue.',
   })
-  findPendingClaimCedantSettlementConfirmations(
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.findPendingClaimCedantSettlementConfirmations(
-      request.user,
+  findPendingClaimCedantSettlementConfirmations() {
+    throw new GoneException(
+      'Reinsurance claim cedant settlements are financially confirmed inside Reinsurance and no longer enter Accounting confirmation queues.',
     );
   }
 
@@ -284,17 +279,13 @@ export class ReinsuranceAccountingIntegrationController {
   @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Reconcile claim payable approvals with Accounting outbox',
+    summary: 'Claim payable Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable claim payable approval records missing their deterministic CLAIM_PAYABLE_APPROVED outbox row.',
+      'Reinsurance Claims no longer publish Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileClaimPayableApprovedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileClaimPayableApprovedEvents(
-      request.user,
-      query,
+  reconcileClaimPayableApprovedEvents() {
+    throw new GoneException(
+      'Claim payable Accounting reconciliation is retired; Reinsurance Claims are financially controlled inside Reinsurance.',
     );
   }
 
@@ -303,17 +294,13 @@ export class ReinsuranceAccountingIntegrationController {
   @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Reconcile claim recovery approvals with Accounting outbox',
+    summary: 'Claim recovery Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable per-allocation claim recovery approval records missing their deterministic CLAIM_RECOVERY_APPROVED outbox row. This does not reconcile recovery receipts or cash movement.',
+      'Reinsurance Claims no longer publish Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileClaimRecoveryApprovedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileClaimRecoveryApprovedEvents(
-      request.user,
-      query,
+  reconcileClaimRecoveryApprovedEvents() {
+    throw new GoneException(
+      'Claim recovery Accounting reconciliation is retired; Reinsurance Claims are financially controlled inside Reinsurance.',
     );
   }
 
@@ -322,18 +309,13 @@ export class ReinsuranceAccountingIntegrationController {
   @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary:
-      'Reconcile bank-confirmed cedant claim settlements with Accounting outbox',
+    summary: 'Claim cedant settlement Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets BANK_CONFIRMED cedant claim settlement rows missing their deterministic CLAIM_CEDANT_SETTLEMENT_PAID outbox row.',
+      'Reinsurance Claims no longer publish Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileClaimCedantSettlementPaidEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileClaimCedantSettlementPaidEvents(
-      request.user,
-      query,
+  reconcileClaimCedantSettlementPaidEvents() {
+    throw new GoneException(
+      'Claim cedant settlement Accounting reconciliation is retired; Reinsurance Claims are financially controlled inside Reinsurance.',
     );
   }
 
@@ -343,17 +325,13 @@ export class ReinsuranceAccountingIntegrationController {
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
-      'Reconcile cedant claim settlement reversals with Accounting outbox',
+      'Claim cedant settlement reversal Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable BANK_CONFIRMED cedant claim settlement reversal rows missing their deterministic CLAIM_CEDANT_SETTLEMENT_REVERSED outbox row.',
+      'Reinsurance Claims no longer publish Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileClaimCedantSettlementReversedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileClaimCedantSettlementReversedEvents(
-      request.user,
-      query,
+  reconcileClaimCedantSettlementReversedEvents() {
+    throw new GoneException(
+      'Claim cedant settlement reversal Accounting reconciliation is retired; Reinsurance Claims are financially controlled inside Reinsurance.',
     );
   }
 
@@ -362,18 +340,13 @@ export class ReinsuranceAccountingIntegrationController {
   @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary:
-      'Reconcile bank-confirmed claim recovery receipts with Accounting outbox',
+    summary: 'Claim recovery receipt Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets BANK_CONFIRMED claim recovery receipt rows missing their deterministic CLAIM_RECOVERY_RECEIVED outbox row.',
+      'Reinsurance Claims no longer publish Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileClaimRecoveryReceivedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileClaimRecoveryReceivedEvents(
-      request.user,
-      query,
+  reconcileClaimRecoveryReceivedEvents() {
+    throw new GoneException(
+      'Claim recovery receipt Accounting reconciliation is retired; Reinsurance Claims are financially controlled inside Reinsurance.',
     );
   }
 
@@ -383,17 +356,13 @@ export class ReinsuranceAccountingIntegrationController {
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
-      'Reconcile claim recovery receipt reversals with Accounting outbox',
+      'Claim recovery receipt reversal Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable BANK_CONFIRMED claim recovery receipt reversal rows missing their deterministic CLAIM_RECOVERY_RECEIPT_REVERSED outbox row.',
+      'Reinsurance Claims no longer publish Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileClaimRecoveryReceiptReversedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileClaimRecoveryReceiptReversedEvents(
-      request.user,
-      query,
+  reconcileClaimRecoveryReceiptReversedEvents() {
+    throw new GoneException(
+      'Claim recovery receipt reversal Accounting reconciliation is retired; Reinsurance Claims are financially controlled inside Reinsurance.',
     );
   }
 }

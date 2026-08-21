@@ -158,7 +158,7 @@ export function useUpdateClaimStatus(placementId: string, claimId: string) {
 
 /**
  * Backend-derived readiness for moving a claim to SETTLED or CLOSED — RECORDED
- * settlements/receipts are operational and don't count until Accounting bank-confirms them.
+ * settlements/receipts are operational and don't count until Reinsurance financially confirms them.
  */
 export function useClaimFinancialCloseReadiness(placementId: string, claimId: string) {
   return useQuery({

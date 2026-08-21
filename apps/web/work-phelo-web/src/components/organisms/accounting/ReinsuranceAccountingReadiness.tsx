@@ -11,7 +11,6 @@ import type {
 
 const GROUPS: Array<{ key: ReinsuranceAccountingReadinessGroupKey; label: string }> = [
   { key: 'premiumAccounting', label: 'Premium accounting' },
-  { key: 'claimsAccounting', label: 'Claims accounting' },
   { key: 'cashConfirmation', label: 'Cash confirmation' },
 ];
 

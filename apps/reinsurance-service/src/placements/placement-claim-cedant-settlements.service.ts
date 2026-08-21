@@ -12,7 +12,6 @@ import {
   PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-payable.dto';
 import { ConfirmPlacementClaimCedantSettlementBankDto } from './dto/confirm-placement-claim-cedant-settlement-bank.dto';
@@ -57,7 +56,6 @@ export class PlacementClaimCedantSettlementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly money: ReinsuranceMoneyHelper,
-    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async approvePayable(
@@ -152,12 +150,7 @@ export class PlacementClaimCedantSettlementsService {
             }
 
             const approvedAt = new Date();
-            await this.financialEvents.assertAccountingReadyForEvent(user, {
-              eventType: 'CLAIM_PAYABLE_APPROVED',
-              currency: claim.currency,
-              businessDate: approvedAt,
-            });
-            const approval = await tx.placementClaimPayableApproval.create({
+            await tx.placementClaimPayableApproval.create({
               data: {
                 tenantId: user.tenantId,
                 placementId: claim.placementId,
@@ -171,12 +164,6 @@ export class PlacementClaimCedantSettlementsService {
                 notes: this.cleanOptional(dto.notes),
               },
             });
-            const accountingEvent =
-              await this.financialEvents.prepareClaimPayableApproved(
-                user,
-                approval,
-              );
-
             const approvedClaim = await tx.placementClaim.update({
               where: { id: claimId },
               data: {
@@ -186,13 +173,6 @@ export class PlacementClaimCedantSettlementsService {
                 updatedByUserId: user.id,
               },
             });
-
-            if (accountingEvent) {
-              await this.financialEvents.enqueuePreparedEvent(
-                tx,
-                accountingEvent,
-              );
-            }
 
             return approvedClaim;
           },
@@ -398,14 +378,6 @@ export class PlacementClaimCedantSettlementsService {
       confirmedExchangeRate ??
         this.optionalDecimalToNumber(settlement.agreedExchangeRate),
     );
-    await this.financialEvents.assertAccountingReadyForEvent(user, {
-      eventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
-      currency: settlementCurrency,
-      businessDate: dto.bankConfirmedAt,
-      settlementMethod,
-      accountingCashAccountId: dto.accountingCashAccountId,
-    });
-
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         return await this.prisma.$transaction(
@@ -493,14 +465,6 @@ export class PlacementClaimCedantSettlementsService {
               );
             }
 
-            const event =
-              await this.financialEvents.prepareClaimCedantSettlementPaid(
-                user,
-                confirmed,
-              );
-            if (event) {
-              await this.financialEvents.enqueuePreparedEvent(tx, event);
-            }
             return confirmed;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -574,15 +538,6 @@ export class PlacementClaimCedantSettlementsService {
             const confirmedOriginal =
               settlement.status ===
               PlacementClaimCedantSettlementStatus.BANK_CONFIRMED;
-            if (confirmedOriginal) {
-              await this.financialEvents.assertAccountingReadyForEvent(user, {
-                eventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-                currency: settlement.settlementCurrency ?? settlement.currency,
-                businessDate: new Date(),
-                settlementMethod: settlement.settlementMethod,
-                accountingCashAccountId: settlement.accountingCashAccountId,
-              });
-            }
             const reversal = await tx.placementClaimCedantSettlement.create({
               data: {
                 tenantId: settlement.tenantId,
@@ -620,17 +575,6 @@ export class PlacementClaimCedantSettlementsService {
               },
               include: cedantSettlementInclude,
             });
-
-            if (confirmedOriginal) {
-              const event =
-                await this.financialEvents.prepareClaimCedantSettlementReversed(
-                  user,
-                  reversal,
-                );
-              if (event) {
-                await this.financialEvents.enqueuePreparedEvent(tx, event);
-              }
-            }
 
             return reversal;
           },
@@ -936,20 +880,6 @@ export class PlacementClaimCedantSettlementsService {
         `${input.settlementMethod} confirmation requires a settlement reference`,
       );
     }
-    const cashAccountRequiredMethods: PlacementSettlementMethod[] = [
-      PlacementSettlementMethod.BANK_TRANSFER,
-      PlacementSettlementMethod.CHEQUE,
-      PlacementSettlementMethod.CASH,
-      PlacementSettlementMethod.MOBILE_MONEY,
-    ];
-    if (
-      cashAccountRequiredMethods.includes(input.settlementMethod) &&
-      !input.accountingCashAccountId
-    ) {
-      throw new BadRequestException(
-        `${input.settlementMethod} confirmation requires an Accounting cash account`,
-      );
-    }
     if (
       input.settlementMethod === PlacementSettlementMethod.OTHER &&
       !hasReference &&
@@ -981,7 +911,7 @@ export class PlacementClaimCedantSettlementsService {
     const cleaned = this.cleanOptional(confirmationNotes);
     if (!cleaned) return existing;
     return existing
-      ? `${existing}\n\nAccounting confirmation: ${cleaned}`
+      ? `${existing}\n\nFinancial confirmation: ${cleaned}`
       : cleaned;
   }
 

@@ -19,7 +19,7 @@ export class ConfirmPlacementClaimCedantSettlementBankDto {
     format: 'date-time',
     example: '2026-08-10T12:00:00.000Z',
     description:
-      'Accounting-owned date/time when the Broker -> Cedant claim settlement was confirmed as paid, cleared, completed, posted or offset.',
+      'Reinsurance-owned financial confirmation date/time when the Broker -> Cedant claim settlement was confirmed as paid, cleared, completed or offset.',
   })
   @IsDateString()
   bankConfirmedAt!: string;
@@ -28,7 +28,7 @@ export class ConfirmPlacementClaimCedantSettlementBankDto {
     example: 'BANK-CEDANT-CLAIM-001',
     maxLength: 100,
     description:
-      'Bank, cheque, mobile-money or settlement reference supplied by Accounting when Reinsurance did not already record one.',
+      'Bank, cheque, mobile-money or settlement reference captured during Reinsurance claim financial confirmation.',
   })
   @TrimmedString()
   @IsOptional()
@@ -39,7 +39,7 @@ export class ConfirmPlacementClaimCedantSettlementBankDto {
   @ApiPropertyOptional({
     example: '56a9d8dd-bf8f-4d6a-a88f-8d1da3b1fd45',
     description:
-      'Accounting-owned cash/bank account selected for cash-impact confirmations. Required for bank, cash, cheque and mobile-money settlement methods before Accounting can bridge this event into Cashbook.',
+      'Legacy optional Accounting cash/bank account reference retained for response compatibility. Reinsurance claim confirmations no longer require it or post claim events to Accounting.',
   })
   @IsOptional()
   @IsUUID()
@@ -96,7 +96,7 @@ export class ConfirmPlacementClaimCedantSettlementBankDto {
     example: 25,
     minimum: 0,
     description:
-      'Bank charges captured during Accounting confirmation. Accounting determines final ledger posting treatment.',
+      'Bank charges captured during Reinsurance claim financial confirmation. No Accounting posting is emitted for this claim settlement.',
   })
   @Type(() => Number)
   @IsOptional()

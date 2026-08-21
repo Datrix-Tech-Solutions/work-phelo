@@ -105,11 +105,14 @@ Reinsurance migrations through Accounting.
 
 Reinsurance is currently the first operational source-module integration. Active
 source-event families include issued debit/credit notes, endorsement notes,
-premium receipts and reversals, bank-confirmed reinsurer disbursements and
-reversals, claim-level payable approvals and allocation-level claim recovery
-approvals, plus bank-confirmed claim recovery receipts and reversals.
-Bank-confirmed cedant claim settlements and reversals complete the Cedant-side
-claim payable settlement boundary.
+premium receipts and reversals, and bank-confirmed reinsurer disbursements and
+reversals.
+
+Reinsurance Claims are currently financially controlled inside Reinsurance and
+do not publish new claim source events to Accounting. Historical claim source
+events that were already delivered remain immutable Accounting history and may
+still be readable through source-event/journal history, but they are not part of
+the active Reinsurance readiness matrix.
 
 ### Active Reinsurance AR/AP Matrix
 
@@ -123,26 +126,18 @@ claim payable settlement boundary.
 | `PAYMENT_REVERSED`                 | Reversal row creation time                       | Premium receipt reversal                          |
 | `REINSURER_DISBURSEMENT_RECORDED`  | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer settlement                    |
 | `REINSURER_DISBURSEMENT_REVERSED`  | Reversal row creation time                       | Reinsurer disbursement reversal                   |
-| `CLAIM_PAYABLE_APPROVED`           | Broker claim-level payable approval time         | Approved Cedant claim payable                     |
-| `CLAIM_CEDANT_SETTLEMENT_PAID`     | Accounting confirmation time (`bankConfirmedAt`) | Broker settlement paid to Cedant                  |
-| `CLAIM_CEDANT_SETTLEMENT_REVERSED` | Reversal row creation time                       | Cedant claim settlement reversal                  |
-| `CLAIM_RECOVERY_APPROVED`          | Formal per-allocation recovery approval time     | Approved Reinsurer recovery receivable            |
-| `CLAIM_RECOVERY_RECEIVED`          | Accounting confirmation time (`bankConfirmedAt`) | Confirmed Reinsurer claim recovery receipt        |
-| `CLAIM_RECOVERY_RECEIPT_REVERSED`  | Reversal row creation time                       | Claim recovery receipt reversal                   |
 
 The active control-account dimensions are intentionally separate:
 
 | Obligation dimension | Counterparty type | Typical source events                                  |
 | -------------------- | ----------------- | ------------------------------------------------------ |
 | Cedant Premium AR    | `CEDANT`          | Debit notes, endorsement debit notes, premium receipts |
-| Cedant Claims AP     | `CEDANT`          | Claim payable approvals, cedant claim settlements      |
 | Reinsurer Premium AP | `REINSURER`       | Credit notes, endorsement credit notes, disbursements  |
-| Reinsurer Claims AR  | `REINSURER`       | Claim recovery approvals, recovery receipts            |
 
 Reports and subledger listings should present balances by control-account
-dimension. A Cedant claims payable does not reduce Cedant premium receivable,
-and a Reinsurer claims receivable does not reduce Reinsurer premium payable,
-without an explicit Accounting-approved settlement.
+dimension. Reinsurance claim settlement and recovery balances are currently
+managed in Reinsurance rather than posted into Accounting control-account
+dimensions.
 
 Operational Reinsurance payments can be recorded before Accounting recognition.
 No Accounting outbox event is created at that point for bank-confirmed
@@ -205,18 +200,15 @@ Cashbook bridging applies to bank/cash/cheque/mobile-money confirmations for:
 - `PAYMENT_REVERSED`
 - `REINSURER_DISBURSEMENT_RECORDED`
 - `REINSURER_DISBURSEMENT_REVERSED`
-- `CLAIM_RECOVERY_RECEIVED`
-- `CLAIM_RECOVERY_RECEIPT_REVERSED`
-- `CLAIM_CEDANT_SETTLEMENT_PAID`
-- `CLAIM_CEDANT_SETTLEMENT_REVERSED`
 
 `INTERNAL_OFFSET` and `JOURNAL` source settlements do not create Cashbook cash
 movements. Historical source events that already posted journals before this
 bridge are not automatically backfilled; use an explicit reconciliation/backfill
 procedure before relying on Bank Reconciliation for those historical periods.
 
-Claims events that remain policy-gated must not be treated as active posting
-events until implemented and covered by posting rules.
+Historical Reinsurance claim source events that were already delivered before
+claim Accounting was retired remain immutable history. New claim confirmations
+do not enter the Accounting Cashbook bridge.
 
 ## Validation
 

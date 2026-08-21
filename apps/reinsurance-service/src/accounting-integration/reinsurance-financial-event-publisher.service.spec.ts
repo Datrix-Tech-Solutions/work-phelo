@@ -1281,7 +1281,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     expect(eligibility.exclusionReasons).toContain('missing agreed FX rate');
   });
 
-  it('prepares CLAIM_PAYABLE_APPROVED from immutable claim-level approval facts', async () => {
+  it('does not prepare retired CLAIM_PAYABLE_APPROVED events', async () => {
     const { actor, service } = makeService();
 
     const event = await service.prepareClaimPayableApproved(actor, {
@@ -1297,6 +1297,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       approvedByUserId: 'user-1',
       notes: 'Approved by reinsurer',
     });
+
+    expect(event).toBeNull();
+    if (event === null) return;
 
     expect(event).toMatchObject({
       tenantId: 'tenant-1',
@@ -1368,7 +1371,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     expect(event).toBeNull();
   });
 
-  it('prepares CLAIM_RECOVERY_APPROVED from immutable allocation approval facts', async () => {
+  it('does not prepare retired CLAIM_RECOVERY_APPROVED events', async () => {
     const { actor, service } = makeService();
 
     const event = await service.prepareClaimRecoveryApproved(actor, {
@@ -1388,6 +1391,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       reference: 'REC-APP-001',
       notes: 'Formally agreed by reinsurer',
     });
+
+    expect(event).toBeNull();
+    if (event === null) return;
 
     expect(event).toMatchObject({
       tenantId: 'tenant-1',
@@ -1469,7 +1475,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     expect(event).toBeNull();
   });
 
-  it('prepares CLAIM_RECOVERY_RECEIVED from bank-confirmed receipt facts', async () => {
+  it('does not prepare retired CLAIM_RECOVERY_RECEIVED events', async () => {
     const { actor, service } = makeService();
 
     const event = await service.prepareClaimRecoveryReceived(actor, {
@@ -1494,6 +1500,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
       reversalOfReceiptId: null,
     });
+
+    expect(event).toBeNull();
+    if (event === null) return;
 
     expect(event).toMatchObject({
       tenantId: 'tenant-1',
@@ -1539,7 +1548,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     });
   });
 
-  it('prepares CLAIM_RECOVERY_RECEIPT_REVERSED from immutable reversal facts', async () => {
+  it('does not prepare retired CLAIM_RECOVERY_RECEIPT_REVERSED events', async () => {
     const { actor, service } = makeService();
 
     const event = await service.prepareClaimRecoveryReceiptReversed(actor, {
@@ -1563,6 +1572,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
       reversalOfReceiptId: 'receipt-1',
     });
+
+    expect(event).toBeNull();
+    if (event === null) return;
 
     expect(event).toMatchObject({
       sourceEventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
@@ -1596,7 +1608,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     });
   });
 
-  it('prepares CLAIM_CEDANT_SETTLEMENT_PAID from Accounting-confirmed settlement facts', async () => {
+  it('does not prepare retired CLAIM_CEDANT_SETTLEMENT_PAID events', async () => {
     const { actor, service } = makeService();
 
     const event = await service.prepareClaimCedantSettlementPaid(actor, {
@@ -1619,6 +1631,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
       reversalOfSettlementId: null,
     });
+
+    expect(event).toBeNull();
+    if (event === null) return;
 
     expect(event).toMatchObject({
       tenantId: 'tenant-1',
@@ -1676,7 +1691,7 @@ describe('ReinsuranceFinancialEventPublisher', () => {
     });
   });
 
-  it('prepares CLAIM_CEDANT_SETTLEMENT_REVERSED from immutable reversal facts', async () => {
+  it('does not prepare retired CLAIM_CEDANT_SETTLEMENT_REVERSED events', async () => {
     const { actor, service } = makeService();
 
     const event = await service.prepareClaimCedantSettlementReversed(actor, {
@@ -1698,6 +1713,9 @@ describe('ReinsuranceFinancialEventPublisher', () => {
       status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
       reversalOfSettlementId: 'settlement-1',
     });
+
+    expect(event).toBeNull();
+    if (event === null) return;
 
     expect(event).toMatchObject({
       sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',

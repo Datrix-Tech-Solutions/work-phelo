@@ -11,7 +11,6 @@ import {
   PlacementClaimStatus,
   Prisma,
 } from '../../prisma/generated/client';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApprovePlacementClaimRecoveryDto } from './dto/approve-placement-claim-recovery.dto';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
@@ -62,7 +61,6 @@ export class PlacementClaimRecoveryApprovalsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly money: ReinsuranceMoneyHelper,
-    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async findAll(
@@ -156,12 +154,7 @@ export class PlacementClaimRecoveryApprovalsService {
             const approvalVersion =
               (existingApprovals[0]?.approvalVersion ?? 0) + 1;
             const approvedAt = new Date();
-            await this.financialEvents.assertAccountingReadyForEvent(user, {
-              eventType: 'CLAIM_RECOVERY_APPROVED',
-              currency,
-              businessDate: approvedAt,
-            });
-            const approval = await tx.placementClaimRecoveryApproval.create({
+            return tx.placementClaimRecoveryApproval.create({
               data: {
                 tenantId: user.tenantId,
                 placementId: allocation.placementId,
@@ -180,20 +173,6 @@ export class PlacementClaimRecoveryApprovalsService {
               },
               include: recoveryApprovalInclude,
             });
-
-            const accountingEvent =
-              await this.financialEvents.prepareClaimRecoveryApproved(
-                user,
-                approval,
-              );
-            if (accountingEvent) {
-              await this.financialEvents.enqueuePreparedEvent(
-                tx,
-                accountingEvent,
-              );
-            }
-
-            return approval;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );

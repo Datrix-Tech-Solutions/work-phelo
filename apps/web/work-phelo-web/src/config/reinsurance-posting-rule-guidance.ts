@@ -34,30 +34,6 @@ const REINSURANCE_EVENT_GUIDANCE: Record<
     amountSources: ['amounts.allocatedAmount'],
     subledgerReferenceSources: ['counterparty.id'],
   },
-  CLAIM_PAYABLE_APPROVED: {
-    amountSources: ['amounts.approvedPayableAmount'],
-    subledgerReferenceSources: ['cedant.id'],
-  },
-  CLAIM_CEDANT_SETTLEMENT_PAID: {
-    amountSources: ['amounts.settlementAmount'],
-    subledgerReferenceSources: ['cedant.id'],
-  },
-  CLAIM_CEDANT_SETTLEMENT_REVERSED: {
-    amountSources: ['amounts.reversalAmount'],
-    subledgerReferenceSources: ['cedant.id'],
-  },
-  CLAIM_RECOVERY_APPROVED: {
-    amountSources: ['amounts.approvedRecoveryAmount'],
-    subledgerReferenceSources: ['reinsurer.id'],
-  },
-  CLAIM_RECOVERY_RECEIVED: {
-    amountSources: ['amounts.receiptAmount'],
-    subledgerReferenceSources: ['reinsurer.id'],
-  },
-  CLAIM_RECOVERY_RECEIPT_REVERSED: {
-    amountSources: ['amounts.reversalAmount'],
-    subledgerReferenceSources: ['reinsurer.id'],
-  },
 };
 
 const ALL_REINSURANCE_AMOUNT_SOURCES = Array.from(

@@ -60,14 +60,13 @@ interface ClaimBankConfirmModalProps {
 }
 
 /**
- * Accounting-owned "financially confirm" step for a RECORDED cedant settlement or recovery
- * receipt. Mirrors the shape of the accounting module's FinancialConfirmationQueue modal, scoped
- * down to the fields the claim bank-confirm endpoints accept.
+ * Reinsurance-owned "financially confirm" step for a RECORDED cedant settlement or recovery
+ * receipt. Scoped to the fields the claim bank-confirm endpoints accept.
  */
 export function ClaimBankConfirmModal({
   isOpen,
   title,
-  description = 'Capture the Accounting confirmation facts for this claim settlement.',
+  description = 'Capture the Reinsurance financial confirmation facts for this claim settlement.',
   amount,
   currency,
   counterpartyName,

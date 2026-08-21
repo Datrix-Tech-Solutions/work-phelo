@@ -165,8 +165,6 @@ function fieldValue(value: string | number | null | undefined, fallback = '-') {
 const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   PREMIUM_RECEIVED: 'PREMIUM RECEIVABLE',
   REINSURER_DISBURSEMENT: 'PREMIUM PAYABLE',
-  CLAIM_RECOVERY_RECEIPT: 'CLAIM RECEIVABLE',
-  CLAIM_CEDANT_SETTLEMENT: 'CLAIM PAYABLE',
 };
 
 function transactionTypeLabel(transactionType: string) {

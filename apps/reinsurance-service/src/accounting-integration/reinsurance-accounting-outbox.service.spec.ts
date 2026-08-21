@@ -90,6 +90,7 @@ function makePrisma(rows: Row[]) {
       }: {
         where: {
           tenantId?: string;
+          sourceEventType?: { notIn?: string[] };
           OR?: Array<{ attemptCount?: { lt?: number } }>;
         };
         take?: number;
@@ -97,6 +98,10 @@ function makePrisma(rows: Row[]) {
         Promise.resolve(
           rows
             .filter((row) => !where.tenantId || row.tenantId === where.tenantId)
+            .filter(
+              (row) =>
+                !where.sourceEventType?.notIn?.includes(row.sourceEventType),
+            )
             .filter((row) => {
               const maxAttempts = where.OR?.find(
                 (item) => item.attemptCount?.lt != null,
@@ -136,6 +141,7 @@ function makePrisma(rows: Row[]) {
           id: string;
           tenantId: string;
           status?: ReinsuranceAccountingOutboxStatus;
+          sourceEventType?: { notIn?: string[] };
           OR?: Array<{ attemptCount?: { lt?: number } }>;
         };
         data: Record<string, unknown>;
@@ -148,6 +154,9 @@ function makePrisma(rows: Row[]) {
             candidate.id === where.id &&
             candidate.tenantId === where.tenantId &&
             (!where.status || candidate.status === where.status) &&
+            !where.sourceEventType?.notIn?.includes(
+              candidate.sourceEventType,
+            ) &&
             (maxAttempts == null || candidate.attemptCount < maxAttempts),
         );
         if (!row) return Promise.resolve({ count: 0 });
@@ -261,6 +270,65 @@ describe('ReinsuranceAccountingOutboxService', () => {
     expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.DELIVERED);
     expect(rows[0].accountingSourceEventId).toBe('accounting-event-1');
     expect(client.enqueueSourceEvent.mock.calls).toHaveLength(1);
+  });
+
+  it('skips retired claim outbox rows during automatic dispatch', async () => {
+    const rows = [
+      makeRow({
+        id: 'claim-outbox-1',
+        sourceEventType: 'CLAIM_PAYABLE_APPROVED',
+        sourceRecordType: 'PlacementClaimPayableApproval',
+        sourceRecordId: 'approval-1',
+        idempotencyKey: 'reinsurance:claim:claim-1:payable-approved:1:v1',
+      }),
+      makeRow({
+        id: 'payment-outbox-1',
+        sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
+        sourceRecordType: 'PlacementPayment',
+        sourceRecordId: 'payment-1',
+      }),
+    ];
+    const prisma = makePrisma(rows);
+    client.enqueueSourceEvent.mockResolvedValueOnce({
+      id: 'accounting-event-1',
+    });
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const result = await service.processPending(prisma, {
+      tenantId: 'tenant-1',
+    });
+
+    expect(result.deliveredCount).toBe(1);
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.PENDING);
+    expect(rows[1].status).toBe(ReinsuranceAccountingOutboxStatus.DELIVERED);
+    expect(client.enqueueSourceEvent.mock.calls).toHaveLength(1);
+  });
+
+  it('refuses manual retry for retired claim outbox rows', async () => {
+    const rows = [
+      makeRow({
+        sourceEventType: 'CLAIM_RECOVERY_RECEIVED',
+        sourceRecordType: 'PlacementClaimRecoveryReceipt',
+        sourceRecordId: 'receipt-1',
+        idempotencyKey:
+          'reinsurance:claim-recovery-receipt:receipt-1:confirmed:v1',
+        status: ReinsuranceAccountingOutboxStatus.FAILED,
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    ];
+    const prisma = makePrisma(rows);
+    const service = new ReinsuranceAccountingOutboxService(client, builder);
+
+    const result = await service.retryFailedEvent(
+      prisma,
+      'tenant-1',
+      'outbox-1',
+    );
+
+    expect(result).toBeNull();
+    expect(rows[0].status).toBe(ReinsuranceAccountingOutboxStatus.FAILED);
+    expect(rows[0].nextAttemptAt).toBeNull();
   });
 
   it('marks retryable failures with a next attempt date', async () => {

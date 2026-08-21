@@ -1256,7 +1256,7 @@ export interface CreatePlacementClaimRecoveryReceiptPayload {
   notes?: string;
 }
 
-/** Accounting-owned confirmation that a Cedant settlement / recovery receipt cleared the bank. */
+/** Reinsurance-owned financial confirmation that a Cedant settlement / recovery receipt cleared. */
 export interface ConfirmPlacementClaimFinancialBankPayload {
   bankConfirmedAt: string;
   bankReference?: string;

@@ -4,9 +4,7 @@ import {
   PlacementClaimAllocationStatus,
   PlacementClaimStatus,
   Prisma,
-  ReinsuranceAccountingOutboxStatus,
 } from '../../prisma/generated/client';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlacementClaimRecoveryApprovalsService } from './placement-claim-recovery-approvals.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
@@ -102,11 +100,6 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
     };
     $transaction: jest.Mock;
   };
-  let financialEvents: {
-    assertAccountingReadyForEvent: jest.Mock;
-    prepareClaimRecoveryApproved: jest.Mock;
-    enqueuePreparedEvent: jest.Mock;
-  };
   let service: PlacementClaimRecoveryApprovalsService;
 
   beforeEach(() => {
@@ -139,34 +132,13 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
     });
     prisma.placementClaimRecoveryApproval.findMany.mockResolvedValue([]);
     prisma.placementClaimRecoveryApproval.create.mockResolvedValue(approval);
-    financialEvents = {
-      assertAccountingReadyForEvent: jest.fn().mockResolvedValue(undefined),
-      prepareClaimRecoveryApproved: jest.fn().mockResolvedValue({
-        tenantId: 'tenant-1',
-        sourceEventType: 'CLAIM_RECOVERY_APPROVED',
-        sourceRecordType: 'PlacementClaimRecoveryApproval',
-        sourceRecordId: 'recovery-approval-1',
-        sourceDocumentId: 'claim-1',
-        idempotencyKey:
-          'reinsurance:claim-recovery:recovery-approval-1:approved:v1',
-        occurredAt: '2026-07-30T10:00:00.000Z',
-        currency: 'GHS',
-        payload: { amounts: { approvedRecoveryAmount: 40000 } },
-      }),
-      enqueuePreparedEvent: jest.fn().mockResolvedValue({
-        id: 'outbox-1',
-        status: ReinsuranceAccountingOutboxStatus.PENDING,
-        accountingSourceEventId: null,
-      }),
-    };
     service = new PlacementClaimRecoveryApprovalsService(
       prisma as unknown as PrismaService,
       new ReinsuranceMoneyHelper(),
-      financialEvents as unknown as ReinsuranceFinancialEventPublisher,
     );
   });
 
-  it('records a per-allocation recovery approval and captures one accounting event', async () => {
+  it('records a per-allocation recovery approval without Accounting outbox capture', async () => {
     await service.approve(user, 'placement-1', 'claim-1', 'allocation-1', {
       approvedAmount: 40000,
       currency: 'GHS',
@@ -192,11 +164,6 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
       reference: 'APP-001',
       notes: 'Approved after loss-adjuster review.',
     });
-    expect(financialEvents.prepareClaimRecoveryApproved).toHaveBeenCalledWith(
-      user,
-      approval,
-    );
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
   });
 
   it('allows cumulative partial approvals for the same allocation', async () => {
@@ -231,7 +198,7 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
     expect(createArgs.data.approvalVersion).toBe(2);
   });
 
-  it('rejects over-approval without creating approval or outbox rows', async () => {
+  it('rejects over-approval without creating approval rows', async () => {
     prisma.placementClaimRecoveryApproval.findMany.mockResolvedValue([
       { ...approval, approvedAmount: new Prisma.Decimal('80000.00') },
     ]);
@@ -243,38 +210,9 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(prisma.placementClaimRecoveryApproval.create).not.toHaveBeenCalled();
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
-  it('blocks recovery approval before persistence when Accounting readiness fails', async () => {
-    financialEvents.assertAccountingReadyForEvent.mockRejectedValue(
-      new ConflictException({
-        code: 'ACCOUNTING_NOT_READY',
-        blockers: [{ code: 'POSTING_RULE_MISSING' }],
-      }),
-    );
-
-    await expect(
-      service.approve(user, 'placement-1', 'claim-1', 'allocation-1', {
-        approvedAmount: 40000,
-        currency: 'GHS',
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
-
-    expect(financialEvents.assertAccountingReadyForEvent).toHaveBeenCalledWith(
-      user,
-      expect.objectContaining({
-        eventType: 'CLAIM_RECOVERY_APPROVED',
-        currency: 'GHS',
-      }),
-    );
-    expect(prisma.placementClaimRecoveryApproval.create).not.toHaveBeenCalled();
-    expect(financialEvents.prepareClaimRecoveryApproved).not.toHaveBeenCalled();
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
-  });
-
-  it('does not enqueue accounting when the tenant has Accounting disabled', async () => {
-    financialEvents.prepareClaimRecoveryApproved.mockResolvedValue(null);
+  it('approves operationally regardless of Accounting module enablement', async () => {
     await service.approve(
       { ...user, moduleConfig: { operations: true, accounting: false } },
       'placement-1',
@@ -284,7 +222,6 @@ describe('PlacementClaimRecoveryApprovalsService', () => {
     );
 
     expect(prisma.placementClaimRecoveryApproval.create).toHaveBeenCalled();
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('rejects non-reinsurer and void allocation approvals', async () => {

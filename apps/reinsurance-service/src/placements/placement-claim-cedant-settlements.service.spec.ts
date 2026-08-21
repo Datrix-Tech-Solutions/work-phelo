@@ -1,12 +1,10 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
-  ReinsuranceAccountingOutboxStatus,
   PlacementClaimCedantSettlementStatus,
   PlacementClaimStatus,
   PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
@@ -107,13 +105,6 @@ describe('PlacementClaimCedantSettlementsService', () => {
     };
     $transaction: jest.Mock;
   };
-  let financialEvents: {
-    assertAccountingReadyForEvent: jest.Mock;
-    prepareClaimPayableApproved: jest.Mock;
-    prepareClaimCedantSettlementPaid: jest.Mock;
-    prepareClaimCedantSettlementReversed: jest.Mock;
-    enqueuePreparedEvent: jest.Mock;
-  };
   let service: PlacementClaimCedantSettlementsService;
 
   beforeEach(() => {
@@ -160,57 +151,13 @@ describe('PlacementClaimCedantSettlementsService', () => {
       createdAt: new Date('2026-07-30T10:00:00.000Z'),
     });
     prisma.placementClaimCedantSettlement.findMany.mockResolvedValue([]);
-    financialEvents = {
-      assertAccountingReadyForEvent: jest.fn().mockResolvedValue(undefined),
-      prepareClaimPayableApproved: jest.fn().mockResolvedValue({
-        tenantId: 'tenant-1',
-        sourceEventType: 'CLAIM_PAYABLE_APPROVED',
-        sourceRecordType: 'PlacementClaimPayableApproval',
-        sourceRecordId: 'approval-1',
-        sourceDocumentId: 'claim-1',
-        idempotencyKey: 'reinsurance:claim:claim-1:payable-approved:1:v1',
-        occurredAt: '2026-07-30T10:00:00.000Z',
-        currency: 'GHS',
-        payload: { amounts: { approvedPayableAmount: 90000 } },
-      }),
-      prepareClaimCedantSettlementPaid: jest.fn().mockResolvedValue({
-        tenantId: 'tenant-1',
-        sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
-        sourceRecordType: 'PlacementClaimCedantSettlement',
-        sourceRecordId: 'settlement-1',
-        sourceDocumentId: 'claim-1',
-        idempotencyKey:
-          'reinsurance:claim-cedant-settlement:settlement-1:confirmed:v1',
-        occurredAt: '2026-07-30T12:00:00.000Z',
-        currency: 'GHS',
-        payload: { amounts: { settlementAmount: 40000 } },
-      }),
-      prepareClaimCedantSettlementReversed: jest.fn().mockResolvedValue({
-        tenantId: 'tenant-1',
-        sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-        sourceRecordType: 'PlacementClaimCedantSettlement',
-        sourceRecordId: 'settlement-reversal-1',
-        sourceDocumentId: 'settlement-1',
-        idempotencyKey:
-          'reinsurance:claim-cedant-settlement:settlement-reversal-1:reversal:v1',
-        occurredAt: '2026-07-30T13:00:00.000Z',
-        currency: 'GHS',
-        payload: { amounts: { reversalAmount: 40000 } },
-      }),
-      enqueuePreparedEvent: jest.fn().mockResolvedValue({
-        id: 'outbox-1',
-        status: ReinsuranceAccountingOutboxStatus.PENDING,
-        accountingSourceEventId: null,
-      }),
-    };
     service = new PlacementClaimCedantSettlementsService(
       prisma as unknown as PrismaService,
       new ReinsuranceMoneyHelper(),
-      financialEvents as unknown as ReinsuranceFinancialEventPublisher,
     );
   });
 
-  it('records claim-level payable approval and captures accounting event once', async () => {
+  it('records claim-level payable approval without Accounting outbox capture', async () => {
     prisma.placementClaim.update.mockResolvedValue({
       ...claim,
       approvedPayableAmount: new Prisma.Decimal('90000.00'),
@@ -245,37 +192,6 @@ describe('PlacementClaimCedantSettlementsService', () => {
       approvedByUserId: 'user-1',
       updatedByUserId: 'user-1',
     });
-    expect(financialEvents.prepareClaimPayableApproved).toHaveBeenCalledTimes(
-      1,
-    );
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
-  });
-
-  it('blocks claim payable approval before persistence when Accounting readiness fails', async () => {
-    financialEvents.assertAccountingReadyForEvent.mockRejectedValue(
-      new ConflictException({
-        code: 'ACCOUNTING_NOT_READY',
-        blockers: [{ code: 'POSTING_RULE_MISSING' }],
-      }),
-    );
-
-    await expect(
-      service.approvePayable(user, 'placement-1', 'claim-1', {
-        approvedPayableAmount: 90000,
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
-
-    expect(financialEvents.assertAccountingReadyForEvent).toHaveBeenCalledWith(
-      user,
-      expect.objectContaining({
-        eventType: 'CLAIM_PAYABLE_APPROVED',
-        currency: 'GHS',
-      }),
-    );
-    expect(prisma.placementClaimPayableApproval.create).not.toHaveBeenCalled();
-    expect(prisma.placementClaim.update).not.toHaveBeenCalled();
-    expect(financialEvents.prepareClaimPayableApproved).not.toHaveBeenCalled();
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('requires final loss, active allocation, amount within final loss and matching currency', async () => {
@@ -309,7 +225,6 @@ describe('PlacementClaimCedantSettlementsService', () => {
         approvedPayableAmount: 90000,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('treats duplicate same-version approval as idempotent and blocks mutation', async () => {
@@ -339,7 +254,6 @@ describe('PlacementClaimCedantSettlementsService', () => {
 
     expect(result).toBe(claim);
     expect(prisma.placementClaimPayableApproval.create).not.toHaveBeenCalled();
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
 
     await expect(
       service.approvePayable(user, 'placement-1', 'claim-1', {
@@ -348,8 +262,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('still approves operationally when Accounting is disabled', async () => {
-    financialEvents.prepareClaimPayableApproved.mockResolvedValue(null);
+  it('approves operationally regardless of Accounting module enablement', async () => {
     prisma.placementClaim.update.mockResolvedValue({
       ...claim,
       approvedPayableAmount: new Prisma.Decimal('90000.00'),
@@ -363,7 +276,6 @@ describe('PlacementClaimCedantSettlementsService', () => {
     );
 
     expect(prisma.placementClaimPayableApproval.create).toHaveBeenCalled();
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('rejects lowering approved payable below effective cedant settlements', async () => {
@@ -433,11 +345,6 @@ describe('PlacementClaimCedantSettlementsService', () => {
       reference: 'PAY-002',
       status: PlacementClaimCedantSettlementStatus.RECORDED,
     });
-    expect(
-      financialEvents.prepareClaimCedantSettlementPaid,
-    ).not.toHaveBeenCalled();
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
-
     await expect(
       service.create(user, 'placement-1', 'claim-1', {
         currency: 'GHS',
@@ -547,10 +454,6 @@ describe('PlacementClaimCedantSettlementsService', () => {
       bankReference: 'BANK-CED-001',
       accountingCashAccountId: 'cash-account-1',
     });
-    expect(
-      financialEvents.prepareClaimCedantSettlementPaid,
-    ).toHaveBeenCalledWith(user, confirmed);
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
   });
 
   it('uses only bank-confirmed settlements for payable outstanding', async () => {
@@ -620,10 +523,6 @@ describe('PlacementClaimCedantSettlementsService', () => {
     expect((createArgs.data.amount as Prisma.Decimal).toString()).toBe(
       '-40000',
     );
-    expect(
-      financialEvents.prepareClaimCedantSettlementReversed,
-    ).not.toHaveBeenCalled();
-
     prisma.placementClaimCedantSettlement.findFirst.mockResolvedValue({
       ...settlement,
       status: PlacementClaimCedantSettlementStatus.REVERSED,
@@ -659,7 +558,7 @@ describe('PlacementClaimCedantSettlementsService', () => {
     },
   );
 
-  it('emits reversal event for bank-confirmed cedant settlement reversals', async () => {
+  it('reverses bank-confirmed cedant settlements without Accounting outbox capture', async () => {
     const confirmedSettlement = {
       ...settlement,
       status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
@@ -689,9 +588,13 @@ describe('PlacementClaimCedantSettlementsService', () => {
       notes: 'Correction',
     });
 
-    expect(
-      financialEvents.prepareClaimCedantSettlementReversed,
-    ).toHaveBeenCalledWith(user, reversal);
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
+    const createArgs =
+      firstCallArg<Prisma.PlacementClaimCedantSettlementCreateArgs>(
+        prisma.placementClaimCedantSettlement.create,
+      );
+    expect(createArgs.data).toMatchObject({
+      status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
+      reversalOfSettlementId: 'settlement-1',
+    });
   });
 });

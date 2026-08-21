@@ -7,8 +7,8 @@ import type { PostingRuleDirection, PostingRuleSubledgerType } from '@/types/acc
 // types (see accounting-service/src/posting/reinsurance-accounting-readiness.catalog.ts
 // + the AR/AP matrix in accounting-service/README.md, and the exact payload
 // paths reinsurance-financial-event-publisher.service.ts sends for each event
-// — including that claim events nest the counterparty under `cedant.id` /
-// `reinsurer.id`, while premium events nest it under `counterparty.id`).
+// — active Reinsurance Accounting events currently nest counterparties under
+// `counterparty.id`).
 //
 // Used both to drive the guided "New Posting Rule" flow (pre-filling the
 // correct DR/CR direction, subledger tag, external ref path, and amount path)
@@ -178,110 +178,6 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
         subledgerExternalRefSource: 'counterparty.id',
         amountSource: 'amounts.allocatedAmount',
       },
-    ],
-  },
-  {
-    eventType: 'CLAIM_PAYABLE_APPROVED',
-    label: 'Claim payable approved',
-    description: 'An approved claim payable is owed to the cedant.',
-    controlDimensionLabel: 'Cedant Claims Payable (AP)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Claims Expense',
-        amountSource: 'amounts.approvedPayableAmount',
-      },
-      {
-        direction: 'CR',
-        roleLabel: 'Claims Payable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'cedant.id',
-        amountSource: 'amounts.approvedPayableAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_CEDANT_SETTLEMENT_PAID',
-    label: 'Cedant claim settlement paid',
-    description: 'The broker settlement paid to the cedant clears the claims payable.',
-    controlDimensionLabel: 'Cedant Claims Payable (AP)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Claims Payable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'cedant.id',
-        amountSource: 'amounts.settlementAmount',
-      },
-      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.settlementAmount' },
-    ],
-  },
-  {
-    eventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-    label: 'Cedant claim settlement reversed',
-    description: 'A cedant claim settlement is being reversed.',
-    controlDimensionLabel: 'Cedant Claims Payable (AP)',
-    lines: [
-      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.reversalAmount' },
-      {
-        direction: 'CR',
-        roleLabel: 'Claims Payable',
-        subledgerType: 'CEDANT',
-        subledgerExternalRefSource: 'cedant.id',
-        amountSource: 'amounts.reversalAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_RECOVERY_APPROVED',
-    label: 'Claim recovery approved',
-    description: 'An approved recovery receivable is owed by the reinsurer.',
-    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Reinsurer Claims Receivable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'reinsurer.id',
-        amountSource: 'amounts.approvedRecoveryAmount',
-      },
-      {
-        direction: 'CR',
-        roleLabel: 'Claims Recovery Income / Clearing',
-        amountSource: 'amounts.approvedRecoveryAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_RECOVERY_RECEIVED',
-    label: 'Claim receivable',
-    description: 'A confirmed reinsurer claim recovery receipt clears the receivable.',
-    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
-    lines: [
-      { direction: 'DR', roleLabel: 'Bank / Cash', amountSource: 'amounts.receiptAmount' },
-      {
-        direction: 'CR',
-        roleLabel: 'Reinsurer Claims Receivable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'reinsurer.id',
-        amountSource: 'amounts.receiptAmount',
-      },
-    ],
-  },
-  {
-    eventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
-    label: 'Claim recovery receipt reversed',
-    description: 'A claim recovery receipt is being reversed.',
-    controlDimensionLabel: 'Reinsurer Claims Receivable (AR)',
-    lines: [
-      {
-        direction: 'DR',
-        roleLabel: 'Reinsurer Claims Receivable',
-        subledgerType: 'REINSURER',
-        subledgerExternalRefSource: 'reinsurer.id',
-        amountSource: 'amounts.reversalAmount',
-      },
-      { direction: 'CR', roleLabel: 'Bank / Cash', amountSource: 'amounts.reversalAmount' },
     ],
   },
 ];

@@ -22,8 +22,8 @@ export function useReinsuranceAccountingIntegrationStatus() {
 }
 
 /**
- * Convenience read of one readiness group (premiumAccounting, claimsAccounting or
- * cashConfirmation) so callers can gate/warn on a specific workflow without repeating
+ * Convenience read of one readiness group (premiumAccounting or cashConfirmation)
+ * so callers can gate/warn on a specific workflow without repeating
  * the null-checks around `postingReadiness`/`readinessGroups` being unavailable
  * (Accounting not enabled, integration not configured, or the readiness check itself failed).
  */
