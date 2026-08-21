@@ -15,11 +15,11 @@ import {
 } from '../../prisma/generated/client';
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
-import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
-import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
-import { PlacementClaimRecoveryApprovalsService } from './placement-claim-recovery-approvals.service';
-import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recovery-receipts.service';
-import { PlacementClaimsService } from './placement-claims.service';
+import { PlacementClaimCashCallsService } from './claims/cash-calls/cash-calls.service';
+import { PlacementClaimCedantSettlementsService } from './claims/settlements/cedant-settlements.service';
+import { PlacementClaimRecoveryApprovalsService } from './claims/recoveries/recovery-approvals.service';
+import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recovery-receipts.service';
+import { PlacementClaimsService } from './claims/claims.service';
 import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementDocumentsService } from './placement-documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
@@ -31,7 +31,7 @@ import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
-import { PlacementClaimFinancialCloseReadinessService } from './placement-claim-financial-close-readiness.service';
+import { PlacementClaimFinancialCloseReadinessService } from './claims/close/financial-close-readiness.service';
 
 describe('PlacementsController', () => {
   const service = {

@@ -10,16 +10,16 @@ import {
   PlacementPaymentType,
   PlacementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ClaimAllocationCalculator } from './claim-allocation.calculator';
-import { ClosingSnapshotReader } from './closing-snapshot.reader';
-import { PlacementEffectivePositionService } from './placement-effective-position.service';
-import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { PlacementClaimsService } from './placement-claims.service';
-import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
-import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ClaimAllocationCalculator } from './allocation/allocation.calculator';
+import { ClosingSnapshotReader } from '../closing-snapshot.reader';
+import { PlacementEffectivePositionService } from '../placement-effective-position.service';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
+import { PlacementClaimsService } from './claims.service';
+import { PlacementFinancialActivityReader } from '../placement-financial-activity.reader';
+import { PlacementFinancialLockPolicy } from '../placement-financial-lock.policy';
+import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 describe('PlacementClaimsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

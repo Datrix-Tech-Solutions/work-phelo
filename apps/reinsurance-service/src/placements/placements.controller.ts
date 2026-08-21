@@ -85,11 +85,11 @@ import { UpdatePlacementClaimCashCallStatusDto } from './dto/update-placement-cl
 import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
 import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
 import { VoidPlacementClaimCashCallDto } from './dto/void-placement-claim-cash-call.dto';
-import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
-import { PlacementClaimCedantSettlementsService } from './placement-claim-cedant-settlements.service';
-import { PlacementClaimRecoveryApprovalsService } from './placement-claim-recovery-approvals.service';
-import { PlacementClaimRecoveryReceiptsService } from './placement-claim-recovery-receipts.service';
-import { PlacementClaimsService } from './placement-claims.service';
+import { PlacementClaimCashCallsService } from './claims/cash-calls/cash-calls.service';
+import { PlacementClaimCedantSettlementsService } from './claims/settlements/cedant-settlements.service';
+import { PlacementClaimRecoveryApprovalsService } from './claims/recoveries/recovery-approvals.service';
+import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recovery-receipts.service';
+import { PlacementClaimsService } from './claims/claims.service';
 import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-payable.dto';
 import { ApprovePlacementClaimRecoveryDto } from './dto/approve-placement-claim-recovery.dto';
 import { ConfirmPlacementClaimCedantSettlementBankDto } from './dto/confirm-placement-claim-cedant-settlement-bank.dto';
@@ -110,7 +110,7 @@ import {
 } from './dto/placement-claim-recovery-response.dto';
 import { ReversePlacementClaimCedantSettlementDto } from './dto/reverse-placement-claim-cedant-settlement.dto';
 import { ReversePlacementClaimRecoveryReceiptDto } from './dto/reverse-placement-claim-recovery-receipt.dto';
-import { PlacementClaimFinancialCloseReadinessService } from './placement-claim-financial-close-readiness.service';
+import { PlacementClaimFinancialCloseReadinessService } from './claims/close/financial-close-readiness.service';
 import {
   PlacementClosingListResponseDto,
   PlacementClosingResponseDto,

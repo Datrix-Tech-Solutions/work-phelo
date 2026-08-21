@@ -10,10 +10,10 @@ import {
   PlacementClaimAllocationStatus,
   PlacementClaimStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ApprovePlacementClaimRecoveryDto } from './dto/approve-placement-claim-recovery.dto';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+} from '../../../../prisma/generated/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { ApprovePlacementClaimRecoveryDto } from '../../dto/approve-placement-claim-recovery.dto';
+import { ReinsuranceMoneyHelper } from '../../reinsurance-money.helper';
 
 const recoveryApprovalInclude = {
   counterparty: {
