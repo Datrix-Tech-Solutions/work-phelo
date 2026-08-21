@@ -10,20 +10,20 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
-import { RequireFeature } from '../auth/decorators/feature.decorator';
-import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import { FeatureGuard } from '../auth/guards/feature.guard';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ModuleGuard } from '../auth/guards/module.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequireFeature } from '../../auth/decorators/feature.decorator';
+import { RequireModule } from '../../auth/decorators/module.decorator';
+import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
+import { FeatureGuard } from '../../auth/guards/feature.guard';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../../auth/guards/module.guard';
+import { PermissionsGuard } from '../../auth/guards/permissions.guard';
 import {
   ReinsuranceDashboardClaimsResponseDto,
   ReinsuranceDashboardFinancialsResponseDto,
   ReinsuranceDashboardOverviewResponseDto,
   ReinsuranceDashboardPlacementsResponseDto,
-} from './dto/reinsurance-dashboard-response.dto';
-import { ReinsuranceDashboardService } from './reinsurance-dashboard.service';
+} from './dashboard-response.dto';
+import { ReinsuranceDashboardService } from './dashboard.service';
 
 @Controller('dashboard')
 @ApiTags('Reinsurance - Dashboard')

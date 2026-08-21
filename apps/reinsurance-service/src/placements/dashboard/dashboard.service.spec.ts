@@ -8,10 +8,10 @@ import {
   PlacementPaymentStatus,
   PlacementPaymentType,
   PlacementStatus,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
-import { ReinsuranceDashboardService } from './reinsurance-dashboard.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
+import { ReinsuranceDashboardService } from './dashboard.service';
 
 describe('ReinsuranceDashboardService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

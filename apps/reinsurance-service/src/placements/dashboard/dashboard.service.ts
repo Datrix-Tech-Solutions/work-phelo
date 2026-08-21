@@ -10,8 +10,8 @@ import {
   PlacementPaymentType,
   PlacementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   ReinsuranceDashboardCashCallCountsDto,
   ReinsuranceDashboardClaimsResponseDto,
@@ -20,8 +20,8 @@ import {
   ReinsuranceDashboardNoteCountsDto,
   ReinsuranceDashboardOverviewResponseDto,
   ReinsuranceDashboardPlacementsResponseDto,
-} from './dto/reinsurance-dashboard-response.dto';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+} from './dashboard-response.dto';
+import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 type CurrencyAmountMap = Map<string, number>;
 

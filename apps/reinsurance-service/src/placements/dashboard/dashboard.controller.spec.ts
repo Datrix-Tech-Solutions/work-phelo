@@ -1,7 +1,7 @@
 import { RequestUser } from '@work-phelo/types';
-import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
-import { ReinsuranceDashboardController } from './reinsurance-dashboard.controller';
-import { ReinsuranceDashboardService } from './reinsurance-dashboard.service';
+import { PERMISSIONS_KEY } from '../../auth/decorators/permissions.decorator';
+import { ReinsuranceDashboardController } from './dashboard.controller';
+import { ReinsuranceDashboardService } from './dashboard.service';
 
 describe('ReinsuranceDashboardController', () => {
   const dashboardService = {
