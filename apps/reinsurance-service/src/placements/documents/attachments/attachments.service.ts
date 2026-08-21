@@ -8,15 +8,15 @@ import { RequestUser } from '@work-phelo/types';
 import {
   PlacementAttachmentStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementDocumentDownloadUrlDto } from './dto/placement-document-download-url.dto';
-import { UploadPlacementAttachmentDto } from './dto/upload-placement-attachment.dto';
-import { VoidPlacementAttachmentDto } from './dto/void-placement-attachment.dto';
+} from '../../../../prisma/generated/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { PlacementDocumentDownloadUrlDto } from '../../dto/placement-document-download-url.dto';
+import { UploadPlacementAttachmentDto } from '../../dto/upload-placement-attachment.dto';
+import { VoidPlacementAttachmentDto } from '../../dto/void-placement-attachment.dto';
 import {
   S3DocumentStorageService,
   StoredObjectResult,
-} from './storage/s3-document-storage.service';
+} from '../storage/s3-document-storage.service';
 
 export type AttachmentParentType =
   | 'PLACEMENT'

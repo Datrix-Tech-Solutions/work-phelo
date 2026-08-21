@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { PlacementDocumentType } from '../../../prisma/generated/client';
+import { PlacementDocumentType } from '../../../../prisma/generated/client';
 import { PlacementDocumentTemplateRegistry } from './placement-document-template.registry';
 
 describe('PlacementDocumentTemplateRegistry', () => {

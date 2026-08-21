@@ -14,10 +14,10 @@ import { PlacementClaimFinancialCloseReadinessService } from './claims/close/fin
 import { PlacementClaimRecoveryApprovalsService } from './claims/recoveries/recovery-approvals.service';
 import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recovery-receipts.service';
 import { PlacementClaimsService } from './claims/claims.service';
-import { PlacementAttachmentsController } from './placement-attachments.controller';
-import { PlacementAttachmentsService } from './placement-attachments.service';
+import { PlacementAttachmentsController } from './documents/attachments/attachments.controller';
+import { PlacementAttachmentsService } from './documents/attachments/attachments.service';
 import { PlacementClosingsService } from './placement-closings.service';
-import { PlacementDocumentsService } from './placement-documents.service';
+import { PlacementDocumentsService } from './documents/documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
@@ -25,15 +25,15 @@ import { PlacementEffectivePositionService } from './placement-effective-positio
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
-import { PlacementDocumentTemplateRegistry } from './pdf/placement-document-template.registry';
-import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
+import { PlacementDocumentTemplateRegistry } from './documents/pdf/placement-document-template.registry';
+import { PlacementPdfRendererService } from './documents/pdf/placement-pdf-renderer.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
 import { ReinsuranceDashboardController } from './reinsurance-dashboard.controller';
 import { ReinsuranceDashboardService } from './reinsurance-dashboard.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
-import { S3DocumentStorageService } from './storage/s3-document-storage.service';
-import { TenantDocumentProfileClient } from './tenant-document-profile.client';
+import { S3DocumentStorageService } from './documents/storage/s3-document-storage.service';
+import { TenantDocumentProfileClient } from './documents/tenant-document-profile.client';
 
 @Module({
   imports: [

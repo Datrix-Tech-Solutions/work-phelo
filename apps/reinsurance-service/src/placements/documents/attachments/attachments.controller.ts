@@ -27,26 +27,26 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
-import { RequireFeature } from '../auth/decorators/feature.decorator';
-import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import { FeatureGuard } from '../auth/guards/feature.guard';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ModuleGuard } from '../auth/guards/module.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { ApiErrorResponseDto } from './dto/placement-response.dto';
+import { RequireFeature } from '../../../auth/decorators/feature.decorator';
+import { RequireModule } from '../../../auth/decorators/module.decorator';
+import { RequirePermissions } from '../../../auth/decorators/permissions.decorator';
+import { FeatureGuard } from '../../../auth/guards/feature.guard';
+import { JwtAuthGuard } from '../../../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../../../auth/guards/module.guard';
+import { PermissionsGuard } from '../../../auth/guards/permissions.guard';
+import { ApiErrorResponseDto } from '../../dto/placement-response.dto';
 import {
   PlacementAttachmentListResponseDto,
   PlacementAttachmentResponseDto,
-} from './dto/placement-attachment-response.dto';
-import { PlacementDocumentDownloadUrlDto } from './dto/placement-document-download-url.dto';
-import { UploadPlacementAttachmentDto } from './dto/upload-placement-attachment.dto';
-import { VoidPlacementAttachmentDto } from './dto/void-placement-attachment.dto';
+} from '../../dto/placement-attachment-response.dto';
+import { PlacementDocumentDownloadUrlDto } from '../../dto/placement-document-download-url.dto';
+import { UploadPlacementAttachmentDto } from '../../dto/upload-placement-attachment.dto';
+import { VoidPlacementAttachmentDto } from '../../dto/void-placement-attachment.dto';
 import {
   AttachmentParentRef,
   PlacementAttachmentsService,
-} from './placement-attachments.service';
-import { PlacementPermission } from './placement.permissions';
+} from './attachments.service';
+import { PlacementPermission } from '../../placement.permissions';
 
 const FILE_LIMIT_BYTES = 25 * 1024 * 1024;
 

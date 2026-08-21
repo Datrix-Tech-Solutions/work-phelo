@@ -123,7 +123,7 @@ import {
 } from './dto/placement-document-response.dto';
 import { PlacementDocumentDownloadUrlDto } from './dto/placement-document-download-url.dto';
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
-import { PlacementDocumentsService } from './placement-documents.service';
+import { PlacementDocumentsService } from './documents/documents.service';
 import {
   CreateEffectiveDebitNoteDto,
   EffectiveDebitNoteListResponseDto,

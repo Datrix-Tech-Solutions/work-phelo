@@ -15,13 +15,13 @@ import {
   PlacementPaymentType,
   PlacementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
-import { PlacementDocumentsService } from './placement-documents.service';
-import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
-import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
-import { PlacementsService } from './placements.service';
+import { PlacementDocumentsService } from './documents.service';
+import { PlacementFinancialActivityReader } from '../placement-financial-activity.reader';
+import { PlacementFinancialLockPolicy } from '../placement-financial-lock.policy';
+import { PlacementsService } from '../placements.service';
 import { S3DocumentStorageService } from './storage/s3-document-storage.service';
 import {
   TenantDocumentProfileClient,

@@ -1,8 +1,8 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { PlacementAttachmentStatus } from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementAttachmentsService } from './placement-attachments.service';
-import { S3DocumentStorageService } from './storage/s3-document-storage.service';
+import { PlacementAttachmentStatus } from '../../../../prisma/generated/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { PlacementAttachmentsService } from './attachments.service';
+import { S3DocumentStorageService } from '../storage/s3-document-storage.service';
 
 describe('PlacementAttachmentsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

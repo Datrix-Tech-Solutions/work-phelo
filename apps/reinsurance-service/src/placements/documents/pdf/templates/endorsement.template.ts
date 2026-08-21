@@ -1,4 +1,4 @@
-import { PlacementDocumentType } from '../../../../prisma/generated/client';
+import { PlacementDocumentType } from '../../../../../prisma/generated/client';
 import {
   dateText,
   detail,

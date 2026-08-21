@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { PlacementDocumentType } from '../../../prisma/generated/client';
+import { PlacementDocumentType } from '../../../../prisma/generated/client';
 import {
   isClosingSlipPayload,
   PlacementDocumentTemplateContext,
