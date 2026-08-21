@@ -14,16 +14,16 @@ import {
   PlacementNoteStatus,
   PlacementNoteType,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
 import {
   S3DocumentStorageService,
   SignedDocumentUrlResult,
   StoredObjectResult,
 } from './storage/s3-document-storage.service';
-import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
-import { PlacementsService } from './placements.service';
+import { VoidPlacementDocumentDto } from '../dto/void-placement-document.dto';
+import { PlacementsService } from '../placements.service';
 import {
   TenantDocumentProfileClient,
   TenantDocumentProfileSnapshot,

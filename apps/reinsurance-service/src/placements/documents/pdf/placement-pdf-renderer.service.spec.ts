@@ -1,7 +1,7 @@
 import {
   PlacementDocumentStatus,
   PlacementDocumentType,
-} from '../../../prisma/generated/client';
+} from '../../../../prisma/generated/client';
 import { PlacementDocumentTemplateRegistry } from './placement-document-template.registry';
 import { PlacementPdfRendererService } from './placement-pdf-renderer.service';
 

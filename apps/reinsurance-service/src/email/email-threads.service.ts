@@ -13,8 +13,8 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { EmailEventPublisher } from '../messaging/email-event.publisher';
-import { PlacementAttachmentsService } from '../placements/placement-attachments.service';
-import { PlacementDocumentsService } from '../placements/placement-documents.service';
+import { PlacementAttachmentsService } from '../placements/documents/attachments/attachments.service';
+import { PlacementDocumentsService } from '../placements/documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LinkPlacementEmailDto } from './dto/link-placement-email.dto';
 import { QueryEmailMessagesDto } from './dto/query-email-messages.dto';
