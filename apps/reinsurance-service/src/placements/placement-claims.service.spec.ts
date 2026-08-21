@@ -46,6 +46,7 @@ describe('PlacementClaimsService', () => {
   const placement = {
     id: 'placement-1',
     currency: 'GHS',
+    placementType: 'FACULTATIVE' as const,
   };
 
   const effectiveView = {
@@ -206,7 +207,7 @@ describe('PlacementClaimsService', () => {
     expect(createArgs.data).toMatchObject({
       tenantId: 'tenant-1',
       placementId: 'placement-1',
-      claimNumber: 'CLM-001',
+      claimNumber: expect.stringMatching(/^CLMFAC-\d{6}-0001$/),
       status: PlacementClaimStatus.DRAFT,
       claimCause: 'Warehouse fire',
       occurrenceDetails: 'Section B',
@@ -312,7 +313,7 @@ describe('PlacementClaimsService', () => {
 
     expect(prisma.placement.findFirst).toHaveBeenCalledWith({
       where: { id: 'placement-1', tenantId: 'tenant-1', archivedAt: null },
-      select: { id: true, currency: true },
+      select: { id: true, currency: true, placementType: true },
     });
     expect(prisma.placementClaim.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
