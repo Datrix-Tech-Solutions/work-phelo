@@ -29,8 +29,8 @@ import { PlacementDocumentTemplateRegistry } from './documents/pdf/placement-doc
 import { PlacementPdfRendererService } from './documents/pdf/placement-pdf-renderer.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
-import { ReinsuranceDashboardController } from './reinsurance-dashboard.controller';
-import { ReinsuranceDashboardService } from './reinsurance-dashboard.service';
+import { ReinsuranceDashboardController } from './dashboard/dashboard.controller';
+import { ReinsuranceDashboardService } from './dashboard/dashboard.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 import { S3DocumentStorageService } from './documents/storage/s3-document-storage.service';
 import { TenantDocumentProfileClient } from './documents/tenant-document-profile.client';
