@@ -285,7 +285,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
         searchValue={search}
         onRowClick={(row) =>
           router.push(
-            `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}`,
+            `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}&tab=${tab}`,
           )
         }
         onSearch={(q) => {
@@ -323,7 +323,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
                   label: 'View',
                   onClick: () =>
                     router.push(
-                      `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}`,
+                      `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}&tab=${tab}`,
                     ),
                 };
                 const edit = { label: 'Edit Claim', onClick: () => setPanelTarget(row) };

@@ -783,3 +783,63 @@ export function useClaimsByTab(placements: Facultative[]): ClaimsByTab {
 
   return { notification, open, closed, isLoadingClaims, isLoadingFinancials };
 }
+
+export type ClaimTabBucket = 'notification' | 'open' | 'closed';
+
+/**
+ * Same Notification/Open/Closed classification as useClaimsByTab, for a single claim whose
+ * placement/claim you already have in hand (e.g. the claim detail page) — reuses the
+ * single-claim recovery-position/allocations hooks and their cache instead of fetching this
+ * placement's whole claims list just to classify the one claim you're already looking at.
+ */
+export function useClaimTabBucket(
+  placementId: string,
+  claim: PlacementClaim | undefined,
+): { bucket: ClaimTabBucket; recoveredAt: string | null; isLoading: boolean } {
+  const isFinalized = !!claim && claim.finalLossAmount != null;
+  // Hooks must run unconditionally — pass an empty id when there's no claim (or it's still
+  // an estimate) yet, which their own `enabled` guards already treat as "don't fetch".
+  const { data: position, isLoading: isLoadingPosition } = useClaimRecoveryPosition(
+    placementId,
+    isFinalized ? claim!.id : '',
+  );
+  const { data: allocations, isLoading: isLoadingAllocations } = useClaimAllocations(
+    placementId,
+    isFinalized ? claim!.id : '',
+  );
+
+  if (!isFinalized) {
+    return { bucket: 'notification', recoveredAt: null, isLoading: false };
+  }
+
+  const isLoading = isLoadingPosition || isLoadingAllocations;
+  if (isLoading || !position || !allocations) {
+    // Assume still-open while financial data loads — matches useClaimsByTab's behaviour of
+    // not classifying a row as closed until the recovery figures actually confirm it.
+    return { bucket: 'open', recoveredAt: null, isLoading: true };
+  }
+
+  const totalAllocated = allocations.reduce(
+    (sum, a) => sum + parseFloat(a.allocatedFinalLossAmount ?? a.allocatedEstimatedLossAmount),
+    0,
+  );
+  const totalCashCalled = parseFloat(position.recoveries.totalCashCalled);
+  const totalOutstanding = parseFloat(position.recoveries.totalOutstanding);
+  const allAllocationsCalled = totalAllocated > 0 && totalCashCalled >= totalAllocated - 0.01;
+  const isFullyRecovered = allAllocationsCalled && totalOutstanding <= 0.01;
+
+  if (!isFullyRecovered) {
+    return { bucket: 'open', recoveredAt: null, isLoading: false };
+  }
+
+  // Same as useClaimsByTab: the claim became fully recovered the moment its last
+  // bank-confirmed receipt landed, across whichever reinsurer/cash call closed it out.
+  const confirmedTimes = position.perCashCall
+    .flatMap((cc) => cc.receipts)
+    .filter((r) => r.status === 'BANK_CONFIRMED' && r.bankConfirmedAt)
+    .map((r) => new Date(r.bankConfirmedAt as string).getTime());
+  const recoveredAt =
+    confirmedTimes.length > 0 ? new Date(Math.max(...confirmedTimes)).toISOString() : null;
+
+  return { bucket: 'closed', recoveredAt, isLoading: false };
+}

@@ -16,6 +16,9 @@ interface ClaimDetailsPanelProps {
   placement: Facultative;
   claim?: PlacementClaim;
   deductionRate: number;
+  /** When the claim was fully recovered from reinsurers — null/undefined while it's still
+   * in Notification or Open. */
+  recoveredAt?: string | null;
 
   statusActions?: ReactNode;
 }
@@ -24,6 +27,7 @@ export function ClaimDetailsPanel({
   placement,
   claim,
   deductionRate,
+  recoveredAt,
   // statusActions,
 }: ClaimDetailsPanelProps) {
   const { facultativeOffer, sumInsured, premium, commission, currency, createdAt } = placement;
@@ -103,6 +107,7 @@ export function ClaimDetailsPanel({
                 value={fmt(claim.approvedPayableAmount, claim.currency)}
               />
             )}
+            {recoveredAt && <DetailField label="Recovered Date" value={fmtDate(recoveredAt)} />}
           </>
         )}
       </div>

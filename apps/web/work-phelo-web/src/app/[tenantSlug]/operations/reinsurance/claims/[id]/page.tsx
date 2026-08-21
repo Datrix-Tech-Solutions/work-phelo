@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement, usePlacementClaim } from '@/hooks';
+import { useFacultativePlacement, usePlacementClaim, useClaimTabBucket } from '@/hooks';
 import { ClaimOverviewSection } from '@/components/molecules/reinsurance/ClaimOverviewSection';
 import { Button } from '@/components/atoms/Button';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
@@ -23,12 +23,19 @@ export default function ClaimDetailPage({
   const { data: activeClaim } = usePlacementClaim(placementId, id);
   const [panelOpen, setPanelOpen] = useState(false);
 
+  // Prefer the tab we actually came from (carried via the row click); if there isn't one —
+  // a bookmarked/direct link — fall back to the claim's own bucket so "Closed Claims" still
+  // reopens to the Closed tab, etc.
+  const referrerTab = searchParams.get('tab');
+  const { bucket } = useClaimTabBucket(placementId, activeClaim);
+  const backTab = referrerTab ?? bucket;
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className={`${pageBreadcrumb} shrink-0 flex items-center justify-between`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link
-            href={`/${tenantSlug}/operations/reinsurance/claims`}
+            href={`/${tenantSlug}/operations/reinsurance/claims?tab=${backTab}`}
             className="hover:text-gray-700 transition-colors"
           >
             Claims
