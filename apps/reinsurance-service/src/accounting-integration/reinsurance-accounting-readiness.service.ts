@@ -108,23 +108,6 @@ const paymentReconciliationInclude = {
   },
 } satisfies Prisma.PlacementPaymentInclude;
 
-const claimRecoveryReceiptReconciliationInclude = {
-  counterparty: {
-    select: {
-      id: true,
-      type: true,
-      name: true,
-      registrationNumber: true,
-    },
-  },
-} satisfies Prisma.PlacementClaimRecoveryReceiptInclude;
-
-const claimCedantSettlementReconciliationInclude = {
-  reversalSettlements: {
-    select: { id: true },
-  },
-} satisfies Prisma.PlacementClaimCedantSettlementInclude;
-
 type AccountingSubledgerSyncResult =
   | {
       status: 'DISABLED' | 'SKIPPED';
@@ -156,12 +139,6 @@ const ACTIVE_REINSURANCE_ACCOUNTING_EVENT_TYPES = [
   'PAYMENT_REVERSED',
   'REINSURER_DISBURSEMENT_RECORDED',
   'REINSURER_DISBURSEMENT_REVERSED',
-  'CLAIM_PAYABLE_APPROVED',
-  'CLAIM_CEDANT_SETTLEMENT_PAID',
-  'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-  'CLAIM_RECOVERY_APPROVED',
-  'CLAIM_RECOVERY_RECEIVED',
-  'CLAIM_RECOVERY_RECEIPT_REVERSED',
 ] as const;
 
 const REINSURANCE_ACCOUNTING_INTEGRATION = 'operations.reinsurance->accounting';
@@ -173,16 +150,11 @@ const READINESS_GROUPS = {
     'ENDORSEMENT_DEBIT_NOTE_ISSUED',
     'ENDORSEMENT_CREDIT_NOTE_ISSUED',
   ],
-  claimsAccounting: ['CLAIM_PAYABLE_APPROVED', 'CLAIM_RECOVERY_APPROVED'],
   cashConfirmation: [
     'PREMIUM_PAYMENT_RECEIVED',
     'PAYMENT_REVERSED',
     'REINSURER_DISBURSEMENT_RECORDED',
     'REINSURER_DISBURSEMENT_REVERSED',
-    'CLAIM_CEDANT_SETTLEMENT_PAID',
-    'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-    'CLAIM_RECOVERY_RECEIVED',
-    'CLAIM_RECOVERY_RECEIPT_REVERSED',
   ],
 } as const;
 
@@ -233,7 +205,7 @@ export class ReinsuranceAccountingReadinessService {
         ? this.groupPostingReadiness(postingReadiness.eventResults)
         : null,
       readinessMode:
-        'Debit-note, credit-note, premium-payment, reinsurer-disbursement, claim-payable and claim-recovery source-event capture, PostingRule preflight, counterparty subledger readiness and outbox dispatch.',
+        'Debit-note, credit-note, premium-payment and reinsurer-disbursement source-event capture, PostingRule preflight, counterparty subledger readiness and outbox dispatch. Reinsurance Claims are financially controlled inside Reinsurance and do not post to Accounting.',
       message:
         !reinsuranceEnabled || !accountingEnabled
           ? 'Reinsurance and Accounting are not both enabled for this tenant; they operate independently.'
@@ -1290,609 +1262,61 @@ export class ReinsuranceAccountingReadinessService {
     });
   }
 
-  async reconcileClaimPayableApprovedEvents(
+  reconcileClaimPayableApprovedEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
   ) {
-    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
-    const dryRun = options.dryRun ?? true;
-    const limit = Math.min(options.limit ?? 50, 100);
-    if (!accountingEnabled) {
-      return {
-        accountingEnabled,
-        dryRun,
-        inspectedCount: 0,
-        missingCount: 0,
-        enqueuedCount: 0,
-        items: [],
-        message:
-          'Accounting module is not enabled for this tenant; no claim payable approval events are captured.',
-      };
-    }
-
-    const approvals = await this.prisma.placementClaimPayableApproval.findMany({
-      where: {
-        tenantId: user.tenantId,
-        claim: { placement: { archivedAt: null } },
-      },
-      orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
-      take: limit,
-    });
-    const keys = approvals.map((approval) =>
-      this.claimPayableApprovedIdempotencyKey(
-        approval.claimId,
-        approval.approvalVersion,
-      ),
-    );
-    const existing = keys.length
-      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
-          where: {
-            tenantId: user.tenantId,
-            idempotencyKey: { in: keys },
-          },
-          select: {
-            id: true,
-            idempotencyKey: true,
-            status: true,
-            accountingSourceEventId: true,
-          },
-        })
-      : [];
-    const existingByKey = new Map(
-      existing.map((event) => [event.idempotencyKey, event]),
-    );
-
-    const items: Array<{
-      approvalId: string;
-      claimId: string;
-      placementId: string;
-      approvedAt: string;
-      approvalVersion: number;
-      idempotencyKey: string;
-      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
-      outboxId?: string;
-      outboxStatus?: string;
-      accountingSourceEventId?: string | null;
-    }> = [];
-    let enqueuedCount = 0;
-
-    for (const approval of approvals) {
-      const idempotencyKey = this.claimPayableApprovedIdempotencyKey(
-        approval.claimId,
-        approval.approvalVersion,
-      );
-      const existingEvent = existingByKey.get(idempotencyKey);
-      if (existingEvent) {
-        items.push({
-          approvalId: approval.id,
-          claimId: approval.claimId,
-          placementId: approval.placementId,
-          approvedAt: approval.approvedAt.toISOString(),
-          approvalVersion: approval.approvalVersion,
-          idempotencyKey,
-          status: 'PRESENT',
-          outboxId: existingEvent.id,
-          outboxStatus: existingEvent.status,
-          accountingSourceEventId: existingEvent.accountingSourceEventId,
-        });
-        continue;
-      }
-
-      if (dryRun) {
-        items.push({
-          approvalId: approval.id,
-          claimId: approval.claimId,
-          placementId: approval.placementId,
-          approvedAt: approval.approvedAt.toISOString(),
-          approvalVersion: approval.approvalVersion,
-          idempotencyKey,
-          status: 'MISSING',
-        });
-        continue;
-      }
-
-      const event = await this.financialEvents.prepareClaimPayableApproved(
-        user,
-        approval,
-      );
-      if (!event) continue;
-      const outboxRow = await this.prisma.$transaction((tx) =>
-        this.financialEvents.enqueuePreparedEvent(tx, event),
-      );
-      enqueuedCount += 1;
-      items.push({
-        approvalId: approval.id,
-        claimId: approval.claimId,
-        placementId: approval.placementId,
-        approvedAt: approval.approvedAt.toISOString(),
-        approvalVersion: approval.approvalVersion,
-        idempotencyKey,
-        status: 'ENQUEUED',
-        outboxId: outboxRow.id,
-        outboxStatus: outboxRow.status,
-        accountingSourceEventId: outboxRow.accountingSourceEventId,
-      });
-    }
-
-    return {
-      accountingEnabled,
-      dryRun,
-      inspectedCount: approvals.length,
-      missingCount: items.filter((item) => item.status === 'MISSING').length,
-      enqueuedCount,
-      items,
-    };
+    return this.retiredClaimReconciliationResult(user, options);
   }
 
-  async reconcileClaimRecoveryApprovedEvents(
+  reconcileClaimRecoveryApprovedEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
   ) {
-    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
-    const dryRun = options.dryRun ?? true;
-    const limit = Math.min(options.limit ?? 50, 100);
-    if (!accountingEnabled) {
-      return {
-        accountingEnabled,
-        dryRun,
-        inspectedCount: 0,
-        missingCount: 0,
-        enqueuedCount: 0,
-        items: [],
-        message:
-          'Accounting module is not enabled for this tenant; no claim recovery approval events are captured.',
-      };
-    }
-
-    const approvals = await this.prisma.placementClaimRecoveryApproval.findMany(
-      {
-        where: {
-          tenantId: user.tenantId,
-          claim: { placement: { archivedAt: null } },
-        },
-        include: {
-          counterparty: {
-            select: {
-              id: true,
-              type: true,
-              name: true,
-              registrationNumber: true,
-            },
-          },
-        },
-        orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
-        take: limit,
-      },
-    );
-    const keys = approvals.map((approval) =>
-      this.claimRecoveryApprovedIdempotencyKey(approval.id),
-    );
-    const existing = keys.length
-      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
-          where: {
-            tenantId: user.tenantId,
-            idempotencyKey: { in: keys },
-          },
-          select: {
-            id: true,
-            idempotencyKey: true,
-            status: true,
-            accountingSourceEventId: true,
-          },
-        })
-      : [];
-    const existingByKey = new Map(
-      existing.map((event) => [event.idempotencyKey, event]),
-    );
-
-    const items: Array<{
-      approvalId: string;
-      claimId: string;
-      placementId: string;
-      allocationId: string;
-      approvedAt: string;
-      approvalVersion: number;
-      idempotencyKey: string;
-      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
-      outboxId?: string;
-      outboxStatus?: string;
-      accountingSourceEventId?: string | null;
-    }> = [];
-    let enqueuedCount = 0;
-
-    for (const approval of approvals) {
-      const idempotencyKey = this.claimRecoveryApprovedIdempotencyKey(
-        approval.id,
-      );
-      const existingEvent = existingByKey.get(idempotencyKey);
-      if (existingEvent) {
-        items.push({
-          approvalId: approval.id,
-          claimId: approval.claimId,
-          placementId: approval.placementId,
-          allocationId: approval.allocationId,
-          approvedAt: approval.approvedAt.toISOString(),
-          approvalVersion: approval.approvalVersion,
-          idempotencyKey,
-          status: 'PRESENT',
-          outboxId: existingEvent.id,
-          outboxStatus: existingEvent.status,
-          accountingSourceEventId: existingEvent.accountingSourceEventId,
-        });
-        continue;
-      }
-
-      if (dryRun) {
-        items.push({
-          approvalId: approval.id,
-          claimId: approval.claimId,
-          placementId: approval.placementId,
-          allocationId: approval.allocationId,
-          approvedAt: approval.approvedAt.toISOString(),
-          approvalVersion: approval.approvalVersion,
-          idempotencyKey,
-          status: 'MISSING',
-        });
-        continue;
-      }
-
-      const event = await this.financialEvents.prepareClaimRecoveryApproved(
-        user,
-        approval,
-      );
-      if (!event) continue;
-      const outboxRow = await this.prisma.$transaction((tx) =>
-        this.financialEvents.enqueuePreparedEvent(tx, event),
-      );
-      enqueuedCount += 1;
-      items.push({
-        approvalId: approval.id,
-        claimId: approval.claimId,
-        placementId: approval.placementId,
-        allocationId: approval.allocationId,
-        approvedAt: approval.approvedAt.toISOString(),
-        approvalVersion: approval.approvalVersion,
-        idempotencyKey,
-        status: 'ENQUEUED',
-        outboxId: outboxRow.id,
-        outboxStatus: outboxRow.status,
-        accountingSourceEventId: outboxRow.accountingSourceEventId,
-      });
-    }
-
-    return {
-      accountingEnabled,
-      dryRun,
-      inspectedCount: approvals.length,
-      missingCount: items.filter((item) => item.status === 'MISSING').length,
-      enqueuedCount,
-      items,
-    };
+    return this.retiredClaimReconciliationResult(user, options);
   }
 
   reconcileClaimCedantSettlementPaidEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
   ) {
-    return this.reconcileClaimCedantSettlementEvents(user, options, {
-      disabledMessage:
-        'Accounting module is not enabled for this tenant; no claim cedant settlement events are captured.',
-      where: {
-        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
-        reversalOfSettlementId: null,
-        bankConfirmedAt: { not: null },
-      },
-      idempotencyKey: (settlementId) =>
-        this.claimCedantSettlementPaidIdempotencyKey(settlementId),
-      prepare: (settlement) =>
-        this.financialEvents.prepareClaimCedantSettlementPaid(user, settlement),
-    });
+    return this.retiredClaimReconciliationResult(user, options);
   }
 
   reconcileClaimCedantSettlementReversedEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
   ) {
-    return this.reconcileClaimCedantSettlementEvents(user, options, {
-      disabledMessage:
-        'Accounting module is not enabled for this tenant; no claim cedant settlement reversal events are captured.',
-      where: {
-        status: PlacementClaimCedantSettlementStatus.BANK_CONFIRMED,
-        reversalOfSettlementId: { not: null },
-        bankConfirmedAt: { not: null },
-      },
-      idempotencyKey: (settlementId) =>
-        this.claimCedantSettlementReversedIdempotencyKey(settlementId),
-      prepare: (settlement) =>
-        this.financialEvents.prepareClaimCedantSettlementReversed(
-          user,
-          settlement,
-        ),
-    });
-  }
-
-  private async reconcileClaimCedantSettlementEvents(
-    user: RequestUser,
-    options: { dryRun?: boolean; limit?: number },
-    config: {
-      disabledMessage: string;
-      where: Prisma.PlacementClaimCedantSettlementWhereInput;
-      idempotencyKey: (settlementId: string) => string;
-      prepare: (
-        settlement: Prisma.PlacementClaimCedantSettlementGetPayload<{
-          include: typeof claimCedantSettlementReconciliationInclude;
-        }>,
-      ) => Promise<ReinsuranceAccountingEventInput | null>;
-    },
-  ) {
-    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
-    const dryRun = options.dryRun ?? true;
-    const limit = Math.min(options.limit ?? 50, 100);
-    if (!accountingEnabled) {
-      return {
-        accountingEnabled,
-        dryRun,
-        inspectedCount: 0,
-        missingCount: 0,
-        enqueuedCount: 0,
-        items: [],
-        message: config.disabledMessage,
-      };
-    }
-
-    const settlements =
-      await this.prisma.placementClaimCedantSettlement.findMany({
-        where: {
-          tenantId: user.tenantId,
-          placement: { archivedAt: null },
-          ...config.where,
-        },
-        include: claimCedantSettlementReconciliationInclude,
-        orderBy: [{ bankConfirmedAt: 'asc' }, { id: 'asc' }],
-        take: limit,
-      });
-    const keys = settlements.map((settlement) =>
-      config.idempotencyKey(settlement.id),
-    );
-    const existing = keys.length
-      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
-          where: {
-            tenantId: user.tenantId,
-            idempotencyKey: { in: keys },
-          },
-          select: {
-            id: true,
-            idempotencyKey: true,
-            status: true,
-            accountingSourceEventId: true,
-          },
-        })
-      : [];
-    const existingByKey = new Map(
-      existing.map((event) => [event.idempotencyKey, event]),
-    );
-
-    const items: Array<{
-      settlementId: string;
-      claimId: string;
-      placementId: string;
-      bankConfirmedAt: string | null;
-      idempotencyKey: string;
-      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
-      outboxId?: string;
-      outboxStatus?: string;
-      accountingSourceEventId?: string | null;
-    }> = [];
-    let enqueuedCount = 0;
-
-    for (const settlement of settlements) {
-      const idempotencyKey = config.idempotencyKey(settlement.id);
-      const existingEvent = existingByKey.get(idempotencyKey);
-      const baseItem = {
-        settlementId: settlement.id,
-        claimId: settlement.claimId,
-        placementId: settlement.placementId,
-        bankConfirmedAt: settlement.bankConfirmedAt?.toISOString() ?? null,
-        idempotencyKey,
-      };
-      if (existingEvent) {
-        items.push({
-          ...baseItem,
-          status: 'PRESENT',
-          outboxId: existingEvent.id,
-          outboxStatus: existingEvent.status,
-          accountingSourceEventId: existingEvent.accountingSourceEventId,
-        });
-        continue;
-      }
-      if (dryRun) {
-        items.push({ ...baseItem, status: 'MISSING' });
-        continue;
-      }
-
-      const event = await config.prepare(settlement);
-      if (!event) continue;
-      const outboxRow = await this.prisma.$transaction((tx) =>
-        this.financialEvents.enqueuePreparedEvent(tx, event),
-      );
-      enqueuedCount += 1;
-      items.push({
-        ...baseItem,
-        status: 'ENQUEUED',
-        outboxId: outboxRow.id,
-        outboxStatus: outboxRow.status,
-        accountingSourceEventId: outboxRow.accountingSourceEventId,
-      });
-    }
-
-    return {
-      accountingEnabled,
-      dryRun,
-      inspectedCount: settlements.length,
-      missingCount: items.filter((item) => item.status === 'MISSING').length,
-      enqueuedCount,
-      items,
-    };
+    return this.retiredClaimReconciliationResult(user, options);
   }
 
   reconcileClaimRecoveryReceivedEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
   ) {
-    return this.reconcileClaimRecoveryReceiptEvents(user, options, {
-      disabledMessage:
-        'Accounting module is not enabled for this tenant; no claim recovery receipt events are captured.',
-      where: {
-        status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
-        reversalOfReceiptId: null,
-        bankConfirmedAt: { not: null },
-      },
-      idempotencyKey: (receiptId) =>
-        this.claimRecoveryReceivedIdempotencyKey(receiptId),
-      prepare: (receipt) =>
-        this.financialEvents.prepareClaimRecoveryReceived(user, receipt),
-    });
+    return this.retiredClaimReconciliationResult(user, options);
   }
 
   reconcileClaimRecoveryReceiptReversedEvents(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
   ) {
-    return this.reconcileClaimRecoveryReceiptEvents(user, options, {
-      disabledMessage:
-        'Accounting module is not enabled for this tenant; no claim recovery receipt reversal events are captured.',
-      where: {
-        status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
-        reversalOfReceiptId: { not: null },
-        bankConfirmedAt: { not: null },
-      },
-      idempotencyKey: (receiptId) =>
-        this.claimRecoveryReceiptReversedIdempotencyKey(receiptId),
-      prepare: (receipt) =>
-        this.financialEvents.prepareClaimRecoveryReceiptReversed(user, receipt),
-    });
+    return this.retiredClaimReconciliationResult(user, options);
   }
 
-  private async reconcileClaimRecoveryReceiptEvents(
+  private retiredClaimReconciliationResult(
     user: RequestUser,
     options: { dryRun?: boolean; limit?: number },
-    config: {
-      disabledMessage: string;
-      where: Prisma.PlacementClaimRecoveryReceiptWhereInput;
-      idempotencyKey: (receiptId: string) => string;
-      prepare: (
-        receipt: Prisma.PlacementClaimRecoveryReceiptGetPayload<{
-          include: typeof claimRecoveryReceiptReconciliationInclude;
-        }>,
-      ) => Promise<ReinsuranceAccountingEventInput | null>;
-    },
   ) {
-    const accountingEnabled = Boolean(user.moduleConfig?.accounting);
-    const dryRun = options.dryRun ?? true;
-    const limit = Math.min(options.limit ?? 50, 100);
-    if (!accountingEnabled) {
-      return {
-        accountingEnabled,
-        dryRun,
-        inspectedCount: 0,
-        missingCount: 0,
-        enqueuedCount: 0,
-        items: [],
-        message: config.disabledMessage,
-      };
-    }
-
-    const receipts = await this.prisma.placementClaimRecoveryReceipt.findMany({
-      where: {
-        tenantId: user.tenantId,
-        placement: { archivedAt: null },
-        ...config.where,
-      },
-      include: claimRecoveryReceiptReconciliationInclude,
-      orderBy: [{ bankConfirmedAt: 'asc' }, { id: 'asc' }],
-      take: limit,
-    });
-    const keys = receipts.map((receipt) => config.idempotencyKey(receipt.id));
-    const existing = keys.length
-      ? await this.prisma.reinsuranceAccountingOutbox.findMany({
-          where: {
-            tenantId: user.tenantId,
-            idempotencyKey: { in: keys },
-          },
-          select: {
-            id: true,
-            idempotencyKey: true,
-            status: true,
-            accountingSourceEventId: true,
-          },
-        })
-      : [];
-    const existingByKey = new Map(
-      existing.map((event) => [event.idempotencyKey, event]),
-    );
-
-    const items: Array<{
-      receiptId: string;
-      claimId: string;
-      placementId: string;
-      allocationId: string;
-      bankConfirmedAt: string | null;
-      idempotencyKey: string;
-      status: 'PRESENT' | 'MISSING' | 'ENQUEUED';
-      outboxId?: string;
-      outboxStatus?: string;
-      accountingSourceEventId?: string | null;
-    }> = [];
-    let enqueuedCount = 0;
-
-    for (const receipt of receipts) {
-      const idempotencyKey = config.idempotencyKey(receipt.id);
-      const existingEvent = existingByKey.get(idempotencyKey);
-      const baseItem = {
-        receiptId: receipt.id,
-        claimId: receipt.claimId,
-        placementId: receipt.placementId,
-        allocationId: receipt.allocationId,
-        bankConfirmedAt: receipt.bankConfirmedAt?.toISOString() ?? null,
-        idempotencyKey,
-      };
-      if (existingEvent) {
-        items.push({
-          ...baseItem,
-          status: 'PRESENT',
-          outboxId: existingEvent.id,
-          outboxStatus: existingEvent.status,
-          accountingSourceEventId: existingEvent.accountingSourceEventId,
-        });
-        continue;
-      }
-      if (dryRun) {
-        items.push({ ...baseItem, status: 'MISSING' });
-        continue;
-      }
-
-      const event = await config.prepare(receipt);
-      if (!event) continue;
-      const outboxRow = await this.prisma.$transaction((tx) =>
-        this.financialEvents.enqueuePreparedEvent(tx, event),
-      );
-      enqueuedCount += 1;
-      items.push({
-        ...baseItem,
-        status: 'ENQUEUED',
-        outboxId: outboxRow.id,
-        outboxStatus: outboxRow.status,
-        accountingSourceEventId: outboxRow.accountingSourceEventId,
-      });
-    }
-
     return {
-      accountingEnabled,
-      dryRun,
-      inspectedCount: receipts.length,
-      missingCount: items.filter((item) => item.status === 'MISSING').length,
-      enqueuedCount,
-      items,
+      accountingEnabled: Boolean(user.moduleConfig?.accounting),
+      dryRun: options.dryRun ?? true,
+      inspectedCount: 0,
+      missingCount: 0,
+      enqueuedCount: 0,
+      items: [],
+      message:
+        'Reinsurance claim Accounting integration is retired by product policy; claim financial workflows are controlled inside Reinsurance.',
     };
   }
 
@@ -1926,33 +1350,6 @@ export class ReinsuranceAccountingReadinessService {
 
   private reinsurerDisbursementReversedIdempotencyKey(paymentId: string) {
     return `reinsurance:reinsurer-disbursement:${paymentId}:reversal:v1`;
-  }
-
-  private claimPayableApprovedIdempotencyKey(
-    claimId: string,
-    approvalVersion: number,
-  ) {
-    return `reinsurance:claim:${claimId}:payable-approved:${approvalVersion}:v1`;
-  }
-
-  private claimCedantSettlementPaidIdempotencyKey(settlementId: string) {
-    return `reinsurance:claim-cedant-settlement:${settlementId}:confirmed:v1`;
-  }
-
-  private claimCedantSettlementReversedIdempotencyKey(settlementId: string) {
-    return `reinsurance:claim-cedant-settlement:${settlementId}:reversal:v1`;
-  }
-
-  private claimRecoveryApprovedIdempotencyKey(approvalId: string) {
-    return `reinsurance:claim-recovery:${approvalId}:approved:v1`;
-  }
-
-  private claimRecoveryReceivedIdempotencyKey(receiptId: string) {
-    return `reinsurance:claim-recovery-receipt:${receiptId}:confirmed:v1`;
-  }
-
-  private claimRecoveryReceiptReversedIdempotencyKey(receiptId: string) {
-    return `reinsurance:claim-recovery-receipt:${receiptId}:reversal:v1`;
   }
 
   private async reconcilePaymentEvents(

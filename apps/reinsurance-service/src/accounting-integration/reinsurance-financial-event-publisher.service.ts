@@ -272,6 +272,16 @@ export class ReinsuranceFinancialEventPublisher {
     private readonly client: ReinsuranceAccountingClient,
   ) {}
 
+  private claimAccountingEventRetired(
+    sourceEventType: string,
+    sourceRecordId: string,
+  ): ReinsuranceAccountingEventInput | null {
+    this.logger.debug(
+      `Claim Accounting integration retired by product policy; ${sourceEventType} not prepared for ${sourceRecordId}`,
+    );
+    return null;
+  }
+
   async assertAccountingReadyForEvent(
     user: RequestUser,
     input: {
@@ -864,6 +874,12 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     approval: ClaimPayableApprovalForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
+    const retiredEvent = this.claimAccountingEventRetired(
+      'CLAIM_PAYABLE_APPROVED',
+      approval.id,
+    );
+    if (retiredEvent === null) return retiredEvent;
+
     if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_PAYABLE_APPROVED not enqueued for approval ${approval.id}`,
@@ -1061,6 +1077,12 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     settlement: ClaimCedantSettlementForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
+    const retiredEvent = this.claimAccountingEventRetired(
+      'CLAIM_CEDANT_SETTLEMENT_PAID',
+      settlement.id,
+    );
+    if (retiredEvent === null) return retiredEvent;
+
     if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_CEDANT_SETTLEMENT_PAID not enqueued for settlement ${settlement.id}`,
@@ -1171,6 +1193,12 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     settlement: ClaimCedantSettlementForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
+    const retiredEvent = this.claimAccountingEventRetired(
+      'CLAIM_CEDANT_SETTLEMENT_REVERSED',
+      settlement.id,
+    );
+    if (retiredEvent === null) return retiredEvent;
+
     if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_CEDANT_SETTLEMENT_REVERSED not enqueued for settlement ${settlement.id}`,
@@ -1275,6 +1303,12 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     approval: ClaimRecoveryApprovalForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
+    const retiredEvent = this.claimAccountingEventRetired(
+      'CLAIM_RECOVERY_APPROVED',
+      approval.id,
+    );
+    if (retiredEvent === null) return retiredEvent;
+
     if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_RECOVERY_APPROVED not enqueued for approval ${approval.id}`,
@@ -1455,6 +1489,12 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     receipt: ClaimRecoveryReceiptForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
+    const retiredEvent = this.claimAccountingEventRetired(
+      'CLAIM_RECOVERY_RECEIVED',
+      receipt.id,
+    );
+    if (retiredEvent === null) return retiredEvent;
+
     if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_RECOVERY_RECEIVED not enqueued for receipt ${receipt.id}`,
@@ -1563,6 +1603,12 @@ export class ReinsuranceFinancialEventPublisher {
     user: RequestUser,
     receipt: ClaimRecoveryReceiptForEvent,
   ): Promise<ReinsuranceAccountingEventInput | null> {
+    const retiredEvent = this.claimAccountingEventRetired(
+      'CLAIM_RECOVERY_RECEIPT_REVERSED',
+      receipt.id,
+    );
+    if (retiredEvent === null) return retiredEvent;
+
     if (!isAccountingIntegrationActive(user)) {
       this.logger.debug(
         `Accounting disabled for tenant ${user.tenantId}; CLAIM_RECOVERY_RECEIPT_REVERSED not enqueued for receipt ${receipt.id}`,

@@ -517,10 +517,10 @@ describe('ReinsuranceAccountingReadinessService', () => {
         checkedAt: '2026-08-11T12:00:00.000Z',
         eventResults: [
           {
-            eventType: 'CLAIM_PAYABLE_APPROVED',
+            eventType: 'PREMIUM_PAYMENT_RECEIVED',
             ready: false,
-            kind: 'NON_CASH',
-            controlDimension: 'CEDANT_CLAIMS_AP',
+            kind: 'CASH',
+            controlDimension: 'CEDANT_PREMIUM_AR',
             requiredSubledgerType: 'CEDANT',
             reversalDependsOnOriginalRecognition: false,
             blockers: [{ code: 'POSTING_RULE_MISSING' }],
@@ -735,7 +735,15 @@ describe('ReinsuranceAccountingReadinessService', () => {
     const readinessRequest = checkReinsuranceReadiness.mock.calls[0]?.[0];
     expect(readinessRequest?.tenantId).toBe('tenant-1');
     expect(readinessRequest?.eventTypes).toEqual(
-      expect.arrayContaining(['DEBIT_NOTE_ISSUED', 'CLAIM_PAYABLE_APPROVED']),
+      expect.arrayContaining([
+        'DEBIT_NOTE_ISSUED',
+        'CREDIT_NOTE_ISSUED',
+        'PREMIUM_PAYMENT_RECEIVED',
+        'REINSURER_DISBURSEMENT_RECORDED',
+      ]),
+    );
+    expect(readinessRequest?.eventTypes).not.toEqual(
+      expect.arrayContaining(['CLAIM_PAYABLE_APPROVED']),
     );
     expect(result.integrationConfigured).toBe(true);
     expect(result.postingReadiness).toMatchObject({
@@ -746,10 +754,11 @@ describe('ReinsuranceAccountingReadinessService', () => {
       premiumAccounting: {
         ready: true,
       },
-      claimsAccounting: {
+      cashConfirmation: {
         ready: false,
       },
     });
+    expect(result.readinessGroups).not.toHaveProperty('claimsAccounting');
   });
 
   it('dry-runs issued debit notes missing their deterministic outbox row', async () => {
@@ -1473,408 +1482,65 @@ describe('ReinsuranceAccountingReadinessService', () => {
     });
   });
 
-  it('dry-runs claim payable approvals missing deterministic outbox rows', async () => {
-    const { financialEvents, prisma, service } = makeService([], [], []);
-
-    const result = await service.reconcileClaimPayableApprovedEvents(user, {
-      dryRun: true,
-      limit: 10,
-    });
-
-    const findManyArg =
-      prisma.placementClaimPayableApproval.findMany.mock.calls[0]?.[0];
-    if (!findManyArg) {
-      throw new Error(
-        'Expected placementClaimPayableApproval.findMany to be called',
-      );
-    }
-    expect(findManyArg.take).toBe(10);
-    expect(findManyArg.where).toMatchObject({
-      tenantId: 'tenant-1',
-      claim: { placement: { archivedAt: null } },
-    });
-    expect(result).toMatchObject({
-      accountingEnabled: true,
-      dryRun: true,
-      inspectedCount: 1,
-      missingCount: 1,
-      enqueuedCount: 0,
-      items: [
-        expect.objectContaining({
-          approvalId: 'approval-1',
-          claimId: 'claim-1',
-          placementId: 'placement-1',
-          approvalVersion: 1,
-          status: 'MISSING',
-          idempotencyKey: 'reinsurance:claim:claim-1:payable-approved:1:v1',
-        }),
-      ],
-    });
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
-  });
-
-  it('excludes claim payable approvals that already have outbox events', async () => {
-    const { service } = makeService(
-      [],
-      [
-        {
-          id: 'outbox-1',
-          idempotencyKey: 'reinsurance:claim:claim-1:payable-approved:1:v1',
-          status: ReinsuranceAccountingOutboxStatus.PENDING,
-          accountingSourceEventId: null,
-        },
-      ],
-      [],
-    );
-
-    const result = await service.reconcileClaimPayableApprovedEvents(user, {
-      dryRun: true,
-    });
-
-    expect(result).toMatchObject({
-      inspectedCount: 1,
-      missingCount: 0,
-      enqueuedCount: 0,
-      items: [
-        expect.objectContaining({
-          approvalId: 'approval-1',
-          status: 'PRESENT',
-          outboxId: 'outbox-1',
-        }),
-      ],
-    });
-  });
-
-  it('enqueues missing claim payable approval events', async () => {
-    const { financialEvents, service } = makeService([], [], []);
-
-    const result = await service.reconcileClaimPayableApprovedEvents(user, {
-      dryRun: false,
-    });
-
-    expect(financialEvents.prepareClaimPayableApproved).toHaveBeenCalledWith(
-      user,
-      claimPayableApproval,
-    );
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        sourceEventType: 'CLAIM_PAYABLE_APPROVED',
-        idempotencyKey: 'reinsurance:claim:claim-1:payable-approved:1:v1',
-      }),
-    );
-    expect(result).toMatchObject({
-      dryRun: false,
-      missingCount: 0,
-      enqueuedCount: 1,
-      items: [
-        expect.objectContaining({
-          approvalId: 'approval-1',
-          status: 'ENQUEUED',
-          outboxId: 'outbox-1',
-        }),
-      ],
-    });
-  });
-
-  it('dry-runs claim recovery approvals missing deterministic outbox rows', async () => {
-    const { financialEvents, prisma, service } = makeService([], [], [], []);
-
-    const result = await service.reconcileClaimRecoveryApprovedEvents(user, {
-      dryRun: true,
-      limit: 10,
-    });
-
-    const findManyArg =
-      prisma.placementClaimRecoveryApproval.findMany.mock.calls[0]?.[0];
-    if (!findManyArg) {
-      throw new Error(
-        'Expected placementClaimRecoveryApproval.findMany to be called',
-      );
-    }
-    expect(findManyArg.take).toBe(10);
-    expect(findManyArg.where).toMatchObject({
-      tenantId: 'tenant-1',
-      claim: { placement: { archivedAt: null } },
-    });
-    expect(result).toMatchObject({
-      accountingEnabled: true,
-      dryRun: true,
-      inspectedCount: 1,
-      missingCount: 1,
-      enqueuedCount: 0,
-      items: [
-        expect.objectContaining({
-          approvalId: 'recovery-approval-1',
-          claimId: 'claim-1',
-          placementId: 'placement-1',
-          allocationId: 'allocation-1',
-          approvalVersion: 1,
-          status: 'MISSING',
-          idempotencyKey:
-            'reinsurance:claim-recovery:recovery-approval-1:approved:v1',
-        }),
-      ],
-    });
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
-  });
-
-  it('enqueues missing claim recovery approval events', async () => {
-    const { financialEvents, service } = makeService([], [], [], []);
-
-    const result = await service.reconcileClaimRecoveryApprovedEvents(user, {
-      dryRun: false,
-    });
-
-    expect(financialEvents.prepareClaimRecoveryApproved).toHaveBeenCalledWith(
-      user,
-      claimRecoveryApproval,
-    );
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        sourceEventType: 'CLAIM_RECOVERY_APPROVED',
-        idempotencyKey:
-          'reinsurance:claim-recovery:recovery-approval-1:approved:v1',
-      }),
-    );
-    expect(result).toMatchObject({
-      dryRun: false,
-      missingCount: 0,
-      enqueuedCount: 1,
-      items: [
-        expect.objectContaining({
-          approvalId: 'recovery-approval-1',
-          status: 'ENQUEUED',
-          outboxId: 'outbox-1',
-        }),
-      ],
-    });
-  });
-
-  it('lists recorded claim recovery receipts awaiting Accounting confirmation', async () => {
-    const { prisma, service } = makeService(
+  it('retires claim reconciliation so it cannot recreate claim outbox rows', () => {
+    const { financialEvents, prisma, service } = makeService(
       [],
       [],
-      [],
-      [],
-      [],
-      [claimRecoveryReceipt],
-    );
-
-    const result =
-      await service.findPendingClaimRecoveryReceiptConfirmations(user);
-
-    const findManyArg =
-      prisma.placementClaimRecoveryReceipt.findMany.mock.calls[0]?.[0];
-    expect(findManyArg?.where).toMatchObject({
-      tenantId: 'tenant-1',
-      status: PlacementClaimRecoveryReceiptStatus.RECORDED,
-      reversalOfReceiptId: null,
-      placement: { archivedAt: null },
-    });
-    expect(result.items).toEqual([
-      expect.objectContaining({
-        sourceModule: 'REINSURANCE',
-        sourceRecordType: 'PlacementClaimRecoveryReceipt',
-        sourceRecordId: 'recovery-receipt-1',
-        action: 'CONFIRM_BANK_RECEIPT',
-        direction: 'INBOUND',
-        amount: '40000',
-        currency: 'GHS',
-      }),
-    ]);
-  });
-
-  it('dry-runs bank-confirmed claim recovery receipts missing outbox rows', async () => {
-    const { financialEvents, service } = makeService(
-      [],
-      [],
-      [],
-      [],
+      [claimPayableApproval],
+      [claimRecoveryApproval],
       [],
       [bankConfirmedRecoveryReceipt],
-    );
-
-    const result = await service.reconcileClaimRecoveryReceivedEvents(user, {
-      dryRun: true,
-    });
-
-    expect(result).toMatchObject({
-      inspectedCount: 1,
-      missingCount: 1,
-      enqueuedCount: 0,
-      items: [
-        expect.objectContaining({
-          receiptId: 'recovery-receipt-1',
-          status: 'MISSING',
-          idempotencyKey:
-            'reinsurance:claim-recovery-receipt:recovery-receipt-1:confirmed:v1',
-        }),
-      ],
-    });
-    expect(financialEvents.prepareClaimRecoveryReceived).not.toHaveBeenCalled();
-  });
-
-  it('enqueues missing claim recovery receipt reversal events', async () => {
-    const reversalReceipt = {
-      ...bankConfirmedRecoveryReceipt,
-      id: 'recovery-receipt-reversal-1',
-      reversalOfReceiptId: 'recovery-receipt-1',
-      amount: new Prisma.Decimal('-40000.00'),
-      bankConfirmedAt: new Date('2026-08-10T12:30:00.000Z'),
-    };
-    const { financialEvents, service } = makeService(
-      [],
-      [],
-      [],
-      [],
-      [],
-      [reversalReceipt],
-    );
-
-    const result = await service.reconcileClaimRecoveryReceiptReversedEvents(
-      user,
-      { dryRun: false },
-    );
-
-    expect(
-      financialEvents.prepareClaimRecoveryReceiptReversed,
-    ).toHaveBeenCalledWith(user, reversalReceipt);
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        sourceEventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
-        idempotencyKey:
-          'reinsurance:claim-recovery-receipt:recovery-receipt-reversal-1:reversal:v1',
-      }),
-    );
-    expect(result).toMatchObject({
-      dryRun: false,
-      enqueuedCount: 1,
-      items: [
-        expect.objectContaining({
-          receiptId: 'recovery-receipt-reversal-1',
-          status: 'ENQUEUED',
-        }),
-      ],
-    });
-  });
-
-  it('lists recorded claim cedant settlements awaiting Accounting confirmation', async () => {
-    const { prisma, service } = makeService(
-      [],
-      [],
-      [],
-      [],
-      [],
-      [],
-      [claimCedantSettlement],
-    );
-
-    const result =
-      await service.findPendingClaimCedantSettlementConfirmations(user);
-
-    const findManyArg =
-      prisma.placementClaimCedantSettlement.findMany.mock.calls[0]?.[0];
-    expect(findManyArg?.where).toMatchObject({
-      tenantId: 'tenant-1',
-      status: PlacementClaimCedantSettlementStatus.RECORDED,
-      reversalOfSettlementId: null,
-      placement: { archivedAt: null },
-    });
-    expect(result.items).toEqual([
-      expect.objectContaining({
-        sourceModule: 'REINSURANCE',
-        sourceRecordType: 'PlacementClaimCedantSettlement',
-        sourceRecordId: 'cedant-settlement-1',
-        action: 'CONFIRM_BANK_PAYMENT',
-        direction: 'OUTBOUND',
-        amount: '30000',
-        currency: 'GHS',
-      }),
-    ]);
-  });
-
-  it('dry-runs bank-confirmed claim cedant settlements missing outbox rows', async () => {
-    const { financialEvents, service } = makeService(
-      [],
-      [],
-      [],
-      [],
-      [],
-      [],
       [bankConfirmedClaimCedantSettlement],
     );
 
-    const result = await service.reconcileClaimCedantSettlementPaidEvents(
-      user,
-      {
-        dryRun: true,
-      },
-    );
+    const results = [
+      service.reconcileClaimPayableApprovedEvents(user, { dryRun: false }),
+      service.reconcileClaimRecoveryApprovedEvents(user, { dryRun: false }),
+      service.reconcileClaimRecoveryReceivedEvents(user, { dryRun: false }),
+      service.reconcileClaimRecoveryReceiptReversedEvents(user, {
+        dryRun: false,
+      }),
+      service.reconcileClaimCedantSettlementPaidEvents(user, { dryRun: false }),
+      service.reconcileClaimCedantSettlementReversedEvents(user, {
+        dryRun: false,
+      }),
+    ];
 
-    expect(result).toMatchObject({
-      inspectedCount: 1,
-      missingCount: 1,
-      enqueuedCount: 0,
-      items: [
-        expect.objectContaining({
-          settlementId: 'cedant-settlement-1',
-          status: 'MISSING',
-          idempotencyKey:
-            'reinsurance:claim-cedant-settlement:cedant-settlement-1:confirmed:v1',
-        }),
-      ],
-    });
+    for (const result of results) {
+      expect(result).toMatchObject({
+        accountingEnabled: true,
+        dryRun: false,
+        inspectedCount: 0,
+        missingCount: 0,
+        enqueuedCount: 0,
+        items: [],
+      });
+      expect(result.message).toContain('retired by product policy');
+    }
+    expect(
+      prisma.placementClaimPayableApproval.findMany,
+    ).not.toHaveBeenCalled();
+    expect(
+      prisma.placementClaimRecoveryApproval.findMany,
+    ).not.toHaveBeenCalled();
+    expect(
+      prisma.placementClaimRecoveryReceipt.findMany,
+    ).not.toHaveBeenCalled();
+    expect(
+      prisma.placementClaimCedantSettlement.findMany,
+    ).not.toHaveBeenCalled();
+    expect(financialEvents.prepareClaimPayableApproved).not.toHaveBeenCalled();
+    expect(financialEvents.prepareClaimRecoveryApproved).not.toHaveBeenCalled();
+    expect(financialEvents.prepareClaimRecoveryReceived).not.toHaveBeenCalled();
+    expect(
+      financialEvents.prepareClaimRecoveryReceiptReversed,
+    ).not.toHaveBeenCalled();
     expect(
       financialEvents.prepareClaimCedantSettlementPaid,
     ).not.toHaveBeenCalled();
-  });
-
-  it('enqueues missing claim cedant settlement reversal events', async () => {
-    const reversalSettlement = {
-      ...bankConfirmedClaimCedantSettlement,
-      id: 'cedant-settlement-reversal-1',
-      reversalOfSettlementId: 'cedant-settlement-1',
-      amount: new Prisma.Decimal('-30000.00'),
-      bankConfirmedAt: new Date('2026-08-11T12:30:00.000Z'),
-    };
-    const { financialEvents, service } = makeService(
-      [],
-      [],
-      [],
-      [],
-      [],
-      [],
-      [reversalSettlement],
-    );
-
-    const result = await service.reconcileClaimCedantSettlementReversedEvents(
-      user,
-      { dryRun: false },
-    );
-
     expect(
       financialEvents.prepareClaimCedantSettlementReversed,
-    ).toHaveBeenCalledWith(user, reversalSettlement);
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        sourceEventType: 'CLAIM_CEDANT_SETTLEMENT_REVERSED',
-        idempotencyKey:
-          'reinsurance:claim-cedant-settlement:cedant-settlement-reversal-1:reversal:v1',
-      }),
-    );
-    expect(result).toMatchObject({
-      dryRun: false,
-      enqueuedCount: 1,
-      items: [
-        expect.objectContaining({
-          settlementId: 'cedant-settlement-reversal-1',
-          status: 'ENQUEUED',
-        }),
-      ],
-    });
+    ).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 });

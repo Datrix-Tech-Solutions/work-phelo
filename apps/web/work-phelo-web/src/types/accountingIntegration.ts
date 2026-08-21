@@ -104,7 +104,6 @@ export interface ReinsuranceAccountingPostingReadiness {
 
 export type ReinsuranceAccountingReadinessGroupKey =
   | 'premiumAccounting'
-  | 'claimsAccounting'
   | 'cashConfirmation';
 
 export interface ReinsuranceAccountingReadinessGroup {

@@ -137,8 +137,9 @@ Claim Allocation -> Claim Recovery Approval -> Accounting Event
 
 Claim recovery approvals are per participating reinsurer/allocation and may be
 recorded cumulatively up to the allocation liability. They do not represent cash
-receipt; recovery receipt and bank-confirmation events remain policy-gated until
-explicitly implemented.
+receipt. Recovery receipts, cedant settlements, their financial confirmations and
+their reversal flows are managed entirely within Reinsurance and do not require
+Accounting readiness or publish Accounting source events.
 
 ## Accounting Integration
 
@@ -160,22 +161,21 @@ Active Reinsurance event families include:
 - `PAYMENT_REVERSED`
 - `REINSURER_DISBURSEMENT_RECORDED`
 - `REINSURER_DISBURSEMENT_REVERSED`
-- `CLAIM_PAYABLE_APPROVED`
-- `CLAIM_CEDANT_SETTLEMENT_PAID`
-- `CLAIM_CEDANT_SETTLEMENT_REVERSED`
-- `CLAIM_RECOVERY_APPROVED`
-- `CLAIM_RECOVERY_RECEIVED`
-- `CLAIM_RECOVERY_RECEIPT_REVERSED`
 
 Accounting owns posting rules, journal creation, fiscal period validation and
-financial confirmation queues. Reinsurance publishes business facts only.
+financial confirmation queues for these non-claim financial events.
+Reinsurance Claims are financially controlled inside Reinsurance and do not
+publish claim source events to Accounting. Historical claim source events that
+were already delivered remain Accounting history; pending, processing and failed
+claim outbox rows are retired by migration and are not dispatched.
 
 When the explicit integration is active, Reinsurance performs an Accounting
 readiness preflight before irreversible financial boundaries such as note
-issuance, claim payable/recovery approvals, bank confirmations and reversals.
-The preflight calls Accounting over the signed internal API and blocks the
-operation with a controlled conflict if PostingRules, control-account shape,
-currency, fiscal period or cash-account setup is not ready.
+issuance, premium bank confirmations and reinsurer disbursement confirmations or
+reversals. The preflight calls Accounting over the signed internal API and
+blocks the operation with a controlled conflict if PostingRules,
+control-account shape, currency, fiscal period or cash-account setup is not
+ready.
 
 If the integration is disconnected, Reinsurance preserves the established
 operational behavior and does not block business actions merely because
@@ -192,7 +192,7 @@ placement bank-confirmation permissions are unchanged.
 
 `GET /api/v1/operations/reinsurance/accounting-integration/status` returns
 configured/active flags plus grouped PostingRule readiness for Premium
-Accounting, Claims Accounting and Cash Confirmation setup.
+Accounting and Cash Confirmation setup.
 
 ## Key Environment Variables
 

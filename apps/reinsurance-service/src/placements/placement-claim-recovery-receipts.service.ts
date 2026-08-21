@@ -13,7 +13,6 @@ import {
   PlacementSettlementMethod,
   Prisma,
 } from '../../prisma/generated/client';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmPlacementClaimRecoveryReceiptBankDto } from './dto/confirm-placement-claim-recovery-receipt-bank.dto';
 import { CreatePlacementClaimRecoveryReceiptDto } from './dto/create-placement-claim-recovery-receipt.dto';
@@ -140,7 +139,6 @@ export class PlacementClaimRecoveryReceiptsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly money: ReinsuranceMoneyHelper,
-    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async findAll(
@@ -313,14 +311,6 @@ export class PlacementClaimRecoveryReceiptsService {
       confirmedExchangeRate ??
         this.optionalDecimalToNumber(receipt.agreedExchangeRate),
     );
-    await this.financialEvents.assertAccountingReadyForEvent(user, {
-      eventType: 'CLAIM_RECOVERY_RECEIVED',
-      currency: settlementCurrency,
-      businessDate: dto.bankConfirmedAt,
-      settlementMethod,
-      accountingCashAccountId: dto.accountingCashAccountId,
-    });
-
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.placementClaimRecoveryReceipt.updateMany({
         where: {
@@ -359,14 +349,6 @@ export class PlacementClaimRecoveryReceiptsService {
         throw new NotFoundException(
           'Placement claim recovery receipt not found',
         );
-      }
-
-      const event = await this.financialEvents.prepareClaimRecoveryReceived(
-        user,
-        confirmed,
-      );
-      if (event) {
-        await this.financialEvents.enqueuePreparedEvent(tx, event);
       }
 
       return confirmed;
@@ -432,15 +414,6 @@ export class PlacementClaimRecoveryReceiptsService {
             const confirmedOriginal =
               receipt.status ===
               PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED;
-            if (confirmedOriginal) {
-              await this.financialEvents.assertAccountingReadyForEvent(user, {
-                eventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
-                currency: receipt.settlementCurrency ?? receipt.currency,
-                businessDate: new Date(),
-                settlementMethod: receipt.settlementMethod,
-                accountingCashAccountId: receipt.accountingCashAccountId,
-              });
-            }
             const reversal = await tx.placementClaimRecoveryReceipt.create({
               data: {
                 tenantId: receipt.tenantId,
@@ -485,17 +458,6 @@ export class PlacementClaimRecoveryReceiptsService {
               },
               include: receiptInclude,
             });
-
-            if (confirmedOriginal) {
-              const event =
-                await this.financialEvents.prepareClaimRecoveryReceiptReversed(
-                  user,
-                  reversal,
-                );
-              if (event) {
-                await this.financialEvents.enqueuePreparedEvent(tx, event);
-              }
-            }
 
             return reversal;
           },
@@ -948,20 +910,6 @@ export class PlacementClaimRecoveryReceiptsService {
         `${input.settlementMethod} confirmation requires a settlement reference`,
       );
     }
-    const cashAccountRequiredMethods: PlacementSettlementMethod[] = [
-      PlacementSettlementMethod.BANK_TRANSFER,
-      PlacementSettlementMethod.CHEQUE,
-      PlacementSettlementMethod.CASH,
-      PlacementSettlementMethod.MOBILE_MONEY,
-    ];
-    if (
-      cashAccountRequiredMethods.includes(input.settlementMethod) &&
-      !input.accountingCashAccountId
-    ) {
-      throw new BadRequestException(
-        `${input.settlementMethod} confirmation requires an Accounting cash account`,
-      );
-    }
     if (
       input.settlementMethod === PlacementSettlementMethod.OTHER &&
       !hasReference &&
@@ -993,7 +941,7 @@ export class PlacementClaimRecoveryReceiptsService {
     const cleaned = this.cleanOptional(confirmationNotes);
     if (!cleaned) return existing;
     return existing
-      ? `${existing}\n\nAccounting confirmation: ${cleaned}`
+      ? `${existing}\n\nFinancial confirmation: ${cleaned}`
       : cleaned;
   }
 

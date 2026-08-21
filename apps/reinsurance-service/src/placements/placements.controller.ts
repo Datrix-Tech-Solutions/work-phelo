@@ -1640,7 +1640,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Get claim financial close readiness',
     description:
-      'Returns backend-derived financial readiness for moving a claim to SETTLED or CLOSED. RECORDED settlements/receipts are operational and require Accounting confirmation before they reduce financial outstanding. BANK_CONFIRMED rows are financial. SETTLED means recognized payable/recovery obligations are resolved; CLOSED is the final operational closure from SETTLED. Claim closure is non-posting in Phase 1 and does not emit a CLAIM_CLOSED Accounting event.',
+      'Returns Reinsurance-derived financial readiness for moving a claim to SETTLED or CLOSED. RECORDED settlements/receipts are operational and require Reinsurance financial confirmation before they reduce financial outstanding. BANK_CONFIRMED rows are financially confirmed inside Reinsurance. SETTLED means approved payable/recovery obligations are resolved; CLOSED is the final operational closure from SETTLED. Claim closure is non-posting and does not emit an Accounting event.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
@@ -1668,7 +1668,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Record claim-level payable approval for a claim',
     description:
-      "This endpoint records the broker's claim-level payable approval after the required reinsurer approvals have been obtained. It does not record individual participating reinsurer approvals. The operation requires finalLossAmount, at least one active reinsurer allocation and rejects approvals above final loss. It creates an immutable approval version and, when Accounting is enabled, captures CLAIM_PAYABLE_APPROVED transactionally.",
+      "This endpoint records the broker's claim-level payable approval after the required reinsurer approvals have been obtained. It does not record individual participating reinsurer approvals. The operation requires finalLossAmount, at least one active reinsurer allocation and rejects approvals above final loss. It creates an immutable Reinsurance approval version and does not emit an Accounting event.",
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
@@ -1761,7 +1761,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Financially confirm a cedant claim settlement',
     description:
-      'Accounting-owned confirmation that a previously RECORDED Broker -> Cedant claim settlement has completed through bank, cash, mobile-money, cheque, offset or journal process. This is the recognition boundary for CLAIM_CEDANT_SETTLEMENT_PAID. The endpoint does not modify the operational amount, Cedant, placement, claim, payable approval or business currency.',
+      'Reinsurance-owned confirmation that a previously RECORDED Broker -> Cedant claim settlement has completed through bank, cash, mobile-money, cheque, offset or journal process. The endpoint does not modify the operational amount, Cedant, placement, claim, payable approval or business currency and does not emit an Accounting event.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
@@ -2349,7 +2349,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Approve reinsurer claim recovery receivable',
     description:
-      'Records a formal per-allocation recovery approval for one reinsurer after the recovery is agreed/approved. This recognizes the receivable and, when Accounting is enabled, captures CLAIM_RECOVERY_APPROVED transactionally. It does not record cash receipt, bank confirmation, withholding tax, NIC levy or bank charges.',
+      'Records a formal per-allocation recovery approval for one reinsurer after the recovery is agreed/approved. This creates Reinsurance recovery approval history only. It does not record cash receipt, financial confirmation, withholding tax, NIC levy, bank charges or Accounting events.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
@@ -2463,7 +2463,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Financially confirm a claim recovery receipt',
     description:
-      'Accounting-owned confirmation that a previously RECORDED Reinsurer -> Broker recovery receipt has cleared the bank, offset or settlement process. This is the recognition boundary for CLAIM_RECOVERY_RECEIVED. The endpoint does not modify the operational amount, counterparty, placement, claim, allocation or cash call.',
+      'Reinsurance-owned confirmation that a previously RECORDED Reinsurer -> Broker recovery receipt has cleared the bank, offset or settlement process. The endpoint does not modify the operational amount, counterparty, placement, claim, allocation or cash call and does not emit an Accounting event.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })

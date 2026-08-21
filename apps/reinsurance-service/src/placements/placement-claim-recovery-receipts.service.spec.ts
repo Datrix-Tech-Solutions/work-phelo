@@ -129,12 +129,6 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     };
     $transaction: jest.Mock;
   };
-  let financialEvents: {
-    assertAccountingReadyForEvent: jest.Mock;
-    prepareClaimRecoveryReceived: jest.Mock;
-    prepareClaimRecoveryReceiptReversed: jest.Mock;
-    enqueuePreparedEvent: jest.Mock;
-  };
   let service: PlacementClaimRecoveryReceiptsService;
 
   beforeEach(() => {
@@ -159,34 +153,6 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
         callback(prisma),
       ),
     };
-    financialEvents = {
-      assertAccountingReadyForEvent: jest.fn().mockResolvedValue(undefined),
-      prepareClaimRecoveryReceived: jest.fn().mockResolvedValue({
-        tenantId: 'tenant-1',
-        sourceEventType: 'CLAIM_RECOVERY_RECEIVED',
-        sourceRecordType: 'PlacementClaimRecoveryReceipt',
-        sourceRecordId: 'receipt-1',
-        sourceDocumentId: 'claim-1',
-        idempotencyKey:
-          'reinsurance:claim-recovery-receipt:receipt-1:confirmed:v1',
-        occurredAt: '2026-07-30T12:00:00.000Z',
-        currency: 'GHS',
-        payload: {},
-      }),
-      prepareClaimRecoveryReceiptReversed: jest.fn().mockResolvedValue({
-        tenantId: 'tenant-1',
-        sourceEventType: 'CLAIM_RECOVERY_RECEIPT_REVERSED',
-        sourceRecordType: 'PlacementClaimRecoveryReceipt',
-        sourceRecordId: 'receipt-reversal-1',
-        sourceDocumentId: 'receipt-1',
-        idempotencyKey:
-          'reinsurance:claim-recovery-receipt:receipt-reversal-1:reversal:v1',
-        occurredAt: '2026-07-30T12:00:00.000Z',
-        currency: 'GHS',
-        payload: {},
-      }),
-      enqueuePreparedEvent: jest.fn().mockResolvedValue({ id: 'outbox-1' }),
-    };
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementClaim.findFirst.mockResolvedValue({
       id: 'claim-1',
@@ -202,7 +168,6 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     service = new PlacementClaimRecoveryReceiptsService(
       prisma as unknown as PrismaService,
       new ReinsuranceMoneyHelper(),
-      financialEvents as never,
     );
   });
 
@@ -278,8 +243,6 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       reference: 'BANK-001',
       status: PlacementClaimRecoveryReceiptStatus.RECORDED,
     });
-    expect(financialEvents.prepareClaimRecoveryReceived).not.toHaveBeenCalled();
-    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('allows a second receipt to complete recovery and rejects over-recovery', async () => {
@@ -308,7 +271,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('financially confirms a recorded recovery receipt and enqueues the recovery received event', async () => {
+  it('financially confirms a recorded recovery receipt without Accounting outbox capture', async () => {
     const confirmed = {
       ...receipt,
       status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
@@ -352,11 +315,6 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       bankReference: 'BANK-CONF-001',
       accountingCashAccountId: 'cash-account-1',
     });
-    expect(financialEvents.prepareClaimRecoveryReceived).toHaveBeenCalledWith(
-      user,
-      confirmed,
-    );
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
   });
 
   it('rejects duplicate or non-recorded financial confirmation', async () => {
@@ -434,10 +392,6 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       reversalOfReceiptId: 'receipt-1',
     });
     expect((createArgs.data.amount as Prisma.Decimal).toString()).toBe('40000');
-    expect(
-      financialEvents.prepareClaimRecoveryReceiptReversed,
-    ).not.toHaveBeenCalled();
-
     prisma.placementClaimRecoveryReceipt.findFirst.mockResolvedValue({
       ...receipt,
       status: PlacementClaimRecoveryReceiptStatus.REVERSED,
@@ -482,7 +436,7 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
     },
   );
 
-  it('emits reversal event for bank-confirmed recovery receipt reversals', async () => {
+  it('reverses bank-confirmed recovery receipts without Accounting outbox capture', async () => {
     const confirmedReceipt = {
       ...receipt,
       status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
@@ -512,10 +466,14 @@ describe('PlacementClaimRecoveryReceiptsService', () => {
       notes: 'Correction',
     });
 
-    expect(
-      financialEvents.prepareClaimRecoveryReceiptReversed,
-    ).toHaveBeenCalledWith(user, reversal);
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledTimes(1);
+    const createArgs =
+      firstCallArg<Prisma.PlacementClaimRecoveryReceiptCreateArgs>(
+        prisma.placementClaimRecoveryReceipt.create,
+      );
+    expect(createArgs.data).toMatchObject({
+      status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+      reversalOfReceiptId: 'receipt-1',
+    });
   });
 
   it('builds recovery position totals independently per cash call', async () => {
