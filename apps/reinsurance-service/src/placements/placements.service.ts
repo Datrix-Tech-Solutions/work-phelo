@@ -33,7 +33,7 @@ import { UpdatePlacementParticipantStatusDto } from './dto/update-placement-part
 import { UpdatePlacementParticipantDto } from './dto/update-placement-participant.dto';
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
-import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
 
 /** Reserved key in businessDetails/offerDetails holding the list of schema fieldKeys the
  *  tenant has opted to hide from generated documents (Slip, Notes, …) for that section.

@@ -3,9 +3,9 @@ import {
   ConflictException,
   Injectable,
 } from '@nestjs/common';
-import { PlacementStatus } from '../../prisma/generated/client';
-import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
-import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
+import { PlacementStatus } from '../../../prisma/generated/client';
+import { PlacementLockStatusDto } from '../dto/placement-lock-status.dto';
+import { PlacementFinancialActivityReader } from './financial-activity.reader';
 
 type PlacementLockSubject = {
   id: string;

@@ -26,7 +26,7 @@ import { PlacementEndorsementClosingsService } from './placement-endorsement-clo
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { PlacementFinancialPositionService } from './placement-financial-position.service';
+import { PlacementFinancialPositionService } from './finance/financial-position.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';

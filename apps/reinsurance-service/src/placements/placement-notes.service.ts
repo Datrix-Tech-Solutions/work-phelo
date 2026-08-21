@@ -27,7 +27,7 @@ import {
   ReinsuranceChargeSettingsService,
 } from '../settings/reinsurance-charge-settings.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { PlacementFinancialPositionService } from './placement-financial-position.service';
+import { PlacementFinancialPositionService } from './finance/financial-position.service';
 import { UpdatePlacementNoteStatusDto } from './dto/update-placement-note-status.dto';
 import { VoidPlacementNoteDto } from './dto/void-placement-note.dto';
 

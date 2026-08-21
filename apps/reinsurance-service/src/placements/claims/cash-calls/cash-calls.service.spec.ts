@@ -12,8 +12,8 @@ import {
 } from '../../../../prisma/generated/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PlacementClaimCashCallsService } from './cash-calls.service';
-import { PlacementFinancialActivityReader } from '../../placement-financial-activity.reader';
-import { PlacementFinancialLockPolicy } from '../../placement-financial-lock.policy';
+import { PlacementFinancialActivityReader } from '../../finance/financial-activity.reader';
+import { PlacementFinancialLockPolicy } from '../../finance/financial-lock.policy';
 
 describe('PlacementClaimCashCallsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

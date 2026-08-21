@@ -144,7 +144,7 @@ import {
 import { PlacementFinancialPositionResponseDto } from './dto/placement-financial-position-response.dto';
 import { ConfirmPlacementPaymentBankDto } from './dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
-import { PlacementFinancialPositionService } from './placement-financial-position.service';
+import { PlacementFinancialPositionService } from './finance/financial-position.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
 import {

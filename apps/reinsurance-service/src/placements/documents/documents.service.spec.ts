@@ -19,8 +19,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
 import { PlacementDocumentsService } from './documents.service';
-import { PlacementFinancialActivityReader } from '../placement-financial-activity.reader';
-import { PlacementFinancialLockPolicy } from '../placement-financial-lock.policy';
+import { PlacementFinancialActivityReader } from '../finance/financial-activity.reader';
+import { PlacementFinancialLockPolicy } from '../finance/financial-lock.policy';
 import { PlacementsService } from '../placements.service';
 import { S3DocumentStorageService } from './storage/s3-document-storage.service';
 import {

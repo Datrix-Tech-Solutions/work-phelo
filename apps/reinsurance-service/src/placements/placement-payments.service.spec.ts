@@ -17,7 +17,7 @@ import {
 } from '../../prisma/generated/client';
 import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/events/financial-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
-import { PlacementFinancialPositionService } from './placement-financial-position.service';
+import { PlacementFinancialPositionService } from './finance/financial-position.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 
 describe('PlacementPaymentsService', () => {
