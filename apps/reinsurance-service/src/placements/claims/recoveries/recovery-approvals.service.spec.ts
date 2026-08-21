@@ -4,10 +4,10 @@ import {
   PlacementClaimAllocationStatus,
   PlacementClaimStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementClaimRecoveryApprovalsService } from './placement-claim-recovery-approvals.service';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+} from '../../../../prisma/generated/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { PlacementClaimRecoveryApprovalsService } from './recovery-approvals.service';
+import { ReinsuranceMoneyHelper } from '../../reinsurance-money.helper';
 
 describe('PlacementClaimRecoveryApprovalsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

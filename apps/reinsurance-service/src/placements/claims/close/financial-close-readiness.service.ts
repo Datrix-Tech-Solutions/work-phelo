@@ -8,12 +8,12 @@ import {
   PlacementClaimRecoveryReceiptStatus,
   PlacementClaimStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../../../../prisma/generated/client';
+import { PrismaService } from '../../../prisma/prisma.service';
 import {
   PlacementClaimFinancialCloseBlocker,
   PlacementClaimFinancialCloseReadinessResponseDto,
-} from './dto/placement-claim-financial-close-readiness-response.dto';
+} from '../../dto/placement-claim-financial-close-readiness-response.dto';
 
 type AggregateResult = {
   _sum?: {

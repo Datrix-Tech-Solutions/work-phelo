@@ -9,10 +9,10 @@ import {
   PlacementClaimCashCallStatus,
   PlacementClaimRecoveryReceiptStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { UpdatePlacementClaimCashCallStatusDto } from './dto/update-placement-claim-cash-call-status.dto';
-import { VoidPlacementClaimCashCallDto } from './dto/void-placement-claim-cash-call.dto';
+} from '../../../../prisma/generated/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { UpdatePlacementClaimCashCallStatusDto } from '../../dto/update-placement-claim-cash-call-status.dto';
+import { VoidPlacementClaimCashCallDto } from '../../dto/void-placement-claim-cash-call.dto';
 
 const cashCallInclude = {
   counterparty: {
