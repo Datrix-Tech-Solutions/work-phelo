@@ -12,12 +12,12 @@ import {
   PlacementClaimStatus,
   PlacementSettlementMethod,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ConfirmPlacementClaimRecoveryReceiptBankDto } from './dto/confirm-placement-claim-recovery-receipt-bank.dto';
-import { CreatePlacementClaimRecoveryReceiptDto } from './dto/create-placement-claim-recovery-receipt.dto';
-import { ReversePlacementClaimRecoveryReceiptDto } from './dto/reverse-placement-claim-recovery-receipt.dto';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+} from '../../../../prisma/generated/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { ConfirmPlacementClaimRecoveryReceiptBankDto } from '../../dto/confirm-placement-claim-recovery-receipt-bank.dto';
+import { CreatePlacementClaimRecoveryReceiptDto } from '../../dto/create-placement-claim-recovery-receipt.dto';
+import { ReversePlacementClaimRecoveryReceiptDto } from '../../dto/reverse-placement-claim-recovery-receipt.dto';
+import { ReinsuranceMoneyHelper } from '../../reinsurance-money.helper';
 
 const receiptInclude = {
   counterparty: {

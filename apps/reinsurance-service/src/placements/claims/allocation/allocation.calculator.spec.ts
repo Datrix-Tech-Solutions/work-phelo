@@ -1,5 +1,5 @@
-import { ClaimAllocationCalculator } from './claim-allocation.calculator';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+import { ClaimAllocationCalculator } from './allocation.calculator';
+import { ReinsuranceMoneyHelper } from '../../reinsurance-money.helper';
 
 describe('ClaimAllocationCalculator', () => {
   const calculator = new ClaimAllocationCalculator(

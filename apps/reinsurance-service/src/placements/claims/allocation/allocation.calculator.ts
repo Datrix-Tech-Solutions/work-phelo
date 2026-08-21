@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+import { ReinsuranceMoneyHelper } from '../../reinsurance-money.helper';
 
 export type ClaimAllocationCalculationInput = {
   estimatedLossAmount: number;

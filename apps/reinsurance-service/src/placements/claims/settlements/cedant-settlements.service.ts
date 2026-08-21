@@ -11,13 +11,13 @@ import {
   PlacementClaimStatus,
   PlacementSettlementMethod,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ApprovePlacementClaimPayableDto } from './dto/approve-placement-claim-payable.dto';
-import { ConfirmPlacementClaimCedantSettlementBankDto } from './dto/confirm-placement-claim-cedant-settlement-bank.dto';
-import { CreatePlacementClaimCedantSettlementDto } from './dto/create-placement-claim-cedant-settlement.dto';
-import { ReversePlacementClaimCedantSettlementDto } from './dto/reverse-placement-claim-cedant-settlement.dto';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+} from '../../../../prisma/generated/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { ApprovePlacementClaimPayableDto } from '../../dto/approve-placement-claim-payable.dto';
+import { ConfirmPlacementClaimCedantSettlementBankDto } from '../../dto/confirm-placement-claim-cedant-settlement-bank.dto';
+import { CreatePlacementClaimCedantSettlementDto } from '../../dto/create-placement-claim-cedant-settlement.dto';
+import { ReversePlacementClaimCedantSettlementDto } from '../../dto/reverse-placement-claim-cedant-settlement.dto';
+import { ReinsuranceMoneyHelper } from '../../reinsurance-money.helper';
 
 const cedantSettlementInclude = {
   reversalSettlements: {

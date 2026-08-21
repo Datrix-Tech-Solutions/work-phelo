@@ -10,17 +10,17 @@ import {
   PlacementClaimStatus,
   PlacementType,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ClaimAllocationCalculator } from './claim-allocation.calculator';
-import { ClosingSnapshot } from './closing-snapshot.reader';
-import { CreatePlacementClaimDto } from './dto/create-placement-claim.dto';
-import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
-import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
-import { PlacementClaimFinancialCloseReadinessService } from './placement-claim-financial-close-readiness.service';
-import { PlacementEffectivePositionService } from './placement-effective-position.service';
-import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ClaimAllocationCalculator } from './allocation/allocation.calculator';
+import { ClosingSnapshot } from '../closing-snapshot.reader';
+import { CreatePlacementClaimDto } from '../dto/create-placement-claim.dto';
+import { UpdatePlacementClaimStatusDto } from '../dto/update-placement-claim-status.dto';
+import { UpdatePlacementClaimDto } from '../dto/update-placement-claim.dto';
+import { PlacementClaimFinancialCloseReadinessService } from './close/financial-close-readiness.service';
+import { PlacementEffectivePositionService } from '../placement-effective-position.service';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
+import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 /** Offer-type code used in the claim number prefix (CLM{code}-yymmdd-XXXX). Only
  *  FACULTATIVE exists today — extend this when other placement types get claims. */
