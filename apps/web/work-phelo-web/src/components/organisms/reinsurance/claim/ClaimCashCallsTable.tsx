@@ -168,17 +168,35 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
         width: '100px',
         render: (row) => {
           if (!row.issuedAt) return <span className="text-xs text-gray-400">—</span>;
-          const recoveryStatus = perCashCallFor(row)?.recoveryStatus;
-
-          if (
-            row.status === 'DRAFT' ||
-            row.status === 'VOID' ||
-            recoveryStatus === 'FULLY_RECOVERED'
-          ) {
+          if (row.status === 'DRAFT' || row.status === 'VOID') {
             return <span className="text-xs text-gray-400">—</span>;
           }
-          const elapsedMs = Date.now() - new Date(row.issuedAt).getTime();
-          return <span className="text-gray-600">{formatAging(elapsedMs)}</span>;
+
+          const perCashCall = perCashCallFor(row);
+          const issuedAtMs = new Date(row.issuedAt).getTime();
+
+          if (perCashCall?.recoveryStatus === 'FULLY_RECOVERED') {
+            // Once paid, freeze the clock at when it actually finished — how long it took
+            // to recover — rather than blanking it out or letting it keep climbing past
+            // completion. The last bank-confirmed receipt marks that moment.
+            const confirmedTimes = (perCashCall.receipts ?? [])
+              .filter(
+                (receipt) =>
+                  receipt.status === 'BANK_CONFIRMED' &&
+                  !receipt.reversalOfReceiptId &&
+                  receipt.bankConfirmedAt,
+              )
+              .map((receipt) => new Date(receipt.bankConfirmedAt as string).getTime());
+            const completedAtMs =
+              confirmedTimes.length > 0 ? Math.max(...confirmedTimes) : Date.now();
+            return (
+              <span className="text-gray-600">
+                {formatAging(Math.max(0, completedAtMs - issuedAtMs))}
+              </span>
+            );
+          }
+
+          return <span className="text-gray-600">{formatAging(Date.now() - issuedAtMs)}</span>;
         },
       },
       {

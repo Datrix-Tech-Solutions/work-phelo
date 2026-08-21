@@ -3,26 +3,13 @@
 import { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { useQueries } from '@tanstack/react-query';
-import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import {
-  Facultative,
-  FacultativeStatus,
-  PlacementClaim,
-  PlacementClaimAllocation,
-  PlacementClaimRecoveryPosition,
-} from '@/types/reinsurance';
-import {
-  useFacultatives,
-  recoveryPositionKey,
-  allocationsKey,
-  useDeletePlacementClaim,
-} from '@/hooks';
+import { Facultative, FacultativeStatus } from '@/types/reinsurance';
+import { useFacultatives, useClaimsByTab, ClaimTabRow, useDeletePlacementClaim } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
@@ -38,15 +25,6 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
   'DECLINED',
   'CANCELLED',
 ];
-
-interface ClaimTableRow {
-  id: string;
-  placement: Facultative;
-  claim: PlacementClaim;
-  /** Bank-confirmed amount recovered from reinsurers so far, net of reversals — only
-   * populated on the Open/Closed tabs, where recovery-position data is fetched. */
-  recoveredAmount?: number;
-}
 
 export type ClaimsTableTab = 'notification' | 'open' | 'closed';
 
@@ -73,7 +51,16 @@ function fmtAmount(val: number | string | null | undefined, currency?: string | 
   return `${prefix}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function buildColumns(tab: ClaimsTableTab): Column<ClaimTableRow>[] {
+function fmtDate(val: string | null | undefined) {
+  if (!val) return '—';
+  return new Date(val).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
   return [
     {
       key: 'reference',
@@ -176,20 +163,21 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTableRow>[] {
         </span>
       ),
     },
-    {
-      key: 'createdAt',
-      label: 'Claim entry date',
-      width: '150px',
-      render: (row) => (
-        <span className="text-gray-600">
-          {new Date(row.claim.occurrenceDate).toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          })}
-        </span>
-      ),
-    },
+    tab === 'closed'
+      ? {
+          key: 'recoveredAt',
+          label: 'Recovered Date',
+          width: '150px',
+          render: (row) => <span className="text-gray-600">{fmtDate(row.recoveredAt)}</span>,
+        }
+      : {
+          key: 'createdAt',
+          label: 'Claim entry date',
+          width: '150px',
+          render: (row) => (
+            <span className="text-gray-600">{fmtDate(row.claim.occurrenceDate)}</span>
+          ),
+        },
   ];
 }
 
@@ -208,10 +196,10 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const [search, setSearch] = useState('');
   const [cedantFilter, setCedantFilter] = useState('');
   const [page, setPage] = useState(1);
-  const [panelTarget, setPanelTarget] = useState<ClaimTableRow | null>(null);
+  const [panelTarget, setPanelTarget] = useState<ClaimTabRow | null>(null);
   const [isAddClaimOpen, setIsAddClaimOpen] = useState(false);
   const [isAddNotificationOpen, setIsAddNotificationOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<ClaimTableRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ClaimTabRow | null>(null);
   const { mutate: deleteClaim, isPending: isDeleting } = useDeletePlacementClaim();
 
   const { data: allRows = [], isLoading } = useFacultatives();
@@ -221,97 +209,19 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     [allRows],
   );
 
-  const claimQueries = useQueries({
-    queries: closingRows.map((row) => ({
-      queryKey: ['reinsurance', 'placements', row.id, 'claims'] as const,
-      queryFn: async () => {
-        const res = await api.get(`/operations/reinsurance/placements/${row.id}/claims`);
-        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
-      },
-    })),
-  });
-  const isLoadingClaims = claimQueries.some((query) => query.isLoading);
+  // Shared with ClaimsStatsRow so the tab tables and the KPI counts stay in lockstep and
+  // draw on the same cached queries instead of double-fetching.
+  const {
+    notification,
+    open: openRows,
+    closed: closedRows,
+    isLoadingClaims,
+    isLoadingFinancials,
+  } = useClaimsByTab(closingRows);
 
-  // Claims with an actual amount already set — the Open and Closed tabs both draw from
-  // these, split further below by whether the claim has been fully recovered.
-  const finalizedRows = useMemo<ClaimTableRow[]>(
-    () =>
-      closingRows.flatMap((placement, i) =>
-        (claimQueries[i]?.data ?? [])
-          .filter((claim) => claim.finalLossAmount != null)
-          .map((claim) => ({ id: claim.id, placement, claim })),
-      ),
-    [closingRows, claimQueries],
-  );
-
-  // Fully recovered = every reinsurer cash call on the claim is settled — checked via the
-  // recovery-position endpoint, only fetched for finalized claims and only on the Open/Closed tabs.
-  const isFinancialTab = tab === 'open' || tab === 'closed';
-  const recoveryQueries = useQueries({
-    queries: finalizedRows.map((row) => ({
-      queryKey: recoveryPositionKey(row.placement.id, row.claim.id),
-      queryFn: async () => {
-        const res = await api.get(
-          `/operations/reinsurance/placements/${row.placement.id}/claims/${row.claim.id}/recovery-position`,
-        );
-        return res.data as PlacementClaimRecoveryPosition;
-      },
-      enabled: isFinancialTab,
-    })),
-  });
-  const isLoadingRecovery = isFinancialTab && recoveryQueries.some((q) => q.isLoading);
-
-  // recovery-position's own totalAllocated reads 0 from the backend, so the "every allocation
-  // cash-called" check below sums the allocations directly instead — same figure the Claim
-  // Allocations table's "Total Allocated Claim" bar uses.
-  const allocationQueries = useQueries({
-    queries: finalizedRows.map((row) => ({
-      queryKey: allocationsKey(row.placement.id, row.claim.id),
-      queryFn: async () => {
-        const res = await api.get(
-          `/operations/reinsurance/placements/${row.placement.id}/claims/${row.claim.id}/allocations`,
-        );
-        return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
-      },
-      enabled: isFinancialTab,
-    })),
-  });
-  const isLoadingAllocations = isFinancialTab && allocationQueries.some((q) => q.isLoading);
-
-  const claimRows = useMemo<ClaimTableRow[]>(() => {
-    if (tab === 'notification') {
-      // Only claims still awaiting an actual amount — once finalLossAmount is set, the
-      // claim has moved on to the Open/Closed tabs, so it drops off Notification.
-      return closingRows.flatMap((placement, i) =>
-        (claimQueries[i]?.data ?? [])
-          .filter((claim) => claim.finalLossAmount == null)
-          .map((claim) => ({ id: claim.id, placement, claim })),
-      );
-    }
-    return finalizedRows
-      .map((row, i): ClaimTableRow | null => {
-        const position = recoveryQueries[i]?.data;
-        const allocations = allocationQueries[i]?.data;
-        if (!position || !allocations) return null;
-        const totalAllocated = allocations.reduce(
-          (sum, a) =>
-            sum + parseFloat(a.allocatedFinalLossAmount ?? a.allocatedEstimatedLossAmount),
-          0,
-        );
-        const totalCashCalled = parseFloat(position.recoveries.totalCashCalled);
-        const totalOutstanding = parseFloat(position.recoveries.totalOutstanding);
-        const totalConfirmed = parseFloat(position.recoveries.totalConfirmed);
-        const totalReversed = parseFloat(position.recoveries.totalReversed);
-        // Fully recovered requires every allocation to have been cash-called (not just that
-        // whatever's been called is covered) — otherwise a reinsurer who was never sent a
-        // cash call would silently make the claim look closed.
-        const allAllocationsCalled = totalAllocated > 0 && totalCashCalled >= totalAllocated - 0.01;
-        const isFullyRecovered = allAllocationsCalled && totalOutstanding <= 0.01;
-        if (tab === 'closed' ? !isFullyRecovered : isFullyRecovered) return null;
-        return { ...row, recoveredAmount: totalConfirmed - totalReversed };
-      })
-      .filter((row): row is ClaimTableRow => row !== null);
-  }, [tab, closingRows, claimQueries, finalizedRows, recoveryQueries, allocationQueries]);
+  const claimRows = tab === 'notification' ? notification : tab === 'open' ? openRows : closedRows;
+  // The Notification tab doesn't need recovery-position/allocations data, so it doesn't wait on it.
+  const isLoadingTabData = isLoadingClaims || (tab !== 'notification' && isLoadingFinancials);
 
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -336,8 +246,16 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     if (cedantFilter) {
       rows = rows.filter((r) => r.placement.cedant.id === cedantFilter);
     }
-    return rows;
-  }, [claimRows, search, cedantFilter]);
+    // Most recent first, by whichever date the tab's date column shows — recovered date on
+    // Closed, claim entry date elsewhere. Copy before sorting — `rows` may still be the same
+    // array reference `claimRows` holds, and sort() mutates in place.
+    const dateOf = (r: ClaimTabRow) => (tab === 'closed' ? r.recoveredAt : r.claim.occurrenceDate);
+    return [...rows].sort((a, b) => {
+      const bTime = dateOf(b) ? new Date(dateOf(b) as string).getTime() : 0;
+      const aTime = dateOf(a) ? new Date(dateOf(a) as string).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [claimRows, search, cedantFilter, tab]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -362,7 +280,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
       <DataTable
         columns={columns}
         data={paged}
-        isLoading={isLoading || isLoadingClaims || isLoadingRecovery || isLoadingAllocations}
+        isLoading={isLoading || isLoadingTabData}
         searchPlaceholder="Search claims…"
         searchValue={search}
         onRowClick={(row) =>

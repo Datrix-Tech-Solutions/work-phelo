@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { Icons } from '@/components/atoms/icons';
-import { useFacultatives, useClaimsSummary } from '@/hooks';
+import { useFacultatives, useClaimsSummary, useClaimsByTab } from '@/hooks';
 import { FacultativeStatus } from '@/types/reinsurance';
 
 const CLOSING_STATUSES: FacultativeStatus[] = [
@@ -15,14 +15,6 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
   'CANCELLED',
 ];
 
-function fmtAmount(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
-  return value.toFixed(2);
-}
-
 export function ClaimsStatsRow() {
   const { data: allPlacements = [], isLoading: loadingPlacements } = useFacultatives();
 
@@ -33,18 +25,30 @@ export function ClaimsStatsRow() {
 
   const {
     totalClaims,
-    totalClaimedAmount,
-    openClaims,
-    settledClaims,
-    closedClaims,
+    // settledClaims,
     isLoading: loadingClaims,
   } = useClaimsSummary(closingPlacements);
 
-  const isLoading = loadingPlacements || loadingClaims;
-  const settlementRate = totalClaims > 0 ? (settledClaims / totalClaims) * 100 : 0;
+  // Open/Closed counts mirror the Open Claims/Closed Claims tables exactly — both draw
+  // from useClaimsByTab, which buckets by actual reinsurer recovery rather than claim.status.
+  const {
+    open,
+    closed,
+    isLoadingClaims: loadingTabClaims,
+    isLoadingFinancials,
+  } = useClaimsByTab(closingPlacements);
+  const openClaims = open.length;
+  const closedClaims = closed.length;
+  const finalizedClaims = openClaims + closedClaims;
+
+  const isLoading = loadingPlacements || loadingClaims || loadingTabClaims || isLoadingFinancials;
+  // % of finalized claims fully recovered from reinsurers.
+  const recoveryRate = finalizedClaims > 0 ? (closedClaims / finalizedClaims) * 100 : 0;
+  // % of all claims settled with the cedant (claim.status), independent of recovery.
+  // const settlementRate = totalClaims > 0 ? (settledClaims / totalClaims) * 100 : 0;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <KpiCard
         label="Total Claims"
         value={totalClaims}
@@ -52,13 +56,7 @@ export function ClaimsStatsRow() {
         iconColor="#2a78d6"
         isLoading={isLoading}
       />
-      <KpiCard
-        label="Total Claimed Amount"
-        value={fmtAmount(totalClaimedAmount)}
-        icon={Icons.CircleDollarSign}
-        iconColor="#eda100"
-        isLoading={isLoading}
-      />
+
       <KpiCard
         label="Open Claims"
         value={openClaims}
@@ -74,12 +72,19 @@ export function ClaimsStatsRow() {
         isLoading={isLoading}
       />
       <KpiCard
+        label="Recovery Rate"
+        value={`${recoveryRate.toFixed(1)}%`}
+        icon={Icons.RotateCcw}
+        iconColor="#eda100"
+        isLoading={isLoading}
+      />
+      {/* <KpiCard
         label="Settlement Rate"
         value={`${settlementRate.toFixed(1)}%`}
         icon={Icons.Activity}
         iconColor="#008300"
         isLoading={isLoading}
-      />
+      /> */}
     </div>
   );
 }

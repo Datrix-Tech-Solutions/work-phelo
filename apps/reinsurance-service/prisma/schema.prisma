@@ -725,7 +725,7 @@ model PlacementClaim {
   attachments           PlacementAttachment[]
 
   @@unique([id, tenantId])
-  @@unique([tenantId, placementId, claimNumber])
+  @@unique([tenantId, claimNumber])
   @@index([tenantId, placementId, status, createdAt])
   @@index([tenantId, status, createdAt])
   @@schema("reinsurance")
