@@ -31,11 +31,11 @@ import {
   ProcessReinsuranceAccountingOutboxDto,
   ReconcileDebitNoteAccountingEventsDto,
   ReconcilePaymentAccountingEventsDto,
-} from './reinsurance-accounting-readiness.dto';
-import { ReinsuranceAccountingOutboxDispatcher } from './reinsurance-accounting-outbox-dispatcher.service';
-import { ReinsuranceAccountingIntegrationActiveGuard } from './reinsurance-accounting-integration-active.guard';
-import { ReinsuranceAccountingOperationAuditInterceptor } from './reinsurance-accounting-operation-audit.interceptor';
-import { ReinsuranceAccountingReadinessService } from './reinsurance-accounting-readiness.service';
+} from './readiness/readiness.dto';
+import { ReinsuranceAccountingOutboxDispatcher } from './outbox/outbox-dispatcher.service';
+import { ReinsuranceAccountingIntegrationActiveGuard } from './guards/integration-active.guard';
+import { ReinsuranceAccountingOperationAuditInterceptor } from './audit/operation-audit.interceptor';
+import { ReinsuranceAccountingReadinessService } from './readiness/readiness.service';
 
 @Controller('accounting-integration')
 @ApiTags('Reinsurance - Accounting Integration')

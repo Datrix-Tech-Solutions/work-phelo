@@ -1,5 +1,5 @@
 import { createHmac } from 'crypto';
-import { ReinsuranceAccountingClient } from './reinsurance-accounting-client';
+import { ReinsuranceAccountingClient } from './accounting.client';
 
 describe('ReinsuranceAccountingClient', () => {
   const originalEnv = process.env;

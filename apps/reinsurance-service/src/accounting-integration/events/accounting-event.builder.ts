@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Prisma } from '../../prisma/generated/client';
+import { Prisma } from '../../../prisma/generated/client';
 
 export const REINSURANCE_ACCOUNTING_SOURCE_MODULE = 'REINSURANCE';
 

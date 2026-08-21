@@ -1,6 +1,6 @@
-import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceAccountingOutboxDispatcher } from './reinsurance-accounting-outbox-dispatcher.service';
-import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ReinsuranceAccountingOutboxDispatcher } from './outbox-dispatcher.service';
+import { ReinsuranceAccountingOutboxService } from './outbox.service';
 
 function setEnv(name: string, value: string | undefined) {
   if (value == null) {

@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto';
 import { Injectable } from '@nestjs/common';
-import { AccountingSourceEventEnvelope } from './reinsurance-accounting-event.builder';
+import { AccountingSourceEventEnvelope } from '../events/accounting-event.builder';
 
 const SERVICE_NAME = 'reinsurance-service';
 const ACCOUNTING_SOURCE_EVENTS_PATH = '/internal/source-events';

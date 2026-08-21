@@ -1,6 +1,6 @@
 import { ConflictException, ExecutionContext } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
-import { ReinsuranceAccountingIntegrationActiveGuard } from './reinsurance-accounting-integration-active.guard';
+import { ReinsuranceAccountingIntegrationActiveGuard } from './integration-active.guard';
 
 const user = (overrides: Partial<RequestUser> = {}): RequestUser => ({
   id: 'user-1',

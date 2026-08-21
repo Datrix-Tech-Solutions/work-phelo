@@ -4,10 +4,10 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceAccountingOutboxStatus } from '../../prisma/generated/client';
-import { ReinsuranceAccountingIntegrationConfigClient } from './reinsurance-accounting-integration-config.client';
-import { ReinsuranceAccountingOutboxService } from './reinsurance-accounting-outbox.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ReinsuranceAccountingOutboxStatus } from '../../../prisma/generated/client';
+import { ReinsuranceAccountingIntegrationConfigClient } from '../client/integration-config.client';
+import { ReinsuranceAccountingOutboxService } from './outbox.service';
 
 const DEFAULT_ENABLED = true;
 const DEFAULT_POLL_INTERVAL_MS = 10_000;

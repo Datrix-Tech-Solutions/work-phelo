@@ -2,15 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   Prisma,
   ReinsuranceAccountingOutboxStatus,
-} from '../../prisma/generated/client';
+} from '../../../prisma/generated/client';
 import {
   ReinsuranceAccountingClient,
   ReinsuranceAccountingClientError,
-} from './reinsurance-accounting-client';
+} from '../client/accounting.client';
 import {
   ReinsuranceAccountingEventBuilder,
   ReinsuranceAccountingEventInput,
-} from './reinsurance-accounting-event.builder';
+} from '../events/accounting-event.builder';
 
 const DEFAULT_BATCH_LIMIT = 25;
 const MAX_BATCH_LIMIT = 100;

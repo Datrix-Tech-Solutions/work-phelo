@@ -28,7 +28,7 @@ import {
   ChargeCalculationInput,
   ReinsuranceChargeSettingsService,
 } from '../settings/reinsurance-charge-settings.service';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/reinsurance-financial-event-publisher.service';
+import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/events/financial-event.publisher';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementFinancialPositionService } from './placement-financial-position.service';
 

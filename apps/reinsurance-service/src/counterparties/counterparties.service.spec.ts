@@ -4,7 +4,7 @@ import {
   CounterpartyOrigin,
   CounterpartyType,
 } from '../../prisma/generated/client';
-import { ReinsuranceAccountingReadinessService } from '../accounting-integration/reinsurance-accounting-readiness.service';
+import { ReinsuranceAccountingReadinessService } from '../accounting-integration/readiness/readiness.service';
 import { CounterpartyEventPublisher } from '../messaging/counterparty-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { CounterpartiesService } from './counterparties.service';
