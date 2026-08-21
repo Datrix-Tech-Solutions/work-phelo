@@ -204,10 +204,10 @@ describe('PlacementClaimsService', () => {
       'placement-1',
       new Date('2026-06-03T00:00:00.000Z'),
     );
+    expect(createArgs.data.claimNumber).toMatch(/^CLMFAC-\d{6}-0001$/);
     expect(createArgs.data).toMatchObject({
       tenantId: 'tenant-1',
       placementId: 'placement-1',
-      claimNumber: expect.stringMatching(/^CLMFAC-\d{6}-0001$/),
       status: PlacementClaimStatus.DRAFT,
       claimCause: 'Warehouse fire',
       occurrenceDetails: 'Section B',
