@@ -8,7 +8,6 @@ import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClaimAllocationStatus,
   PlacementClaimStatus,
-  PlacementType,
   Prisma,
 } from '../../../prisma/generated/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -21,12 +20,6 @@ import { PlacementClaimFinancialCloseReadinessService } from './close/financial-
 import { PlacementEffectivePositionService } from '../placement-effective-position.service';
 import { PlacementEffectiveViewService } from '../placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
-
-/** Offer-type code used in the claim number prefix (CLM{code}-yymmdd-XXXX). Only
- *  FACULTATIVE exists today — extend this when other placement types get claims. */
-const PLACEMENT_TYPE_CODE: Record<PlacementType, string> = {
-  FACULTATIVE: 'FAC',
-};
 
 const claimAllocationInclude = {
   counterparty: {
@@ -112,17 +105,13 @@ export class PlacementClaimsService {
         dto.finalLossAmount === undefined ? null : dto.finalLossAmount,
     });
 
-    return this.prisma.$transaction(async (tx) => {
-      const claimNumber = await this.nextClaimNumber(
-        tx,
-        user.tenantId,
-        placement.placementType,
-      );
-      const finalLossAmount =
-        dto.finalLossAmount === undefined ? null : dto.finalLossAmount;
-      const now = new Date();
+    const claimNumber = this.cleanRequired(dto.claimNumber);
+    const finalLossAmount =
+      dto.finalLossAmount === undefined ? null : dto.finalLossAmount;
+    const now = new Date();
 
-      return tx.placementClaim.create({
+    try {
+      return await this.prisma.placementClaim.create({
         data: {
           tenantId: user.tenantId,
           placementId,
@@ -141,7 +130,9 @@ export class PlacementClaimsService {
           updatedByUserId: user.id,
         },
       });
-    });
+    } catch (error) {
+      throw this.mapClaimNumberConflict(error, claimNumber);
+    }
   }
 
   async update(
@@ -190,34 +181,43 @@ export class PlacementClaimsService {
       finalLossAmount: effectiveFinalLossAmount,
     });
     const now = new Date();
+    const claimNumber =
+      dto.claimNumber === undefined
+        ? undefined
+        : this.cleanRequired(dto.claimNumber);
 
-    return this.prisma.placementClaim.update({
-      where: { id: claimId },
-      data: {
-        ...(dto.occurrenceDate === undefined ? {} : { occurrenceDate }),
-        ...(dto.reportedDate === undefined
-          ? {}
-          : { reportedDate: new Date(dto.reportedDate) }),
-        ...(dto.claimCause === undefined
-          ? {}
-          : { claimCause: this.cleanRequired(dto.claimCause) }),
-        ...(dto.occurrenceDetails === undefined
-          ? {}
-          : { occurrenceDetails: this.cleanOptional(dto.occurrenceDetails) }),
-        ...(dto.currency === undefined ? {} : { currency }),
-        ...(dto.estimatedLossAmount === undefined
-          ? {}
-          : { estimatedLossAmount: dto.estimatedLossAmount }),
-        ...(finalLossAmount === undefined
-          ? {}
-          : {
-              finalLossAmount,
-              finalizedAt: now,
-              finalizedByUserId: user.id,
-            }),
-        updatedByUserId: user.id,
-      },
-    });
+    try {
+      return await this.prisma.placementClaim.update({
+        where: { id: claimId },
+        data: {
+          ...(claimNumber === undefined ? {} : { claimNumber }),
+          ...(dto.occurrenceDate === undefined ? {} : { occurrenceDate }),
+          ...(dto.reportedDate === undefined
+            ? {}
+            : { reportedDate: new Date(dto.reportedDate) }),
+          ...(dto.claimCause === undefined
+            ? {}
+            : { claimCause: this.cleanRequired(dto.claimCause) }),
+          ...(dto.occurrenceDetails === undefined
+            ? {}
+            : { occurrenceDetails: this.cleanOptional(dto.occurrenceDetails) }),
+          ...(dto.currency === undefined ? {} : { currency }),
+          ...(dto.estimatedLossAmount === undefined
+            ? {}
+            : { estimatedLossAmount: dto.estimatedLossAmount }),
+          ...(finalLossAmount === undefined
+            ? {}
+            : {
+                finalLossAmount,
+                finalizedAt: now,
+                finalizedByUserId: user.id,
+              }),
+          updatedByUserId: user.id,
+        },
+      });
+    } catch (error) {
+      throw this.mapClaimNumberConflict(error, claimNumber);
+    }
   }
 
   async changeStatus(
@@ -338,7 +338,6 @@ export class PlacementClaimsService {
       select: {
         id: true,
         currency: true,
-        placementType: true,
       },
     });
     if (!placement) throw new NotFoundException('Placement not found');
@@ -352,25 +351,21 @@ export class PlacementClaimsService {
     await this.findPlacement(tenantId, placementId);
   }
 
-  /** CLM{offer type code}-yymmdd-XXXX, e.g. CLMFAC-260821-0001 — offer type from the
-   *  placement's own type, date is when the claim is being recorded (not the loss date,
-   *  which the user enters and could be well in the past), and XXXX is a lifetime count of
-   *  every claim ever created for the tenant (never resets, not scoped per placement — a
-   *  claim number is unique tenant-wide now, see the claimNumber unique constraint).
-   *  Claims created before this scheme keep their old CLM-XXX numbers untouched. */
-  private async nextClaimNumber(
-    tx: Prisma.TransactionClient,
-    tenantId: string,
-    placementType: PlacementType,
-  ): Promise<string> {
-    const count = await tx.placementClaim.count({ where: { tenantId } });
-    const now = new Date();
-    const yy = String(now.getFullYear() % 100).padStart(2, '0');
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    return `CLM${PLACEMENT_TYPE_CODE[placementType]}-${yy}${mm}${dd}-${String(
-      count + 1,
-    ).padStart(4, '0')}`;
+  private mapClaimNumberConflict(
+    error: unknown,
+    claimNumber?: string,
+  ): unknown {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return new ConflictException(
+        claimNumber
+          ? `Claim number "${claimNumber}" is already in use`
+          : 'Claim number is already in use',
+      );
+    }
+    return error;
   }
 
   private assertStatusTransition(

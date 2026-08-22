@@ -13,7 +13,7 @@ type ClaimTab = 'details' | 'cashCalls' | 'history';
 const CLAIM_TABS = [
   { key: 'details', label: 'Details' },
   { key: 'cashCalls', label: 'Recoveries' },
-  { key: 'history', label: 'History' },
+  // { key: 'history', label: 'History' },
 ];
 
 interface ClaimOverviewSectionProps {
@@ -21,11 +21,12 @@ interface ClaimOverviewSectionProps {
   claim?: PlacementClaim;
 }
 
-/** Claim detail page content — a persistent fact-summary card (mirrors `FacultativeOverview`)
- * above a tab bar over Details / Recoveries / History, following the Facultative detail page
- * layout: overview on top, tabbed table content below. */
 export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionProps) {
   const [activeTab, setActiveTab] = useState<ClaimTab>('details');
+
+  const isNotification = !claim || claim.finalLossAmount == null;
+  const visibleTabs = isNotification ? CLAIM_TABS.filter((t) => t.key === 'details') : CLAIM_TABS;
+  const effectiveTab: ClaimTab = isNotification ? 'details' : activeTab;
 
   return (
     <div className="flex flex-col gap-4">
@@ -33,17 +34,17 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
 
       <div className="flex flex-col">
         <TabBar
-          tabs={CLAIM_TABS}
-          activeTab={activeTab}
+          tabs={visibleTabs}
+          activeTab={effectiveTab}
           onTabChange={(tab) => setActiveTab(tab as ClaimTab)}
         />
 
         <div className="pt-5">
-          {activeTab === 'details' && <ClaimOverviewTab placement={placement} claim={claim} />}
-          {claim && activeTab === 'cashCalls' && (
+          {effectiveTab === 'details' && <ClaimOverviewTab placement={placement} claim={claim} />}
+          {claim && effectiveTab === 'cashCalls' && (
             <ClaimCashCallsTable placement={placement} claim={claim} />
           )}
-          {claim && activeTab === 'history' && (
+          {claim && effectiveTab === 'history' && (
             <ClaimFinancialHistoryTable placement={placement} claim={claim} />
           )}
         </div>

@@ -7,9 +7,18 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
+import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Facultative, FacultativeStatus } from '@/types/reinsurance';
-import { useFacultatives, useClaimsByTab, ClaimTabRow, useDeletePlacementClaim } from '@/hooks';
+import {
+  useFacultatives,
+  useClaimsByTab,
+  ClaimTabRow,
+  useDeletePlacementClaim,
+  useUpdatePlacementClaimUnbound,
+  useClaimAllocations,
+  useGenerateClaimAllocationsMutation,
+} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
@@ -87,7 +96,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
     {
       key: 'claimNumber',
       label: 'Claim Number',
-      width: '100px',
+      width: '130px',
       render: (row) => <span className="font-medium text-gray-900">{row.claim.claimNumber}</span>,
     },
     {
@@ -100,7 +109,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       ? {
           key: 'recoveredAmount',
           label: 'Total Recovered',
-          width: '150px',
+          width: '120px',
           className: 'text-right',
           render: (row) => (
             <span className="text-gray-900 whitespace-nowrap">
@@ -111,7 +120,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       : {
           key: 'facultativeOffer',
           label: 'Fac. Sum Insured',
-          width: '150px',
+          width: '120px',
           className: 'text-right',
           render: (row) => {
             const placement = row.placement;
@@ -132,7 +141,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       ? {
           key: 'finalLossAmount',
           label: 'Actual Claim',
-          width: '150px',
+          width: '120px',
           className: 'text-right',
           render: (row) => (
             <span className="font-medium text-gray-900 whitespace-nowrap">
@@ -143,7 +152,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       : {
           key: 'estimatedLossAmount',
           label: 'Claim Amount',
-          width: '150px',
+          width: '120px',
           className: 'text-right',
           render: (row) => (
             <span className="font-medium text-gray-900 whitespace-nowrap">
@@ -155,7 +164,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
     {
       key: 'brokerage',
       label: 'Brokerage',
-      width: '150px',
+      width: '120px',
       className: 'text-right',
       render: (row) => (
         <span className="text-gray-900 whitespace-nowrap">
@@ -167,13 +176,13 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       ? {
           key: 'recoveredAt',
           label: 'Recovered Date',
-          width: '150px',
+          width: '120px',
           render: (row) => <span className="text-gray-600">{fmtDate(row.recoveredAt)}</span>,
         }
       : {
           key: 'createdAt',
           label: 'Claim entry date',
-          width: '150px',
+          width: '130px',
           render: (row) => (
             <span className="text-gray-600">{fmtDate(row.claim.occurrenceDate)}</span>
           ),
@@ -182,10 +191,6 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
 }
 
 interface ClaimsTableProps {
-  /** 'notification' (default) shows claims still awaiting an actual amount. 'open' shows
-   * claims that have an actual claim amount but are not yet fully recovered, and swaps the
-   * header action to "Add Claim". 'closed' shows claims fully recovered from reinsurers.
-   * The three tabs partition every claim with no overlap. */
   tab?: ClaimsTableTab;
 }
 
@@ -202,6 +207,17 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const [deleteTarget, setDeleteTarget] = useState<ClaimTabRow | null>(null);
   const { mutate: deleteClaim, isPending: isDeleting } = useDeletePlacementClaim();
 
+  const [finalizeTarget, setFinalizeTarget] = useState<ClaimTabRow | null>(null);
+  const [finalAmount, setFinalAmount] = useState('');
+  const [finalAmountError, setFinalAmountError] = useState('');
+  const updateClaim = useUpdatePlacementClaimUnbound();
+  const generateAllocationsForClaim = useGenerateClaimAllocationsMutation();
+
+  const { data: finalizeAllocations = [] } = useClaimAllocations(
+    finalizeTarget?.placement.id ?? '',
+    finalizeTarget?.claim.id ?? '',
+  );
+
   const { data: allRows = [], isLoading } = useFacultatives();
 
   const closingRows = useMemo(
@@ -209,8 +225,6 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     [allRows],
   );
 
-  // Shared with ClaimsStatsRow so the tab tables and the KPI counts stay in lockstep and
-  // draw on the same cached queries instead of double-fetching.
   const {
     notification,
     open: openRows,
@@ -220,7 +234,6 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   } = useClaimsByTab(closingRows);
 
   const claimRows = tab === 'notification' ? notification : tab === 'open' ? openRows : closedRows;
-  // The Notification tab doesn't need recovery-position/allocations data, so it doesn't wait on it.
   const isLoadingTabData = isLoadingClaims || (tab !== 'notification' && isLoadingFinancials);
 
   const cedantOptions = useMemo(() => {
@@ -246,9 +259,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     if (cedantFilter) {
       rows = rows.filter((r) => r.placement.cedant.id === cedantFilter);
     }
-    // Most recent first, by whichever date the tab's date column shows — recovered date on
-    // Closed, claim entry date elsewhere. Copy before sorting — `rows` may still be the same
-    // array reference `claimRows` holds, and sort() mutates in place.
+
     const dateOf = (r: ClaimTabRow) => (tab === 'closed' ? r.recoveredAt : r.claim.occurrenceDate);
     return [...rows].sort((a, b) => {
       const bTime = dateOf(b) ? new Date(dateOf(b) as string).getTime() : 0;
@@ -273,6 +284,47 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
         onError: (err) => toast.error(extractError(err, 'Failed to delete claim')),
       },
     );
+  };
+
+  const handleCloseFinalize = () => {
+    setFinalizeTarget(null);
+    setFinalAmount('');
+    setFinalAmountError('');
+  };
+
+  const handleFinalize = async () => {
+    if (!finalizeTarget) return;
+    const parsed = parseFloat(finalAmount);
+    if (isNaN(parsed) || parsed <= 0) {
+      setFinalAmountError('Actual claim amount is required');
+      return;
+    }
+
+    try {
+      await updateClaim.mutateAsync({
+        placementId: finalizeTarget.placement.id,
+        claimId: finalizeTarget.claim.id,
+        finalLossAmount: parsed,
+      });
+
+      if (finalizeAllocations.length === 0) {
+        try {
+          await generateAllocationsForClaim.mutateAsync({
+            placementId: finalizeTarget.placement.id,
+            claimId: finalizeTarget.claim.id,
+          });
+        } catch (allocationError) {
+          toast.error(
+            `Claim finalized, but allocations could not be generated: ${extractError(allocationError)}`,
+          );
+        }
+      }
+
+      toast.success('Claim finalized successfully');
+      handleCloseFinalize();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to finalize claim'));
+    }
   };
 
   return (
@@ -314,8 +366,6 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
               : undefined
         }
         rowActions={
-          // Closed claims are read-only, and the row click already opens View — no action
-          // menu needed there.
           tab === 'closed'
             ? undefined
             : (row) => {
@@ -329,10 +379,17 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
                 const edit = { label: 'Edit Claim', onClick: () => setPanelTarget(row) };
                 if (tab === 'open') return [view, edit];
 
-                // Notification: still just a draft entry, so it can be deleted outright.
                 return [
                   view,
                   edit,
+                  {
+                    label: 'Move to Open',
+                    onClick: () => {
+                      setFinalizeTarget(row);
+                      setFinalAmount(row.claim.estimatedLossAmount);
+                      setFinalAmountError('');
+                    },
+                  },
                   { label: 'Delete', onClick: () => setDeleteTarget(row), danger: true },
                 ];
               }
@@ -388,6 +445,55 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
           </div>
         }
       />
+
+      <Modal
+        isOpen={!!finalizeTarget}
+        onClose={handleCloseFinalize}
+        title="Finalize Claim"
+        description={`Enter the actual claim amount for claim "${finalizeTarget?.claim.claimNumber}". This moves it out of Notification.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={handleCloseFinalize}
+              disabled={updateClaim.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              isLoading={updateClaim.isPending}
+              loadingText="Finalizing…"
+              onClick={handleFinalize}
+            >
+              Finalize Claim
+            </Button>
+          </div>
+        }
+      >
+        <div className="mt-4 flex flex-col gap-3">
+          <p className="text-sm text-gray-600">
+            The claim amount was{' '}
+            <span className="font-medium text-gray-900">
+              {fmtAmount(finalizeTarget?.claim.estimatedLossAmount, finalizeTarget?.claim.currency)}
+            </span>{' '}
+            for the loss that occurred on the{' '}
+            <span className="font-medium text-gray-900">
+              {fmtDate(finalizeTarget?.claim.occurrenceDate)}
+            </span>
+            .
+          </p>
+          <NumberField
+            label="Actual Claim Amount"
+            value={finalAmount ? Number(finalAmount) : 0}
+            onChange={(n) => {
+              setFinalAmount(String(n));
+              setFinalAmountError('');
+            }}
+            error={finalAmountError}
+            placeholder="0.00"
+          />
+        </div>
+      </Modal>
     </>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { cn, inputClass } from '@/lib/utils';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { Input } from '@/components/atoms/Input';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCurrencyOptions, usePlacementEffectiveView, usePremiumPaymentContext } from '@/hooks';
@@ -11,6 +12,7 @@ import { Facultative } from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 export interface MakeClaimFormValues {
+  claimNumber: string;
   estimatedLossAmount: string;
   finalLossAmount: string;
   occurrenceDate: string;
@@ -24,6 +26,7 @@ export interface MakeClaimFormValues {
 }
 
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
+  claimNumber: '',
   estimatedLossAmount: '',
   finalLossAmount: '',
   occurrenceDate: '',
@@ -123,6 +126,12 @@ export function MakeClaimFormFields({
           <hr className="border-gray-100" />
         </>
       )}
+      <Input
+        label="Claim Number"
+        placeholder="Enter claim number…"
+        {...register('claimNumber', { required: 'Claim number is required' })}
+        error={errors.claimNumber?.message}
+      />
       <div className="flex flex-col gap-1 text-sm">
         <p className="text-gray-700">{premiumPaymentStatusText}</p>
         {latestPaymentDateText && (

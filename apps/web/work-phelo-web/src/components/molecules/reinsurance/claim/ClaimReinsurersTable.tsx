@@ -119,7 +119,11 @@ export function ClaimReinsurersTable({
             return <span className="text-xs text-gray-400">—</span>;
           }
           if (!isActualAmount) {
-            return <span className="text-xs text-gray-400">Awaiting actual claim amount</span>;
+            return (
+              <TableButton variant="blue" onClick={() => onPreview(participant)}>
+                Preview
+              </TableButton>
+            );
           }
           return (
             <div className="flex items-center gap-2">

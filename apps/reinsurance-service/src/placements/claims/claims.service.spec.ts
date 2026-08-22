@@ -182,12 +182,12 @@ describe('PlacementClaimsService', () => {
     prisma.placementEndorsement.findMany.mockResolvedValue([]);
   });
 
-  it('creates a claim loss event with placement-scoped CLM numbering', async () => {
+  it('creates a claim loss event using the user-entered claim number', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
-    prisma.placementClaim.count.mockResolvedValue(0);
     prisma.placementClaim.create.mockResolvedValue(claim);
 
     await service.create(user, 'placement-1', {
+      claimNumber: ' CLM-CUSTOM-001 ',
       occurrenceDate: '2026-06-03T00:00:00.000Z',
       reportedDate: '2026-06-05T10:00:00.000Z',
       claimCause: ' Warehouse fire ',
@@ -204,7 +204,7 @@ describe('PlacementClaimsService', () => {
       'placement-1',
       new Date('2026-06-03T00:00:00.000Z'),
     );
-    expect(createArgs.data.claimNumber).toMatch(/^CLMFAC-\d{6}-0001$/);
+    expect(createArgs.data.claimNumber).toBe('CLM-CUSTOM-001');
     expect(createArgs.data).toMatchObject({
       tenantId: 'tenant-1',
       placementId: 'placement-1',
@@ -219,11 +219,33 @@ describe('PlacementClaimsService', () => {
     });
   });
 
+  it('rejects creating a claim with a claim number already used by the tenant', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '0.0.0',
+      }),
+    );
+
+    await expect(
+      service.create(user, 'placement-1', {
+        claimNumber: 'CLM-DUPLICATE',
+        occurrenceDate: '2026-06-03T00:00:00.000Z',
+        reportedDate: '2026-06-05T10:00:00.000Z',
+        claimCause: 'Warehouse fire',
+        currency: 'GHS',
+        estimatedLossAmount: 40000,
+      }),
+    ).rejects.toThrow(ConflictException);
+  });
+
   it('rejects a claim before the effective coverage inception date', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
 
     await expect(
       service.create(user, 'placement-1', {
+        claimNumber: 'CLM-TEST-001',
         occurrenceDate: '2025-12-31T12:00:00.000Z',
         reportedDate: '2026-06-05T10:00:00.000Z',
         claimCause: 'Warehouse fire',
@@ -239,6 +261,7 @@ describe('PlacementClaimsService', () => {
 
     await expect(
       service.create(user, 'placement-1', {
+        claimNumber: 'CLM-TEST-002',
         occurrenceDate: '2027-01-01T00:00:00.000Z',
         reportedDate: '2026-06-05T10:00:00.000Z',
         claimCause: 'Warehouse fire',
@@ -254,6 +277,7 @@ describe('PlacementClaimsService', () => {
 
     await expect(
       service.create(user, 'placement-1', {
+        claimNumber: 'CLM-TEST-003',
         occurrenceDate: '2026-06-03T00:00:00.000Z',
         reportedDate: '2026-06-05T10:00:00.000Z',
         claimCause: 'Warehouse fire',
@@ -266,7 +290,6 @@ describe('PlacementClaimsService', () => {
 
   it('uses endorsed loss-date terms instead of raw placement values', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
-    prisma.placementClaim.count.mockResolvedValue(0);
     prisma.placementClaim.create.mockResolvedValue(claim);
     effectiveViewService.getEffectiveView.mockResolvedValueOnce({
       effectiveTerms: {
@@ -276,6 +299,7 @@ describe('PlacementClaimsService', () => {
     });
 
     await service.create(user, 'placement-1', {
+      claimNumber: 'CLM-TEST-004',
       occurrenceDate: '2026-08-01T00:00:00.000Z',
       reportedDate: '2026-08-02T10:00:00.000Z',
       claimCause: 'Warehouse fire',
@@ -296,6 +320,7 @@ describe('PlacementClaimsService', () => {
 
     await expect(
       service.create(user, 'placement-1', {
+        claimNumber: 'CLM-TEST-005',
         occurrenceDate: '2026-06-03T00:00:00.000Z',
         reportedDate: '2026-06-05T10:00:00.000Z',
         claimCause: 'Warehouse fire',
@@ -313,7 +338,7 @@ describe('PlacementClaimsService', () => {
 
     expect(prisma.placement.findFirst).toHaveBeenCalledWith({
       where: { id: 'placement-1', tenantId: 'tenant-1', archivedAt: null },
-      select: { id: true, currency: true, placementType: true },
+      select: { id: true, currency: true },
     });
     expect(prisma.placementClaim.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -927,7 +952,6 @@ describe('PlacementClaimsService', () => {
     };
     prisma.placementPayment.findFirst.mockResolvedValue(null);
     prisma.placement.findFirst.mockResolvedValue(placement);
-    prisma.placementClaim.count.mockResolvedValue(0);
     prisma.placementClaim.create.mockResolvedValue(claim);
 
     await expect(lockPolicy.evaluate(unlockedPlacement)).resolves.toMatchObject(
@@ -938,6 +962,7 @@ describe('PlacementClaimsService', () => {
     );
 
     await service.create(user, 'placement-1', {
+      claimNumber: 'CLM-TEST-006',
       occurrenceDate: '2026-06-03T00:00:00.000Z',
       reportedDate: '2026-06-05T10:00:00.000Z',
       claimCause: 'Warehouse fire',

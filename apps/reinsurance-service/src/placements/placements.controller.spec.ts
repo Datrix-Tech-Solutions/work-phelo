@@ -1154,6 +1154,7 @@ describe('PlacementsController', () => {
       blockers: [],
     });
     const createDto = {
+      claimNumber: 'CLM-TEST-001',
       occurrenceDate: '2026-06-03T00:00:00.000Z',
       reportedDate: '2026-06-05T10:00:00.000Z',
       claimCause: 'Warehouse fire',

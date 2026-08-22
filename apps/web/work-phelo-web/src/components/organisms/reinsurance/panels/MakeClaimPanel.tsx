@@ -103,6 +103,7 @@ export function MakeClaimPanel({
       if (claim) {
         reset({
           ...MAKE_CLAIM_DEFAULTS,
+          claimNumber: claim.claimNumber,
           estimatedLossAmount: claim.estimatedLossAmount,
           finalLossAmount: claim.finalLossAmount ?? '',
           occurrenceDate: claim.occurrenceDate.split('T')[0],
@@ -145,6 +146,7 @@ export function MakeClaimPanel({
     };
 
     const payload = {
+      claimNumber: values.claimNumber,
       occurrenceDate: new Date(values.occurrenceDate).toISOString(),
       reportedDate: new Date().toISOString(),
       claimCause: values.claimCause,
