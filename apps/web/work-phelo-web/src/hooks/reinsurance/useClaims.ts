@@ -143,6 +143,27 @@ export function useUpdatePlacementClaim(placementId: string, claimId: string) {
   });
 }
 
+/** Unbound (vs. useUpdatePlacementClaim) so a single instance can update any row of a table
+ *  spanning multiple placements — pass the ids per call instead of binding them up front.
+ *  Used by the Notification tab's "Finalize Claim" row action, which patches a claim in the
+ *  claims list without opening the full edit panel. */
+export function useUpdatePlacementClaimUnbound() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      placementId,
+      claimId,
+      ...payload
+    }: UpdatePlacementClaimPayload & { placementId: string; claimId: string }) => {
+      const res = await api.patch(`${BASE}/${placementId}/claims/${claimId}`, payload);
+      return res.data as PlacementClaim;
+    },
+    onSuccess: (_claim, { placementId, claimId }) => {
+      invalidateClaimWorkflow(queryClient, placementId, claimId);
+    },
+  });
+}
+
 export function useUpdateClaimStatus(placementId: string, claimId: string) {
   const queryClient = useQueryClient();
   return useMutation({

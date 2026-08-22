@@ -12,6 +12,16 @@ import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
 export class CreatePlacementClaimDto {
   @ApiProperty({
+    example: 'CLMFAC-260821-0001',
+    maxLength: 50,
+    description: 'User-entered claim number. Must be unique tenant-wide.',
+  })
+  @TrimmedString()
+  @IsString()
+  @MaxLength(50)
+  claimNumber!: string;
+
+  @ApiProperty({
     type: String,
     format: 'date-time',
     example: '2026-06-03T00:00:00.000Z',

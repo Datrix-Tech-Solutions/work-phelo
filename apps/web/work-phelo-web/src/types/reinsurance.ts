@@ -1436,6 +1436,7 @@ export interface PlacementClaim {
 }
 
 export interface CreatePlacementClaimPayload {
+  claimNumber: string;
   occurrenceDate: string;
   reportedDate: string;
   claimCause: string;

@@ -129,8 +129,10 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
           isOpen
           placement={placement}
           participant={debitNoteTarget}
+          claim={claim}
           claimAmount={claimAmount}
           allocation={debitNoteAllocation}
+          mode={isActualAmount ? 'claim' : 'notification'}
           onPrint={() => {}}
           onClose={() => setDebitNoteTarget(null)}
         />
