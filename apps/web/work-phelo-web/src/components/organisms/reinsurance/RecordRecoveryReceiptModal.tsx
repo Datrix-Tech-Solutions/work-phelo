@@ -34,8 +34,6 @@ interface RecordPaymentValues {
   amount: string;
   bankName: string;
   currency: string;
-  /** Conversion rate into the cash call's own currency — only used when `currency` differs
-   * from it, on the Direct to Cedant path. */
   rate: string;
 }
 
@@ -52,14 +50,14 @@ const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
 };
 
 const MODE_OPTIONS = [
-  { value: 'broker', label: 'To Broker' },
+  { value: 'broker', label: 'Through Broker' },
   { value: 'cedant', label: 'Direct to Cedant' },
+  { value: 'offset', label: 'Offset Claim' },
 ];
 
 const PAYMENT_TYPE_OPTIONS = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'cheque', label: 'Cheque' },
-  { value: 'offset_claim', label: 'Offset Claim' },
 ];
 
 function fmtAmount(val: number, currency: string) {
@@ -93,7 +91,7 @@ export function RecordRecoveryReceiptModal({
   const paymentType = useWatch({ control, name: 'paymentType' });
   const directCurrency = useWatch({ control, name: 'currency' });
   const { data: currencyOptions = [] } = useCurrencyOptions();
-  const isDirectEntry = mode === 'cedant' || paymentType === 'offset_claim';
+  const isDirectEntry = mode === 'cedant' || mode === 'offset';
 
   const showRate =
     isDirectEntry && !!directCurrency && !!row?.currency && directCurrency !== row.currency;
@@ -134,13 +132,8 @@ export function RecordRecoveryReceiptModal({
     }
     try {
       const amount = Math.round((parseFloat(values.amount) || 0) * 100) / 100;
-      const isDirectEntry = values.mode === 'cedant' || values.paymentType === 'offset_claim';
+      const isDirectEntry = values.mode === 'cedant' || values.mode === 'offset';
 
-      // Every branch below picks a settlementMethod (and, where needed, notes) that already
-      // satisfies the bank-confirm endpoint's conditional requirements using data this form
-      // already collects — a reference from Create for Cheque/Bank Transfer, or a method
-      // (Other/Internal Offset) that doesn't need one — so the receipt can be confirmed in the
-      // same action instead of needing a separate trip to the History tab.
       let confirmedAt: string;
       let settlementMethod: PlacementSettlementMethod;
       let confirmNotes: string | undefined;
@@ -166,9 +159,7 @@ export function RecordRecoveryReceiptModal({
           },
         });
         confirmedAt = new Date(values.paymentDate).toISOString();
-        // OTHER needs a reference or notes — Direct to Cedant has no reference, so pass the
-        // same notes again (the confirm check reads its own request's notes, not the
-        // receipt's stored ones). Internal Offset needs neither.
+
         settlementMethod = values.mode === 'cedant' ? 'OTHER' : 'INTERNAL_OFFSET';
         confirmNotes = values.mode === 'cedant' ? notes : undefined;
       } else {
@@ -218,12 +209,6 @@ export function RecordRecoveryReceiptModal({
     }
   };
 
-  // Bank Name's register()/Controller calls are inlined directly inside each conditional block
-  // below (like chequeNumber/valueDate already are) rather than factored into always-computed
-  // consts — react-hook-form doesn't reliably pick up changed `rules` on a field that's already
-  // registered from an earlier render, so the only solid way to make a field's requirement
-  // conditional is to only ever call register()/Controller for it at all when its branch is
-  // actually active.
   const chequeFields = paymentType === 'cheque' && (
     <>
       <div className="grid grid-cols-5 gap-4">
@@ -416,9 +401,6 @@ export function RecordRecoveryReceiptModal({
             type="button"
             onClick={() => {
               handleSubmit(onSubmit, (formErrors) => {
-                // A field can fail validation while being registered from a branch that's no
-                // longer rendered, so its own error text has nowhere to show. Surface it here
-                // instead of letting the click silently do nothing.
                 const [firstError] = Object.values(formErrors);
                 addToast({
                   message: firstError?.message ?? 'Please check the form and try again.',
