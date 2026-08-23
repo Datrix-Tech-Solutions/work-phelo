@@ -13,7 +13,7 @@ type ClaimTab = 'details' | 'cashCalls' | 'history';
 const CLAIM_TABS = [
   { key: 'details', label: 'Details' },
   { key: 'cashCalls', label: 'Recoveries' },
-  // { key: 'history', label: 'History' },
+  { key: 'history', label: 'History' },
 ];
 
 interface ClaimOverviewSectionProps {
