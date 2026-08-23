@@ -266,7 +266,7 @@ export function ClaimDebitNoteModal({
           RE: CLAIM NOTIFICATION – {title ?? '—'} – {cedant.name} – {classOfBusiness ?? '—'}
         </p>
 
-        <p className="font-medium text-gray-900 mt-3">Dear Sirs,</p>
+        <p className="font-medium text-gray-900 mt-3">Dear Sir/Madam,</p>
         <p className="text-gray-700 mt-3 leading-relaxed">
           We hereby notify you of a claim under the above risk, which may give rise to a recovery
           under the applicable reinsurance arrangement.

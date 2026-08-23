@@ -47,9 +47,6 @@ const TYPE_VARIANT: Record<HistoryRowType, 'info' | 'success'> = {
   RECEIVABLE: 'success',
 };
 
-/** Receivable rows only ever carry a Mode of Payment marker via `notes` (no dedicated backend
- *  field yet — see RecordRecoveryReceiptModal). Payable rows still use the settlement's own
- *  `settlementMethod`, since cedant settlements never went through that redesign. */
 function modeOfPaymentLabel(row: HistoryRow): string {
   if (row.type === 'PAYABLE') {
     return row.settlement?.settlementMethod?.replaceAll('_', ' ') ?? '—';
@@ -57,13 +54,9 @@ function modeOfPaymentLabel(row: HistoryRow): string {
   const notes = row.receipt?.notes;
   if (notes === OFFSET_CLAIM_RECEIPT_NOTE) return 'Offset Claim';
   if (notes === DIRECT_TO_CEDANT_RECEIPT_NOTE) return 'Direct to Cedant';
-  return 'To Broker';
+  return 'Through Broker';
 }
 
-/** Unified financial history for this claim, one timeline sorted by date: "Claim Payable" rows
- * are Broker → Cedant settlements, "Claim Receivable" rows are Reinsurer → Broker recovery
- * receipts — same underlying data as before, just merged with a Type tag instead of split across
- * two tables. */
 export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialHistoryTableProps) {
   const { data: settlements = [] } = useClaimCedantSettlements(placement.id, claim.id);
   const { data: position } = useClaimRecoveryPosition(placement.id, claim.id);

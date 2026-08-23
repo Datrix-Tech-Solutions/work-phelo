@@ -23,9 +23,6 @@ export default function ClaimDetailPage({
   const { data: activeClaim } = usePlacementClaim(placementId, id);
   const [panelOpen, setPanelOpen] = useState(false);
 
-  // Prefer the tab we actually came from (carried via the row click); if there isn't one —
-  // a bookmarked/direct link — fall back to the claim's own bucket so "Closed Claims" still
-  // reopens to the Closed tab, etc.
   const referrerTab = searchParams.get('tab');
   const { bucket } = useClaimTabBucket(placementId, activeClaim);
   const backTab = referrerTab ?? bucket;
