@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { NewInvoiceForm } from '@/components/organisms/accounting/forms/NewInvoiceForm';
 import { AccountingTradeDocument, AccountingTradeDocumentStatus } from '@/types/accounting';
 import { useReceivableInvoices } from '@/hooks';
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
@@ -31,11 +32,10 @@ function fmtAmount(amount: string, currency: string) {
 }
 
 export function AccountsReceivableTable() {
-  const router = useRouter();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const { data, isLoading } = useReceivableInvoices({ limit: 100 });
   const invoices = useMemo(() => data?.items ?? [], [data]);
@@ -120,13 +120,14 @@ export function AccountsReceivableTable() {
         }}
         actionButton={{
           label: 'New Invoice',
-          onClick: () => router.push(`/${tenantSlug}/accounting/accountsreceivable/new`),
+          onClick: () => setPanelOpen(true),
         }}
         onRowClick={(row) => setDetailTarget(row)}
         emptyMessage="No invoices found"
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       <TradeDocumentDetailPanel
@@ -134,6 +135,21 @@ export function AccountsReceivableTable() {
         document={detailTarget}
         onClose={() => setDetailTarget(null)}
       />
+
+      <Modal
+        isOpen={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title="New Invoice"
+        description="Record a new customer invoice."
+        width="max-w-5xl"
+        height="max-h-[90vh]"
+      >
+        <NewInvoiceForm
+          side="RECEIVABLE"
+          onCancel={() => setPanelOpen(false)}
+          onCreated={() => setPanelOpen(false)}
+        />
+      </Modal>
     </>
   );
 }
