@@ -56,7 +56,7 @@ export function InvoiceLineDetailsSection({
     {
       key: 'description',
       label: 'Description',
-      width: '2fr',
+      width: 'minmax(150px, 1fr)',
       renderField: (index) => (
         <input
           {...register(`lines.${index}.description`)}
@@ -68,7 +68,7 @@ export function InvoiceLineDetailsSection({
     {
       key: 'glAccount',
       label: 'GL Account',
-      width: '1.5fr',
+      width: 'minmax(150px, 1fr)',
       renderField: (index) => {
         const err = errors.lines?.[index]?.glAccount;
         return (
@@ -93,7 +93,7 @@ export function InvoiceLineDetailsSection({
     {
       key: 'unitPrice',
       label: 'Unit Price',
-      width: '110px',
+      width: '100px',
       align: 'right',
       renderField: (index) => {
         const err = errors.lines?.[index]?.unitPrice;
@@ -131,7 +131,7 @@ export function InvoiceLineDetailsSection({
     {
       key: 'tax',
       label: 'Tax (%)',
-      width: '90px',
+      width: '70px',
       align: 'right',
       renderField: (index) => (
         <input
@@ -159,7 +159,7 @@ export function InvoiceLineDetailsSection({
     {
       key: 'total',
       label: `Total${currency ? ` (${currency})` : ''}`,
-      width: '140px',
+      width: '120px',
       align: 'right',
       renderField: (index) => (
         <div className="py-2 px-1 text-sm text-right text-gray-900 font-semibold">

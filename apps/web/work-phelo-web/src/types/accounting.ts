@@ -851,6 +851,55 @@ export const SUBLEDGER_TYPE_LABELS: Record<SubledgerType, string> = {
   OTHER: 'Other',
 };
 
+/** Which side of the ledger a tenant-defined Entity Type posts to: RECEIVABLE for
+ *  customer-like entities, PAYABLE for vendor-like ones, BOTH for entities that can carry
+ *  either (e.g. a party that's sometimes billed, sometimes bills you), and NONE for entities
+ *  that don't flow through AP/AR at all (e.g. Employee, Statutory, Other). */
+export type EntityAccountingRelation = 'RECEIVABLE' | 'PAYABLE' | 'BOTH' | 'NONE';
+
+export const ENTITY_ACCOUNTING_RELATION_LABELS: Record<EntityAccountingRelation, string> = {
+  RECEIVABLE: 'Receivable',
+  PAYABLE: 'Payable',
+  BOTH: 'Both',
+  NONE: 'None',
+};
+
+/** Fallback accounting relation for the fixed `SubledgerType` values, used wherever an entity
+ *  isn't (yet) resolvable against a tenant-configured `EntityType` — e.g. before the
+ *  entity-types endpoint exists, or for a type with no custom relation configured. CEDANT and
+ *  REINSURER default to BOTH since a reinsurance counterparty can carry either a receivable or
+ *  a payable position depending on settlement direction. */
+export const DEFAULT_ENTITY_ACCOUNTING_RELATION: Record<SubledgerType, EntityAccountingRelation> =
+  {
+    CUSTOMER: 'RECEIVABLE',
+    VENDOR: 'PAYABLE',
+    CEDANT: 'BOTH',
+    REINSURER: 'BOTH',
+    EMPLOYEE: 'NONE',
+    STATUTORY: 'NONE',
+    OTHER: 'NONE',
+  };
+
+/** A label available in the Entity "Type" field. The base set — Customer, Vendor, Employee,
+ *  Statutory, Other — is system-seeded (`isSystem: true`) and can't be deleted; a tenant can
+ *  add further custom ones (e.g. "Landlord", "Government Agency") alongside them, each mapped
+ *  to the accounting relation that drives whether entities of that type can carry a
+ *  receivable balance, a payable balance, both, or neither. */
+export interface EntityType {
+  id: string;
+  name: string;
+  accountingRelation: EntityAccountingRelation;
+  isSystem: boolean;
+  entityCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEntityTypePayload {
+  name: string;
+  accountingRelation: EntityAccountingRelation;
+}
+
 export interface SubledgerAccount {
   id: string;
   code: string;

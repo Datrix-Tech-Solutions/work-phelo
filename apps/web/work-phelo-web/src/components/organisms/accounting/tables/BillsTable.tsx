@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { NewInvoiceForm } from '@/components/organisms/accounting/forms/NewInvoiceForm';
 import { AccountingTradeDocument, AccountingTradeDocumentStatus } from '@/types/accounting';
 import { usePayableBills } from '@/hooks';
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
@@ -30,12 +31,11 @@ function fmtAmount(amount: string, currency: string) {
   return `${currency} ${Number.isFinite(value) ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amount}`;
 }
 
-export function AccountsPayableTable() {
-  const router = useRouter();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+export function BillsTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const { data, isLoading } = usePayableBills({ limit: 100 });
   const bills = useMemo(() => data?.items ?? [], [data]);
@@ -58,7 +58,7 @@ export function AccountsPayableTable() {
     () => [
       {
         key: 'documentNumber',
-        label: 'Invoice No.',
+        label: 'Bill No.',
         width: '140px',
         render: (row) => (
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
@@ -76,7 +76,7 @@ export function AccountsPayableTable() {
       },
       {
         key: 'documentDate',
-        label: 'Invoice Date',
+        label: 'Bill Date',
         width: '130px',
         render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.documentDate)}</span>,
       },
@@ -112,21 +112,22 @@ export function AccountsPayableTable() {
         columns={columns}
         data={paged}
         isLoading={isLoading}
-        searchPlaceholder="Search invoices…"
+        searchPlaceholder="Search bills…"
         searchValue={search}
         onSearch={(q) => {
           setSearch(q);
           setPage(1);
         }}
         actionButton={{
-          label: 'New Invoice',
-          onClick: () => router.push(`/${tenantSlug}/accounting/accountspayable/new`),
+          label: 'New Bill',
+          onClick: () => setPanelOpen(true),
         }}
         onRowClick={(row) => setDetailTarget(row)}
-        emptyMessage="No invoices found"
+        emptyMessage="No bills found"
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       <TradeDocumentDetailPanel
@@ -134,6 +135,21 @@ export function AccountsPayableTable() {
         document={detailTarget}
         onClose={() => setDetailTarget(null)}
       />
+
+      <Modal
+        isOpen={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title="New Bill"
+        description="Record a new vendor bill."
+        width="max-w-5xl"
+        height="max-h-[90vh]"
+      >
+        <NewInvoiceForm
+          side="PAYABLE"
+          onCancel={() => setPanelOpen(false)}
+          onCreated={() => setPanelOpen(false)}
+        />
+      </Modal>
     </>
   );
 }

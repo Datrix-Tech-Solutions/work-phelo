@@ -41,7 +41,7 @@ export default function VendorDetailPage({
 
   const { data: vendor, isLoading } = useVendor(vendorId);
   const { data: config } = useAccountingConfig();
-  const base = `/${tenantSlug}/accounting/settings/entities`;
+  const base = `/${tenantSlug}/accounting/accountspayable/entities`;
   const updateVendor = useUpdateVendor();
   const deactivateVendor = useDeactivateVendor();
   const activateVendor = useActivateVendor();

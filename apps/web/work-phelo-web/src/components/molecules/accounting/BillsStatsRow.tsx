@@ -1,21 +1,21 @@
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { Icons } from '@/components/atoms/icons';
 
-interface AccountsPayableStatsRowProps {
+interface BillsStatsRowProps {
   isLoading: boolean;
   totalPayables: string;
-  overdueInvoices: number;
+  overdueBills: number;
   dueThisWeek: number;
   pendingApproval: number;
 }
 
-export function AccountsPayableStatsRow({
+export function BillsStatsRow({
   isLoading,
   totalPayables,
-  overdueInvoices,
+  overdueBills,
   dueThisWeek,
   pendingApproval,
-}: AccountsPayableStatsRowProps) {
+}: BillsStatsRowProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
       <KpiCard
@@ -26,8 +26,8 @@ export function AccountsPayableStatsRow({
         isLoading={isLoading}
       />
       <KpiCard
-        label="Overdue Invoices"
-        value={overdueInvoices}
+        label="Overdue Bills"
+        value={overdueBills}
         icon={Icons.FileWarning}
         iconColor="#e34948"
         isLoading={isLoading}

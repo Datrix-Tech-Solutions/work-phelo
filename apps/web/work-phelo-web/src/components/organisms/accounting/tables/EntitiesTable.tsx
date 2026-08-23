@@ -1,16 +1,18 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useParams } from 'next/navigation';
-import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
+// import { useParams } from 'next/navigation';
+// import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
+import { TypeChip } from '@/components/atoms/TypeChip';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { AddEntityPanel } from '@/components/organisms/accounting/panels/AddEntityPanel';
 import { SUBLEDGER_TYPE_LABELS, SubledgerAccount, SubledgerType } from '@/types/accounting';
+import { SUBLEDGER_TYPE_CHIP_COLOR } from '@/lib/accounting/subledgerType';
 import { useAccountingConfig, useDeactivateSubledger, useSubledgers } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -26,8 +28,8 @@ function fmtBalance(amount: number, currency: string) {
 }
 
 export function EntitiesTable() {
-  const router = useRouter();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  // const router = useRouter();
+  // const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<SubledgerType | ''>('');
   const [page, setPage] = useState(1);
@@ -57,19 +59,24 @@ export function EntitiesTable() {
       {
         key: 'name',
         label: 'Entity Name',
-        width: 'minmax(150px, 1fr)',
+        width: 'minmax(120px, 1fr)',
         render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
       },
       {
         key: 'type',
         label: 'Type',
-        width: '100px',
-        render: (row) => <Badge label={SUBLEDGER_TYPE_LABELS[row.type]} variant="info" />,
+        width: '120px',
+        render: (row) => (
+          <TypeChip
+            label={SUBLEDGER_TYPE_LABELS[row.type]}
+            color={SUBLEDGER_TYPE_CHIP_COLOR[row.type]}
+          />
+        ),
       },
       {
         key: 'controlAccount',
         label: 'Control Account',
-        width: 'minmax(150px, 1fr)',
+        width: 'minmax(120px, 1fr)',
         render: (row) => (
           <span className="text-gray-700 text-sm">
             {row.controlAccount.code} — {row.controlAccount.name}
@@ -103,8 +110,6 @@ export function EntitiesTable() {
         label: '',
         width: '120px',
         render: (row) =>
-          // No activate route exists for subledger accounts (unlike the old vendor/customer
-          // pair) — deactivating here is currently one-way, so inactive rows get no action.
           row.status === 'ACTIVE' ? (
             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
               <TableButton variant="red" onClick={() => setDeactivateTarget(row)}>
@@ -165,7 +170,7 @@ export function EntitiesTable() {
           setPage(1);
         }}
         extraFilters={extraFilters}
-        onRowClick={(row) => router.push(`/${tenantSlug}/accounting/settings/entities/${row.id}`)}
+        // onRowClick={(row) => router.push(`/${tenantSlug}/accounting/accountspayable/entities/${row.id}`)}
         actionButton={{ label: 'Add Entity', onClick: () => setPanelOpen(true) }}
         emptyMessage="No entities found"
         currentPage={page}

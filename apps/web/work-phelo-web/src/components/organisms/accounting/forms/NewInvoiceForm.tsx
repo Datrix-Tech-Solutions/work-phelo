@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -11,10 +11,14 @@ import { AccountingTradeSide, InvoiceFormValues, INVOICE_DEFAULTS } from '@/type
 import {
   useCreatePayableBill,
   useCreateReceivableInvoice,
-  useCustomers,
+  useEntityTypes,
   useGLAccountOptions,
-  useVendors,
+  useSubledgers,
 } from '@/hooks';
+import {
+  matchesTradeSide,
+  resolveEntityAccountingRelation,
+} from '@/lib/accounting/entityAccountingRelation';
 import { Icons } from '@/components/atoms/icons';
 import { cardClass } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -35,15 +39,20 @@ export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewIn
   const form = useForm<InvoiceFormValues>({ defaultValues: INVOICE_DEFAULTS });
   const [showCancelModal, setShowCancelModal] = useState(false);
 
-  // One side's list goes unused, but neither hook supports a skip flag; a single
-  // wasted fetch on this rarely-visited "new document" page is a fair trade for
-  // not hand-rolling a conditional-hook workaround.
-  const { data: customersData, isLoading: isLoadingCustomers } = useCustomers();
-  const { data: vendorsData, isLoading: isLoadingVendors } = useVendors();
-  const parties = isReceivable ? (customersData?.items ?? []) : (vendorsData?.items ?? []);
+  const { data: entities, isLoading: isLoadingEntities } = useSubledgers({ status: 'ACTIVE' });
+  const { data: entityTypes, isLoading: isLoadingEntityTypes } = useEntityTypes();
+  const isLoadingParties = isLoadingEntities || isLoadingEntityTypes;
+
+  const parties = useMemo(
+    () =>
+      (entities ?? []).filter((entity) =>
+        matchesTradeSide(resolveEntityAccountingRelation(entity, entityTypes), side),
+      ),
+    [entities, entityTypes, side],
+  );
   const partyOptions: SearchSelectOption[] = parties.map((p) => ({
     value: p.id,
-    label: `${p.code} — ${p.legalName}`,
+    label: `${p.code} — ${p.name}`,
   }));
 
   const { options: glAccountOptions, isLoading: isLoadingGLAccounts } = useGLAccountOptions();
@@ -53,9 +62,7 @@ export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewIn
   const isPending = isReceivable ? createInvoice.isPending : createBill.isPending;
 
   const onSubmit = async (data: InvoiceFormValues) => {
-    // The backend posts one invoice/bill line: a single subtotal, a single tax
-    // amount and one offset GL account. Line items here are a data-entry aid —
-    // they get summed, and the first line's GL account is what actually posts.
+    
     const subtotalAmount = data.lines.reduce(
       (sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0),
       0,
@@ -108,7 +115,7 @@ export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewIn
             form={form}
             vendorLabel={partyLabel}
             partyOptions={partyOptions}
-            isLoadingParties={isReceivable ? isLoadingCustomers : isLoadingVendors}
+            isLoadingParties={isLoadingParties}
           />
         </div>
 

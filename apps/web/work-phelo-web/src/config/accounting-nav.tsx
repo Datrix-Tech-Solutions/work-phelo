@@ -8,7 +8,9 @@ import {
   LayoutDashboard,
   LibraryBig,
   NotebookTabsIcon,
+  ReceiptText,
   Settings,
+  Users,
   Wallet,
 } from 'lucide-react';
 
@@ -21,6 +23,8 @@ const AccountsReceivableIcon = () => <BanknoteArrowDown className="w-5 h-5" />;
 const CashAndBankIcon = () => <Wallet className="w-5 h-5" />;
 const FinancialReportsIcon = () => <ChartLine className="w-5 h-5" />;
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
+const EntitiesIcon = () => <Users className="w-5 h-5" />;
+const BillsIcon = () => <ReceiptText className="w-5 h-5" />;
 
 export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
   {
@@ -37,7 +41,41 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Accounting and Finance',
+    label: 'Sales & Revenue',
+    items: [
+      {
+        key: 'ap-entities',
+        label: 'Entities',
+        icon: <EntitiesIcon />,
+        href: 'accountspayable/entities',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'ar-invoices',
+        label: 'Invoices',
+        icon: <AccountsReceivableIcon />,
+        href: 'accountsreceivable/invoices',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
+    label: 'Expenses & Purchases',
+    items: [
+      {
+        key: 'bills',
+        label: 'Bills',
+        icon: <BillsIcon />,
+        href: 'expensesandpurchases/bills',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
+    label: 'Accounting',
     items: [
       {
         key: 'chart-of-accounts',
@@ -47,6 +85,22 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
+
+      {
+        key: 'journal-entries',
+        label: 'Journal Entries',
+        icon: <JournalEntriesIcon />,
+        href: 'journalentry',
+        enabled: true,
+        active: true,
+      },
+      
+    ],
+  },
+  {
+    label: 'Finance',
+    items: [
+      
       {
         key: 'general-ledger',
         label: 'General Ledger',
@@ -56,14 +110,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         active: true,
         exact: true,
       },
-      {
-        key: 'journal-entries',
-        label: 'Journal Entries',
-        icon: <JournalEntriesIcon />,
-        href: 'journalentry',
-        enabled: true,
-        active: true,
-      },
+      
       {
         key: 'source-events',
         label: 'Posting Inbox',
@@ -79,6 +126,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         href: 'accountspayable',
         enabled: true,
         active: true,
+        exact: true,
       },
       {
         key: 'accounts-receivable',
@@ -87,6 +135,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         href: 'accountsreceivable',
         enabled: true,
         active: true,
+        exact: true,
       },
       {
         key: 'cash-and-bank',
@@ -98,6 +147,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
+  
   {
     label: 'Reports',
     items: [
