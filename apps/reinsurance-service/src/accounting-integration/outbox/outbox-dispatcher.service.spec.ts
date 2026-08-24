@@ -36,7 +36,25 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
     process.env = originalEnv;
   });
 
+  it('is dormant by default after Reinsurance Accounting decoupling', async () => {
+    const dispatcher = new ReinsuranceAccountingOutboxDispatcher(
+      prisma,
+      outbox,
+    );
+
+    dispatcher.onApplicationBootstrap();
+    await dispatcher.processBatch('manual');
+
+    expect(outbox.processPending.mock.calls).toHaveLength(0);
+    expect(dispatcher.status()).toMatchObject({
+      enabled: false,
+      running: false,
+      inFlight: false,
+    });
+  });
+
   it('starts automatically and processes pending events with configured options', async () => {
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED', 'true');
     setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_POLL_INTERVAL_MS', '2000');
     setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_BATCH_SIZE', '7');
     setEnv(
@@ -87,7 +105,7 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
     );
 
     expect(dispatcher.status().config).toEqual({
-      enabled: true,
+      enabled: false,
       pollIntervalMs: 1000,
       batchSize: 100,
       processingTimeoutMs: 900000,
@@ -97,6 +115,7 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
   });
 
   it('does not create a second timer if bootstrap is called twice', async () => {
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED', 'true');
     const dispatcher = new ReinsuranceAccountingOutboxDispatcher(
       prisma,
       outbox,
@@ -131,6 +150,7 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
   });
 
   it('skips overlapping runs so one worker instance does not double process', async () => {
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED', 'true');
     let resolveBatch!: () => void;
     outbox.processPending.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -158,6 +178,7 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
   });
 
   it('records batch errors without stopping future batches', async () => {
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED', 'true');
     outbox.processPending
       .mockRejectedValueOnce(new Error('database unavailable'))
       .mockResolvedValueOnce({
@@ -190,6 +211,7 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
   });
 
   it('continues polling after a failed scheduled tick', async () => {
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED', 'true');
     setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_POLL_INTERVAL_MS', '2000');
     outbox.processPending
       .mockRejectedValueOnce(new Error('database unavailable'))
@@ -220,6 +242,7 @@ describe('ReinsuranceAccountingOutboxDispatcher', () => {
   });
 
   it('clears the interval and waits for in-flight work during shutdown', async () => {
+    setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED', 'true');
     setEnv('REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_POLL_INTERVAL_MS', '2000');
     let resolveBatch!: () => void;
     outbox.processPending.mockReturnValueOnce(
