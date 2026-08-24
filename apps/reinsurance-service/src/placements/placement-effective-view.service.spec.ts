@@ -7,7 +7,7 @@ import {
   PlacementEndorsementType,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ClosingSnapshotReader } from './closing-snapshot.reader';
+import { ClosingSnapshotReader } from './closings/closing-snapshot.reader';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 

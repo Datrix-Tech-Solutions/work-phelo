@@ -7,7 +7,7 @@ import {
 import {
   ClosingSnapshot,
   ClosingSnapshotReader,
-} from './closing-snapshot.reader';
+} from './closings/closing-snapshot.reader';
 
 type EffectiveEndorsementForPosition = {
   id: string;
