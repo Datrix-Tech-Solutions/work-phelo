@@ -20,35 +20,27 @@ describe('assertReinsuranceRuntimeEnv', () => {
     process.env = originalEnv;
   });
 
-  it('requires Accounting integration config in deployment runtimes', () => {
+  it('does not require Accounting integration config in deployment runtimes', () => {
     process.env.DEPLOY_ENV = 'dev';
 
-    expect(() => assertReinsuranceRuntimeEnv()).toThrow(
-      'ACCOUNTING_SERVICE_URL, INTERNAL_SERVICE_AUTH_SECRET',
-    );
+    expect(() => assertReinsuranceRuntimeEnv()).not.toThrow();
   });
 
-  it('validates the Accounting service URL', () => {
+  it('does not validate retired Accounting service URL settings during startup', () => {
     process.env.DEPLOY_ENV = 'dev';
     process.env.ACCOUNTING_SERVICE_URL = 'not a url';
-    process.env.INTERNAL_SERVICE_AUTH_SECRET = 'x'.repeat(32);
 
-    expect(() => assertReinsuranceRuntimeEnv()).toThrow(
-      'ACCOUNTING_SERVICE_URL must be a valid URL',
-    );
+    expect(() => assertReinsuranceRuntimeEnv()).not.toThrow();
   });
 
-  it('requires a sufficiently strong internal auth secret', () => {
+  it('does not require retired Accounting internal auth settings during startup', () => {
     process.env.DEPLOY_ENV = 'dev';
-    process.env.ACCOUNTING_SERVICE_URL = 'http://accounting-service:4008';
     process.env.INTERNAL_SERVICE_AUTH_SECRET = 'short';
 
-    expect(() => assertReinsuranceRuntimeEnv()).toThrow(
-      'INTERNAL_SERVICE_AUTH_SECRET must be at least 32 characters',
-    );
+    expect(() => assertReinsuranceRuntimeEnv()).not.toThrow();
   });
 
-  it('allows integration config to be omitted when explicitly disabled', () => {
+  it('continues to accept the retired integration disable flag for compatibility', () => {
     process.env.DEPLOY_ENV = 'dev';
     process.env.REINSURANCE_ACCOUNTING_INTEGRATION_ENABLED = 'false';
 

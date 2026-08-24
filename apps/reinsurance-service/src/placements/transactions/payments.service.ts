@@ -17,7 +17,6 @@ import {
   PlacementSettlementMethod,
   Prisma,
 } from '../../../prisma/generated/client';
-import { ReinsuranceFinancialEventPublisher } from '../../accounting-integration/events/financial-event.publisher';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConfirmPlacementPaymentBankDto } from '../dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from '../dto/create-placement-payment.dto';
@@ -94,15 +93,6 @@ const paymentInclude = {
   },
 } satisfies Prisma.PlacementPaymentInclude;
 
-const paymentEventPlacementSelect = {
-  id: true,
-  reference: true,
-  policyNumber: true,
-  title: true,
-  cedantId: true,
-  currency: true,
-} satisfies Prisma.PlacementSelect;
-
 const FINANCIALLY_CONFIRMABLE_PAYMENT_LIFECYCLE: Readonly<
   Record<PlacementPaymentStatus, readonly PlacementPaymentStatus[]>
 > = {
@@ -138,7 +128,6 @@ export class PlacementPaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly financialPositionService: PlacementFinancialPositionService,
-    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
   ) {}
 
   async findAll(
@@ -323,12 +312,6 @@ export class PlacementPaymentsService {
       );
     }
 
-    const placement = await this.prisma.placement.findFirst({
-      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
-      select: paymentEventPlacementSelect,
-    });
-    if (!placement) throw new NotFoundException('Placement not found');
-
     const settlementMethod = this.resolveConfirmationSettlementMethod(
       payment,
       dto.settlementMethod,
@@ -347,7 +330,6 @@ export class PlacementPaymentsService {
       settlementMethod,
       bankReference,
       operationalReference: payment.reference,
-      accountingCashAccountId: dto.accountingCashAccountId,
       notes: dto.notes,
     });
     this.assertSettlementFxFacts(
@@ -355,16 +337,6 @@ export class PlacementPaymentsService {
       settlementCurrency,
       confirmedExchangeRate,
     );
-    await this.financialEvents.assertAccountingReadyForEvent(user, {
-      eventType:
-        payment.type === PlacementPaymentType.PREMIUM_RECEIVED
-          ? 'PREMIUM_PAYMENT_RECEIVED'
-          : 'REINSURER_DISBURSEMENT_RECORDED',
-      currency: settlementCurrency,
-      businessDate: dto.bankConfirmedAt,
-      settlementMethod,
-      accountingCashAccountId: dto.accountingCashAccountId,
-    });
 
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.placementPayment.updateMany({
@@ -403,14 +375,6 @@ export class PlacementPaymentsService {
         throw new NotFoundException('Placement payment not found');
       }
 
-      const event = this.prepareConfirmationEvent(user, {
-        ...confirmed,
-        placement,
-      });
-      if (event) {
-        await this.financialEvents.enqueuePreparedEvent(tx, event);
-      }
-
       return confirmed;
     });
   }
@@ -429,24 +393,6 @@ export class PlacementPaymentsService {
       throw new ConflictException('Payment has already been reversed');
     }
     this.assertCanReversePayment(payment);
-
-    const placement = await this.prisma.placement.findFirst({
-      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
-      select: paymentEventPlacementSelect,
-    });
-    if (!placement) throw new NotFoundException('Placement not found');
-    if (payment.status === PlacementPaymentStatus.BANK_CONFIRMED) {
-      await this.financialEvents.assertAccountingReadyForEvent(user, {
-        eventType:
-          payment.type === PlacementPaymentType.PREMIUM_RECEIVED
-            ? 'PAYMENT_REVERSED'
-            : 'REINSURER_DISBURSEMENT_REVERSED',
-        currency: payment.settlementCurrency ?? payment.currency,
-        businessDate: new Date(),
-        settlementMethod: payment.settlementMethod,
-        accountingCashAccountId: payment.accountingCashAccountId,
-      });
-    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.placementPayment.update({
@@ -509,43 +455,6 @@ export class PlacementPaymentsService {
         include: paymentInclude,
       });
 
-      if (payment.type === PlacementPaymentType.PREMIUM_RECEIVED) {
-        const event = this.financialEvents.preparePaymentReversed(user, {
-          ...reversal,
-          placement,
-          reversalOfPayment: {
-            id: payment.id,
-            amount: payment.amount,
-            currency: payment.currency,
-            paymentDate: payment.paymentDate,
-            reference: payment.reference,
-            status: PlacementPaymentStatus.REVERSED,
-          },
-        });
-        if (event) {
-          await this.financialEvents.enqueuePreparedEvent(tx, event);
-        }
-      } else if (payment.type === PlacementPaymentType.REINSURER_DISBURSEMENT) {
-        const event = this.financialEvents.prepareReinsurerDisbursementReversed(
-          user,
-          {
-            ...reversal,
-            placement,
-            reversalOfPayment: {
-              id: payment.id,
-              amount: payment.amount,
-              currency: payment.currency,
-              paymentDate: payment.paymentDate,
-              reference: payment.reference,
-              status: PlacementPaymentStatus.REVERSED,
-            },
-          },
-        );
-        if (event) {
-          await this.financialEvents.enqueuePreparedEvent(tx, event);
-        }
-      }
-
       return reversal;
     });
   }
@@ -605,7 +514,7 @@ export class PlacementPaymentsService {
       FINANCIALLY_CONFIRMABLE_PAYMENT_LIFECYCLE[payment.status] ?? [];
     if (!allowedNext.includes(PlacementPaymentStatus.REVERSED)) {
       throw new BadRequestException(
-        `Cannot reverse a payment from ${payment.status}. Accounting must financially confirm the payment before reversal is available.`,
+        `Cannot reverse a payment from ${payment.status}. The payment must be bank confirmed before reversal is available.`,
       );
     }
   }
@@ -628,7 +537,6 @@ export class PlacementPaymentsService {
     settlementMethod: PlacementSettlementMethod;
     bankReference: string | null;
     operationalReference: string | null;
-    accountingCashAccountId?: string;
     notes?: string;
   }): void {
     const referenceRequiredMethods: PlacementSettlementMethod[] = [
@@ -646,21 +554,6 @@ export class PlacementPaymentsService {
     if (referenceRequired && !hasReference) {
       throw new BadRequestException(
         `${input.settlementMethod} confirmation requires a settlement reference`,
-      );
-    }
-
-    const cashAccountRequiredMethods: PlacementSettlementMethod[] = [
-      PlacementSettlementMethod.BANK_TRANSFER,
-      PlacementSettlementMethod.CHEQUE,
-      PlacementSettlementMethod.CASH,
-      PlacementSettlementMethod.MOBILE_MONEY,
-    ];
-    if (
-      cashAccountRequiredMethods.includes(input.settlementMethod) &&
-      !input.accountingCashAccountId
-    ) {
-      throw new BadRequestException(
-        `${input.settlementMethod} confirmation requires an Accounting cash account`,
       );
     }
 
@@ -837,23 +730,6 @@ export class PlacementPaymentsService {
     if (paymentCurrency === positionCurrency) return amount;
     if (!exchangeRate) return 0;
     return amount / exchangeRate;
-  }
-
-  private prepareConfirmationEvent(
-    user: RequestUser,
-    payment: PlacementPaymentRecord & {
-      placement: NonNullable<PlacementPaymentRecord['placement']> & {
-        cedantId: string;
-      };
-    },
-  ) {
-    if (payment.type === PlacementPaymentType.PREMIUM_RECEIVED) {
-      return this.financialEvents.preparePremiumPaymentReceived(user, payment);
-    }
-    return this.financialEvents.prepareReinsurerDisbursementRecorded(
-      user,
-      payment,
-    );
   }
 
   private async assertReinsurerDisbursement(

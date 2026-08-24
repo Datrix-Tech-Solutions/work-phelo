@@ -15,7 +15,6 @@ import {
   PlacementSettlementMethod,
   Prisma,
 } from '../../../prisma/generated/client';
-import { ReinsuranceFinancialEventPublisher } from '../../accounting-integration/events/financial-event.publisher';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PlacementFinancialPositionService } from '../finance/financial-position.service';
 import { PlacementPaymentsService } from './payments.service';
@@ -205,7 +204,6 @@ describe('PlacementPaymentsService', () => {
     service = new PlacementPaymentsService(
       prisma as unknown as PrismaService,
       financialPositionService as unknown as PlacementFinancialPositionService,
-      financialEvents as unknown as ReinsuranceFinancialEventPublisher,
     );
   });
 
@@ -271,21 +269,7 @@ describe('PlacementPaymentsService', () => {
     expect(result.id).toBe('payment-1');
   });
 
-  it('bank-confirms a recorded premium receipt and enqueues accounting recognition', async () => {
-    const preparedEvent = {
-      tenantId: 'tenant-1',
-      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
-      sourceRecordType: 'PlacementPayment',
-      sourceRecordId: 'payment-1',
-      sourceDocumentId: 'payment-1',
-      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
-      occurredAt: '2026-06-04T12:00:00.000Z',
-      currency: 'USD',
-      payload: { amounts: { paymentAmount: 1000 } },
-    };
-    financialEvents.preparePremiumPaymentReceived.mockReturnValue(
-      preparedEvent,
-    );
+  it('bank-confirms a recorded premium receipt without Accounting recognition', async () => {
     const recordedReceipt = {
       ...payment,
       settlementMethod: PlacementSettlementMethod.CHEQUE,
@@ -299,11 +283,10 @@ describe('PlacementPaymentsService', () => {
       bankConfirmedAt: new Date('2026-06-05T10:00:00.000Z'),
       bankConfirmedByUserId: 'user-1',
       bankReference: null,
+      accountingCashAccountId: 'cash-account-1',
       notes: 'Cheque payment\nBank confirmation: Cheque cleared',
     };
-    prisma.placement.findFirst
-      .mockResolvedValueOnce({ id: 'placement-1' })
-      .mockResolvedValueOnce(placement);
+    prisma.placement.findFirst.mockResolvedValueOnce({ id: 'placement-1' });
     prisma.placementPayment.findFirst
       .mockResolvedValueOnce(recordedReceipt)
       .mockResolvedValueOnce(confirmedReceipt);
@@ -328,34 +311,36 @@ describe('PlacementPaymentsService', () => {
       settlementMethod: PlacementSettlementMethod.CHEQUE,
       settlementCurrency: 'USD',
       bankReference: null,
+      accountingCashAccountId: 'cash-account-1',
       notes: 'Cheque payment\nBank confirmation: Cheque cleared',
     });
-    expect(financialEvents.preparePremiumPaymentReceived).toHaveBeenCalledWith(
-      user,
-      expect.objectContaining({
-        id: 'payment-1',
-        status: PlacementPaymentStatus.BANK_CONFIRMED,
-        placement,
-      }),
-    );
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
-      prisma,
-      preparedEvent,
-    );
+    expect(
+      financialEvents.assertAccountingReadyForEvent,
+    ).not.toHaveBeenCalled();
+    expect(
+      financialEvents.preparePremiumPaymentReceived,
+    ).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
     expect(result.status).toBe(PlacementPaymentStatus.BANK_CONFIRMED);
   });
 
-  it('leaves a recorded premium receipt unchanged when Accounting readiness fails', async () => {
+  it('bank-confirms a premium receipt even when retired Accounting readiness would fail', async () => {
     const recordedReceipt = {
       ...payment,
       settlementMethod: PlacementSettlementMethod.CHEQUE,
       settlementCurrency: 'USD',
       reference: 'CHQ-001',
     };
-    prisma.placement.findFirst
-      .mockResolvedValueOnce({ id: 'placement-1' })
-      .mockResolvedValueOnce(placement);
-    prisma.placementPayment.findFirst.mockResolvedValueOnce(recordedReceipt);
+    const confirmedReceipt = {
+      ...recordedReceipt,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+      bankConfirmedAt: new Date('2026-06-05T10:00:00.000Z'),
+    };
+    prisma.placement.findFirst.mockResolvedValueOnce({ id: 'placement-1' });
+    prisma.placementPayment.findFirst
+      .mockResolvedValueOnce(recordedReceipt)
+      .mockResolvedValueOnce(confirmedReceipt);
+    prisma.placementPayment.updateMany.mockResolvedValue({ count: 1 });
     financialEvents.assertAccountingReadyForEvent.mockRejectedValue(
       new ConflictException({
         code: 'ACCOUNTING_NOT_READY',
@@ -363,80 +348,18 @@ describe('PlacementPaymentsService', () => {
       }),
     );
 
-    await expect(
-      service.confirmBankPayment(user, 'placement-1', 'payment-1', {
-        bankConfirmedAt: '2026-06-05T10:00:00.000Z',
-        accountingCashAccountId: 'cash-account-1',
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await service.confirmBankPayment(user, 'placement-1', 'payment-1', {
+      bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+    });
 
-    expect(financialEvents.assertAccountingReadyForEvent).toHaveBeenCalledWith(
-      user,
-      expect.objectContaining({
-        eventType: 'PREMIUM_PAYMENT_RECEIVED',
-        currency: 'USD',
-        settlementMethod: PlacementSettlementMethod.CHEQUE,
-        accountingCashAccountId: 'cash-account-1',
-      }),
-    );
-    expect(prisma.placementPayment.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementPayment.updateMany).toHaveBeenCalled();
+    expect(
+      financialEvents.assertAccountingReadyForEvent,
+    ).not.toHaveBeenCalled();
     expect(
       financialEvents.preparePremiumPaymentReceived,
     ).not.toHaveBeenCalled();
     expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
-  });
-
-  it('rolls back premium confirmation when accounting capture fails', async () => {
-    const mutableReceipt = { ...payment };
-    const preparedEvent = {
-      tenantId: 'tenant-1',
-      sourceEventType: 'PREMIUM_PAYMENT_RECEIVED',
-      sourceRecordType: 'PlacementPayment',
-      sourceRecordId: 'payment-1',
-      sourceDocumentId: 'payment-1',
-      idempotencyKey: 'reinsurance:payment:payment-1:recorded:v1',
-      occurredAt: '2026-06-04T12:00:00.000Z',
-      currency: 'USD',
-      payload: { amounts: { paymentAmount: 1000 } },
-    };
-    financialEvents.preparePremiumPaymentReceived.mockReturnValue(
-      preparedEvent,
-    );
-    financialEvents.enqueuePreparedEvent.mockRejectedValue(
-      new Error('Outbox insert failed'),
-    );
-    prisma.placement.findFirst
-      .mockResolvedValueOnce({ id: 'placement-1' })
-      .mockResolvedValueOnce(placement);
-    prisma.placementPayment.findFirst
-      .mockResolvedValueOnce(mutableReceipt)
-      .mockImplementation(() => Promise.resolve(mutableReceipt));
-    prisma.placementPayment.updateMany.mockImplementation((args: unknown) => {
-      const { data } = args as Prisma.PlacementPaymentUpdateManyArgs;
-      Object.assign(mutableReceipt, data);
-      return Promise.resolve({ count: 1 });
-    });
-    prisma.$transaction.mockImplementation(
-      async (callback: (tx: unknown) => Promise<unknown>) => {
-        const before = { ...mutableReceipt };
-        try {
-          return await callback(prisma);
-        } catch (error) {
-          Object.assign(mutableReceipt, before);
-          throw error;
-        }
-      },
-    );
-
-    await expect(
-      service.confirmBankPayment(user, 'placement-1', 'payment-1', {
-        bankConfirmedAt: '2026-06-05T10:00:00.000Z',
-        bankReference: 'BANK-CONF-001',
-        accountingCashAccountId: 'cash-account-1',
-      }),
-    ).rejects.toThrow('Outbox insert failed');
-
-    expect(mutableReceipt.status).toBe(PlacementPaymentStatus.RECORDED);
   });
 
   it('does not enqueue a premium received event when Accounting is disabled', async () => {
@@ -916,11 +839,7 @@ describe('PlacementPaymentsService', () => {
     expect(result).toHaveLength(2);
   });
 
-  it('bank-confirms a recorded reinsurer disbursement and enqueues accounting recognition', async () => {
-    const preparedEvent = {
-      sourceEventType: 'REINSURER_DISBURSEMENT_RECORDED',
-      sourceRecordId: 'payment-disbursement-1',
-    };
+  it('bank-confirms a recorded reinsurer disbursement without Accounting recognition', async () => {
     const recordedDisbursement = {
       ...payment,
       id: 'payment-disbursement-1',
@@ -952,16 +871,11 @@ describe('PlacementPaymentsService', () => {
       withholdingTaxAmount: new Prisma.Decimal('50.00'),
       notes: 'Operational settlement\nBank confirmation: Statement batch 42',
     };
-    prisma.placement.findFirst
-      .mockResolvedValueOnce({ id: 'placement-1' })
-      .mockResolvedValueOnce(placement);
+    prisma.placement.findFirst.mockResolvedValueOnce({ id: 'placement-1' });
     prisma.placementPayment.findFirst
       .mockResolvedValueOnce(recordedDisbursement)
       .mockResolvedValueOnce(confirmedDisbursement);
     prisma.placementPayment.updateMany.mockResolvedValue({ count: 1 });
-    financialEvents.prepareReinsurerDisbursementRecorded.mockReturnValue(
-      preparedEvent,
-    );
 
     const result = await service.confirmBankPayment(
       user,
@@ -999,19 +913,12 @@ describe('PlacementPaymentsService', () => {
       notes: 'Operational settlement\nBank confirmation: Statement batch 42',
     });
     expect(
+      financialEvents.assertAccountingReadyForEvent,
+    ).not.toHaveBeenCalled();
+    expect(
       financialEvents.prepareReinsurerDisbursementRecorded,
-    ).toHaveBeenCalledWith(
-      user,
-      expect.objectContaining({
-        id: 'payment-disbursement-1',
-        status: PlacementPaymentStatus.BANK_CONFIRMED,
-        placement,
-      }),
-    );
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
-      expect.anything(),
-      preparedEvent,
-    );
+    ).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
     expect(result.status).toBe(PlacementPaymentStatus.BANK_CONFIRMED);
   });
 
@@ -1490,25 +1397,13 @@ describe('PlacementPaymentsService', () => {
     expect(result.reversalOfPaymentId).toBe('payment-1');
   });
 
-  it('captures a payment reversal accounting event atomically', async () => {
+  it('reverses a bank-confirmed premium receipt without Accounting capture', async () => {
     const confirmedPayment = {
       ...payment,
       status: PlacementPaymentStatus.BANK_CONFIRMED,
       bankConfirmedAt: new Date('2026-06-05T10:00:00.000Z'),
     };
-    const preparedEvent = {
-      tenantId: 'tenant-1',
-      sourceEventType: 'PAYMENT_REVERSED',
-      sourceRecordType: 'PlacementPayment',
-      sourceRecordId: 'payment-reversal-1',
-      sourceDocumentId: 'payment-reversal-1',
-      idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
-      occurredAt: '2026-06-04T13:00:00.000Z',
-      currency: 'USD',
-      payload: { amounts: { paymentAmount: 1000 } },
-    };
-    financialEvents.preparePaymentReversed.mockReturnValue(preparedEvent);
-    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementPayment.findFirst.mockResolvedValue(confirmedPayment);
     prisma.placementPayment.update.mockResolvedValue({
       ...confirmedPayment,
@@ -1523,95 +1418,11 @@ describe('PlacementPaymentsService', () => {
 
     await service.reverse(user, 'placement-1', 'payment-1');
 
-    const reversalEventArg = financialEvents.preparePaymentReversed.mock
-      .calls[0]?.[1] as
-      | {
-          id?: string;
-          reversalOfPayment?: { id?: string; status?: PlacementPaymentStatus };
-          placement?: { id?: string; reference?: string };
-        }
-      | undefined;
-    if (!reversalEventArg) {
-      throw new Error('Expected reversal event preparation');
-    }
-    expect(reversalEventArg.id).toBe('payment-reversal-1');
-    expect(reversalEventArg.reversalOfPayment).toMatchObject({
-      id: 'payment-1',
-      status: PlacementPaymentStatus.REVERSED,
-    });
-    expect(reversalEventArg.placement).toMatchObject({
-      id: 'placement-1',
-      reference: 'FAC-001',
-    });
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
-      prisma,
-      preparedEvent,
-    );
-  });
-
-  it('rolls back payment reversal when required accounting capture fails', async () => {
-    const mutableOriginal = {
-      ...payment,
-      status: PlacementPaymentStatus.BANK_CONFIRMED,
-      bankConfirmedAt: new Date('2026-06-05T10:00:00.000Z'),
-    };
-    const mutableReversals: unknown[] = [];
-    const preparedEvent = {
-      tenantId: 'tenant-1',
-      sourceEventType: 'PAYMENT_REVERSED',
-      sourceRecordType: 'PlacementPayment',
-      sourceRecordId: 'payment-reversal-1',
-      sourceDocumentId: 'payment-reversal-1',
-      idempotencyKey: 'reinsurance:payment:payment-reversal-1:reversal:v1',
-      occurredAt: '2026-06-04T13:00:00.000Z',
-      currency: 'USD',
-      payload: { amounts: { paymentAmount: 1000 } },
-    };
-    financialEvents.preparePaymentReversed.mockReturnValue(preparedEvent);
-    financialEvents.enqueuePreparedEvent.mockRejectedValue(
-      new Error('Outbox insert failed'),
-    );
-    prisma.placement.findFirst.mockResolvedValue(placement);
-    prisma.placementPayment.findFirst.mockResolvedValue(mutableOriginal);
-    prisma.placementPayment.update.mockImplementation((args: unknown) => {
-      const { data } = args as Prisma.PlacementPaymentUpdateArgs;
-      Object.assign(mutableOriginal, data);
-      return Promise.resolve(mutableOriginal);
-    });
-    prisma.placementPayment.create.mockImplementation(() => {
-      const reversal = {
-        ...payment,
-        id: 'payment-reversal-1',
-        amount: new Prisma.Decimal('-1000.00'),
-        reversalOfPaymentId: 'payment-1',
-      };
-      mutableReversals.push(reversal);
-      return Promise.resolve(reversal);
-    });
-    prisma.$transaction.mockImplementation(
-      async (callback: (tx: unknown) => Promise<unknown>) => {
-        const beforeOriginal = { ...mutableOriginal };
-        const beforeReversals = [...mutableReversals];
-        try {
-          return await callback(prisma);
-        } catch (error) {
-          Object.assign(mutableOriginal, beforeOriginal);
-          mutableReversals.splice(
-            0,
-            mutableReversals.length,
-            ...beforeReversals,
-          );
-          throw error;
-        }
-      },
-    );
-
-    await expect(
-      service.reverse(user, 'placement-1', 'payment-1'),
-    ).rejects.toThrow('Outbox insert failed');
-
-    expect(mutableOriginal.status).toBe(PlacementPaymentStatus.BANK_CONFIRMED);
-    expect(mutableReversals).toHaveLength(0);
+    expect(
+      financialEvents.assertAccountingReadyForEvent,
+    ).not.toHaveBeenCalled();
+    expect(financialEvents.preparePaymentReversed).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('rejects reversing a recorded premium receipt before financial confirmation', async () => {
@@ -1660,11 +1471,7 @@ describe('PlacementPaymentsService', () => {
     expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
-  it('preserves endorsement closing source when reversing a bank-confirmed reinsurer disbursement', async () => {
-    const preparedEvent = {
-      sourceEventType: 'REINSURER_DISBURSEMENT_REVERSED',
-      sourceRecordId: 'payment-endorsement-reversal-1',
-    };
+  it('preserves endorsement closing source when reversing a bank-confirmed reinsurer disbursement without Accounting capture', async () => {
     const endorsementPayment = {
       ...payment,
       id: 'payment-endorsement-1',
@@ -1682,10 +1489,7 @@ describe('PlacementPaymentsService', () => {
         registrationNumber: null,
       },
     };
-    financialEvents.prepareReinsurerDisbursementReversed.mockReturnValue(
-      preparedEvent,
-    );
-    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementPayment.findFirst.mockResolvedValue(endorsementPayment);
     prisma.placementPayment.update.mockResolvedValue({
       ...endorsementPayment,
@@ -1711,20 +1515,12 @@ describe('PlacementPaymentsService', () => {
       reversalOfPaymentId: 'payment-endorsement-1',
     });
     expect(
+      financialEvents.assertAccountingReadyForEvent,
+    ).not.toHaveBeenCalled();
+    expect(
       financialEvents.prepareReinsurerDisbursementReversed,
-    ).toHaveBeenCalledWith(
-      user,
-      expect.objectContaining({
-        id: 'payment-endorsement-reversal-1',
-        placement,
-        endorsementClosingId: 'endorsement-closing-c',
-        reversalOfPaymentId: 'payment-endorsement-1',
-      }),
-    );
-    expect(financialEvents.enqueuePreparedEvent).toHaveBeenCalledWith(
-      expect.anything(),
-      preparedEvent,
-    );
+    ).not.toHaveBeenCalled();
+    expect(financialEvents.enqueuePreparedEvent).not.toHaveBeenCalled();
   });
 
   it('rejects reversing an already reversed payment', async () => {

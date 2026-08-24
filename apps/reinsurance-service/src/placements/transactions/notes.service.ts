@@ -19,7 +19,6 @@ import {
   ReinsuranceChargeRateType,
 } from '../../../prisma/generated/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ReinsuranceFinancialEventPublisher } from '../../accounting-integration/events/financial-event.publisher';
 import { EffectiveDebitNotePreviewResponseDto } from '../dto/effective-debit-note.dto';
 import {
   AppliedChargeSnapshot,
@@ -104,7 +103,6 @@ export class PlacementNotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chargeSettings: ReinsuranceChargeSettingsService,
-    private readonly financialEvents: ReinsuranceFinancialEventPublisher,
     private readonly financialPosition: PlacementFinancialPositionService,
     private readonly effectiveView: PlacementEffectiveViewService,
   ) {}
@@ -657,40 +655,9 @@ export class PlacementNotesService {
     }
 
     const issuedAt = new Date();
-    if (note.postingEnabled !== false) {
-      const eventType =
-        note.type === PlacementNoteType.DEBIT_NOTE
-          ? 'DEBIT_NOTE_ISSUED'
-          : note.type === PlacementNoteType.CREDIT_NOTE
-            ? 'CREDIT_NOTE_ISSUED'
-            : null;
-      if (eventType) {
-        await this.financialEvents.assertAccountingReadyForEvent(user, {
-          eventType,
-          currency: note.currency,
-          businessDate: issuedAt,
-        });
-      }
-    }
-    const accountingEvent =
-      note.postingEnabled === false
-        ? null
-        : note.type === PlacementNoteType.DEBIT_NOTE
-          ? await this.financialEvents.prepareDebitNoteIssued(
-              user,
-              note,
-              issuedAt,
-            )
-          : note.type === PlacementNoteType.CREDIT_NOTE
-            ? await this.financialEvents.prepareCreditNoteIssued(
-                user,
-                note,
-                issuedAt,
-              )
-            : null;
 
     return this.prisma.$transaction(async (tx) => {
-      const issuedNote = await tx.placementNote.update({
+      return tx.placementNote.update({
         where: { id: noteId },
         data: {
           status: PlacementNoteStatus.ISSUED,
@@ -698,12 +665,6 @@ export class PlacementNotesService {
         },
         include: noteInclude,
       });
-
-      if (accountingEvent) {
-        await this.financialEvents.enqueuePreparedEvent(tx, accountingEvent);
-      }
-
-      return issuedNote;
     });
   }
 
@@ -756,36 +717,9 @@ export class PlacementNotesService {
     }
 
     const issuedAt = new Date();
-    const eventType =
-      note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE
-        ? 'ENDORSEMENT_DEBIT_NOTE_ISSUED'
-        : note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
-          ? 'ENDORSEMENT_CREDIT_NOTE_ISSUED'
-          : null;
-    if (eventType) {
-      await this.financialEvents.assertAccountingReadyForEvent(user, {
-        eventType,
-        currency: note.currency,
-        businessDate: issuedAt,
-      });
-    }
-    const accountingEvent =
-      note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE
-        ? await this.financialEvents.prepareEndorsementDebitNoteIssued(
-            user,
-            note,
-            issuedAt,
-          )
-        : note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE
-          ? await this.financialEvents.prepareEndorsementCreditNoteIssued(
-              user,
-              note,
-              issuedAt,
-            )
-          : null;
 
     return this.prisma.$transaction(async (tx) => {
-      const issuedNote = await tx.placementNote.update({
+      return tx.placementNote.update({
         where: { id: noteId },
         data: {
           status: PlacementNoteStatus.ISSUED,
@@ -793,12 +727,6 @@ export class PlacementNotesService {
         },
         include: noteInclude,
       });
-
-      if (accountingEvent) {
-        await this.financialEvents.enqueuePreparedEvent(tx, accountingEvent);
-      }
-
-      return issuedNote;
     });
   }
 

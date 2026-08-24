@@ -190,31 +190,33 @@ The existing `TENANT_ADMIN`/`SUPER_ADMIN` bypass remains intentionally unchanged
 for compatibility; maker-checker and broader SoD policy are deferred. Ordinary
 placement bank-confirmation permissions are unchanged.
 
-`GET /api/v1/operations/reinsurance/accounting-integration/status` returns
-configured/active flags plus grouped PostingRule readiness for Premium
-Accounting and Cash Confirmation setup.
+Reinsurance Accounting integration endpoints are retained only as compatibility
+surfaces and return `410 Gone`. Reinsurance financial workflows are controlled
+inside Reinsurance and no longer publish, dispatch, or reconcile live Accounting
+events.
 
 ## Key Environment Variables
 
-| Variable                                       | Required                        | Secret                         | Purpose                            |
-| ---------------------------------------------- | ------------------------------- | ------------------------------ | ---------------------------------- |
-| `DATABASE_URL`                                 | Yes                             | Yes                            | Reinsurance PostgreSQL schema      |
-| `JWT_SECRET`                                   | Yes                             | Yes                            | User JWT verification              |
-| `RABBITMQ_URL`                                 | Yes                             | Yes                            | Messaging publisher configuration  |
-| `RABBITMQ_PUBLISH_TIMEOUT_MS`                  | Optional                        | No                             | Publisher timeout override         |
-| `ACCOUNTING_SERVICE_URL`                       | Optional                        | No                             | Accounting integration target      |
-| `ACCOUNTING_SERVICE_TIMEOUT_MS`                | Optional                        | No                             | Accounting HTTP timeout            |
-| `INTERNAL_SERVICE_AUTH_SECRET`                 | For Accounting/Auth integration | Yes                            | Signed internal-service requests   |
-| `AUTH_SERVICE_URL`                             | For document profile lookups    | No                             | Auth tenant profile endpoint base  |
-| `REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS` | Optional                        | No                             | Tenant profile cache TTL           |
-| `REINSURANCE_TENANT_PROFILE_TIMEOUT_MS`        | Optional                        | No                             | Tenant profile request timeout     |
-| `REINSURANCE_DOCUMENT_S3_*`                    | For document storage            | Yes where credentials are used | Private generated document storage |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`          | Optional                        | No                             | PDF renderer Chromium path         |
-| `REINSURANCE_ATTACHMENT_ALLOWED_MIME_TYPES`    | Optional                        | No                             | Upload MIME allow-list             |
-| `REINSURANCE_ATTACHMENT_MAX_BYTES`             | Optional                        | No                             | Upload size limit                  |
-| `REINSURANCE_MAILBOX_TOKEN_ENCRYPTION_KEY`     | For mailbox connections         | Yes                            | Encrypt provider tokens            |
+| Variable                                       | Required                       | Secret                         | Purpose                               |
+| ---------------------------------------------- | ------------------------------ | ------------------------------ | ------------------------------------- |
+| `DATABASE_URL`                                 | Yes                            | Yes                            | Reinsurance PostgreSQL schema         |
+| `JWT_SECRET`                                   | Yes                            | Yes                            | User JWT verification                 |
+| `RABBITMQ_URL`                                 | Yes                            | Yes                            | Messaging publisher configuration     |
+| `RABBITMQ_PUBLISH_TIMEOUT_MS`                  | Optional                       | No                             | Publisher timeout override            |
+| `ACCOUNTING_SERVICE_URL`                       | Historical compatibility only  | No                             | Retired Accounting integration target |
+| `ACCOUNTING_SERVICE_TIMEOUT_MS`                | Historical compatibility only  | No                             | Retired Accounting HTTP timeout       |
+| `INTERNAL_SERVICE_AUTH_SECRET`                 | For Auth/document integrations | Yes                            | Signed internal-service requests      |
+| `AUTH_SERVICE_URL`                             | For document profile lookups   | No                             | Auth tenant profile endpoint base     |
+| `REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS` | Optional                       | No                             | Tenant profile cache TTL              |
+| `REINSURANCE_TENANT_PROFILE_TIMEOUT_MS`        | Optional                       | No                             | Tenant profile request timeout        |
+| `REINSURANCE_DOCUMENT_S3_*`                    | For document storage           | Yes where credentials are used | Private generated document storage    |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`          | Optional                       | No                             | PDF renderer Chromium path            |
+| `REINSURANCE_ATTACHMENT_ALLOWED_MIME_TYPES`    | Optional                       | No                             | Upload MIME allow-list                |
+| `REINSURANCE_ATTACHMENT_MAX_BYTES`             | Optional                       | No                             | Upload size limit                     |
+| `REINSURANCE_MAILBOX_TOKEN_ENCRYPTION_KEY`     | For mailbox connections        | Yes                            | Encrypt provider tokens               |
 
-Outbox dispatcher configuration:
+Retired Accounting outbox dispatcher compatibility configuration. The dispatcher
+is disabled by default after decoupling:
 
 - `REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED`
 - `REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_POLL_INTERVAL_MS`
