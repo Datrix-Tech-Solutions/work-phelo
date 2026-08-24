@@ -4,7 +4,7 @@ import { ReinsuranceAccountingIntegrationModule } from '../accounting-integratio
 import { PrismaModule } from '../prisma/prisma.module';
 import { ReinsuranceChargeSettingsModule } from '../settings/reinsurance-charge-settings.module';
 import { ClaimAllocationCalculator } from './claims/allocation/allocation.calculator';
-import { ClosingSnapshotReader } from './closing-snapshot.reader';
+import { ClosingSnapshotReader } from './closings/closing-snapshot.reader';
 import { PlacementFinancialActivityReader } from './finance/financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
 import { PlacementFinancialPositionService } from './finance/financial-position.service';
@@ -16,7 +16,7 @@ import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recov
 import { PlacementClaimsService } from './claims/claims.service';
 import { PlacementAttachmentsController } from './documents/attachments/attachments.controller';
 import { PlacementAttachmentsService } from './documents/attachments/attachments.service';
-import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementClosingsService } from './closings/closings.service';
 import { PlacementDocumentsService } from './documents/documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';

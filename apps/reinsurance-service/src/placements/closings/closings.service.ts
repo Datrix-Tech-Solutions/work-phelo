@@ -10,9 +10,9 @@ import {
   PlacementParticipantStatus,
   PlacementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { UpdatePlacementClosingStatusDto } from './dto/update-placement-closing-status.dto';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { UpdatePlacementClosingStatusDto } from '../dto/update-placement-closing-status.dto';
 
 const closingInclude = {
   participant: {

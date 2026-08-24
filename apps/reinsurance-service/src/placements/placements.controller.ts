@@ -116,7 +116,7 @@ import {
   PlacementClosingResponseDto,
 } from './dto/placement-closing-response.dto';
 import { UpdatePlacementClosingStatusDto } from './dto/update-placement-closing-status.dto';
-import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementClosingsService } from './closings/closings.service';
 import {
   PlacementDocumentListResponseDto,
   PlacementDocumentResponseDto,

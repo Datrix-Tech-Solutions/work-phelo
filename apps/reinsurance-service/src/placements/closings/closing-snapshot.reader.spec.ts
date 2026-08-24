@@ -1,6 +1,6 @@
-import { PlacementClosingStatus, Prisma } from '../../prisma/generated/client';
+import { PlacementClosingStatus, Prisma } from '../../../prisma/generated/client';
 import { ClosingSnapshotReader } from './closing-snapshot.reader';
-import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 describe('ClosingSnapshotReader', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

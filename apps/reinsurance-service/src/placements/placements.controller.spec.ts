@@ -20,7 +20,7 @@ import { PlacementClaimCedantSettlementsService } from './claims/settlements/ced
 import { PlacementClaimRecoveryApprovalsService } from './claims/recoveries/recovery-approvals.service';
 import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recovery-receipts.service';
 import { PlacementClaimsService } from './claims/claims.service';
-import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementClosingsService } from './closings/closings.service';
 import { PlacementDocumentsService } from './documents/documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
