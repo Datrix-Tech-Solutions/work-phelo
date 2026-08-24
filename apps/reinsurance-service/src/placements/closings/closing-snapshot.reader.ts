@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { PlacementClosingStatus, Prisma } from '../../../prisma/generated/client';
+import {
+  PlacementClosingStatus,
+  Prisma,
+} from '../../../prisma/generated/client';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 export type ClosingSnapshotSourceType =

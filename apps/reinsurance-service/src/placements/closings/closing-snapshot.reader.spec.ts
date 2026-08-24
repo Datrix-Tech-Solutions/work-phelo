@@ -1,4 +1,7 @@
-import { PlacementClosingStatus, Prisma } from '../../../prisma/generated/client';
+import {
+  PlacementClosingStatus,
+  Prisma,
+} from '../../../prisma/generated/client';
 import { ClosingSnapshotReader } from './closing-snapshot.reader';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
