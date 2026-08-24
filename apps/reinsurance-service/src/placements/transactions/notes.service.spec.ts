@@ -19,18 +19,18 @@ import {
   ReinsuranceChargeRateType,
   ReinsuranceChargeRoundingMode,
   ReinsuranceChargeType,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementFinancialActivityReader } from './finance/financial-activity.reader';
-import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
-import { PlacementNotesService } from './placement-notes.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementFinancialActivityReader } from '../finance/financial-activity.reader';
+import { PlacementFinancialLockPolicy } from '../finance/financial-lock.policy';
+import { PlacementNotesService } from './notes.service';
 import {
   ChargeCalculationInput,
   ReinsuranceChargeSettingsService,
-} from '../settings/reinsurance-charge-settings.service';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/events/financial-event.publisher';
-import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { PlacementFinancialPositionService } from './finance/financial-position.service';
+} from '../../settings/reinsurance-charge-settings.service';
+import { ReinsuranceFinancialEventPublisher } from '../../accounting-integration/events/financial-event.publisher';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
+import { PlacementFinancialPositionService } from '../finance/financial-position.service';
 
 describe('PlacementNotesService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

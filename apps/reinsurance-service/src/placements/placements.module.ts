@@ -23,8 +23,8 @@ import { PlacementEndorsementsService } from './endorsements/endorsements.servic
 import { PlacementEndorsementParticipantsService } from './endorsements/participants.service';
 import { PlacementEffectivePositionService } from './placement-effective-position.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { PlacementNotesService } from './placement-notes.service';
-import { PlacementPaymentsService } from './placement-payments.service';
+import { PlacementNotesService } from './transactions/notes.service';
+import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementDocumentTemplateRegistry } from './documents/pdf/placement-document-template.registry';
 import { PlacementPdfRendererService } from './documents/pdf/placement-pdf-renderer.service';
 import { PlacementsController } from './placements.controller';
