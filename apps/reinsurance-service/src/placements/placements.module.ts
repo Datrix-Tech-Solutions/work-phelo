@@ -28,6 +28,7 @@ import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementDocumentTemplateRegistry } from './documents/pdf/placement-document-template.registry';
 import { PlacementPdfRendererService } from './documents/pdf/placement-pdf-renderer.service';
 import { PlacementsController } from './placements.controller';
+import { PlacementDocumentsController } from './controllers/placement-documents.controller';
 import { PlacementsService } from './placements.service';
 import { ReinsuranceDashboardController } from './dashboard/dashboard.controller';
 import { ReinsuranceDashboardService } from './dashboard/dashboard.service';
@@ -44,6 +45,7 @@ import { TenantDocumentProfileClient } from './documents/tenant-document-profile
   ],
   controllers: [
     PlacementsController,
+    PlacementDocumentsController,
     PlacementAttachmentsController,
     ReinsuranceDashboardController,
   ],
