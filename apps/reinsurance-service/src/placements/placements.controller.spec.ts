@@ -1,7 +1,5 @@
 import { RequestUser } from '@work-phelo/types';
 import {
-  PlacementClaimCashCallStatus,
-  PlacementClaimStatus,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
   PlacementClosingStatus,
@@ -14,11 +12,6 @@ import {
 } from '../../prisma/generated/client';
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
-import { PlacementClaimCashCallsService } from './claims/cash-calls/cash-calls.service';
-import { PlacementClaimCedantSettlementsService } from './claims/settlements/cedant-settlements.service';
-import { PlacementClaimRecoveryApprovalsService } from './claims/recoveries/recovery-approvals.service';
-import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recovery-receipts.service';
-import { PlacementClaimsService } from './claims/claims.service';
 import { PlacementClosingsService } from './closings/closings.service';
 import { PlacementEndorsementClosingsService } from './endorsements/closings.service';
 import { PlacementEndorsementsService } from './endorsements/endorsements.service';
@@ -29,7 +22,6 @@ import { PlacementNotesService } from './transactions/notes.service';
 import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
-import { PlacementClaimFinancialCloseReadinessService } from './claims/close/financial-close-readiness.service';
 
 describe('PlacementsController', () => {
   const service = {
@@ -113,43 +105,6 @@ describe('PlacementsController', () => {
     confirmBankPayment: jest.fn(),
     reverse: jest.fn(),
   };
-  const claimsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    changeStatus: jest.fn(),
-    findAllocations: jest.fn(),
-    generateAllocations: jest.fn(),
-  };
-  const claimCashCallsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    changeStatus: jest.fn(),
-    void: jest.fn(),
-  };
-  const claimCedantSettlementsService = {
-    approvePayable: jest.fn(),
-    findAll: jest.fn(),
-    create: jest.fn(),
-    confirmBankSettlement: jest.fn(),
-    reverse: jest.fn(),
-  };
-  const claimFinancialCloseReadinessService = {
-    getReadiness: jest.fn(),
-  };
-  const claimRecoveryApprovalsService = {
-    findAll: jest.fn(),
-    approve: jest.fn(),
-  };
-  const claimRecoveryReceiptsService = {
-    findAll: jest.fn(),
-    create: jest.fn(),
-    confirmBankReceipt: jest.fn(),
-    reverse: jest.fn(),
-    getRecoveryPosition: jest.fn(),
-  };
   const user = {
     tenantId: 'tenant-1',
   } as RequestUser;
@@ -169,12 +124,6 @@ describe('PlacementsController', () => {
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
       financialPositionService as unknown as PlacementFinancialPositionService,
-      claimsService as unknown as PlacementClaimsService,
-      claimCashCallsService as unknown as PlacementClaimCashCallsService,
-      claimCedantSettlementsService as unknown as PlacementClaimCedantSettlementsService,
-      claimFinancialCloseReadinessService as unknown as PlacementClaimFinancialCloseReadinessService,
-      claimRecoveryApprovalsService as unknown as PlacementClaimRecoveryApprovalsService,
-      claimRecoveryReceiptsService as unknown as PlacementClaimRecoveryReceiptsService,
     );
 
   it('delegates list queries using only the authenticated tenant context', async () => {
@@ -209,20 +158,9 @@ describe('PlacementsController', () => {
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
     ['findPayment', PlacementPermission.VIEW],
-    ['findClaims', PlacementPermission.VIEW],
-    ['findClaim', PlacementPermission.VIEW],
-    ['findClaimAllocations', PlacementPermission.VIEW],
-    ['findClaimCashCalls', PlacementPermission.VIEW],
-    ['findClaimCashCall', PlacementPermission.VIEW],
-    ['findClaimCedantSettlements', PlacementPermission.VIEW],
-    ['getClaimFinancialCloseReadiness', PlacementPermission.VIEW],
-    ['getClaimRecoveryPosition', PlacementPermission.VIEW],
-    ['findClaimRecoveryApprovals', PlacementPermission.VIEW],
-    ['findClaimRecoveryReceipts', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
     ['createEndorsement', PlacementPermission.CREATE],
     ['createPayment', PlacementPermission.CREATE],
-    ['createClaim', PlacementPermission.CREATE],
     ['update', PlacementPermission.EDIT],
     ['updateEndorsement', PlacementPermission.EDIT],
     ['changeEndorsementStatus', PlacementPermission.EDIT],
@@ -250,20 +188,6 @@ describe('PlacementsController', () => {
     ['createEndorsementCreditNote', PlacementPermission.EDIT],
     ['issueEndorsementNote', PlacementPermission.EDIT],
     ['voidEndorsementNote', PlacementPermission.EDIT],
-    ['updateClaim', PlacementPermission.EDIT],
-    ['changeClaimStatus', PlacementPermission.EDIT],
-    ['generateClaimAllocations', PlacementPermission.EDIT],
-    ['createClaimCashCall', PlacementPermission.EDIT],
-    ['changeClaimCashCallStatus', PlacementPermission.EDIT],
-    ['voidClaimCashCall', PlacementPermission.EDIT],
-    ['approveClaimPayable', PlacementPermission.EDIT],
-    ['approveClaimRecovery', PlacementPermission.EDIT],
-    ['createClaimCedantSettlement', PlacementPermission.EDIT],
-    ['confirmClaimCedantSettlementBank', PlacementPermission.EDIT],
-    ['reverseClaimCedantSettlement', PlacementPermission.EDIT],
-    ['createClaimRecoveryReceipt', PlacementPermission.EDIT],
-    ['confirmClaimRecoveryReceiptBank', PlacementPermission.EDIT],
-    ['reverseClaimRecoveryReceipt', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],
     ['voidNote', PlacementPermission.EDIT],
     ['reversePayment', PlacementPermission.EDIT],
@@ -941,193 +865,6 @@ describe('PlacementsController', () => {
       'endorsement-1',
       'note-1',
       expect.objectContaining({ voidReason: 'Issued in error' }),
-    );
-  });
-
-  it('delegates claim reads and mutations with authenticated context', async () => {
-    const controller = createController();
-    claimsService.findAll.mockResolvedValue([]);
-    claimsService.findAllocations.mockResolvedValue([]);
-    claimFinancialCloseReadinessService.getReadiness.mockResolvedValue({
-      claimId: 'claim-1',
-      blockers: [],
-    });
-    const createDto = {
-      claimNumber: 'CLM-TEST-001',
-      occurrenceDate: '2026-06-03T00:00:00.000Z',
-      reportedDate: '2026-06-05T10:00:00.000Z',
-      claimCause: 'Warehouse fire',
-      currency: 'USD',
-      estimatedLossAmount: 40000,
-    };
-    const updateDto = { finalLossAmount: 37500 };
-
-    const claimList = await controller.findClaims('placement-1', {
-      user,
-    } as never);
-    await controller.findClaim('placement-1', 'claim-1', { user } as never);
-    await controller.createClaim('placement-1', createDto, { user } as never);
-    await controller.updateClaim('placement-1', 'claim-1', updateDto, {
-      user,
-    } as never);
-    await controller.changeClaimStatus(
-      'placement-1',
-      'claim-1',
-      { status: PlacementClaimStatus.NOTIFIED },
-      { user } as never,
-    );
-    await controller.getClaimFinancialCloseReadiness('placement-1', 'claim-1', {
-      user,
-    } as never);
-    const allocationList = await controller.findClaimAllocations(
-      'placement-1',
-      'claim-1',
-      { user } as never,
-    );
-    await controller.generateClaimAllocations('placement-1', 'claim-1', {
-      user,
-    } as never);
-
-    expect(claimsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-    );
-    expect(claimList).toEqual({ items: [] });
-    expect(claimsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(claimsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      createDto,
-    );
-    expect(claimsService.update).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      updateDto,
-    );
-    expect(claimsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      expect.objectContaining({ status: PlacementClaimStatus.NOTIFIED }),
-    );
-    expect(
-      claimFinancialCloseReadinessService.getReadiness,
-    ).toHaveBeenCalledWith('tenant-1', 'placement-1', 'claim-1');
-    expect(claimsService.findAllocations).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(allocationList).toEqual({ items: [] });
-    expect(claimsService.generateAllocations).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-    );
-  });
-
-  it('delegates claim cash call reads and mutations with authenticated context', async () => {
-    const controller = createController();
-    claimCashCallsService.findAll.mockResolvedValue([]);
-
-    const list = await controller.findClaimCashCalls('placement-1', 'claim-1', {
-      user,
-    } as never);
-    await controller.findClaimCashCall(
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      { user } as never,
-    );
-    await controller.createClaimCashCall(
-      'placement-1',
-      'claim-1',
-      'allocation-1',
-      { user } as never,
-    );
-    await controller.changeClaimCashCallStatus(
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      { status: PlacementClaimCashCallStatus.ISSUED },
-      { user } as never,
-    );
-    await controller.voidClaimCashCall(
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      { voidReason: 'Replacement required' },
-      { user } as never,
-    );
-
-    expect(claimCashCallsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(list).toEqual({ items: [] });
-    expect(claimCashCallsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-    );
-    expect(claimCashCallsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'allocation-1',
-    );
-    expect(claimCashCallsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      expect.objectContaining({ status: PlacementClaimCashCallStatus.ISSUED }),
-    );
-    expect(claimCashCallsService.void).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      expect.objectContaining({ voidReason: 'Replacement required' }),
-    );
-  });
-
-  it('delegates claim recovery approval reads and mutations with authenticated context', async () => {
-    const controller = createController();
-    claimRecoveryApprovalsService.findAll.mockResolvedValue([]);
-
-    const list = await controller.findClaimRecoveryApprovals(
-      'placement-1',
-      'claim-1',
-      { user } as never,
-    );
-    await controller.approveClaimRecovery(
-      'placement-1',
-      'claim-1',
-      'allocation-1',
-      { approvedAmount: 40000, currency: 'GHS' },
-      { user } as never,
-    );
-
-    expect(claimRecoveryApprovalsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(list).toEqual({ items: [] });
-    expect(claimRecoveryApprovalsService.approve).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'allocation-1',
-      expect.objectContaining({ approvedAmount: 40000, currency: 'GHS' }),
     );
   });
 
