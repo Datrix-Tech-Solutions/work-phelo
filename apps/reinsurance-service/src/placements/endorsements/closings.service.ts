@@ -11,11 +11,11 @@ import {
   PlacementEndorsementParticipantStatus,
   PlacementEndorsementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { UpdatePlacementEndorsementClosingStatusDto } from './dto/update-placement-endorsement-closing-status.dto';
-import { PlacementEndorsementSummaryResponseDto } from './dto/placement-endorsement-summary-response.dto';
-import { PlacementEndorsementsService } from './placement-endorsements.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { UpdatePlacementEndorsementClosingStatusDto } from '../dto/update-placement-endorsement-closing-status.dto';
+import { PlacementEndorsementSummaryResponseDto } from '../dto/placement-endorsement-summary-response.dto';
+import { PlacementEndorsementsService } from './endorsements.service';
 
 const endorsementClosingInclude = {
   endorsementParticipant: {

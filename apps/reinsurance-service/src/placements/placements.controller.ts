@@ -68,9 +68,9 @@ import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endo
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
 import { ValidateEndorsementParticipantResponseDto } from './dto/validate-endorsement-participant-response.dto';
 import { ForceCloseEndorsementResponseDto } from './dto/force-close-endorsement-response.dto';
-import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
-import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
-import { PlacementEndorsementsService } from './placement-endorsements.service';
+import { PlacementEndorsementClosingsService } from './endorsements/closings.service';
+import { PlacementEndorsementParticipantsService } from './endorsements/participants.service';
+import { PlacementEndorsementsService } from './endorsements/endorsements.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import {
   PlacementClaimCashCallListResponseDto,
