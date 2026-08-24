@@ -22,9 +22,9 @@ import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recov
 import { PlacementClaimsService } from './claims/claims.service';
 import { PlacementClosingsService } from './closings/closings.service';
 import { PlacementDocumentsService } from './documents/documents.service';
-import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
-import { PlacementEndorsementsService } from './placement-endorsements.service';
-import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
+import { PlacementEndorsementClosingsService } from './endorsements/closings.service';
+import { PlacementEndorsementsService } from './endorsements/endorsements.service';
+import { PlacementEndorsementParticipantsService } from './endorsements/participants.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementFinancialPositionService } from './finance/financial-position.service';
 import { PlacementNotesService } from './placement-notes.service';

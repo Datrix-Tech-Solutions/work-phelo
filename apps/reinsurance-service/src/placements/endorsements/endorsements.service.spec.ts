@@ -14,10 +14,10 @@ import {
   PlacementStatus,
   PlacementType,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { PlacementEndorsementsService } from './placement-endorsements.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
+import { PlacementEndorsementsService } from './endorsements.service';
 
 describe('PlacementEndorsementsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
