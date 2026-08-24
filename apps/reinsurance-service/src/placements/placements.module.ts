@@ -30,6 +30,7 @@ import { PlacementPdfRendererService } from './documents/pdf/placement-pdf-rende
 import { PlacementsController } from './placements.controller';
 import { PlacementClaimsController } from './controllers/placement-claims.controller';
 import { PlacementDocumentsController } from './controllers/placement-documents.controller';
+import { PlacementEndorsementsController } from './controllers/placement-endorsements.controller';
 import { PlacementsService } from './placements.service';
 import { ReinsuranceDashboardController } from './dashboard/dashboard.controller';
 import { ReinsuranceDashboardService } from './dashboard/dashboard.service';
@@ -48,6 +49,7 @@ import { TenantDocumentProfileClient } from './documents/tenant-document-profile
     PlacementsController,
     PlacementDocumentsController,
     PlacementClaimsController,
+    PlacementEndorsementsController,
     PlacementAttachmentsController,
     ReinsuranceDashboardController,
   ],
