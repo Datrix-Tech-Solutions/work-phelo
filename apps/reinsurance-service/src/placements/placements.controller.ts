@@ -136,7 +136,7 @@ import {
 } from './dto/placement-note-response.dto';
 import { UpdatePlacementNoteStatusDto } from './dto/update-placement-note-status.dto';
 import { VoidPlacementNoteDto } from './dto/void-placement-note.dto';
-import { PlacementNotesService } from './placement-notes.service';
+import { PlacementNotesService } from './transactions/notes.service';
 import {
   PlacementPaymentListResponseDto,
   PlacementPaymentResponseDto,
@@ -145,7 +145,7 @@ import { PlacementFinancialPositionResponseDto } from './dto/placement-financial
 import { ConfirmPlacementPaymentBankDto } from './dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
 import { PlacementFinancialPositionService } from './finance/financial-position.service';
-import { PlacementPaymentsService } from './placement-payments.service';
+import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
 import {
   ClosingSlipPreviewResponseDto,

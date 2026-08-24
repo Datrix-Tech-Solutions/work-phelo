@@ -27,8 +27,8 @@ import { PlacementEndorsementsService } from './endorsements/endorsements.servic
 import { PlacementEndorsementParticipantsService } from './endorsements/participants.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementFinancialPositionService } from './finance/financial-position.service';
-import { PlacementNotesService } from './placement-notes.service';
-import { PlacementPaymentsService } from './placement-payments.service';
+import { PlacementNotesService } from './transactions/notes.service';
+import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
 import { PlacementClaimFinancialCloseReadinessService } from './claims/close/financial-close-readiness.service';

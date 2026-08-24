@@ -17,19 +17,19 @@ import {
   Prisma,
   ReinsuranceChargeCode,
   ReinsuranceChargeRateType,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReinsuranceFinancialEventPublisher } from '../accounting-integration/events/financial-event.publisher';
-import { EffectiveDebitNotePreviewResponseDto } from './dto/effective-debit-note.dto';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ReinsuranceFinancialEventPublisher } from '../../accounting-integration/events/financial-event.publisher';
+import { EffectiveDebitNotePreviewResponseDto } from '../dto/effective-debit-note.dto';
 import {
   AppliedChargeSnapshot,
   ChargeCalculationResult,
   ReinsuranceChargeSettingsService,
-} from '../settings/reinsurance-charge-settings.service';
-import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { PlacementFinancialPositionService } from './finance/financial-position.service';
-import { UpdatePlacementNoteStatusDto } from './dto/update-placement-note-status.dto';
-import { VoidPlacementNoteDto } from './dto/void-placement-note.dto';
+} from '../../settings/reinsurance-charge-settings.service';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
+import { PlacementFinancialPositionService } from '../finance/financial-position.service';
+import { UpdatePlacementNoteStatusDto } from '../dto/update-placement-note-status.dto';
+import { VoidPlacementNoteDto } from '../dto/void-placement-note.dto';
 
 const noteInclude = {
   counterparty: {
