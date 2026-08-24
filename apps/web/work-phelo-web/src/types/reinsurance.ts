@@ -1330,6 +1330,12 @@ export interface CreatePlacementPaymentPayload {
   notes?: string;
 }
 
+export interface ConfirmPlacementPaymentBankPayload {
+  bankConfirmedAt: string;
+  bankReference?: string;
+  notes?: string;
+}
+
 export type PlacementFinancialPositionState =
   | 'RECEIVABLE'
   | 'PAYABLE'

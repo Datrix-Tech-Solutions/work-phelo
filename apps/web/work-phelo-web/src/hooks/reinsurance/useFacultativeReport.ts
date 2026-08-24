@@ -3,7 +3,12 @@ import { useQueries } from '@tanstack/react-query';
 import { useFacultatives, fetchPlacementClosings, placementClosingsKey } from './useFacultatives';
 import { useRiskTypes } from './useRiskTypes';
 import { useRiskClasses } from './useRiskClasses';
-import { fetchPlacementPayments, paymentsKey } from './usePayments';
+import {
+  fetchPlacementFinancialPosition,
+  fetchPlacementPayments,
+  paymentsKey,
+  placementFinancialPositionKey,
+} from './usePayments';
 import { useReportCurrencyTotals, ReportCurrencyTotals } from './useReportCurrencyTotals';
 import {
   Facultative,
@@ -11,17 +16,20 @@ import {
   PlacementPayment,
   PlacementParticipantClosing,
 } from '@/types/reinsurance';
+import {
+  cedantPaymentStatusFromPosition,
+  CedantPaymentStatus,
+  pendingPremiumReceived,
+} from '@/lib/reinsurance/placementStatus';
 
 const ACCEPTED_STATUSES = new Set(['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED']);
 const OPEN_STATUSES = new Set(['DRAFT', 'MARKETING']);
 const QUALIFYING_PARTICIPANT_STATUSES = new Set(['ACCEPTED', 'CLOSED']);
 const REINSURER_ROLES = new Set(['REINSURER', 'LEAD_REINSURER', 'CO_REINSURER']);
-/** Payment states that still count as "received" for the premium-paid date — everything except a failed/cancelled/reversed attempt. */
 const RECEIVED_PAYMENT_STATUSES = new Set(['RECORDED', 'BANK_CONFIRMED']);
 
 export type FacultativeReportDateField = 'createdAt' | 'premiumPaid' | 'closingDate';
 
-/** Latest matching premium receipt date for a placement — includes pending (RECORDED) payments, excludes failed/cancelled/reversed ones and reversal entries. */
 function latestPremiumPaidDate(payments: PlacementPayment[]): string | null {
   let latest: string | null = null;
   for (const pmt of payments) {
@@ -33,8 +41,6 @@ function latestPremiumPaidDate(payments: PlacementPayment[]): string | null {
   return latest;
 }
 
-/** Date the offer as a whole was closed: the force-close timestamp if it was force-closed,
- *  otherwise the latest participant closing's issuedAt — the moment the last participant closed. */
 function closingDateFor(
   placement: Facultative,
   closings: PlacementParticipantClosing[],
@@ -48,7 +54,6 @@ function closingDateFor(
   return latest;
 }
 
-/** Sums sharePercent for participants that have accepted or closed — a closed reinsurer still counts as accepted. */
 function acceptedPercentFor(p: Facultative): number {
   const sum = p.participants
     .filter((pt) => QUALIFYING_PARTICIPANT_STATUSES.has(pt.status))
@@ -56,7 +61,6 @@ function acceptedPercentFor(p: Facultative): number {
   return Math.round(sum * 100) / 100;
 }
 
-/** Counts reinsurer-role participants that have accepted or closed — matches acceptedPercentFor's scope. */
 function reinsurerCountFor(p: Facultative): number {
   return p.participants.filter(
     (pt) => REINSURER_ROLES.has(pt.role) && QUALIFYING_PARTICIPANT_STATUSES.has(pt.status),
@@ -66,18 +70,17 @@ function reinsurerCountFor(p: Facultative): number {
 export type FacultativeReportLifecycle = 'ACTIVE' | 'EXPIRED';
 
 export interface FacultativeReportParams {
-  /** Which placement date [startDate, endDate] filters against. Defaults to 'createdAt' (date of entry). */
   dateField?: FacultativeReportDateField;
   startDate?: string;
   endDate?: string;
   riskClassIds?: string[];
-  /** Exact match on the placement's own currency — rows aren't aggregated across currencies here. */
   currency?: string;
   statuses?: FacultativeStatus[];
   cedantIds?: string[];
-  /** ACTIVE = today falls within [inceptionDate, expiryDate]; EXPIRED = expiryDate is in the past.
-   *  Placements missing either date, or not yet started, match neither. */
+
   lifecycle?: FacultativeReportLifecycle;
+
+  paymentStatuses?: CedantPaymentStatus[];
 }
 
 export interface FacultativeReportRow {
@@ -97,6 +100,7 @@ export interface FacultativeReportRow {
   status: FacultativeStatus;
   inceptionDate: string | null;
   expiryDate: string | null;
+  paymentStatus: CedantPaymentStatus;
 }
 
 export interface FacultativeReportSummary {
@@ -133,8 +137,7 @@ export function useFacultativeReport(
   }, [riskTypeMap, riskClassMap]);
 
   const dateField = params.dateField ?? 'createdAt';
-  // Only fetched when the selected date field actually needs them — 'createdAt' is already on
-  // every placement, so these stay idle (and cost nothing) unless premium-paid/closing-date is picked.
+
   const needsPremiumPaid = enabled && dateField === 'premiumPaid';
   const needsClosingDate = enabled && dateField === 'closingDate';
 
@@ -224,7 +227,39 @@ export function useFacultativeReport(
     params.cedantIds,
   ]);
 
+  const positionQueries = useQueries({
+    queries: filtered.map((p) => ({
+      queryKey: placementFinancialPositionKey(p.id),
+      queryFn: () => fetchPlacementFinancialPosition(p.id),
+    })),
+  });
+  const paymentStatusPaymentsQueries = useQueries({
+    queries: filtered.map((p) => ({
+      queryKey: paymentsKey(p.id),
+      queryFn: () => fetchPlacementPayments(p.id),
+    })),
+  });
+  const paymentStatusLoading =
+    positionQueries.some((q) => q.isLoading) ||
+    paymentStatusPaymentsQueries.some((q) => q.isLoading);
+
+  const paymentStatusByPlacementId = useMemo(() => {
+    const map = new Map<string, CedantPaymentStatus>();
+    filtered.forEach((p, i) => {
+      const position = positionQueries[i]?.data;
+      const payments = paymentStatusPaymentsQueries[i]?.data ?? [];
+      const due = position?.cedant.currentObligation ?? 0;
+      const paid = position?.cedant.netSettled ?? 0;
+      const outstanding = position?.cedant.outstanding ?? 0;
+      const pending = pendingPremiumReceived(payments);
+      map.set(p.id, cedantPaymentStatusFromPosition(due, paid, outstanding, pending));
+    });
+    return map;
+  }, [filtered, positionQueries, paymentStatusPaymentsQueries]);
+
   const rows = useMemo<FacultativeReportRow[]>(() => {
+    const paymentStatuses = params.paymentStatuses?.length ? new Set(params.paymentStatuses) : null;
+
     return [...filtered]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .map((p) => ({
@@ -244,8 +279,10 @@ export function useFacultativeReport(
         status: p.status,
         inceptionDate: p.inceptionDate,
         expiryDate: p.expiryDate,
-      }));
-  }, [filtered, riskClassNameFor]);
+        paymentStatus: paymentStatusByPlacementId.get(p.id) ?? 'Outstanding',
+      }))
+      .filter((row) => !paymentStatuses || paymentStatuses.has(row.paymentStatus));
+  }, [filtered, riskClassNameFor, paymentStatusByPlacementId, params.paymentStatuses]);
 
   const summary = useMemo<FacultativeReportSummary>(() => {
     const total = filtered.length;
@@ -273,6 +310,6 @@ export function useFacultativeReport(
     rows,
     summary,
     currencyTotals,
-    isLoading: isLoading || premiumPaymentsLoading || closingsLoading,
+    isLoading: isLoading || premiumPaymentsLoading || closingsLoading || paymentStatusLoading,
   };
 }

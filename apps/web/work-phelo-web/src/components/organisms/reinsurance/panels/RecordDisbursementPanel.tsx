@@ -3,7 +3,12 @@
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-import { useCreatePlacementPayment, usePlacementClosings, usePlacementPayments } from '@/hooks';
+import {
+  useCreatePlacementPayment,
+  useConfirmPlacementPaymentBank,
+  usePlacementClosings,
+  usePlacementPayments,
+} from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import {
@@ -49,6 +54,7 @@ export function RecordDisbursementPanel({
   onClose,
 }: RecordDisbursementPanelProps) {
   const createPayment = useCreatePlacementPayment();
+  const confirmPaymentBank = useConfirmPlacementPaymentBank();
   const addToast = useToastStore((s) => s.addToast);
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
@@ -122,8 +128,21 @@ export function RecordDisbursementPanel({
     }
     setIsSubmitting(true);
     try {
+      const now = new Date().toISOString();
       for (const source of sources) {
-        await createPayment.mutateAsync({
+        // A closing/endorsement number to record as the payment's reference — the confirm
+        // step below needs *some* reference on a BANK_TRANSFER payment, and this doubles as a
+        // meaningful audit trail in Payment History instead of a placeholder value.
+        const reference = source.closingId
+          ? `Closing ${closings.find((c) => c.id === source.closingId)?.closingNumber ?? source.closingId}`
+          : source.endorsementClosingId
+            ? `Endorsement ${
+                target.adjustments?.find((a) => a.closingId === source.endorsementClosingId)
+                  ?.endorsementNumber ?? source.endorsementClosingId
+              }`
+            : undefined;
+
+        const created = await createPayment.mutateAsync({
           placementId: placement.id,
           type: 'REINSURER_DISBURSEMENT',
           direction: 'OUTBOUND',
@@ -135,9 +154,28 @@ export function RecordDisbursementPanel({
           currency: source.currency,
           settlementMethod: 'BANK_TRANSFER',
           settlementCurrency: source.currency,
-          paymentDate: new Date().toISOString(),
-          notes: 'Operational reinsurer disbursement',
+          paymentDate: now,
+          reference,
+          // Same wording Payment History already uses for a bank-transfer premium receipt —
+          // reads consistently across both payment types instead of a one-off description.
+          notes: 'Bank transfer',
         });
+
+        // Confirm right after recording — the settlement method/currency/reference above
+        // already cover everything the confirm endpoint needs, so this needs no further
+        // input and no separate trip through Accounting's confirmation queue.
+        try {
+          await confirmPaymentBank.mutateAsync({
+            placementId: placement.id,
+            paymentId: created.id,
+            bankConfirmedAt: now,
+          });
+        } catch (confirmError) {
+          addToast({
+            message: `Disbursement recorded, but bank confirmation failed automatically: ${extractError(confirmError)}. It will remain pending until confirmed.`,
+            type: 'error',
+          });
+        }
       }
       addToast({ message: 'Reinsurer disbursement recorded successfully', type: 'success' });
       onClose();

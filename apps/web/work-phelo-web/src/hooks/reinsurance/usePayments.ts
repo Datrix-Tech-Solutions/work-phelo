@@ -6,6 +6,7 @@ import {
   FacultativeStatus,
   PlacementPayment,
   CreatePlacementPaymentPayload,
+  ConfirmPlacementPaymentBankPayload,
   PlacementFinancialPosition,
   PlacementParticipantClosing,
 } from '@/types/reinsurance';
@@ -83,6 +84,32 @@ export function useCreatePlacementPayment() {
       ...payload
     }: CreatePlacementPaymentPayload & { placementId: string }) => {
       const res = await api.post(`${BASE}/${placementId}/payments`, payload);
+      return res.data as PlacementPayment;
+    },
+    onSuccess: (_, { placementId }) => {
+      queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+    },
+  });
+}
+
+/** Bank-confirms a RECORDED premium receipt/reinsurer disbursement — settlementMethod,
+ *  settlementCurrency and reference all fall back to whatever the payment already carries from
+ *  when it was recorded (confirmation isn't allowed to change them), so only `bankConfirmedAt`
+ *  is genuinely required. Lets Record + Confirm happen as one action from inside Reinsurance
+ *  itself, instead of needing a separate trip through Accounting's confirmation queue. */
+export function useConfirmPlacementPaymentBank() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      placementId,
+      paymentId,
+      ...payload
+    }: ConfirmPlacementPaymentBankPayload & { placementId: string; paymentId: string }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/payments/${paymentId}/bank-confirmation`,
+        payload,
+      );
       return res.data as PlacementPayment;
     },
     onSuccess: (_, { placementId }) => {

@@ -4,13 +4,29 @@ import { useRouter, useParams } from 'next/navigation';
 import {
   Landmark,
   Handshake,
-  ScrollText,
+  // ScrollText,
   ShieldCheck,
   BanknoteArrowDown,
   BanknoteArrowUp,
 } from 'lucide-react';
 import { ReportCard } from '@/components/molecules/shared/ReportCard';
-import { useCedantsReport, useReinsurersReport, useFacultativeReport } from '@/hooks';
+import {
+  useCedantsReport,
+  useReinsurersReport,
+  useFacultativeReport,
+  usePremiumsReport,
+  useClaimsReport,
+} from '@/hooks';
+
+function fmtAmount(value: number, symbol: string): string {
+  const abs = Math.abs(value);
+  let formatted: string;
+  if (abs >= 1_000_000_000) formatted = `${(value / 1_000_000_000).toFixed(2)}B`;
+  else if (abs >= 1_000_000) formatted = `${(value / 1_000_000).toFixed(2)}M`;
+  else if (abs >= 1_000) formatted = `${(value / 1_000).toFixed(2)}K`;
+  else formatted = value.toFixed(2);
+  return symbol ? `${symbol} ${formatted}` : formatted;
+}
 
 export default function ReinsuranceReportsPage() {
   const router = useRouter();
@@ -21,6 +37,8 @@ export default function ReinsuranceReportsPage() {
   const { summary: cedantsSummary, isLoading: loadingCedants } = useCedantsReport({});
   const { summary: reinsurersSummary, isLoading: loadingReinsurers } = useReinsurersReport({});
   const { summary: facultativeSummary, isLoading: loadingFacultative } = useFacultativeReport({});
+  const { summary: premiumsSummary, isLoading: loadingPremiums } = usePremiumsReport({});
+  const { summary: claimsSummary, isLoading: loadingClaims } = useClaimsReport({});
 
   return (
     <div className="flex flex-col gap-6 p-6 min-h-0 overflow-y-auto flex-1">
@@ -32,6 +50,27 @@ export default function ReinsuranceReportsPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <ReportCard
+          icon={<ShieldCheck className="w-6 h-6" />}
+          iconClassName="bg-amber-600 text-amber-100"
+          title="Facultative"
+          description="Facultative placement activity and closings."
+          stats={[
+            {
+              label: 'Total Offers',
+              value: loadingFacultative ? '—' : String(facultativeSummary.totalOffers),
+            },
+            {
+              label: 'Open Offers',
+              value: loadingFacultative ? '—' : String(facultativeSummary.openOffers),
+            },
+            {
+              label: 'Acceptance Rate',
+              value: loadingFacultative ? '—' : `${facultativeSummary.acceptanceRate.toFixed(1)}%`,
+            },
+          ]}
+          onClick={() => router.push(`${base}/facultative`)}
+        />
         <ReportCard
           icon={<Landmark className="w-6 h-6" />}
           iconClassName="bg-blue-600 text-blue-100"
@@ -65,7 +104,7 @@ export default function ReinsuranceReportsPage() {
               value: loadingReinsurers ? '—' : String(reinsurersSummary.activeReinsurers),
             },
             {
-              label: 'Total Placements',
+              label: 'Total Participation',
               value: loadingReinsurers ? '—' : String(reinsurersSummary.totalPlacements),
             },
             {
@@ -76,7 +115,7 @@ export default function ReinsuranceReportsPage() {
           onClick={() => router.push(`${base}/reinsurers`)}
         />
 
-        <ReportCard
+        {/* <ReportCard
           icon={<ScrollText className="w-6 h-6" />}
           iconClassName="bg-emerald-600 text-emerald-100"
           title="Treaty"
@@ -86,29 +125,7 @@ export default function ReinsuranceReportsPage() {
             { label: 'Ceded Premium', value: '—' },
           ]}
           onClick={() => router.push(`${base}/treaty`)}
-        />
-
-        <ReportCard
-          icon={<ShieldCheck className="w-6 h-6" />}
-          iconClassName="bg-amber-600 text-amber-100"
-          title="Facultative"
-          description="Facultative placement activity and closings."
-          stats={[
-            {
-              label: 'Total Offers',
-              value: loadingFacultative ? '—' : String(facultativeSummary.totalOffers),
-            },
-            {
-              label: 'Open Offers',
-              value: loadingFacultative ? '—' : String(facultativeSummary.openOffers),
-            },
-            {
-              label: 'Acceptance Rate',
-              value: loadingFacultative ? '—' : `${facultativeSummary.acceptanceRate.toFixed(1)}%`,
-            },
-          ]}
-          onClick={() => router.push(`${base}/facultative`)}
-        />
+        /> */}
 
         <ReportCard
           icon={<BanknoteArrowDown className="w-6 h-6" />}
@@ -116,8 +133,18 @@ export default function ReinsuranceReportsPage() {
           title="Premiums"
           description="Premium and payment history across placements."
           stats={[
-            { label: 'Total Collected', value: '—' },
-            { label: 'Outstanding', value: '—' },
+            {
+              label: 'Total Collected',
+              value: loadingPremiums
+                ? '—'
+                : fmtAmount(premiumsSummary.totalCollected, premiumsSummary.currencySymbol),
+            },
+            {
+              label: 'Outstanding',
+              value: loadingPremiums
+                ? '—'
+                : fmtAmount(premiumsSummary.outstanding, premiumsSummary.currencySymbol),
+            },
           ]}
           onClick={() => router.push(`${base}/premiums`)}
         />
@@ -128,8 +155,18 @@ export default function ReinsuranceReportsPage() {
           title="Claims"
           description="Claims activity and settlement history."
           stats={[
-            { label: 'Open Claims', value: '—' },
-            { label: 'Total Paid', value: '—' },
+            {
+              label: 'Open Claims',
+              value: loadingClaims ? '—' : String(claimsSummary.openClaims),
+            },
+            {
+              label: 'Closed Claims',
+              value: loadingClaims ? '—' : String(claimsSummary.closedClaims),
+            },
+            {
+              label: 'Recovery Rate',
+              value: loadingClaims ? '—' : `${claimsSummary.recoveryRate.toFixed(1)}%`,
+            },
           ]}
           onClick={() => router.push(`${base}/claims`)}
         />
