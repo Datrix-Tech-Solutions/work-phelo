@@ -19,10 +19,12 @@ import {
   usePlacementPayments,
 } from '@/hooks';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
 import {
   cedantPaymentStatusFromPosition,
   CedantPaymentStatus as PaymentStatus,
   pendingPremiumReceived,
+  latestConfirmedPremiumPaymentDate,
 } from '@/lib/reinsurance/placementStatus';
 
 const PAGE_SIZE = 10;
@@ -136,6 +138,12 @@ const COLUMNS: Column<Facultative>[] = [
     ),
   },
   {
+    key: 'cedant' as keyof Facultative,
+    label: 'Cedant',
+    width: 'minmax(100px, 1fr)',
+    render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
+  },
+  {
     key: 'sumInsured',
     label: 'Sum Insured',
     width: '130px',
@@ -148,7 +156,7 @@ const COLUMNS: Column<Facultative>[] = [
   },
   {
     key: 'facultativeOffer',
-    label: 'Fac. Sum Insured',
+    label: 'Share of S.I.',
     width: '130px',
     className: 'text-right',
     render: (row) => {
@@ -225,6 +233,7 @@ export function PaymentsTable() {
   const [statusFilter, setStatusFilter] = useState('');
   const [cedantFilter, setCedantFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
 
   const { data: allRows = [], isLoading } = useFacultatives();
 
@@ -268,6 +277,18 @@ export function PaymentsTable() {
     [closingRows, paymentStatusMap],
   );
 
+  // Same authoritative "last payment" figure used elsewhere in the app (e.g. the claim
+  // overview) — drives the table's default sort so offers with the most recent payment
+  // activity surface first, instead of just the newest offers.
+  const latestPaymentDateMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    closingRows.forEach((row, i) => {
+      const payments = paymentsQueries[i]?.data ?? [];
+      map.set(row.id, latestConfirmedPremiumPaymentDate(payments));
+    });
+    return map;
+  }, [closingRows, paymentsQueries]);
+
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const r of payableRows) seen.set(r.cedant.id, r.cedant.name);
@@ -303,8 +324,12 @@ export function PaymentsTable() {
     if (cedantFilter) {
       rows = rows.filter((r) => r.cedant.id === cedantFilter);
     }
-    return rows;
-  }, [payableRows, search, statusFilter, cedantFilter, paymentStatusMap]);
+
+    // Most recent payment activity first
+    // row that only has a pending (not yet bank-confirmed) receipt so far.
+    const dateOf = (r: Facultative) => latestPaymentDateMap.get(r.id) ?? r.createdAt;
+    return [...rows].sort((a, b) => new Date(dateOf(b)).getTime() - new Date(dateOf(a)).getTime());
+  }, [payableRows, search, statusFilter, cedantFilter, paymentStatusMap, latestPaymentDateMap]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -339,33 +364,39 @@ export function PaymentsTable() {
   );
 
   return (
-    <DataTable
-      columns={COLUMNS}
-      data={paged}
-      isLoading={isLoading}
-      searchPlaceholder="Search payments…"
-      searchValue={search}
-      onRowClick={(row) => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`)}
-      onSearch={(q) => {
-        setSearch(q);
-        setPage(1);
-      }}
-      extraFilters={extraFilters}
-      actionButton={{
-        label: 'Receive Cedant Premium',
-        onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/new`),
-      }}
-      // rowActions={(row) => [
-      //   {
-      //     label: 'View Payment Workspace',
-      //     onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
-      //   },
-      // ]}
-      emptyMessage="No payment records found"
-      currentPage={page}
-      totalPages={totalPages}
-      onPageChange={setPage}
-      noInternalScroll
-    />
+    <>
+      <DataTable
+        columns={COLUMNS}
+        data={paged}
+        isLoading={isLoading}
+        searchPlaceholder="Search payments…"
+        searchValue={search}
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`)
+        }
+        onSearch={(q) => {
+          setSearch(q);
+          setPage(1);
+        }}
+        extraFilters={extraFilters}
+        actionButton={{
+          label: 'Receive Cedant Premium',
+          onClick: () => setIsAddPaymentOpen(true),
+        }}
+        // rowActions={(row) => [
+        //   {
+        //     label: 'View Payment Workspace',
+        //     onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
+        //   },
+        // ]}
+        emptyMessage="No payment records found"
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        noInternalScroll
+      />
+
+      <AddPaymentForm isOpen={isAddPaymentOpen} onClose={() => setIsAddPaymentOpen(false)} />
+    </>
   );
 }

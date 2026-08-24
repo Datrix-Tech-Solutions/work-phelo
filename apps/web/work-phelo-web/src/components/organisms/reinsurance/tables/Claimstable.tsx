@@ -9,7 +9,7 @@ import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { Facultative, FacultativeStatus } from '@/types/reinsurance';
+import { FacultativeStatus } from '@/types/reinsurance';
 import {
   useFacultatives,
   useClaimsByTab,
@@ -36,21 +36,6 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
 ];
 
 export type ClaimsTableTab = 'notification' | 'open' | 'closed';
-
-// Brokerage isn't a single rate on the offer — it's the sum of each accepted/closed
-// participant's own brokerage cut. Same formula as BrokerageByCurrencyCard.
-function brokerageAmountFor(placement: Facultative): number | null {
-  if (placement.premium == null) return null;
-  let total: number | null = null;
-  for (const p of placement.participants ?? []) {
-    if (p.status !== 'ACCEPTED' && p.status !== 'CLOSED') continue;
-    const share = p.sharePercent != null ? parseFloat(p.sharePercent) : null;
-    const fee = p.brokerageFee != null ? parseFloat(p.brokerageFee) : null;
-    if (share == null || fee == null) continue;
-    total = (total ?? 0) + placement.premium * (share / 100) * (fee / 100);
-  }
-  return total;
-}
 
 function fmtAmount(val: number | string | null | undefined, currency?: string | null) {
   if (val == null || val === '') return '—';
@@ -119,7 +104,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
         }
       : {
           key: 'facultativeOffer',
-          label: 'Fac. Sum Insured',
+          label: 'Sum Insured',
           width: '120px',
           className: 'text-right',
           render: (row) => {
@@ -161,17 +146,6 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
           ),
         },
 
-    {
-      key: 'brokerage',
-      label: 'Brokerage',
-      width: '120px',
-      className: 'text-right',
-      render: (row) => (
-        <span className="text-gray-900 whitespace-nowrap">
-          {fmtAmount(brokerageAmountFor(row.placement), row.placement.currency)}
-        </span>
-      ),
-    },
     tab === 'closed'
       ? {
           key: 'recoveredAt',

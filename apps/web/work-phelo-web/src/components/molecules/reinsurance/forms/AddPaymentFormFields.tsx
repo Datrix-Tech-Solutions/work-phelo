@@ -3,18 +3,33 @@
 import { useEffect, useMemo } from 'react';
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { useQueries } from '@tanstack/react-query';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { useCashAccounts, useFacultatives, useCurrencyOptions } from '@/hooks';
+import { useFacultatives, useCurrencyOptions } from '@/hooks';
 import {
   fetchPlacementFinancialPosition,
+  fetchPlacementPayments,
+  paymentsKey,
   placementFinancialPositionKey,
 } from '@/hooks/reinsurance/usePayments';
 import { cn } from '@/lib/utils';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import {
+  cedantPaymentStatusFromPosition,
+  pendingPremiumReceived,
+  CedantPaymentStatus,
+} from '@/lib/reinsurance/placementStatus';
+import { PlacementPayment } from '@/types/reinsurance';
+
+const PAYMENT_STATUS_CLASS: Record<CedantPaymentStatus, string> = {
+  Outstanding: 'text-xs text-gray-400',
+  Pending: 'text-xs text-amber-600 font-medium',
+  'Part Payment': 'text-xs text-yellow-600 font-medium',
+  Paid: 'text-xs text-green-600 font-medium',
+};
 
 export interface AddPaymentFormValues {
   cedantId: string;
@@ -86,22 +101,6 @@ export function AddPaymentFormFields({
 
   const { data: facultatives = [] } = useFacultatives();
   const { data: currencyOptions = [] } = useCurrencyOptions();
-  // Bank Name picks from Accounting's configured cash/bank accounts when any exist;
-  // falls back to a plain text field so this form still works before Accounting
-  // has set any up.
-  const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts({
-    isActive: true,
-  });
-  const cashAccountOptions: SearchSelectOption[] = useMemo(
-    () =>
-      cashAccounts.map((account) => ({
-        value: account.name,
-        label: account.name,
-        sublabel: [account.bankName, account.currency].filter(Boolean).join(' · ') || undefined,
-      })),
-    [cashAccounts],
-  );
-  const showCashAccountSelect = !isLoadingCashAccounts && cashAccountOptions.length > 0;
 
   const preFilledPlacement = useMemo(
     () => (placementId ? facultatives.find((f) => f.id === placementId) : undefined),
@@ -130,6 +129,24 @@ export function AddPaymentFormFields({
     });
     return map;
   }, [selectedFacultatives, positionQueries]);
+
+  // For the payment-status summary below the business picker — same authoritative figures
+  // (financial position + pending receipts) the Premiums page and placement Details page use.
+  const paymentsQueries = useQueries({
+    queries: selectedFacultatives.map((f) => ({
+      queryKey: paymentsKey(f.id),
+      queryFn: () => fetchPlacementPayments(f.id),
+    })),
+  });
+
+  const paymentsByPlacementId = useMemo(() => {
+    const map = new Map<string, PlacementPayment[]>();
+    selectedFacultatives.forEach((f, index) => {
+      const payments = paymentsQueries[index]?.data;
+      if (payments) map.set(f.id, payments);
+    });
+    return map;
+  }, [selectedFacultatives, paymentsQueries]);
 
   useEffect(() => {
     if (preFilledPlacement) {
@@ -251,6 +268,38 @@ export function AddPaymentFormFields({
       </p>
     ) : null;
 
+  // Whether payment has already been made (and how much is left) for each selected business —
+  // shown as soon as a business is picked, ahead of everything else, so it's answered before
+  // the user has to fill in an amount at all.
+  const businessPaymentSummary = selectedFacultatives.length > 0 && (
+    <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
+      {selectedFacultatives.map((f) => {
+        const position = positionByPlacementId.get(f.id);
+        const payments = paymentsByPlacementId.get(f.id) ?? [];
+        const due = position?.cedant.currentObligation ?? 0;
+        const paid = position?.cedant.netSettled ?? 0;
+        const outstanding = position?.cedant.outstanding ?? 0;
+        const pending = pendingPremiumReceived(payments);
+        const status = cedantPaymentStatusFromPosition(due, paid, outstanding, pending);
+        const cur = position?.currency ?? f.currency ?? '';
+
+        return (
+          <div key={f.id} className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {displayPolicyNumber(f.policyNumber)}
+              </p>
+              <span className={PAYMENT_STATUS_CLASS[status]}>{status}</span>
+            </div>
+            <span className="text-xs text-gray-700 font-medium whitespace-nowrap text-right">
+              {outstanding > 0.0001 ? `${cur} ${fmtNum(outstanding)} left` : 'Fully paid'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const allocationSection = showAllocation && (
     <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
       <p className="text-xs font-semibold text-gray-700">Allocate Payment</p>
@@ -322,34 +371,7 @@ export function AddPaymentFormFields({
     </div>
   );
 
-  // Cheque payments always use the plain text field — a cheque's drawee bank
-  // isn't necessarily one of the tenant's own cash/bank accounts.
-  const chequeBankNameField = (
-    <FormField
-      label="Bank Name"
-      registration={register('bankName', { required: 'Bank name is required' })}
-      placeholder="Enter bank name…"
-      error={errors.bankName}
-    />
-  );
-
-  const bankTransferBankNameField = showCashAccountSelect ? (
-    <Controller
-      name="bankName"
-      control={control}
-      rules={{ required: 'Bank name is required' }}
-      render={({ field }) => (
-        <SearchSelect
-          label="Bank Name"
-          placeholder="Select cash/bank account…"
-          options={cashAccountOptions}
-          value={field.value}
-          onChange={field.onChange}
-          error={errors.bankName?.message}
-        />
-      )}
-    />
-  ) : (
+  const bankNameField = (
     <FormField
       label="Bank Name"
       registration={register('bankName', { required: 'Bank name is required' })}
@@ -386,7 +408,7 @@ export function AddPaymentFormFields({
         </div>
       </div>
 
-      {chequeBankNameField}
+      {bankNameField}
 
       <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
         <Controller
@@ -452,7 +474,7 @@ export function AddPaymentFormFields({
         )}
       />
 
-      {bankTransferBankNameField}
+      {bankNameField}
 
       <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
         <Controller
@@ -549,6 +571,7 @@ export function AddPaymentFormFields({
           label="Business"
           value={displayPolicyNumber(preFilledPlacement.policyNumber)}
         />
+        {businessPaymentSummary}
         {paymentTypeField}
         {chequeFields}
         {bankFields}
@@ -578,6 +601,7 @@ export function AddPaymentFormFields({
         )}
       />
       {cedantId && businessField}
+      {businessPaymentSummary}
       {businessIds.length > 0 && paymentTypeField}
       {chequeFields}
       {bankFields}

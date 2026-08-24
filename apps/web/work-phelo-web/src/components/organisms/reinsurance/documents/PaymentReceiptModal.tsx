@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
-import { useCedants, useRiskTypes } from '@/hooks';
+import { useCedants, useReinsurers, useRiskTypes } from '@/hooks';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
@@ -67,7 +67,10 @@ export function PaymentReceiptModal({
   onClose,
 }: PaymentReceiptModalProps) {
   const { data: cedants = [] } = useCedants();
+  const { data: reinsurers = [] } = useReinsurers();
   const { data: riskTypes = [] } = useRiskTypes();
+
+  const isDisbursement = payment.type === 'REINSURER_DISBURSEMENT';
 
   const {
     currency,
@@ -86,11 +89,23 @@ export function PaymentReceiptModal({
   const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
   const fullCedant = cedants.find((c) => c.id === cedant.id);
-  const primaryAddress =
+  const cedantAddress =
     fullCedant?.addresses?.find((a) => a.isPrimary) ?? fullCedant?.addresses?.[0];
-  const cedantLocation = primaryAddress
-    ? [primaryAddress.city, primaryAddress.state, primaryAddress.country].filter(Boolean).join(', ')
+  const cedantLocation = cedantAddress
+    ? [cedantAddress.city, cedantAddress.state, cedantAddress.country].filter(Boolean).join(', ')
     : null;
+
+  const reinsurer = reinsurers.find((r) => r.id === payment.counterparty.id);
+  const reinsurerAddress =
+    reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
+  const reinsurerLocation = reinsurerAddress
+    ? [reinsurerAddress.city, reinsurerAddress.state, reinsurerAddress.country]
+        .filter(Boolean)
+        .join(', ')
+    : null;
+
+  const partyName = isDisbursement ? payment.counterparty.name : cedant.name;
+  const partyLocation = isDisbursement ? reinsurerLocation : cedantLocation;
 
   const facOffer = facultativeOffer ?? 0;
   const facPremium = premium != null ? (facOffer / 100) * premium : null;
@@ -98,14 +113,24 @@ export function PaymentReceiptModal({
   const netPremium =
     facPremium != null && commissionAmt != null ? facPremium - commissionAmt : null;
 
-  // Decode payment method from stored notes/reference
   const isCheque = payment.notes === 'Cheque payment';
   const refParts = (payment.reference ?? '').split(' — ');
   const chequeNumber = isCheque ? refParts[0] || null : null;
   const bankName = isCheque ? (refParts[1] ?? refParts[0] ?? null) : (refParts[0] ?? null);
 
   const paidAmount = parseFloat(payment.amount);
-  const being = netPremium != null && paidAmount >= netPremium ? 'Full Payment' : 'Partial Payment';
+
+  const disbursementClosingNet =
+    payment.closing?.netPremium ?? payment.endorsementClosing?.netPremium;
+  const comparableNet = isDisbursement
+    ? disbursementClosingNet != null
+      ? parseFloat(disbursementClosingNet)
+      : null
+    : netPremium;
+  const being =
+    comparableNet != null && !isNaN(comparableNet) && paidAmount >= comparableNet
+      ? 'Full Payment'
+      : 'Partial Payment';
 
   const afterContent = (
     <div className="mt-10 flex flex-col gap-6 border-t border-gray-200 pt-6">
@@ -126,7 +151,7 @@ export function PaymentReceiptModal({
   );
 
   const clientRows = [
-    { label: 'Received From', value: cedant.name },
+    { label: isDisbursement ? 'Paid To' : 'Received From', value: partyName },
     { label: 'Amount', value: fmtAmount(payment.amount, payment.currency) },
     { label: 'Being', value: being },
   ];
@@ -158,7 +183,7 @@ export function PaymentReceiptModal({
       value: commissionAmt != null ? fmtAmount(commissionAmt, currency) : '—',
     },
     {
-      label: 'Net Premium Received by iRisk Re',
+      label: `Net Premium Received by ${isDisbursement ? partyName : 'iRisk Re'}`,
       value: fmtAmount(payment.amount, payment.currency),
       bold: true,
     },
@@ -197,8 +222,8 @@ export function PaymentReceiptModal({
         {/* Receipt To */}
         <div className="flex flex-col gap-0.5">
           <span className="text-sm text-gray-400 uppercase tracking-wide">Receipt To</span>
-          <p className="font-semibold text-gray-900">{cedant.name}</p>
-          {cedantLocation && <p className="text-gray-500">{cedantLocation}</p>}
+          <p className="font-semibold text-gray-900">{partyName}</p>
+          {partyLocation && <p className="text-gray-500">{partyLocation}</p>}
         </div>
 
         {/* Table */}
