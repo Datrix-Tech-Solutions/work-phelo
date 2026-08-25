@@ -10,35 +10,17 @@ import {
   BanknoteArrowUp,
 } from 'lucide-react';
 import { ReportCard } from '@/components/molecules/shared/ReportCard';
-import {
-  useCedantsReport,
-  useReinsurersReport,
-  useFacultativeReport,
-  usePremiumsReport,
-  useClaimsReport,
-} from '@/hooks';
 
-function fmtAmount(value: number, symbol: string): string {
-  const abs = Math.abs(value);
-  let formatted: string;
-  if (abs >= 1_000_000_000) formatted = `${(value / 1_000_000_000).toFixed(2)}B`;
-  else if (abs >= 1_000_000) formatted = `${(value / 1_000_000).toFixed(2)}M`;
-  else if (abs >= 1_000) formatted = `${(value / 1_000).toFixed(2)}K`;
-  else formatted = value.toFixed(2);
-  return symbol ? `${symbol} ${formatted}` : formatted;
-}
+const ON_DEMAND_STATS = [
+  { label: 'Load', value: 'On demand' },
+  { label: 'Opens', value: 'Report page' },
+];
 
 export default function ReinsuranceReportsPage() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const base = `/${tenantSlug}/operations/reinsurance/reports`;
-
-  const { summary: cedantsSummary, isLoading: loadingCedants } = useCedantsReport({});
-  const { summary: reinsurersSummary, isLoading: loadingReinsurers } = useReinsurersReport({});
-  const { summary: facultativeSummary, isLoading: loadingFacultative } = useFacultativeReport({});
-  const { summary: premiumsSummary, isLoading: loadingPremiums } = usePremiumsReport({});
-  const { summary: claimsSummary, isLoading: loadingClaims } = useClaimsReport({});
 
   return (
     <div className="flex flex-col gap-6 p-6 min-h-0 overflow-y-auto flex-1">
@@ -55,20 +37,7 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-amber-600 text-amber-100"
           title="Facultative"
           description="Facultative placement activity and closings."
-          stats={[
-            {
-              label: 'Total Offers',
-              value: loadingFacultative ? '—' : String(facultativeSummary.totalOffers),
-            },
-            {
-              label: 'Open Offers',
-              value: loadingFacultative ? '—' : String(facultativeSummary.openOffers),
-            },
-            {
-              label: 'Acceptance Rate',
-              value: loadingFacultative ? '—' : `${facultativeSummary.acceptanceRate.toFixed(1)}%`,
-            },
-          ]}
+          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/facultative`)}
         />
         <ReportCard
@@ -76,20 +45,7 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-blue-600 text-blue-100"
           title="Cedants"
           description="Business performance and placement activity by cedant."
-          stats={[
-            {
-              label: 'Active Cedants',
-              value: loadingCedants ? '—' : String(cedantsSummary.activeCedants),
-            },
-            {
-              label: 'Total Offers',
-              value: loadingCedants ? '—' : String(cedantsSummary.totalPlacements),
-            },
-            {
-              label: 'With Outstanding Balance',
-              value: loadingCedants ? '—' : String(cedantsSummary.cedantsWithOutstanding),
-            },
-          ]}
+          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/cedants`)}
         />
 
@@ -98,20 +54,7 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-purple-600 text-purple-100"
           title="Reinsurers"
           description="Participation and revenue breakdown by reinsurer."
-          stats={[
-            {
-              label: 'Active Reinsurers',
-              value: loadingReinsurers ? '—' : String(reinsurersSummary.activeReinsurers),
-            },
-            {
-              label: 'Total Participation',
-              value: loadingReinsurers ? '—' : String(reinsurersSummary.totalPlacements),
-            },
-            {
-              label: 'With Outstanding Balance',
-              value: loadingReinsurers ? '—' : String(reinsurersSummary.reinsurersWithOutstanding),
-            },
-          ]}
+          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/reinsurers`)}
         />
 
@@ -132,20 +75,7 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-cyan-600 text-cyan-100"
           title="Premiums"
           description="Premium and payment history across placements."
-          stats={[
-            {
-              label: 'Total Collected',
-              value: loadingPremiums
-                ? '—'
-                : fmtAmount(premiumsSummary.totalCollected, premiumsSummary.currencySymbol),
-            },
-            {
-              label: 'Outstanding',
-              value: loadingPremiums
-                ? '—'
-                : fmtAmount(premiumsSummary.outstanding, premiumsSummary.currencySymbol),
-            },
-          ]}
+          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/premiums`)}
         />
 
@@ -154,20 +84,7 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-rose-600 text-rose-100"
           title="Claims"
           description="Claims activity and settlement history."
-          stats={[
-            {
-              label: 'Open Claims',
-              value: loadingClaims ? '—' : String(claimsSummary.openClaims),
-            },
-            {
-              label: 'Closed Claims',
-              value: loadingClaims ? '—' : String(claimsSummary.closedClaims),
-            },
-            {
-              label: 'Recovery Rate',
-              value: loadingClaims ? '—' : `${claimsSummary.recoveryRate.toFixed(1)}%`,
-            },
-          ]}
+          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/claims`)}
         />
       </div>

@@ -7,9 +7,8 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
-  useCashAccounts,
   useCreateClaimRecoveryReceipt,
   useConfirmClaimRecoveryReceiptBank,
   useCurrencyOptions,
@@ -99,16 +98,6 @@ export function RecordRecoveryReceiptModal({
   useEffect(() => {
     if (!showRate) setValue('rate', '');
   }, [showRate, setValue]);
-
-  const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts({
-    isActive: true,
-  });
-  const cashAccountOptions: SearchSelectOption[] = cashAccounts.map((account) => ({
-    value: account.name,
-    label: account.name,
-    sublabel: [account.bankName, account.currency].filter(Boolean).join(' · ') || undefined,
-  }));
-  const showCashAccountSelect = !isLoadingCashAccounts && cashAccountOptions.length > 0;
 
   useEffect(() => {
     if (row) {
@@ -278,31 +267,12 @@ export function RecordRecoveryReceiptModal({
         )}
       />
 
-      {showCashAccountSelect ? (
-        <Controller
-          name="bankName"
-          control={control}
-          rules={{ required: 'Bank name is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Bank Name"
-              placeholder="Select cash/bank account..."
-              options={cashAccountOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.bankName?.message}
-              size="sm"
-            />
-          )}
-        />
-      ) : (
-        <FormField
-          label="Bank Name"
-          registration={register('bankName', { required: 'Bank name is required' })}
-          placeholder="Enter bank name..."
-          error={errors.bankName}
-        />
-      )}
+      <FormField
+        label="Bank Name"
+        registration={register('bankName', { required: 'Bank name is required' })}
+        placeholder="Enter bank name..."
+        error={errors.bankName}
+      />
 
       <Controller
         name="amount"

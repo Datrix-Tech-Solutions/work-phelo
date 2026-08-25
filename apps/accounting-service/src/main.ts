@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import { json, urlencoded } from 'express';
 import { isSwaggerEnabled } from '@work-phelo/config';
 import { AppModule } from './app.module';
 import {
@@ -10,9 +11,14 @@ import {
 import { assertAccountingRuntimeEnv } from './config/runtime-env';
 import { setupSwagger } from './swagger.config';
 
+const ORDINARY_BODY_LIMIT = process.env.HTTP_BODY_LIMIT ?? '1mb';
+
 async function bootstrap() {
   assertAccountingRuntimeEnv();
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  app.enableShutdownHooks();
+  app.use(json({ limit: ORDINARY_BODY_LIMIT }));
+  app.use(urlencoded({ extended: true, limit: ORDINARY_BODY_LIMIT }));
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
