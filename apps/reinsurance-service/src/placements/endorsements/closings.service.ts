@@ -41,6 +41,10 @@ const endorsementParticipantInclude = {
       id: true,
       name: true,
       registrationNumber: true,
+      // Fallback source for brokerage when there's no originalParticipant link below —
+      // covers a genuinely new mid-term participant, or a broken/missing link on a
+      // carried-over one, so brokerage doesn't silently default to 0%.
+      brokerageFee: true,
     },
   },
   // `PlacementEndorsementParticipant` has no brokerageFee column of its own — participants
@@ -957,6 +961,7 @@ export class PlacementEndorsementClosingsService {
       sharePercent: Prisma.Decimal | null;
       signedLinePercent: Prisma.Decimal | null;
       originalParticipant?: { brokerageFee: Prisma.Decimal | null } | null;
+      counterparty: { brokerageFee: Prisma.Decimal | null };
     },
     signedLinePercent: number,
   ) {
@@ -964,10 +969,13 @@ export class PlacementEndorsementClosingsService {
     const commissionPct = source.commission ?? 0;
     // Brokerage is per-participant (each reinsurer's own brokerage cut), mirroring the
     // original closing path in placement-closings.service.ts — not a placement-level rate.
-    // Participants added fresh within the endorsement (no originalParticipant) have no
-    // brokerage fee to inherit yet, so they default to 0.
+    // Prefer the carried-over original participant's negotiated rate; fall back to the
+    // counterparty's default when there's no original-participant link (a genuinely new
+    // mid-term participant, or a broken link) so brokerage doesn't silently become 0.
     const brokeragePct = this.toNumber(
-      participant.originalParticipant?.brokerageFee ?? null,
+      participant.originalParticipant?.brokerageFee ??
+        participant.counterparty.brokerageFee ??
+        null,
     );
 
     const premiumSnapshot = (signedLinePercent / 100) * source.premium;

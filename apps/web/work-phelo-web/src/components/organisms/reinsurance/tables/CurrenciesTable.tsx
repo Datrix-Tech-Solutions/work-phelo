@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useParams } from 'next/navigation';
-import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -17,12 +15,6 @@ const PAGE_SIZE = 10;
 
 const COLUMNS: Column<Currency>[] = [
   {
-    key: 'name',
-    label: 'Currency',
-    width: 'minmax(150px, 1fr)',
-    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-  },
-  {
     key: 'isoCode',
     label: 'ISO Code',
     width: '150px',
@@ -33,25 +25,15 @@ const COLUMNS: Column<Currency>[] = [
     ),
   },
   {
-    key: 'exchangeRateToBase',
-    label: 'Exchange Rate',
-    width: '150px',
-    render: (row) => (
-      <span className="text-gray-700">
-        {row.isBaseCurrency
-          ? 'Base'
-          : row.exchangeRateToBase
-            ? parseFloat(row.exchangeRateToBase).toFixed(4)
-            : '—'}
-      </span>
-    ),
+    key: 'name',
+    label: 'Currency',
+    width: 'minmax(150px, 1fr)',
+    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
   },
 ];
 
 export function CurrenciesTable() {
   const toast = useToast();
-  const router = useRouter();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -98,12 +80,7 @@ export function CurrenciesTable() {
         actionButton={{ label: 'Add Currency', onClick: () => setPanelOpen(true) }}
         rowActions={(row) => [
           {
-            label: 'View',
-            onClick: () =>
-              router.push(`/${tenantSlug}/operations/reinsurance/settings/currency/${row.id}`),
-          },
-          {
-            label: 'Update Rate',
+            label: 'Edit',
             onClick: () => setEditTarget(row),
           },
           {

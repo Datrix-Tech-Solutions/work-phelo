@@ -10,6 +10,7 @@ interface NumberFieldProps {
   className?: string;
   label?: string;
   error?: string;
+  disabled?: boolean;
 }
 
 /** Text input that shows raw digits while focused and a thousands-formatted,
@@ -21,6 +22,7 @@ export function NumberField({
   className,
   label,
   error,
+  disabled,
 }: NumberFieldProps) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
   const [focused, setFocused] = useState(false);
@@ -52,6 +54,7 @@ export function NumberField({
         setLocal(raw);
         onChange(raw === '' ? 0 : Number(raw));
       }}
+      disabled={disabled}
       className={inputClass(error, cn(label ? 'w-full' : 'w-28 py-1.5', className))}
     />
   );
