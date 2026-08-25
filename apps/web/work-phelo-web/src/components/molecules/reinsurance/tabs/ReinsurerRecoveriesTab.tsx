@@ -8,14 +8,9 @@ import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Facultative } from '@/types/reinsurance';
-import {
-  RecoveryRow,
-  useAllReinsurerClaims,
-  useCashAccounts,
-  useCreateClaimRecoveryReceipt,
-} from '@/hooks';
+import { RecoveryRow, useAllReinsurerClaims, useCreateClaimRecoveryReceipt } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -86,19 +81,6 @@ function RecordRecoveryReceiptModal({
   const createReceipt = useCreateClaimRecoveryReceipt();
   const addToast = useToastStore((s) => s.addToast);
   const paymentType = useWatch({ control, name: 'paymentType' });
-
-  // Bank Name picks from Accounting's configured cash/bank accounts for bank
-  // transfers, when any exist; falls back to plain text otherwise. Cheques always
-  // use plain text — a cheque's drawee bank isn't necessarily one of ours.
-  const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts({
-    isActive: true,
-  });
-  const cashAccountOptions: SearchSelectOption[] = cashAccounts.map((account) => ({
-    value: account.name,
-    label: account.name,
-    sublabel: [account.bankName, account.currency].filter(Boolean).join(' · ') || undefined,
-  }));
-  const showCashAccountSelect = !isLoadingCashAccounts && cashAccountOptions.length > 0;
 
   useEffect(() => {
     if (row) {
@@ -235,31 +217,12 @@ function RecordRecoveryReceiptModal({
 
         {!!paymentType && (
           <>
-            {paymentType === 'bank_transfer' && showCashAccountSelect ? (
-              <Controller
-                name="bankName"
-                control={control}
-                rules={{ required: 'Bank name is required' }}
-                render={({ field }) => (
-                  <SearchSelect
-                    label="Bank Name"
-                    placeholder="Select cash/bank account..."
-                    options={cashAccountOptions}
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.bankName?.message}
-                    size="sm"
-                  />
-                )}
-              />
-            ) : (
-              <FormField
-                label="Bank Name"
-                registration={register('bankName', { required: 'Bank name is required' })}
-                placeholder="Enter bank name..."
-                error={errors.bankName}
-              />
-            )}
+            <FormField
+              label="Bank Name"
+              registration={register('bankName', { required: 'Bank name is required' })}
+              placeholder="Enter bank name..."
+              error={errors.bankName}
+            />
             <FormField
               label="Amount Received"
               registration={register('amount', { required: 'Amount is required' })}
