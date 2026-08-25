@@ -1,6 +1,18 @@
 import { createHmac } from 'crypto';
 import { ProxyController } from './proxy.controller';
 
+function mockCreateProxyRequest(
+  controller: ProxyController,
+  fakeProxyRequest: unknown,
+) {
+  return jest
+    .spyOn(
+      controller as unknown as { createProxyRequest: () => unknown },
+      'createProxyRequest',
+    )
+    .mockReturnValue(fakeProxyRequest);
+}
+
 describe('ProxyController Reinsurance foundation', () => {
   const enableSwagger = process.env.ENABLE_SWAGGER;
   const deployEnv = process.env.DEPLOY_ENV;
@@ -8,6 +20,7 @@ describe('ProxyController Reinsurance foundation', () => {
 
   beforeEach(() => {
     process.env.JWT_SECRET = 'gateway-phase-one-secret';
+    process.env.AUTH_SERVICE_URL = 'http://auth-service:4001';
     process.env.REINSURANCE_SERVICE_URL = 'http://reinsurance-service:4007';
     process.env.ACCOUNTING_SERVICE_URL = 'http://accounting-service:4008';
     process.env.DEPLOY_ENV = 'dev';
@@ -15,9 +28,12 @@ describe('ProxyController Reinsurance foundation', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     delete process.env.JWT_SECRET;
+    delete process.env.AUTH_SERVICE_URL;
     delete process.env.REINSURANCE_SERVICE_URL;
     delete process.env.ACCOUNTING_SERVICE_URL;
+    delete process.env.GATEWAY_PROXY_TIMEOUT_MS;
     if (enableSwagger === undefined) {
       delete process.env.ENABLE_SWAGGER;
     } else {
@@ -179,5 +195,204 @@ describe('ProxyController Reinsurance foundation', () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it('uses a bounded downstream proxy timeout with a safe default', () => {
+    const controller = new ProxyController() as unknown as {
+      proxyTimeoutMs(): number;
+    };
+
+    expect(controller.proxyTimeoutMs()).toBe(30_000);
+
+    process.env.GATEWAY_PROXY_TIMEOUT_MS = '2500';
+    expect(controller.proxyTimeoutMs()).toBe(2500);
+
+    process.env.GATEWAY_PROXY_TIMEOUT_MS = '0';
+    expect(controller.proxyTimeoutMs()).toBe(30_000);
+  });
+
+  it('returns 504 when the downstream request times out', async () => {
+    const controller = new ProxyController();
+    let timeoutHandler: (() => void) | undefined;
+    const fakeProxyRequest = {
+      setTimeout: jest.fn((_ms: number, handler: () => void) => {
+        timeoutHandler = handler;
+      }),
+      on: jest.fn(),
+      setHeader: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+      destroy: jest.fn(),
+    };
+    mockCreateProxyRequest(controller, fakeProxyRequest);
+    const request = {
+      path: '/api/v1/auth/login',
+      url: '/api/v1/auth/login',
+      headers: {},
+      cookies: {},
+      method: 'POST',
+      body: { email: 'admin@example.com', password: 'secret' },
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const response = {
+      status,
+      json,
+      headersSent: false,
+      writableEnded: false,
+      on: jest.fn(),
+      off: jest.fn(),
+      end: jest.fn(),
+    };
+
+    await controller.proxy(request as never, response as never);
+    timeoutHandler?.();
+
+    expect(fakeProxyRequest.destroy).toHaveBeenCalled();
+    expect(status).toHaveBeenCalledWith(504);
+    expect(json).toHaveBeenCalledWith({
+      message: 'Gateway timeout while contacting downstream service',
+      statusCode: 504,
+    });
+  });
+
+  it('does not double-write a response if a timeout also emits an error', async () => {
+    const controller = new ProxyController();
+    let timeoutHandler: (() => void) | undefined;
+    let errorHandler: ((error: Error) => void) | undefined;
+    const fakeProxyRequest = {
+      setTimeout: jest.fn((_ms: number, handler: () => void) => {
+        timeoutHandler = handler;
+      }),
+      on: jest.fn((event: string, handler: (error: Error) => void) => {
+        if (event === 'error') {
+          errorHandler = handler;
+        }
+      }),
+      setHeader: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+      destroy: jest.fn(),
+    };
+    mockCreateProxyRequest(controller, fakeProxyRequest);
+    const request = {
+      path: '/api/v1/auth/login',
+      url: '/api/v1/auth/login',
+      headers: {},
+      cookies: {},
+      method: 'POST',
+      body: {},
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const response = {
+      status,
+      json,
+      headersSent: false,
+      writableEnded: false,
+      on: jest.fn(),
+      off: jest.fn(),
+      end: jest.fn(),
+    };
+
+    await controller.proxy(request as never, response as never);
+    timeoutHandler?.();
+    errorHandler?.(new Error('socket closed after timeout'));
+
+    expect(status).toHaveBeenCalledTimes(1);
+    expect(status).toHaveBeenCalledWith(504);
+  });
+
+  it('returns 503 without leaking downstream error details', async () => {
+    const controller = new ProxyController();
+    let errorHandler: ((error: Error) => void) | undefined;
+    const fakeProxyRequest = {
+      setTimeout: jest.fn(),
+      on: jest.fn((event: string, handler: (error: Error) => void) => {
+        if (event === 'error') {
+          errorHandler = handler;
+        }
+      }),
+      setHeader: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+      destroy: jest.fn(),
+    };
+    mockCreateProxyRequest(controller, fakeProxyRequest);
+    const request = {
+      path: '/api/v1/auth/login',
+      url: '/api/v1/auth/login',
+      headers: {},
+      cookies: {},
+      method: 'POST',
+      body: {},
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const response = {
+      status,
+      json,
+      headersSent: false,
+      writableEnded: false,
+      on: jest.fn(),
+      off: jest.fn(),
+      end: jest.fn(),
+    };
+
+    await controller.proxy(request as never, response as never);
+    errorHandler?.(new Error('connect ECONNREFUSED 127.0.0.1:4001'));
+
+    expect(status).toHaveBeenCalledWith(503);
+    expect(json).toHaveBeenCalledWith({
+      message: 'Service temporarily unavailable',
+      statusCode: 503,
+    });
+  });
+
+  it('propagates client aborts to the downstream request', async () => {
+    const controller = new ProxyController();
+    let abortHandler: (() => void) | undefined;
+    const fakeProxyRequest = {
+      setTimeout: jest.fn(),
+      on: jest.fn(),
+      setHeader: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+      destroy: jest.fn(),
+    };
+    mockCreateProxyRequest(controller, fakeProxyRequest);
+    const request = {
+      path: '/api/v1/auth/login',
+      url: '/api/v1/auth/login',
+      headers: {},
+      cookies: {},
+      method: 'POST',
+      body: {},
+      on: jest.fn((event: string, handler: () => void) => {
+        if (event === 'aborted') {
+          abortHandler = handler;
+        }
+      }),
+      off: jest.fn(),
+    };
+    const response = {
+      status: jest.fn().mockReturnValue({ json: jest.fn() }),
+      headersSent: false,
+      writableEnded: false,
+      on: jest.fn(),
+      off: jest.fn(),
+      end: jest.fn(),
+    };
+
+    await controller.proxy(request as never, response as never);
+    abortHandler?.();
+
+    expect(fakeProxyRequest.destroy).toHaveBeenCalled();
   });
 });
