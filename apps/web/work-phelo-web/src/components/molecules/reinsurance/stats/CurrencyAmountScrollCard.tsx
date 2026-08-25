@@ -13,6 +13,7 @@ interface CurrencyAmountScrollCardProps {
 
   rows: CurrencyAmountRow[];
   isLoading?: boolean;
+  emptyMessage?: string;
 }
 
 function fmtAmount(amount: number, code: string) {
@@ -23,6 +24,7 @@ export function CurrencyAmountScrollCard({
   title,
   rows,
   isLoading,
+  emptyMessage = 'No finalized claims yet',
 }: CurrencyAmountScrollCardProps) {
   return (
     <div className={cardClass('flex flex-col gap-2 p-3', 'glass')}>
@@ -35,7 +37,7 @@ export function CurrencyAmountScrollCard({
           <Skeleton className="h-9 w-28 shrink-0" />
         </div>
       ) : rows.length === 0 ? (
-        <span className="text-sm text-gray-400">No finalized claims yet</span>
+        <span className="text-sm text-gray-400">{emptyMessage}</span>
       ) : (
         <div
           className="flex gap-2 overflow-x-auto scrollbar-hide"

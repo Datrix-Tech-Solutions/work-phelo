@@ -270,16 +270,11 @@ export function PaymentsTable() {
     return map;
   }, [closingRows, positionQueries, paymentsQueries]);
 
-  // Only offers with at least one payment recorded belong here — a placement that's
-  // fully "Outstanding" (nothing paid or even pending) hasn't started a payment workflow yet.
   const payableRows = useMemo(
     () => closingRows.filter((r) => paymentStatusMap.get(r.id) !== 'Outstanding'),
     [closingRows, paymentStatusMap],
   );
 
-  // Same authoritative "last payment" figure used elsewhere in the app (e.g. the claim
-  // overview) — drives the table's default sort so offers with the most recent payment
-  // activity surface first, instead of just the newest offers.
   const latestPaymentDateMap = useMemo(() => {
     const map = new Map<string, string | null>();
     closingRows.forEach((row, i) => {
@@ -325,8 +320,6 @@ export function PaymentsTable() {
       rows = rows.filter((r) => r.cedant.id === cedantFilter);
     }
 
-    // Most recent payment activity first
-    // row that only has a pending (not yet bank-confirmed) receipt so far.
     const dateOf = (r: Facultative) => latestPaymentDateMap.get(r.id) ?? r.createdAt;
     return [...rows].sort((a, b) => new Date(dateOf(b)).getTime() - new Date(dateOf(a)).getTime());
   }, [payableRows, search, statusFilter, cedantFilter, paymentStatusMap, latestPaymentDateMap]);

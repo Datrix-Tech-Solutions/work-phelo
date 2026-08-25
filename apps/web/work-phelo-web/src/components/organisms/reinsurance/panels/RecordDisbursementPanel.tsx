@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { NumberField } from '@/components/atoms/NumberField';
 import {
   useCreatePlacementPayment,
   useConfirmPlacementPaymentBank,
@@ -43,10 +44,6 @@ interface RecordDisbursementPanelProps {
   onClose: () => void;
 }
 
-/** Confirms the full outstanding shown for a reinsurer in `ReinsurersPaymentTable` — no manual
- * amount/method/date entry. Behind the scenes it still settles each outstanding source (the
- * original placement closing and any endorsement adjustments) with its own payment record, so
- * the reinsurer's share stays traceable per closing even though the user only sees one number. */
 export function RecordDisbursementPanel({
   placement,
   financialPosition,
@@ -59,6 +56,7 @@ export function RecordDisbursementPanel({
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [amount, setAmount] = useState(0);
 
   const sources = useMemo<DisbursementSource[]>(() => {
     if (!target) return [];
@@ -112,6 +110,42 @@ export function RecordDisbursementPanel({
     );
   }, [closings, financialPosition?.currency, target, payments, placement.currency]);
 
+  const totalOutstanding = useMemo(
+    () => sources.reduce((sum, source) => sum + source.outstanding, 0),
+    [sources],
+  );
+
+  const cedantObligation = financialPosition?.cedant.currentObligation ?? 0;
+  const cedantCollected = financialPosition?.cedant.netSettled ?? 0;
+  const cedantCollectionRatio =
+    cedantObligation > 0.0001 ? Math.min(1, cedantCollected / cedantObligation) : null;
+  const suggestedAmount =
+    target && cedantCollectionRatio != null && totalOutstanding > 0
+      ? Math.max(
+          0,
+          Math.min(
+            totalOutstanding,
+            cedantCollectionRatio * target.currentEffectivePayable - target.netSettled,
+          ),
+        )
+      : null;
+
+  useEffect(() => {
+    if (!target) return;
+    const prefill = suggestedAmount ?? totalOutstanding;
+    setAmount(prefill > 0 ? Math.round(prefill * 100) / 100 : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, totalOutstanding]);
+
+  const amountError =
+    totalOutstanding <= 0
+      ? null
+      : amount <= 0
+        ? 'Enter an amount greater than zero.'
+        : amount > totalOutstanding + 0.0001
+          ? 'Amount cannot exceed the outstanding balance.'
+          : null;
+
   const handleClose = () => {
     if (isSubmitting) return;
     onClose();
@@ -126,13 +160,18 @@ export function RecordDisbursementPanel({
       });
       return;
     }
+    if (amountError || amount <= 0) return;
+
     setIsSubmitting(true);
     try {
       const now = new Date().toISOString();
+
+      let remaining = amount;
       for (const source of sources) {
-        // A closing/endorsement number to record as the payment's reference — the confirm
-        // step below needs *some* reference on a BANK_TRANSFER payment, and this doubles as a
-        // meaningful audit trail in Payment History instead of a placeholder value.
+        if (remaining <= 0.0001) break;
+        const portion = Math.min(source.outstanding, remaining);
+        if (portion <= 0.0001) continue;
+
         const reference = source.closingId
           ? `Closing ${closings.find((c) => c.id === source.closingId)?.closingNumber ?? source.closingId}`
           : source.endorsementClosingId
@@ -150,20 +189,17 @@ export function RecordDisbursementPanel({
           closingId: source.closingId,
           endorsementClosingId: source.endorsementClosingId,
           participantId: source.participantId,
-          amount: source.outstanding,
+          amount: portion,
           currency: source.currency,
           settlementMethod: 'BANK_TRANSFER',
           settlementCurrency: source.currency,
           paymentDate: now,
           reference,
-          // Same wording Payment History already uses for a bank-transfer premium receipt —
-          // reads consistently across both payment types instead of a one-off description.
           notes: 'Bank transfer',
         });
 
-        // Confirm right after recording — the settlement method/currency/reference above
-        // already cover everything the confirm endpoint needs, so this needs no further
-        // input and no separate trip through Accounting's confirmation queue.
+        remaining -= portion;
+
         try {
           await confirmPaymentBank.mutateAsync({
             placementId: placement.id,
@@ -200,17 +236,34 @@ export function RecordDisbursementPanel({
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={isSubmitting}>
+          <Button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isSubmitting || !!amountError || amount <= 0}
+          >
             {isSubmitting ? 'Recording…' : 'Confirm'}
           </Button>
         </>
       }
     >
-      <p className="text-sm text-gray-700 leading-relaxed">
-        Disburse{' '}
-        <span className="font-semibold text-gray-900">{fmt(target.outstanding, currency)}</span> to{' '}
-        <span className="font-semibold text-gray-900">{target.counterpartyName}</span>?
-      </p>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-gray-700 leading-relaxed">
+          Disburse to <span className="font-semibold text-gray-900">{target.counterpartyName}</span>
+          , payable balance{' '}
+          <span className="font-semibold text-gray-900">{fmt(amount, currency)}</span>, outstanding
+          balance{' '}
+          <span className="font-semibold text-gray-900">{fmt(target.outstanding, currency)}</span>.
+        </p>
+
+        <NumberField
+          label={`Amount (${currency})`}
+          value={amount}
+          onChange={setAmount}
+          error={amountError ?? undefined}
+          disabled={isSubmitting}
+          placeholder="0.00"
+        />
+      </div>
     </Modal>
   );
 }
