@@ -118,7 +118,7 @@ export default function FacultativeFormFields({
             rules={{ required: 'Insurance company is required' }}
             render={({ field }) => (
               <SearchSelect
-                label="Insurance Company"
+                label="Ceding Company"
                 placeholder={isLoadingCedants ? 'Loading…' : 'Select insurance company…'}
                 value={field.value}
                 onChange={field.onChange}

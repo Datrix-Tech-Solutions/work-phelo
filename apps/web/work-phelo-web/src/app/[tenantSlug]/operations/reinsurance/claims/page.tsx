@@ -21,8 +21,7 @@ const VALID_TABS: ClaimsPageTab[] = ['notification', 'open', 'closed'];
 export default function ReinsuranceClaimsPage() {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get('tab');
-  // Landing here from a claim's breadcrumb (Back to Claims) reopens the tab it came from,
-  // e.g. after viewing a claim from Closed Claims. Falls back to Notification otherwise.
+
   const initialTab = VALID_TABS.includes(requestedTab as ClaimsPageTab)
     ? (requestedTab as ClaimsPageTab)
     : 'notification';

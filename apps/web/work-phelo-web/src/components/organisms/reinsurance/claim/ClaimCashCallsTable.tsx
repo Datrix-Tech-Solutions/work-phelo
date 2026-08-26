@@ -65,12 +65,6 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
   const columns: Column<PlacementClaimCashCall>[] = useMemo(
     () => [
       {
-        key: 'cashCallNumber',
-        label: 'Cash Call',
-        width: '100px',
-        render: (row) => <span className="font-medium text-gray-900">{row.cashCallNumber}</span>,
-      },
-      {
         key: 'counterparty',
         label: 'Reinsurer',
         width: 'minmax(120px, 1fr)',
@@ -176,9 +170,6 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
           const issuedAtMs = new Date(row.issuedAt).getTime();
 
           if (perCashCall?.recoveryStatus === 'FULLY_RECOVERED') {
-            // Once paid, freeze the clock at when it actually finished — how long it took
-            // to recover — rather than blanking it out or letting it keep climbing past
-            // completion. The last bank-confirmed receipt marks that moment.
             const confirmedTimes = (perCashCall.receipts ?? [])
               .filter(
                 (receipt) =>
@@ -248,7 +239,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
             <span className="text-sm font-bold text-gray-900">Claim Recoveries</span>
           </div>
         }
-        emptyMessage="No cash calls for this claim"
+        emptyMessage="No recoveries for this claim"
         currentPage={1}
         totalPages={0}
         onPageChange={() => {}}

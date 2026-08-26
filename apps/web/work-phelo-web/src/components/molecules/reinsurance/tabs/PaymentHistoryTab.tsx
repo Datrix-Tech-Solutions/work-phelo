@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { usePlacementPayments, useReversePayment } from '@/hooks';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
@@ -56,22 +58,21 @@ interface PaymentHistoryTabProps {
 }
 
 export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabProps) {
-  const { data: payments = [], isLoading } = usePlacementPayments(placementId);
+  const { data: allPayments = [], isLoading } = usePlacementPayments(placementId);
+  // The reversal entry itself (the negative-amount offsetting record) is bookkeeping noise
+  // here — the original payment stays visible, marked REVERSED, for audit purposes.
+  const payments = allPayments.filter((p) => !p.reversalOfPaymentId);
   const reversePayment = useReversePayment();
   const addToast = useToastStore((s) => s.addToast);
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
+  const [reverseTarget, setReverseTarget] = useState<PlacementPayment | null>(null);
 
-  const handleReverse = async (payment: PlacementPayment) => {
-    if (
-      !window.confirm(
-        'Reverse this recorded transaction? The original payment will remain in history, be marked reversed, and a reversal entry will be created.',
-      )
-    ) {
-      return;
-    }
+  const handleReverse = async () => {
+    if (!reverseTarget) return;
     try {
-      await reversePayment.mutateAsync({ placementId, paymentId: payment.id });
+      await reversePayment.mutateAsync({ placementId, paymentId: reverseTarget.id });
       addToast({ message: 'Payment reversed successfully', type: 'success' });
+      setReverseTarget(null);
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
     }
@@ -120,12 +121,20 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       key: 'notes',
       label: 'Payment Details',
       width: 'minmax(120px, 1fr)',
-      render: (row) => (
-        <div className="flex flex-col">
-          <span className="text-gray-700">{row.notes || '—'}</span>
-          {row.reference && <span className="text-xs text-gray-400">{row.reference}</span>}
-        </div>
-      ),
+      render: (row) => {
+        const mainText = [
+          row.settlementMethod ? fmtType(row.settlementMethod) : null,
+          row.reference,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        return (
+          <div className="flex flex-col">
+            <span className="text-gray-700">{mainText || '—'}</span>
+            {row.notes && <span className="text-xs text-gray-400">{row.notes}</span>}
+          </div>
+        );
+      },
     },
     {
       key: 'amount',
@@ -157,7 +166,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
             Reciept
           </TableButton>
           {canReversePayment(row) && (
-            <TableButton variant="red" onClick={() => handleReverse(row)}>
+            <TableButton variant="red" onClick={() => setReverseTarget(row)}>
               Reverse
             </TableButton>
           )}
@@ -196,6 +205,32 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
           onClose={() => setReceiptTarget(null)}
         />
       )}
+
+      <Modal
+        isOpen={!!reverseTarget}
+        onClose={() => setReverseTarget(null)}
+        title="Reverse Payment?"
+        description="The original payment will remain in history, be marked reversed, and a reversal entry will be created."
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setReverseTarget(null)}
+              disabled={reversePayment.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={reversePayment.isPending}
+              loadingText="Reversing…"
+              onClick={handleReverse}
+            >
+              Reverse
+            </Button>
+          </div>
+        }
+      />
     </>
   );
 }

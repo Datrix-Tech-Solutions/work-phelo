@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -58,13 +58,13 @@ const PAYMENT_STATUS_CLASS: Record<PaymentWorklistRow['paymentStatus'], string> 
   Paid: 'text-xs text-green-600 font-medium',
 };
 
-const STATUS_FILTER_OPTIONS = [
-  { value: 'Placed', label: 'Placed' },
-  { value: 'Closed', label: 'Closed' },
-  { value: 'Pending', label: 'Pending' },
-  { value: 'Part Payment', label: 'Part Payment' },
-  { value: 'Paid', label: 'Paid' },
-];
+// const STATUS_FILTER_OPTIONS = [
+//   { value: 'Placed', label: 'Placed' },
+//   { value: 'Closed', label: 'Closed' },
+//   { value: 'Pending', label: 'Pending' },
+//   { value: 'Part Payment', label: 'Part Payment' },
+//   { value: 'Paid', label: 'Paid' },
+// ];
 
 function PaymentSummaryCell({ row }: { row: PaymentWorklistRow }) {
   const cur = row.currency ?? '';
@@ -123,7 +123,7 @@ const COLUMNS: Column<PaymentWorklistRow>[] = [
   },
   {
     key: 'sumInsured',
-    label: 'Sum Insured',
+    label: '100% Sum Insured',
     width: '130px',
     className: 'text-right',
     render: (row) => (
@@ -138,24 +138,29 @@ const COLUMNS: Column<PaymentWorklistRow>[] = [
     width: '130px',
     className: 'text-right',
     render: (row) => (
-      <span className="font-small text-gray-900 whitespace-nowrap">
-        {row.facultativeSumInsured != null
-          ? `${row.currency ?? ''} ${fmtAmount(row.facultativeSumInsured)}`
-          : '—'}
-      </span>
-    ),
-  },
-  {
-    key: 'participants',
-    label: 'Participants',
-    width: '90px',
-    render: (row) => (
-      <div className="flex flex-col gap-0.5">
-        <span className="font-semibold text-gray-900">{row.acceptedParticipantCount}</span>
-        <span className="text-xs text-gray-400">accepted</span>
+      <div className="flex flex-col gap-0.5 items-end">
+        <span className="font-small text-gray-900 whitespace-nowrap">
+          {row.facultativeSumInsured != null
+            ? `${row.currency ?? ''} ${fmtAmount(row.facultativeSumInsured)}`
+            : '—'}
+        </span>
+        <span className="text-xs text-gray-400">
+          {row.facultativeOffer != null ? `${row.facultativeOffer}% share` : '—'}
+        </span>
       </div>
     ),
   },
+  // {
+  //   key: 'participants',
+  //   label: 'Participants',
+  //   width: '90px',
+  //   render: (row) => (
+  //     <div className="flex flex-col gap-0.5">
+  //       <span className="font-semibold text-gray-900">{row.acceptedParticipantCount}</span>
+  //       <span className="text-xs text-gray-400">accepted</span>
+  //     </div>
+  //   ),
+  // },
   {
     key: 'collectedToDate',
     label: 'Paid / Outstanding',
@@ -189,10 +194,16 @@ export function PaymentsTable() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PaymentWorklistStatusFilter | ''>('');
+  const [statusFilter] = useState<PaymentWorklistStatusFilter | ''>('');
   const [cedantFilter, setCedantFilter] = useState('');
   const [page, setPage] = useState(1);
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
+  const [addPaymentPlacementId, setAddPaymentPlacementId] = useState<string | undefined>(undefined);
+
+  const openAddPayment = (row?: PaymentWorklistRow) => {
+    setAddPaymentPlacementId(row?.id);
+    setIsAddPaymentOpen(true);
+  };
 
   const {
     data: worklist,
@@ -216,21 +227,34 @@ export function PaymentsTable() {
   const paged = worklist?.items ?? [];
   const totalPages = Math.max(1, worklist?.meta.totalPages ?? 1);
 
+  const getRowActions = (row: PaymentWorklistRow): RowAction[] => {
+    const viewOffer: RowAction = {
+      label: 'View Offer',
+      onClick: () =>
+        router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.placementId}`),
+    };
+    const disbursePayment: RowAction = {
+      label: 'Disburse Payment',
+      onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
+    };
+
+    switch (row.paymentStatus) {
+      case 'Paid':
+        return [viewOffer, disbursePayment];
+      case 'Part Payment':
+        return [
+          viewOffer,
+          { label: 'Make Payment', onClick: () => openAddPayment(row) },
+          disbursePayment,
+        ];
+      default:
+        return [viewOffer];
+    }
+  };
+
   const extraFilters = (
     <>
-      <div>
-        <SearchSelect
-          size="sm"
-          placeholder="Status"
-          options={STATUS_FILTER_OPTIONS}
-          value={statusFilter}
-          onChange={(v) => {
-            setStatusFilter(v as PaymentWorklistStatusFilter | '');
-            setPage(1);
-          }}
-        />
-      </div>
-      <div>
+      <div className="w-78">
         <SearchSelect
           size="sm"
           placeholder="Cedants"
@@ -242,6 +266,18 @@ export function PaymentsTable() {
           }}
         />
       </div>
+      {/* <div className="w-40">
+        <SearchSelect
+          size="sm"
+          placeholder="Status"
+          options={STATUS_FILTER_OPTIONS}
+          value={statusFilter}
+          onChange={(v) => {
+            setStatusFilter(v as PaymentWorklistStatusFilter | '');
+            setPage(1);
+          }}
+        />
+      </div> */}
     </>
   );
 
@@ -261,16 +297,13 @@ export function PaymentsTable() {
           setPage(1);
         }}
         extraFilters={extraFilters}
+        searchAfterFilters
         actionButton={{
           label: 'Receive Cedant Premium',
-          onClick: () => setIsAddPaymentOpen(true),
+          onClick: () => openAddPayment(),
         }}
-        // rowActions={(row) => [
-        //   {
-        //     label: 'View Payment Workspace',
-        //     onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
-        //   },
-        // ]}
+        rowActions={getRowActions}
+        singleActionAsButton={false}
         emptyMessage={isError ? 'Unable to load payment records' : 'No payment records found'}
         currentPage={page}
         totalPages={totalPages}
@@ -278,7 +311,15 @@ export function PaymentsTable() {
         noInternalScroll
       />
 
-      <AddPaymentForm isOpen={isAddPaymentOpen} onClose={() => setIsAddPaymentOpen(false)} />
+      <AddPaymentForm
+        isOpen={isAddPaymentOpen}
+        onClose={() => {
+          setIsAddPaymentOpen(false);
+          setAddPaymentPlacementId(undefined);
+        }}
+        placementId={addPaymentPlacementId}
+        defaultCedantId={cedantFilter || undefined}
+      />
     </>
   );
 }

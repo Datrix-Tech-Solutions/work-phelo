@@ -52,6 +52,7 @@ export interface AddPaymentFormValues {
   rate: string;
   allocations: Record<string, string>;
   allocationRates: Record<string, string>;
+  notes: string;
 }
 
 export const ADD_PAYMENT_DEFAULTS: AddPaymentFormValues = {
@@ -67,6 +68,7 @@ export const ADD_PAYMENT_DEFAULTS: AddPaymentFormValues = {
   rate: '',
   allocations: {},
   allocationRates: {},
+  notes: '',
 };
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -169,8 +171,6 @@ export function AddPaymentFormFields({
     return map;
   }, [selectedFacultatives, positionQueries]);
 
-  // For the payment-status summary below the business picker — same authoritative figures
-  // (financial position + pending receipts) the Premiums page and placement Details page use.
   const paymentsQueries = useQueries({
     queries: selectedFacultatives.map((f) => ({
       queryKey: paymentsKey(f.id),
@@ -274,8 +274,14 @@ export function AddPaymentFormFields({
         totalExpected > 0 ? netPremium / totalExpected : 1 / selectedFacultatives.length;
       newAllocations[f.id] = (proportion * parsedAmount).toFixed(2);
     });
-    setValue('allocations', newAllocations);
+
+    const current = allocations ?? {};
+    const unchanged =
+      Object.keys(newAllocations).length === Object.keys(current).length &&
+      Object.entries(newAllocations).every(([id, value]) => current[id] === value);
+    if (!unchanged) setValue('allocations', newAllocations);
   }, [
+    allocations,
     parsedAmount,
     positionByPlacementId,
     selectedFacultatives,
@@ -307,9 +313,6 @@ export function AddPaymentFormFields({
       </p>
     ) : null;
 
-  // Whether payment has already been made (and how much is left) for each selected business —
-  // shown as soon as a business is picked, ahead of everything else, so it's answered before
-  // the user has to fill in an amount at all.
   const businessPaymentSummary = selectedFacultatives.length > 0 && (
     <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
       {selectedFacultatives.map((f) => {
@@ -419,6 +422,17 @@ export function AddPaymentFormFields({
     />
   );
 
+  const notesField = (
+    <FormField
+      label="Notes"
+      type="textarea"
+      rows={3}
+      registration={register('notes')}
+      placeholder="Add any notes about this payment…"
+      error={errors.notes}
+    />
+  );
+
   const chequeFields = paymentType === 'cheque' && (
     <>
       <div className="grid grid-cols-5 gap-4">
@@ -494,6 +508,7 @@ export function AddPaymentFormFields({
         {totalExpectedHint}
       </div>
       {allocationSection}
+      {notesField}
     </>
   );
 
@@ -560,6 +575,7 @@ export function AddPaymentFormFields({
         {totalExpectedHint}
       </div>
       {allocationSection}
+      {notesField}
     </>
   );
 
