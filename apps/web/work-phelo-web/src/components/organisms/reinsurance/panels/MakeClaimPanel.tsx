@@ -16,7 +16,8 @@ import {
   useClaimAllocations,
   useGenerateClaimAllocations,
   useGenerateClaimAllocationsMutation,
-  useFacultatives,
+  useCedants,
+  useFacultativeSearch,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
@@ -30,6 +31,7 @@ interface MakeClaimPanelProps {
   claim?: PlacementClaim;
   onSuccess?: (claim: PlacementClaim) => void;
   onPlacementChange?: (placementId: string) => void;
+  onPlacementResolved?: (placement: Facultative | null) => void;
 
   mode?: 'notification' | 'actual';
 }
@@ -41,42 +43,78 @@ export function MakeClaimPanel({
   claim,
   onSuccess,
   onPlacementChange,
+  onPlacementResolved,
   mode = 'notification',
 }: MakeClaimPanelProps) {
   const isEditing = !!claim;
   const showPicker = !placement;
 
-  const { data: facultatives = [] } = useFacultatives();
+  const { data: cedants = [] } = useCedants();
   const [cedantId, setCedantId] = useState('');
   const [businessId, setBusinessId] = useState('');
+  const [businessQuery, setBusinessQuery] = useState('');
+  const [debouncedBusinessQuery, setDebouncedBusinessQuery] = useState('');
+  const [placementById, setPlacementById] = useState<Map<string, Facultative>>(() => new Map());
 
-  const pickedPlacement = useMemo(
-    () => facultatives.find((f) => f.id === businessId),
-    [facultatives, businessId],
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedBusinessQuery(businessQuery), 300);
+    return () => clearTimeout(timer);
+  }, [businessQuery]);
+
+  const { data: placementOptionsPage } = useFacultativeSearch(
+    {
+      archived: false,
+      cedantId: cedantId || undefined,
+      search: debouncedBusinessQuery || undefined,
+    },
+    { enabled: showPicker && !!cedantId, limit: 25 },
   );
+
+  const placementOptions = useMemo(
+    () => placementOptionsPage?.items ?? [],
+    [placementOptionsPage?.items],
+  );
+
+  useEffect(() => {
+    if (!placement) return;
+    setPlacementById((current) => new Map(current).set(placement.id, placement));
+  }, [placement]);
+
+  useEffect(() => {
+    if (placementOptions.length === 0) return;
+    setPlacementById((current) => {
+      const next = new Map(current);
+      placementOptions.forEach((item) => next.set(item.id, item));
+      return next;
+    });
+  }, [placementOptions]);
+
+  const pickedPlacement = useMemo(() => placementById.get(businessId), [placementById, businessId]);
   const effectivePlacement = placement ?? pickedPlacement;
 
-  const cedantOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const f of facultatives) {
-      if (f.status !== 'CANCELLED') seen.set(f.cedant.id, f.cedant.name);
-    }
-    return Array.from(seen.entries())
-      .map(([id, name]) => ({ value: id, label: name }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [facultatives]);
+  useEffect(() => {
+    onPlacementResolved?.(effectivePlacement ?? null);
+  }, [effectivePlacement, onPlacementResolved]);
 
-  const businessOptions = useMemo(
-    () =>
-      facultatives
-        .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
-        .map((f) => ({
-          value: f.id,
-          label: displayPolicyNumber(f.policyNumber),
-          sublabel: [f.classOfBusiness, f.title].filter(Boolean).join(' · '),
-        })),
-    [facultatives, cedantId],
-  );
+  const cedantOptions = useMemo(() => {
+    return cedants
+      .map((cedant) => ({ value: cedant.id, label: cedant.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [cedants]);
+
+  const businessOptions = useMemo(() => {
+    const options = new Map<string, Facultative>();
+    if (pickedPlacement) options.set(pickedPlacement.id, pickedPlacement);
+    placementOptions
+      .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
+      .forEach((f) => options.set(f.id, f));
+
+    return Array.from(options.values()).map((f) => ({
+      value: f.id,
+      label: displayPolicyNumber(f.policyNumber),
+      sublabel: [f.classOfBusiness, f.title].filter(Boolean).join(' · '),
+    }));
+  }, [placementOptions, pickedPlacement, cedantId]);
 
   const form = useForm<MakeClaimFormValues>({ defaultValues: MAKE_CLAIM_DEFAULTS });
   const {
@@ -247,7 +285,9 @@ export function MakeClaimPanel({
             onChange={(val) => {
               setCedantId(val);
               setBusinessId('');
+              setBusinessQuery('');
               onPlacementChange?.('');
+              onPlacementResolved?.(null);
             }}
           />
           {cedantId && (
@@ -260,6 +300,7 @@ export function MakeClaimPanel({
                 setBusinessId(val);
                 onPlacementChange?.(val);
               }}
+              onQueryChange={setBusinessQuery}
             />
           )}
           {effectivePlacement && <hr className="border-gray-100" />}

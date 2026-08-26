@@ -200,6 +200,9 @@ interface CedantPlacementsTabProps {
   onEndorsement: (placement: Facultative) => void;
   onView: (placement: Facultative) => void;
   onPremiums: (placement: Facultative) => void;
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
 }
 
 export function CedantPlacementsTab({
@@ -209,9 +212,14 @@ export function CedantPlacementsTab({
   onEndorsement,
   onView,
   onPremiums,
+  currentPage,
+  totalPages: serverTotalPages,
+  onPageChange,
 }: CedantPlacementsTabProps) {
   const [filter, _setFilter] = useState<PlacementFilter>('all');
-  const [page, setPage] = useState(1);
+  const [localPage, setLocalPage] = useState(1);
+  const page = currentPage ?? localPage;
+  const setPage = onPageChange ?? setLocalPage;
 
   const paymentStatuses = useCedantPlacementPaymentStatuses(placements);
 
@@ -264,8 +272,10 @@ export function CedantPlacementsTab({
     setPage(1);
   }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = serverTotalPages ?? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paged = serverTotalPages
+    ? filtered
+    : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-4">
