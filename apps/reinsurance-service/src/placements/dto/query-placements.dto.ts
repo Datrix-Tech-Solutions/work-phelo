@@ -1,9 +1,12 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayUnique,
   IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
+  IsArray,
   IsString,
   IsUUID,
   Max,
@@ -32,6 +35,34 @@ export class QueryPlacementsDto {
   @IsOptional()
   @IsEnum(PlacementStatus)
   status?: PlacementStatus;
+
+  @ApiPropertyOptional({
+    enum: PlacementStatus,
+    isArray: true,
+    example: [
+      PlacementStatus.DRAFT,
+      PlacementStatus.MARKETING,
+      PlacementStatus.PARTIALLY_PLACED,
+      PlacementStatus.PLACED,
+    ],
+    description:
+      'Comma-separated placement lifecycle statuses. Applied before pagination.',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const rawValues = Array.isArray(value) ? value : [value];
+    const statuses = rawValues
+      .flatMap((item) => String(item).split(','))
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return statuses.length ? statuses : undefined;
+  })
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(8)
+  @IsEnum(PlacementStatus, { each: true })
+  statuses?: PlacementStatus[];
 
   @ApiPropertyOptional({
     enum: PlacementType,

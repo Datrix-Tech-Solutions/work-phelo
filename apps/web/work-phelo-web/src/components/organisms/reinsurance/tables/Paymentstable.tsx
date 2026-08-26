@@ -3,29 +3,19 @@
 import { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { useQueries } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
 import {
-  fetchPlacementFinancialPosition,
-  fetchPlacementPayments,
-  paymentsKey,
-  placementFinancialPositionKey,
-  useFacultatives,
-  usePlacementFinancialPosition,
-  usePlacementPayments,
-} from '@/hooks';
+  FacultativeStatus,
+  PaymentWorklistRow,
+  PaymentWorklistStatusFilter,
+  toStatusLabel,
+} from '@/types/reinsurance';
+import { useCedants, usePaymentsWorklist } from '@/hooks';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
-import {
-  cedantPaymentStatusFromPosition,
-  CedantPaymentStatus as PaymentStatus,
-  pendingPremiumReceived,
-  latestConfirmedPremiumPaymentDate,
-} from '@/lib/reinsurance/placementStatus';
 
 const PAGE_SIZE = 10;
 
@@ -62,8 +52,7 @@ function paymentStatusLabel(status: FacultativeStatus): string {
   return toStatusLabel(status);
 }
 
-const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
-  Outstanding: 'text-xs text-gray-400',
+const PAYMENT_STATUS_CLASS: Record<PaymentWorklistRow['paymentStatus'], string> = {
   Pending: 'text-xs text-amber-600 font-medium',
   'Part Payment': 'text-xs text-yellow-600 font-medium',
   Paid: 'text-xs text-green-600 font-medium',
@@ -77,53 +66,42 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'Paid', label: 'Paid' },
 ];
 
-function PaymentSummaryCell({ placement }: { placement: Facultative }) {
-  const { data: position } = usePlacementFinancialPosition(placement.id);
-  const paid = position?.cedant.netSettled ?? 0;
-  const outstanding = position?.cedant.outstanding ?? 0;
-  const cur = position?.currency ?? placement.currency ?? '';
-  const outstandingLabel =
-    position?.cedant.position === 'CREDIT_BALANCE' || outstanding < 0 ? 'credit' : 'outstanding';
+function PaymentSummaryCell({ row }: { row: PaymentWorklistRow }) {
+  const cur = row.currency ?? '';
   return (
     <div className="flex flex-col gap-0.5">
       <span className="font-bold text-gray-900">
-        {cur} {fmtAmount(paid)}
+        {cur} {fmtAmount(row.paidAmount)}
       </span>
       <span className="text-xs text-gray-400">
-        {cur} {fmtAmount(Math.abs(outstanding))} {outstandingLabel}
+        {cur} {fmtAmount(Math.abs(row.outstandingAmount))} {row.outstandingLabel}
       </span>
     </div>
   );
 }
 
-function PaymentStatusCell({ placement }: { placement: Facultative }) {
-  const { data: position } = usePlacementFinancialPosition(placement.id);
-  const { data: payments = [] } = usePlacementPayments(placement.id);
-  const due = position?.cedant.currentObligation ?? 0;
-  const paid = position?.cedant.netSettled ?? 0;
-  const outstanding = position?.cedant.outstanding ?? 0;
-  const pending = pendingPremiumReceived(payments);
-
-  const paymentStatus = cedantPaymentStatusFromPosition(due, paid, outstanding, pending);
-
+function PaymentStatusCell({ row }: { row: PaymentWorklistRow }) {
   return (
     <div className="flex flex-col gap-1 items-start">
       <Badge
-        label={paymentStatusLabel(placement.status)}
-        variant={RAW_STATUS_VARIANT_MAP[placement.status]}
+        label={paymentStatusLabel(row.placementStatus)}
+        variant={RAW_STATUS_VARIANT_MAP[row.placementStatus]}
       />
-      <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
+      <span className={PAYMENT_STATUS_CLASS[row.paymentStatus]}>{row.paymentStatus}</span>
     </div>
   );
 }
 
-const COLUMNS: Column<Facultative>[] = [
+const COLUMNS: Column<PaymentWorklistRow>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
     width: '150px',
     render: (row) => (
-      <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
+      <EndorsedReferencePill
+        id={row.placementId}
+        reference={displayPolicyNumber(row.policyNumber)}
+      />
     ),
   },
   {
@@ -138,10 +116,10 @@ const COLUMNS: Column<Facultative>[] = [
     ),
   },
   {
-    key: 'cedant' as keyof Facultative,
+    key: 'cedant',
     label: 'Cedant',
     width: 'minmax(100px, 1fr)',
-    render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
+    render: (row) => <span className="text-gray-700">{row.cedantName}</span>,
   },
   {
     key: 'sumInsured',
@@ -159,40 +137,30 @@ const COLUMNS: Column<Facultative>[] = [
     label: 'Share of S.I.',
     width: '130px',
     className: 'text-right',
-    render: (row) => {
-      const facSumInsured =
-        row.sumInsured != null && row.facultativeOffer != null
-          ? row.sumInsured * (row.facultativeOffer / 100)
-          : null;
-      return (
-        <span className="font-small text-gray-900 whitespace-nowrap">
-          {facSumInsured != null ? `${row.currency ?? ''} ${fmtAmount(facSumInsured)}` : '—'}
-        </span>
-      );
-    },
+    render: (row) => (
+      <span className="font-small text-gray-900 whitespace-nowrap">
+        {row.facultativeSumInsured != null
+          ? `${row.currency ?? ''} ${fmtAmount(row.facultativeSumInsured)}`
+          : '—'}
+      </span>
+    ),
   },
   {
-    key: 'participants' as keyof Facultative,
+    key: 'participants',
     label: 'Participants',
     width: '90px',
-    render: (row) => {
-      // const total = row.participants?.length ?? 0;
-      const accepted =
-        row.participants?.filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED').length ??
-        0;
-      return (
-        <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-gray-900">{accepted}</span>
-          <span className="text-xs text-gray-400">accepted</span>
-        </div>
-      );
-    },
+    render: (row) => (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-semibold text-gray-900">{row.acceptedParticipantCount}</span>
+        <span className="text-xs text-gray-400">accepted</span>
+      </div>
+    ),
   },
   {
-    key: 'collectedToDate' as keyof Facultative,
+    key: 'collectedToDate',
     label: 'Paid / Outstanding',
     width: '150px',
-    render: (row) => <PaymentSummaryCell placement={row} />,
+    render: (row) => <PaymentSummaryCell row={row} />,
   },
   {
     key: 'commission',
@@ -213,119 +181,40 @@ const COLUMNS: Column<Facultative>[] = [
     label: 'Status',
     width: '100px',
     className: 'pr-6',
-    render: (row) => <PaymentStatusCell placement={row} />,
+    render: (row) => <PaymentStatusCell row={row} />,
   },
-];
-
-const CLOSING_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
-  'PLACED',
-  'CLOSING',
-  'CLOSED',
-  'DECLINED',
-  'CANCELLED',
 ];
 
 export function PaymentsTable() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<PaymentWorklistStatusFilter | ''>('');
   const [cedantFilter, setCedantFilter] = useState('');
   const [page, setPage] = useState(1);
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
 
-  const { data: allRows = [], isLoading } = useFacultatives();
-
-  const closingRows = useMemo(
-    () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
-    [allRows],
-  );
-
-  const positionQueries = useQueries({
-    queries: closingRows.map((row) => ({
-      queryKey: placementFinancialPositionKey(row.id),
-      queryFn: () => fetchPlacementFinancialPosition(row.id),
-    })),
+  const {
+    data: worklist,
+    isLoading,
+    isError,
+  } = usePaymentsWorklist({
+    page,
+    limit: PAGE_SIZE,
+    search,
+    status: statusFilter,
+    cedantId: cedantFilter,
   });
-
-  const paymentsQueries = useQueries({
-    queries: closingRows.map((row) => ({
-      queryKey: paymentsKey(row.id),
-      queryFn: () => fetchPlacementPayments(row.id),
-    })),
-  });
-
-  const paymentStatusMap = useMemo(() => {
-    const map = new Map<string, PaymentStatus>();
-    closingRows.forEach((row, i) => {
-      const position = positionQueries[i]?.data;
-      const payments = paymentsQueries[i]?.data ?? [];
-      const due = position?.cedant.currentObligation ?? 0;
-      const paid = position?.cedant.netSettled ?? 0;
-      const outstanding = position?.cedant.outstanding ?? 0;
-      const pending = pendingPremiumReceived(payments);
-      map.set(row.id, cedantPaymentStatusFromPosition(due, paid, outstanding, pending));
-    });
-    return map;
-  }, [closingRows, positionQueries, paymentsQueries]);
-
-  const payableRows = useMemo(
-    () => closingRows.filter((r) => paymentStatusMap.get(r.id) !== 'Outstanding'),
-    [closingRows, paymentStatusMap],
-  );
-
-  const latestPaymentDateMap = useMemo(() => {
-    const map = new Map<string, string | null>();
-    closingRows.forEach((row, i) => {
-      const payments = paymentsQueries[i]?.data ?? [];
-      map.set(row.id, latestConfirmedPremiumPaymentDate(payments));
-    });
-    return map;
-  }, [closingRows, paymentsQueries]);
+  const { data: cedants = [] } = useCedants();
 
   const cedantOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of payableRows) seen.set(r.cedant.id, r.cedant.name);
-    return Array.from(seen.entries())
-      .map(([id, name]) => ({ value: id, label: name }))
+    return cedants
+      .map((cedant) => ({ value: cedant.id, label: cedant.name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [payableRows]);
+  }, [cedants]);
 
-  const filtered = useMemo(() => {
-    let rows = payableRows;
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          (r.policyNumber?.toLowerCase().includes(q) ?? false) ||
-          r.title.toLowerCase().includes(q) ||
-          (r.classOfBusiness?.toLowerCase().includes(q) ?? false),
-      );
-    }
-    if (statusFilter) {
-      if (statusFilter === 'Placed') {
-        rows = rows.filter((r) =>
-          (['PLACED', 'PARTIALLY_PLACED', 'CLOSING'] as FacultativeStatus[]).includes(r.status),
-        );
-      } else if (statusFilter === 'Closed') {
-        rows = rows.filter((r) =>
-          (['CLOSED', 'DECLINED', 'CANCELLED'] as FacultativeStatus[]).includes(r.status),
-        );
-      } else {
-        rows = rows.filter((r) => paymentStatusMap.get(r.id) === (statusFilter as PaymentStatus));
-      }
-    }
-    if (cedantFilter) {
-      rows = rows.filter((r) => r.cedant.id === cedantFilter);
-    }
-
-    const dateOf = (r: Facultative) => latestPaymentDateMap.get(r.id) ?? r.createdAt;
-    return [...rows].sort((a, b) => new Date(dateOf(b)).getTime() - new Date(dateOf(a)).getTime());
-  }, [payableRows, search, statusFilter, cedantFilter, paymentStatusMap, latestPaymentDateMap]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paged = worklist?.items ?? [];
+  const totalPages = Math.max(1, worklist?.meta.totalPages ?? 1);
 
   const extraFilters = (
     <>
@@ -336,7 +225,7 @@ export function PaymentsTable() {
           options={STATUS_FILTER_OPTIONS}
           value={statusFilter}
           onChange={(v) => {
-            setStatusFilter(v);
+            setStatusFilter(v as PaymentWorklistStatusFilter | '');
             setPage(1);
           }}
         />
@@ -382,7 +271,7 @@ export function PaymentsTable() {
         //     onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
         //   },
         // ]}
-        emptyMessage="No payment records found"
+        emptyMessage={isError ? 'Unable to load payment records' : 'No payment records found'}
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}

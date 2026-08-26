@@ -187,6 +187,14 @@ export class PlacementsController {
     enum: PlacementStatus,
   })
   @ApiQuery({
+    name: 'statuses',
+    required: false,
+    enum: PlacementStatus,
+    isArray: true,
+    description:
+      'Comma-separated placement lifecycle statuses. Applied before pagination.',
+  })
+  @ApiQuery({
     name: 'placementType',
     required: false,
     enum: ['FACULTATIVE'],
