@@ -384,6 +384,50 @@ describe('PlacementsService', () => {
     });
   });
 
+  it('filters open placement statuses before pagination and count', async () => {
+    prisma.placement.findMany.mockResolvedValue([
+      { ...placement, status: PlacementStatus.DRAFT },
+    ]);
+    prisma.placement.count.mockResolvedValue(25);
+
+    const openStatuses = [
+      PlacementStatus.DRAFT,
+      PlacementStatus.MARKETING,
+      PlacementStatus.PARTIALLY_PLACED,
+      PlacementStatus.PLACED,
+    ];
+
+    const result = await service.findAll('tenant-1', {
+      statuses: openStatuses,
+      page: 1,
+      limit: 20,
+    });
+
+    const expectedWhere = {
+      tenantId: 'tenant-1',
+      archivedAt: null,
+      status: { in: openStatuses },
+    };
+    expect(prisma.placement.findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: expectedWhere,
+      skip: 0,
+      take: 20,
+    });
+    expect(prisma.placement.count.mock.calls[0]?.[0]).toMatchObject({
+      where: expectedWhere,
+    });
+    expect(openStatuses).not.toContain(PlacementStatus.CLOSING);
+    expect(openStatuses).not.toContain(PlacementStatus.CLOSED);
+    expect(openStatuses).not.toContain(PlacementStatus.DECLINED);
+    expect(openStatuses).not.toContain(PlacementStatus.CANCELLED);
+    expect(result.meta).toEqual({
+      page: 1,
+      limit: 20,
+      total: 25,
+      totalPages: 2,
+    });
+  });
+
   it('lists archived records with the same filters, search and pagination', async () => {
     const archivedPlacement = {
       ...placement,

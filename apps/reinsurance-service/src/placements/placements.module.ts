@@ -36,6 +36,8 @@ import { ReinsuranceDashboardService } from './dashboard/dashboard.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 import { S3DocumentStorageService } from './documents/storage/s3-document-storage.service';
 import { TenantDocumentProfileClient } from './documents/tenant-document-profile.client';
+import { ReinsurancePaymentsWorklistService } from './worklists/payments-worklist.service';
+import { ReinsuranceWorklistsController } from './worklists/reinsurance-worklists.controller';
 
 @Module({
   imports: [PrismaModule, RabbitMQModule, ReinsuranceChargeSettingsModule],
@@ -46,10 +48,12 @@ import { TenantDocumentProfileClient } from './documents/tenant-document-profile
     PlacementEndorsementsController,
     PlacementAttachmentsController,
     ReinsuranceDashboardController,
+    ReinsuranceWorklistsController,
   ],
   providers: [
     PlacementsService,
     ReinsuranceDashboardService,
+    ReinsurancePaymentsWorklistService,
     PlacementAttachmentsService,
     PlacementClaimsService,
     PlacementClaimCashCallsService,
