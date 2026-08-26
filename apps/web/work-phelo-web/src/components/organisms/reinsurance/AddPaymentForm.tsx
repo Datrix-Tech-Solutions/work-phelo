@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -23,6 +23,9 @@ import { PaymentReceiptModal } from '@/components/organisms/reinsurance/document
 
 interface AddPaymentFormProps {
   placementId?: string;
+  /** Pre-selects this cedant when the panel opens (e.g. the table's active cedant filter).
+   *  Ignored when `placementId` is set, since that already locks a single cedant + business. */
+  defaultCedantId?: string;
   onPaymentRecorded?: (amount: number) => void;
   onAllocationsRecorded?: (allocations: Record<string, number>) => void;
   onPlacementsChange?: (placementIds: string[]) => void;
@@ -38,6 +41,7 @@ interface AddPaymentFormProps {
 
 export default function AddPaymentForm({
   placementId,
+  defaultCedantId,
   onPaymentRecorded,
   onAllocationsRecorded,
   onPlacementsChange,
@@ -72,8 +76,19 @@ export default function AddPaymentForm({
   const form = useForm<AddPaymentFormValues>({ defaultValues: ADD_PAYMENT_DEFAULTS });
   const {
     handleSubmit,
+    setValue,
     formState: { isSubmitting },
   } = form;
+
+  // Pre-select the cedant every time the panel opens with one supplied (e.g. the table's
+  // active cedant filter) — skipped when placementId is set, since that already locks a
+  // single cedant + business via the read-only path in AddPaymentFormFields.
+  useEffect(() => {
+    if (panelOpen && !placementId && defaultCedantId) {
+      setValue('cedantId', defaultCedantId);
+      setValue('businessIds', []);
+    }
+  }, [panelOpen, placementId, defaultCedantId, setValue]);
 
   const onSubmit = async (values: AddPaymentFormValues) => {
     const selectedFacs = placementId
@@ -99,6 +114,7 @@ export default function AddPaymentForm({
     const reference = refParts.join(' — ') || undefined;
 
     const notesStr = values.paymentType === 'cheque' ? 'Cheque payment' : 'Bank transfer';
+    const notes = values.notes ? `${notesStr} — ${values.notes}` : notesStr;
 
     try {
       const positions = await Promise.all(
@@ -160,7 +176,7 @@ export default function AddPaymentForm({
           reference,
           settlementMethod: values.paymentType === 'cheque' ? 'CHEQUE' : 'BANK_TRANSFER',
           settlementCurrency: placementCurrency,
-          notes: notesStr,
+          notes,
         });
 
         // Confirm right after recording — everything the confirm endpoint needs

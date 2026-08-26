@@ -77,16 +77,13 @@ export function MakeClaimFormFields({
   const claimCurrency = useWatch({ control, name: 'currency' });
   const rateValue = useWatch({ control, name: 'rate' });
   const showRate = !!claimCurrency && !!placement.currency && claimCurrency !== placement.currency;
-  // Amounts are entered in `claimCurrency` but persisted (and compared against sum insured)
-  // in the placement's currency, so validation needs to convert by the same rate submit does.
+
   const conversionRate = showRate ? parseFloat(rateValue) || 1 : 1;
 
   useEffect(() => {
     if (!showRate) setValue('rate', '');
   }, [showRate, setValue]);
 
-  // Premium payment context — same authoritative figures the Premiums page and placement
-  // Details page use, so this agrees with what's shown everywhere else.
   const { statusText: premiumPaymentStatusText, latestPaymentDate } = usePremiumPaymentContext(
     placement.id,
   );
@@ -242,7 +239,7 @@ export function MakeClaimFormFields({
           }}
           render={({ field }) => (
             <NumberField
-              label="Actual Claim Amount"
+              label="100% Claim Amount"
               value={field.value ? Number(field.value) : 0}
               onChange={(n) => field.onChange(String(n))}
               error={errors.finalLossAmount?.message}
@@ -268,7 +265,7 @@ export function MakeClaimFormFields({
           }}
           render={({ field }) => (
             <NumberField
-              label="Claim Amount"
+              label="100% Estimated Claim Amount"
               value={field.value ? Number(field.value) : 0}
               onChange={(n) => field.onChange(String(n))}
               error={errors.estimatedLossAmount?.message}

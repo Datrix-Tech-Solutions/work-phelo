@@ -136,7 +136,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
         }
       : {
           key: 'estimatedLossAmount',
-          label: 'Claim Amount',
+          label: '100% Claim Amount',
           width: '120px',
           className: 'text-right',
           render: (row) => (
@@ -457,7 +457,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
             .
           </p>
           <NumberField
-            label="Actual Claim Amount"
+            label="100 % Claim Amount"
             value={finalAmount ? Number(finalAmount) : 0}
             onChange={(n) => {
               setFinalAmount(String(n));
