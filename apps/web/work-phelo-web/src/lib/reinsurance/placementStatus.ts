@@ -18,14 +18,6 @@ export const RAW_STATUS_VARIANT_MAP: Record<FacultativeStatus, StatusVariant> = 
   CANCELLED: 'danger',
 };
 
-/**
- * Raw status alone can't tell 'Closed' apart from 'Partially Placed' once a placement has
- * been through CLOSING — reopening a closed offer for edits reuses the CLOSING status, and
- * validating a fully-placed offer moves it into CLOSING too. So for the in-flight CLOSING
- * status we fall back to the actual accepted percentage against facultativeOffer instead of
- * trusting the raw status. PLACED, however, means the offer is fully placed but the closing
- * workflow hasn't been initiated yet — it stays "open" until the user acts on it.
- */
 export function acceptedPercentFor(placement: Facultative): number {
   return (
     placement.participants
@@ -49,7 +41,6 @@ export function isEffectivelyClosed(placement: Facultative): boolean {
   return false;
 }
 
-/** Raw backend status, human-formatted only (no grouping/collapsing across statuses). */
 export function rawStatusLabel(status: FacultativeStatus): string {
   return status
     .toLowerCase()
@@ -58,22 +49,17 @@ export function rawStatusLabel(status: FacultativeStatus): string {
     .join(' ');
 }
 
-// Business-friendly wording for specific statuses — still one label per raw status, no grouping.
 const STATUS_LABEL_OVERRIDES: Partial<Record<FacultativeStatus, string>> = {
   MARKETING: 'On Market',
   CLOSING: 'Partially Closed',
 };
 
-/** Same as rawStatusLabel, but swaps in business-friendly wording for a few statuses. */
 export function facultativeStatusLabel(status: FacultativeStatus): string {
   return STATUS_LABEL_OVERRIDES[status] ?? rawStatusLabel(status);
 }
 
 export type CedantPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
 
-/** Sum of recorded-but-not-yet-bank-confirmed cedant premium receipts — money that's been
- *  recorded as received but hasn't moved `netSettled`/`outstanding` yet (those only count
- *  BANK_CONFIRMED payments), so without this a just-recorded receipt looks like nothing happened. */
 export function pendingPremiumReceived(payments: PlacementPayment[]): number {
   return payments
     .filter(
@@ -82,9 +68,6 @@ export function pendingPremiumReceived(payments: PlacementPayment[]): number {
     .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
 }
 
-/** Derives Outstanding/Pending/Part Payment/Paid from the same authoritative financial-position
- *  figures the Premiums page and placement Details page use, plus any pending (unconfirmed)
- *  premium receipt — keeps all surfaces agreeing on payment status. */
 export function cedantPaymentStatusFromPosition(
   due: number,
   paid: number,
@@ -97,8 +80,6 @@ export function cedantPaymentStatusFromPosition(
   return 'Outstanding';
 }
 
-/** Plain-English wording for CedantPaymentStatus, for surfaces that show it as a sentence
- *  rather than a status badge (e.g. the claim panel/overview). */
 export const PREMIUM_PAYMENT_STATUS_TEXT: Record<CedantPaymentStatus, string> = {
   Paid: 'Premium fully paid',
   'Part Payment': 'Premium partly paid',
@@ -106,13 +87,10 @@ export const PREMIUM_PAYMENT_STATUS_TEXT: Record<CedantPaymentStatus, string> = 
   Outstanding: 'Premium not yet paid',
 };
 
-/** Most recent bank-confirmed, non-reversed premium receipt date, or null if there isn't one. */
 export function latestConfirmedPremiumPaymentDate(payments: PlacementPayment[]): string | null {
-  const confirmed = payments.filter(
-    (p) => p.type === 'PREMIUM_RECEIVED' && p.status === 'BANK_CONFIRMED' && !p.reversalOfPaymentId,
-  );
-  return confirmed.reduce<string | null>(
-    (latest, p) => (!latest || p.paymentDate > latest ? p.paymentDate : latest),
+  const received = payments.filter((p) => p.type === 'PREMIUM_RECEIVED' && !p.reversalOfPaymentId);
+  return received.reduce<string | null>(
+    (latest, p) => (!latest || p.createdAt > latest ? p.createdAt : latest),
     null,
   );
 }

@@ -4,9 +4,9 @@ import {
   PlacementEndorsementParticipantStatus,
   PlacementEndorsementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementEndorsementParticipantsService } from './participants.service';
 
 describe('PlacementEndorsementParticipantsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

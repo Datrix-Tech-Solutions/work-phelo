@@ -23,7 +23,7 @@ import {
   FacultativeReportLifecycle,
 } from '@/hooks/reinsurance/useFacultativeReport';
 import { FACULTATIVE_STATUSES, FacultativeStatus } from '@/types/reinsurance';
-import { facultativeStatusLabel } from '@/lib/reinsurance/placementStatus';
+import { facultativeStatusLabel, CedantPaymentStatus } from '@/lib/reinsurance/placementStatus';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { exportToCsv } from '@/lib/exportCsv';
 
@@ -45,6 +45,13 @@ const LIFECYCLE_OPTIONS: { value: FacultativeReportLifecycle; label: string }[] 
   { value: 'EXPIRED', label: 'Expired' },
 ];
 
+const PAYMENT_STATUS_OPTIONS: { value: CedantPaymentStatus; label: string }[] = [
+  { value: 'Outstanding', label: 'Outstanding' },
+  { value: 'Pending', label: 'Pending' },
+  { value: 'Part Payment', label: 'Part Payment' },
+  { value: 'Paid', label: 'Paid' },
+];
+
 const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neutral' | 'danger'> =
   {
     DRAFT: 'neutral',
@@ -56,6 +63,13 @@ const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neu
     DECLINED: 'danger',
     CANCELLED: 'danger',
   };
+
+const PAYMENT_STATUS_VARIANT_MAP: Record<CedantPaymentStatus, 'success' | 'warning' | 'neutral'> = {
+  Outstanding: 'neutral',
+  Pending: 'warning',
+  'Part Payment': 'warning',
+  Paid: 'success',
+};
 
 function fmtAmount(value: number | null, currency: string | null): string {
   if (value == null) return '—';
@@ -88,6 +102,7 @@ export function FacultativeReportTable() {
   const [currency, setCurrency] = useState('');
   const [statuses, setStatuses] = useState<string[]>([]);
   const [lifecycle, setLifecycle] = useState('');
+  const [paymentStatuses, setPaymentStatuses] = useState<string[]>([]);
   const [cedantIds, setCedantIds] = useState<string[]>([]);
   const [reportParams, setReportParams] = useState<FacultativeReportParams | null>(null);
 
@@ -109,6 +124,9 @@ export function FacultativeReportTable() {
       statuses: statuses.length ? (statuses as FacultativeStatus[]) : undefined,
       cedantIds: cedantIds.length ? cedantIds : undefined,
       lifecycle: (lifecycle || undefined) as FacultativeReportLifecycle | undefined,
+      paymentStatuses: paymentStatuses.length
+        ? (paymentStatuses as CedantPaymentStatus[])
+        : undefined,
     });
     setPage(1);
   };
@@ -118,26 +136,21 @@ export function FacultativeReportTable() {
       {
         key: 'reference',
         label: 'Policy Number',
-        width: '150px',
+        width: '120px',
         render: (row) => (
           <EndorsedReferencePill id={row.id} reference={displayPolicyNumber(row.policyNumber)} />
         ),
       },
       {
         key: 'cedantName',
-        label: 'Cedant / Risk Type',
+        label: 'Cedant',
         width: 'minmax(120px, 0.8fr)',
-        render: (row) => (
-          <div className="flex flex-col gap-0.5">
-            <span className="font-semibold text-gray-900 leading-tight">{row.cedantName}</span>
-            <span className="text-xs text-gray-400">{row.classOfBusiness ?? '—'}</span>
-          </div>
-        ),
+        render: (row) => <span className="font-semibold text-gray-900">{row.cedantName}</span>,
       },
       {
         key: 'riskClassName',
         label: 'Risk Class',
-        width: '100px',
+        width: '90px',
         render: (row) => row.riskClassName ?? '—',
       },
       {
@@ -150,44 +163,55 @@ export function FacultativeReportTable() {
       {
         key: 'premium',
         label: 'Premium',
-        width: '150px',
+        width: '120px',
         className: 'text-right',
         render: (row) => fmtAmount(row.premium, row.currency),
       },
       {
         key: 'commission',
         label: 'Commission',
-        width: '100px',
+        width: '70px',
         render: (row) => (row.commission != null ? `${row.commission}%` : '—'),
       },
       {
         key: 'totalAcceptedPercent',
         label: 'Accepted',
-        width: '100px',
+        width: '70px',
         render: (row) => `${row.totalAcceptedPercent}%`,
       },
       {
         key: 'reinsurerCount',
         label: 'Reinsurers',
-        width: '100px',
+        width: '70px',
         render: (row) => row.reinsurerCount.toLocaleString(),
       },
       {
         key: 'inceptionDate',
         label: 'Inception',
-        width: '150px',
+        width: '90px',
         render: (row) => fmtDate(row.inceptionDate),
       },
       {
         key: 'expiryDate',
         label: 'Expiry',
-        width: '150px',
+        width: '90px',
         render: (row) => fmtDate(row.expiryDate),
+      },
+      {
+        key: 'paymentStatus',
+        label: 'Payment Status',
+        width: '110px',
+        render: (row) => (
+          <Badge
+            label={row.paymentStatus}
+            variant={PAYMENT_STATUS_VARIANT_MAP[row.paymentStatus]}
+          />
+        ),
       },
       {
         key: 'status',
         label: 'Status',
-        width: '100px',
+        width: '90px',
         render: (row) => (
           <Badge
             label={facultativeStatusLabel(row.status)}
@@ -206,7 +230,6 @@ export function FacultativeReportTable() {
     const headers = [
       'Policy Number',
       'Cedant',
-      'Risk Type',
       'Risk Class',
       'Sum Insured',
       'Premium',
@@ -215,12 +238,12 @@ export function FacultativeReportTable() {
       'Reinsurers',
       'Inception',
       'Expiry',
+      'Payment Status',
       'Status',
     ];
     const data = rows.map((row) => [
       displayPolicyNumber(row.policyNumber),
       row.cedantName,
-      row.classOfBusiness ?? '',
       row.riskClassName ?? '',
       fmtAmount(row.sumInsured, row.currency),
       fmtAmount(row.premium, row.currency),
@@ -229,6 +252,7 @@ export function FacultativeReportTable() {
       row.reinsurerCount,
       fmtDate(row.inceptionDate),
       fmtDate(row.expiryDate),
+      row.paymentStatus,
       facultativeStatusLabel(row.status),
     ]);
     exportToCsv(`facultative-report-${new Date().toISOString().slice(0, 10)}.csv`, headers, data);
@@ -313,6 +337,16 @@ export function FacultativeReportTable() {
                   options={LIFECYCLE_OPTIONS}
                   value={lifecycle}
                   onChange={setLifecycle}
+                />
+              </div>
+              <div className="w-40">
+                <MultiSelect
+                  size="sm"
+                  variant="inline"
+                  placeholder="Payment status"
+                  options={PAYMENT_STATUS_OPTIONS}
+                  value={paymentStatuses}
+                  onChange={setPaymentStatuses}
                 />
               </div>
               <div className="w-44">

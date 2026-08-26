@@ -75,6 +75,7 @@ jobs:
       auth-service: ${{ steps.filter.outputs.auth-service }}
       hr-service: ${{ steps.filter.outputs.hr-service }}
       notification-service: ${{ steps.filter.outputs.notification-service }}
+      reinsurance-service: ${{ steps.filter.outputs.reinsurance-service }}
       nextjs-web: ${{ steps.filter.outputs.nextjs-web }}
 
     steps:
@@ -106,6 +107,11 @@ jobs:
               - 'tsconfig*.json'
             notification-service:
               - 'apps/notification-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+            reinsurance-service:
+              - 'apps/reinsurance-service/**'
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
@@ -141,6 +147,8 @@ jobs:
             dockerfile: apps/hr-service/Dockerfile
           - service: notification-service
             dockerfile: apps/notification-service/Dockerfile
+          - service: reinsurance-service
+            dockerfile: apps/reinsurance-service/Dockerfile
           - service: nextjs-web
             dockerfile: apps/web/work-phelo-web/Dockerfile
 

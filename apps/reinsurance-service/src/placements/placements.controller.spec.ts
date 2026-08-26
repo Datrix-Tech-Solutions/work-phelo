@@ -1,37 +1,21 @@
 import { RequestUser } from '@work-phelo/types';
-import { StreamableFile } from '@nestjs/common';
 import {
-  PlacementClaimCashCallStatus,
-  PlacementClaimStatus,
-  PlacementEndorsementStatus,
-  PlacementEndorsementType,
   PlacementClosingStatus,
   PlacementNoteStatus,
-  PlacementPaymentDirection,
-  PlacementPaymentType,
-  PlacementEndorsementParticipantStatus,
   PlacementParticipantRole,
   PlacementParticipantStatus,
+  PlacementPaymentDirection,
+  PlacementPaymentType,
 } from '../../prisma/generated/client';
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
-import { PlacementClaimCashCallsService } from './claims/cash-calls/cash-calls.service';
-import { PlacementClaimCedantSettlementsService } from './claims/settlements/cedant-settlements.service';
-import { PlacementClaimRecoveryApprovalsService } from './claims/recoveries/recovery-approvals.service';
-import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recovery-receipts.service';
-import { PlacementClaimsService } from './claims/claims.service';
-import { PlacementClosingsService } from './placement-closings.service';
-import { PlacementDocumentsService } from './documents/documents.service';
-import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
-import { PlacementEndorsementsService } from './placement-endorsements.service';
-import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
+import { PlacementClosingsService } from './closings/closings.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementFinancialPositionService } from './finance/financial-position.service';
-import { PlacementNotesService } from './placement-notes.service';
-import { PlacementPaymentsService } from './placement-payments.service';
+import { PlacementNotesService } from './transactions/notes.service';
+import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
-import { PlacementClaimFinancialCloseReadinessService } from './claims/close/financial-close-readiness.service';
 
 describe('PlacementsController', () => {
   const service = {
@@ -58,53 +42,11 @@ describe('PlacementsController', () => {
     create: jest.fn(),
     changeStatus: jest.fn(),
   };
-  const documentsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    generateOfferSlip: jest.fn(),
-    generateParticipantOfferSlip: jest.fn(),
-    generateClosingSlip: jest.fn(),
-    generateNoteDocument: jest.fn(),
-    generateEndorsementSlip: jest.fn(),
-    generateEndorsementClosingSlip: jest.fn(),
-    generateEndorsementCertificate: jest.fn(),
-    generateClaimNotice: jest.fn(),
-    generateClaimCashCall: jest.fn(),
-    renderPdf: jest.fn(),
-    renderAndStorePdf: jest.fn(),
-    createDownloadUrl: jest.fn(),
-    void: jest.fn(),
-  };
-  const endorsementsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    getSummary: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    changeStatus: jest.fn(),
-  };
   const effectiveViewService = {
     getEffectiveView: jest.fn(),
   };
   const financialPositionService = {
     getFinancialPosition: jest.fn(),
-  };
-  const endorsementParticipantsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    changeStatus: jest.fn(),
-    reinvite: jest.fn(),
-    delete: jest.fn(),
-  };
-  const endorsementClosingsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    validateAndConfirm: jest.fn(),
-    forceClose: jest.fn(),
-    changeStatus: jest.fn(),
   };
   const notesService = {
     findAll: jest.fn(),
@@ -132,43 +74,6 @@ describe('PlacementsController', () => {
     confirmBankPayment: jest.fn(),
     reverse: jest.fn(),
   };
-  const claimsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    changeStatus: jest.fn(),
-    findAllocations: jest.fn(),
-    generateAllocations: jest.fn(),
-  };
-  const claimCashCallsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    changeStatus: jest.fn(),
-    void: jest.fn(),
-  };
-  const claimCedantSettlementsService = {
-    approvePayable: jest.fn(),
-    findAll: jest.fn(),
-    create: jest.fn(),
-    confirmBankSettlement: jest.fn(),
-    reverse: jest.fn(),
-  };
-  const claimFinancialCloseReadinessService = {
-    getReadiness: jest.fn(),
-  };
-  const claimRecoveryApprovalsService = {
-    findAll: jest.fn(),
-    approve: jest.fn(),
-  };
-  const claimRecoveryReceiptsService = {
-    findAll: jest.fn(),
-    create: jest.fn(),
-    confirmBankReceipt: jest.fn(),
-    reverse: jest.fn(),
-    getRecoveryPosition: jest.fn(),
-  };
   const user = {
     tenantId: 'tenant-1',
   } as RequestUser;
@@ -181,20 +86,10 @@ describe('PlacementsController', () => {
     new PlacementsController(
       service as unknown as PlacementsService,
       closingsService as unknown as PlacementClosingsService,
-      documentsService as unknown as PlacementDocumentsService,
-      endorsementsService as unknown as PlacementEndorsementsService,
       effectiveViewService as unknown as PlacementEffectiveViewService,
-      endorsementParticipantsService as unknown as PlacementEndorsementParticipantsService,
-      endorsementClosingsService as unknown as PlacementEndorsementClosingsService,
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
       financialPositionService as unknown as PlacementFinancialPositionService,
-      claimsService as unknown as PlacementClaimsService,
-      claimCashCallsService as unknown as PlacementClaimCashCallsService,
-      claimCedantSettlementsService as unknown as PlacementClaimCedantSettlementsService,
-      claimFinancialCloseReadinessService as unknown as PlacementClaimFinancialCloseReadinessService,
-      claimRecoveryApprovalsService as unknown as PlacementClaimRecoveryApprovalsService,
-      claimRecoveryReceiptsService as unknown as PlacementClaimRecoveryReceiptsService,
     );
 
   it('delegates list queries using only the authenticated tenant context', async () => {
@@ -216,49 +111,15 @@ describe('PlacementsController', () => {
     ['getClosingSlipPreview', PlacementPermission.VIEW],
     ['findClosings', PlacementPermission.VIEW],
     ['findClosing', PlacementPermission.VIEW],
-    ['findDocuments', PlacementPermission.VIEW],
-    ['findDocument', PlacementPermission.VIEW],
-    ['renderDocumentPdf', PlacementPermission.VIEW],
-    ['getDocumentDownloadUrl', PlacementPermission.VIEW],
-    ['findEndorsements', PlacementPermission.VIEW],
-    ['findEndorsement', PlacementPermission.VIEW],
-    ['getEndorsementSummary', PlacementPermission.VIEW],
-    ['findEndorsementParticipants', PlacementPermission.VIEW],
-    ['findEndorsementParticipant', PlacementPermission.VIEW],
-    ['findEndorsementClosings', PlacementPermission.VIEW],
-    ['findEndorsementClosing', PlacementPermission.VIEW],
     ['findEndorsementNotes', PlacementPermission.VIEW],
     ['findEndorsementNote', PlacementPermission.VIEW],
     ['findNotes', PlacementPermission.VIEW],
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
     ['findPayment', PlacementPermission.VIEW],
-    ['findClaims', PlacementPermission.VIEW],
-    ['findClaim', PlacementPermission.VIEW],
-    ['findClaimAllocations', PlacementPermission.VIEW],
-    ['findClaimCashCalls', PlacementPermission.VIEW],
-    ['findClaimCashCall', PlacementPermission.VIEW],
-    ['findClaimCedantSettlements', PlacementPermission.VIEW],
-    ['getClaimFinancialCloseReadiness', PlacementPermission.VIEW],
-    ['getClaimRecoveryPosition', PlacementPermission.VIEW],
-    ['findClaimRecoveryApprovals', PlacementPermission.VIEW],
-    ['findClaimRecoveryReceipts', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
-    ['createEndorsement', PlacementPermission.CREATE],
     ['createPayment', PlacementPermission.CREATE],
-    ['createClaim', PlacementPermission.CREATE],
     ['update', PlacementPermission.EDIT],
-    ['updateEndorsement', PlacementPermission.EDIT],
-    ['changeEndorsementStatus', PlacementPermission.EDIT],
-    ['createEndorsementParticipant', PlacementPermission.EDIT],
-    ['updateEndorsementParticipant', PlacementPermission.EDIT],
-    ['changeEndorsementParticipantStatus', PlacementPermission.EDIT],
-    ['reinviteEndorsementParticipant', PlacementPermission.EDIT],
-    ['deleteEndorsementParticipant', PlacementPermission.EDIT],
-    ['createEndorsementClosing', PlacementPermission.EDIT],
-    ['validateAndConfirmEndorsementParticipant', PlacementPermission.EDIT],
-    ['forceCloseEndorsement', PlacementPermission.EDIT],
-    ['changeEndorsementClosingStatus', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
     ['forceClose', PlacementPermission.EDIT],
     ['addParticipant', PlacementPermission.EDIT],
@@ -268,37 +129,12 @@ describe('PlacementsController', () => {
     ['deleteParticipant', PlacementPermission.EDIT],
     ['createClosing', PlacementPermission.EDIT],
     ['changeClosingStatus', PlacementPermission.EDIT],
-    ['generateOfferSlipDocument', PlacementPermission.EDIT],
-    ['generateParticipantOfferSlipDocument', PlacementPermission.EDIT],
-    ['generateClosingSlipDocument', PlacementPermission.EDIT],
-    ['generateNoteDocument', PlacementPermission.EDIT],
-    ['generateEndorsementSlipDocument', PlacementPermission.EDIT],
-    ['generateEndorsementClosingSlipDocument', PlacementPermission.EDIT],
-    ['generateEndorsementCertificateDocument', PlacementPermission.EDIT],
-    ['generateClaimNoticeDocument', PlacementPermission.EDIT],
-    ['generateClaimCashCallDocument', PlacementPermission.EDIT],
-    ['renderAndStoreDocumentPdf', PlacementPermission.EDIT],
-    ['voidDocument', PlacementPermission.EDIT],
     ['createDebitNote', PlacementPermission.EDIT],
     ['createCreditNote', PlacementPermission.EDIT],
     ['createEndorsementDebitNote', PlacementPermission.EDIT],
     ['createEndorsementCreditNote', PlacementPermission.EDIT],
     ['issueEndorsementNote', PlacementPermission.EDIT],
     ['voidEndorsementNote', PlacementPermission.EDIT],
-    ['updateClaim', PlacementPermission.EDIT],
-    ['changeClaimStatus', PlacementPermission.EDIT],
-    ['generateClaimAllocations', PlacementPermission.EDIT],
-    ['createClaimCashCall', PlacementPermission.EDIT],
-    ['changeClaimCashCallStatus', PlacementPermission.EDIT],
-    ['voidClaimCashCall', PlacementPermission.EDIT],
-    ['approveClaimPayable', PlacementPermission.EDIT],
-    ['approveClaimRecovery', PlacementPermission.EDIT],
-    ['createClaimCedantSettlement', PlacementPermission.EDIT],
-    ['confirmClaimCedantSettlementBank', PlacementPermission.EDIT],
-    ['reverseClaimCedantSettlement', PlacementPermission.EDIT],
-    ['createClaimRecoveryReceipt', PlacementPermission.EDIT],
-    ['confirmClaimRecoveryReceiptBank', PlacementPermission.EDIT],
-    ['reverseClaimRecoveryReceipt', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],
     ['voidNote', PlacementPermission.EDIT],
     ['reversePayment', PlacementPermission.EDIT],
@@ -491,288 +327,6 @@ describe('PlacementsController', () => {
     );
   });
 
-  it('delegates endorsement reads with authenticated tenant context', async () => {
-    const controller = createController();
-    endorsementsService.findAll.mockResolvedValue([]);
-    endorsementsService.getSummary.mockResolvedValue({ id: 'summary-1' });
-
-    const listResult = await controller.findEndorsements('placement-1', {
-      user,
-    } as never);
-    await controller.findEndorsement('placement-1', 'endorsement-1', {
-      user,
-    } as never);
-    await controller.getEndorsementSummary('placement-1', 'endorsement-1', {
-      user,
-    } as never);
-
-    expect(endorsementsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-    );
-    expect(listResult).toEqual({ items: [] });
-    expect(endorsementsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-    );
-    expect(endorsementsService.getSummary).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-    );
-  });
-
-  it('delegates endorsement mutations with authenticated user context', async () => {
-    const controller = createController();
-
-    await controller.createEndorsement(
-      'placement-1',
-      {
-        type: PlacementEndorsementType.SUM_INSURED_INCREASE,
-        effectiveDate: '2026-06-04T00:00:00.000Z',
-        reason: 'Increase sum insured',
-      },
-      { user } as never,
-    );
-    await controller.updateEndorsement(
-      'placement-1',
-      'endorsement-1',
-      { reason: 'Updated' },
-      { user } as never,
-    );
-    await controller.changeEndorsementStatus(
-      'placement-1',
-      'endorsement-1',
-      { status: PlacementEndorsementStatus.MARKETING },
-      { user } as never,
-    );
-
-    expect(endorsementsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      expect.objectContaining({
-        type: PlacementEndorsementType.SUM_INSURED_INCREASE,
-      }),
-    );
-    expect(endorsementsService.update).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      expect.objectContaining({ reason: 'Updated' }),
-    );
-    expect(endorsementsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      expect.objectContaining({ status: PlacementEndorsementStatus.MARKETING }),
-    );
-  });
-
-  it('delegates endorsement participant reads with authenticated tenant context', async () => {
-    const controller = createController();
-    endorsementParticipantsService.findAll.mockResolvedValue({
-      items: [],
-      aggregates: {
-        totalOfferedPercent: 0,
-        totalAcceptedPercent: 0,
-        remainingPercent: null,
-        declinedPercent: 0,
-      },
-    });
-
-    const listResult = await controller.findEndorsementParticipants(
-      'placement-1',
-      'endorsement-1',
-      { user } as never,
-    );
-    await controller.findEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-
-    expect(endorsementParticipantsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-    );
-    expect(listResult).toEqual({
-      items: [],
-      aggregates: {
-        totalOfferedPercent: 0,
-        totalAcceptedPercent: 0,
-        remainingPercent: null,
-        declinedPercent: 0,
-      },
-    });
-    expect(endorsementParticipantsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
-  });
-
-  it('delegates endorsement participant mutations with authenticated user context', async () => {
-    const controller = createController();
-
-    await controller.createEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      {
-        counterpartyId: 'reinsurer-1',
-        originalParticipantId: 'participant-1',
-        sharePercent: 20,
-      },
-      { user } as never,
-    );
-    await controller.updateEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { signedLinePercent: 15 },
-      { user } as never,
-    );
-    await controller.changeEndorsementParticipantStatus(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { status: PlacementEndorsementParticipantStatus.OFFER_SENT },
-      { user } as never,
-    );
-    await controller.reinviteEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-    await controller.deleteEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-
-    expect(endorsementParticipantsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      expect.objectContaining({ counterpartyId: 'reinsurer-1' }),
-    );
-    expect(endorsementParticipantsService.update).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      expect.objectContaining({ signedLinePercent: 15 }),
-    );
-    expect(endorsementParticipantsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      expect.objectContaining({
-        status: PlacementEndorsementParticipantStatus.OFFER_SENT,
-      }),
-    );
-    expect(endorsementParticipantsService.reinvite).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
-    expect(endorsementParticipantsService.delete).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
-  });
-
-  it('delegates endorsement closing reads with authenticated tenant context', async () => {
-    const controller = createController();
-    endorsementClosingsService.findAll.mockResolvedValue([]);
-
-    const listResult = await controller.findEndorsementClosings(
-      'placement-1',
-      'endorsement-1',
-      { user } as never,
-    );
-    await controller.findEndorsementClosing(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-      { user } as never,
-    );
-
-    expect(endorsementClosingsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-    );
-    expect(listResult).toEqual({ items: [] });
-    expect(endorsementClosingsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-    );
-  });
-
-  it('delegates endorsement closing mutations with authenticated user context', async () => {
-    const controller = createController();
-
-    await controller.createEndorsementClosing(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-    await controller.changeEndorsementClosingStatus(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-      { status: PlacementClosingStatus.ISSUED },
-      { user } as never,
-    );
-    await controller.validateAndConfirmEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-    await controller.forceCloseEndorsement('placement-1', 'endorsement-1', {
-      user,
-    } as never);
-
-    expect(endorsementClosingsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
-    expect(endorsementClosingsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-      expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
-    );
-    expect(endorsementClosingsService.validateAndConfirm).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
-    expect(endorsementClosingsService.forceClose).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-    );
-  });
-
   it('delegates archive and restore placement lifecycle actions', async () => {
     const controller = createController();
 
@@ -787,172 +341,6 @@ describe('PlacementsController', () => {
       archiveReason: 'Duplicate placement',
     });
     expect(service.restore).toHaveBeenCalledWith(user, 'placement-1');
-  });
-
-  it('delegates document registry reads and generation with authenticated context', async () => {
-    const controller = createController();
-    documentsService.findAll.mockResolvedValue([]);
-
-    const listResult = await controller.findDocuments('placement-1', {
-      user,
-    } as never);
-    await controller.findDocument('placement-1', 'document-1', {
-      user,
-    } as never);
-    documentsService.renderPdf.mockResolvedValue(Buffer.from('%PDF'));
-    const pdf = await controller.renderDocumentPdf(
-      'placement-1',
-      'document-1',
-      { user } as never,
-    );
-    await controller.renderAndStoreDocumentPdf('placement-1', 'document-1', {
-      user,
-    } as never);
-    documentsService.createDownloadUrl.mockResolvedValue({
-      url: 'https://signed.example/document.pdf',
-      expiresAt: new Date('2026-06-11T12:05:00.000Z'),
-      mimeType: 'application/pdf',
-      fileName: 'DOC-CS-001.pdf',
-    });
-    const downloadUrl = await controller.getDocumentDownloadUrl(
-      'placement-1',
-      'document-1',
-      { user } as never,
-    );
-    await controller.generateOfferSlipDocument('placement-1', {
-      user,
-    } as never);
-    await controller.generateParticipantOfferSlipDocument(
-      'placement-1',
-      'participant-1',
-      { user } as never,
-    );
-    await controller.generateClosingSlipDocument('placement-1', 'closing-1', {
-      user,
-    } as never);
-    await controller.generateNoteDocument('placement-1', 'note-1', {
-      user,
-    } as never);
-    await controller.generateEndorsementSlipDocument(
-      'placement-1',
-      'endorsement-1',
-      { user } as never,
-    );
-    await controller.generateEndorsementClosingSlipDocument(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-      { user } as never,
-    );
-    await controller.generateEndorsementCertificateDocument(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-      { user } as never,
-    );
-    await controller.generateClaimNoticeDocument('placement-1', 'claim-1', {
-      user,
-    } as never);
-    await controller.generateClaimCashCallDocument(
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      { user } as never,
-    );
-    await controller.voidDocument(
-      'placement-1',
-      'document-1',
-      { voidReason: 'Replacement generated' },
-      { user } as never,
-    );
-
-    expect(documentsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-    );
-    expect(listResult).toEqual({ items: [] });
-    expect(documentsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'document-1',
-    );
-    expect(documentsService.renderPdf).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'document-1',
-    );
-    expect(pdf).toBeInstanceOf(StreamableFile);
-    expect(documentsService.renderAndStorePdf).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'document-1',
-    );
-    expect(documentsService.createDownloadUrl).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'document-1',
-    );
-    expect(downloadUrl).toMatchObject({
-      url: 'https://signed.example/document.pdf',
-      mimeType: 'application/pdf',
-    });
-    expect(documentsService.generateOfferSlip).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-    );
-    expect(documentsService.generateParticipantOfferSlip).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'participant-1',
-    );
-    expect(documentsService.generateClosingSlip).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'closing-1',
-    );
-    expect(documentsService.generateNoteDocument).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'note-1',
-    );
-    expect(documentsService.generateEndorsementSlip).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-    );
-    expect(
-      documentsService.generateEndorsementClosingSlip,
-    ).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-    );
-    expect(
-      documentsService.generateEndorsementCertificate,
-    ).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-    );
-    expect(documentsService.generateClaimNotice).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-    );
-    expect(documentsService.generateClaimCashCall).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-    );
-    expect(documentsService.void).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'document-1',
-      expect.objectContaining({ voidReason: 'Replacement generated' }),
-    );
   });
 
   it('delegates note reads with authenticated tenant context', async () => {
@@ -1142,193 +530,6 @@ describe('PlacementsController', () => {
       'endorsement-1',
       'note-1',
       expect.objectContaining({ voidReason: 'Issued in error' }),
-    );
-  });
-
-  it('delegates claim reads and mutations with authenticated context', async () => {
-    const controller = createController();
-    claimsService.findAll.mockResolvedValue([]);
-    claimsService.findAllocations.mockResolvedValue([]);
-    claimFinancialCloseReadinessService.getReadiness.mockResolvedValue({
-      claimId: 'claim-1',
-      blockers: [],
-    });
-    const createDto = {
-      claimNumber: 'CLM-TEST-001',
-      occurrenceDate: '2026-06-03T00:00:00.000Z',
-      reportedDate: '2026-06-05T10:00:00.000Z',
-      claimCause: 'Warehouse fire',
-      currency: 'USD',
-      estimatedLossAmount: 40000,
-    };
-    const updateDto = { finalLossAmount: 37500 };
-
-    const claimList = await controller.findClaims('placement-1', {
-      user,
-    } as never);
-    await controller.findClaim('placement-1', 'claim-1', { user } as never);
-    await controller.createClaim('placement-1', createDto, { user } as never);
-    await controller.updateClaim('placement-1', 'claim-1', updateDto, {
-      user,
-    } as never);
-    await controller.changeClaimStatus(
-      'placement-1',
-      'claim-1',
-      { status: PlacementClaimStatus.NOTIFIED },
-      { user } as never,
-    );
-    await controller.getClaimFinancialCloseReadiness('placement-1', 'claim-1', {
-      user,
-    } as never);
-    const allocationList = await controller.findClaimAllocations(
-      'placement-1',
-      'claim-1',
-      { user } as never,
-    );
-    await controller.generateClaimAllocations('placement-1', 'claim-1', {
-      user,
-    } as never);
-
-    expect(claimsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-    );
-    expect(claimList).toEqual({ items: [] });
-    expect(claimsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(claimsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      createDto,
-    );
-    expect(claimsService.update).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      updateDto,
-    );
-    expect(claimsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      expect.objectContaining({ status: PlacementClaimStatus.NOTIFIED }),
-    );
-    expect(
-      claimFinancialCloseReadinessService.getReadiness,
-    ).toHaveBeenCalledWith('tenant-1', 'placement-1', 'claim-1');
-    expect(claimsService.findAllocations).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(allocationList).toEqual({ items: [] });
-    expect(claimsService.generateAllocations).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-    );
-  });
-
-  it('delegates claim cash call reads and mutations with authenticated context', async () => {
-    const controller = createController();
-    claimCashCallsService.findAll.mockResolvedValue([]);
-
-    const list = await controller.findClaimCashCalls('placement-1', 'claim-1', {
-      user,
-    } as never);
-    await controller.findClaimCashCall(
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      { user } as never,
-    );
-    await controller.createClaimCashCall(
-      'placement-1',
-      'claim-1',
-      'allocation-1',
-      { user } as never,
-    );
-    await controller.changeClaimCashCallStatus(
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      { status: PlacementClaimCashCallStatus.ISSUED },
-      { user } as never,
-    );
-    await controller.voidClaimCashCall(
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      { voidReason: 'Replacement required' },
-      { user } as never,
-    );
-
-    expect(claimCashCallsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(list).toEqual({ items: [] });
-    expect(claimCashCallsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-    );
-    expect(claimCashCallsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'allocation-1',
-    );
-    expect(claimCashCallsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      expect.objectContaining({ status: PlacementClaimCashCallStatus.ISSUED }),
-    );
-    expect(claimCashCallsService.void).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'cash-call-1',
-      expect.objectContaining({ voidReason: 'Replacement required' }),
-    );
-  });
-
-  it('delegates claim recovery approval reads and mutations with authenticated context', async () => {
-    const controller = createController();
-    claimRecoveryApprovalsService.findAll.mockResolvedValue([]);
-
-    const list = await controller.findClaimRecoveryApprovals(
-      'placement-1',
-      'claim-1',
-      { user } as never,
-    );
-    await controller.approveClaimRecovery(
-      'placement-1',
-      'claim-1',
-      'allocation-1',
-      { approvedAmount: 40000, currency: 'GHS' },
-      { user } as never,
-    );
-
-    expect(claimRecoveryApprovalsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(list).toEqual({ items: [] });
-    expect(claimRecoveryApprovalsService.approve).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'claim-1',
-      'allocation-1',
-      expect.objectContaining({ approvedAmount: 40000, currency: 'GHS' }),
     );
   });
 

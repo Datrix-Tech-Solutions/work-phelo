@@ -15,14 +15,14 @@ import {
   PlacementNoteStatus,
   PlacementNoteType,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
-import { PlacementEndorsementSummaryResponseDto } from './dto/placement-endorsement-summary-response.dto';
-import { EffectivePlacementViewResponseDto } from './dto/placement-effective-view-response.dto';
-import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
-import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreatePlacementEndorsementDto } from '../dto/create-placement-endorsement.dto';
+import { PlacementEndorsementSummaryResponseDto } from '../dto/placement-endorsement-summary-response.dto';
+import { EffectivePlacementViewResponseDto } from '../dto/placement-effective-view-response.dto';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
+import { UpdatePlacementEndorsementStatusDto } from '../dto/update-placement-endorsement-status.dto';
+import { UpdatePlacementEndorsementDto } from '../dto/update-placement-endorsement.dto';
 
 type PlacementEndorsementRecord = PlacementEndorsement;
 

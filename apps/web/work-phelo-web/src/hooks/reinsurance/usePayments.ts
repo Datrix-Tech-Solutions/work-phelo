@@ -6,6 +6,7 @@ import {
   FacultativeStatus,
   PlacementPayment,
   CreatePlacementPaymentPayload,
+  ConfirmPlacementPaymentBankPayload,
   PlacementFinancialPosition,
   PlacementParticipantClosing,
 } from '@/types/reinsurance';
@@ -55,9 +56,6 @@ export function usePlacementFinancialPosition(placementId: string, asOfDate?: st
   });
 }
 
-/** Premium payment status/latest-payment-date for a placement, in the plain-sentence wording
- *  used by the claim panel and claim overview — shares the same authoritative figures as the
- *  Premiums page and placement Details page via the same query keys/cache. */
 export function usePremiumPaymentContext(placementId: string) {
   const { data: financialPosition } = usePlacementFinancialPosition(placementId);
   const { data: payments = [] } = usePlacementPayments(placementId);
@@ -83,6 +81,27 @@ export function useCreatePlacementPayment() {
       ...payload
     }: CreatePlacementPaymentPayload & { placementId: string }) => {
       const res = await api.post(`${BASE}/${placementId}/payments`, payload);
+      return res.data as PlacementPayment;
+    },
+    onSuccess: (_, { placementId }) => {
+      queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+    },
+  });
+}
+
+export function useConfirmPlacementPaymentBank() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      placementId,
+      paymentId,
+      ...payload
+    }: ConfirmPlacementPaymentBankPayload & { placementId: string; paymentId: string }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/payments/${paymentId}/bank-confirmation`,
+        payload,
+      );
       return res.data as PlacementPayment;
     },
     onSuccess: (_, { placementId }) => {
@@ -147,11 +166,6 @@ export function totalEffectiveReinsurerDisbursement(
 
 export type PlacementPaymentStatus = 'paid' | 'partial' | 'outstanding';
 
-/**
- * Returns a map of placementId → payment status for placements that have at least one
- * accepted/closed participant. Uses the same query keys as usePlacementPayments so results
- * share the React Query cache with the per-row PaymentStatusCell queries.
- */
 export function useCedantPlacementPaymentStatuses(
   placements: Facultative[],
 ): Map<string, PlacementPaymentStatus> {
@@ -189,17 +203,26 @@ export function useCedantPlacementPaymentStatuses(
   }, [relevantPlacements, positionQueries]);
 }
 
+export interface CurrencyAmount {
+  code: string;
+  amount: number;
+}
+
 export interface PremiumsSummary {
   totalDue: number;
   totalPaid: number;
+
+  dueByCurrency: CurrencyAmount[];
+  paidByCurrency: CurrencyAmount[];
   isLoading: boolean;
 }
 
-/**
- * Aggregates net premium due vs. recorded payments across the given placements. Uses the same
- * query keys as usePlacementPayments so results share the cache. Expects `placements` to
- * already be filtered to the set worth querying (e.g. placed/closing offers).
- */
+function sortedCurrencyTotals(totals: Map<string, number>): CurrencyAmount[] {
+  return Array.from(totals.entries())
+    .map(([code, amount]) => ({ code, amount }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
 export function usePremiumsSummary(placements: Facultative[]): PremiumsSummary {
   const positionQueries = useQueries({
     queries: placements.map((p) => ({
@@ -213,21 +236,29 @@ export function usePremiumsSummary(placements: Facultative[]): PremiumsSummary {
   const summary = useMemo(() => {
     let totalDue = 0;
     let totalPaid = 0;
+    const dueTotals = new Map<string, number>();
+    const paidTotals = new Map<string, number>();
     placements.forEach((p, i) => {
       const position = positionQueries[i]?.data;
-      totalDue += position?.cedant.currentObligation ?? 0;
-      totalPaid += position?.cedant.netSettled ?? 0;
+      const due = position?.cedant.currentObligation ?? 0;
+      const paid = position?.cedant.netSettled ?? 0;
+      const code = position?.currency ?? p.currency ?? 'UNKNOWN';
+      totalDue += due;
+      totalPaid += paid;
+      if (due > 0.0001) dueTotals.set(code, (dueTotals.get(code) ?? 0) + due);
+      if (paid > 0.0001) paidTotals.set(code, (paidTotals.get(code) ?? 0) + paid);
     });
-    return { totalDue, totalPaid };
+    return {
+      totalDue,
+      totalPaid,
+      dueByCurrency: sortedCurrencyTotals(dueTotals),
+      paidByCurrency: sortedCurrencyTotals(paidTotals),
+    };
   }, [placements, positionQueries]);
 
   return { ...summary, isLoading };
 }
 
-/**
- * Returns paid disbursements (by currency ISO code) made to a specific reinsurer across all their
- * placements. Uses the same query keys as usePlacementPayments so results share the cache.
- */
 export function useReinsurerPaymentSummary(
   placements: Facultative[],
   reinsurerId: string,
@@ -278,10 +309,6 @@ export function useReinsurerPaymentSummary(
   return { paidByCode, isLoading };
 }
 
-/**
- * Returns paid premium receipts (by currency ISO code) across a set of placements (already
- * filtered to one cedant). Uses the same query keys as usePlacementPayments so results share cache.
- */
 export function useCedantPaymentSummary(placements: Facultative[]): {
   paidByCode: Map<string, number>;
   isLoading: boolean;
@@ -319,10 +346,6 @@ export function useCedantPaymentSummary(placements: Facultative[]): {
   return { paidByCode, isLoading };
 }
 
-/**
- * Returns a map of cedantId → count of placements with outstanding or partial payments.
- * Uses the same query keys as usePlacementPayments so results share the React Query cache.
- */
 export function useCedantOutstandingCounts(): Map<string, number> {
   const { data: placements = [] } = useFacultatives();
 

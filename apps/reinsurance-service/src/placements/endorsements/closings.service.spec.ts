@@ -8,9 +8,9 @@ import {
   PlacementEndorsementParticipantStatus,
   PlacementEndorsementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementEndorsementClosingsService } from './closings.service';
 
 describe('PlacementEndorsementClosingsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
@@ -325,6 +325,66 @@ describe('PlacementEndorsementClosingsService', () => {
         currency: 'USD',
       });
       expect(result.status).toBe(PlacementClosingStatus.DRAFT);
+    });
+
+    it('falls back to the counterparty default brokerage rate when there is no original-participant link', async () => {
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        originalParticipantId: null,
+        originalParticipant: null,
+        counterparty: {
+          ...acceptedParticipant.counterparty,
+          brokerageFee: '5.00',
+        },
+      });
+
+      await service.create(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      const createArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingCreateArgs>(
+          prisma.placementEndorsementClosing.create,
+        );
+
+      expect(createArgs.data).toMatchObject({
+        brokeragePercent: 5,
+        brokerageAmount: 450, // 5% of the 9000 premium snapshot
+        netPremium: 7650, // 9000 - 900 commission - 450 brokerage
+      });
+    });
+
+    it('defaults brokerage to zero when neither the original participant nor the counterparty has a rate', async () => {
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        originalParticipantId: null,
+        originalParticipant: null,
+        counterparty: {
+          ...acceptedParticipant.counterparty,
+          brokerageFee: null,
+        },
+      });
+
+      await service.create(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      const createArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingCreateArgs>(
+          prisma.placementEndorsementClosing.create,
+        );
+
+      expect(createArgs.data).toMatchObject({
+        brokeragePercent: 0,
+        brokerageAmount: 0,
+        netPremium: 8100, // 9000 - 900 commission, no brokerage
+      });
     });
 
     it('does not mutate original placement records when creating an endorsement closing', async () => {

@@ -16,7 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   ClosingSnapshot,
   ClosingSnapshotReader,
-} from './closing-snapshot.reader';
+} from './closings/closing-snapshot.reader';
 import { EffectivePlacementViewResponseDto } from './dto/placement-effective-view-response.dto';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 

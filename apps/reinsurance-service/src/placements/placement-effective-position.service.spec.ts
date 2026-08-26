@@ -2,7 +2,7 @@ import {
   PlacementClosingStatus,
   PlacementEndorsementStatus,
 } from '../../prisma/generated/client';
-import { ClosingSnapshotReader } from './closing-snapshot.reader';
+import { ClosingSnapshotReader } from './closings/closing-snapshot.reader';
 import { PlacementEffectivePositionService } from './placement-effective-position.service';
 
 describe('PlacementEffectivePositionService', () => {

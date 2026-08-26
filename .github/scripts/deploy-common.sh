@@ -143,13 +143,13 @@ ensure_deploy_dirs() {
     "$DEPLOY_PATH/apps/api-gateway" \
     "$DEPLOY_PATH/apps/auth-service" \
     "$DEPLOY_PATH/apps/hr-service" \
-    "$DEPLOY_PATH/apps/notification-service"
+    "$DEPLOY_PATH/apps/notification-service" \
+    "$DEPLOY_PATH/apps/reinsurance-service"
 
   if [[ "${DEPLOY_ENV}" == "dev" ]]; then
     mkdir -p \
       "$DEPLOY_PATH/apps/subscription-service" \
       "$DEPLOY_PATH/apps/marketing-service" \
-      "$DEPLOY_PATH/apps/reinsurance-service" \
       "$DEPLOY_PATH/apps/accounting-service"
   fi
 }

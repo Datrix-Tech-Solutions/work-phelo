@@ -16,8 +16,7 @@ interface ClaimDetailsPanelProps {
   placement: Facultative;
   claim?: PlacementClaim;
   deductionRate: number;
-  /** When the claim was fully recovered from reinsurers — null/undefined while it's still
-   * in Notification or Open. */
+
   recoveredAt?: string | null;
 
   statusActions?: ReactNode;

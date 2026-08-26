@@ -19,7 +19,7 @@ export class ConfirmPlacementPaymentBankDto {
     format: 'date-time',
     example: '2026-06-04T14:30:00.000Z',
     description:
-      'Accounting-owned date/time when the payment was financially confirmed as received, cleared, completed, posted or offset.',
+      'Broker-recorded date/time when the payment was confirmed as received, cleared, completed or offset inside Reinsurance.',
   })
   @IsDateString()
   bankConfirmedAt!: string;
@@ -28,7 +28,7 @@ export class ConfirmPlacementPaymentBankDto {
     example: 'BANK-CONF-2026-001',
     maxLength: 100,
     description:
-      'Bank, cheque, mobile-money or settlement reference supplied by Accounting when the operational module did not already provide one.',
+      'Bank, cheque, mobile-money or settlement reference for the confirmed Reinsurance payment.',
   })
   @TrimmedString()
   @IsOptional()
@@ -39,7 +39,8 @@ export class ConfirmPlacementPaymentBankDto {
   @ApiPropertyOptional({
     example: '56a9d8dd-bf8f-4d6a-a88f-8d1da3b1fd45',
     description:
-      'Accounting-owned cash/bank account selected for cash-impact confirmations. Required for bank, cash, cheque and mobile-money settlement methods before Accounting can bridge this event into Cashbook.',
+      'Deprecated compatibility metadata from the former Accounting confirmation workflow. Accepted if supplied, but no longer required or validated against Accounting.',
+    deprecated: true,
   })
   @IsOptional()
   @IsUUID()
@@ -96,7 +97,7 @@ export class ConfirmPlacementPaymentBankDto {
     example: 25,
     minimum: 0,
     description:
-      'Bank charges captured during Accounting confirmation. Accounting determines final ledger posting treatment.',
+      'Operational bank charges captured with the Reinsurance payment confirmation.',
   })
   @Type(() => Number)
   @IsOptional()

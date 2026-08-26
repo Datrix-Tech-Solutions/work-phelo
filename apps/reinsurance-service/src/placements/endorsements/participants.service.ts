@@ -11,11 +11,11 @@ import {
   PlacementEndorsementParticipantStatus,
   PlacementEndorsementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreatePlacementEndorsementParticipantDto } from './dto/create-placement-endorsement-participant.dto';
-import { UpdatePlacementEndorsementParticipantStatusDto } from './dto/update-placement-endorsement-participant-status.dto';
-import { UpdatePlacementEndorsementParticipantDto } from './dto/update-placement-endorsement-participant.dto';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreatePlacementEndorsementParticipantDto } from '../dto/create-placement-endorsement-participant.dto';
+import { UpdatePlacementEndorsementParticipantStatusDto } from '../dto/update-placement-endorsement-participant-status.dto';
+import { UpdatePlacementEndorsementParticipantDto } from '../dto/update-placement-endorsement-participant.dto';
 
 const participantInclude = {
   counterparty: {

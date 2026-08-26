@@ -90,10 +90,10 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       width: '150px',
       render: (row) => (
         <div className="flex flex-col">
-          <span className="text-gray-700">{fmtType(row.type)}</span>
-          <span className="text-xs text-gray-400">
+          <span className="font-semibold text-gray-700">{fmtType(row.type)}</span>
+          {/* <span className="text-xs text-gray-400">
             {row.direction === 'INBOUND' ? 'Inflow' : 'Outflow'}
-          </span>
+          </span> */}
         </div>
       ),
     },
@@ -101,7 +101,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       key: 'counterparty',
       label: 'Participant',
       width: 'minmax(100px, 0.7fr)',
-      render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
+      render: (row) => <span className="font-semibold text-gray-700">{row.counterparty.name}</span>,
     },
     // {
     //   key: 'closing',

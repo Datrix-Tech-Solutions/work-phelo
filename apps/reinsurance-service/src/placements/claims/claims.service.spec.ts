@@ -13,7 +13,7 @@ import {
 } from '../../../prisma/generated/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClaimAllocationCalculator } from './allocation/allocation.calculator';
-import { ClosingSnapshotReader } from '../closing-snapshot.reader';
+import { ClosingSnapshotReader } from '../closings/closing-snapshot.reader';
 import { PlacementEffectivePositionService } from '../placement-effective-position.service';
 import { PlacementEffectiveViewService } from '../placement-effective-view.service';
 import { PlacementClaimsService } from './claims.service';

@@ -10,9 +10,9 @@ import {
   PlacementParticipantStatus,
   PlacementStatus,
   Prisma,
-} from '../../prisma/generated/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlacementClosingsService } from './placement-closings.service';
+} from '../../../prisma/generated/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementClosingsService } from './closings.service';
 
 describe('PlacementClosingsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;

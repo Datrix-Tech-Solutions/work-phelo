@@ -18,7 +18,15 @@ const MAX_BACKOFF_MS = 15 * 60 * 1000;
 const BASE_BACKOFF_MS = 60 * 1000;
 const PROCESSING_STALE_AFTER_MS = 15 * 60 * 1000;
 const DEFAULT_MAX_ATTEMPTS = 10;
-const RETIRED_CLAIM_ACCOUNTING_EVENT_TYPES = [
+export const RETIRED_REINSURANCE_ACCOUNTING_EVENT_TYPES = [
+  'DEBIT_NOTE_ISSUED',
+  'CREDIT_NOTE_ISSUED',
+  'ENDORSEMENT_DEBIT_NOTE_ISSUED',
+  'ENDORSEMENT_CREDIT_NOTE_ISSUED',
+  'PREMIUM_PAYMENT_RECEIVED',
+  'PAYMENT_REVERSED',
+  'REINSURER_DISBURSEMENT_RECORDED',
+  'REINSURER_DISBURSEMENT_REVERSED',
   'CLAIM_PAYABLE_APPROVED',
   'CLAIM_RECOVERY_APPROVED',
   'CLAIM_RECOVERY_RECEIVED',
@@ -95,7 +103,9 @@ export class ReinsuranceAccountingOutboxService {
     const candidates = await prisma.reinsuranceAccountingOutbox.findMany({
       where: {
         ...(options.tenantId ? { tenantId: options.tenantId } : {}),
-        sourceEventType: { notIn: [...RETIRED_CLAIM_ACCOUNTING_EVENT_TYPES] },
+        sourceEventType: {
+          notIn: [...RETIRED_REINSURANCE_ACCOUNTING_EVENT_TYPES],
+        },
         OR: [
           { status: ReinsuranceAccountingOutboxStatus.PENDING },
           {
@@ -226,7 +236,9 @@ export class ReinsuranceAccountingOutboxService {
         id: outboxId,
         tenantId,
         status: ReinsuranceAccountingOutboxStatus.FAILED,
-        sourceEventType: { notIn: [...RETIRED_CLAIM_ACCOUNTING_EVENT_TYPES] },
+        sourceEventType: {
+          notIn: [...RETIRED_REINSURANCE_ACCOUNTING_EVENT_TYPES],
+        },
       },
       data: { nextAttemptAt: new Date(), lastError: null },
     });
@@ -251,7 +263,9 @@ export class ReinsuranceAccountingOutboxService {
       where: {
         id: outboxId,
         tenantId,
-        sourceEventType: { notIn: [...RETIRED_CLAIM_ACCOUNTING_EVENT_TYPES] },
+        sourceEventType: {
+          notIn: [...RETIRED_REINSURANCE_ACCOUNTING_EVENT_TYPES],
+        },
         OR: [
           { status: ReinsuranceAccountingOutboxStatus.PENDING },
           {

@@ -214,7 +214,7 @@ export function MakeClaimPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title={isEditing ? 'Edit Claim' : mode === 'actual' ? 'Add Claim' : 'Make Claim'}
+      title={isEditing ? 'Edit Claim' : mode === 'actual' ? 'Add Claim' : 'Add Notification'}
       description={
         effectivePlacement
           ? `Claim for ${displayPolicyNumber(effectivePlacement.policyNumber)}`

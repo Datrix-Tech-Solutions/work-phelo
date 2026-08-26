@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
-import { ReinsuranceAccountingIntegrationModule } from '../accounting-integration/reinsurance-accounting-integration.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ReinsuranceChargeSettingsModule } from '../settings/reinsurance-charge-settings.module';
 import { ClaimAllocationCalculator } from './claims/allocation/allocation.calculator';
-import { ClosingSnapshotReader } from './closing-snapshot.reader';
+import { ClosingSnapshotReader } from './closings/closing-snapshot.reader';
 import { PlacementFinancialActivityReader } from './finance/financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
 import { PlacementFinancialPositionService } from './finance/financial-position.service';
@@ -16,18 +15,21 @@ import { PlacementClaimRecoveryReceiptsService } from './claims/recoveries/recov
 import { PlacementClaimsService } from './claims/claims.service';
 import { PlacementAttachmentsController } from './documents/attachments/attachments.controller';
 import { PlacementAttachmentsService } from './documents/attachments/attachments.service';
-import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementClosingsService } from './closings/closings.service';
 import { PlacementDocumentsService } from './documents/documents.service';
-import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
-import { PlacementEndorsementsService } from './placement-endorsements.service';
-import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
+import { PlacementEndorsementClosingsService } from './endorsements/closings.service';
+import { PlacementEndorsementsService } from './endorsements/endorsements.service';
+import { PlacementEndorsementParticipantsService } from './endorsements/participants.service';
 import { PlacementEffectivePositionService } from './placement-effective-position.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
-import { PlacementNotesService } from './placement-notes.service';
-import { PlacementPaymentsService } from './placement-payments.service';
+import { PlacementNotesService } from './transactions/notes.service';
+import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementDocumentTemplateRegistry } from './documents/pdf/placement-document-template.registry';
 import { PlacementPdfRendererService } from './documents/pdf/placement-pdf-renderer.service';
 import { PlacementsController } from './placements.controller';
+import { PlacementClaimsController } from './controllers/placement-claims.controller';
+import { PlacementDocumentsController } from './controllers/placement-documents.controller';
+import { PlacementEndorsementsController } from './controllers/placement-endorsements.controller';
 import { PlacementsService } from './placements.service';
 import { ReinsuranceDashboardController } from './dashboard/dashboard.controller';
 import { ReinsuranceDashboardService } from './dashboard/dashboard.service';
@@ -36,14 +38,12 @@ import { S3DocumentStorageService } from './documents/storage/s3-document-storag
 import { TenantDocumentProfileClient } from './documents/tenant-document-profile.client';
 
 @Module({
-  imports: [
-    PrismaModule,
-    RabbitMQModule,
-    ReinsuranceChargeSettingsModule,
-    ReinsuranceAccountingIntegrationModule,
-  ],
+  imports: [PrismaModule, RabbitMQModule, ReinsuranceChargeSettingsModule],
   controllers: [
     PlacementsController,
+    PlacementDocumentsController,
+    PlacementClaimsController,
+    PlacementEndorsementsController,
     PlacementAttachmentsController,
     ReinsuranceDashboardController,
   ],

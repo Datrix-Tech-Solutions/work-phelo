@@ -10,7 +10,12 @@ import {
   AddPaymentFormValues,
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
-import { useFacultatives, useCreatePlacementPayment, useFacultativePlacement } from '@/hooks';
+import {
+  useFacultatives,
+  useCreatePlacementPayment,
+  useConfirmPlacementPaymentBank,
+  useFacultativePlacement,
+} from '@/hooks';
 import { fetchPlacementFinancialPosition } from '@/hooks/reinsurance/usePayments';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
@@ -23,6 +28,12 @@ interface AddPaymentFormProps {
   onAllocationsRecorded?: (allocations: Record<string, number>) => void;
   onPlacementsChange?: (placementIds: string[]) => void;
   defaultOpen?: boolean;
+  /** Externally controlled open state — when provided, this component stops rendering its own
+   *  "Receive Cedant Premium" trigger button and open/close is owned entirely by the caller
+   *  (e.g. a table that already has its own action button for this and just wants the side
+   *  panel to open in place instead of navigating to a separate page). */
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export default function AddPaymentForm({
@@ -31,8 +42,16 @@ export default function AddPaymentForm({
   onAllocationsRecorded,
   onPlacementsChange,
   defaultOpen = false,
+  isOpen,
+  onClose,
 }: AddPaymentFormProps) {
-  const [panelOpen, setPanelOpen] = useState(defaultOpen);
+  const isControlled = isOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const panelOpen = isControlled ? isOpen : internalOpen;
+  const closePanel = () => {
+    if (isControlled) onClose?.();
+    else setInternalOpen(false);
+  };
   const [receiptPrompt, setReceiptPrompt] = useState<{
     payment: PlacementPayment;
     placement: Facultative;
@@ -46,6 +65,7 @@ export default function AddPaymentForm({
   const { data: facultatives = [] } = useFacultatives();
   const { data: singlePlacement } = useFacultativePlacement(placementId ?? '');
   const createPayment = useCreatePlacementPayment();
+  const confirmPaymentBank = useConfirmPlacementPaymentBank();
   const addToast = useToastStore((s) => s.addToast);
 
   const form = useForm<AddPaymentFormValues>({ defaultValues: ADD_PAYMENT_DEFAULTS });
@@ -122,7 +142,7 @@ export default function AddPaymentForm({
 
         submittedAmount = Math.round(submittedAmount * 100) / 100;
 
-        return createPayment.mutateAsync({
+        const created = await createPayment.mutateAsync({
           placementId: f.id,
           type: 'PREMIUM_RECEIVED',
           direction: 'INBOUND',
@@ -135,6 +155,23 @@ export default function AddPaymentForm({
           settlementCurrency: placementCurrency,
           notes: notesStr,
         });
+
+        // Confirm right after recording — everything the confirm endpoint needs
+        // (settlement method/currency/reference) is already on the payment from the
+        // create call above, so this needs nothing further from the user.
+        try {
+          return await confirmPaymentBank.mutateAsync({
+            placementId: f.id,
+            paymentId: created.id,
+            bankConfirmedAt: new Date(resolvedDate).toISOString(),
+          });
+        } catch (confirmError) {
+          addToast({
+            message: `Payment recorded for ${f.policyNumber ?? f.title}, but bank confirmation failed automatically: ${extractError(confirmError)}. It will remain pending until confirmed.`,
+            type: 'error',
+          });
+          return created;
+        }
       });
 
       const results = await Promise.all(calls);
@@ -150,7 +187,7 @@ export default function AddPaymentForm({
         onAllocationsRecorded?.(parsed);
       }
 
-      setPanelOpen(false);
+      closePanel();
       form.reset(ADD_PAYMENT_DEFAULTS);
 
       // Offer receipt generation when placement context is available
@@ -179,16 +216,18 @@ export default function AddPaymentForm({
 
   return (
     <>
-      <Button onClick={() => setPanelOpen(true)}>Receive Cedant Premium</Button>
+      {!isControlled && (
+        <Button onClick={() => setInternalOpen(true)}>Receive Cedant Premium</Button>
+      )}
 
       <SidePanel
         isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
+        onClose={closePanel}
         title="Receive Cedant Premium"
         description="Record money received from the cedant for selected placement obligations."
         footer={
           <div className="flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
+            <Button type="button" variant="outline" onClick={closePanel}>
               Cancel
             </Button>
             <Button type="submit" form="add-payment-form" disabled={isSubmitting}>

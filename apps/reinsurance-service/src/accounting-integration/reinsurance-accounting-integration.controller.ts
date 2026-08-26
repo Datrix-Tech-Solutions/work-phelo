@@ -2,23 +2,15 @@ import {
   Controller,
   Get,
   GoneException,
-  Param,
-  ParseUUIDPipe,
   Post,
-  Query,
-  Req,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiCookieAuth,
   ApiOperation,
-  ApiOkResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Request } from 'express';
-import { RequestUser } from '@work-phelo/types';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -26,16 +18,9 @@ import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import {
-  AccountingOutboxDispatcherStatusDto,
-  ProcessReinsuranceAccountingOutboxDto,
-  ReconcileDebitNoteAccountingEventsDto,
-  ReconcilePaymentAccountingEventsDto,
-} from './readiness/readiness.dto';
-import { ReinsuranceAccountingOutboxDispatcher } from './outbox/outbox-dispatcher.service';
-import { ReinsuranceAccountingIntegrationActiveGuard } from './guards/integration-active.guard';
-import { ReinsuranceAccountingOperationAuditInterceptor } from './audit/operation-audit.interceptor';
-import { ReinsuranceAccountingReadinessService } from './readiness/readiness.service';
+
+const REINSURANCE_ACCOUNTING_RETIRED_MESSAGE =
+  'Reinsurance Accounting integration is retired by product policy; Reinsurance financial workflows are controlled inside Reinsurance.';
 
 @Controller('accounting-integration')
 @ApiTags('Reinsurance - Accounting Integration')
@@ -45,62 +30,48 @@ import { ReinsuranceAccountingReadinessService } from './readiness/readiness.ser
 @RequireModule('operations')
 @RequireFeature('operations', 'reinsurance')
 export class ReinsuranceAccountingIntegrationController {
-  constructor(
-    private readonly readiness: ReinsuranceAccountingReadinessService,
-    private readonly dispatcher: ReinsuranceAccountingOutboxDispatcher,
-  ) {}
-
   @Get('status')
   @RequirePermissions('operations.reinsurance.dashboard:VIEW')
   @ApiOperation({
-    summary: 'Get Reinsurance Accounting integration readiness status',
+    summary: 'Reinsurance Accounting integration status is retired',
+    description:
+      'Reinsurance is financially self-contained. This compatibility endpoint fails safely and never contacts Accounting.',
   })
-  status(@Req() request: Request & { user: RequestUser }) {
-    return this.readiness.status(request.user);
+  status() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('counterparties/:counterpartyId/subledger/sync')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Synchronize one Cedant/Reinsurer counterparty to Accounting',
+    summary: 'Reinsurance counterparty Accounting sync is retired',
     description:
-      'Ensures the tenant Accounting subledger exists when Accounting is enabled. This does not publish financial source events.',
+      'Reinsurance counterparties are managed inside Reinsurance. This compatibility endpoint fails safely and never contacts Accounting.',
   })
-  syncCounterparty(
-    @Param('counterpartyId', ParseUUIDPipe) counterpartyId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.syncCounterpartyById(request.user, counterpartyId);
+  syncCounterparty() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('outbox/process-pending')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Dispatch pending Reinsurance Accounting outbox events',
+    summary: 'Reinsurance Accounting outbox dispatch is retired',
     description:
-      'Operational dispatcher for already-enqueued outbox rows. This endpoint does not create new financial events.',
+      'Reinsurance no longer sends financial events to Accounting. This compatibility endpoint fails safely and never dispatches outbox rows.',
   })
-  processPending(
-    @Query() query: ProcessReinsuranceAccountingOutboxDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.processPending(request.user, query);
+  processPending() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Get('outbox/dispatcher/status')
   @RequirePermissions('operations.reinsurance.accounting-operations:VIEW')
   @ApiOperation({
-    summary: 'Get Reinsurance Accounting outbox dispatcher status',
+    summary: 'Reinsurance Accounting outbox dispatcher status is retired',
     description:
-      'Reports automatic dispatcher configuration and recent batch activity. The endpoint is authenticated, requires the existing Reinsurance dashboard view permission, and is observational only. It does not create, dispatch or expose financial-event payloads.',
+      'Reinsurance no longer dispatches financial events to Accounting. This compatibility endpoint fails safely and does not expose historical event payloads.',
   })
-  @ApiOkResponse({ type: AccountingOutboxDispatcherStatusDto })
   dispatcherStatus() {
-    return this.dispatcher.status();
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Get('financial-confirmations/claim-recovery-receipts')
@@ -130,153 +101,95 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/debit-note-issued')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Reconcile issued placement debit notes with Accounting outbox',
+    summary: 'Placement debit note Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets issued placement debit notes missing their deterministic DEBIT_NOTE_ISSUED outbox row.',
+      'Reinsurance no longer publishes placement debit note Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileDebitNoteIssuedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileDebitNoteIssuedEvents(request.user, query);
+  reconcileDebitNoteIssuedEvents() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('reconciliation/credit-note-issued')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Reconcile issued placement credit notes with Accounting outbox',
+    summary: 'Placement credit note Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets issued placement credit notes missing their deterministic CREDIT_NOTE_ISSUED outbox row.',
+      'Reinsurance no longer publishes placement credit note Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileCreditNoteIssuedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileCreditNoteIssuedEvents(request.user, query);
+  reconcileCreditNoteIssuedEvents() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('reconciliation/endorsement-debit-note-issued')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Reconcile issued endorsement debit notes with Accounting outbox',
+    summary: 'Endorsement debit note Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets issued endorsement debit notes missing their deterministic ENDORSEMENT_DEBIT_NOTE_ISSUED outbox row.',
+      'Reinsurance no longer publishes endorsement debit note Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileEndorsementDebitNoteIssuedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileEndorsementDebitNoteIssuedEvents(
-      request.user,
-      query,
-    );
+  reconcileEndorsementDebitNoteIssuedEvents() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('reconciliation/endorsement-credit-note-issued')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Reconcile issued endorsement credit notes with Accounting outbox',
+    summary: 'Endorsement credit note Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets issued endorsement credit notes missing their deterministic ENDORSEMENT_CREDIT_NOTE_ISSUED outbox row.',
+      'Reinsurance no longer publishes endorsement credit note Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileEndorsementCreditNoteIssuedEvents(
-    @Query() query: ReconcileDebitNoteAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileEndorsementCreditNoteIssuedEvents(
-      request.user,
-      query,
-    );
+  reconcileEndorsementCreditNoteIssuedEvents() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('reconciliation/premium-payment-received')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Reconcile recorded premium payments with Accounting outbox',
+    summary: 'Premium payment Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets premium receipt payment rows missing their deterministic PREMIUM_PAYMENT_RECEIVED outbox row.',
+      'Reinsurance no longer publishes premium payment Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcilePremiumPaymentReceivedEvents(
-    @Query() query: ReconcilePaymentAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcilePremiumPaymentReceivedEvents(
-      request.user,
-      query,
-    );
+  reconcilePremiumPaymentReceivedEvents() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('reconciliation/payment-reversed')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary: 'Reconcile premium payment reversals with Accounting outbox',
+    summary: 'Premium payment reversal Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets reversal payment rows missing their deterministic PAYMENT_REVERSED outbox row.',
+      'Reinsurance no longer publishes premium payment reversal Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcilePaymentReversedEvents(
-    @Query() query: ReconcilePaymentAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcilePaymentReversedEvents(request.user, query);
+  reconcilePaymentReversedEvents() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('reconciliation/reinsurer-disbursement-recorded')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
-    summary:
-      'Reconcile bank-confirmed reinsurer disbursements with Accounting outbox',
+    summary: 'Reinsurer disbursement Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets bank-confirmed outbound reinsurer payments missing their deterministic REINSURER_DISBURSEMENT_RECORDED outbox row.',
+      'Reinsurance no longer publishes reinsurer disbursement Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileReinsurerDisbursementRecordedEvents(
-    @Query() query: ReconcilePaymentAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileReinsurerDisbursementRecordedEvents(
-      request.user,
-      query,
-    );
+  reconcileReinsurerDisbursementRecordedEvents() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('reconciliation/reinsurer-disbursement-reversed')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
-      'Reconcile reversed reinsurer disbursements with Accounting outbox',
+      'Reinsurer disbursement reversal Accounting reconciliation is retired',
     description:
-      'Tenant-scoped support operation. Defaults to dry-run and only targets immutable outbound reinsurer disbursement reversal rows missing their deterministic REINSURER_DISBURSEMENT_REVERSED outbox row.',
+      'Reinsurance no longer publishes reinsurer disbursement reversal Accounting events. This compatibility endpoint fails safely and never creates outbox rows.',
   })
-  reconcileReinsurerDisbursementReversedEvents(
-    @Query() query: ReconcilePaymentAccountingEventsDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.readiness.reconcileReinsurerDisbursementReversedEvents(
-      request.user,
-      query,
-    );
+  reconcileReinsurerDisbursementReversedEvents() {
+    throw new GoneException(REINSURANCE_ACCOUNTING_RETIRED_MESSAGE);
   }
 
   @Post('reconciliation/claim-payable-approved')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Claim payable Accounting reconciliation is retired',
@@ -290,8 +203,6 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-recovery-approved')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Claim recovery Accounting reconciliation is retired',
@@ -305,8 +216,6 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-cedant-settlement-paid')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Claim cedant settlement Accounting reconciliation is retired',
@@ -320,8 +229,6 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-cedant-settlement-reversed')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:
@@ -336,8 +243,6 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-recovery-received')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary: 'Claim recovery receipt Accounting reconciliation is retired',
@@ -351,8 +256,6 @@ export class ReinsuranceAccountingIntegrationController {
   }
 
   @Post('reconciliation/claim-recovery-receipt-reversed')
-  @UseInterceptors(ReinsuranceAccountingOperationAuditInterceptor)
-  @UseGuards(ReinsuranceAccountingIntegrationActiveGuard)
   @RequirePermissions('operations.reinsurance.accounting-operations:EDIT')
   @ApiOperation({
     summary:

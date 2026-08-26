@@ -9,7 +9,7 @@ import { ReinsuranceAccountingOutboxStatus } from '../../../prisma/generated/cli
 import { ReinsuranceAccountingIntegrationConfigClient } from '../client/integration-config.client';
 import { ReinsuranceAccountingOutboxService } from './outbox.service';
 
-const DEFAULT_ENABLED = true;
+const DEFAULT_ENABLED = false;
 const DEFAULT_POLL_INTERVAL_MS = 10_000;
 const DEFAULT_BATCH_SIZE = 25;
 const DEFAULT_PROCESSING_TIMEOUT_MS = 15 * 60 * 1000;

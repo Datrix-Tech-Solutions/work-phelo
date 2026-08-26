@@ -248,16 +248,12 @@ export interface CurrencyFormValues {
   name: string;
   isoCode: string;
   symbol: string;
-  exchangeRateToBase: number | '';
-  isBaseCurrency: boolean;
 }
 
 export const CURRENCY_FORM_DEFAULTS: CurrencyFormValues = {
   name: '',
   isoCode: '',
   symbol: '',
-  exchangeRateToBase: '',
-  isBaseCurrency: false,
 };
 
 /* ── Risk Type ── */
@@ -1327,6 +1323,12 @@ export interface CreatePlacementPaymentPayload {
   settlementMethod?: PlacementSettlementMethod;
   settlementCurrency?: string;
   reference?: string;
+  notes?: string;
+}
+
+export interface ConfirmPlacementPaymentBankPayload {
+  bankConfirmedAt: string;
+  bankReference?: string;
   notes?: string;
 }
 
