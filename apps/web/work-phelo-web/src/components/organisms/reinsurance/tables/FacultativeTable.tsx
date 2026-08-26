@@ -27,16 +27,13 @@ import {
 import {
   endorsementKey,
   fetchPlacementFinancialPosition,
-  fetchPlacementPayments,
-  paymentsKey,
   placementFinancialPositionKey,
   useDeleteFacultative,
   useFacultativesPage,
   useForceCloseFacultative,
-  usePlacementFinancialPosition,
-  usePlacementPayments,
   useRestoreFacultative,
   useCurrentTenantUsers,
+  usePaymentsWorklist,
 } from '@/hooks';
 import { TenantUser } from '@/types/tenant';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
@@ -53,6 +50,20 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
+
+const OPEN_PLACEMENT_STATUSES: FacultativeStatus[] = [
+  'DRAFT',
+  'MARKETING',
+  'PARTIALLY_PLACED',
+  'PLACED',
+];
+
+const CLOSED_PLACEMENT_STATUSES: FacultativeStatus[] = [
+  'CLOSING',
+  'CLOSED',
+  'DECLINED',
+  'CANCELLED',
+];
 
 function displayUserName(user: Pick<TenantUser, 'firstName' | 'lastName' | 'email'>): string {
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
@@ -82,13 +93,11 @@ const PLACEMENTS_FILTER_OPTIONS = [
   { value: 'DRAFT', label: 'Draft' },
   { value: 'MARKETING', label: 'On Market' },
   { value: 'PARTIALLY_PLACED', label: 'Partially Placed' },
-  // { value: 'PLACED', label: 'Placed' },
-  { value: 'CLOSING', label: 'Partially Closed' },
+  { value: 'PLACED', label: 'Placed' },
   ...CLOSING_PAYMENT_FILTER_OPTIONS,
 ];
 
 const CLOSING_STATUS_FILTER_OPTIONS = [
-  { value: 'PLACED', label: 'Placed' },
   { value: 'CLOSING', label: 'Partially Closed' },
   { value: 'CLOSED', label: 'Closed' },
   { value: 'DECLINED', label: 'Declined' },
@@ -122,15 +131,13 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Paid: 'text-[10px] text-green-600 font-medium',
 };
 
-function PaymentStatusCell({ placement }: { placement: Facultative }) {
-  const { data: position } = usePlacementFinancialPosition(placement.id);
-  const { data: payments = [] } = usePlacementPayments(placement.id);
-  const due = position?.cedant.currentObligation ?? 0;
-  const paid = position?.cedant.netSettled ?? 0;
-  const outstanding = position?.cedant.outstanding ?? 0;
-  const pending = pendingPremiumReceived(payments);
-  const paymentStatus = cedantPaymentStatusFromPosition(due, paid, outstanding, pending);
-
+function PaymentStatusCell({
+  placement,
+  paymentStatus,
+}: {
+  placement: Facultative;
+  paymentStatus: PaymentStatus;
+}) {
   return (
     <div className="flex flex-col gap-1">
       <Badge
@@ -239,7 +246,6 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'status',
     label: 'Status',
     width: '100px',
-    render: (row) => <PaymentStatusCell placement={row} />,
   },
 ];
 
@@ -304,6 +310,12 @@ export function FacultativeTable({
     search,
     archived: tab === 'archived',
     status: serverStatusFilter,
+    statuses:
+      !serverStatusFilter && tab === 'placements'
+        ? OPEN_PLACEMENT_STATUSES
+        : !serverStatusFilter && tab === 'closing'
+          ? CLOSED_PLACEMENT_STATUSES
+          : undefined,
   });
   const { data: tenantUsers = [] } = useCurrentTenantUsers({ enabled: tab === 'archived' });
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
@@ -315,49 +327,36 @@ export function FacultativeTable({
   const allRows = useMemo(() => placementsPage.data?.items ?? [], [placementsPage.data?.items]);
   const isLoading = placementsPage.isLoading;
 
-  const closingRows = useMemo(() => allRows.filter(isEffectivelyClosed), [allRows]);
+  const closingRows = useMemo(() => (tab === 'closing' ? allRows : []), [allRows, tab]);
 
-  const positionQueries = useQueries({
-    queries:
-      tab === 'closing'
-        ? closingRows.map((row) => ({
-            queryKey: placementFinancialPositionKey(row.id),
-            queryFn: () => fetchPlacementFinancialPosition(row.id),
-          }))
-        : [],
-  });
+  const closingPlacementIds = useMemo(() => closingRows.map((row) => row.id), [closingRows]);
 
-  const closingPaymentsQueries = useQueries({
-    queries:
-      tab === 'closing'
-        ? closingRows.map((row) => ({
-            queryKey: paymentsKey(row.id),
-            queryFn: () => fetchPlacementPayments(row.id),
-          }))
-        : [],
-  });
+  const closingPaymentsWorkList = usePaymentsWorklist(
+    {
+      page: 1,
+      limit: PAGE_SIZE,
+      placementIds: closingPlacementIds,
+    },
+    {
+      enabled: tab === 'closing' && closingPlacementIds.length > 0,
+    },
+  );
 
   const paymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
-    closingRows.forEach((row, i) => {
-      const position = positionQueries[i]?.data;
-      const payments = closingPaymentsQueries[i]?.data ?? [];
-      const due = position?.cedant.currentObligation ?? 0;
-      const paid = position?.cedant.netSettled ?? 0;
-      const outstanding = position?.cedant.outstanding ?? 0;
-      const pending = pendingPremiumReceived(payments);
-      map.set(row.id, cedantPaymentStatusFromPosition(due, paid, outstanding, pending));
+
+    closingRows.forEach((row) => {
+      map.set(row.id, 'Outstanding');
     });
+
+    for (const row of closingPaymentsWorkList.data?.items ?? []) {
+      map.set(row.placementId, row.paymentStatus);
+    }
     return map;
-  }, [closingRows, positionQueries, closingPaymentsQueries]);
+  }, [closingRows, closingPaymentsWorkList.data?.items]);
 
   const filtered = useMemo(() => {
     let rows = allRows;
-    if (tab !== 'archived') {
-      rows = rows.filter((r) =>
-        tab === 'closing' ? isEffectivelyClosed(r) : !isEffectivelyClosed(r),
-      );
-    }
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -504,6 +503,19 @@ export function FacultativeTable({
       return COLUMNS.map((col) => {
         if (col.key === 'totalAcceptedPercent') return SUM_INSURED_COLUMN;
         if (col.key === 'participants') return CLOSED_PARTICIPANTS_COLUMN;
+
+        if (col.key === 'status') {
+          return {
+            ...col,
+            render: (row: Facultative) => (
+              <PaymentStatusCell
+                placement={row}
+                paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
+              />
+            ),
+          };
+        }
+
         return col;
       });
     }
@@ -554,7 +566,7 @@ export function FacultativeTable({
         ),
       },
     ];
-  }, [tab, tenantUsers]);
+  }, [tab, tenantUsers, paymentStatusMap]);
 
   const closeArchiveModal = () => {
     setArchiveTarget(null);

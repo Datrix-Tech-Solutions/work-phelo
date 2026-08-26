@@ -982,6 +982,8 @@ export type PlacementPaymentStatus =
   | 'FAILED'
   | 'CANCELLED'
   | 'REVERSED';
+export type PaymentWorklistPaymentStatus = 'Pending' | 'Part Payment' | 'Paid';
+export type PaymentWorklistStatusFilter = 'Placed' | 'Closed' | PaymentWorklistPaymentStatus;
 export type PlacementSettlementMethod =
   | 'BANK_TRANSFER'
   | 'CHEQUE'
@@ -1068,6 +1070,36 @@ export interface PlacementPayment {
     } | null;
   } | null;
   allocations?: PlacementPaymentAllocation[];
+}
+
+export interface PaymentWorklistRow {
+  id: string;
+  placementId: string;
+  reference: string | null;
+  policyNumber: string | null;
+  title: string;
+  classOfBusiness: string | null;
+  cedantId: string;
+  cedantName: string;
+  sumInsured: number | null;
+  facultativeOffer: number | null;
+  commission: number | null;
+  facultativeSumInsured: number | null;
+  acceptedParticipantCount: number;
+  currency: string | null;
+  paidAmount: number;
+  outstandingAmount: number;
+  outstandingLabel: 'outstanding' | 'credit';
+  currentObligation: number;
+  latestConfirmedPaymentDate: string | null;
+  placementStatus: FacultativeStatus;
+  paymentStatus: PaymentWorklistPaymentStatus;
+  sortDate: string;
+}
+
+export interface PaginatedPaymentWorklist {
+  items: PaymentWorklistRow[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
 export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';

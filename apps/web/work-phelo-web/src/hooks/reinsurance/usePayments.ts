@@ -9,6 +9,8 @@ import {
   ConfirmPlacementPaymentBankPayload,
   PlacementFinancialPosition,
   PlacementParticipantClosing,
+  PaginatedPaymentWorklist,
+  PaymentWorklistStatusFilter,
 } from '@/types/reinsurance';
 import { useFacultatives } from './useFacultatives';
 import {
@@ -19,11 +21,52 @@ import {
 } from '@/lib/reinsurance/placementStatus';
 
 const BASE = '/operations/reinsurance/placements';
+const WORKLIST_BASE = '/operations/reinsurance/worklists/payments';
 
 export const paymentsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'payments'] as const;
 export const placementFinancialPositionKey = (placementId: string, asOfDate?: string) =>
   ['reinsurance', 'placements', placementId, 'financial-position', asOfDate ?? 'current'] as const;
+export const paymentsWorklistKey = (params: PaymentWorklistParams) =>
+  ['reinsurance', 'worklists', 'payments', normalizePaymentWorklistParams(params)] as const;
+const paymentsWorklistsKey = ['reinsurance', 'worklists', 'payments'] as const;
+
+export interface PaymentWorklistParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: PaymentWorklistStatusFilter | '';
+  cedantId?: string;
+  placementIds?: string[];
+}
+
+function normalizePaymentWorklistParams(params: PaymentWorklistParams = {}) {
+  return {
+    page: params.page ?? 1,
+    limit: params.limit ?? 10,
+    ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+    ...(params.status ? { status: params.status } : {}),
+    ...(params.cedantId ? { cedantId: params.cedantId } : {}),
+    ...(params.placementIds?.length ? { placementIds: params.placementIds.join(',') } : {}),
+  };
+}
+
+export function usePaymentsWorklist(
+  params: PaymentWorklistParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  const normalizedParams = normalizePaymentWorklistParams(params);
+  return useQuery({
+    queryKey: paymentsWorklistKey(params),
+    queryFn: async () => {
+      const res = await api.get<PaginatedPaymentWorklist>(WORKLIST_BASE, {
+        params: normalizedParams,
+      });
+      return res.data;
+    },
+    enabled: options.enabled ?? true,
+  });
+}
 
 export async function fetchPlacementPayments(placementId: string): Promise<PlacementPayment[]> {
   const res = await api.get(`${BASE}/${placementId}/payments`);
@@ -86,6 +129,7 @@ export function useCreatePlacementPayment() {
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentsWorklistsKey });
     },
   });
 }
@@ -107,6 +151,7 @@ export function useConfirmPlacementPaymentBank() {
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentsWorklistsKey });
     },
   });
 }
@@ -121,6 +166,7 @@ export function useReversePayment() {
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentsWorklistsKey });
     },
   });
 }
