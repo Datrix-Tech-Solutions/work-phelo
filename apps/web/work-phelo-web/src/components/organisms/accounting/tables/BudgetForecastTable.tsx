@@ -137,6 +137,7 @@ export function BudgetForecastTable() {
       currentPage={page}
       totalPages={totalPages}
       onPageChange={setPage}
+      noInternalScroll
     />
   );
 }

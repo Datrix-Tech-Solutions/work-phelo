@@ -152,6 +152,7 @@ export function FiscalPeriodsTable() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       <Modal

@@ -156,6 +156,65 @@ export interface CreateCostCentrePayload {
 
 export type UpdateCostCentrePayload = Partial<CreateCostCentrePayload>;
 
+export type TransactionTypeCategory = 'NEUTRAL' | 'RECEIVABLE' | 'PAYABLE' | 'NONE';
+
+export interface TransactionTypeDefinition {
+  id: string;
+  name: string;
+  code: string;
+  category: TransactionTypeCategory;
+  businessRoles: string[];
+  allowedDocument: string | null;
+  source: string | null;
+  description: string | null;
+  rulesCount: number;
+}
+
+export interface CreateTransactionTypePayload {
+  name: string;
+  code: string;
+  category: TransactionTypeCategory;
+  allowedDocument?: string;
+  source?: string;
+  description?: string;
+}
+
+export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>;
+
+export interface SourceTypeDefinition {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+export interface CreateSourceTypePayload {
+  name: string;
+  description?: string;
+}
+
+export type UpdateSourceTypePayload = Partial<CreateSourceTypePayload>;
+
+export interface TransactionTypeRule {
+  id: string;
+  transactionTypeId: string;
+  sourceType: string | null;
+  role: string | null;
+  account: { id: string; code: string; name: string };
+  description: string | null;
+}
+
+export interface CreateTransactionTypeRulePayload {
+  transactionTypeId: string;
+  sourceType?: string;
+  role?: string;
+  accountId: string;
+  description?: string;
+}
+
+export type UpdateTransactionTypeRulePayload = Partial<
+  Omit<CreateTransactionTypeRulePayload, 'transactionTypeId'>
+>;
+
 export type FiscalPeriodStatus = 'OPEN' | 'CLOSED' | 'LOCKED';
 
 export interface FiscalPeriod {
@@ -192,8 +251,6 @@ export interface AccountCategoryDefinition {
 
 export interface JournalLine {
   targetAccount: string;
-  /** Required when targetAccount is a control account (i.e. a GL account that subledger
-   *  accounts post through) — the backend rejects control-account lines without one. */
   subledgerAccountId: string;
   description: string;
   debit: number | '';
@@ -348,10 +405,6 @@ export interface InvoiceLine {
   tax: number | '';
 }
 
-/** `vendor` holds the selected customer/vendor id (picked via SearchSelect, not
- * free text — the backend keys the invoice/bill to a real party record).
- * `invoiceNumber` is a user-facing reference only: the backend always generates
- * its own document number, so this maps to `externalReference` on submit. */
 export interface InvoiceFormValues {
   vendor: string;
   invoiceNumber: string;
@@ -376,11 +429,7 @@ export type AccountingTradeSide = 'RECEIVABLE' | 'PAYABLE';
 export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
 export type AccountingTradeDocumentKind = 'INVOICE' | 'CREDIT_NOTE' | 'BILL';
 export type AccountingTradeDocumentPaymentState =
-  | 'DRAFT'
-  | 'REVERSED'
-  | 'PAID'
-  | 'PARTIALLY_PAID'
-  | 'OPEN';
+  'DRAFT' | 'REVERSED' | 'PAID' | 'PARTIALLY_PAID' | 'OPEN';
 
 export interface AccountingTradePartyRef {
   id: string;
@@ -409,9 +458,6 @@ interface AccountingTradeOriginalDocumentRef {
   status: string;
 }
 
-/** Normalized shape for both AR invoices and AP bills — the backend records are
- * structurally identical (customerId/vendorId aside), so the frontend reads them
- * through one shared `party` field instead of juggling two near-duplicate types. */
 export interface AccountingTradeDocument {
   id: string;
   side: AccountingTradeSide;
@@ -479,7 +525,6 @@ export interface ReverseTradeDocumentPayload {
 export interface AccountingTradeDocumentBalance {
   currency: string;
   originalAmount: string;
-  /** Applied receipts (AR) or applied payments (AP), normalized to one field name. */
   appliedSettlements: string;
   appliedCreditNotes: string;
   outstandingAmount: string;
@@ -512,15 +557,11 @@ export interface CreateTradeCreditNotePayload {
   currency: string;
   amount: number;
   offsetGlAccountId: string;
-  /** Optional posted invoice/bill this credit note applies against. */
   originalDocumentId?: string;
   description?: string;
   externalReference?: string;
 }
 
-/** AR customer receipts and AP vendor payments — cash-account-linked settlements
- * that post through Cashbook. Structurally identical apart from the party
- * relation and the receiptDate/paymentDate field name, same as trade documents. */
 export interface AccountingTradeSettlement {
   id: string;
   side: AccountingTradeSide;
@@ -588,7 +629,6 @@ export interface AccountingTradeAllocation {
 }
 
 export interface CreateTradeAllocationPayload {
-  /** The posted invoice (AR) or bill (AP) this receipt/credit note is being applied to. */
   documentId: string;
   amount: number;
 }
@@ -673,13 +713,7 @@ export type CashbookTransactionType = 'RECEIPT' | 'PAYMENT' | 'TRANSFER' | 'CHAR
 export type CashbookDirection = 'INFLOW' | 'OUTFLOW' | 'TRANSFER';
 export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
 export type AccountingCashbookSettlementMethod =
-  | 'BANK_TRANSFER'
-  | 'CHEQUE'
-  | 'CASH'
-  | 'MOBILE_MONEY'
-  | 'INTERNAL_TRANSFER'
-  | 'JOURNAL'
-  | 'OTHER';
+  'BANK_TRANSFER' | 'CHEQUE' | 'CASH' | 'MOBILE_MONEY' | 'INTERNAL_TRANSFER' | 'JOURNAL' | 'OTHER';
 
 export interface CashbookAccountRef {
   id: string;
@@ -822,17 +856,8 @@ export interface PaginatedResult<T> {
 }
 
 export type SubledgerType =
-  | 'CUSTOMER'
-  | 'VENDOR'
-  | 'CEDANT'
-  | 'REINSURER'
-  | 'EMPLOYEE'
-  | 'STATUTORY'
-  | 'OTHER';
+  'CUSTOMER' | 'VENDOR' | 'CEDANT' | 'REINSURER' | 'EMPLOYEE' | 'STATUTORY' | 'OTHER';
 
-/** Types creatable manually from Accounting Settings → Entities. CEDANT and REINSURER
- *  subledgers are provisioned by the reinsurance service via its internal ensure endpoint —
- *  creating them here risks colliding with (or orphaning from) that flow. */
 export const MANUAL_SUBLEDGER_TYPES: SubledgerType[] = [
   'CUSTOMER',
   'VENDOR',
@@ -851,10 +876,6 @@ export const SUBLEDGER_TYPE_LABELS: Record<SubledgerType, string> = {
   OTHER: 'Other',
 };
 
-/** Which side of the ledger a tenant-defined Entity Type posts to: RECEIVABLE for
- *  customer-like entities, PAYABLE for vendor-like ones, BOTH for entities that can carry
- *  either (e.g. a party that's sometimes billed, sometimes bills you), and NONE for entities
- *  that don't flow through AP/AR at all (e.g. Employee, Statutory, Other). */
 export type EntityAccountingRelation = 'RECEIVABLE' | 'PAYABLE' | 'BOTH' | 'NONE';
 
 export const ENTITY_ACCOUNTING_RELATION_LABELS: Record<EntityAccountingRelation, string> = {
@@ -864,27 +885,17 @@ export const ENTITY_ACCOUNTING_RELATION_LABELS: Record<EntityAccountingRelation,
   NONE: 'None',
 };
 
-/** Fallback accounting relation for the fixed `SubledgerType` values, used wherever an entity
- *  isn't (yet) resolvable against a tenant-configured `EntityType` — e.g. before the
- *  entity-types endpoint exists, or for a type with no custom relation configured. CEDANT and
- *  REINSURER default to BOTH since a reinsurance counterparty can carry either a receivable or
- *  a payable position depending on settlement direction. */
-export const DEFAULT_ENTITY_ACCOUNTING_RELATION: Record<SubledgerType, EntityAccountingRelation> =
-  {
-    CUSTOMER: 'RECEIVABLE',
-    VENDOR: 'PAYABLE',
-    CEDANT: 'BOTH',
-    REINSURER: 'BOTH',
-    EMPLOYEE: 'NONE',
-    STATUTORY: 'NONE',
-    OTHER: 'NONE',
-  };
 
-/** A label available in the Entity "Type" field. The base set — Customer, Vendor, Employee,
- *  Statutory, Other — is system-seeded (`isSystem: true`) and can't be deleted; a tenant can
- *  add further custom ones (e.g. "Landlord", "Government Agency") alongside them, each mapped
- *  to the accounting relation that drives whether entities of that type can carry a
- *  receivable balance, a payable balance, both, or neither. */
+export const DEFAULT_ENTITY_ACCOUNTING_RELATION: Record<SubledgerType, EntityAccountingRelation> = {
+  CUSTOMER: 'RECEIVABLE',
+  VENDOR: 'PAYABLE',
+  CEDANT: 'BOTH',
+  REINSURER: 'BOTH',
+  EMPLOYEE: 'NONE',
+  STATUTORY: 'NONE',
+  OTHER: 'NONE',
+};
+
 export interface EntityType {
   id: string;
   name: string;
@@ -1250,11 +1261,6 @@ export interface PostingRuleLine {
   glAccount: { id: string; code: string; name: string; status: string };
 }
 
-/** Maps one source business event (sourceModule + sourceEventType) to a balanced
- * set of journal lines. The highest-`version` active rule whose effective date
- * range covers the event's transaction date is the one the posting engine uses —
- * no match means the event can't be posted (the `POSTING_RULE_MISSING` blocker
- * behind "Accounting is not ready to recognize X" errors elsewhere in the app). */
 export interface PostingRule {
   id: string;
   name: string;
@@ -1280,14 +1286,9 @@ export interface PostingRuleLineInput {
   direction: PostingRuleDirection;
   glAccountId: string;
   subledgerType?: PostingRuleSubledgerType;
-  /** Dot-path into the source event payload used to resolve the subledger's
-   * external reference, e.g. "counterparty.id". Only meaningful with subledgerType set. */
   subledgerExternalRefSource?: string;
-  /** Dot-path into the source event payload for this line's amount, e.g. "amounts.netPremium". */
   amountSource: string;
-  /** Dot-path into the source event payload for this line's currency, e.g. "currency". */
   currencySource: string;
-  /** Supports {{sourceRecordId}}, {{sourceDocumentId}} and {{payload.x}} interpolation. */
   descriptionTemplate: string;
 }
 

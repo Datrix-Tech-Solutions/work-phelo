@@ -10,8 +10,10 @@ import {
   NotebookTabsIcon,
   ReceiptText,
   Settings,
+  Target,
   Users,
   Wallet,
+  WalletCards,
 } from 'lucide-react';
 
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
@@ -23,6 +25,8 @@ const AccountsReceivableIcon = () => <BanknoteArrowDown className="w-5 h-5" />;
 const CashAndBankIcon = () => <Wallet className="w-5 h-5" />;
 const FinancialReportsIcon = () => <ChartLine className="w-5 h-5" />;
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
+const BudgetIcon = () => <Target className="w-5 h-5" />;
+const FiscalYearIcon = () => <WalletCards className="w-5 h-5" />;
 const EntitiesIcon = () => <Users className="w-5 h-5" />;
 const BillsIcon = () => <ReceiptText className="w-5 h-5" />;
 
@@ -41,6 +45,19 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Transactions',
+    items: [
+      {
+        key: 'transactions',
+        label: 'Transactions',
+        icon: <ReceiptText />,
+        href: 'transactions',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
     label: 'Sales & Revenue',
     items: [
       {
@@ -53,7 +70,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
       },
       {
         key: 'ar-invoices',
-        label: 'Invoices',
+        label: 'Receivable',
         icon: <AccountsReceivableIcon />,
         href: 'accountsreceivable/invoices',
         enabled: true,
@@ -66,7 +83,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
     items: [
       {
         key: 'bills',
-        label: 'Bills',
+        label: 'Payable',
         icon: <BillsIcon />,
         href: 'expensesandpurchases/bills',
         enabled: true,
@@ -94,13 +111,59 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
-      
+    ],
+  },
+
+  {
+    label: 'Reports',
+    items: [
+      {
+        key: 'financial-reports',
+        label: 'Financial Reports',
+        icon: <FinancialReportsIcon />,
+        href: 'financial-reports',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
+    label: 'Planning',
+    items: [
+      {
+        key: 'budget',
+        label: 'Budgets & Forecasts',
+        icon: <BudgetIcon />,
+        href: 'budget-forecast',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'fiscal-year',
+        label: 'Fiscal Year',
+        icon: <FiscalYearIcon/>,
+        href: 'fiscal-year',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      {
+        key: 'settings',
+        label: 'Settings',
+        icon: <SettingsIcon />,
+        href: 'settings',
+        enabled: true,
+        active: true,
+      },
     ],
   },
   {
     label: 'Finance',
     items: [
-      
       {
         key: 'general-ledger',
         label: 'General Ledger',
@@ -110,7 +173,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         active: true,
         exact: true,
       },
-      
+
       {
         key: 'source-events',
         label: 'Posting Inbox',
@@ -142,33 +205,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         label: 'Cash and Bank',
         icon: <CashAndBankIcon />,
         href: 'cashandbank',
-        enabled: true,
-        active: true,
-      },
-    ],
-  },
-  
-  {
-    label: 'Reports',
-    items: [
-      {
-        key: 'financial-reports',
-        label: 'Financial Reports',
-        icon: <FinancialReportsIcon />,
-        href: 'financial-reports',
-        enabled: true,
-        active: true,
-      },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
-      {
-        key: 'settings',
-        label: 'Settings',
-        icon: <SettingsIcon />,
-        href: 'settings',
         enabled: true,
         active: true,
       },

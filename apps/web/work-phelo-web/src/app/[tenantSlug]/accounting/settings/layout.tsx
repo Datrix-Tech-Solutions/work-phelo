@@ -13,25 +13,24 @@ export default function AccountingSettingsLayout({ children }: { children: React
   const groups: TabGroup[] = [
     {
       tabs: [
-        { key: 'vendors', label: 'Vendors', href: `${base}/vendors` },
-        { key: 'customers', label: 'Customers', href: `${base}/customers` },
+        { key: 'transaction-types', label: 'Transaction Types', href: `${base}/transaction-types` },
+        { key: 'source-types', label: 'Source Types', href: `${base}/source-types` },
+        { key: 'rules', label: 'Rules', href: `${base}/rules` },
       ],
     },
     {
       tabs: [
-        { key: 'configuration', label: 'Configuration', href: `${base}/configuration` },
-        { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
-        { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
-        { key: 'cost-centres', label: 'Cost Centres', href: `${base}/cost-centres` },
+        // { key: 'configuration', label: 'Configuration', href: `${base}/configuration` },
+        // { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
+        // { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
+        // { key: 'cost-centres', label: 'Cost Centres', href: `${base}/cost-centres` },
         { key: 'currency', label: 'Currency', href: `${base}/currency` },
-        { key: 'exchange-rates', label: 'Exchange Rates', href: `${base}/exchange-rates` },
-        { key: 'posting-rules', label: 'Posting Rules', href: `${base}/posting-rules` },
+        // { key: 'posting-rules', label: 'Posting Rules', href: `${base}/posting-rules` },
       ],
     },
     {
       tabs: [
         { key: 'fiscal-year', label: 'Fiscal Year', href: `${base}/fiscal-year` },
-        { key: 'budget-forecast', label: 'Budget & Forecast', href: `${base}/budget-forecast` },
       ],
     },
   ];
