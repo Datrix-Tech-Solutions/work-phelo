@@ -4,14 +4,13 @@ import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultatives, usePlacementClaims } from '@/hooks';
+import { useFacultativePlacement, usePlacementClaims } from '@/hooks';
 import AddClaimPaymentForm from '@/components/organisms/reinsurance/AddClaimPaymentForm';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 function SelectedClaimCard({ placementId }: { placementId: string }) {
-  const { data: facultatives = [] } = useFacultatives();
+  const { data: placement } = useFacultativePlacement(placementId);
   const { data: claims = [] } = usePlacementClaims(placementId);
-  const placement = facultatives.find((f) => f.id === placementId);
   const claim = claims[0];
 
   if (!placement) return null;

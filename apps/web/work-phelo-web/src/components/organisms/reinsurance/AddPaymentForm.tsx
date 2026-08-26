@@ -11,7 +11,6 @@ import {
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
 import {
-  useFacultatives,
   useCreatePlacementPayment,
   useConfirmPlacementPaymentBank,
   useFacultativePlacement,
@@ -27,6 +26,7 @@ interface AddPaymentFormProps {
   onPaymentRecorded?: (amount: number) => void;
   onAllocationsRecorded?: (allocations: Record<string, number>) => void;
   onPlacementsChange?: (placementIds: string[]) => void;
+  onPlacementsResolved?: (placements: Facultative[]) => void;
   defaultOpen?: boolean;
   /** Externally controlled open state — when provided, this component stops rendering its own
    *  "Receive Cedant Premium" trigger button and open/close is owned entirely by the caller
@@ -41,6 +41,7 @@ export default function AddPaymentForm({
   onPaymentRecorded,
   onAllocationsRecorded,
   onPlacementsChange,
+  onPlacementsResolved,
   defaultOpen = false,
   isOpen,
   onClose,
@@ -61,8 +62,8 @@ export default function AddPaymentForm({
     placement: Facultative;
   } | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [resolvedPlacements, setResolvedPlacements] = useState<Facultative[]>([]);
 
-  const { data: facultatives = [] } = useFacultatives();
   const { data: singlePlacement } = useFacultativePlacement(placementId ?? '');
   const createPayment = useCreatePlacementPayment();
   const confirmPaymentBank = useConfirmPlacementPaymentBank();
@@ -75,7 +76,13 @@ export default function AddPaymentForm({
   } = form;
 
   const onSubmit = async (values: AddPaymentFormValues) => {
-    const selectedFacs = facultatives.filter((f) => values.businessIds.includes(f.id));
+    const selectedFacs = placementId
+      ? singlePlacement
+        ? [singlePlacement]
+        : []
+      : values.businessIds
+          .map((id) => resolvedPlacements.find((placement) => placement.id === id))
+          .filter((placement): placement is Facultative => Boolean(placement));
     if (selectedFacs.length === 0) return;
 
     const parsedAmount = parseFloat(values.amount) || 0;
@@ -189,6 +196,8 @@ export default function AddPaymentForm({
 
       closePanel();
       form.reset(ADD_PAYMENT_DEFAULTS);
+      setResolvedPlacements([]);
+      onPlacementsResolved?.([]);
 
       // Offer receipt generation when placement context is available
       const firstPayment = results[0];
@@ -241,6 +250,10 @@ export default function AddPaymentForm({
             form={form}
             placementId={placementId}
             onPlacementsChange={onPlacementsChange}
+            onPlacementsResolved={(placements) => {
+              setResolvedPlacements(placements);
+              onPlacementsResolved?.(placements);
+            }}
           />
         </form>
       </SidePanel>

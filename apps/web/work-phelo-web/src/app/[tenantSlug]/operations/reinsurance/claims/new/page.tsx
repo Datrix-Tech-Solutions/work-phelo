@@ -6,19 +6,16 @@ import { useRouter } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultatives } from '@/hooks';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
 import { ClaimSummary } from '@/components/molecules/reinsurance/ClaimSummary';
+import { Facultative } from '@/types/reinsurance';
 
 export default function NewClaimPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
-  const { data: facultatives = [] } = useFacultatives();
 
   const [panelOpen, setPanelOpen] = useState(true);
-  const [placementId, setPlacementId] = useState('');
-
-  const placement = facultatives.find((f) => f.id === placementId);
+  const [placement, setPlacement] = useState<Facultative | null>(null);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -46,7 +43,7 @@ export default function NewClaimPage({ params }: { params: Promise<{ tenantSlug:
       <MakeClaimPanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
-        onPlacementChange={setPlacementId}
+        onPlacementResolved={setPlacement}
         onSuccess={(claim) =>
           router.push(
             `/${tenantSlug}/operations/reinsurance/claims/${claim.id}?placementId=${claim.placementId}`,

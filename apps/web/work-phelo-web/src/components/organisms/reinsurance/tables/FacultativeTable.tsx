@@ -18,16 +18,20 @@ import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/
 import { PartialEditFacultativePanel } from '@/components/organisms/reinsurance/panels/PartialEditFacultativePanel';
 import { RenewFacultativePanel } from '@/components/organisms/reinsurance/panels/RenewFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
-import { Facultative, PlacementEndorsement, PlacementPayment } from '@/types/reinsurance';
+import {
+  Facultative,
+  FacultativeStatus,
+  PlacementEndorsement,
+  PlacementPayment,
+} from '@/types/reinsurance';
 import {
   endorsementKey,
   fetchPlacementFinancialPosition,
   fetchPlacementPayments,
   paymentsKey,
   placementFinancialPositionKey,
-  useArchivedFacultatives,
   useDeleteFacultative,
-  useFacultatives,
+  useFacultativesPage,
   useForceCloseFacultative,
   usePlacementFinancialPosition,
   usePlacementPayments,
@@ -95,6 +99,21 @@ const CLOSING_FILTER_OPTIONS = [
   // ...CLOSING_STATUS_FILTER_OPTIONS,
   ...CLOSING_PAYMENT_FILTER_OPTIONS,
 ];
+
+const RAW_STATUS_OPTIONS = new Set<string>([
+  'DRAFT',
+  'MARKETING',
+  'PARTIALLY_PLACED',
+  'PLACED',
+  'CLOSING',
+  'CLOSED',
+  'DECLINED',
+  'CANCELLED',
+]);
+
+function rawStatusFilter(value: string): FacultativeStatus | undefined {
+  return RAW_STATUS_OPTIONS.has(value) ? (value as FacultativeStatus) : undefined;
+}
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-[10px] text-gray-400',
@@ -278,9 +297,13 @@ export function FacultativeTable({
   const [archiveReason, setArchiveReason] = useState('');
   const [forceCloseTarget, setForceCloseTarget] = useState<Facultative | null>(null);
 
-  const { data: activeRows = [], isLoading: loadingActive } = useFacultatives();
-  const { data: archivedRows = [], isLoading: loadingArchived } = useArchivedFacultatives({
-    enabled: tab === 'archived',
+  const serverStatusFilter = rawStatusFilter(statusFilter);
+  const placementsPage = useFacultativesPage({
+    page,
+    limit: PAGE_SIZE,
+    search,
+    archived: tab === 'archived',
+    status: serverStatusFilter,
   });
   const { data: tenantUsers = [] } = useCurrentTenantUsers({ enabled: tab === 'archived' });
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
@@ -289,8 +312,8 @@ export function FacultativeTable({
     forceCloseTarget?.id ?? '',
   );
 
-  const allRows = tab === 'archived' ? archivedRows : activeRows;
-  const isLoading = tab === 'archived' ? loadingArchived : loadingActive;
+  const allRows = useMemo(() => placementsPage.data?.items ?? [], [placementsPage.data?.items]);
+  const isLoading = placementsPage.isLoading;
 
   const closingRows = useMemo(() => allRows.filter(isEffectivelyClosed), [allRows]);
 
@@ -380,8 +403,8 @@ export function FacultativeTable({
     );
   }, [filtered, tab]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, placementsPage.data?.meta.totalPages ?? 1);
+  const paged = sorted;
 
   // Placements tab: only the current page needs a paid/unpaid check, just to swap
   // Edit Offer for Partial Edit once a payment exists — no filtering depends on this.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { useQueries } from '@tanstack/react-query';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -8,7 +8,12 @@ import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { useFacultatives, useCurrencyOptions } from '@/hooks';
+import {
+  useCedants,
+  useCurrencyOptions,
+  useFacultativePlacement,
+  useFacultativeSearch,
+} from '@/hooks';
 import {
   fetchPlacementFinancialPosition,
   fetchPlacementPayments,
@@ -22,7 +27,7 @@ import {
   pendingPremiumReceived,
   CedantPaymentStatus,
 } from '@/lib/reinsurance/placementStatus';
-import { PlacementPayment } from '@/types/reinsurance';
+import { Facultative, PlacementPayment } from '@/types/reinsurance';
 
 const PAYMENT_STATUS_CLASS: Record<CedantPaymentStatus, string> = {
   Outstanding: 'text-xs text-gray-400',
@@ -84,12 +89,14 @@ interface AddPaymentFormFieldsProps {
   form: UseFormReturn<AddPaymentFormValues>;
   placementId?: string;
   onPlacementsChange?: (placementIds: string[]) => void;
+  onPlacementsResolved?: (placements: Facultative[]) => void;
 }
 
 export function AddPaymentFormFields({
   form,
   placementId,
   onPlacementsChange,
+  onPlacementsResolved,
 }: AddPaymentFormFieldsProps) {
   const {
     register,
@@ -99,20 +106,52 @@ export function AddPaymentFormFields({
     formState: { errors },
   } = form;
 
-  const { data: facultatives = [] } = useFacultatives();
+  const { data: cedants = [] } = useCedants();
   const { data: currencyOptions = [] } = useCurrencyOptions();
-
-  const preFilledPlacement = useMemo(
-    () => (placementId ? facultatives.find((f) => f.id === placementId) : undefined),
-    [facultatives, placementId],
-  );
-
+  const { data: preFilledPlacement } = useFacultativePlacement(placementId ?? '');
+  const [businessQuery, setBusinessQuery] = useState('');
+  const [debouncedBusinessQuery, setDebouncedBusinessQuery] = useState('');
+  const [placementById, setPlacementById] = useState<Map<string, Facultative>>(() => new Map());
   const cedantId = watch('cedantId');
   const businessIds = watch('businessIds');
-  const selectedFacultatives = useMemo(
-    () => facultatives.filter((f) => businessIds.includes(f.id)),
-    [facultatives, businessIds],
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedBusinessQuery(businessQuery), 300);
+    return () => clearTimeout(timer);
+  }, [businessQuery]);
+
+  const { data: placementOptionsPage } = useFacultativeSearch(
+    {
+      archived: false,
+      cedantId: cedantId || undefined,
+      search: debouncedBusinessQuery || undefined,
+    },
+    { enabled: !preFilledPlacement && !!cedantId, limit: 25 },
   );
+
+  const placementOptions = useMemo(
+    () => placementOptionsPage?.items ?? [],
+    [placementOptionsPage?.items],
+  );
+
+  const availablePlacementById = useMemo(() => {
+    const map = new Map<string, Facultative>();
+    if (preFilledPlacement) map.set(preFilledPlacement.id, preFilledPlacement);
+    placementOptions.forEach((placement) => map.set(placement.id, placement));
+    return map;
+  }, [preFilledPlacement, placementOptions]);
+
+  const selectedFacultatives = useMemo(
+    () =>
+      businessIds
+        .map((id) => placementById.get(id) ?? availablePlacementById.get(id))
+        .filter(Boolean) as Facultative[],
+    [businessIds, placementById, availablePlacementById],
+  );
+
+  useEffect(() => {
+    onPlacementsResolved?.(selectedFacultatives);
+  }, [onPlacementsResolved, selectedFacultatives]);
 
   const positionQueries = useQueries({
     queries: selectedFacultatives.map((f) => ({
@@ -156,29 +195,29 @@ export function AddPaymentFormFields({
   }, [preFilledPlacement, setValue]);
 
   const cedantOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const f of facultatives) {
-      if (f.status !== 'CANCELLED') seen.set(f.cedant.id, f.cedant.name);
-    }
-    return Array.from(seen.entries())
-      .map(([id, name]) => ({ value: id, label: name }))
+    return cedants
+      .map((cedant) => ({ value: cedant.id, label: cedant.name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [facultatives]);
+  }, [cedants]);
 
-  const businessOptions = useMemo(
-    () =>
-      facultatives
-        .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
-        .map((f) => {
-          const parts = [f.classOfBusiness, f.title].filter(Boolean);
-          return {
-            value: f.id,
-            label: `${displayPolicyNumber(f.policyNumber)} · ${f.title}`,
-            sublabel: parts.join(' · '),
-          };
-        }),
-    [facultatives, cedantId],
-  );
+  const businessOptions = useMemo(() => {
+    const options = new Map<string, Facultative>();
+    selectedFacultatives.forEach((f) => options.set(f.id, f));
+    placementOptions
+      .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
+      .forEach((f) => options.set(f.id, f));
+
+    return Array.from(options.values())
+      .map((f) => {
+        const parts = [f.classOfBusiness, f.title].filter(Boolean);
+        return {
+          value: f.id,
+          label: `${displayPolicyNumber(f.policyNumber)} · ${f.title}`,
+          sublabel: parts.join(' · '),
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [placementOptions, selectedFacultatives, cedantId]);
 
   const totalExpected = useMemo(() => {
     return selectedFacultatives.reduce((sum, f) => {
@@ -554,9 +593,18 @@ export function AddPaymentFormFields({
           options={businessOptions}
           value={field.value}
           onChange={(vals) => {
+            setPlacementById((current) => {
+              const next = new Map(current);
+              vals.forEach((id) => {
+                const placement = availablePlacementById.get(id);
+                if (placement) next.set(id, placement);
+              });
+              return next;
+            });
             field.onChange(vals);
             onPlacementsChange?.(vals);
           }}
+          onQueryChange={setBusinessQuery}
           error={errors.businessIds?.message}
         />
       )}

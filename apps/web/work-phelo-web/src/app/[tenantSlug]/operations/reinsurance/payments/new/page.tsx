@@ -1,25 +1,19 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { cardClass } from '@/lib/utils';
-import { useFacultatives } from '@/hooks';
 import { PaymentBreakdown } from '@/components/molecules/reinsurance/PaymentBreakdown';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
+import { Facultative } from '@/types/reinsurance';
 
 export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
-  const { data: facultatives = [] } = useFacultatives();
 
-  const [selectedPlacementIds, setSelectedPlacementIds] = useState<string[]>([]);
-
-  const selectedPlacements = useMemo(
-    () => selectedPlacementIds.map((id) => facultatives.find((f) => f.id === id)).filter(Boolean),
-    [facultatives, selectedPlacementIds],
-  );
+  const [selectedPlacements, setSelectedPlacements] = useState<Facultative[]>([]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -35,12 +29,7 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
           <span className="text-gray-700 font-medium">Receive Cedant Premium</span>
         </nav>
 
-        <AddPaymentForm
-          defaultOpen
-          onPlacementsChange={(ids) => {
-            setSelectedPlacementIds(ids);
-          }}
-        />
+        <AddPaymentForm defaultOpen onPlacementsResolved={setSelectedPlacements} />
       </div>
 
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>

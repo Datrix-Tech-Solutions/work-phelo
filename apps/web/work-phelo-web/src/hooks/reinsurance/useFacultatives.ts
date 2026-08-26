@@ -44,6 +44,33 @@ const placementLockStatusKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'lock-status'] as const;
 const paymentEligibleFacultativesKey = [...FACULTATIVES_KEY, 'payment-eligible'] as const;
 
+const PLACEMENT_PAGE_LIMIT = 10;
+const PLACEMENT_SELECTOR_LIMIT = 25;
+
+export interface FacultativesPageMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedFacultatives {
+  items: Facultative[];
+  meta: FacultativesPageMeta;
+}
+
+export interface FacultativesPageParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: FacultativeStatus;
+  placementType?: 'FACULTATIVE';
+  cedantId?: string;
+  riskTypeId?: string;
+  classOfBusiness?: string;
+  archived?: boolean;
+}
+
 export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
 export const placementClosingsKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'closings'] as const;
@@ -78,6 +105,63 @@ function extractList(data: unknown): Facultative[] {
       (data as { items?: unknown[]; data?: unknown[] })?.data ??
       []);
   return raw.map(transformPlacement);
+}
+
+function normalizePageParams(params: FacultativesPageParams = {}) {
+  return {
+    page: params.page ?? 1,
+    limit: params.limit ?? PLACEMENT_PAGE_LIMIT,
+    ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+    ...(params.status ? { status: params.status } : {}),
+    ...(params.placementType ? { placementType: params.placementType } : {}),
+    ...(params.cedantId ? { cedantId: params.cedantId } : {}),
+    ...(params.riskTypeId ? { riskTypeId: params.riskTypeId } : {}),
+    ...(params.classOfBusiness?.trim() ? { classOfBusiness: params.classOfBusiness.trim() } : {}),
+    ...(typeof params.archived === 'boolean' ? { archived: params.archived } : {}),
+  };
+}
+
+function extractPage(data: unknown, fallbackParams: ReturnType<typeof normalizePageParams>) {
+  const items = extractList(data);
+  const rawMeta = (data as { meta?: Partial<FacultativesPageMeta> })?.meta;
+  const meta: FacultativesPageMeta = {
+    page: rawMeta?.page ?? fallbackParams.page,
+    limit: rawMeta?.limit ?? fallbackParams.limit,
+    total: rawMeta?.total ?? items.length,
+    totalPages: rawMeta?.totalPages ?? Math.max(1, Math.ceil(items.length / fallbackParams.limit)),
+  };
+
+  return { items, meta };
+}
+
+export function useFacultativesPage(
+  params: FacultativesPageParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  const normalizedParams = normalizePageParams(params);
+
+  return useQuery({
+    queryKey: [...FACULTATIVES_KEY, 'page', normalizedParams],
+    queryFn: async () => {
+      const res = await api.get(BASE, { params: normalizedParams });
+      return extractPage(res.data, normalizedParams);
+    },
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useFacultativeSearch(
+  params: Omit<FacultativesPageParams, 'page' | 'limit'> = {},
+  options: { enabled?: boolean; limit?: number } = {},
+) {
+  return useFacultativesPage(
+    {
+      ...params,
+      page: 1,
+      limit: options.limit ?? PLACEMENT_SELECTOR_LIMIT,
+    },
+    { enabled: options.enabled },
+  );
 }
 
 export function useFacultatives() {

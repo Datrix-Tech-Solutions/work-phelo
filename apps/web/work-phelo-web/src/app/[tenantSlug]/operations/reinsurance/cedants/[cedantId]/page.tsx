@@ -7,8 +7,8 @@ import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import {
   useCedants,
-  useFacultatives,
   useCurrencies,
+  useFacultativesPage,
   useFacultativePlacement,
   usePlacementPayments,
 } from '@/hooks';
@@ -139,7 +139,13 @@ export default function CedantDetailPage({
   const { tenantSlug, cedantId } = use(params);
 
   const { data: cedants = [], isLoading: cedantsLoading } = useCedants();
-  const { data: placements = [], isLoading: placementsLoading } = useFacultatives();
+  const [placementsPage, setPlacementsPage] = useState(1);
+  const { data: placementsResponse, isLoading: placementsLoading } = useFacultativesPage({
+    page: placementsPage,
+    limit: 10,
+    cedantId,
+    archived: false,
+  });
   const { data: currencies = [] } = useCurrencies();
 
   const cedant = cedants.find((c) => c.id === cedantId) ?? null;
@@ -152,10 +158,8 @@ export default function CedantDetailPage({
 
   const settingsBase = `/${tenantSlug}/operations/reinsurance/cedants`;
 
-  const cedantPlacements = useMemo(
-    () => placements.filter((p) => p.cedant.id === cedantId),
-    [placements, cedantId],
-  );
+  const cedantPlacements = placementsResponse?.items ?? [];
+  const cedantPlacementTotalPages = Math.max(1, placementsResponse?.meta.totalPages ?? 1);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -246,6 +250,9 @@ export default function CedantDetailPage({
                     onEndorsement={setEndorsementPlacement}
                     onView={(p) => setActivePlacementView({ mode: 'view', placement: p })}
                     onPremiums={(p) => setActivePlacementView({ mode: 'premium', placement: p })}
+                    currentPage={placementsPage}
+                    totalPages={cedantPlacementTotalPages}
+                    onPageChange={setPlacementsPage}
                   />
                 )}
 

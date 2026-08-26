@@ -31,6 +31,8 @@ interface MultiSelectProps {
   /** Label for the inline variant's "All" row/empty state. Defaults to "All {placeholder}"
    *  (e.g. "All Status") so the field names its own dimension rather than showing a bare "All". */
   allLabel?: string;
+  /** Fires on every keystroke so callers can use bounded server-side option searches. */
+  onQueryChange?: (query: string) => void;
 }
 
 export function MultiSelect({
@@ -44,6 +46,7 @@ export function MultiSelect({
   size = 'sm',
   variant = 'default',
   allLabel,
+  onQueryChange,
 }: MultiSelectProps) {
   const resolvedAllLabel = allLabel ?? `All ${placeholder}`;
   const [open, setOpen] = useState(false);
@@ -295,7 +298,10 @@ export function MultiSelect({
                     ref={searchRef}
                     type="text"
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      onQueryChange?.(e.target.value);
+                    }}
                     onMouseDown={(e) => e.stopPropagation()}
                     onKeyDown={handleSearchKeyDown}
                     placeholder="Search…"
