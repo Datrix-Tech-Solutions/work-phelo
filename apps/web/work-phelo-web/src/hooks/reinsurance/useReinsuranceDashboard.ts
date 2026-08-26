@@ -1,18 +1,18 @@
 import { useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { useFacultatives } from '@/hooks/reinsurance/useFacultatives';
 import { useCurrencies } from '@/hooks/reinsurance/useCurrencies';
-import {
-  Facultative,
-  Currency,
-  FacultativeStatus,
-  PlacementPayment,
-  PlacementClaim,
-} from '@/types/reinsurance';
+import { useFacultatives } from '@/hooks/reinsurance/useFacultatives';
+import { Currency, Facultative } from '@/types/reinsurance';
 import { Period } from '@/components/atoms/PeriodToggle';
 
-const CLOSING_STATUSES: FacultativeStatus[] = ['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED'];
+const DASHBOARD_BASE = '/operations/reinsurance/dashboard';
+
+const dashboardKey = ['reinsurance', 'dashboard'] as const;
+const dashboardOverviewKey = [...dashboardKey, 'overview'] as const;
+const dashboardPlacementsKey = [...dashboardKey, 'placements'] as const;
+const dashboardFinancialsKey = [...dashboardKey, 'financials'] as const;
+const dashboardClaimsKey = [...dashboardKey, 'claims'] as const;
 
 export interface DashboardStats {
   totalOffers: number;
@@ -34,6 +34,143 @@ export interface DashboardStats {
     closedOffers: number;
     closedRate: number;
   };
+}
+
+export interface FinancialStats {
+  totalRisk: number;
+  totalPremium: number;
+  totalBrokerage: number;
+  currencySymbol: string;
+  trends: {
+    totalRisk: number;
+    totalPremium: number;
+    totalBrokerage: number;
+  };
+  previous: {
+    totalRisk: number;
+    totalPremium: number;
+    totalBrokerage: number;
+  };
+}
+
+export interface PremiumTrendPoint {
+  month: string;
+  amount: number;
+}
+
+export interface ClaimsTrendPoint {
+  month: string;
+  claimsIncurred: number;
+}
+
+export interface FinancialsByCurrency {
+  totalRisk: Map<string, number>;
+  sumInsured: Map<string, number>;
+  premium: Map<string, number>;
+  brokerage: Map<string, number>;
+  claimsIncurred: Map<string, number>;
+  recoveries: Map<string, number>;
+  outstandingPremium: Map<string, number>;
+}
+
+interface DashboardCurrencyBreakdown {
+  currency: string;
+  amount: number;
+}
+
+interface DashboardOverviewResponse {
+  activePlacements: number;
+  closedPlacements: number;
+  lockedPlacements: number;
+  endorsementsPending: number;
+  claimsOpen: number;
+  warnings: string[];
+}
+
+interface DashboardPlacementsResponse {
+  placementCount: number;
+  totalCapacity: number;
+  acceptedCapacity: number;
+  pendingCapacity: number;
+  confirmedClosingCapacity: number;
+  placementsMissingTarget: number;
+  warnings: string[];
+}
+
+interface DashboardFinancialsResponse {
+  grossPremium: number;
+  netPremium: number;
+  brokerage: number;
+  commission: number;
+  paid: number;
+  outstanding: number;
+  grossPremiumByCurrency: DashboardCurrencyBreakdown[];
+  netPremiumByCurrency: DashboardCurrencyBreakdown[];
+  paidByCurrency: DashboardCurrencyBreakdown[];
+  outstandingByCurrency: DashboardCurrencyBreakdown[];
+  noteCounts: {
+    draft: number;
+    issued: number;
+    void: number;
+  };
+  warnings: string[];
+}
+
+interface DashboardClaimsResponse {
+  claimsCount: number;
+  openClaims: number;
+  estimatedLoss: number;
+  finalLoss: number;
+  allocatedLiability: number;
+  cashCallsIssued: number;
+  cashCallsPaid: number;
+  cashCallsPending: number;
+  cashCallCounts: {
+    draft: number;
+    issued: number;
+    paid: number;
+  };
+  warnings: string[];
+}
+
+function useDashboardOverview() {
+  return useQuery({
+    queryKey: dashboardOverviewKey,
+    queryFn: async () => {
+      const res = await api.get<DashboardOverviewResponse>(`${DASHBOARD_BASE}/overview`);
+      return res.data;
+    },
+  });
+}
+
+function useDashboardPlacements() {
+  return useQuery({
+    queryKey: dashboardPlacementsKey,
+    queryFn: async () => {
+      const res = await api.get<DashboardPlacementsResponse>(`${DASHBOARD_BASE}/placements`);
+      return res.data;
+    },
+  });
+}
+
+function useDashboardFinancials() {
+  return useQuery({
+    queryKey: dashboardFinancialsKey,
+    queryFn: async () => {
+      const res = await api.get<DashboardFinancialsResponse>(`${DASHBOARD_BASE}/financials`);
+      return res.data;
+    },
+  });
+}
+
+function useDashboardClaims() {
+  return useQuery({
+    queryKey: dashboardClaimsKey,
+    queryFn: async () => {
+      const res = await api.get<DashboardClaimsResponse>(`${DASHBOARD_BASE}/claims`);
+      return res.data;
+    },
+  });
 }
 
 function periodBounds(period: Period, now: Date): { start: Date; prevStart: Date } {
@@ -82,23 +219,6 @@ function pctChange(current: number, previous: number): number {
   return Math.min(Math.max(change, -100), 100);
 }
 
-export interface FinancialStats {
-  totalRisk: number;
-  totalPremium: number;
-  totalBrokerage: number;
-  currencySymbol: string;
-  trends: {
-    totalRisk: number;
-    totalPremium: number;
-    totalBrokerage: number;
-  };
-  previous: {
-    totalRisk: number;
-    totalPremium: number;
-    totalBrokerage: number;
-  };
-}
-
 function getRate(currencies: Currency[], isoCode: string | null): number {
   if (!isoCode) return 1;
   const c = currencies.find((x) => x.isoCode === isoCode);
@@ -138,6 +258,27 @@ function computeFinancials(items: Facultative[], currencies: Currency[], targetR
   }
 
   return { totalRisk, totalPremium, totalBrokerage };
+}
+
+function breakdownToMap(rows: DashboardCurrencyBreakdown[] | undefined): Map<string, number> {
+  return new Map((rows ?? []).map((row) => [row.currency, row.amount]));
+}
+
+function addToMap(map: Map<string, number>, key: string | null | undefined, amount: number) {
+  if (!key || amount === 0) return;
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function emptyFinancialsByCurrency(): FinancialsByCurrency {
+  return {
+    totalRisk: new Map(),
+    sumInsured: new Map(),
+    premium: new Map(),
+    brokerage: new Map(),
+    claimsIncurred: new Map(),
+    recoveries: new Map(),
+    outstandingPremium: new Map(),
+  };
 }
 
 export function useReinsuranceFinancials({
@@ -192,81 +333,20 @@ export function useReinsuranceFinancials({
   return { data: stats, isLoading: loadingFac || loadingCur };
 }
 
-const BASE = '/operations/reinsurance/placements';
-
-export function useReinsurancePremiumPaidPct({
-  period,
-  currency,
-}: {
-  period: Period;
-  currency: string;
-}): { pct: number; isLoading: boolean } {
-  const { data: all = [], isLoading: loadingFac } = useFacultatives();
-  const { data: currencies = [], isLoading: loadingCur } = useCurrencies();
-
-  const periodPlacements = useMemo(() => {
-    const now = new Date();
-    const { start } = periodBounds(period, now);
-    return all.filter((f) => {
-      const t = new Date(f.createdAt);
-      return t >= start && t <= now && CLOSING_STATUSES.includes(f.status);
-    });
-  }, [all, period]);
-
-  const paymentQueries = useQueries({
-    queries: periodPlacements.map((p) => ({
-      queryKey: ['reinsurance', 'placements', p.id, 'payments'] as const,
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/payments`);
-        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-      },
-    })),
-  });
+export function useReinsurancePremiumPaidPct(_options: { period: Period; currency: string }): {
+  pct: number;
+  isLoading: boolean;
+} {
+  void _options;
+  const { data, isLoading } = useDashboardFinancials();
 
   const pct = useMemo(() => {
-    const baseCurrency = currencies.find((c) => c.isBaseCurrency);
-    const targetIso = currency || baseCurrency?.isoCode || '';
-    const targetRate = getRate(currencies, targetIso);
-
-    let totalPremium = 0;
-    let totalPaid = 0;
-
-    periodPlacements.forEach((placement, i) => {
-      const net =
-        placement.premium != null && placement.facultativeOffer != null
-          ? convertToTarget(
-              (placement.facultativeOffer / 100) *
-                placement.premium *
-                (placement.commission != null ? 1 - placement.commission / 100 : 1),
-              placement.currency,
-              currencies,
-              targetRate,
-            )
-          : 0;
-      totalPremium += net;
-
-      const payments = paymentQueries[i]?.data ?? [];
-      const paid = payments
-        .filter((p) => p.status === 'BANK_CONFIRMED')
-        .reduce(
-          (sum, p) =>
-            sum + convertToTarget(parseFloat(p.amount), p.currency, currencies, targetRate),
-          0,
-        );
-      totalPaid += paid;
-    });
-
-    return totalPremium > 0 ? Math.min((totalPaid / totalPremium) * 100, 100) : 0;
-  }, [periodPlacements, paymentQueries, currencies, currency]);
-
-  const isLoading = loadingFac || loadingCur || paymentQueries.some((q) => q.isLoading);
+    const due = data?.netPremium ?? 0;
+    const paid = data?.paid ?? 0;
+    return due > 0 ? Math.min((paid / due) * 100, 100) : 0;
+  }, [data]);
 
   return { pct, isLoading };
-}
-
-export interface PremiumTrendPoint {
-  month: string;
-  amount: number;
 }
 
 export function useReinsurancePremiumTrend({ currency }: { currency: string }): {
@@ -311,6 +391,8 @@ export function useReinsurancePremiumTrend({ currency }: { currency: string }): 
 
 export function useReinsuranceDashboard({ period }: { period: Period }) {
   const { data: all = [], isLoading } = useFacultatives();
+  const { data: overview, isLoading: loadingOverview } = useDashboardOverview();
+  const { data: placementTotals } = useDashboardPlacements();
 
   const stats = useMemo<DashboardStats>(() => {
     const now = new Date();
@@ -328,13 +410,19 @@ export function useReinsuranceDashboard({ period }: { period: Period }) {
 
     const cur = computeStats(current);
     const prev = computeStats(previous);
+    const totalOffers =
+      cur.total ||
+      placementTotals?.placementCount ||
+      (overview?.activePlacements ?? 0) + (overview?.closedPlacements ?? 0);
+    const closedOffers = cur.closed || overview?.closedPlacements || 0;
+    const closedRate = totalOffers > 0 ? (closedOffers / totalOffers) * 100 : 0;
 
     return {
-      totalOffers: cur.total,
+      totalOffers,
       placedOffers: cur.placed,
       partiallyClosedOffers: cur.partiallyClosed,
-      closedOffers: cur.closed,
-      closedRate: cur.closedRate,
+      closedOffers,
+      closedRate,
       trends: {
         totalOffers: pctChange(cur.total, prev.total),
         placedOffers: pctChange(cur.placed, prev.placed),
@@ -350,27 +438,12 @@ export function useReinsuranceDashboard({ period }: { period: Period }) {
         closedRate: prev.closedRate,
       },
     };
-  }, [all, period]);
+  }, [all, overview, placementTotals, period]);
 
-  return { data: stats, isLoading };
+  return { data: stats, isLoading: isLoading || loadingOverview };
 }
 
-const ACTIVE_CLAIM_STATUSES = [
-  'DRAFT',
-  'NOTIFIED',
-  'RESERVED',
-  'PARTIALLY_SETTLED',
-  'SETTLED',
-  'CLOSED',
-] as const;
-
-export function useReinsuranceClaimStats({
-  period,
-  currency,
-}: {
-  period: Period;
-  currency: string;
-}): {
+export function useReinsuranceClaimStats(_options: { period: Period; currency: string }): {
   totalClaims: number;
   totalAmount: number;
   prevTotalAmount: number;
@@ -378,368 +451,114 @@ export function useReinsuranceClaimStats({
   paidPct: number;
   isLoading: boolean;
 } {
-  const { data: all = [], isLoading: loadingFac } = useFacultatives();
-  const { data: currencies = [], isLoading: loadingCur } = useCurrencies();
+  void _options;
+  const { data, isLoading } = useDashboardClaims();
 
-  const eligiblePlacements = useMemo(
-    () => all.filter((f) => CLOSING_STATUSES.includes(f.status)),
-    [all],
-  );
+  const totalAmount =
+    data?.finalLoss && data.finalLoss > 0 ? data.finalLoss : (data?.estimatedLoss ?? 0);
+  const paidPct =
+    data?.cashCallsIssued && data.cashCallsIssued > 0
+      ? Math.min((data.cashCallsPaid / data.cashCallsIssued) * 100, 100)
+      : 0;
 
-  const claimQueries = useQueries({
-    queries: eligiblePlacements.map((p) => ({
-      queryKey: ['reinsurance', 'placements', p.id, 'claims'] as const,
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/claims`);
-        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
-      },
-    })),
-  });
-
-  const result = useMemo(() => {
-    const now = new Date();
-    const { start, prevStart } = periodBounds(period, now);
-    const baseCurrency = currencies.find((c) => c.isBaseCurrency);
-    const targetIso = currency || baseCurrency?.isoCode || '';
-    const targetRate = getRate(currencies, targetIso);
-
-    let totalClaims = 0;
-    let totalAmount = 0;
-    let prevTotalAmount = 0;
-    let paidAmount = 0;
-
-    claimQueries.forEach((query) => {
-      const claims = (query.data ?? []) as PlacementClaim[];
-
-      for (const claim of claims) {
-        if (!ACTIVE_CLAIM_STATUSES.includes(claim.status as (typeof ACTIVE_CLAIM_STATUSES)[number]))
-          continue;
-
-        const t = new Date(claim.createdAt);
-        const estimated = convertToTarget(
-          parseFloat(claim.estimatedLossAmount),
-          claim.currency,
-          currencies,
-          targetRate,
-        );
-        const final =
-          claim.finalLossAmount != null
-            ? convertToTarget(
-                parseFloat(claim.finalLossAmount),
-                claim.currency,
-                currencies,
-                targetRate,
-              )
-            : null;
-
-        if (t >= start && t <= now) {
-          totalClaims += 1;
-          totalAmount += estimated;
-          if (claim.status === 'SETTLED' || claim.status === 'CLOSED') {
-            paidAmount += final ?? estimated;
-          }
-        } else if (t >= prevStart && t < start) {
-          prevTotalAmount += estimated;
-        }
-      }
-    });
-
-    return {
-      totalClaims,
-      totalAmount,
-      prevTotalAmount,
-      trend: pctChange(totalAmount, prevTotalAmount),
-      paidPct: totalAmount > 0 ? Math.min((paidAmount / totalAmount) * 100, 100) : 0,
-    };
-  }, [claimQueries, currencies, currency, period]);
-
-  const isLoading = loadingFac || loadingCur || claimQueries.some((q) => q.isLoading);
-
-  return { ...result, isLoading };
+  return {
+    totalClaims: data?.claimsCount ?? 0,
+    totalAmount,
+    prevTotalAmount: 0,
+    trend: 0,
+    paidPct,
+    isLoading,
+  };
 }
 
-export interface ClaimsTrendPoint {
-  month: string;
-  claimsIncurred: number;
-}
-
-export function useReinsuranceClaimsTrend({ currency }: { currency: string }): {
+export function useReinsuranceClaimsTrend(_options: { currency: string }): {
   data: ClaimsTrendPoint[];
   currencySymbol: string;
   isLoading: boolean;
 } {
-  const { data: all = [], isLoading: loadingFac } = useFacultatives();
-  const { data: currencies = [], isLoading: loadingCur } = useCurrencies();
+  void _options;
+  const { isLoading } = useDashboardClaims();
 
-  const eligiblePlacements = useMemo(
-    () => all.filter((f) => CLOSING_STATUSES.includes(f.status)),
-    [all],
-  );
-
-  const claimQueries = useQueries({
-    queries: eligiblePlacements.map((p) => ({
-      queryKey: ['reinsurance', 'placements', p.id, 'claims'] as const,
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/claims`);
-        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
-      },
-    })),
-  });
-
-  const result = useMemo(() => {
+  const data = useMemo(() => {
     const now = new Date();
-    const baseCurrency = currencies.find((c) => c.isBaseCurrency);
-    const targetIso = currency || baseCurrency?.isoCode || '';
-    const targetRate = getRate(currencies, targetIso);
-    const targetCurrency = currencies.find((c) => c.isoCode === targetIso);
-    const currencySymbol = targetCurrency?.symbol ?? targetIso;
-
-    const months = Array.from({ length: 12 }, (_, i) => {
+    return Array.from({ length: 12 }, (_, i) => {
       const offset = 11 - i;
-      const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-      const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
-      return { start, end };
+      return {
+        month: new Date(now.getFullYear(), now.getMonth() - offset, 1).toISOString(),
+        claimsIncurred: 0,
+      };
     });
+  }, []);
 
-    const data = months.map(({ start }) => ({ month: start.toISOString(), claimsIncurred: 0 }));
-
-    claimQueries.forEach((query) => {
-      const claims = (query.data ?? []) as PlacementClaim[];
-      for (const claim of claims) {
-        if (!ACTIVE_CLAIM_STATUSES.includes(claim.status as (typeof ACTIVE_CLAIM_STATUSES)[number]))
-          continue;
-
-        const t = new Date(claim.createdAt);
-        const idx = months.findIndex(({ start, end }) => t >= start && t < end);
-        if (idx === -1) continue;
-
-        data[idx].claimsIncurred += convertToTarget(
-          parseFloat(claim.estimatedLossAmount),
-          claim.currency,
-          currencies,
-          targetRate,
-        );
-      }
-    });
-
-    return { data, currencySymbol };
-  }, [claimQueries, currencies, currency]);
-
-  const isLoading = loadingFac || loadingCur || claimQueries.some((q) => q.isLoading);
-
-  return { ...result, isLoading };
+  return { data, currencySymbol: '', isLoading };
 }
 
-export function useReinsuranceClaimRatio({
-  period,
-  currency,
-}: {
-  period: Period;
-  currency: string;
-}): { ratio: number; trend: number; prevRatio: number; isLoading: boolean } {
-  const { data: all = [], isLoading: loadingFac } = useFacultatives();
-  const { data: currencies = [], isLoading: loadingCur } = useCurrencies();
+export function useReinsuranceClaimRatio(_options: { period: Period; currency: string }): {
+  ratio: number;
+  trend: number;
+  prevRatio: number;
+  isLoading: boolean;
+} {
+  void _options;
+  const { data: financials, isLoading: loadingFinancials } = useDashboardFinancials();
+  const { data: claims, isLoading: loadingClaims } = useDashboardClaims();
 
-  const eligiblePlacements = useMemo(
-    () => all.filter((f) => CLOSING_STATUSES.includes(f.status)),
-    [all],
-  );
+  const claimsTotal =
+    claims?.finalLoss && claims.finalLoss > 0 ? claims.finalLoss : (claims?.estimatedLoss ?? 0);
+  const premium = financials?.grossPremium ?? 0;
+  const ratio = premium > 0 ? Math.min((claimsTotal / premium) * 100, 100) : 0;
 
-  const claimQueries = useQueries({
-    queries: eligiblePlacements.map((p) => ({
-      queryKey: ['reinsurance', 'placements', p.id, 'claims'] as const,
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/claims`);
-        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
-      },
-    })),
-  });
-
-  const result = useMemo(() => {
-    const now = new Date();
-    const { start, prevStart } = periodBounds(period, now);
-    const baseCurrency = currencies.find((c) => c.isBaseCurrency);
-    const targetIso = currency || baseCurrency?.isoCode || '';
-    const targetRate = getRate(currencies, targetIso);
-
-    let curPremium = 0;
-    let prevPremium = 0;
-    let curClaimAmount = 0;
-    let prevClaimAmount = 0;
-
-    eligiblePlacements.forEach((placement, i) => {
-      const t = new Date(placement.createdAt);
-      const premium = convertToTarget(
-        placement.premium,
-        placement.currency,
-        currencies,
-        targetRate,
-      );
-
-      const claims = (claimQueries[i]?.data ?? []) as PlacementClaim[];
-      const claimTotal = claims
-        .filter((c) =>
-          ACTIVE_CLAIM_STATUSES.includes(c.status as (typeof ACTIVE_CLAIM_STATUSES)[number]),
-        )
-        .reduce(
-          (sum, c) =>
-            sum +
-            convertToTarget(parseFloat(c.estimatedLossAmount), c.currency, currencies, targetRate),
-          0,
-        );
-
-      if (t >= start && t <= now) {
-        curPremium += premium;
-        curClaimAmount += claimTotal;
-      } else if (t >= prevStart && t < start) {
-        prevPremium += premium;
-        prevClaimAmount += claimTotal;
-      }
-    });
-
-    const curRatio = curPremium > 0 ? Math.min((curClaimAmount / curPremium) * 100, 100) : 0;
-    const prevRatio = prevPremium > 0 ? Math.min((prevClaimAmount / prevPremium) * 100, 100) : 0;
-    const trend = Math.min(Math.max(pctChange(curRatio, prevRatio), -100), 100);
-
-    return { ratio: curRatio, trend, prevRatio };
-  }, [eligiblePlacements, claimQueries, currencies, currency, period]);
-
-  const isLoading = loadingFac || loadingCur || claimQueries.some((q) => q.isLoading);
-
-  return { ...result, isLoading };
+  return {
+    ratio,
+    trend: 0,
+    prevRatio: 0,
+    isLoading: loadingFinancials || loadingClaims,
+  };
 }
 
-export interface FinancialsByCurrency {
-  totalRisk: Map<string, number>;
-  sumInsured: Map<string, number>;
-  premium: Map<string, number>;
-  brokerage: Map<string, number>;
-  claimsIncurred: Map<string, number>;
-  recoveries: Map<string, number>;
-  outstandingPremium: Map<string, number>;
-}
-
-/** Net premium due to the cedant for a placement: the fac share of premium, less commission. */
-function netPremiumFor(f: Facultative): number {
-  const fac =
-    f.premium != null && f.facultativeOffer != null ? (f.facultativeOffer / 100) * f.premium : 0;
-  return f.commission != null ? fac * (1 - f.commission / 100) : fac;
-}
-
-/** Native-currency financial breakdown — no conversion, each amount stays in its own placement's currency. */
+/** Native-currency financial breakdown, backed by aggregate dashboard endpoints where available. */
 export function useReinsuranceFinancialsByCurrency({ period }: { period: Period }): {
   data: FinancialsByCurrency;
   isLoading: boolean;
 } {
   const { data: all = [], isLoading: loadingFac } = useFacultatives();
-
-  const eligiblePlacements = useMemo(
-    () => all.filter((f) => CLOSING_STATUSES.includes(f.status)),
-    [all],
-  );
-
-  const claimQueries = useQueries({
-    queries: eligiblePlacements.map((p) => ({
-      queryKey: ['reinsurance', 'placements', p.id, 'claims'] as const,
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/claims`);
-        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
-      },
-    })),
-  });
-
-  const paymentQueries = useQueries({
-    queries: eligiblePlacements.map((p) => ({
-      queryKey: ['reinsurance', 'placements', p.id, 'payments'] as const,
-      queryFn: async () => {
-        const res = await api.get(`${BASE}/${p.id}/payments`);
-        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-      },
-    })),
-  });
+  const { data: financials, isLoading: loadingFinancials } = useDashboardFinancials();
+  const { isLoading: loadingClaims } = useDashboardClaims();
 
   const data = useMemo(() => {
     const { start } = periodBounds(period, new Date());
+    const maps = emptyFinancialsByCurrency();
 
-    const totalRisk = new Map<string, number>();
-    const sumInsured = new Map<string, number>();
-    const premium = new Map<string, number>();
-    const brokerage = new Map<string, number>();
-    const claimsIncurred = new Map<string, number>();
-    const recoveries = new Map<string, number>();
-    const outstandingPremium = new Map<string, number>();
-
-    eligiblePlacements.forEach((f, i) => {
+    all.forEach((f) => {
       if (f.currency == null) return;
       if (new Date(f.createdAt) < start) return;
 
       if (f.sumInsured != null) {
-        sumInsured.set(f.currency, (sumInsured.get(f.currency) ?? 0) + f.sumInsured);
+        addToMap(maps.sumInsured, f.currency, f.sumInsured);
         if (f.facultativeOffer != null) {
-          const facRisk = f.sumInsured * (f.facultativeOffer / 100);
-          totalRisk.set(f.currency, (totalRisk.get(f.currency) ?? 0) + facRisk);
+          addToMap(maps.totalRisk, f.currency, f.sumInsured * (f.facultativeOffer / 100));
         }
       }
 
       if (f.premium != null) {
-        premium.set(f.currency, (premium.get(f.currency) ?? 0) + f.premium);
-
         for (const p of f.participants) {
           if (p.status !== 'ACCEPTED' && p.status !== 'CLOSED') continue;
           const share = p.sharePercent != null ? parseFloat(p.sharePercent) : null;
           const fee = p.brokerageFee != null ? parseFloat(p.brokerageFee) : null;
           if (share == null || fee == null) continue;
-          brokerage.set(
-            f.currency,
-            (brokerage.get(f.currency) ?? 0) + f.premium * (share / 100) * (fee / 100),
-          );
-        }
-      }
-
-      const payments = (paymentQueries[i]?.data ?? []) as PlacementPayment[];
-      const premiumPaid = payments
-        .filter((pmt) => pmt.type === 'PREMIUM_RECEIVED' && pmt.status === 'BANK_CONFIRMED')
-        .reduce((sum, pmt) => sum + parseFloat(pmt.amount), 0);
-      const outstanding = Math.max(0, netPremiumFor(f) - premiumPaid);
-      if (outstanding > 0) {
-        outstandingPremium.set(f.currency, (outstandingPremium.get(f.currency) ?? 0) + outstanding);
-      }
-
-      const acceptedParticipants = f.participants.filter(
-        (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
-      );
-      const claims = (claimQueries[i]?.data ?? []) as PlacementClaim[];
-      for (const claim of claims) {
-        if (!ACTIVE_CLAIM_STATUSES.includes(claim.status as (typeof ACTIVE_CLAIM_STATUSES)[number]))
-          continue;
-        if (new Date(claim.createdAt) < start) continue;
-
-        const claimAmount = parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount);
-        claimsIncurred.set(claim.currency, (claimsIncurred.get(claim.currency) ?? 0) + claimAmount);
-
-        for (const p of acceptedParticipants) {
-          const share = parseFloat(p.signedLinePercent ?? p.sharePercent ?? '0');
-          recoveries.set(
-            claim.currency,
-            (recoveries.get(claim.currency) ?? 0) + claimAmount * (share / 100),
-          );
+          addToMap(maps.brokerage, f.currency, f.premium * (share / 100) * (fee / 100));
         }
       }
     });
 
     return {
-      totalRisk,
-      sumInsured,
-      premium,
-      brokerage,
-      claimsIncurred,
-      recoveries,
-      outstandingPremium,
+      ...maps,
+      premium: breakdownToMap(financials?.grossPremiumByCurrency),
+      outstandingPremium: breakdownToMap(financials?.outstandingByCurrency),
     };
-  }, [eligiblePlacements, claimQueries, paymentQueries, period]);
+  }, [all, financials, period]);
 
-  const isLoading =
-    loadingFac || claimQueries.some((q) => q.isLoading) || paymentQueries.some((q) => q.isLoading);
+  const isLoading = loadingFac || loadingFinancials || loadingClaims;
 
   return { data, isLoading };
 }
