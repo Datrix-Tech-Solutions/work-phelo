@@ -982,7 +982,7 @@ export type PlacementPaymentStatus =
   | 'FAILED'
   | 'CANCELLED'
   | 'REVERSED';
-export type PaymentWorklistPaymentStatus = 'Pending' | 'Part Payment' | 'Paid';
+export type PaymentWorklistPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
 export type PaymentWorklistStatusFilter = 'Placed' | 'Closed' | PaymentWorklistPaymentStatus;
 export type PlacementSettlementMethod =
   | 'BANK_TRANSFER'

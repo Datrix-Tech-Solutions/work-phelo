@@ -277,7 +277,6 @@ export function ClaimRecoveryApprovalsPanel({
           placement={placement}
           participant={debitNoteParticipant}
           claimAmount={claimAmount}
-          onPrint={() => {}}
           onClose={() => setDebitNoteTarget(null)}
         />
       )}

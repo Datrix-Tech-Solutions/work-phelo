@@ -138,6 +138,18 @@ function PaymentStatusCell({
   );
 }
 
+const SUM_INSURED_COLUMN: Column<Facultative> = {
+  key: 'sumInsured',
+  label: '100% Sum Insured',
+  width: '150px',
+  className: 'text-right',
+  render: (row) => (
+    <span className="font-semibold text-gray-900">
+      {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
+    </span>
+  ),
+};
+
 const COLUMNS: Column<Facultative>[] = [
   {
     key: 'reference',
@@ -164,6 +176,7 @@ const COLUMNS: Column<Facultative>[] = [
     width: 'minmax(120px, 0.8fr)',
     render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
   },
+  SUM_INSURED_COLUMN,
   {
     key: 'facultativeOffer',
     label: 'Fac Offer',
@@ -237,18 +250,6 @@ const COLUMNS: Column<Facultative>[] = [
     width: '100px',
   },
 ];
-
-const SUM_INSURED_COLUMN: Column<Facultative> = {
-  key: 'sumInsured',
-  label: '100% Sum Insured',
-  width: '150px',
-  className: 'text-right',
-  render: (row) => (
-    <span className="font-semibold text-gray-900">
-      {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
-    </span>
-  ),
-};
 
 // Closing tab: participants are frozen once closed, so the total is redundant noise —
 // just show how many accepted.
@@ -490,39 +491,40 @@ export function FacultativeTable({
     });
 
     if (tab === 'closing') {
-      return columnsWithRowState.map((col) => {
-        if (col.key === 'totalAcceptedPercent') return SUM_INSURED_COLUMN;
-        if (col.key === 'participants') return CLOSED_PARTICIPANTS_COLUMN;
+      // Signing Progress is dropped for closed placements; 100% Sum Insured (from COLUMNS) stays.
+      return columnsWithRowState
+        .filter((col) => col.key !== 'totalAcceptedPercent')
+        .map((col) => {
+          if (col.key === 'participants') return CLOSED_PARTICIPANTS_COLUMN;
 
-        if (col.key === 'status') {
-          return {
-            ...col,
-            render: (row: Facultative) => (
-              <PaymentStatusCell
-                placement={row}
-                paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
-              />
-            ),
-          };
-        }
+          if (col.key === 'status') {
+            return {
+              ...col,
+              render: (row: Facultative) => (
+                <PaymentStatusCell
+                  placement={row}
+                  paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
+                />
+              ),
+            };
+          }
 
-        return col;
-      });
+          return col;
+        });
     }
 
     if (tab === 'placements') {
-      const withoutStatus = columnsWithRowState.filter((col) => col.key !== 'status');
-      const premiumIndex = withoutStatus.findIndex((col) => col.key === 'premium');
-      return [
-        ...withoutStatus.slice(0, premiumIndex + 1),
-        SUM_INSURED_COLUMN,
-        ...withoutStatus.slice(premiumIndex + 1),
-      ];
+      return columnsWithRowState.filter((col) => col.key !== 'status');
     }
 
     if (tab !== 'archived') return COLUMNS;
 
-    const ARCHIVED_HIDDEN_KEYS = new Set(['totalAcceptedPercent', 'participants', 'status']);
+    const ARCHIVED_HIDDEN_KEYS = new Set([
+      'sumInsured',
+      'totalAcceptedPercent',
+      'participants',
+      'status',
+    ]);
 
     return [
       ...COLUMNS.filter((col) => !ARCHIVED_HIDDEN_KEYS.has(col.key as string)),

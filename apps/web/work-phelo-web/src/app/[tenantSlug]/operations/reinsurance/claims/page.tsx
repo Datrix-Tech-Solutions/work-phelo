@@ -11,8 +11,8 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 type ClaimsPageTab = 'notification' | 'open' | 'closed';
 
 const TABS = [
-  { key: 'notification', label: 'Notification' },
   { key: 'open', label: 'Open Claims' },
+  { key: 'notification', label: 'Notification' },
   { key: 'closed', label: 'Closed Claims' },
 ];
 
@@ -24,7 +24,7 @@ export default function ReinsuranceClaimsPage() {
 
   const initialTab = VALID_TABS.includes(requestedTab as ClaimsPageTab)
     ? (requestedTab as ClaimsPageTab)
-    : 'notification';
+    : 'open';
   const [activeTab, setActiveTab] = useState<ClaimsPageTab>(initialTab);
 
   return (

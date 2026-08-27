@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PlacementStatus } from '../../../prisma/generated/client';
 
 export const PAYMENT_WORKLIST_PAYMENT_STATUSES = [
+  'Outstanding',
   'Pending',
   'Part Payment',
   'Paid',

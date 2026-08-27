@@ -1,8 +1,13 @@
 'use client';
 
 import React from 'react';
-import { DetailField } from '@/components/atoms/DetailField';
-import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
+import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
+import {
+  DocumentContentFrame,
+  DocumentField,
+  DocumentSectionHeader,
+} from '@/components/molecules/documents/DocumentContentFrame';
+import { OfferSlipContent } from '@/components/molecules/documents/content/OfferSlipContent';
 import {
   EndorsementParticipantClosing,
   Facultative,
@@ -11,11 +16,7 @@ import {
   PlacementEndorsementSummary,
   PlacementNote,
 } from '@/types/reinsurance';
-import { useReinsurers, useRiskTypes } from '@/hooks';
-import { useReinsuranceCharges } from '@/hooks/reinsurance/useReinsuranceCharges';
-import { isForeignCedant, selectChargeRate } from '@/lib/reinsuranceTax';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
-import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 interface EndorsementSlipPreviewModalProps {
@@ -125,32 +126,6 @@ function formatField(
   return text(value);
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-3 mt-6 first:mt-0">
-      <p className="mb-1 text-sm font-semibold uppercase tracking-widest text-gray-500">
-        {children}
-      </p>
-      <div className="border-t border-gray-300" />
-    </div>
-  );
-}
-
-function InfoRows({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
-  return (
-    <table className="w-full border-collapse text-base">
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.label}>
-            <td className="w-2/5 py-1.5 pr-4 text-gray-500">{row.label}</td>
-            <td className="py-1.5 pl-4 font-medium text-gray-900">{row.value}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
 // Risk/offer detail fields (schema-driven risk details + custom "extra" fields) aren't flat
 // scalars on the snapshot — they live nested under businessDetails/offerDetails, so they need
 // their own extraction/diff pass alongside CHANGE_FIELDS.
@@ -197,47 +172,40 @@ function ChangeTable({
     );
 
   if (changed.length === 0 && changedDetailFields.length === 0) {
-    return <p className="text-sm text-gray-400 italic">No revised placement terms recorded.</p>;
+    return <p className="italic">No revised placement terms recorded.</p>;
   }
 
   return (
-    <table className="w-full border-collapse text-base">
+    <table className="w-full border-collapse">
       <thead>
         <tr className="border-b border-gray-200">
-          <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">Field</th>
-          <th className="px-3 py-1.5 text-left text-sm font-semibold text-gray-500">Original</th>
-          <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">Endorsed</th>
+          <th className="py-[0.4em] pr-2 text-left font-semibold">Field</th>
+          <th className="px-2 py-[0.4em] text-left font-semibold">Original</th>
+          <th className="py-[0.4em] pl-2 text-left font-semibold">Endorsed</th>
         </tr>
       </thead>
       <tbody>
         {changed.map((field) => (
-          <tr key={field.key}>
-            <td className="py-1.5 pr-3 text-gray-500">{field.label}</td>
-            <td className="px-3 py-1.5 text-gray-700">
+          <tr key={field.key} className="border-b border-gray-100">
+            <td className="py-[0.4em] pr-2">{field.label}</td>
+            <td className="px-2 py-[0.4em]">
               {formatField(original[field.key], field.type, original.currency ?? currency)}
             </td>
-            <td className="py-1.5 pl-3 font-medium text-gray-900">
+            <td className="py-[0.4em] pl-2">
               {formatField(proposed[field.key], field.type, proposed.currency ?? currency)}
             </td>
           </tr>
         ))}
         {changedDetailFields.map(({ key, label }) => (
-          <tr key={key}>
-            <td className="py-1.5 pr-3 text-gray-500">{label}</td>
-            <td className="px-3 py-1.5 text-gray-700">{text(originalDetails.get(key)?.value)}</td>
-            <td className="py-1.5 pl-3 font-medium text-gray-900">
-              {text(proposedDetails.get(key)?.value)}
-            </td>
+          <tr key={key} className="border-b border-gray-100">
+            <td className="py-[0.4em] pr-2">{label}</td>
+            <td className="px-2 py-[0.4em]">{text(originalDetails.get(key)?.value)}</td>
+            <td className="py-[0.4em] pl-2">{text(proposedDetails.get(key)?.value)}</td>
           </tr>
         ))}
       </tbody>
     </table>
   );
-}
-
-function Field({ label, value }: { label: string; value: string | null | undefined }) {
-  if (!value || value === '—') return null;
-  return <DetailField inline label={label} value={value} />;
 }
 
 function getSnapshotParticipants(snapshot: Record<string, unknown>): Record<string, unknown>[] {
@@ -393,124 +361,91 @@ function RevisedOfferContent({
         )
       : null;
 
+  const participationRows = [
+    ...(confirmedClosing
+      ? [
+          {
+            label: 'Your Participation %',
+            previous: `${prevShare}%`,
+            revised: `${toNum(confirmedClosing.signedLinePercent)}%`,
+            bold: false,
+          },
+        ]
+      : []),
+    {
+      label: 'Your Share SI',
+      previous: fmtMoney(prevYourSumInsured || null, prevCurrency),
+      revised: fmtMoney(yourSumInsured, currency),
+      bold: false,
+    },
+    {
+      label: 'Your Gross Premium',
+      previous: fmtMoney(prevYourPremium || null, prevCurrency),
+      revised: fmtMoney(yourPremium, currency),
+      bold: false,
+    },
+    {
+      label: 'Your Commission',
+      previous: fmtMoney(prevCommissionAmt || null, prevCurrency),
+      revised: fmtMoney(commissionAmt, currency),
+      bold: false,
+    },
+    {
+      label: 'Your Net Premium',
+      previous: fmtMoney(prevNetPremium || null, prevCurrency),
+      revised: fmtMoney(netPremium, currency),
+      bold: true,
+    },
+  ];
+
   return (
-    <>
-      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-1 text-center">
-        {confirmedClosing ? 'Endorsement Certificate' : 'Endorsement Offer Slip'}
-      </p>
+    <DocumentContentFrame
+      title={confirmedClosing ? 'Endorsement Certificate' : 'Endorsement Offer Slip'}
+    >
+      <DocumentSectionHeader>Policy Information</DocumentSectionHeader>
+      <DocumentField label="Cedant" value={placement.cedant.name} />
+      <DocumentField label="Reinsurer" value={reinsurerName} />
+      <DocumentField label="Insured" value={text(placement.title)} />
+      <DocumentField label="Policy Number" value={displayPolicyNumber(placement.policyNumber)} />
+      <DocumentField label="Endorsement No." value={endorsement.endorsementNumber} />
+      <DocumentField label="Effective Date" value={fmtDate(endorsement.effectiveDate)} />
+      <DocumentField label="Currency" value={text(placement.currency)} />
+      <DocumentField label="Class of Business" value={text(placement.classOfBusiness)} />
 
-      {/* POLICY INFORMATION */}
-      <SectionHeading>Policy Information</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
-        <tbody>
-          {[
-            { label: 'Cedant', value: placement.cedant.name },
-            { label: 'Reinsurer', value: reinsurerName },
-            { label: 'Insured', value: text(placement.title) },
-            { label: 'Policy Number', value: displayPolicyNumber(placement.policyNumber) },
-            { label: 'Endorsement No.', value: endorsement.endorsementNumber },
-            { label: 'Effective Date', value: fmtDate(endorsement.effectiveDate) },
-            { label: 'Currency', value: text(placement.currency) },
-            { label: 'Class of Business', value: text(placement.classOfBusiness) },
-          ].map((row) => (
-            <tr key={row.label}>
-              <td className="py-1.5 pr-4 text-gray-500 w-2/5">{row.label}</td>
-              <td className="py-1.5 pl-4 text-gray-900 font-medium">{row.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* ENDORSEMENT SUMMARY */}
-      <SectionHeading>Endorsement Summary</SectionHeading>
-      <div className="text-sm mb-2 space-y-2">
-        {narrative ? (
-          <p className="text-gray-800 leading-relaxed">{narrative}</p>
-        ) : (
-          <p className="text-gray-400 italic">No parameter changes recorded.</p>
-        )}
-        {Boolean(endorsement.reason) && (
-          <div>
-            <span className="text-gray-500">Comment:</span>
-            <p className="text-gray-900 font-medium mt-0.5">{endorsement.reason}</p>
-          </div>
-        )}
+      <DocumentSectionHeader>Endorsement Summary</DocumentSectionHeader>
+      <div className="flex flex-col gap-2">
+        {narrative ? <p>{narrative}</p> : <p className="italic">No parameter changes recorded.</p>}
+        {Boolean(endorsement.reason) && <p>Comment: {endorsement.reason}</p>}
       </div>
 
       {proposed && (
         <>
-          <SectionHeading>Original vs Endorsed Business</SectionHeading>
+          <DocumentSectionHeader>Original vs Endorsed Business</DocumentSectionHeader>
           <ChangeTable original={originalPlacement} proposed={proposed} currency={currency} />
         </>
       )}
 
-      {/* REINSURER PARTICIPATION */}
-      <SectionHeading>Reinsurer Participation</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
+      <DocumentSectionHeader>Reinsurer Participation</DocumentSectionHeader>
+      <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-gray-200">
-            <th className="py-1.5 pr-4 text-left text-sm font-semibold text-gray-500 w-1/3">
+            <th className="w-1/3 py-[0.4em] pr-2 text-left font-semibold">
               {confirmedClosing ? '' : `Your Participation (${prevShare}%)`}
             </th>
-            <th className="py-1.5 px-4 text-left text-sm font-semibold text-gray-500 w-1/3">
-              Original
-            </th>
-            <th className="py-1.5 pl-4 text-left text-sm font-semibold text-gray-500 w-1/3">
+            <th className="w-1/3 py-[0.4em] px-2 text-left font-semibold">Original</th>
+            <th className="w-1/3 py-[0.4em] pl-2 text-left font-semibold">
               {confirmedClosing ? 'Revised' : 'Endorsed'}
             </th>
           </tr>
         </thead>
         <tbody>
-          {[
-            ...(confirmedClosing
-              ? [
-                  {
-                    label: 'Your Participation %',
-                    previous: `${prevShare}%`,
-                    revised: `${toNum(confirmedClosing.signedLinePercent)}%`,
-                    bold: false,
-                  },
-                ]
-              : []),
-            {
-              label: 'Your Share SI',
-              previous: fmtMoney(prevYourSumInsured || null, prevCurrency),
-              revised: fmtMoney(yourSumInsured, currency),
-              bold: false,
-            },
-            {
-              label: 'Your Gross Premium',
-              previous: fmtMoney(prevYourPremium || null, prevCurrency),
-              revised: fmtMoney(yourPremium, currency),
-              bold: false,
-            },
-            {
-              label: 'Your Commission',
-              previous: fmtMoney(prevCommissionAmt || null, prevCurrency),
-              revised: fmtMoney(commissionAmt, currency),
-              bold: false,
-            },
-            {
-              label: 'Your Net Premium',
-              previous: fmtMoney(prevNetPremium || null, prevCurrency),
-              revised: fmtMoney(netPremium, currency),
-              bold: true,
-            },
-          ].map((row) => (
-            <tr key={row.label}>
-              <td
-                className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
-              >
-                {row.label}
-              </td>
-              <td
-                className={`py-1.5 px-4 ${row.bold ? 'font-semibold text-gray-600' : 'text-gray-700'}`}
-              >
+          {participationRows.map((row) => (
+            <tr key={row.label} className="border-b border-gray-100">
+              <td className={`py-[0.4em] pr-2 ${row.bold ? 'font-semibold' : ''}`}>{row.label}</td>
+              <td className={`py-[0.4em] px-2 ${row.bold ? 'font-semibold' : ''}`}>
                 {row.previous}
               </td>
-              <td
-                className={`py-1.5 pl-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
-              >
+              <td className={`py-[0.4em] pl-2 ${row.bold ? 'font-semibold' : ''}`}>
                 {row.revised}
               </td>
             </tr>
@@ -518,13 +453,12 @@ function RevisedOfferContent({
         </tbody>
       </table>
 
-      {/* SPECIAL CONDITIONS */}
-      <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
+      <DocumentSectionHeader>Special Conditions</DocumentSectionHeader>
+      <ul className="list-none space-y-1">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>
-    </>
+    </DocumentContentFrame>
   );
 }
 
@@ -533,172 +467,6 @@ function RevisedOfferContent({
  * SlipPreviewModal layout exactly, just sourced from the endorsement's current (proposed)
  * terms instead of the original placement snapshot, and offered at this recipient's line.
  */
-function OfferSlipContent({
-  placement,
-  endorsement,
-  counterpartyId,
-  offeredLinePercent,
-  brokerageFee,
-}: {
-  placement: Facultative;
-  endorsement: PlacementEndorsement;
-  counterpartyId?: string | null;
-  offeredLinePercent: number;
-  brokerageFee: number;
-}) {
-  const proposed = getSnapshotPlacement(endorsement.proposedSnapshot ?? {});
-  const pick = <T,>(key: string, fallback: T): T =>
-    proposed[key] !== undefined && proposed[key] !== null ? (proposed[key] as T) : fallback;
-
-  const currency = pick('currency', placement.currency);
-  const sumInsured = pick<number | null>('sumInsured', placement.sumInsured);
-  const premium = pick<number | null>('premium', placement.premium);
-  const commission = pick<number | null>('commission', placement.commission);
-  const rate = pick<number | null>('rate', placement.rate);
-  const classOfBusiness = pick<string | null>('classOfBusiness', placement.classOfBusiness);
-  const title = pick<string>('title', placement.title);
-  const inceptionDate = pick<string | null>('inceptionDate', placement.inceptionDate);
-  const expiryDate = pick<string | null>('expiryDate', placement.expiryDate);
-  const businessDetails = pick<Record<string, unknown> | null>(
-    'businessDetails',
-    placement.businessDetails,
-  );
-  const offerDetails = pick<Record<string, unknown> | null>('offerDetails', placement.offerDetails);
-  const description = pick<string | null>('description', placement.description);
-
-  const { data: reinsurers = [] } = useReinsurers();
-  const { data: charges } = useReinsuranceCharges();
-  const reinsurer = reinsurers.find((r) => r.id === counterpartyId);
-  const foreignReinsurer = isForeignCedant(reinsurer);
-  const nicLevyRate = selectChargeRate(charges, 'NIC_LEVY', currency);
-  const withholdingTaxRate = selectChargeRate(charges, 'WITHHOLDING_TAX', currency);
-
-  const businessEntries = placementDetailEntries(businessDetails);
-  const offerEntries = placementDetailEntries(offerDetails);
-
-  const facOffer = offeredLinePercent;
-  const facSumInsured = sumInsured != null ? (facOffer / 100) * sumInsured : null;
-  const reinsurancePremium = premium != null ? (facOffer / 100) * premium : null;
-  const commissions =
-    reinsurancePremium != null
-      ? (((commission ?? 0) + brokerageFee) / 100) * reinsurancePremium
-      : null;
-  const netPremium =
-    reinsurancePremium != null && commissions != null ? reinsurancePremium - commissions : null;
-  const nicLevy =
-    foreignReinsurer && reinsurancePremium != null
-      ? reinsurancePremium * (nicLevyRate / 100)
-      : null;
-  const withholdingTax =
-    foreignReinsurer && reinsurancePremium != null
-      ? reinsurancePremium * (withholdingTaxRate / 100)
-      : null;
-  const netPremiumPayable =
-    netPremium != null ? netPremium - (nicLevy ?? 0) - (withholdingTax ?? 0) : null;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-2 text-center">
-        Facultative Offer Slip
-      </p>
-      <div className="mb-4">
-        <Field label="Date" value={fmtDate(new Date().toISOString())} />
-      </div>
-      <Field label="Cover Type" value={classOfBusiness} />
-      <Field label="Original Insured" value={title} />
-      <Field label="Policy Number" value={displayPolicyNumber(placement.policyNumber)} />
-      <Field label="Currency" value={currency} />
-      {(inceptionDate || expiryDate) && (
-        <Field
-          label="Insurance Period"
-          value={`${fmtDate(inceptionDate ?? '')} – ${fmtDate(expiryDate ?? '')}`}
-        />
-      )}
-
-      {(businessEntries.length > 0 || offerEntries.length > 0) && (
-        <>
-          <hr className="border-gray-100 my-1" />
-          {businessEntries.map((entry) => {
-            const formatted = text(entry.value);
-            return formatted === '—' ? null : (
-              <DetailField key={entry.key} inline label={entry.label} value={formatted} />
-            );
-          })}
-          {offerEntries.map((entry) => {
-            const formatted = text(entry.value);
-            return formatted === '—' ? null : (
-              <DetailField key={entry.key} inline label={entry.label} value={formatted} />
-            );
-          })}
-        </>
-      )}
-
-      {(sumInsured != null ||
-        rate != null ||
-        premium != null ||
-        facSumInsured != null ||
-        reinsurancePremium != null) && (
-        <>
-          <hr className="border-gray-100 my-1" />
-          <Field
-            label="100% Sum Insured"
-            value={sumInsured != null ? fmtMoney(sumInsured, currency) : null}
-          />
-          <Field label="Premium Rate" value={rate != null ? `${rate}%` : null} />
-          <Field
-            label="100% Gross Premium"
-            value={premium != null ? fmtMoney(premium, currency) : null}
-          />
-          <Field
-            label="Offer"
-            value={
-              facSumInsured != null ? `${fmtMoney(facSumInsured, currency)} (${facOffer}%)` : null
-            }
-          />
-          <Field
-            label="Reinsurance Premium"
-            value={reinsurancePremium != null ? fmtMoney(reinsurancePremium, currency) : null}
-          />
-          <Field
-            label="Reinsurance Commission"
-            value={
-              commissions != null
-                ? `${fmtMoney(commissions, currency)} (${(commission ?? 0) + brokerageFee}%)`
-                : null
-            }
-          />
-          {nicLevy != null && withholdingTax != null && (
-            <>
-              <Field label={`NIC Levy (${nicLevyRate}%)`} value={fmtMoney(nicLevy, currency)} />
-              <Field
-                label={`Withholding Tax (${withholdingTaxRate}%)`}
-                value={fmtMoney(withholdingTax, currency)}
-              />
-            </>
-          )}
-        </>
-      )}
-
-      {netPremiumPayable != null && (
-        <>
-          <hr className="border-gray-100 my-1" />
-          <Field label="Net Premium" value={fmtMoney(netPremiumPayable, currency)} />
-        </>
-      )}
-      {description && (
-        <>
-          <hr className="border-gray-100 my-1" />
-          <p className="text-sm font-semibold text-gray-400 tracking-wide">Kindly Refer:</p>
-          <div
-            className="text-base text-gray-700"
-            dangerouslySetInnerHTML={{ __html: description }}
-          />
-        </>
-      )}
-    </div>
-  );
-}
-
 export function EndorsementSlipPreviewModal({
   isOpen,
   placement,
@@ -715,7 +483,6 @@ export function EndorsementSlipPreviewModal({
   confirmedClosing,
   onClose,
 }: EndorsementSlipPreviewModalProps) {
-  const { data: riskTypes = [] } = useRiskTypes();
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = getSnapshotPlacement(endorsement.proposedSnapshot ?? {});
   const confirmedClosings = closings.filter((closing) => closing.status === 'CONFIRMED');
@@ -729,51 +496,32 @@ export function EndorsementSlipPreviewModal({
     null;
 
   if (previewFormat === 'OFFER_SLIP') {
-    const riskTypeName = riskTypes.find((rt) => rt.id === placement.riskTypeId)?.name ?? null;
     const offeredLinePercent = Number(focusedRecipient?.offeredLinePercent ?? 0);
     return (
-      <DocumentPreviewModal
+      <DocumentPreviewShell
         isOpen={isOpen}
         title={`${documentTitle} — ${placement.title}`}
-        documentTitle="Facultative Offer Slip"
-        fileName={buildDocumentFileName(
-          'Offer Slip',
-          displayPolicyNumber(placement.policyNumber),
-          riskTypeName,
-          placement.title,
-          focusedReinsurerName ?? undefined,
-        )}
-        onPrint={() => {}}
+        printRootId="endorsement-offer-slip-print-root"
         onClose={onClose}
       >
         <OfferSlipContent
           placement={placement}
-          endorsement={endorsement}
-          counterpartyId={focusedCounterpartyId}
-          offeredLinePercent={Number.isFinite(offeredLinePercent) ? offeredLinePercent : 0}
+          counterpartyId={focusedCounterpartyId ?? undefined}
+          facultativeOfferOverride={Number.isFinite(offeredLinePercent) ? offeredLinePercent : 0}
           brokerageFee={brokerageFee}
         />
-      </DocumentPreviewModal>
+      </DocumentPreviewShell>
     );
   }
 
   if (previewFormat === 'REVISED_CERTIFICATE') {
-    const riskTypeName = riskTypes.find((rt) => rt.id === placement.riskTypeId)?.name ?? null;
     const sharePercent = Number(focusedRecipient?.offeredLinePercent ?? 0);
     const docTitle = confirmedClosing ? 'Endorsement Certificate' : 'Endorsement Offer Slip';
     return (
-      <DocumentPreviewModal
+      <DocumentPreviewShell
         isOpen={isOpen}
         title={`${docTitle} — ${endorsement.endorsementNumber}`}
-        documentTitle={docTitle}
-        fileName={buildDocumentFileName(
-          docTitle,
-          displayPolicyNumber(placement.policyNumber),
-          riskTypeName,
-          placement.title,
-          focusedReinsurerName ? `to ${focusedReinsurerName}` : null,
-        )}
-        onPrint={() => {}}
+        printRootId="endorsement-certificate-print-root"
         onClose={onClose}
       >
         <RevisedOfferContent
@@ -785,154 +533,138 @@ export function EndorsementSlipPreviewModal({
           brokerageFee={brokerageFee}
           confirmedClosing={confirmedClosing}
         />
-      </DocumentPreviewModal>
+      </DocumentPreviewShell>
     );
   }
 
   return (
-    <DocumentPreviewModal
+    <DocumentPreviewShell
       isOpen={isOpen}
-      title={`${documentTitle} — ${endorsement.endorsementNumber}`}
-      documentTitle={documentTitle}
-      fileName={buildDocumentFileName(
-        documentTitle,
-        endorsement.endorsementNumber,
-        placement.reference,
-        focusedReinsurerName ?? undefined,
-      )}
-      qrValue={`${endorsement.endorsementNumber}:${endorsement.id}:PREVIEW`}
-      onPrint={() => {}}
+      title={documentTitle}
+      printRootId="endorsement-slip-print-root"
       onClose={onClose}
     >
-      <SectionHeading>Endorsement</SectionHeading>
-      <InfoRows
-        rows={[
-          { label: 'Policy Number', value: displayPolicyNumber(placement.policyNumber) },
-          { label: 'Insured', value: placement.title },
-          { label: 'Endorsement Number', value: endorsement.endorsementNumber },
-          // { label: 'Endorsement Type', value: endorsement.type },
-          // { label: 'Impact Type', value: text(endorsement.impactType) },
-          // { label: 'Status', value: endorsement.status },
-          { label: 'Effective Date', value: fmtDate(endorsement.effectiveDate) },
-          { label: 'Reason', value: text(endorsement.reason) },
-        ]}
-      />
+      <DocumentContentFrame title={documentTitle}>
+        <DocumentSectionHeader>Endorsement</DocumentSectionHeader>
+        <DocumentField label="Policy Number" value={displayPolicyNumber(placement.policyNumber)} />
+        <DocumentField label="Insured" value={placement.title} />
+        <DocumentField label="Endorsement Number" value={endorsement.endorsementNumber} />
+        <DocumentField label="Effective Date" value={fmtDate(endorsement.effectiveDate)} />
+        <DocumentField label="Reason" value={text(endorsement.reason)} />
 
-      <SectionHeading>Original vs Proposed Business</SectionHeading>
-      <ChangeTable original={original} proposed={proposed} currency={placement.currency} />
+        <DocumentSectionHeader>Original vs Proposed Business</DocumentSectionHeader>
+        <ChangeTable original={original} proposed={proposed} currency={placement.currency} />
 
-      {(focusedParticipant || focusedRecipient) && (
-        <>
-          <SectionHeading>Market Recipient</SectionHeading>
-          <InfoRows
-            rows={[
-              {
-                label: 'Reinsurer',
-                value:
-                  focusedRecipient?.name ??
-                  focusedParticipant?.counterparty?.name ??
-                  focusedParticipant?.counterpartyId ??
-                  '—',
-              },
-              {
-                label: 'Relationship',
-                value:
-                  focusedRecipient?.relationship ??
-                  (focusedParticipant?.originalParticipantId
-                    ? 'Existing placement participant reviewing revised terms'
-                    : 'New endorsement participant reviewing current endorsed risk'),
-              },
-              {
-                label: 'Offered / Revised Line',
-                value: fmtPct(
-                  focusedRecipient?.offeredLinePercent ??
-                    focusedParticipant?.signedLinePercent ??
-                    focusedParticipant?.sharePercent,
-                ),
-              },
-              {
-                label: 'Response Status',
-                value: focusedRecipient?.status ?? focusedParticipant?.status ?? '—',
-              },
-            ]}
-          />
-        </>
-      )}
+        {(focusedParticipant || focusedRecipient) && (
+          <>
+            <DocumentSectionHeader>Market Recipient</DocumentSectionHeader>
+            <DocumentField
+              label="Reinsurer"
+              value={
+                focusedRecipient?.name ??
+                focusedParticipant?.counterparty?.name ??
+                focusedParticipant?.counterpartyId ??
+                '—'
+              }
+            />
+            <DocumentField
+              label="Relationship"
+              value={
+                focusedRecipient?.relationship ??
+                (focusedParticipant?.originalParticipantId
+                  ? 'Existing placement participant reviewing revised terms'
+                  : 'New endorsement participant reviewing current endorsed risk')
+              }
+            />
+            <DocumentField
+              label="Offered / Revised Line"
+              value={fmtPct(
+                focusedRecipient?.offeredLinePercent ??
+                  focusedParticipant?.signedLinePercent ??
+                  focusedParticipant?.sharePercent,
+              )}
+            />
+            <DocumentField
+              label="Response Status"
+              value={focusedRecipient?.status ?? focusedParticipant?.status ?? '—'}
+            />
+          </>
+        )}
 
-      <SectionHeading>Capacity Summary</SectionHeading>
-      <InfoRows
-        rows={[
-          {
-            label: 'Target Capacity',
-            value: summary?.targetPercent == null ? '—' : `${summary.targetPercent}%`,
-          },
-          { label: 'Accepted Capacity', value: summary ? `${summary.acceptedPercent}%` : '—' },
-          { label: 'Confirmed Capacity', value: summary ? `${summary.placedPercent}%` : '—' },
-          {
-            label: 'Remaining Capacity',
-            value: summary?.remainingPercent == null ? '—' : `${summary.remainingPercent}%`,
-          },
-        ]}
-      />
+        <DocumentSectionHeader>Capacity Summary</DocumentSectionHeader>
+        <DocumentField
+          label="Target Capacity"
+          value={summary?.targetPercent == null ? null : `${summary.targetPercent}%`}
+        />
+        <DocumentField
+          label="Accepted Capacity"
+          value={summary ? `${summary.acceptedPercent}%` : null}
+        />
+        <DocumentField
+          label="Confirmed Capacity"
+          value={summary ? `${summary.placedPercent}%` : null}
+        />
+        <DocumentField
+          label="Remaining Capacity"
+          value={summary?.remainingPercent == null ? null : `${summary.remainingPercent}%`}
+        />
 
-      <SectionHeading>Endorsement Participants</SectionHeading>
-      {participants.length === 0 ? (
-        <p className="text-base text-gray-400 italic">No endorsement participants recorded.</p>
-      ) : (
-        <table className="w-full text-base border-collapse mb-2">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="py-1.5 pr-3 text-left text-sm font-semibold text-gray-500">
-                Reinsurer
-              </th>
-              <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">
-                Offer Share
-              </th>
-              <th className="py-1.5 px-3 text-left text-sm font-semibold text-gray-500">
-                Net Premium
-              </th>
-              <th className="py-1.5 pl-3 text-left text-sm font-semibold text-gray-500">
-                Added/Revised
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {participants.map((participant) => {
-              const closing = confirmedClosings.find(
-                (item) => item.endorsementParticipant.counterpartyId === participant.counterpartyId,
-              );
-              return (
-                <tr key={participant.id}>
-                  <td className="py-1.5 pr-3 text-gray-900 font-medium">
-                    {participant.counterparty?.name ?? participant.counterpartyId}
-                  </td>
-                  <td className="py-1.5 px-3 text-gray-700">
-                    {fmtPct(participant.signedLinePercent ?? participant.sharePercent)}
-                  </td>
-                  <td className="py-1.5 px-3 text-gray-700">
-                    {closing ? fmtMoney(closing.netPremium, closing.currency) : '—'}
-                  </td>
-                  <td className="py-1.5 pl-3 text-gray-700">
-                    {participant.originalParticipantId ? 'Revised' : 'Added'}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+        <DocumentSectionHeader>Endorsement Participants</DocumentSectionHeader>
+        {participants.length === 0 ? (
+          <p className="italic">No endorsement participants recorded.</p>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="py-[0.4em] pr-2 text-left font-semibold">Reinsurer</th>
+                <th className="py-[0.4em] px-2 text-left font-semibold">Offer Share</th>
+                <th className="py-[0.4em] px-2 text-left font-semibold">Net Premium</th>
+                <th className="py-[0.4em] pl-2 text-left font-semibold">Added/Revised</th>
+              </tr>
+            </thead>
+            <tbody>
+              {participants.map((participant) => {
+                const closing = confirmedClosings.find(
+                  (item) =>
+                    item.endorsementParticipant.counterpartyId === participant.counterpartyId,
+                );
+                return (
+                  <tr key={participant.id} className="border-b border-gray-100">
+                    <td className="py-[0.4em] pr-2">
+                      {participant.counterparty?.name ?? participant.counterpartyId}
+                    </td>
+                    <td className="py-[0.4em] px-2">
+                      {fmtPct(participant.signedLinePercent ?? participant.sharePercent)}
+                    </td>
+                    <td className="py-[0.4em] px-2">
+                      {closing ? fmtMoney(closing.netPremium, closing.currency) : '—'}
+                    </td>
+                    <td className="py-[0.4em] pl-2">
+                      {participant.originalParticipantId ? 'Revised' : 'Added'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
 
-      {notes.length > 0 && (
-        <>
-          <SectionHeading>Endorsement Notes</SectionHeading>
-          <InfoRows
-            rows={notes.map((note) => ({
-              label: note.noteNumber,
-              value: `${note.type} · ${note.status} · Net ${fmtMoney(note.netAmount, note.currency)}`,
-            }))}
-          />
-        </>
-      )}
-    </DocumentPreviewModal>
+        {notes.length > 0 && (
+          <>
+            <DocumentSectionHeader>Endorsement Notes</DocumentSectionHeader>
+            {notes.map((note) => (
+              <DocumentField
+                key={note.noteNumber}
+                label={note.noteNumber}
+                value={`${note.type} · ${note.status} · Net ${fmtMoney(
+                  note.netAmount,
+                  note.currency,
+                )}`}
+              />
+            ))}
+          </>
+        )}
+      </DocumentContentFrame>
+    </DocumentPreviewShell>
   );
 }

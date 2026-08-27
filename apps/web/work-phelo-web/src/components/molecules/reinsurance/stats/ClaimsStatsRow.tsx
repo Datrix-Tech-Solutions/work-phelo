@@ -51,18 +51,17 @@ export function ClaimsStatsRow() {
   // Open/Closed counts mirror the Open Claims/Closed Claims tables exactly — both draw
   // from useClaimsByTab, which buckets by actual reinsurer recovery rather than claim.status.
   const {
+    notification,
     open,
     closed,
     isLoadingClaims: loadingTabClaims,
     isLoadingFinancials,
   } = useClaimsByTab(closingPlacements);
+  const notificationClaims = notification.length;
   const openClaims = open.length;
   const closedClaims = closed.length;
-  const finalizedClaims = openClaims + closedClaims;
 
   const isLoading = loadingPlacements || loadingClaims || loadingTabClaims || isLoadingFinancials;
-  // % of finalized claims fully recovered from reinsurers.
-  const recoveryRate = finalizedClaims > 0 ? (closedClaims / finalizedClaims) * 100 : 0;
 
   // Finalized claims only (Open + Closed) — Notification-stage claims are still just an
   // estimate, so folding them in here would overstate exposure with unconfirmed amounts.
@@ -106,9 +105,9 @@ export function ClaimsStatsRow() {
           isLoading={isLoading}
         />
         <KpiCard
-          label="Recovery Rate"
-          value={`${recoveryRate.toFixed(1)}%`}
-          icon={Icons.RotateCcw}
+          label="Notifications"
+          value={notificationClaims}
+          icon={Icons.Bell}
           iconColor="#eda100"
           isLoading={isLoading}
         />

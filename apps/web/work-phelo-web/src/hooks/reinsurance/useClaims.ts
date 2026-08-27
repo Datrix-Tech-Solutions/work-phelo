@@ -693,6 +693,11 @@ export interface ClaimTabRow {
    * claim — the moment outstanding recovery hit zero. Set alongside `recoveredAmount`;
    * only meaningful (non-null) once the claim is actually in `closed`. */
   recoveredAt?: string | null;
+  /** Reinsurers' total share of the claim — the cedant-payable amount — summed across the
+   * claim's allocations (final loss where set, else estimated). Same figure the Claim
+   * Allocations table's "Total Allocated Claim" bar uses. Set alongside `recoveredAmount`
+   * on `open`/`closed` rows. */
+  claimShare?: number;
 }
 
 export interface ClaimsByTab {
