@@ -18,8 +18,11 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../auth/guards/module.guard';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard';
 import { PaymentWorklistResponseDto } from '../dto/payment-worklist-response.dto';
+import { FacultativeRowStateResponseDto } from '../dto/facultative-row-state-response.dto';
+import { QueryFacultativeRowStateDto } from '../dto/query-facultative-row-state.dto';
 import { QueryPaymentWorklistDto } from '../dto/query-payment-worklist.dto';
 import { PlacementPermission } from '../placement.permissions';
+import { ReinsuranceFacultativeRowStateService } from './facultative-row-state.service';
 import { ReinsurancePaymentsWorklistService } from './payments-worklist.service';
 
 @Controller('worklists')
@@ -37,6 +40,7 @@ import { ReinsurancePaymentsWorklistService } from './payments-worklist.service'
 export class ReinsuranceWorklistsController {
   constructor(
     private readonly paymentsWorklist: ReinsurancePaymentsWorklistService,
+    private readonly facultativeRowState: ReinsuranceFacultativeRowStateService,
   ) {}
 
   @Get('payments')
@@ -53,5 +57,21 @@ export class ReinsuranceWorklistsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.paymentsWorklist.findPayments(request.user.tenantId, query);
+  }
+
+  @Get('facultative-row-state')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get Facultative placement row state',
+    description:
+      'Returns bounded tenant-scoped row state for visible Facultative placement rows. ' +
+      'This avoids frontend per-placement payments, financial-position and endorsement fan-out.',
+  })
+  @ApiOkResponse({ type: FacultativeRowStateResponseDto })
+  findFacultativeRowState(
+    @Query() query: QueryFacultativeRowStateDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.facultativeRowState.findRowState(request.user.tenantId, query);
   }
 }

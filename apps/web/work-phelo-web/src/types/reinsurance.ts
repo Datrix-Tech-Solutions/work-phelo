@@ -1102,6 +1102,20 @@ export interface PaginatedPaymentWorklist {
   meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
+export type FacultativeRowPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
+
+export interface FacultativeRowState {
+  placementId: string;
+  paymentStatus: FacultativeRowPaymentStatus;
+  hasRecordedPayment: boolean;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface FacultativeRowStateResponse {
+  items: FacultativeRowState[];
+}
+
 export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';
 export type PlacementClaimCedantSettlementStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';
 export type PlacementClaimRecoveryStatus =

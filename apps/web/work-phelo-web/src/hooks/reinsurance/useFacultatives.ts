@@ -30,9 +30,11 @@ import {
   ValidateEndorsementParticipantResponse,
   ForceCloseEndorsementResponse,
   PlacementDocument,
+  FacultativeRowStateResponse,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
+const WORKLIST_BASE = '/operations/reinsurance/worklists';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
 const ARCHIVED_FACULTATIVES_KEY = ['reinsurance', 'placements', 'archived'] as const;
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
@@ -43,6 +45,8 @@ const placementNotesKey = (placementId: string) =>
 const placementLockStatusKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'lock-status'] as const;
 const paymentEligibleFacultativesKey = [...FACULTATIVES_KEY, 'payment-eligible'] as const;
+const facultativeRowStateKey = (placementIds: string[]) =>
+  ['reinsurance', 'worklists', 'facultative-row-state', [...new Set(placementIds)].sort()] as const;
 
 async function invalidateFacultativeLists(queryClient: ReturnType<typeof useQueryClient>) {
   await Promise.all([
@@ -163,6 +167,33 @@ export function useFacultativesPage(
       return extractPage(res.data, normalizedParams);
     },
     enabled: options.enabled ?? true,
+  });
+}
+
+export function useFacultativeRowState(
+  placementIds: string[],
+  options: { enabled?: boolean } = {},
+) {
+  const uniquePlacementIds = useMemo(
+    () => [...new Set(placementIds)].filter(Boolean),
+    [placementIds],
+  );
+
+  return useQuery({
+    queryKey: facultativeRowStateKey(uniquePlacementIds),
+    queryFn: async () => {
+      const res = await api.get<FacultativeRowStateResponse>(
+        `${WORKLIST_BASE}/facultative-row-state`,
+        {
+          params: { placementIds: uniquePlacementIds.join(',') },
+        },
+      );
+      return res.data;
+    },
+    enabled:
+      (options.enabled ?? true) &&
+      uniquePlacementIds.length > 0 &&
+      uniquePlacementIds.length <= 100,
   });
 }
 
@@ -617,7 +648,7 @@ function invalidateEndorsementWorkflow(
   }
 }
 
-export function usePlacementEndorsements(placementId: string) {
+export function usePlacementEndorsements(placementId: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: endorsementKey(placementId),
     queryFn: async () => {
@@ -625,7 +656,7 @@ export function usePlacementEndorsements(placementId: string) {
       const raw = res.data?.items ?? res.data ?? [];
       return raw as PlacementEndorsement[];
     },
-    enabled: !!placementId,
+    enabled: !!placementId && (options.enabled ?? true),
   });
 }
 
