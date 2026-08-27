@@ -982,7 +982,7 @@ export type PlacementPaymentStatus =
   | 'FAILED'
   | 'CANCELLED'
   | 'REVERSED';
-export type PaymentWorklistPaymentStatus = 'Pending' | 'Part Payment' | 'Paid';
+export type PaymentWorklistPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
 export type PaymentWorklistStatusFilter = 'Placed' | 'Closed' | PaymentWorklistPaymentStatus;
 export type PlacementSettlementMethod =
   | 'BANK_TRANSFER'
@@ -1100,6 +1100,20 @@ export interface PaymentWorklistRow {
 export interface PaginatedPaymentWorklist {
   items: PaymentWorklistRow[];
   meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export type FacultativeRowPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
+
+export interface FacultativeRowState {
+  placementId: string;
+  paymentStatus: FacultativeRowPaymentStatus;
+  hasRecordedPayment: boolean;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface FacultativeRowStateResponse {
+  items: FacultativeRowState[];
 }
 
 export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';

@@ -16,12 +16,8 @@ import {
 } from '@/hooks';
 import { DetailField } from '@/components/atoms/DetailField';
 import { extractError } from '@/lib/extractError';
-import { cardClass } from '@/lib/utils';
+import { cardClass, cn, inputClass } from '@/lib/utils';
 import { useToastStore } from '@/store/toast.store';
-import {
-  OFFSET_CLAIM_RECEIPT_NOTE,
-  DIRECT_TO_CEDANT_RECEIPT_NOTE,
-} from '@/lib/reinsurance/claimFormat';
 import { PlacementSettlementMethod } from '@/types/reinsurance';
 
 interface RecordPaymentValues {
@@ -34,6 +30,7 @@ interface RecordPaymentValues {
   bankName: string;
   currency: string;
   rate: string;
+  notes: string;
 }
 
 const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
@@ -46,6 +43,7 @@ const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
   bankName: '',
   currency: '',
   rate: '',
+  notes: '',
 };
 
 const MODE_OPTIONS = [
@@ -122,6 +120,7 @@ export function RecordRecoveryReceiptModal({
     try {
       const amount = Math.round((parseFloat(values.amount) || 0) * 100) / 100;
       const isDirectEntry = values.mode === 'cedant' || values.mode === 'offset';
+      const notes = (values.notes ?? '').trim() || undefined;
 
       let confirmedAt: string;
       let settlementMethod: PlacementSettlementMethod;
@@ -133,8 +132,6 @@ export function RecordRecoveryReceiptModal({
         const convertedAmount = needsConversion
           ? Math.round(amount * (parseFloat(values.rate) || 1) * 100) / 100
           : amount;
-        const notes =
-          values.mode === 'cedant' ? DIRECT_TO_CEDANT_RECEIPT_NOTE : OFFSET_CLAIM_RECEIPT_NOTE;
 
         newReceipt = await createReceipt.mutateAsync({
           placementId: row.placementId,
@@ -150,6 +147,8 @@ export function RecordRecoveryReceiptModal({
         confirmedAt = new Date(values.paymentDate).toISOString();
 
         settlementMethod = values.mode === 'cedant' ? 'OTHER' : 'INTERNAL_OFFSET';
+        // OTHER settlement (direct-to-cedant) needs a reference or confirmation notes —
+        // there's no reference in this branch, so the user's notes carry it.
         confirmNotes = values.mode === 'cedant' ? notes : undefined;
       } else {
         const resolvedDate =
@@ -167,7 +166,7 @@ export function RecordRecoveryReceiptModal({
             currency: row.currency,
             paymentDate: new Date(resolvedDate).toISOString(),
             reference: refParts.join(' - ') || undefined,
-            notes: values.bankName ? `Received via ${values.bankName}` : undefined,
+            notes,
           },
         });
         confirmedAt = new Date(resolvedDate).toISOString();
@@ -418,51 +417,63 @@ export function RecordRecoveryReceiptModal({
         </div>
       )}
 
-      <form
-        id="record-recovery-receipt-form"
-        onSubmit={handleSubmit(onSubmit)}
-        className="flex flex-col gap-5 mt-5"
-      >
+      <Controller
+        name="mode"
+        control={control}
+        rules={{ required: 'Mode of payment is required' }}
+        render={({ field }) => (
+          <SearchSelect
+            label="Mode of Payment"
+            placeholder="Select mode of payment..."
+            options={MODE_OPTIONS}
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.mode?.message}
+            size="sm"
+          />
+        )}
+      />
+
+      {mode === 'broker' && (
         <Controller
-          name="mode"
+          name="paymentType"
           control={control}
-          rules={{ required: 'Mode of payment is required' }}
+          rules={{ required: 'Payment type is required' }}
           render={({ field }) => (
             <SearchSelect
-              label="Mode of Payment"
-              placeholder="Select mode of payment..."
-              options={MODE_OPTIONS}
+              label="Payment Type"
+              placeholder="Select payment type..."
+              options={PAYMENT_TYPE_OPTIONS}
               value={field.value}
               onChange={field.onChange}
-              error={errors.mode?.message}
+              error={errors.paymentType?.message}
               size="sm"
             />
           )}
         />
+      )}
 
-        {mode === 'broker' && (
-          <Controller
-            name="paymentType"
-            control={control}
-            rules={{ required: 'Payment type is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Payment Type"
-                placeholder="Select payment type..."
-                options={PAYMENT_TYPE_OPTIONS}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.paymentType?.message}
-                size="sm"
-              />
-            )}
+      {chequeFields}
+      {bankFields}
+      {directEntryFields}
+
+      {mode && (
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+          <label className="text-sm font-bold text-gray-900">
+            Notes{mode === 'cedant' ? '' : ' (optional)'}
+          </label>
+          <textarea
+            {...register('notes', {
+              required:
+                mode === 'cedant' ? 'Notes are required for a direct-to-cedant recovery' : false,
+            })}
+            placeholder="Add any notes about this recovery…"
+            rows={3}
+            className={cn(inputClass(), 'resize-none')}
           />
-        )}
-
-        {chequeFields}
-        {bankFields}
-        {directEntryFields}
-      </form>
+          {errors.notes && <p className="text-xs text-red-500">{errors.notes.message}</p>}
+        </div>
+      )}
     </SidePanel>
   );
 }

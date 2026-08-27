@@ -13,20 +13,21 @@ import {
   PaymentWorklistStatusFilter,
   toStatusLabel,
 } from '@/types/reinsurance';
-import { useCedants, usePaymentsWorklist } from '@/hooks';
+import { useCedants, usePaymentsWorklist, usePlacementPayments } from '@/hooks';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { cn } from '@/lib/utils';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
 
 const PAGE_SIZE = 10;
 
-// function fmtDate(iso: string) {
-//   if (!iso) return '—';
-//   return new Date(iso).toLocaleDateString('en-GB', {
-//     day: '2-digit',
-//     month: 'short',
-//     year: 'numeric',
-//   });
-// }
+function fmtDate(iso: string) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
 
 function fmtAmount(val: number | null | undefined) {
   if (val == null) return '—';
@@ -53,6 +54,7 @@ function paymentStatusLabel(status: FacultativeStatus): string {
 }
 
 const PAYMENT_STATUS_CLASS: Record<PaymentWorklistRow['paymentStatus'], string> = {
+  Outstanding: 'text-xs text-gray-400',
   Pending: 'text-xs text-amber-600 font-medium',
   'Part Payment': 'text-xs text-yellow-600 font-medium',
   Paid: 'text-xs text-green-600 font-medium',
@@ -80,14 +82,59 @@ function PaymentSummaryCell({ row }: { row: PaymentWorklistRow }) {
   );
 }
 
+// const PAYMENT_RECORD_STATUS_LABEL: Record<string, string> = {
+//   RECORDED: 'Recorded',
+//   BANK_CONFIRMED: 'Bank Confirmed',
+//   FAILED: 'Failed',
+//   CANCELLED: 'Cancelled',
+//   REVERSED: 'Reversed',
+// };
+
 function PaymentStatusCell({ row }: { row: PaymentWorklistRow }) {
+  const [hovered, setHovered] = useState(false);
+  const { data: payments = [], isLoading } = usePlacementPayments(row.placementId, {
+    enabled: hovered,
+  });
+
+  const history = payments
+    .filter((p) => p.type === 'PREMIUM_RECEIVED' && !p.reversalOfPaymentId)
+    .sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
+
   return (
     <div className="flex flex-col gap-1 items-start">
       <Badge
         label={paymentStatusLabel(row.placementStatus)}
         variant={RAW_STATUS_VARIANT_MAP[row.placementStatus]}
       />
-      <span className={PAYMENT_STATUS_CLASS[row.paymentStatus]}>{row.paymentStatus}</span>
+      <span
+        className={cn(PAYMENT_STATUS_CLASS[row.paymentStatus], 'relative cursor-default')}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {row.paymentStatus}
+
+        {hovered && !isLoading && history.length > 0 && (
+          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none">
+            <span className="block bg-(--chip-dark,#111827) text-white rounded-lg shadow-xl px-2.5 py-1.5 text-[10px] whitespace-nowrap">
+              <span className="block font-semibold text-[11px] mb-1">Payment History</span>
+              <span className="flex flex-col gap-0.5">
+                {history.map((p) => (
+                  <span key={p.id} className="flex justify-between gap-4">
+                    <span className="text-[#9ca3af]">{fmtDate(p.paymentDate)}</span>
+                    <span className="font-medium">
+                      {p.currency} {fmtAmount(parseFloat(p.amount))}
+                    </span>
+                    {/* <span className="text-[#9ca3af]">
+                      {PAYMENT_RECORD_STATUS_LABEL[p.status] ?? p.status}
+                    </span> */}
+                  </span>
+                ))}
+              </span>
+            </span>
+            <span className="block w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm mx-auto -mt-1" />
+          </span>
+        )}
+      </span>
     </div>
   );
 }
@@ -239,6 +286,8 @@ export function PaymentsTable() {
     };
 
     switch (row.paymentStatus) {
+      case 'Outstanding':
+        return [viewOffer, { label: 'Add Payment', onClick: () => openAddPayment(row) }];
       case 'Paid':
         return [viewOffer, disbursePayment];
       case 'Part Payment':

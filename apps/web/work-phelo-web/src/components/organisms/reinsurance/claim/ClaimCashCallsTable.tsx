@@ -6,7 +6,7 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { RecordRecoveryReceiptModal } from '@/components/organisms/reinsurance/RecordRecoveryReceiptModal';
 import { useClaimCashCalls, useClaimRecoveryPosition, RecoveryRow } from '@/hooks';
-import { fmt, OFFSET_CLAIM_RECEIPT_NOTE } from '@/lib/reinsurance/claimFormat';
+import { fmt } from '@/lib/reinsurance/claimFormat';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { Facultative, PlacementClaim, PlacementClaimCashCall } from '@/types/reinsurance';
 
@@ -135,7 +135,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
           const perCashCall = perCashCallFor(row);
 
           const hasOffsetReceipt = (perCashCall?.receipts ?? []).some(
-            (receipt) => receipt.notes === OFFSET_CLAIM_RECEIPT_NOTE,
+            (receipt) => receipt.settlementMethod === 'INTERNAL_OFFSET',
           );
 
           const recoveryStatus = perCashCall?.recoveryStatus;

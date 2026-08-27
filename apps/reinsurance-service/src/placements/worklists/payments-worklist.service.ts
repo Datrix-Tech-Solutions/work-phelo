@@ -36,15 +36,6 @@ type PaymentWorklistRawRow = {
   totalCount: bigint | number | string;
 };
 
-const ACTIVE_PAYMENT_PLACEMENT_STATUSES: PlacementStatus[] = [
-  PlacementStatus.PARTIALLY_PLACED,
-  PlacementStatus.PLACED,
-  PlacementStatus.CLOSING,
-  PlacementStatus.CLOSED,
-  PlacementStatus.DECLINED,
-  PlacementStatus.CANCELLED,
-];
-
 @Injectable()
 export class ReinsurancePaymentsWorklistService {
   constructor(
@@ -90,16 +81,6 @@ export class ReinsurancePaymentsWorklistService {
          AND c."tenantId" = p."tenantId"
         WHERE p."tenantId" = ${tenantId}
           AND p."archivedAt" IS NULL
-          AND p."status"::text IN (${Prisma.join(ACTIVE_PAYMENT_PLACEMENT_STATUSES)})
-          AND EXISTS (
-            SELECT 1
-            FROM "reinsurance"."PlacementPayment" pay
-            WHERE pay."tenantId" = p."tenantId"
-              AND pay."placementId" = p."id"
-              AND pay."type" = 'PREMIUM_RECEIVED'
-              AND pay."reversalOfPaymentId" IS NULL
-              AND pay."status" IN ('RECORDED', 'BANK_CONFIRMED')
-          )
           ${cedantPredicate}
           ${placementIdsPredicate}
           ${searchPredicate}
@@ -236,7 +217,7 @@ export class ReinsurancePaymentsWorklistService {
       filtered AS (
         SELECT *
         FROM rows
-        WHERE "paymentStatus" <> 'Outstanding'
+        WHERE TRUE
           ${statusPredicate}
       ),
       counted AS (

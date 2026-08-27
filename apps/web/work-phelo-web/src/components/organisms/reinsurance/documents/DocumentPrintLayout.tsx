@@ -1,34 +1,69 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import Image from 'next/image';
 import QRCode from 'react-qr-code';
-import { CompanyLogo } from '@/components/atoms/CompanyLogo';
+import {
+  COMPANY_URL,
+  FOOTER_LINES,
+  LOGO_SRC,
+  WATERMARK_SRC,
+} from '@/lib/reinsurance/documentBranding';
 
-const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
-const HEADER_H = 100; // px — must match the fixed header height
-const FOOTER_H = 56; // px — must match the fixed footer height
-const PAGE_GAP = 32; // px — breathing room below header on every printed page
+const HEADER_H = 180; // px — must match the fixed header height
+const FOOTER_H = 110; // px — must match the fixed footer height
+const PAGE_GAP = 44; // px — breathing room below header on every printed page
 
-const FOOTER_LINES = [
-  'Location: No. D17 Boundary Road, Near Kaiser Kitchen Appliances, East Legon, Accra',
-  'Address: P. O. Box MD2671, Madina - Accra',
-  'Tel: +233 (501) 605 643 / +233 (246) 923 436',
-];
+/** The default sign-off block, used when no `afterContent` is passed. */
+function DefaultSignOff() {
+  return (
+    <div
+      style={{
+        paddingTop: '24px',
+        borderTop: '1px solid #e5e7eb',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+      }}
+    >
+      <p style={{ fontSize: '16px', color: '#374151', fontStyle: 'italic', margin: 0 }}>
+        Kindly confirm your acceptance or otherwise
+      </p>
+      <div style={{ display: 'flex', gap: '50px' }}>
+        {['Accepted by', 'Signature'].map((label) => (
+          <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <span style={{ fontSize: '10px', color: '#6b7280' }}>{label}</span>
+            <div style={{ width: '224px', borderBottom: '1px solid #9ca3af', marginTop: '50px' }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface DocumentPrintLayoutProps {
   documentTitle: string;
   children: ReactNode;
+  /** Bottom-of-page sign-off. Omit for the default block; pass `null` for none. */
   afterContent?: ReactNode;
+  /** Portal element id — the print pipeline looks this up. One per document type. */
+  rootId?: string;
 }
 
-export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLayoutProps) {
+export function DocumentPrintLayout({
+  children,
+  afterContent,
+  rootId = 'irisk-print-root',
+}: DocumentPrintLayoutProps) {
   if (typeof document === 'undefined') return null;
+
+  const signOff = afterContent === undefined ? <DefaultSignOff /> : afterContent;
 
   return createPortal(
     <div
-      id="irisk-print-root"
+      id={rootId}
       style={{ display: 'none', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
     >
       {/* Watermark */}
@@ -44,13 +79,10 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
           zIndex: 0,
         }}
       >
-        <Image
-          src="/iRiskrewatermark.png"
+        <img
+          src={WATERMARK_SRC}
           alt=""
-          width={400}
-          height={250}
-          style={{ objectFit: 'contain' }}
-          priority
+          style={{ width: '760px', height: '475px', objectFit: 'contain' }}
         />
       </div>
 
@@ -66,16 +98,20 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'flex-end',
-          padding: '12px 48px',
+          padding: '20px 56px',
           borderBottom: '1px solid #e5e7eb',
           backgroundColor: 'white',
           zIndex: 2,
         }}
       >
         <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
-          <CompanyLogo width={130} height={65} style={{ objectFit: 'contain' }} priority />
+          <img
+            src={LOGO_SRC}
+            alt=""
+            style={{ width: '260px', height: '130px', objectFit: 'contain' }}
+          />
         </div>
-        <QRCode value={COMPANY_URL} size={60} />
+        <QRCode value={COMPANY_URL} size={120} />
       </div>
 
       {/* Fixed footer — sticks to bottom of every page */}
@@ -91,10 +127,10 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '2px',
+          gap: '5px',
           borderTop: '1px solid #f3f4f6',
           backgroundColor: 'white',
-          padding: '6px 48px',
+          padding: '14px 56px',
           zIndex: 2,
           fontFamily: 'var(--font-app), sans-serif',
         }}
@@ -102,7 +138,7 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
         {FOOTER_LINES.map((line) => (
           <p
             key={line}
-            style={{ fontSize: '9px', color: '#6b7280', margin: 0, textAlign: 'center' }}
+            style={{ fontSize: '18px', color: '#6b7280', margin: 0, textAlign: 'center' }}
           >
             {line}
           </p>
@@ -142,54 +178,11 @@ export function DocumentPrintLayout({ children, afterContent }: DocumentPrintLay
               >
                 <div>{children}</div>
 
-                <div style={{ marginTop: 'auto', paddingTop: '64px', paddingBottom: '40px' }}>
-                  {afterContent !== undefined ? (
-                    afterContent
-                  ) : (
-                    <div
-                      style={{
-                        paddingTop: '24px',
-                        borderTop: '1px solid #e5e7eb',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '16px',
-                      }}
-                    >
-                      <p
-                        style={{
-                          fontSize: '16px',
-                          color: '#374151',
-                          fontStyle: 'italic',
-                          margin: 0,
-                        }}
-                      >
-                        Kindly confirm your acceptance or otherwise
-                      </p>
-                      <div style={{ display: 'flex', gap: '50px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          <span style={{ fontSize: '10px', color: '#6b7280' }}>Accepted by</span>
-                          <div
-                            style={{
-                              width: '224px',
-                              borderBottom: '1px solid #9ca3af',
-                              marginTop: '50px',
-                            }}
-                          />
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          <span style={{ fontSize: '10px', color: '#6b7280' }}>Signature</span>
-                          <div
-                            style={{
-                              width: '224px',
-                              borderBottom: '1px solid #9ca3af',
-                              marginTop: '50px',
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {signOff ? (
+                  <div style={{ marginTop: 'auto', paddingTop: '64px', paddingBottom: '40px' }}>
+                    {signOff}
+                  </div>
+                ) : null}
               </div>
             </td>
           </tr>

@@ -268,6 +268,15 @@ export class PreviewReinsuranceChargeCalculationDto {
   @IsOptional()
   @IsDateString()
   effectiveAt?: string;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Whether the reinsurer is non-resident. Defaults to true so the preview shows the foreign-cession levies (NIC Levy, Withholding Tax); set false to preview a cession to a resident reinsurer.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isForeignReinsurer?: boolean;
 }
 
 export class ReinsuranceChargeConfigurationResponseDto {

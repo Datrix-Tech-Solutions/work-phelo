@@ -17,6 +17,7 @@ import { TrimmedString } from '../../counterparties/dto/string.transforms';
 export const PAYMENT_WORKLIST_STATUS_FILTERS = [
   'Placed',
   'Closed',
+  'Outstanding',
   'Pending',
   'Part Payment',
   'Paid',

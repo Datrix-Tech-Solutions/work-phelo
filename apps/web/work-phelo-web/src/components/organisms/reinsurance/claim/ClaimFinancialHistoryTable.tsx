@@ -1,21 +1,30 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Badge } from '@/components/atoms/Badge';
+import { useMemo, useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { TableButton } from '@/components/atoms/TableButton';
+import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
+import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
 import { useClaimCedantSettlements, useClaimRecoveryPosition } from '@/hooks';
-import {
-  fmtDate,
-  fmt,
-  OFFSET_CLAIM_RECEIPT_NOTE,
-  DIRECT_TO_CEDANT_RECEIPT_NOTE,
-} from '@/lib/reinsurance/claimFormat';
+import { fmtDate, fmt } from '@/lib/reinsurance/claimFormat';
 import {
   Facultative,
   PlacementClaim,
   PlacementClaimCedantSettlement,
   PlacementClaimRecoveryReceipt,
+  PlacementPayment,
 } from '@/types/reinsurance';
+
+// The claim recovery receipt has no document of its own yet — reuse the premium
+// payment receipt for now by presenting the recovery receipt in its shape.
+function recoveryReceiptAsPayment(receipt: PlacementClaimRecoveryReceipt): PlacementPayment {
+  return {
+    ...receipt,
+    type: 'CLAIM_SETTLEMENT',
+    closing: null,
+    endorsementClosing: null,
+  } as unknown as PlacementPayment;
+}
 
 interface ClaimFinancialHistoryTableProps {
   placement: Facultative;
@@ -37,29 +46,21 @@ interface HistoryRow {
   receipt?: PlacementClaimRecoveryReceipt;
 }
 
-const TYPE_LABEL: Record<HistoryRowType, string> = {
-  PAYABLE: 'Claim Payable',
-  RECEIVABLE: 'Claim Receivable',
-};
-
-const TYPE_VARIANT: Record<HistoryRowType, 'info' | 'success'> = {
-  PAYABLE: 'info',
-  RECEIVABLE: 'success',
-};
-
-function modeOfPaymentLabel(row: HistoryRow): string {
+function modeOfPayment(row: HistoryRow): { label: string; color: TypeChipColor } | null {
   if (row.type === 'PAYABLE') {
-    return row.settlement?.settlementMethod?.replaceAll('_', ' ') ?? '—';
+    const method = row.settlement?.settlementMethod;
+    return method ? { label: method.replaceAll('_', ' '), color: 'gray' } : null;
   }
-  const notes = row.receipt?.notes;
-  if (notes === OFFSET_CLAIM_RECEIPT_NOTE) return 'Offset Claim';
-  if (notes === DIRECT_TO_CEDANT_RECEIPT_NOTE) return 'Direct to Cedant';
-  return 'Through Broker';
+  const method = row.receipt?.settlementMethod;
+  if (method === 'INTERNAL_OFFSET') return { label: 'Offset Claim', color: 'purple' };
+  if (method === 'OTHER') return { label: 'Direct to Cedant', color: 'teal' };
+  return { label: 'Through Broker', color: 'blue' };
 }
 
 export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialHistoryTableProps) {
   const { data: settlements = [] } = useClaimCedantSettlements(placement.id, claim.id);
   const { data: position } = useClaimRecoveryPosition(placement.id, claim.id);
+  const [receiptTarget, setReceiptTarget] = useState<PlacementClaimRecoveryReceipt | null>(null);
 
   const rows = useMemo<HistoryRow[]>(() => {
     const payableRows: HistoryRow[] = settlements.map((settlement) => ({
@@ -95,28 +96,38 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
 
   const columns: Column<HistoryRow>[] = [
     {
-      key: 'type',
-      label: 'Type',
-      width: '130px',
-      render: (row) => <Badge label={TYPE_LABEL[row.type]} variant={TYPE_VARIANT[row.type]} />,
+      key: 'modeOfPayment',
+      label: 'Mode of Payment',
+      width: '150px',
+      render: (row) => {
+        const mode = modeOfPayment(row);
+        return mode ? (
+          <TypeChip label={mode.label} color={mode.color} />
+        ) : (
+          <span className="text-gray-400">—</span>
+        );
+      },
     },
     {
       key: 'date',
       label: 'Date',
       width: '90px',
-      render: (row) => <span className="text-gray-600">{fmtDate(row.date)}</span>,
+      render: (row) => <span className="font-medium text-gray-600">{fmtDate(row.date)}</span>,
     },
     {
-      key: 'counterparty',
-      label: 'Counterparty',
+      key: 'participant',
+      label: 'Participant',
       width: 'minmax(120px, 1fr)',
+      render: (row) => <span className="font-bold text-gray-700">{row.counterpartyName}</span>,
+    },
+    {
+      key: 'notes',
+      label: 'Notes',
+      width: 'minmax(140px, 1.5fr)',
       render: (row) => (
-        <div className="flex flex-col">
-          <span className="text-gray-700">{row.counterpartyName}</span>
-          {row.cashCallNumber && (
-            <span className="text-xs text-gray-400">{row.cashCallNumber}</span>
-          )}
-        </div>
+        <span className="font-semibold text-gray-600">
+          {row.receipt?.notes ?? row.settlement?.notes ?? '—'}
+        </span>
       ),
     },
     {
@@ -125,25 +136,26 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
       width: '150px',
       className: 'text-right pr-8',
       render: (row) => (
-        <span className="block text-right font-medium text-gray-900">
+        <span className="block text-right font-bold text-gray-900">
           {fmt(row.amount, row.currency)}
         </span>
       ),
     },
     {
-      key: 'modeOfPayment',
-      label: 'Mode of Payment',
-      width: '150px',
-      render: (row) => (
-        <span className="text-xs font-bold text-blue-900">{modeOfPaymentLabel(row)}</span>
-      ),
+      key: 'actions',
+      label: 'Actions',
+      width: '110px',
+      render: (row) =>
+        row.receipt ? (
+          <TableButton variant="blue" onClick={() => setReceiptTarget(row.receipt ?? null)}>
+            Receipt
+          </TableButton>
+        ) : (
+          <TableButton variant="blue" disabled tooltip="Printable receipt coming soon">
+            Receipt
+          </TableButton>
+        ),
     },
-    // {
-    //   key: 'reference',
-    //   label: 'Reference',
-    //   width: 'minmax(120px, 1fr)',
-    //   render: (row) => <span className="text-gray-600">{row.reference ?? '—'}</span>,
-    // },
   ];
 
   return (
@@ -157,6 +169,15 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
         onPageChange={() => {}}
         noInternalScroll
       />
+
+      {receiptTarget && (
+        <PaymentReceiptModal
+          isOpen
+          placement={placement}
+          payment={recoveryReceiptAsPayment(receiptTarget)}
+          onClose={() => setReceiptTarget(null)}
+        />
+      )}
     </div>
   );
 }

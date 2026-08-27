@@ -3,8 +3,6 @@
 import { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { useQueries } from '@tanstack/react-query';
-import { api } from '@/lib/api';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
@@ -18,32 +16,23 @@ import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/
 import { PartialEditFacultativePanel } from '@/components/organisms/reinsurance/panels/PartialEditFacultativePanel';
 import { RenewFacultativePanel } from '@/components/organisms/reinsurance/panels/RenewFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
+import { Facultative, FacultativeStatus } from '@/types/reinsurance';
 import {
-  Facultative,
-  FacultativeStatus,
-  PlacementEndorsement,
-  PlacementPayment,
-} from '@/types/reinsurance';
-import {
-  endorsementKey,
-  fetchPlacementFinancialPosition,
-  placementFinancialPositionKey,
   useDeleteFacultative,
   useFacultativesPage,
   useForceCloseFacultative,
   useRestoreFacultative,
   useCurrentTenantUsers,
   usePaymentsWorklist,
+  useFacultativeRowState,
 } from '@/hooks';
 import { TenantUser } from '@/types/tenant';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   acceptedPercentFor,
-  cedantPaymentStatusFromPosition,
   CedantPaymentStatus as PaymentStatus,
   facultativeStatusLabel,
   isEffectivelyClosed,
-  pendingPremiumReceived,
   RAW_STATUS_VARIANT_MAP,
 } from '@/lib/reinsurance/placementStatus';
 import { useToast } from '@/hooks/useToast';
@@ -149,6 +138,18 @@ function PaymentStatusCell({
   );
 }
 
+const SUM_INSURED_COLUMN: Column<Facultative> = {
+  key: 'sumInsured',
+  label: '100% Sum Insured',
+  width: '150px',
+  className: 'text-right',
+  render: (row) => (
+    <span className="font-semibold text-gray-900">
+      {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
+    </span>
+  ),
+};
+
 const COLUMNS: Column<Facultative>[] = [
   {
     key: 'reference',
@@ -175,6 +176,7 @@ const COLUMNS: Column<Facultative>[] = [
     width: 'minmax(120px, 0.8fr)',
     render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
   },
+  SUM_INSURED_COLUMN,
   {
     key: 'facultativeOffer',
     label: 'Fac Offer',
@@ -248,18 +250,6 @@ const COLUMNS: Column<Facultative>[] = [
     width: '100px',
   },
 ];
-
-const SUM_INSURED_COLUMN: Column<Facultative> = {
-  key: 'sumInsured',
-  label: '100% Sum Insured',
-  width: '150px',
-  className: 'text-right',
-  render: (row) => (
-    <span className="font-semibold text-gray-900">
-      {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
-    </span>
-  ),
-};
 
 // Closing tab: participants are frozen once closed, so the total is redundant noise —
 // just show how many accepted.
@@ -404,90 +394,74 @@ export function FacultativeTable({
 
   const totalPages = Math.max(1, placementsPage.data?.meta.totalPages ?? 1);
   const paged = sorted;
+  const visiblePlacementIds = useMemo(
+    () => (tab === 'archived' ? [] : paged.map((row) => row.id)),
+    [paged, tab],
+  );
 
-  // Placements tab: only the current page needs a paid/unpaid check, just to swap
-  // Edit Offer for Partial Edit once a payment exists — no filtering depends on this.
-  const openPaymentQueries = useQueries({
-    queries:
-      tab === 'placements'
-        ? paged.map((row) => ({
-            queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
-            queryFn: async () => {
-              const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
-              return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-            },
-          }))
-        : [],
+  const facultativeRowState = useFacultativeRowState(visiblePlacementIds, {
+    enabled: tab !== 'archived' && visiblePlacementIds.length > 0,
   });
+
+  const rowStateByPlacementId = useMemo(
+    () => new Map((facultativeRowState.data?.items ?? []).map((item) => [item.placementId, item])),
+    [facultativeRowState.data?.items],
+  );
 
   const hasPaymentMap = useMemo(() => {
     const map = new Map<string, boolean>();
-    if (tab !== 'placements') return map;
-    paged.forEach((row, i) => {
-      const payments = openPaymentQueries[i]?.data ?? [];
-      map.set(
-        row.id,
-        payments.some((p) => p.status === 'RECORDED'),
-      );
-    });
-    return map;
-  }, [paged, openPaymentQueries, tab]);
 
-  const openPositionQueries = useQueries({
-    queries:
-      tab === 'placements'
-        ? paged.map((row) => ({
-            queryKey: placementFinancialPositionKey(row.id),
-            queryFn: () => fetchPlacementFinancialPosition(row.id),
-          }))
-        : [],
-  });
+    if (tab !== 'placements') return map;
+
+    for (const row of paged) {
+      map.set(row.id, rowStateByPlacementId.get(row.id)?.hasRecordedPayment ?? false);
+    }
+
+    return map;
+  }, [paged, rowStateByPlacementId, tab]);
 
   const openPaymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
+
     if (tab !== 'placements') return map;
-    paged.forEach((row, i) => {
-      const position = openPositionQueries[i]?.data;
-      const payments = openPaymentQueries[i]?.data ?? [];
-      const due = position?.cedant.currentObligation ?? 0;
-      const paid = position?.cedant.netSettled ?? 0;
-      const outstanding = position?.cedant.outstanding ?? 0;
-      const pending = pendingPremiumReceived(payments);
-      map.set(row.id, cedantPaymentStatusFromPosition(due, paid, outstanding, pending));
-    });
+
+    for (const row of paged) {
+      map.set(row.id, rowStateByPlacementId.get(row.id)?.paymentStatus ?? 'Outstanding');
+    }
+
     return map;
-  }, [paged, openPositionQueries, openPaymentQueries, tab]);
+  }, [paged, rowStateByPlacementId, tab]);
+
+  const hasEndorsementMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+
+    if (tab === 'archived') return map;
+
+    for (const row of paged) {
+      map.set(row.id, rowStateByPlacementId.get(row.id)?.hasNonVoidEndorsement ?? false);
+    }
+
+    return map;
+  }, [paged, rowStateByPlacementId, tab]);
+
+  const endorsementCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+
+    if (tab === 'archived') return map;
+
+    for (const row of paged) {
+      map.set(row.id, rowStateByPlacementId.get(row.id)?.nonVoidEndorsementCount ?? 0);
+    }
+
+    return map;
+  }, [paged, rowStateByPlacementId, tab]);
+
+  // Placements tab: only the current page needs a paid/unpaid check, just to swap
+  // Edit Offer for Partial Edit once a payment exists — no filtering depends on this.
 
   // Reopen Offer is only valid once no endorsement has been made on the placement —
   // reopening after an endorsement would let the original offer diverge from what's
   // since been endorsed. Excludes VOID endorsements, same as EndorsedReferencePill.
-  const endorsementQueries = useQueries({
-    queries:
-      tab === 'archived'
-        ? []
-        : paged.map((row) => ({
-            queryKey: endorsementKey(row.id),
-            queryFn: async () => {
-              const res = await api.get(
-                `/operations/reinsurance/placements/${row.id}/endorsements`,
-              );
-              return (res.data?.items ?? res.data ?? []) as PlacementEndorsement[];
-            },
-          })),
-  });
-
-  const hasEndorsementMap = useMemo(() => {
-    const map = new Map<string, boolean>();
-    if (tab === 'archived') return map;
-    paged.forEach((row, i) => {
-      const endorsements = endorsementQueries[i]?.data ?? [];
-      map.set(
-        row.id,
-        endorsements.some((e) => e.status !== 'VOID'),
-      );
-    });
-    return map;
-  }, [paged, endorsementQueries, tab]);
 
   const columns = useMemo<Column<Facultative>[]>(() => {
     const userNameById = new Map(
@@ -499,40 +473,58 @@ export function FacultativeTable({
     const actorName = (userId: string | null) =>
       userId ? (userNameById.get(userId) ?? 'Unknown user') : 'Unknown user';
 
-    if (tab === 'closing') {
-      return COLUMNS.map((col) => {
-        if (col.key === 'totalAcceptedPercent') return SUM_INSURED_COLUMN;
-        if (col.key === 'participants') return CLOSED_PARTICIPANTS_COLUMN;
-
-        if (col.key === 'status') {
-          return {
-            ...col,
-            render: (row: Facultative) => (
-              <PaymentStatusCell
-                placement={row}
-                paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
-              />
-            ),
-          };
-        }
-
+    const columnsWithRowState = COLUMNS.map((col) => {
+      if (col.key !== 'reference' || tab === 'archived') {
         return col;
-      });
+      }
+
+      return {
+        ...col,
+        render: (row: Facultative) => (
+          <EndorsedReferencePill
+            id={row.id}
+            reference={displayPolicyNumber(row.policyNumber)}
+            endorsementCount={endorsementCountMap.get(row.id) ?? 0}
+          />
+        ),
+      };
+    });
+
+    if (tab === 'closing') {
+      // Signing Progress is dropped for closed placements; 100% Sum Insured (from COLUMNS) stays.
+      return columnsWithRowState
+        .filter((col) => col.key !== 'totalAcceptedPercent')
+        .map((col) => {
+          if (col.key === 'participants') return CLOSED_PARTICIPANTS_COLUMN;
+
+          if (col.key === 'status') {
+            return {
+              ...col,
+              render: (row: Facultative) => (
+                <PaymentStatusCell
+                  placement={row}
+                  paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
+                />
+              ),
+            };
+          }
+
+          return col;
+        });
     }
 
     if (tab === 'placements') {
-      const withoutStatus = COLUMNS.filter((col) => col.key !== 'status');
-      const premiumIndex = withoutStatus.findIndex((col) => col.key === 'premium');
-      return [
-        ...withoutStatus.slice(0, premiumIndex + 1),
-        SUM_INSURED_COLUMN,
-        ...withoutStatus.slice(premiumIndex + 1),
-      ];
+      return columnsWithRowState.filter((col) => col.key !== 'status');
     }
 
     if (tab !== 'archived') return COLUMNS;
 
-    const ARCHIVED_HIDDEN_KEYS = new Set(['totalAcceptedPercent', 'participants', 'status']);
+    const ARCHIVED_HIDDEN_KEYS = new Set([
+      'sumInsured',
+      'totalAcceptedPercent',
+      'participants',
+      'status',
+    ]);
 
     return [
       ...COLUMNS.filter((col) => !ARCHIVED_HIDDEN_KEYS.has(col.key as string)),
@@ -566,7 +558,7 @@ export function FacultativeTable({
         ),
       },
     ];
-  }, [tab, tenantUsers, paymentStatusMap]);
+  }, [tab, tenantUsers, paymentStatusMap, endorsementCountMap]);
 
   const closeArchiveModal = () => {
     setArchiveTarget(null);

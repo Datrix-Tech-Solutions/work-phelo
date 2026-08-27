@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
-import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents/GuaranteeNoteModal';
+import { GuaranteeNotePreviewModal } from '@/components/organisms/reinsurance/documents/GuaranteeNotePreviewModal';
 import { NoteDocumentModal } from '@/components/organisms/reinsurance/documents/NoteDocumentModal';
 import {
   ClosingLetterData,
@@ -80,14 +80,6 @@ function toNumber(val: string | number | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-// Temporary client-side override for closings.sumInsuredSnapshot: derives the participant's
-// sum insured share from signedLinePercent × the risk's total sum insured, computed the same
-// way the backend is supposed to. This is preferred over the backend value (not just used when
-// it's missing) because environments that haven't deployed/migrated the fix yet return either
-// no value at all, or the un-scaled full sum insured for every participant. The backend value
-// is only used as a last resort, when signedLinePercent or the total sum insured isn't
-// available client-side to derive from. Remove this override once every environment is
-// confirmed to be returning the correctly-scaled value.
 function deriveSumInsuredShare(
   signedLinePercent: string | number | null | undefined,
   totalSumInsured: number | null | undefined,
@@ -97,8 +89,6 @@ function deriveSumInsuredShare(
   return (pct / 100) * totalSumInsured;
 }
 
-// Mirrors the backend's proposed → originalSnapshot.placement fallback chain for the
-// endorsement's total sum insured, for use only by the deriveSumInsuredShare fallback above.
 function endorsementTotalSumInsured(endorsement: PlacementEndorsement | undefined): number | null {
   if (!endorsement) return null;
   const proposed = endorsement.proposedSnapshot ?? {};
@@ -554,7 +544,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         />
       </CollapsibleOverview>
 
-      <GuaranteeNoteModal
+      <GuaranteeNotePreviewModal
         isOpen={guaranteeNoteOpen}
         placement={placement}
         facultativeOfferOverride={effectiveView?.effectiveTotals.facultativeOfferPercent}
@@ -571,7 +561,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           counterpartyName: participant.counterparty.name,
           displaySharePercent: participant.signedLinePercent,
         }))}
-        onPrint={() => setGuaranteeNoteOpen(false)}
         onClose={() => setGuaranteeNoteOpen(false)}
       />
 

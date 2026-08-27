@@ -201,7 +201,6 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
           isOpen
           placement={placement}
           payment={receiptTarget}
-          onPrint={() => {}}
           onClose={() => setReceiptTarget(null)}
         />
       )}

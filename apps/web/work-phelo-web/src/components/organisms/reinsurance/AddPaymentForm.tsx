@@ -296,7 +296,6 @@ export default function AddPaymentForm({
           isOpen={receiptOpen}
           placement={receiptData.placement}
           payment={receiptData.payment}
-          onPrint={() => {}}
           onClose={() => {
             setReceiptOpen(false);
             setReceiptData(null);

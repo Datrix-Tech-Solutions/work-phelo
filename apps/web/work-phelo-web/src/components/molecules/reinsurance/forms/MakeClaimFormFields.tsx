@@ -11,8 +11,19 @@ import { useCurrencyOptions, usePlacementEffectiveView, usePremiumPaymentContext
 import { Facultative } from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
+/** Free-form classification tag. Front-end only for now — the back-end doesn't accept or
+ * persist it yet, so it's not sent in the create/update payload. Wire it into the claim
+ * DTO + payload once the field exists server-side. */
+export type ClaimTag = 'pending' | 'finalized';
+
+export const CLAIM_TAG_OPTIONS: { value: ClaimTag; label: string }[] = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'finalized', label: 'Finalized' },
+];
+
 export interface MakeClaimFormValues {
   claimNumber: string;
+  claimTag: ClaimTag;
   estimatedLossAmount: string;
   finalLossAmount: string;
   occurrenceDate: string;
@@ -27,6 +38,7 @@ export interface MakeClaimFormValues {
 
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
   claimNumber: '',
+  claimTag: 'pending',
   estimatedLossAmount: '',
   finalLossAmount: '',
   occurrenceDate: '',
@@ -128,6 +140,19 @@ export function MakeClaimFormFields({
         placeholder="Enter claim number…"
         {...register('claimNumber', { required: 'Claim number is required' })}
         error={errors.claimNumber?.message}
+      />
+      <Controller
+        name="claimTag"
+        control={control}
+        render={({ field }) => (
+          <SearchSelect
+            label="Tag"
+            placeholder="Select tag…"
+            options={CLAIM_TAG_OPTIONS}
+            value={field.value}
+            onChange={field.onChange}
+          />
+        )}
       />
       <div className="flex flex-col gap-1 text-sm">
         <p className="text-gray-700">{premiumPaymentStatusText}</p>

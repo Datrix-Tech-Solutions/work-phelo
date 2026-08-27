@@ -83,11 +83,11 @@ export async function fetchPlacementFinancialPosition(
   return res.data as PlacementFinancialPosition;
 }
 
-export function usePlacementPayments(placementId: string) {
+export function usePlacementPayments(placementId: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: paymentsKey(placementId),
     queryFn: () => fetchPlacementPayments(placementId),
-    enabled: !!placementId,
+    enabled: !!placementId && (options.enabled ?? true),
   });
 }
 
@@ -257,9 +257,15 @@ export interface CurrencyAmount {
 export interface PremiumsSummary {
   totalDue: number;
   totalPaid: number;
+  totalOutstanding: number;
+  /** Brokerage earned on premium actually collected — accrues only on the paid share of each
+   *  placement's premium, never on the outstanding share. Cash-basis, not accrual-basis. */
+  totalBrokerageEarned: number;
 
   dueByCurrency: CurrencyAmount[];
   paidByCurrency: CurrencyAmount[];
+  outstandingByCurrency: CurrencyAmount[];
+  brokerageEarnedByCurrency: CurrencyAmount[];
   isLoading: boolean;
 }
 
@@ -282,23 +288,58 @@ export function usePremiumsSummary(placements: Facultative[]): PremiumsSummary {
   const summary = useMemo(() => {
     let totalDue = 0;
     let totalPaid = 0;
+    let totalOutstanding = 0;
+    let totalBrokerageEarned = 0;
     const dueTotals = new Map<string, number>();
     const paidTotals = new Map<string, number>();
+    const outstandingTotals = new Map<string, number>();
+    const brokerageEarnedTotals = new Map<string, number>();
     placements.forEach((p, i) => {
       const position = positionQueries[i]?.data;
       const due = position?.cedant.currentObligation ?? 0;
       const paid = position?.cedant.netSettled ?? 0;
+      // Credit balances (outstanding < 0) belong to a different bucket than money still owed —
+      // this breakdown only totals what's still owed, matching dueByCurrency/paidByCurrency
+      // only totaling positive amounts.
+      const outstanding = Math.max(0, position?.cedant.outstanding ?? 0);
       const code = position?.currency ?? p.currency ?? 'UNKNOWN';
       totalDue += due;
       totalPaid += paid;
+      totalOutstanding += outstanding;
       if (due > 0.0001) dueTotals.set(code, (dueTotals.get(code) ?? 0) + due);
       if (paid > 0.0001) paidTotals.set(code, (paidTotals.get(code) ?? 0) + paid);
+      if (outstanding > 0.0001)
+        outstandingTotals.set(code, (outstandingTotals.get(code) ?? 0) + outstanding);
+
+      // Full accrual brokerage on this placement's premium (same formula the dashboard uses),
+      // then scaled down to only the collected share — nothing accrues on what's still owed.
+      const collectionRatio = due > 0.0001 ? Math.min(1, paid / due) : 0;
+      if (collectionRatio > 0 && p.premium != null) {
+        let placementBrokerage = 0;
+        for (const participant of p.participants) {
+          if (participant.status !== 'ACCEPTED' && participant.status !== 'CLOSED') continue;
+          const share =
+            participant.sharePercent != null ? parseFloat(participant.sharePercent) : null;
+          const fee =
+            participant.brokerageFee != null ? parseFloat(participant.brokerageFee) : null;
+          if (share == null || fee == null) continue;
+          placementBrokerage += p.premium * (share / 100) * (fee / 100);
+        }
+        const brokerageEarned = placementBrokerage * collectionRatio;
+        totalBrokerageEarned += brokerageEarned;
+        if (brokerageEarned > 0.0001)
+          brokerageEarnedTotals.set(code, (brokerageEarnedTotals.get(code) ?? 0) + brokerageEarned);
+      }
     });
     return {
       totalDue,
       totalPaid,
+      totalOutstanding,
+      totalBrokerageEarned,
       dueByCurrency: sortedCurrencyTotals(dueTotals),
       paidByCurrency: sortedCurrencyTotals(paidTotals),
+      outstandingByCurrency: sortedCurrencyTotals(outstandingTotals),
+      brokerageEarnedByCurrency: sortedCurrencyTotals(brokerageEarnedTotals),
     };
   }, [placements, positionQueries]);
 

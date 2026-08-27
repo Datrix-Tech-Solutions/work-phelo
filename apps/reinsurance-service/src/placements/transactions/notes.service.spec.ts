@@ -482,6 +482,11 @@ describe('PlacementNotesService', () => {
         grossPremium: new Prisma.Decimal('10000.00'),
         commissionAmount: new Prisma.Decimal('1000.00'),
         currency: 'USD',
+        participant: {
+          counterparty: {
+            addresses: [{ country: 'GB', isPrimary: true }],
+          },
+        },
       },
     ]);
     prisma.placementNote.count.mockResolvedValue(0);
@@ -555,6 +560,101 @@ describe('PlacementNotesService', () => {
       netBeforeCharges: 9000,
       deductions: 540,
       netAmount: 8460,
+    });
+  });
+
+  it('applies foreign-cession levies only to the share ceded to non-resident reinsurers', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        grossPremium: new Prisma.Decimal('6000.00'),
+        commissionAmount: new Prisma.Decimal('600.00'),
+        currency: 'USD',
+        participant: {
+          counterparty: { addresses: [{ country: 'GB', isPrimary: true }] },
+        },
+      },
+      {
+        grossPremium: new Prisma.Decimal('4000.00'),
+        commissionAmount: new Prisma.Decimal('400.00'),
+        currency: 'USD',
+        participant: {
+          counterparty: { addresses: [{ country: 'GH', isPrimary: true }] },
+        },
+      },
+    ]);
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue(note);
+
+    chargeSettings.calculateCharges.mockImplementation(
+      (_tenantId: string, input: ChargeCalculationInput) => {
+        const grossAmount = input.grossAmount;
+        const commissionAmount = input.commissionAmount ?? 0;
+        const netBeforeCharges = grossAmount - commissionAmount;
+        const deductions = input.isForeignReinsurer
+          ? Math.round(netBeforeCharges * 0.06 * 100) / 100
+          : 0;
+        return Promise.resolve({
+          currency: input.currency,
+          effectiveAt: (input.effectiveAt ?? new Date()).toISOString(),
+          grossAmount,
+          commissionAmount,
+          brokerageAmount: 0,
+          netBeforeCharges,
+          additions: 0,
+          deductions,
+          netAmount: netBeforeCharges - deductions,
+          charges: input.isForeignReinsurer
+            ? [
+                {
+                  configurationId: 'charge-wht',
+                  code: ReinsuranceChargeCode.WITHHOLDING_TAX,
+                  name: 'Withholding Tax',
+                  chargeType: ReinsuranceChargeType.TAX,
+                  rateType: ReinsuranceChargeRateType.PERCENTAGE,
+                  rate: '6',
+                  calculationBasis:
+                    ReinsuranceChargeCalculationBasis.NET_BEFORE_CHARGES,
+                  direction: ReinsuranceChargeDirection.DEDUCTION,
+                  currency: null,
+                  effectiveFrom: '2026-01-01T00:00:00.000Z',
+                  effectiveTo: null,
+                  roundingMode: ReinsuranceChargeRoundingMode.HALF_UP,
+                  decimalPlaces: 2,
+                  basisAmount: netBeforeCharges,
+                  amount: deductions,
+                },
+              ]
+            : [],
+        });
+      },
+    );
+
+    await service.createDebitNote(user, 'placement-1');
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    // Foreign sub-pool: net 6000 - 600 = 5400, WHT 6% = 324.
+    // Resident sub-pool: net 4000 - 400 = 3600, no levy.
+    expect(createArgs.data).toMatchObject({
+      grossAmount: 10000,
+      commissionAmount: 1000,
+      withholdingTaxAmount: 324,
+      netAmount: 8676,
+    });
+    expect(createArgs.data.appliedCharges).toMatchObject({
+      deductions: 324,
+      netAmount: 8676,
+    });
+    const foreignInputs = chargeSettings.calculateCharges.mock.calls
+      .map(([, input]: [unknown, ChargeCalculationInput]) => input)
+      .filter((input: ChargeCalculationInput) => input.isForeignReinsurer);
+    expect(foreignInputs).toHaveLength(1);
+    expect(foreignInputs[0]).toMatchObject({
+      grossAmount: 6000,
+      commissionAmount: 600,
     });
   });
 
