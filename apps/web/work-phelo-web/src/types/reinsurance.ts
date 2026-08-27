@@ -1261,6 +1261,23 @@ export interface PlacementClaimRecoveryPosition {
   cedantSettlementStatus: string;
 }
 
+export type ClaimRowBucket = 'notification' | 'open' | 'closed';
+
+export interface ClaimRowState {
+  claimId: string;
+  placementId: string;
+  bucket: ClaimRowBucket;
+  recoveredAmount: string;
+  recoveredAt: string | null;
+  isFullyRecovered: boolean;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface ClaimRowStateResponse {
+  items: ClaimRowState[];
+}
+
 export interface ApprovePlacementClaimPayablePayload {
   approvedPayableAmount: number;
   notes?: string;

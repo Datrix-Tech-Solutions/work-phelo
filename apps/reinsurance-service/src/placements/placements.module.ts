@@ -36,6 +36,7 @@ import { ReinsuranceDashboardService } from './dashboard/dashboard.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 import { S3DocumentStorageService } from './documents/storage/s3-document-storage.service';
 import { TenantDocumentProfileClient } from './documents/tenant-document-profile.client';
+import { ReinsuranceClaimRowStateService } from './worklists/claim-row-state.service';
 import { ReinsuranceFacultativeRowStateService } from './worklists/facultative-row-state.service';
 import { ReinsurancePaymentsWorklistService } from './worklists/payments-worklist.service';
 import { ReinsuranceWorklistsController } from './worklists/reinsurance-worklists.controller';
@@ -54,6 +55,7 @@ import { ReinsuranceWorklistsController } from './worklists/reinsurance-worklist
   providers: [
     PlacementsService,
     ReinsuranceDashboardService,
+    ReinsuranceClaimRowStateService,
     ReinsuranceFacultativeRowStateService,
     ReinsurancePaymentsWorklistService,
     PlacementAttachmentsService,
