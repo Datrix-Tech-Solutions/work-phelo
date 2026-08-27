@@ -17,11 +17,14 @@ import { FeatureGuard } from '../../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../auth/guards/module.guard';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard';
+import { ClaimRowStateResponseDto } from '../dto/claim-row-state-response.dto';
 import { PaymentWorklistResponseDto } from '../dto/payment-worklist-response.dto';
 import { FacultativeRowStateResponseDto } from '../dto/facultative-row-state-response.dto';
+import { QueryClaimRowStateDto } from '../dto/query-claim-row-state.dto';
 import { QueryFacultativeRowStateDto } from '../dto/query-facultative-row-state.dto';
 import { QueryPaymentWorklistDto } from '../dto/query-payment-worklist.dto';
 import { PlacementPermission } from '../placement.permissions';
+import { ReinsuranceClaimRowStateService } from './claim-row-state.service';
 import { ReinsuranceFacultativeRowStateService } from './facultative-row-state.service';
 import { ReinsurancePaymentsWorklistService } from './payments-worklist.service';
 
@@ -41,6 +44,7 @@ export class ReinsuranceWorklistsController {
   constructor(
     private readonly paymentsWorklist: ReinsurancePaymentsWorklistService,
     private readonly facultativeRowState: ReinsuranceFacultativeRowStateService,
+    private readonly claimRowState: ReinsuranceClaimRowStateService,
   ) {}
 
   @Get('payments')
@@ -73,5 +77,21 @@ export class ReinsuranceWorklistsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.facultativeRowState.findRowState(request.user.tenantId, query);
+  }
+
+  @Get('claim-row-state')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get Claims row state',
+    description:
+      'Returns bounded tenant-scoped row state for discovered Claims list rows. ' +
+      'This avoids frontend per-claim recovery-position, allocations and endorsement fan-out.',
+  })
+  @ApiOkResponse({ type: ClaimRowStateResponseDto })
+  findClaimRowState(
+    @Query() query: QueryClaimRowStateDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimRowState.findRowState(request.user.tenantId, query);
   }
 }

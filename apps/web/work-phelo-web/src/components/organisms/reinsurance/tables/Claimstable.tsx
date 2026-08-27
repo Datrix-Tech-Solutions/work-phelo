@@ -64,6 +64,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       <EndorsedReferencePill
         id={row.placement.id}
         reference={displayPolicyNumber(row.placement.policyNumber)}
+        endorsementCount={row.nonVoidEndorsementCount}
       />
     ),
   };
