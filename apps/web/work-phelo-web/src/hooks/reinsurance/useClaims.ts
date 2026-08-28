@@ -6,6 +6,8 @@ import {
   ApprovePlacementClaimRecoveryPayload,
   ClaimRowState,
   ClaimRowStateResponse,
+  ClaimsWorklistPlacement,
+  ClaimsWorklistSummary,
   ConfirmPlacementClaimCedantSettlementBankPayload,
   ConfirmPlacementClaimRecoveryReceiptBankPayload,
   CreatePlacementClaimCedantSettlementPayload,
@@ -22,6 +24,7 @@ import {
   PlacementClaimRecoveryPosition,
   PlacementClaimRecoveryReceipt,
   PlacementClaimStatus,
+  PaginatedClaimsWorklist,
   UpdatePlacementClaimPayload,
 } from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
@@ -60,6 +63,32 @@ export const financialCloseReadinessKey = (placementId: string, claimId: string)
 export const claimRowStateKey = (claimIds: string[]) =>
   ['reinsurance', 'worklists', 'claim-row-state', [...new Set(claimIds)].sort()] as const;
 
+const claimsWorklistsKey = ['reinsurance', 'worklists', 'claims'] as const;
+
+export interface ClaimsWorklistParams {
+  tab?: ClaimTabBucket;
+  page?: number;
+  limit?: number;
+  search?: string;
+  cedantId?: string;
+}
+
+function normalizeClaimsWorklistParams(params: ClaimsWorklistParams = {}) {
+  return {
+    tab: params.tab ?? 'notification',
+    page: params.page ?? 1,
+    limit: params.limit ?? 10,
+    ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+    ...(params.cedantId ? { cedantId: params.cedantId } : {}),
+  };
+}
+
+export const claimsWorklistKey = (params: ClaimsWorklistParams = {}) =>
+  ['reinsurance', 'worklists', 'claims', normalizeClaimsWorklistParams(params)] as const;
+
+export const claimsWorklistSummaryKey = () =>
+  ['reinsurance', 'worklists', 'claims-summary'] as const;
+
 function invalidateClaimWorkflow(
   queryClient: ReturnType<typeof useQueryClient>,
   placementId: string,
@@ -75,6 +104,8 @@ function invalidateClaimWorkflow(
     queryClient.invalidateQueries({ queryKey: recoveryApprovalsKey(placementId, claimId) });
     queryClient.invalidateQueries({ queryKey: financialCloseReadinessKey(placementId, claimId) });
   }
+  queryClient.invalidateQueries({ queryKey: claimsWorklistsKey });
+  queryClient.invalidateQueries({ queryKey: claimsWorklistSummaryKey() });
   queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
 }
 
@@ -698,6 +729,57 @@ export interface ClaimTabRow {
    * Allocations table's "Total Allocated Claim" bar uses. Set alongside `recoveredAmount`
    * on `open`/`closed` rows. */
   claimShare?: number;
+}
+
+export function useClaimsWorklist(params: ClaimsWorklistParams = {}) {
+  const normalizedParams = normalizeClaimsWorklistParams(params);
+  return useQuery({
+    queryKey: claimsWorklistKey(params),
+    queryFn: async () => {
+      const res = await api.get<PaginatedClaimsWorklist>(`${WORKLIST_BASE}/claims`, {
+        params: normalizedParams,
+      });
+      return {
+        ...res.data,
+        items: res.data.items.map(
+          (row): ClaimTabRow => ({
+            id: row.id,
+            placement: toFacultative(row.placement),
+            claim: row.claim,
+            recoveredAmount: row.recoveredAmount,
+            recoveredAt: row.recoveredAt,
+            claimShare: row.claimShare,
+            nonVoidEndorsementCount: row.nonVoidEndorsementCount,
+          }),
+        ),
+      };
+    },
+  });
+}
+
+export function useClaimsWorklistSummary() {
+  return useQuery({
+    queryKey: claimsWorklistSummaryKey(),
+    queryFn: async () => {
+      const res = await api.get<ClaimsWorklistSummary>(`${WORKLIST_BASE}/claims-summary`);
+      return res.data;
+    },
+  });
+}
+
+function toFacultative(placement: ClaimsWorklistPlacement): Facultative {
+  return {
+    ...placement,
+    cedantId: placement.cedant.id,
+    cedantName: placement.cedant.name,
+    insuranceCompany: null,
+    reference: placement.reference ?? placement.policyNumber ?? placement.id,
+    participants: [],
+    totalOfferedPercent: 0,
+    totalAcceptedPercent: 0,
+    remainingPercent: 0,
+    forceClosed: !!placement.forceClosedAt,
+  };
 }
 
 export interface ClaimsByTab {

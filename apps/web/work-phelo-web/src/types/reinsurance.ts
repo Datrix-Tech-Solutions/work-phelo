@@ -412,6 +412,8 @@ export interface Facultative {
   classOfBusiness: string | null;
   riskTypeId: string | null;
   cedant: { id: string; name: string };
+  cedantId: string;
+  cedantName: string;
   businessDetails: Record<string, unknown> | null;
   offerDetails: Record<string, unknown> | null;
   description: string | null;
@@ -1276,6 +1278,71 @@ export interface ClaimRowState {
 
 export interface ClaimRowStateResponse {
   items: ClaimRowState[];
+}
+
+export interface ClaimsWorklistPlacement {
+  id: string;
+  reference: string | null;
+  policyNumber: string | null;
+  title: string;
+  classOfBusiness: string | null;
+  riskTypeId: string | null;
+  cedant: { id: string; name: string };
+  businessDetails: Record<string, unknown> | null;
+  offerDetails: Record<string, unknown> | null;
+  description: string | null;
+  sumInsured: number | null;
+  rate: number | null;
+  commission: number | null;
+  facultativeOffer: number | null;
+  premium: number | null;
+  currency: string | null;
+  inceptionDate: string | null;
+  expiryDate: string | null;
+  status: FacultativeStatus;
+  createdAt: string;
+  updatedAt: string;
+  archivedByUserId: string | null;
+  archiveReason: string | null;
+  archivedAt: string | null;
+  closeMode: string | null;
+  forceClosedAt: string | null;
+  forceClosedByUserId: string | null;
+}
+
+export interface ClaimsWorklistRow {
+  id: string;
+  claimId: string;
+  placementId: string;
+  bucket: ClaimRowBucket;
+  placement: ClaimsWorklistPlacement;
+  claim: PlacementClaim;
+  recoveredAmount: number;
+  recoveredAt: string | null;
+  isFullyRecovered: boolean;
+  claimShare: number;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface PaginatedClaimsWorklist {
+  items: ClaimsWorklistRow[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface ClaimsCurrencyAmount {
+  code: string;
+  amount: number;
+}
+
+export interface ClaimsWorklistSummary {
+  totalClaims: number;
+  settledClaims: number;
+  notificationClaims: number;
+  openClaims: number;
+  closedClaims: number;
+  claimsByCurrency: ClaimsCurrencyAmount[];
+  recoveredByCurrency: ClaimsCurrencyAmount[];
 }
 
 export interface ApprovePlacementClaimPayablePayload {
