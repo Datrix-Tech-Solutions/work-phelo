@@ -178,6 +178,7 @@ export class TenantDocumentProfileService {
     const uploadedFile = file as Express.Multer.File;
     const stored = await this.storage.store({
       tenantId,
+      tenantSlug: tenant.slug,
       assetType,
       body: uploadedFile.buffer,
       contentType: uploadedFile.mimetype,
