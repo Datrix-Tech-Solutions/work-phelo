@@ -17,14 +17,20 @@ import { FeatureGuard } from '../../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../auth/guards/module.guard';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard';
+import {
+  ClaimsSummaryResponseDto,
+  ClaimsWorklistResponseDto,
+} from '../dto/claims-worklist-response.dto';
 import { ClaimRowStateResponseDto } from '../dto/claim-row-state-response.dto';
 import { PaymentWorklistResponseDto } from '../dto/payment-worklist-response.dto';
 import { FacultativeRowStateResponseDto } from '../dto/facultative-row-state-response.dto';
 import { QueryClaimRowStateDto } from '../dto/query-claim-row-state.dto';
+import { QueryClaimsWorklistDto } from '../dto/query-claims-worklist.dto';
 import { QueryFacultativeRowStateDto } from '../dto/query-facultative-row-state.dto';
 import { QueryPaymentWorklistDto } from '../dto/query-payment-worklist.dto';
 import { PlacementPermission } from '../placement.permissions';
 import { ReinsuranceClaimRowStateService } from './claim-row-state.service';
+import { ReinsuranceClaimsWorklistService } from './claims-worklist.service';
 import { ReinsuranceFacultativeRowStateService } from './facultative-row-state.service';
 import { ReinsurancePaymentsWorklistService } from './payments-worklist.service';
 
@@ -45,6 +51,7 @@ export class ReinsuranceWorklistsController {
     private readonly paymentsWorklist: ReinsurancePaymentsWorklistService,
     private readonly facultativeRowState: ReinsuranceFacultativeRowStateService,
     private readonly claimRowState: ReinsuranceClaimRowStateService,
+    private readonly claimsWorklist: ReinsuranceClaimsWorklistService,
   ) {}
 
   @Get('payments')
@@ -93,5 +100,33 @@ export class ReinsuranceWorklistsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.claimRowState.findRowState(request.user.tenantId, query);
+  }
+
+  @Get('claims')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List Reinsurance Claims worklist rows',
+    description:
+      'Returns true server-paginated Claims table rows with backend-derived Notification/Open/Closed bucket state. ' +
+      'This replaces frontend placement preload, per-placement claims discovery and client-side pagination.',
+  })
+  @ApiOkResponse({ type: ClaimsWorklistResponseDto })
+  findClaims(
+    @Query() query: QueryClaimsWorklistDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimsWorklist.findClaims(request.user.tenantId, query);
+  }
+
+  @Get('claims-summary')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Summarize Reinsurance Claims worklist state',
+    description:
+      'Returns global Claims KPI counts and currency totals using the same backend bucket classification as the Claims worklist.',
+  })
+  @ApiOkResponse({ type: ClaimsSummaryResponseDto })
+  summarizeClaims(@Req() request: Request & { user: RequestUser }) {
+    return this.claimsWorklist.summarizeClaims(request.user.tenantId);
   }
 }

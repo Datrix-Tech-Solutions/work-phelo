@@ -9,15 +9,14 @@ import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { FacultativeStatus } from '@/types/reinsurance';
 import {
-  useFacultatives,
-  useClaimsByTab,
   ClaimTabRow,
   useDeletePlacementClaim,
   useUpdatePlacementClaimUnbound,
   useClaimAllocations,
   useGenerateClaimAllocationsMutation,
+  useClaimsWorklist,
+  useCedants,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -26,15 +25,6 @@ import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 10;
-
-const CLOSING_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
-  'PLACED',
-  'CLOSING',
-  'CLOSED',
-  'DECLINED',
-  'CANCELLED',
-];
 
 export type ClaimsTableTab = 'notification' | 'open' | 'closed';
 
@@ -218,22 +208,11 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       label: 'Payable Amount',
       width: '120px',
       className: 'text-right',
-      render: (row) => {
-        const estimated =
-          row.claim.estimatedLossAmount != null && row.claim.estimatedLossAmount !== ''
-            ? parseFloat(row.claim.estimatedLossAmount)
-            : null;
-        const offer = row.placement.facultativeOffer;
-        const payable =
-          estimated != null && !isNaN(estimated) && offer != null
-            ? estimated * (offer / 100)
-            : null;
-        return (
-          <span className="font-semibold text-gray-900 whitespace-nowrap">
-            {payable != null ? fmtAmount(payable, row.claim.currency) : '—'}
-          </span>
-        );
-      },
+      render: (row) => (
+        <span className="font-semibold text-gray-900 whitespace-nowrap">
+          {fmtAmount(row.claimShare, row.claim.currency)}
+        </span>
+      ),
     },
     claimEntryDate,
   ];
@@ -261,64 +240,29 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const [finalAmountError, setFinalAmountError] = useState('');
   const updateClaim = useUpdatePlacementClaimUnbound();
   const generateAllocationsForClaim = useGenerateClaimAllocationsMutation();
+  const { data: cedants = [], isLoading: isLoadingCedants } = useCedants();
 
   const { data: finalizeAllocations = [] } = useClaimAllocations(
     finalizeTarget?.placement.id ?? '',
     finalizeTarget?.claim.id ?? '',
   );
 
-  const { data: allRows = [], isLoading } = useFacultatives();
-
-  const closingRows = useMemo(
-    () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
-    [allRows],
-  );
-
-  const {
-    notification,
-    open: openRows,
-    closed: closedRows,
-    isLoadingClaims,
-    isLoadingFinancials,
-  } = useClaimsByTab(closingRows);
-
-  const claimRows = tab === 'notification' ? notification : tab === 'open' ? openRows : closedRows;
-  const isLoadingTabData = isLoadingClaims || (tab !== 'notification' && isLoadingFinancials);
+  const claimsWorklist = useClaimsWorklist({
+    tab,
+    page,
+    limit: PAGE_SIZE,
+    search,
+    cedantId: cedantFilter || undefined,
+  });
+  const claimRows = claimsWorklist.data?.items ?? [];
 
   const cedantOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of claimRows) seen.set(r.placement.cedant.id, r.placement.cedant.name);
-    return Array.from(seen.entries())
-      .map(([id, name]) => ({ value: id, label: name }))
+    return cedants
+      .map((cedant) => ({ value: cedant.id, label: cedant.name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [claimRows]);
+  }, [cedants]);
 
-  const filtered = useMemo(() => {
-    let rows = claimRows;
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          (r.placement.policyNumber?.toLowerCase().includes(q) ?? false) ||
-          r.placement.title.toLowerCase().includes(q) ||
-          (r.placement.classOfBusiness?.toLowerCase().includes(q) ?? false) ||
-          r.claim.claimNumber.toLowerCase().includes(q),
-      );
-    }
-    if (cedantFilter) {
-      rows = rows.filter((r) => r.placement.cedant.id === cedantFilter);
-    }
-
-    const dateOf = (r: ClaimTabRow) => (tab === 'closed' ? r.recoveredAt : r.claim.occurrenceDate);
-    return [...rows].sort((a, b) => {
-      const bTime = dateOf(b) ? new Date(dateOf(b) as string).getTime() : 0;
-      const aTime = dateOf(a) ? new Date(dateOf(a) as string).getTime() : 0;
-      return bTime - aTime;
-    });
-  }, [claimRows, search, cedantFilter, tab]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, claimsWorklist.data?.meta.totalPages ?? 1);
   const columns = useMemo(() => buildColumns(tab), [tab]);
 
   const handleDelete = () => {
@@ -380,8 +324,8 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     <>
       <DataTable
         columns={columns}
-        data={paged}
-        isLoading={isLoading || isLoadingTabData}
+        data={claimRows}
+        isLoading={claimsWorklist.isLoading || isLoadingCedants}
         searchPlaceholder="Search claims…"
         searchValue={search}
         onRowClick={(row) =>
