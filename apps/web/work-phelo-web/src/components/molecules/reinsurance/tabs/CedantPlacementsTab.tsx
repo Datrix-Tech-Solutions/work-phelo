@@ -13,6 +13,7 @@ import {
   usePlacementClosings,
   usePlacementPayments,
 } from '@/hooks';
+import { useFacultativePlacementRowActions } from '@/hooks/reinsurance/useFacultativePlacementRowActions';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
@@ -196,10 +197,9 @@ type PlacementFilter = 'all' | 'pending' | 'closed' | 'unpaid' | 'paid';
 interface CedantPlacementsTabProps {
   placements: Facultative[];
   isLoading: boolean;
-  onEditPlacement: (placement: Facultative) => void;
-  onEndorsement: (placement: Facultative) => void;
   onView: (placement: Facultative) => void;
   onPremiums: (placement: Facultative) => void;
+  onDisbursement: (placement: Facultative) => void;
   currentPage?: number;
   totalPages?: number;
   onPageChange?: (page: number) => void;
@@ -208,10 +208,9 @@ interface CedantPlacementsTabProps {
 export function CedantPlacementsTab({
   placements,
   isLoading,
-  onEditPlacement,
-  onEndorsement,
   onView,
   onPremiums,
+  onDisbursement,
   currentPage,
   totalPages: serverTotalPages,
   onPageChange,
@@ -222,6 +221,24 @@ export function CedantPlacementsTab({
   const setPage = onPageChange ?? setLocalPage;
 
   const paymentStatuses = useCedantPlacementPaymentStatuses(placements);
+
+  const { getRowActions, dialogs } = useFacultativePlacementRowActions({
+    placements,
+    onView,
+    extraActions: (row) => {
+      // Premium receipt / disbursement only make sense once the policy is in force.
+      if (row.status !== 'CLOSED') return [];
+      const payStatus = paymentStatuses.get(row.id) ?? 'outstanding';
+      return [
+        ...(payStatus !== 'paid'
+          ? [{ label: 'Premium Payment', onClick: () => onPremiums(row) }]
+          : []),
+        ...(payStatus !== 'outstanding'
+          ? [{ label: 'Disbursement', onClick: () => onDisbursement(row) }]
+          : []),
+      ];
+    },
+  });
 
   const counts = useMemo(
     () => ({
@@ -317,19 +334,14 @@ export function CedantPlacementsTab({
         data={paged}
         isLoading={isLoading}
         emptyMessage="No placements found"
-        rowActions={(row) => [
-          { label: 'View', onClick: () => onView(row) },
-          { label: 'Edit', onClick: () => onEditPlacement(row) },
-          { label: 'Premium Payment', onClick: () => onPremiums(row) },
-          ...(row.status !== 'CANCELLED'
-            ? [{ label: 'Endorsement', onClick: () => onEndorsement(row) }]
-            : []),
-        ]}
+        rowActions={getRowActions}
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
       />
+
+      {dialogs}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   PlacementNote,
 } from '@/types/reinsurance';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 interface EndorsementSlipPreviewModalProps {
@@ -501,6 +502,12 @@ export function EndorsementSlipPreviewModal({
       <DocumentPreviewShell
         isOpen={isOpen}
         title={`${documentTitle} — ${placement.title}`}
+        fileName={buildDocumentFileName(
+          documentTitle,
+          displayPolicyNumber(placement.policyNumber),
+          placement.title,
+          `endorsement ${endorsement.endorsementNumber}`,
+        )}
         printRootId="endorsement-offer-slip-print-root"
         onClose={onClose}
       >
@@ -521,6 +528,12 @@ export function EndorsementSlipPreviewModal({
       <DocumentPreviewShell
         isOpen={isOpen}
         title={`${docTitle} — ${endorsement.endorsementNumber}`}
+        fileName={buildDocumentFileName(
+          docTitle,
+          displayPolicyNumber(placement.policyNumber),
+          placement.title,
+          `endorsement ${endorsement.endorsementNumber}`,
+        )}
         printRootId="endorsement-certificate-print-root"
         onClose={onClose}
       >
@@ -541,6 +554,12 @@ export function EndorsementSlipPreviewModal({
     <DocumentPreviewShell
       isOpen={isOpen}
       title={documentTitle}
+      fileName={buildDocumentFileName(
+        documentTitle,
+        displayPolicyNumber(placement.policyNumber),
+        placement.title,
+        `endorsement ${endorsement.endorsementNumber}`,
+      )}
       printRootId="endorsement-slip-print-root"
       onClose={onClose}
     >

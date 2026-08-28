@@ -265,12 +265,7 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
       width: '120px',
       render: (row) => <span className="text-gray-700">{row.claimNumber}</span>,
     },
-    {
-      key: 'cashCallNumber',
-      label: 'Cash Call',
-      width: '120px',
-      render: (row) => <span className="text-gray-700">{row.cashCallNumber}</span>,
-    },
+
     {
       key: 'occurrenceDate',
       label: 'Occurrence Date',
@@ -279,7 +274,7 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
     },
     {
       key: 'calledAmount',
-      label: 'Called',
+      label: 'Recovery Amount',
       width: '140px',
       render: (row) => (
         <span className="font-medium text-gray-900 block">

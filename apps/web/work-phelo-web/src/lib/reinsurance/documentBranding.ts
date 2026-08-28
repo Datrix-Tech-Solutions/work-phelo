@@ -14,3 +14,6 @@ export const FOOTER_LINES = [
 
 export const LOGO_SRC = '/iriskre.png';
 export const WATERMARK_SRC = '/iRiskrewatermark.png';
+export const SIGNATURE_SRC = '/irisk-re-signature.png';
+export const SIGNATORY_NAME = 'Nana Yaa Savage-Mensah';
+export const SIGNATORY_TITLE = 'Managing Director';

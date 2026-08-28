@@ -5,8 +5,9 @@ import { useReinsurers } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
+  DocumentAmountTable,
   DocumentContentFrame,
-  DocumentField,
+  DocumentSignature,
 } from '@/components/molecules/documents/DocumentContentFrame';
 
 type UnknownRecord = Record<string, unknown>;
@@ -154,7 +155,7 @@ export function CreditNoteContent({ note, placement, reinsurerCompany }: CreditN
   ];
 
   return (
-    <DocumentContentFrame title="Closings">
+    <DocumentContentFrame title="Closings" showTitle={false}>
       <div
         className="flex flex-col gap-[0.3em]"
         style={{ fontFamily: 'var(--doc-font-content)', marginBottom: 'var(--doc-space-section)' }}
@@ -171,18 +172,7 @@ export function CreditNoteContent({ note, placement, reinsurerCompany }: CreditN
         </p>
       </div>
 
-      {descriptionRows.map((row, i) => (
-        <DocumentField key={i} label={row.label} value={row.value ?? null} />
-      ))}
-
-      {financialRows.map((row, i) => (
-        <DocumentField
-          key={i}
-          label={row.pct && row.value ? `${row.label} (${row.pct})` : row.label}
-          value={row.value ?? row.pct ?? null}
-          strong={row.bold}
-        />
-      ))}
+      <DocumentAmountTable rows={[...descriptionRows, ...financialRows]} />
 
       {placement?.description && (
         <div
@@ -203,6 +193,7 @@ export function CreditNoteContent({ note, placement, reinsurerCompany }: CreditN
       >
         <p>Thank You.</p>
         <p>Yours faithfully,</p>
+        <DocumentSignature />
       </div>
     </DocumentContentFrame>
   );

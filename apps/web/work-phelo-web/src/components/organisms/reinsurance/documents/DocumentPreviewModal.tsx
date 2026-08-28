@@ -1,13 +1,17 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import Image from 'next/image';
 import QRCode from 'react-qr-code';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { CompanyLogo } from '@/components/atoms/CompanyLogo';
 import { DocumentPrintLayout } from '@/components/organisms/reinsurance/documents/DocumentPrintLayout';
-import { renderPrintRootToPdf } from '@/lib/reinsurance/renderDocumentPdf';
+import {
+  openPdfPreview,
+  renderPrintRootToPdf,
+  stagePrintRoot,
+} from '@/lib/reinsurance/renderDocumentPdf';
 
 const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
 
@@ -39,51 +43,43 @@ export function DocumentPreviewModal({
   children,
   afterContent,
 }: DocumentPreviewModalProps) {
-  const handlePrint = () => {
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const handlePrint = async () => {
     const el = document.getElementById('irisk-print-root');
-    if (!el) return;
+    if (!el || isPrinting) return;
     const printTitle = fileName ?? documentTitle;
 
-    // Open the tab synchronously (before any other work) so popup blockers
-    // treat it as a direct result of the click.
+    // Open the tab synchronously so popup blockers treat it as click-driven.
     const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      // Popup blocked — fall back to printing the current tab in place.
-      el.style.display = 'block';
-      const previousTitle = document.title;
-      document.title = printTitle;
-      window.print();
-      document.title = previousTitle;
-      el.style.display = 'none';
-      onPrint();
-      return;
+    if (printWindow) {
+      printWindow.document.title = printTitle;
+      printWindow.document.body.innerHTML =
+        '<p style="font-family: sans-serif; padding: 24px; color: #6b7280;">Preparing document…</p>';
     }
 
-    printWindow.document.title = printTitle;
-    printWindow.document.body.innerHTML =
-      '<p style="font-family: sans-serif; padding: 24px; color: #6b7280;">Preparing document…</p>';
-
-    el.style.display = 'block';
-    renderPrintRootToPdf(el, printTitle)
-      .then((blob) => {
-        if (printWindow.closed) return;
-        const url = URL.createObjectURL(blob);
-        printWindow.location.href = url;
-      })
-      .catch((error) => {
-        console.error('Failed to generate print PDF', error);
-        if (printWindow.closed) return;
+    setIsPrinting(true);
+    const restore = stagePrintRoot(el);
+    try {
+      const blob = await renderPrintRootToPdf(el, printTitle);
+      if (printWindow && !printWindow.closed) {
+        await openPdfPreview(printWindow, blob, printTitle);
+      }
+    } catch (error) {
+      console.error('Failed to generate print PDF', error);
+      if (printWindow && !printWindow.closed) {
         printWindow.document.body.innerHTML =
           '<p style="font-family: sans-serif; padding: 24px; color: #b91c1c;">Could not generate the document. Please try again.</p>';
-      })
-      .finally(() => {
-        el.style.display = 'none';
-        // Deferred until the capture is done: several callers use onPrint to close
-        // this modal, which unmounts the portaled #irisk-print-root. Firing it any
-        // earlier races html2canvas's async clone-and-capture of that same element,
-        // causing "Unable to find element in cloned iframe".
-        onPrint();
-      });
+      }
+    } finally {
+      restore();
+      setIsPrinting(false);
+      // Deferred until the capture is done: several callers use onPrint to close
+      // this modal, which unmounts the portaled #irisk-print-root. Firing it any
+      // earlier races html2canvas's async clone-and-capture of that same element,
+      // causing "Unable to find element in cloned iframe".
+      onPrint();
+    }
   };
 
   return (
@@ -100,7 +96,9 @@ export function DocumentPreviewModal({
             <Button variant="outline" onClick={onClose}>
               Close Preview
             </Button>
-            <Button onClick={handlePrint}>Print</Button>
+            <Button onClick={handlePrint} isLoading={isPrinting} loadingText="Preparing…">
+              Print
+            </Button>
           </>
         }
       >

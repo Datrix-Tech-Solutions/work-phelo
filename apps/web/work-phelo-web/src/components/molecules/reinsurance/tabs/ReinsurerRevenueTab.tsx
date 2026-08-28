@@ -2,11 +2,15 @@
 
 import { useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { Facultative, Currency } from '@/types/reinsurance';
+import { Facultative, Currency, Reinsurer } from '@/types/reinsurance';
 import { useReinsurerPaymentSummary } from '@/hooks';
+import { useReinsuranceCharges } from '@/hooks/reinsurance/useReinsuranceCharges';
+import { isForeignCedant, selectChargeRate } from '@/lib/reinsuranceTax';
 
 type RevenueRow = Currency & {
   brokerage: number | null;
+  nicLevy: number | null;
+  withholdingTax: number | null;
   paidPremiums: number | null;
   outstandingPremiums: number | null;
 };
@@ -69,9 +73,28 @@ const REVENUE_COLUMNS: Column<RevenueRow>[] = [
   },
 ];
 
+// Statutory deductions on premium ceded abroad — only shown for reinsurers not based in Ghana.
+const FOREIGN_CHARGE_COLUMNS: Column<RevenueRow>[] = [
+  {
+    key: 'nicLevy',
+    label: 'NIC Levy',
+    width: '160px',
+    className: 'text-right',
+    render: (row) => <AmountCell amount={row.nicLevy} currency={row} />,
+  },
+  {
+    key: 'withholdingTax',
+    label: 'Withholding Tax',
+    width: '170px',
+    className: 'text-right',
+    render: (row) => <AmountCell amount={row.withholdingTax} currency={row} />,
+  },
+];
+
 interface ReinsurerRevenueTabProps {
   placements: Facultative[];
   reinsurerId: string;
+  reinsurer: Reinsurer;
   reinsurerDefaultBrokerageFee: number | null;
   currencies: Currency[];
 }
@@ -79,10 +102,26 @@ interface ReinsurerRevenueTabProps {
 export function ReinsurerRevenueTab({
   placements,
   reinsurerId,
+  reinsurer,
   reinsurerDefaultBrokerageFee,
   currencies,
 }: ReinsurerRevenueTabProps) {
   const { paidByCode } = useReinsurerPaymentSummary(placements, reinsurerId);
+  const { data: charges } = useReinsuranceCharges();
+
+  const isForeignReinsurer = isForeignCedant(reinsurer);
+
+  const columns = useMemo(
+    () =>
+      isForeignReinsurer
+        ? [
+            ...REVENUE_COLUMNS.slice(0, 2), // Currency, Brokerage
+            ...FOREIGN_CHARGE_COLUMNS,
+            ...REVENUE_COLUMNS.slice(2), // Paid / Outstanding Premiums
+          ]
+        : REVENUE_COLUMNS,
+    [isForeignReinsurer],
+  );
 
   const { brokerageByCode, grossByCode } = useMemo(() => {
     const brokerage = new Map<string, number>();
@@ -121,9 +160,16 @@ export function ReinsurerRevenueTab({
     const paid = paidByCode.get(c.isoCode) ?? null;
     const outstanding = gross != null ? gross - (paid ?? 0) : null;
 
+    const nicRate = isForeignReinsurer ? selectChargeRate(charges, 'NIC_LEVY', c.isoCode) : 0;
+    const whtRate = isForeignReinsurer
+      ? selectChargeRate(charges, 'WITHHOLDING_TAX', c.isoCode)
+      : 0;
+
     return {
       ...c,
       brokerage: brokerageByCode.get(c.isoCode) ?? null,
+      nicLevy: gross != null && nicRate > 0 ? gross * (nicRate / 100) : null,
+      withholdingTax: gross != null && whtRate > 0 ? gross * (whtRate / 100) : null,
       paidPremiums: paid,
       outstandingPremiums: outstanding,
     };
@@ -131,7 +177,7 @@ export function ReinsurerRevenueTab({
 
   return (
     <DataTable
-      columns={REVENUE_COLUMNS}
+      columns={columns}
       data={rows}
       emptyMessage="No currencies configured"
       currentPage={1}

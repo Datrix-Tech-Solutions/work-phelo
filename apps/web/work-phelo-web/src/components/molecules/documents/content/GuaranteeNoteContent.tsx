@@ -6,6 +6,7 @@ import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   DocumentContentFrame,
   DocumentField,
+  DocumentSectionHeader,
 } from '@/components/molecules/documents/DocumentContentFrame';
 
 function fmtDate(iso: string | null): string {
@@ -127,7 +128,7 @@ export function GuaranteeNoteContent({
       }));
 
   return (
-    <DocumentContentFrame title="Guarantee Note">
+    <DocumentContentFrame title="Guarantee Note" showTitle={false}>
       <div
         className="flex flex-col gap-[0.3em]"
         style={{ fontFamily: 'var(--doc-font-content)', marginBottom: 'var(--doc-space-section)' }}
@@ -137,9 +138,10 @@ export function GuaranteeNoteContent({
         <p className="text-gray-800">{displayName}</p>
         {displayCity && <p className="text-gray-600">{displayCity}</p>}
         {displayRegionCountry && <p className="text-gray-600">{displayRegionCountry}</p>}
-        <p className="mt-[1em] text-gray-900">Dear Sir/Madam</p>
+        <p className="mt-[1em] text-center font-semibold text-gray-900 underline">GUARANTEE NOTE</p>
       </div>
 
+      <DocumentSectionHeader>Policy Details and Risk Description</DocumentSectionHeader>
       <DocumentField label="Cover Type" value={classOfBusiness} />
       <DocumentField label="Reinsured" value={cedant.name} />
       <DocumentField label="Policy Number" value={displayPolicyNumber(effectivePolicyNumber)} />

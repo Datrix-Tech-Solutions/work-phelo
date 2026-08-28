@@ -347,10 +347,10 @@ export function PaymentsTable() {
         }}
         extraFilters={extraFilters}
         searchAfterFilters
-        actionButton={{
-          label: 'Receive Cedant Premium',
-          onClick: () => openAddPayment(),
-        }}
+        // actionButton={{
+        //   label: 'Receive Cedant Premium',
+        //   onClick: () => openAddPayment(),
+        // }}
         rowActions={getRowActions}
         singleActionAsButton={false}
         emptyMessage={isError ? 'Unable to load payment records' : 'No payment records found'}

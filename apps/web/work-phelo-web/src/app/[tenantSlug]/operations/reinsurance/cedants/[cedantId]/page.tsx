@@ -1,17 +1,12 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import {
-  useCedants,
-  useCurrencies,
-  useFacultativesPage,
-  useFacultativePlacement,
-  usePlacementPayments,
-} from '@/hooks';
+import { useCedants, useCurrencies, useFacultativesPage, useFacultativePlacement } from '@/hooks';
 import { EditCedantPanel } from '@/components/organisms/reinsurance/panels/EditCedantPanel';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
@@ -24,20 +19,14 @@ import { FacultativeOverview } from '@/components/molecules/reinsurance/stats/Fa
 import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
 import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/PlacementClosingsTab';
 import { EndorsementTab } from '@/components/molecules/reinsurance/tabs/EndorsmentTab';
-import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
-import { PaymentHistoryTab } from '@/components/molecules/reinsurance/tabs/PaymentHistoryTab';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
 import { Facultative } from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 type CedantTab = 'placements' | 'revenue' | 'contacts';
 type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
-type PaymentTab = 'overview' | 'history';
 
-type ActivePlacementView =
-  | { mode: 'view'; placement: Facultative }
-  | { mode: 'premium'; placement: Facultative }
-  | null;
+type ActivePlacementView = { mode: 'view'; placement: Facultative } | null;
 
 const TABS = [
   { key: 'placements', label: 'Placements' },
@@ -49,11 +38,6 @@ const FACULTATIVE_TABS = [
   { key: 'distribution', label: 'Distribution List' },
   { key: 'closings', label: 'Placement Closings' },
   { key: 'endorsement', label: 'Endorsement' },
-];
-
-const PAYMENT_TABS = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'history', label: 'Payment History' },
 ];
 
 function PlacementView({ placementId }: { placementId: string }) {
@@ -93,50 +77,13 @@ function PlacementView({ placementId }: { placementId: string }) {
   );
 }
 
-function PremiumView({ placementId }: { placementId: string }) {
-  const { data: placement } = useFacultativePlacement(placementId);
-  const { data: payments = [] } = usePlacementPayments(placementId);
-  const [activeTab, setActiveTab] = useState<PaymentTab>('overview');
-
-  const paidAmount = useMemo(
-    () =>
-      payments
-        .filter((p) => p.status === 'RECORDED')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-    [payments],
-  );
-
-  if (!placement) {
-    return (
-      <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading…</div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <TabBar
-        tabs={PAYMENT_TABS}
-        activeTab={activeTab}
-        onTabChange={(t) => setActiveTab(t as PaymentTab)}
-      />
-      <div>
-        {activeTab === 'overview' && (
-          <BusinessPaymentSection placement={placement} paidAmount={paidAmount} />
-        )}
-        {activeTab === 'history' && (
-          <PaymentHistoryTab placementId={placementId} placement={placement} />
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function CedantDetailPage({
   params,
 }: {
   params: Promise<{ tenantSlug: string; cedantId: string }>;
 }) {
   const { tenantSlug, cedantId } = use(params);
+  const router = useRouter();
 
   const { data: cedants = [], isLoading: cedantsLoading } = useCedants();
   const [placementsPage, setPlacementsPage] = useState(1);
@@ -155,6 +102,7 @@ export default function CedantDetailPage({
   const [endorsementPlacement, setEndorsementPlacement] = useState<Facultative | null>(null);
   const [activeTab, setActiveTab] = useState<CedantTab>('placements');
   const [activePlacementView, setActivePlacementView] = useState<ActivePlacementView>(null);
+  const [premiumPlacement, setPremiumPlacement] = useState<Facultative | null>(null);
 
   const settingsBase = `/${tenantSlug}/operations/reinsurance/cedants`;
 
@@ -187,9 +135,7 @@ export default function CedantDetailPage({
           )}
         </nav>
 
-        {activePlacementView?.mode === 'premium' ? (
-          <AddPaymentForm placementId={activePlacementView.placement.id} />
-        ) : activePlacementView?.mode === 'view' ? (
+        {activePlacementView?.mode === 'view' ? (
           <div className="flex items-center gap-2">
             {activePlacementView.placement.participants.some(
               (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
@@ -226,8 +172,6 @@ export default function CedantDetailPage({
           </div>
         ) : activePlacementView?.mode === 'view' ? (
           <PlacementView placementId={activePlacementView.placement.id} />
-        ) : activePlacementView?.mode === 'premium' ? (
-          <PremiumView placementId={activePlacementView.placement.id} />
         ) : (
           <div className="flex flex-col gap-6">
             <CedantOverview cedant={cedant} />
@@ -246,10 +190,13 @@ export default function CedantDetailPage({
                   <CedantPlacementsTab
                     placements={cedantPlacements}
                     isLoading={placementsLoading}
-                    onEditPlacement={setEditPlacement}
-                    onEndorsement={setEndorsementPlacement}
                     onView={(p) => setActivePlacementView({ mode: 'view', placement: p })}
-                    onPremiums={(p) => setActivePlacementView({ mode: 'premium', placement: p })}
+                    onPremiums={(p) => setPremiumPlacement(p)}
+                    onDisbursement={(p) =>
+                      router.push(
+                        `/${tenantSlug}/operations/reinsurance/payments/${p.id}?from=cedant`,
+                      )
+                    }
                     currentPage={placementsPage}
                     totalPages={cedantPlacementTotalPages}
                     onPageChange={setPlacementsPage}
@@ -282,6 +229,12 @@ export default function CedantDetailPage({
           onClose={() => setEndorsementPlacement(null)}
         />
       )}
+
+      <AddPaymentForm
+        isOpen={!!premiumPlacement}
+        placementId={premiumPlacement?.id}
+        onClose={() => setPremiumPlacement(null)}
+      />
     </div>
   );
 }
