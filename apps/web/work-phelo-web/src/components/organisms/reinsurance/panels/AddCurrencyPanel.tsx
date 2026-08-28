@@ -37,9 +37,11 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
       await createCurrency({
         name: data.name,
         isoCode: data.isoCode,
-        symbol: data.symbol,
-        isBaseCurrency: false,
+        symbol: data.symbol || undefined,
         exchangeRateToBase: 1,
+        isBaseCurrency: false,
+        isActive: true,
+        displayOrder: 0,
       });
       toast.success('Currency created successfully');
       handleClose();
