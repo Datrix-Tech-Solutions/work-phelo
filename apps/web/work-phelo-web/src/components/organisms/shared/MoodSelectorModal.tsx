@@ -5,14 +5,19 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { cn } from '@/lib/utils';
 import { useToastStore } from '@/store/toast.store';
 
-const SESSION_KEY = 'mood_selector_shown';
+const STORAGE_KEY = 'mood_selector_last_shown';
+
+// Local-time YYYY-MM-DD, so the pop-up resets at the user's own midnight.
+function todayKey() {
+  return new Date().toLocaleDateString('en-CA');
+}
 
 function subscribe() {
   return () => {};
 }
 
 function getSnapshot() {
-  return sessionStorage.getItem(SESSION_KEY) === null;
+  return localStorage.getItem(STORAGE_KEY) !== todayKey();
 }
 
 function getServerSnapshot() {
@@ -59,7 +64,7 @@ const MOODS = [
 
 export function MoodSelectorModal() {
   // false on the server and the first client render (hydration-safe); React resyncs to
-  // the real sessionStorage value right after hydration completes.
+  // the real localStorage value right after hydration completes.
   const notShownYet = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const [closed, setClosed] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -67,7 +72,7 @@ export function MoodSelectorModal() {
   const open = notShownYet && !closed;
 
   const close = () => {
-    sessionStorage.setItem(SESSION_KEY, '1');
+    localStorage.setItem(STORAGE_KEY, todayKey());
     setClosed(true);
   };
 
