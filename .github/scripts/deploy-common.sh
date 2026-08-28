@@ -110,6 +110,23 @@ validate_required_envs() {
       ;;
   esac
 
+  case "$(printf '%s' "${AUTH_TENANT_ASSET_STORAGE_PROVIDER}" | tr '[:upper:]' '[:lower:]')" in
+    s3)
+      ;;
+    cloudinary)
+      for name in CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
+        [[ -n "${!name:-}" ]] || missing+=("$name")
+      done
+      ;;
+    *)
+      die "AUTH_TENANT_ASSET_STORAGE_PROVIDER must be one of: s3, cloudinary (got '${AUTH_TENANT_ASSET_STORAGE_PROVIDER}')"
+      ;;
+  esac
+
+  if (( ${#missing[@]} > 0 )); then
+    die "Missing required deployment variables for ${deploy_env}: ${missing[*]}"
+  fi
+
   validate_database_target "$deploy_env"
   validate_environment_boundaries "$deploy_env"
 }
