@@ -5,8 +5,9 @@ import { useReinsurers } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
+  DocumentAmountTable,
   DocumentContentFrame,
-  DocumentField,
+  DocumentSignature,
 } from '@/components/molecules/documents/DocumentContentFrame';
 
 /** Normalized shape both an original placement closing and an endorsement closing
@@ -158,7 +159,7 @@ export function ClosingLetterContent({
   ];
 
   return (
-    <DocumentContentFrame title="Closings">
+    <DocumentContentFrame title="Closings" showTitle={false}>
       <div
         className="flex flex-col gap-[0.3em]"
         style={{ fontFamily: 'var(--doc-font-content)', marginBottom: 'var(--doc-space-section)' }}
@@ -180,18 +181,7 @@ export function ClosingLetterContent({
         </p>
       </div>
 
-      {descriptionRows.map((row, i) => (
-        <DocumentField key={i} label={row.label} value={row.value ?? null} />
-      ))}
-
-      {financialRows.map((row, i) => (
-        <DocumentField
-          key={i}
-          label={row.pct && row.value ? `${row.label} (${row.pct})` : row.label}
-          value={row.value ?? row.pct ?? null}
-          strong={row.bold}
-        />
-      ))}
+      <DocumentAmountTable rows={[...descriptionRows, ...financialRows]} />
 
       <div
         className="flex flex-col gap-[0.2em] text-gray-700"
@@ -199,6 +189,7 @@ export function ClosingLetterContent({
       >
         <p>Thank You.</p>
         <p>Yours faithfully,</p>
+        <DocumentSignature />
       </div>
     </DocumentContentFrame>
   );

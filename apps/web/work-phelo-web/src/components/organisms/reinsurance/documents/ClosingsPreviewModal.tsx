@@ -1,5 +1,7 @@
 'use client';
 
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
   CreditNoteContent,
@@ -23,6 +25,12 @@ export function ClosingsPreviewModal({
     <DocumentPreviewShell
       isOpen={isOpen}
       title={title}
+      fileName={buildDocumentFileName(
+        'Closings',
+        displayPolicyNumber(content.placement?.policyNumber),
+        content.placement?.title,
+        content.reinsurerCompany ? `to ${content.reinsurerCompany}` : null,
+      )}
       printRootId="closings-print-root"
       onClose={onClose}
     >

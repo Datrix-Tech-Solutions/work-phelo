@@ -23,6 +23,21 @@ import { extractError } from '@/lib/extractError';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { cn } from '@/lib/utils';
+import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
+import {
+  ClaimTag,
+  CLAIM_TAG_OPTIONS,
+} from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
+
+// "Claim state" = the Pending/Finalized selector on the claim form. Front-end only for now;
+// the column stays blank until the back-end persists it on the claim.
+const CLAIM_STATE_CHIP_COLOR: Record<ClaimTag, TypeChipColor> = {
+  pending: 'amber',
+  finalized: 'green',
+};
+
+const claimStateLabel = (tag: ClaimTag) =>
+  CLAIM_TAG_OPTIONS.find((o) => o.value === tag)?.label ?? tag;
 
 const PAGE_SIZE = 10;
 
@@ -140,6 +155,20 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
     ),
   };
 
+  const claimState: Column<ClaimTabRow> = {
+    key: 'claimState',
+    label: 'Claim State',
+    width: '110px',
+    render: (row) => {
+      const tag = row.claim.claimTag;
+      return tag ? (
+        <TypeChip label={claimStateLabel(tag)} color={CLAIM_STATE_CHIP_COLOR[tag]} />
+      ) : (
+        <span className="text-gray-400">—</span>
+      );
+    },
+  };
+
   const claimEntryDate: Column<ClaimTabRow> = {
     key: 'createdAt',
     label: 'Claim entry date',
@@ -169,6 +198,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       insuredRiskType,
       claimNumber,
       cedant,
+      claimState,
       actualClaim,
       offerPercent,
       claimShare,

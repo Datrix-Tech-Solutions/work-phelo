@@ -15,8 +15,8 @@ import {
   PlacementPayment,
 } from '@/types/reinsurance';
 
-// The claim recovery receipt has no document of its own yet — reuse the premium
-// payment receipt for now by presenting the recovery receipt in its shape.
+// The claim recovery receipt has no closing snapshot — carry over what it does
+// have (amount, counterparty) and render it through the plain payment receipt.
 function recoveryReceiptAsPayment(receipt: PlacementClaimRecoveryReceipt): PlacementPayment {
   return {
     ...receipt,

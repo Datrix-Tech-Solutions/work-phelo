@@ -1565,6 +1565,9 @@ export interface PlacementClaim {
   voidedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** "Claim state" tag (Pending / Finalized) from the claim form. Not yet persisted by the
+   * back-end — optional until the DTO adds it. */
+  claimTag?: 'pending' | 'finalized' | null;
 }
 
 export interface CreatePlacementClaimPayload {

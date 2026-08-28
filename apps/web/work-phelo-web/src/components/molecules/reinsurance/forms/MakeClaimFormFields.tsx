@@ -146,7 +146,7 @@ export function MakeClaimFormFields({
         control={control}
         render={({ field }) => (
           <SearchSelect
-            label="Tag"
+            label="Claim state"
             placeholder="Select tag…"
             options={CLAIM_TAG_OPTIONS}
             value={field.value}

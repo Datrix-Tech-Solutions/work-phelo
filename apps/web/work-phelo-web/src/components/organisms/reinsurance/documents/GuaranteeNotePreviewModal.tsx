@@ -1,5 +1,6 @@
 'use client';
 
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
@@ -24,6 +25,11 @@ export function GuaranteeNotePreviewModal({
     <DocumentPreviewShell
       isOpen={isOpen}
       title={`Guarantee Note — ${displayPolicyNumber(policyNumber)}`}
+      fileName={buildDocumentFileName(
+        'Guarantee Note',
+        displayPolicyNumber(policyNumber),
+        content.placement.title,
+      )}
       printRootId="guarantee-note-print-root"
       onClose={onClose}
     >

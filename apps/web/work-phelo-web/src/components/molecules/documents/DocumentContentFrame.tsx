@@ -1,6 +1,9 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import type { CSSProperties, ReactNode } from 'react';
+import { SIGNATURE_SRC, SIGNATORY_NAME, SIGNATORY_TITLE } from '@/lib/reinsurance/documentBranding';
 import { documentRootStyle } from './documentTypography';
 
 const titleStyle: CSSProperties = {
@@ -33,23 +36,37 @@ const fieldRowStyle: CSSProperties = {
 
 interface DocumentContentFrameProps {
   title: string;
+  /** The big centered document title. Off for letter-style documents that open
+   *  with a date and salutation instead (guarantee note, closings). */
+  showTitle?: boolean;
   meta?: ReactNode;
   children: ReactNode;
 }
 
-export function DocumentContentFrame({ title, meta, children }: DocumentContentFrameProps) {
+export function DocumentContentFrame({
+  title,
+  showTitle = true,
+  meta,
+  children,
+}: DocumentContentFrameProps) {
+  const hasMasthead = showTitle || Boolean(meta);
   return (
     <div className="@container mx-auto w-full max-w-184 text-gray-900" style={documentRootStyle}>
       <div className="flex flex-col" style={{ fontSize: 'clamp(11px, 3.3cqw, 16px)' }}>
-        <h2 className="text-center uppercase" style={titleStyle}>
-          {title}
-        </h2>
+        {showTitle ? (
+          <h2 className="text-center uppercase" style={titleStyle}>
+            {title}
+          </h2>
+        ) : null}
         {meta ? (
           <p className="mt-[0.5em] text-center text-gray-500" style={metaStyle}>
             {meta}
           </p>
         ) : null}
-        <div className="flex flex-col" style={{ marginTop: 'var(--doc-space-section)' }}>
+        <div
+          className="flex flex-col"
+          style={{ marginTop: hasMasthead ? 'var(--doc-space-section)' : 0 }}
+        >
           {children}
         </div>
       </div>
@@ -85,6 +102,72 @@ export function DocumentField({
     <div className="grid grid-cols-2 items-baseline" style={fieldRowStyle}>
       <span className="text-gray-500">{label}</span>
       <span className={strong ? 'font-semibold text-gray-900' : 'text-gray-800'}>{value}</span>
+    </div>
+  );
+}
+
+export interface DocumentAmountRow {
+  label: string;
+  pct?: string | null;
+  value?: string | null;
+  bold?: boolean;
+}
+
+const amountCell = 'px-[0.8em] py-[0.5em] align-top';
+
+/**
+ * The document's main body table: one row per line, three columns —
+ * label, an optional percentage, an optional amount. Everything (policy details
+ * and figures alike) sits in this single table.
+ */
+export function DocumentAmountTable({ rows }: { rows: DocumentAmountRow[] }) {
+  return (
+    <table
+      className="w-full border-collapse"
+      style={{
+        fontFamily: 'var(--doc-font-content)',
+        tableLayout: 'fixed',
+        marginTop: 'var(--doc-space-row)',
+      }}
+    >
+      <colgroup>
+        <col style={{ width: '38%' }} />
+        <col style={{ width: '15%' }} />
+        <col style={{ width: '47%' }} />
+      </colgroup>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i}>
+            <td
+              className={`${amountCell} ${
+                row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'
+              }`}
+            >
+              {row.label}
+            </td>
+            <td className={`${amountCell} text-gray-500`}>{row.pct ?? ''}</td>
+            <td
+              className={`${amountCell} ${
+                row.bold ? 'font-semibold text-gray-900' : 'text-gray-800'
+              }`}
+            >
+              {row.value && row.value !== '—' ? row.value : ''}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** The issuer's signature — image plus name and title, drawn from the fixed
+ *  document branding. Placed after a letter's "Yours faithfully,". */
+export function DocumentSignature() {
+  return (
+    <div className="mt-[0.6em]" style={{ fontFamily: 'var(--doc-font-content)' }}>
+      <img src={SIGNATURE_SRC} alt="" className="h-[8em] w-auto max-w-[16em] object-contain" />
+      <p className="font-semibold text-gray-900">{SIGNATORY_NAME}</p>
+      <p className="text-gray-700">{SIGNATORY_TITLE}</p>
     </div>
   );
 }

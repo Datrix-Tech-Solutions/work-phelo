@@ -76,17 +76,6 @@ const PAYMENT_TYPE_OPTIONS = [
   { value: 'cheque', label: 'Cheque' },
 ];
 
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-      <label className="text-sm font-bold text-gray-900">{label}</label>
-      <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-700">
-        {value || '—'}
-      </div>
-    </div>
-  );
-}
-
 interface AddPaymentFormFieldsProps {
   form: UseFormReturn<AddPaymentFormValues>;
   placementId?: string;
@@ -341,6 +330,61 @@ export function AddPaymentFormFields({
       })}
     </div>
   );
+
+  const preFilledPosition = preFilledPlacement
+    ? positionByPlacementId.get(preFilledPlacement.id)
+    : undefined;
+  const preFilledOutstanding = preFilledPosition?.cedant.outstanding ?? 0;
+  const preFilledStatus: CedantPaymentStatus | null = preFilledPlacement
+    ? cedantPaymentStatusFromPosition(
+        preFilledPosition?.cedant.currentObligation ?? 0,
+        preFilledPosition?.cedant.netSettled ?? 0,
+        preFilledOutstanding,
+        pendingPremiumReceived(
+          preFilledPlacement ? (paymentsByPlacementId.get(preFilledPlacement.id) ?? []) : [],
+        ),
+      )
+    : null;
+
+  const preFilledSummary =
+    preFilledPlacement &&
+    preFilledStatus &&
+    (() => {
+      const cur = preFilledPosition?.currency ?? preFilledPlacement.currency ?? '';
+
+      const rows = [
+        { label: 'Cedant', value: preFilledPlacement.cedant.name, hint: null as React.ReactNode },
+        {
+          label: 'Business',
+          value: displayPolicyNumber(preFilledPlacement.policyNumber),
+          hint: preFilledPlacement.title || null,
+        },
+        {
+          label: 'Outstanding',
+          value:
+            preFilledOutstanding > 0.0001 ? `${cur} ${fmtNum(preFilledOutstanding)}` : 'Fully paid',
+          hint: <span className={PAYMENT_STATUS_CLASS[preFilledStatus]}>{preFilledStatus}</span>,
+        },
+      ];
+
+      return (
+        <dl className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+          {rows.map((row) => (
+            <div key={row.label} className="flex items-start justify-between gap-3">
+              <dt className="shrink-0 pt-0.5 text-xs font-medium text-gray-500">{row.label}</dt>
+              <dd className="min-w-0 text-right">
+                <span className="block truncate text-sm font-medium text-gray-900">
+                  {row.value}
+                </span>
+                {row.hint && (
+                  <span className="block truncate text-xs text-gray-400">{row.hint}</span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      );
+    })();
 
   const allocationSection = showAllocation && (
     <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
@@ -630,12 +674,7 @@ export function AddPaymentFormFields({
   if (preFilledPlacement) {
     return (
       <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
-        <ReadOnlyField label="Cedant" value={preFilledPlacement.cedant.name} />
-        <ReadOnlyField
-          label="Business"
-          value={displayPolicyNumber(preFilledPlacement.policyNumber)}
-        />
-        {businessPaymentSummary}
+        {preFilledSummary}
         {paymentTypeField}
         {chequeFields}
         {bankFields}

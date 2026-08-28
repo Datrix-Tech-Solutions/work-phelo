@@ -187,7 +187,7 @@ export function CreditNoteModal({
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>
-            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director (AG)</p>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director</p>
           </div>
         </div>
       }

@@ -27,7 +27,9 @@ export default function PaymentDetailPage({
 }) {
   const { tenantSlug, id } = use(params);
   const searchParams = useSearchParams();
-  const fromClosing = searchParams.get('from') === 'closing';
+  const from = searchParams.get('from');
+  const fromClosing = from === 'closing';
+  const fromCedant = from === 'cedant';
   const {
     data: placement,
     isLoading: placementLoading,
@@ -54,6 +56,26 @@ export default function PaymentDetailPage({
               >
                 Closings
               </Link>
+            </>
+          ) : fromCedant ? (
+            <>
+              <Link
+                href={`/${tenantSlug}/operations/reinsurance/cedants`}
+                className="hover:text-gray-700 transition-colors"
+              >
+                Cedants
+              </Link>
+              {placement?.cedant && (
+                <>
+                  <Icons.ChevronRight className="w-5 h-5" />
+                  <Link
+                    href={`/${tenantSlug}/operations/reinsurance/cedants/${placement.cedant.id}`}
+                    className="hover:text-gray-700 transition-colors"
+                  >
+                    {placement.cedant.name}
+                  </Link>
+                </>
+              )}
             </>
           ) : (
             <Link
@@ -102,10 +124,10 @@ export default function PaymentDetailPage({
               available to this tenant, or the page may have been opened with the wrong record ID.
             </p>
             <Link
-              href={`/${tenantSlug}/operations/reinsurance/payments`}
+              href={`/${tenantSlug}/operations/reinsurance/${fromCedant ? 'cedants' : 'payments'}`}
               className="text-sm font-semibold text-(--module-btn-bg,var(--color-brand)) hover:underline"
             >
-              Back to payments
+              {fromCedant ? 'Back to cedants' : 'Back to payments'}
             </Link>
           </div>
         ) : placementLoading ? (

@@ -92,6 +92,11 @@ export function PaymentReceiptContent({ placement, payment }: PaymentReceiptCont
   const chequeNumber = isCheque ? refParts[0] || null : null;
   const bankName = isCheque ? (refParts[1] ?? refParts[0] ?? null) : (refParts[0] ?? null);
 
+  // Strip the "Bank transfer" / "Cheque payment" boilerplate the payment form
+  // prepends, so only a genuine free-text note (e.g. from a claim recovery) shows.
+  const displayNotes =
+    (payment.notes ?? '').replace(/^(Bank transfer|Cheque payment)(\s*—\s*)?/, '').trim() || null;
+
   const paidAmount = parseFloat(payment.amount);
   const disbursementClosingNet =
     payment.closing?.netPremium ?? payment.endorsementClosing?.netPremium;
@@ -179,6 +184,17 @@ export function PaymentReceiptContent({ placement, payment }: PaymentReceiptCont
       {particularsRows.map((row) => (
         <DocumentField key={row.label} label={row.label} value={row.value} strong={row.bold} />
       ))}
+
+      {displayNotes && (
+        <>
+          <p className="font-semibold text-gray-500" style={groupLabelStyle}>
+            Notes
+          </p>
+          <p className="text-gray-800" style={{ fontFamily: 'var(--doc-font-content)' }}>
+            {displayNotes}
+          </p>
+        </>
+      )}
 
       <p
         className="text-center italic text-gray-600"

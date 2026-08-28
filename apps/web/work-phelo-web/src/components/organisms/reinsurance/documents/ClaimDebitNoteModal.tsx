@@ -1,5 +1,6 @@
 'use client';
 
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
@@ -20,6 +21,11 @@ export function ClaimDebitNoteModal({ isOpen, onClose, ...content }: ClaimDebitN
     <DocumentPreviewShell
       isOpen={isOpen}
       title={`${label} — ${displayPolicyNumber(content.placement.policyNumber)}`}
+      fileName={buildDocumentFileName(
+        label,
+        displayPolicyNumber(content.placement.policyNumber),
+        content.placement.title,
+      )}
       printRootId="claim-debit-note-print-root"
       onClose={onClose}
     >

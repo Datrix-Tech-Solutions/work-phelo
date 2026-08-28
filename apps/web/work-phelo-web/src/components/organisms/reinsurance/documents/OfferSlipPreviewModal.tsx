@@ -1,5 +1,7 @@
 'use client';
 
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
   OfferSlipContent,
@@ -18,6 +20,11 @@ export function OfferSlipPreviewModal({ isOpen, onClose, ...content }: OfferSlip
     <DocumentPreviewShell
       isOpen={isOpen}
       title={`Offer Slip — ${content.placement.title}`}
+      fileName={buildDocumentFileName(
+        'Offer Slip',
+        displayPolicyNumber(content.placement.policyNumber),
+        content.placement.title,
+      )}
       printRootId="offer-slip-print-root"
       onClose={onClose}
     >

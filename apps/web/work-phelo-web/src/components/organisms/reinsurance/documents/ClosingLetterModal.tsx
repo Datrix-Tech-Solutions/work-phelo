@@ -1,6 +1,7 @@
 'use client';
 
 import { Facultative, PlacementEndorsement } from '@/types/reinsurance';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
@@ -34,6 +35,11 @@ export function ClosingLetterModal({
     <DocumentPreviewShell
       isOpen={isOpen}
       title={`Closings — ${displayPolicyNumber(placement.policyNumber)}`}
+      fileName={buildDocumentFileName(
+        'Closings',
+        displayPolicyNumber(placement.policyNumber),
+        placement.title,
+      )}
       printRootId="closing-letter-print-root"
       onClose={onClose}
     >
