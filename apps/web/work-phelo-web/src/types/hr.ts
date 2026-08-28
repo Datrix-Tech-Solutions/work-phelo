@@ -192,6 +192,7 @@ export interface UpdateEmployeePayload {
   departmentId?: string;
   branchId?: string;
   managerId?: string;
+  hireDate?: string;
   probationEndsAt?: string;
   contractEndDate?: string;
   employmentType?: EmploymentType;
