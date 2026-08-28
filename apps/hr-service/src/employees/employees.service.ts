@@ -902,6 +902,7 @@ export class EmployeesService {
       dateOfBirth,
       probationEndsAt,
       contractEndDate,
+      hireDate,
       compensationType,
       taxPolicy,
       fixedTaxAmount,
@@ -931,8 +932,11 @@ export class EmployeesService {
       this.assertMinimumEmployeeAge(dateOfBirth);
     }
 
+    const effectiveHireDate =
+      hireDate !== undefined ? new Date(hireDate) : existing.hireDate;
+
     this.validateEmploymentDates({
-      hireDate: existing.hireDate,
+      hireDate: effectiveHireDate,
       probationEndsAt: probationEndsAt
         ? new Date(probationEndsAt)
         : (existing.probationEndsAt ?? undefined),
@@ -978,6 +982,7 @@ export class EmployeesService {
           statusChangedByEmail: actor.email,
         }),
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+        ...(hireDate !== undefined && { hireDate: effectiveHireDate }),
         probationEndsAt: probationEndsAt
           ? new Date(probationEndsAt)
           : undefined,
