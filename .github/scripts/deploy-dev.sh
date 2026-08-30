@@ -283,7 +283,7 @@ wait_for_http_ok "dev nextjs" "http://127.0.0.1:3000/health"
 section "Container Status"
 docker_compose ps
 
-docker image prune -f --filter "until=24h" >/dev/null || true
+post_deploy_capacity_maintenance
 
 log ""
 log "✓ Dev deployment complete at $(date -u +%Y-%m-%dT%H:%M:%SZ)"

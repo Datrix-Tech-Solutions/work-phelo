@@ -60,6 +60,44 @@ Production exposure is intentionally narrower than development. Check
 [`infrastructure/docker-compose.prod.yml`](infrastructure/docker-compose.prod.yml)
 before planning any production release.
 
+## Deployment Capacity Hardening
+
+Development and production deployments run a remote host preflight before SCP
+uploads deployment assets. The preflight checks root filesystem capacity, Docker
+daemon health, Docker Compose availability, deployment target writability and
+required host utilities. The default minimum free space is `10 GiB`, configured
+with the non-secret `DEPLOY_MIN_FREE_GIB` workflow environment value.
+
+After a successful rollout and health verification, deploy scripts run
+reference-aware WorkPhelo image cleanup. The cleanup protects every image ID
+referenced by any container on the shared Docker host, including stopped dev and
+production containers. It only targets old unused SHA-tagged images under
+`ghcr.io/datrix-tech-solutions/work-phelo/*`, keeps non-SHA tags such as `dev`
+and `prod`, and keeps the newest unused rollback candidates per service. The
+default rollback window is `3`, controlled by
+`WORKPHELO_IMAGE_ROLLBACK_RETAIN_PER_SERVICE`.
+
+The deploy scripts never prune Docker volumes and never delete Docker filesystem
+internals directly. For emergency disk inspection use:
+
+```bash
+df -h /
+docker system df
+docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+docker image ls 'ghcr.io/datrix-tech-solutions/work-phelo/*'
+docker builder du
+```
+
+Do not run broad destructive cleanup commands such as
+`docker system prune -a --volumes`, `docker volume prune` or direct removal
+under `/var/lib/docker`.
+
+The Compose files currently do not define container log rotation. Host-level
+hardening should be handled separately through approved server management:
+Docker log rotation, journald caps, external disk monitoring and alerts, SSH key
+hardening, firewall review, automatic security updates and backup/restore
+verification.
+
 ## Architecture Principles
 
 - Each backend service owns its schema, migrations, API contracts and business
