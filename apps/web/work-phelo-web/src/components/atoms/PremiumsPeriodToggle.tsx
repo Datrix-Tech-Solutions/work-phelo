@@ -10,6 +10,29 @@ const PERIODS: { label: string; value: PremiumsPeriod }[] = [
   { label: 'Quarterly', value: 'quarterly' },
 ];
 
+export const PREMIUMS_PERIOD_LABEL: Record<PremiumsPeriod, string> = {
+  weekly: 'This Week',
+  monthly: 'This Month',
+  quarterly: 'This Quarter',
+};
+
+/** Start of the calendar week (Mon) / month / quarter that `now` falls in. */
+export function premiumsPeriodStart(period: PremiumsPeriod, now: Date = new Date()): Date {
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+  switch (period) {
+    case 'weekly': {
+      const mondayOffset = (now.getDay() + 6) % 7;
+      return new Date(y, m, d - mondayOffset);
+    }
+    case 'monthly':
+      return new Date(y, m, 1);
+    case 'quarterly':
+      return new Date(y, Math.floor(m / 3) * 3, 1);
+  }
+}
+
 interface PremiumsPeriodToggleProps {
   value: PremiumsPeriod;
   onChange: (value: PremiumsPeriod) => void;

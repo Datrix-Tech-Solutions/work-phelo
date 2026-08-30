@@ -2,7 +2,7 @@
 
 import { DataList, Column } from '@/components/organisms/shared/DataList';
 import { Currency } from '@/types/reinsurance';
-import { transparentCardClass } from '@/lib/utils';
+import { cn, transparentCardClass } from '@/lib/utils';
 
 type AmountRow = Currency & { amount: number | null };
 
@@ -43,6 +43,8 @@ interface CurrencyAmountListCardProps {
   currencies: Currency[];
   isLoading?: boolean;
   emptyMessage?: string;
+  /** Overrides the card's default height (`h-80`). */
+  className?: string;
 }
 
 export function CurrencyAmountListCard({
@@ -52,13 +54,14 @@ export function CurrencyAmountListCard({
   currencies,
   isLoading,
   emptyMessage = 'No data for this period',
+  className,
 }: CurrencyAmountListCardProps) {
   const rows = currencies
     .map((c) => ({ ...c, amount: amountsByCode.get(c.isoCode) ?? null }))
     .filter((row) => row.amount != null);
 
   return (
-    <div className={transparentCardClass('flex flex-col gap-3 py-5 h-80')}>
+    <div className={cn(transparentCardClass('flex flex-col gap-3 py-5 h-80'), className)}>
       <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
       <div className="flex-1 min-h-0 overflow-y-auto -mx-3 px-3">
         <DataList

@@ -5,7 +5,15 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement } from '@/hooks';
+import {
+  useFacultativePlacement,
+  usePlacementFinancialPosition,
+  usePlacementPayments,
+} from '@/hooks';
+import {
+  cedantPaymentStatusFromPosition,
+  pendingPremiumReceived,
+} from '@/lib/reinsurance/placementStatus';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { PaymentOverview } from '@/components/molecules/reinsurance/stats/PaymentOverview';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
@@ -36,6 +44,18 @@ export default function PaymentDetailPage({
     isError: placementError,
   } = useFacultativePlacement(id);
   const [activeTab, setActiveTab] = useState<PaymentTab>('details');
+
+  const { data: financialPosition } = usePlacementFinancialPosition(id);
+  const { data: payments = [] } = usePlacementPayments(id);
+  // Once the cedant premium is fully paid there's nothing left to receive, so the
+  // "Receive Cedant Premium" trigger is hidden.
+  const cedantPaymentStatus = cedantPaymentStatusFromPosition(
+    financialPosition?.cedant.currentObligation ?? 0,
+    financialPosition?.cedant.netSettled ?? 0,
+    financialPosition?.cedant.outstanding ?? 0,
+    pendingPremiumReceived(payments),
+  );
+  const cedantFullyPaid = cedantPaymentStatus === 'Paid';
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -91,7 +111,7 @@ export default function PaymentDetailPage({
           </span>
         </nav>
 
-        {placement && <AddPaymentForm placementId={id} />}
+        {placement && !cedantFullyPaid && <AddPaymentForm placementId={id} />}
       </div>
 
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>

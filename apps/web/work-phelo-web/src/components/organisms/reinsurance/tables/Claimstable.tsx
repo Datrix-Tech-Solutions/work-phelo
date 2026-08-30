@@ -64,7 +64,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
   const policyNumber: Column<ClaimTabRow> = {
     key: 'reference',
     label: 'Policy Number',
-    width: '150px',
+    width: '130px',
     render: (row) => (
       <EndorsedReferencePill
         id={row.placement.id}
@@ -89,7 +89,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
   const claimNumber: Column<ClaimTabRow> = {
     key: 'claimNumber',
     label: 'Claim Number',
-    width: '130px',
+    width: '120px',
     render: (row) => <span className="font-medium text-gray-900">{row.claim.claimNumber}</span>,
   };
 
@@ -117,7 +117,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
   const actualClaim: Column<ClaimTabRow> = {
     key: 'finalLossAmount',
     label: '100% Actual Claim',
-    width: '150px',
+    width: '130px',
     className: 'text-right',
     render: (row) => (
       <span className="font-bold text-gray-900 whitespace-nowrap">
@@ -184,6 +184,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       insuredRiskType,
       claimNumber,
       cedant,
+      claimState,
       actualClaim,
       offerPercent,
       claimShare,
@@ -198,7 +199,6 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       insuredRiskType,
       claimNumber,
       cedant,
-      claimState,
       actualClaim,
       offerPercent,
       claimShare,
@@ -268,6 +268,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const [finalizeTarget, setFinalizeTarget] = useState<ClaimTabRow | null>(null);
   const [finalAmount, setFinalAmount] = useState('');
   const [finalAmountError, setFinalAmountError] = useState('');
+  const [finalClaimTag, setFinalClaimTag] = useState<ClaimTag>('pending');
   const updateClaim = useUpdatePlacementClaimUnbound();
   const generateAllocationsForClaim = useGenerateClaimAllocationsMutation();
   const { data: cedants = [], isLoading: isLoadingCedants } = useCedants();
@@ -313,6 +314,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     setFinalizeTarget(null);
     setFinalAmount('');
     setFinalAmountError('');
+    setFinalClaimTag('pending');
   };
 
   const handleFinalize = async () => {
@@ -514,6 +516,13 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
             }}
             error={finalAmountError}
             placeholder="0.00"
+          />
+          <SearchSelect
+            label="Claim state"
+            placeholder="Select tag…"
+            options={CLAIM_TAG_OPTIONS}
+            value={finalClaimTag}
+            onChange={(v) => setFinalClaimTag(v as ClaimTag)}
           />
         </div>
       </Modal>

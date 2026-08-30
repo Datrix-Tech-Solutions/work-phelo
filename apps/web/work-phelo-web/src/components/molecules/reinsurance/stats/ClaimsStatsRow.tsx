@@ -1,12 +1,17 @@
 'use client';
 
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
-import { CurrencyAmountScrollCard } from '@/components/molecules/reinsurance/stats/CurrencyAmountScrollCard';
+import { CurrencyAmountListCard } from '@/components/molecules/reinsurance/stats/CurrencyAmountListCard';
 import { Icons } from '@/components/atoms/icons';
-import { useClaimsWorklistSummary } from '@/hooks';
+import { useClaimsWorklistSummary, useCurrencies } from '@/hooks';
+import type { ClaimsCurrencyAmount } from '@/types/reinsurance';
+
+const toAmountMap = (rows: ClaimsCurrencyAmount[]) =>
+  new Map(rows.map((row) => [row.code, row.amount]));
 
 export function ClaimsStatsRow() {
   const { data: summary, isLoading } = useClaimsWorklistSummary();
+  const { data: currencies = [] } = useCurrencies();
 
   return (
     <div className="flex flex-col gap-4">
@@ -42,15 +47,23 @@ export function ClaimsStatsRow() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <CurrencyAmountScrollCard
+        <CurrencyAmountListCard
           title="Claims Amount by Currency"
-          rows={summary?.claimsByCurrency ?? []}
+          columnLabel="Claim Amount"
+          amountsByCode={toAmountMap(summary?.claimsByCurrency ?? [])}
+          currencies={currencies}
           isLoading={isLoading}
+          emptyMessage="No claims yet"
+          className="h-64"
         />
-        <CurrencyAmountScrollCard
+        <CurrencyAmountListCard
           title="Recovered by Currency"
-          rows={summary?.recoveredByCurrency ?? []}
+          columnLabel="Recovered"
+          amountsByCode={toAmountMap(summary?.recoveredByCurrency ?? [])}
+          currencies={currencies}
           isLoading={isLoading}
+          emptyMessage="No recoveries yet"
+          className="h-64"
         />
       </div>
     </div>

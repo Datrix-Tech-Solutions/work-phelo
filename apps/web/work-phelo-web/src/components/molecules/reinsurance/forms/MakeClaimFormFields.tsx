@@ -141,19 +141,23 @@ export function MakeClaimFormFields({
         {...register('claimNumber', { required: 'Claim number is required' })}
         error={errors.claimNumber?.message}
       />
-      <Controller
-        name="claimTag"
-        control={control}
-        render={({ field }) => (
-          <SearchSelect
-            label="Claim state"
-            placeholder="Select tag…"
-            options={CLAIM_TAG_OPTIONS}
-            value={field.value}
-            onChange={field.onChange}
-          />
-        )}
-      />
+      {/* Claim state (Pending / Finalized) — only on the Add Claim form, not Add Notification
+          or Edit. The "Move to Open" modal has its own copy of this field. */}
+      {mode === 'actual' && !isEditing && (
+        <Controller
+          name="claimTag"
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              label="Claim state"
+              placeholder="Select tag…"
+              options={CLAIM_TAG_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
+      )}
       <div className="flex flex-col gap-1 text-sm">
         <p className="text-gray-700">{premiumPaymentStatusText}</p>
         {latestPaymentDateText && (
