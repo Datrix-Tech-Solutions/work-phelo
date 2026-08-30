@@ -25,6 +25,9 @@ export interface ClaimReportRow {
   occurrenceDate: string;
   estimatedLossAmount: number;
   finalLossAmount: number | null;
+  /** When the actual (final) loss amount was set — i.e. when the payable amount became
+   *  available. Null while the claim is still a notification. */
+  finalizedAt: string | null;
   /** Bank-confirmed amount recovered from reinsurers so far — only set for open/closed claims. */
   recoveredAmount: number | null;
   recoveredAt: string | null;
@@ -75,6 +78,7 @@ export function useClaimsReport(
         estimatedLossAmount: parseFloat(r.claim.estimatedLossAmount),
         finalLossAmount:
           r.claim.finalLossAmount != null ? parseFloat(r.claim.finalLossAmount) : null,
+        finalizedAt: r.claim.finalizedAt ?? null,
         recoveredAmount: r.recoveredAmount ?? null,
         recoveredAt: r.recoveredAt ?? null,
         bucket,

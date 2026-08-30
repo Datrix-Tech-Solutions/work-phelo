@@ -346,6 +346,99 @@ export function usePremiumsSummary(placements: Facultative[]): PremiumsSummary {
   return { ...summary, isLoading };
 }
 
+export interface PremiumsPeriodSummary {
+  /** Premium collected between `sinceIso` and now, by currency. */
+  paidByCurrency: CurrencyAmount[];
+  /** Brokerage earned on the premium collected in that window, by currency. */
+  brokerageEarnedByCurrency: CurrencyAmount[];
+  /** Premium collected in the window ÷ premium that was collectible during it
+   *  (owed at the window's start + newly due since). 0–100. */
+  collectionRate: number;
+  isLoading: boolean;
+}
+
+/**
+ * Premium collection *activity* over a time window, for the Premiums stats row's period
+ * toggle. Diffs each placement's financial position as-of `sinceIso` against its current
+ * position — so it needs two position queries per placement (both cached by their
+ * as-of key). Balances (due / outstanding) aren't windowable and stay on `usePremiumsSummary`.
+ */
+export function usePremiumsPeriodSummary(
+  placements: Facultative[],
+  sinceIso: string,
+): PremiumsPeriodSummary {
+  const currentQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: placementFinancialPositionKey(p.id),
+      queryFn: () => fetchPlacementFinancialPosition(p.id),
+    })),
+  });
+  const startQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: placementFinancialPositionKey(p.id, sinceIso),
+      queryFn: () => fetchPlacementFinancialPosition(p.id, sinceIso),
+    })),
+  });
+
+  const isLoading =
+    currentQueries.some((q) => q.isLoading) || startQueries.some((q) => q.isLoading);
+
+  const summary = useMemo(() => {
+    const paidTotals = new Map<string, number>();
+    const brokerageTotals = new Map<string, number>();
+    let totalPaidInPeriod = 0;
+    let totalCollectible = 0;
+
+    placements.forEach((p, i) => {
+      const now = currentQueries[i]?.data;
+      const start = startQueries[i]?.data;
+      if (!now || !start) return;
+      const code = now.currency ?? p.currency ?? 'UNKNOWN';
+
+      const paidInPeriod = Math.max(
+        0,
+        (now.cedant.netSettled ?? 0) - (start.cedant.netSettled ?? 0),
+      );
+      const newlyDue = Math.max(
+        0,
+        (now.cedant.currentObligation ?? 0) - (start.cedant.currentObligation ?? 0),
+      );
+      totalPaidInPeriod += paidInPeriod;
+      totalCollectible += Math.max(0, start.cedant.outstanding ?? 0) + newlyDue;
+      if (paidInPeriod > 0.0001) paidTotals.set(code, (paidTotals.get(code) ?? 0) + paidInPeriod);
+
+      // Brokerage accrues in proportion to premium collected, so the window earns the same
+      // fraction of this placement's full-accrual brokerage as the premium share it collected.
+      const totalDue = now.cedant.currentObligation ?? 0;
+      if (paidInPeriod > 0.0001 && totalDue > 0.0001 && p.premium != null) {
+        let placementBrokerage = 0;
+        for (const participant of p.participants) {
+          if (participant.status !== 'ACCEPTED' && participant.status !== 'CLOSED') continue;
+          const share =
+            participant.sharePercent != null ? parseFloat(participant.sharePercent) : null;
+          const fee =
+            participant.brokerageFee != null ? parseFloat(participant.brokerageFee) : null;
+          if (share == null || fee == null) continue;
+          placementBrokerage += p.premium * (share / 100) * (fee / 100);
+        }
+        const earned = placementBrokerage * (paidInPeriod / totalDue);
+        if (earned > 0.0001) brokerageTotals.set(code, (brokerageTotals.get(code) ?? 0) + earned);
+      }
+    });
+
+    const collectionRate =
+      totalCollectible > 0.0001 ? Math.min(100, (totalPaidInPeriod / totalCollectible) * 100) : 0;
+
+    return {
+      paidByCurrency: sortedCurrencyTotals(paidTotals),
+      brokerageEarnedByCurrency: sortedCurrencyTotals(brokerageTotals),
+      collectionRate,
+    };
+  }, [placements, currentQueries, startQueries]);
+
+  return { ...summary, isLoading };
+}
+
 export function useReinsurerPaymentSummary(
   placements: Facultative[],
   reinsurerId: string,
