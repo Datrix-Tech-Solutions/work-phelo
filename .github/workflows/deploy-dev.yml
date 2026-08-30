@@ -314,6 +314,20 @@ jobs:
       - name: Validate deployment inputs
         run: bash .github/scripts/validate-deploy-env.sh dev
 
+      - name: Preflight deployment host
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_ENV: dev
+          DEPLOY_MIN_FREE_GIB: 15
+        with:
+          host: ${{ vars.DEV_SERVER_HOST }}
+          username: ${{ vars.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          port: 22
+          command_timeout: 5m
+          script_path: .github/scripts/deploy-host-preflight.sh
+          envs: DEPLOY_ENV,DEPLOY_PATH,DEPLOY_MIN_FREE_GIB
+
       # Upload the compose file — the server needs nothing else from the repo.
       # Source code is already baked into the images; git is not used on the server.
       - name: Upload deployment assets to server

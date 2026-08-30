@@ -19,6 +19,10 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
+bytes_to_gib() {
+  awk -v bytes="$1" 'BEGIN { printf "%.1f GiB", bytes / 1024 / 1024 / 1024 }'
+}
+
 required_env_vars_for() {
   local deploy_env="$1"
   local -a required=(
@@ -239,6 +243,85 @@ docker_compose_exec() {
   docker_compose exec -T "$@"
 }
 
+deploy_path_for_env() {
+  local deploy_env="$1"
+
+  case "$deploy_env" in
+    dev)
+      if [[ "${DEPLOY_ENV:-}" == "dev" && -n "${DEPLOY_PATH:-}" ]]; then
+        printf '%s\n' "$DEPLOY_PATH"
+      else
+        printf '%s\n' "${WORKPHELO_DEV_DEPLOY_PATH:-/var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo}"
+      fi
+      ;;
+    prod)
+      if [[ "${DEPLOY_ENV:-}" == "prod" && -n "${DEPLOY_PATH:-}" ]]; then
+        printf '%s\n' "$DEPLOY_PATH"
+      else
+        printf '%s\n' "${WORKPHELO_PROD_DEPLOY_PATH:-/var/www/apps/workphelo.com/work-phelo}"
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+compose_env_file_for_env() {
+  local deploy_env="$1"
+  printf '%s/.compose.%s.env\n' "$(deploy_path_for_env "$deploy_env")" "$deploy_env"
+}
+
+deploy_image_history_file_for_env() {
+  local deploy_env="$1"
+  printf '%s/.deploy-image-history.%s\n' "$(deploy_path_for_env "$deploy_env")" "$deploy_env"
+}
+
+service_name_from_image_env_key() {
+  local key="$1"
+  local service
+
+  service="${key%_IMAGE}"
+  service="$(printf '%s' "$service" | tr '[:upper:]_' '[:lower:]-')"
+
+  case "$service" in
+    nextjs)
+      printf 'nextjs\n'
+      ;;
+    *)
+      printf '%s\n' "$service"
+      ;;
+  esac
+}
+
+is_workphelo_image_ref() {
+  local image_ref="$1"
+  local image_prefix="${IMAGE_PREFIX:-ghcr.io/datrix-tech-solutions/work-phelo}"
+
+  [[ "$image_ref" == "${image_prefix}/"* ]]
+}
+
+is_sha_tagged_workphelo_ref() {
+  local image_ref="$1"
+  local tag="${image_ref##*:}"
+
+  is_workphelo_image_ref "$image_ref" && [[ "$tag" =~ ^[0-9a-f]{40}$ ]]
+}
+
+list_service_image_refs_from_env_file() {
+  local env_file="$1"
+  local key
+  local image_ref
+
+  [[ -f "$env_file" ]] || return 0
+
+  while IFS='=' read -r key image_ref; do
+    [[ "$key" == *_IMAGE ]] || continue
+    [[ -n "${image_ref:-}" ]] || continue
+    printf '%s\t%s\n' "$(service_name_from_image_env_key "$key")" "$image_ref"
+  done <"$env_file"
+}
+
 validate_compose_render() {
   local tmp
   tmp="$(mktemp)"
@@ -246,6 +329,42 @@ validate_compose_render() {
   [[ -s "$tmp" ]] || die "Docker Compose config rendered empty output"
   rm -f "$tmp"
   log "Docker Compose config validation passed"
+}
+
+root_disk_usage() {
+  df -Pk / | awk 'NR == 2 { gsub(/%/, "", $5); printf "%.0f %s\n", $4 * 1024, $5 }'
+}
+
+report_root_disk_usage() {
+  local label="${1:-Root Disk Usage}"
+  local available_bytes
+  local used_percent
+  local warning_percent="${DEPLOY_DISK_WARNING_PERCENT:-85}"
+  local critical_percent="${DEPLOY_DISK_CRITICAL_PERCENT:-90}"
+  local status="healthy"
+
+  read -r available_bytes used_percent < <(root_disk_usage)
+
+  if (( used_percent >= critical_percent )); then
+    status="critical"
+  elif (( used_percent >= warning_percent )); then
+    status="warning"
+  fi
+
+  section "$label"
+  log "Root filesystem: ${used_percent}% used, $(bytes_to_gib "$available_bytes") available (${status})"
+}
+
+assert_root_disk_not_critical() {
+  local available_bytes
+  local used_percent
+  local critical_percent="${DEPLOY_DISK_CRITICAL_PERCENT:-90}"
+
+  read -r available_bytes used_percent < <(root_disk_usage)
+
+  if (( used_percent >= critical_percent )); then
+    die "Root filesystem remains critical after deployment cleanup: ${used_percent}% used, $(bytes_to_gib "$available_bytes") available"
+  fi
 }
 
 preflight_runtime_env() {
@@ -261,6 +380,191 @@ preflight_runtime_env() {
     --env-file "$env_file" \
     "$image_ref" \
     node "$validation_script"
+}
+
+collect_container_image_ids() {
+  local container_id
+
+  docker ps -aq | while IFS= read -r container_id; do
+    [[ -n "$container_id" ]] || continue
+    docker inspect --format='{{.Image}}' "$container_id" 2>/dev/null || true
+  done | sort -u
+}
+
+collect_current_compose_image_refs() {
+  local deploy_env
+
+  for deploy_env in dev prod; do
+    list_service_image_refs_from_env_file "$(compose_env_file_for_env "$deploy_env")" |
+      awk -F '\t' '{ print $2 }'
+  done | sort -u
+}
+
+collect_deploy_history_image_refs() {
+  local deploy_env
+  local history_file
+
+  for deploy_env in dev prod; do
+    history_file="$(deploy_image_history_file_for_env "$deploy_env")"
+    [[ -f "$history_file" ]] || continue
+    sort -r "$history_file" | awk -F '\t' '
+      NF >= 3 {
+        service = $2
+        image = $3
+        key = service SUBSEP image
+        if (seen[key]++) next
+        if (++count[service] <= 3) print image
+      }
+    '
+  done | sort -u
+}
+
+collect_retained_workphelo_image_ids() {
+  local image_ref
+
+  {
+    collect_current_compose_image_refs
+    collect_deploy_history_image_refs
+  } | sort -u | while IFS= read -r image_ref; do
+    [[ -n "$image_ref" ]] || continue
+    is_workphelo_image_ref "$image_ref" || continue
+    docker image inspect --format='{{.Id}}' "$image_ref" 2>/dev/null || true
+  done | sort -u
+}
+
+collect_protected_workphelo_image_ids() {
+  {
+    collect_container_image_ids
+    collect_retained_workphelo_image_ids
+  } | sort -u
+}
+
+list_workphelo_image_tags() {
+  local image_prefix="${IMAGE_PREFIX:-ghcr.io/datrix-tech-solutions/work-phelo}"
+  local repository
+  local tag
+  local image_id
+  local created
+
+  docker image ls --format '{{.Repository}}|{{.Tag}}' | while IFS='|' read -r repository tag; do
+    [[ "$repository" == "${image_prefix}/"* ]] || continue
+    [[ -n "$tag" && "$tag" != "<none>" ]] || continue
+
+    image_id="$(docker image inspect --format='{{.Id}}' "${repository}:${tag}" 2>/dev/null || true)"
+    created="$(docker image inspect --format='{{.Created}}' "${repository}:${tag}" 2>/dev/null || true)"
+    [[ -n "$image_id" && -n "$created" ]] || continue
+
+    printf '%s|%s|%s|%s\n' "$repository" "$tag" "$image_id" "$created"
+  done
+}
+
+record_successful_deploy_images() {
+  local deploy_env="${DEPLOY_ENV:-}"
+  local compose_env_file="${COMPOSE_ENV_FILE:-}"
+  local timestamp
+  local history_file
+  local history_dir
+  local new_entries
+  local combined
+  local bounded
+  local tmp_file
+
+  [[ "$deploy_env" == "dev" || "$deploy_env" == "prod" ]] ||
+    die "Cannot record deployment image history for DEPLOY_ENV='${deploy_env}'"
+  [[ -f "$compose_env_file" ]] ||
+    die "Cannot record deployment image history; compose env file missing: ${compose_env_file}"
+
+  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  history_file="$(deploy_image_history_file_for_env "$deploy_env")"
+  history_dir="$(dirname "$history_file")"
+  mkdir -p "$history_dir"
+
+  new_entries="$(mktemp)"
+  combined="$(mktemp)"
+  bounded="$(mktemp)"
+  tmp_file="$(mktemp "${history_file}.XXXXXX")"
+
+  while IFS=$'\t' read -r service image_ref; do
+    [[ -n "${service:-}" && -n "${image_ref:-}" ]] || continue
+    is_sha_tagged_workphelo_ref "$image_ref" || continue
+    printf '%s\t%s\t%s\n' "$timestamp" "$service" "$image_ref"
+  done < <(list_service_image_refs_from_env_file "$compose_env_file") >"$new_entries"
+
+  if [[ -f "$history_file" ]]; then
+    cat "$history_file" "$new_entries" >"$combined"
+  else
+    cat "$new_entries" >"$combined"
+  fi
+
+  sort -r "$combined" | awk -F '\t' '
+    NF >= 3 {
+      service = $2
+      image = $3
+      key = service SUBSEP image
+      if (seen[key]++) next
+      if (++count[service] <= 3) print
+    }
+  ' >"$bounded"
+
+  cat "$bounded" >"$tmp_file"
+  chmod 600 "$tmp_file"
+  mv "$tmp_file" "$history_file"
+  rm -f "$new_entries" "$combined" "$bounded"
+
+  log "✓ Recorded ${deploy_env} image history at ${history_file}"
+}
+
+cleanup_stale_workphelo_images() {
+  local protected_ids
+  local image_tags
+  protected_ids="$(mktemp)"
+  image_tags="$(mktemp)"
+
+  collect_protected_workphelo_image_ids >"$protected_ids"
+  list_workphelo_image_tags >"$image_tags"
+
+  if [[ ! -s "$image_tags" ]]; then
+    rm -f "$protected_ids" "$image_tags"
+    log "No WorkPhelo GHCR images found for retention cleanup"
+    return 0
+  fi
+
+  local deleted=0
+  local repository
+
+  while IFS= read -r repository; do
+    while IFS='|' read -r _repo tag image_id _created; do
+      [[ "$tag" =~ ^[0-9a-f]{40}$ ]] || continue
+
+      if grep -Fxq "$image_id" "$protected_ids"; then
+        continue
+      fi
+
+      if docker image rm "${repository}:${tag}" >/dev/null 2>&1; then
+        deleted=$((deleted + 1))
+        log "  • removed stale unused image ${repository}:${tag}"
+      else
+        log "  ⚠ could not remove stale unused image ${repository}:${tag}"
+      fi
+    done < <(grep -F "${repository}|" "$image_tags" | sort -t '|' -k4,4r)
+  done < <(cut -d '|' -f1 "$image_tags" | sort -u)
+
+  rm -f "$protected_ids" "$image_tags"
+  log "WorkPhelo image retention complete; removed ${deleted} stale unused SHA-tagged image(s)"
+}
+
+post_deploy_capacity_maintenance() {
+  report_root_disk_usage "Post-Deploy Disk Usage"
+
+  section "Post-Deploy Image Retention"
+  if cleanup_stale_workphelo_images; then
+    log "✓ WorkPhelo image cleanup completed"
+  else
+    log "⚠ WorkPhelo image cleanup failed; continuing unless disk is critical"
+  fi
+
+  report_root_disk_usage "Post-Cleanup Disk Usage"
+  assert_root_disk_not_critical
 }
 
 ensure_image_available() {

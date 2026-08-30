@@ -216,10 +216,12 @@ wait_for_http_ok "prod api-gateway" "http://127.0.0.1:4110/health"
 wait_for_http_ok "prod gateway reinsurance route" "http://127.0.0.1:4110/api/v1/operations/reinsurance/health"
 wait_for_http_ok "prod nextjs" "http://127.0.0.1:3001/health"
 
+record_successful_deploy_images
+
 section "Container Status"
 docker_compose ps
 
-docker image prune -f --filter "until=24h" >/dev/null || true
+post_deploy_capacity_maintenance
 
 log ""
 log "✓ Production deployment complete at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
