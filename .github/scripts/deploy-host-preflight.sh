@@ -20,7 +20,7 @@ bytes_to_gib() {
 }
 
 check_root_disk_space() {
-  local min_free_gib="${DEPLOY_MIN_FREE_GIB:-10}"
+  local min_free_gib="${DEPLOY_MIN_FREE_GIB:-15}"
   local min_free_bytes=$((min_free_gib * 1024 * 1024 * 1024))
   local available_kib
   local used_percent

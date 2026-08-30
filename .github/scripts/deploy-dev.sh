@@ -280,6 +280,8 @@ wait_for_http_ok "dev reinsurance via gateway" "http://127.0.0.1:4010/api/v1/ope
 wait_for_http_ok "dev accounting via gateway" "http://127.0.0.1:4010/api/v1/accounting/health"
 wait_for_http_ok "dev nextjs" "http://127.0.0.1:3000/health"
 
+record_successful_deploy_images
+
 section "Container Status"
 docker_compose ps
 

@@ -243,6 +243,85 @@ docker_compose_exec() {
   docker_compose exec -T "$@"
 }
 
+deploy_path_for_env() {
+  local deploy_env="$1"
+
+  case "$deploy_env" in
+    dev)
+      if [[ "${DEPLOY_ENV:-}" == "dev" && -n "${DEPLOY_PATH:-}" ]]; then
+        printf '%s\n' "$DEPLOY_PATH"
+      else
+        printf '%s\n' "${WORKPHELO_DEV_DEPLOY_PATH:-/var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo}"
+      fi
+      ;;
+    prod)
+      if [[ "${DEPLOY_ENV:-}" == "prod" && -n "${DEPLOY_PATH:-}" ]]; then
+        printf '%s\n' "$DEPLOY_PATH"
+      else
+        printf '%s\n' "${WORKPHELO_PROD_DEPLOY_PATH:-/var/www/apps/workphelo.com/work-phelo}"
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+compose_env_file_for_env() {
+  local deploy_env="$1"
+  printf '%s/.compose.%s.env\n' "$(deploy_path_for_env "$deploy_env")" "$deploy_env"
+}
+
+deploy_image_history_file_for_env() {
+  local deploy_env="$1"
+  printf '%s/.deploy-image-history.%s\n' "$(deploy_path_for_env "$deploy_env")" "$deploy_env"
+}
+
+service_name_from_image_env_key() {
+  local key="$1"
+  local service
+
+  service="${key%_IMAGE}"
+  service="$(printf '%s' "$service" | tr '[:upper:]_' '[:lower:]-')"
+
+  case "$service" in
+    nextjs)
+      printf 'nextjs\n'
+      ;;
+    *)
+      printf '%s\n' "$service"
+      ;;
+  esac
+}
+
+is_workphelo_image_ref() {
+  local image_ref="$1"
+  local image_prefix="${IMAGE_PREFIX:-ghcr.io/datrix-tech-solutions/work-phelo}"
+
+  [[ "$image_ref" == "${image_prefix}/"* ]]
+}
+
+is_sha_tagged_workphelo_ref() {
+  local image_ref="$1"
+  local tag="${image_ref##*:}"
+
+  is_workphelo_image_ref "$image_ref" && [[ "$tag" =~ ^[0-9a-f]{40}$ ]]
+}
+
+list_service_image_refs_from_env_file() {
+  local env_file="$1"
+  local key
+  local image_ref
+
+  [[ -f "$env_file" ]] || return 0
+
+  while IFS='=' read -r key image_ref; do
+    [[ "$key" == *_IMAGE ]] || continue
+    [[ -n "${image_ref:-}" ]] || continue
+    printf '%s\t%s\n' "$(service_name_from_image_env_key "$key")" "$image_ref"
+  done <"$env_file"
+}
+
 validate_compose_render() {
   local tmp
   tmp="$(mktemp)"
@@ -312,6 +391,54 @@ collect_container_image_ids() {
   done | sort -u
 }
 
+collect_current_compose_image_refs() {
+  local deploy_env
+
+  for deploy_env in dev prod; do
+    list_service_image_refs_from_env_file "$(compose_env_file_for_env "$deploy_env")" |
+      awk -F '\t' '{ print $2 }'
+  done | sort -u
+}
+
+collect_deploy_history_image_refs() {
+  local deploy_env
+  local history_file
+
+  for deploy_env in dev prod; do
+    history_file="$(deploy_image_history_file_for_env "$deploy_env")"
+    [[ -f "$history_file" ]] || continue
+    sort -r "$history_file" | awk -F '\t' '
+      NF >= 3 {
+        service = $2
+        image = $3
+        key = service SUBSEP image
+        if (seen[key]++) next
+        if (++count[service] <= 3) print image
+      }
+    '
+  done | sort -u
+}
+
+collect_retained_workphelo_image_ids() {
+  local image_ref
+
+  {
+    collect_current_compose_image_refs
+    collect_deploy_history_image_refs
+  } | sort -u | while IFS= read -r image_ref; do
+    [[ -n "$image_ref" ]] || continue
+    is_workphelo_image_ref "$image_ref" || continue
+    docker image inspect --format='{{.Id}}' "$image_ref" 2>/dev/null || true
+  done | sort -u
+}
+
+collect_protected_workphelo_image_ids() {
+  {
+    collect_container_image_ids
+    collect_retained_workphelo_image_ids
+  } | sort -u
+}
+
 list_workphelo_image_tags() {
   local image_prefix="${IMAGE_PREFIX:-ghcr.io/datrix-tech-solutions/work-phelo}"
   local repository
@@ -331,16 +458,69 @@ list_workphelo_image_tags() {
   done
 }
 
-cleanup_stale_workphelo_images() {
-  local retain_per_service="${WORKPHELO_IMAGE_ROLLBACK_RETAIN_PER_SERVICE:-3}"
-  [[ "$retain_per_service" =~ ^[0-9]+$ ]] || retain_per_service=3
+record_successful_deploy_images() {
+  local deploy_env="${DEPLOY_ENV:-}"
+  local compose_env_file="${COMPOSE_ENV_FILE:-}"
+  local timestamp
+  local history_file
+  local history_dir
+  local new_entries
+  local combined
+  local bounded
+  local tmp_file
 
+  [[ "$deploy_env" == "dev" || "$deploy_env" == "prod" ]] ||
+    die "Cannot record deployment image history for DEPLOY_ENV='${deploy_env}'"
+  [[ -f "$compose_env_file" ]] ||
+    die "Cannot record deployment image history; compose env file missing: ${compose_env_file}"
+
+  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  history_file="$(deploy_image_history_file_for_env "$deploy_env")"
+  history_dir="$(dirname "$history_file")"
+  mkdir -p "$history_dir"
+
+  new_entries="$(mktemp)"
+  combined="$(mktemp)"
+  bounded="$(mktemp)"
+  tmp_file="$(mktemp "${history_file}.XXXXXX")"
+
+  while IFS=$'\t' read -r service image_ref; do
+    [[ -n "${service:-}" && -n "${image_ref:-}" ]] || continue
+    is_sha_tagged_workphelo_ref "$image_ref" || continue
+    printf '%s\t%s\t%s\n' "$timestamp" "$service" "$image_ref"
+  done < <(list_service_image_refs_from_env_file "$compose_env_file") >"$new_entries"
+
+  if [[ -f "$history_file" ]]; then
+    cat "$history_file" "$new_entries" >"$combined"
+  else
+    cat "$new_entries" >"$combined"
+  fi
+
+  sort -r "$combined" | awk -F '\t' '
+    NF >= 3 {
+      service = $2
+      image = $3
+      key = service SUBSEP image
+      if (seen[key]++) next
+      if (++count[service] <= 3) print
+    }
+  ' >"$bounded"
+
+  cat "$bounded" >"$tmp_file"
+  chmod 600 "$tmp_file"
+  mv "$tmp_file" "$history_file"
+  rm -f "$new_entries" "$combined" "$bounded"
+
+  log "✓ Recorded ${deploy_env} image history at ${history_file}"
+}
+
+cleanup_stale_workphelo_images() {
   local protected_ids
   local image_tags
   protected_ids="$(mktemp)"
   image_tags="$(mktemp)"
 
-  collect_container_image_ids >"$protected_ids"
+  collect_protected_workphelo_image_ids >"$protected_ids"
   list_workphelo_image_tags >"$image_tags"
 
   if [[ ! -s "$image_tags" ]]; then
@@ -353,17 +533,10 @@ cleanup_stale_workphelo_images() {
   local repository
 
   while IFS= read -r repository; do
-    local retained=0
-
     while IFS='|' read -r _repo tag image_id _created; do
       [[ "$tag" =~ ^[0-9a-f]{40}$ ]] || continue
 
       if grep -Fxq "$image_id" "$protected_ids"; then
-        continue
-      fi
-
-      if (( retained < retain_per_service )); then
-        retained=$((retained + 1))
         continue
       fi
 

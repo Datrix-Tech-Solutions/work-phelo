@@ -65,17 +65,19 @@ before planning any production release.
 Development and production deployments run a remote host preflight before SCP
 uploads deployment assets. The preflight checks root filesystem capacity, Docker
 daemon health, Docker Compose availability, deployment target writability and
-required host utilities. The default minimum free space is `10 GiB`, configured
+required host utilities. The default minimum free space is `15 GiB`, configured
 with the non-secret `DEPLOY_MIN_FREE_GIB` workflow environment value.
 
 After a successful rollout and health verification, deploy scripts run
-reference-aware WorkPhelo image cleanup. The cleanup protects every image ID
-referenced by any container on the shared Docker host, including stopped dev and
-production containers. It only targets old unused SHA-tagged images under
-`ghcr.io/datrix-tech-solutions/work-phelo/*`, keeps non-SHA tags such as `dev`
-and `prod`, and keeps the newest unused rollback candidates per service. The
-default rollback window is `3`, controlled by
-`WORKPHELO_IMAGE_ROLLBACK_RETAIN_PER_SERVICE`.
+reference-aware WorkPhelo image cleanup. Successful deployments record
+environment-specific image history in `.deploy-image-history.dev` or
+`.deploy-image-history.prod` using `timestamp<TAB>service<TAB>image_ref` rows.
+The cleanup protects every image ID referenced by any container on the shared
+Docker host, including stopped dev and production containers. It also protects
+current compose image refs and the current plus previous two successful SHA
+image refs per service for both dev and production. It only targets old unused
+SHA-tagged images under `ghcr.io/datrix-tech-solutions/work-phelo/*` and keeps
+non-SHA tags such as `dev` and `prod`.
 
 The deploy scripts never prune Docker volumes and never delete Docker filesystem
 internals directly. For emergency disk inspection use:

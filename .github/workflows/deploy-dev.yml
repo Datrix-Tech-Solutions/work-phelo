@@ -318,7 +318,7 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         env:
           DEPLOY_ENV: dev
-          DEPLOY_MIN_FREE_GIB: 10
+          DEPLOY_MIN_FREE_GIB: 15
         with:
           host: ${{ vars.DEV_SERVER_HOST }}
           username: ${{ vars.DEV_SERVER_USER }}
