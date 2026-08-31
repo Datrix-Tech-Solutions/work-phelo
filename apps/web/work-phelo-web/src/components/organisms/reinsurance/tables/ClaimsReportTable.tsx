@@ -55,6 +55,18 @@ function fmtDate(iso: string | null): string {
   });
 }
 
+const MS_PER_DAY = 86_400_000;
+
+function fmtAging(row: ClaimReportRow): string {
+  if (!row.finalizedAt) return '—';
+  const from = new Date(row.finalizedAt).getTime();
+  const to = row.recoveredAt ? new Date(row.recoveredAt).getTime() : Date.now();
+  const days = Math.max(0, Math.floor((to - from) / MS_PER_DAY));
+  if (days <= 30) return '0-30';
+  if (days <= 60) return '30-60';
+  return '60+';
+}
+
 export function ClaimsReportTable() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -111,7 +123,7 @@ export function ClaimsReportTable() {
       {
         key: 'occurrenceDate',
         label: 'Occurrence',
-        width: '130px',
+        width: '90px',
         render: (row) => fmtDate(row.occurrenceDate),
       },
       {
@@ -136,9 +148,15 @@ export function ClaimsReportTable() {
         render: (row) => fmtAmount(row.recoveredAmount, row.currency),
       },
       {
+        key: 'aging',
+        label: 'Aging',
+        width: '60px',
+        render: (row) => <span className="text-gray-700">{fmtAging(row)}</span>,
+      },
+      {
         key: 'bucket',
         label: 'Status',
-        width: '110px',
+        width: '100px',
         render: (row) => (
           <Badge label={BUCKET_LABEL[row.bucket]} variant={BUCKET_VARIANT_MAP[row.bucket]} />
         ),
@@ -160,6 +178,7 @@ export function ClaimsReportTable() {
       'Estimated Claim',
       'Actual Claim',
       'Recovered',
+      'Aging',
       'Status',
     ];
     const data = rows.map((row) => [
@@ -171,6 +190,7 @@ export function ClaimsReportTable() {
       row.estimatedLossAmount,
       row.finalLossAmount ?? '',
       row.recoveredAmount ?? '',
+      fmtAging(row),
       BUCKET_LABEL[row.bucket],
     ]);
     exportToCsv(`claims-report-${new Date().toISOString().slice(0, 10)}.csv`, headers, data);

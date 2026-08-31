@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { NumberField } from '@/components/atoms/NumberField';
+import { Input } from '@/components/atoms/Input';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   useCreatePlacementPayment,
   useConfirmPlacementPaymentBank,
@@ -16,7 +18,14 @@ import {
   Facultative,
   PlacementFinancialPosition,
   PlacementReinsurerFinancialPosition,
+  PlacementSettlementMethod,
 } from '@/types/reinsurance';
+
+const PAYMENT_METHOD_OPTIONS: { value: PlacementSettlementMethod; label: string }[] = [
+  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+  { value: 'CHEQUE', label: 'Cheque' },
+  { value: 'CASH', label: 'Cash' },
+];
 
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';
@@ -57,6 +66,16 @@ export function RecordDisbursementPanel({
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [amount, setAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<PlacementSettlementMethod>('BANK_TRANSFER');
+  const [notes, setNotes] = useState('');
+  const [referenceValue, setReferenceValue] = useState('');
+
+  const referenceLabel =
+    paymentMethod === 'BANK_TRANSFER'
+      ? 'Bank Name'
+      : paymentMethod === 'CHEQUE'
+        ? 'Cheque Number'
+        : null;
 
   const sources = useMemo<DisbursementSource[]>(() => {
     if (!target) return [];
@@ -134,8 +153,16 @@ export function RecordDisbursementPanel({
     if (!target) return;
     const prefill = suggestedAmount ?? totalOutstanding;
     setAmount(prefill > 0 ? Math.round(prefill * 100) / 100 : 0);
+    setPaymentMethod('BANK_TRANSFER');
+    setNotes('');
+    setReferenceValue('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, totalOutstanding]);
+
+  const handlePaymentMethodChange = (value: string) => {
+    setPaymentMethod(value as PlacementSettlementMethod);
+    setReferenceValue('');
+  };
 
   const amountError =
     totalOutstanding <= 0
@@ -172,14 +199,7 @@ export function RecordDisbursementPanel({
         const portion = Math.min(source.outstanding, remaining);
         if (portion <= 0.0001) continue;
 
-        const reference = source.closingId
-          ? `Closing ${closings.find((c) => c.id === source.closingId)?.closingNumber ?? source.closingId}`
-          : source.endorsementClosingId
-            ? `Endorsement ${
-                target.adjustments?.find((a) => a.closingId === source.endorsementClosingId)
-                  ?.endorsementNumber ?? source.endorsementClosingId
-              }`
-            : undefined;
+        const reference = referenceValue || undefined;
 
         const created = await createPayment.mutateAsync({
           placementId: placement.id,
@@ -191,11 +211,11 @@ export function RecordDisbursementPanel({
           participantId: source.participantId,
           amount: portion,
           currency: source.currency,
-          settlementMethod: 'BANK_TRANSFER',
+          settlementMethod: paymentMethod,
           settlementCurrency: source.currency,
           paymentDate: now,
           reference,
-          notes: 'Bank transfer',
+          notes: notes || undefined,
         });
 
         remaining -= portion;
@@ -254,6 +274,23 @@ export function RecordDisbursementPanel({
           balance{' '}
           <span className="font-semibold text-gray-900">{fmt(target.outstanding, currency)}</span>.
         </p>
+        <SearchSelect
+          label="Payment Method"
+          placeholder="Select payment method…"
+          options={PAYMENT_METHOD_OPTIONS}
+          value={paymentMethod}
+          onChange={handlePaymentMethodChange}
+        />
+
+        {referenceLabel && (
+          <Input
+            label={referenceLabel}
+            value={referenceValue}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReferenceValue(e.target.value)}
+            placeholder={`Enter ${referenceLabel.toLowerCase()}…`}
+            disabled={isSubmitting}
+          />
+        )}
 
         <NumberField
           label={`Amount (${currency})`}
@@ -262,6 +299,16 @@ export function RecordDisbursementPanel({
           error={amountError ?? undefined}
           disabled={isSubmitting}
           placeholder="0.00"
+        />
+
+        <Input
+          label="Notes"
+          type="textarea"
+          rows={3}
+          value={notes}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
+          placeholder="Add any notes about this disbursement…"
+          disabled={isSubmitting}
         />
       </div>
     </Modal>

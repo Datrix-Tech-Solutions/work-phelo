@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { useQueries } from '@tanstack/react-query';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -8,7 +8,12 @@ import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { useFacultatives, useCurrencyOptions } from '@/hooks';
+import {
+  useCedants,
+  useCurrencyOptions,
+  useFacultativePlacement,
+  useFacultativeSearch,
+} from '@/hooks';
 import {
   fetchPlacementFinancialPosition,
   fetchPlacementPayments,
@@ -22,7 +27,7 @@ import {
   pendingPremiumReceived,
   CedantPaymentStatus,
 } from '@/lib/reinsurance/placementStatus';
-import { PlacementPayment } from '@/types/reinsurance';
+import { Facultative, PlacementPayment } from '@/types/reinsurance';
 
 const PAYMENT_STATUS_CLASS: Record<CedantPaymentStatus, string> = {
   Outstanding: 'text-xs text-gray-400',
@@ -47,6 +52,7 @@ export interface AddPaymentFormValues {
   rate: string;
   allocations: Record<string, string>;
   allocationRates: Record<string, string>;
+  notes: string;
 }
 
 export const ADD_PAYMENT_DEFAULTS: AddPaymentFormValues = {
@@ -62,6 +68,7 @@ export const ADD_PAYMENT_DEFAULTS: AddPaymentFormValues = {
   rate: '',
   allocations: {},
   allocationRates: {},
+  notes: '',
 };
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -69,27 +76,18 @@ const PAYMENT_TYPE_OPTIONS = [
   { value: 'cheque', label: 'Cheque' },
 ];
 
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-      <label className="text-sm font-bold text-gray-900">{label}</label>
-      <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-700">
-        {value || '—'}
-      </div>
-    </div>
-  );
-}
-
 interface AddPaymentFormFieldsProps {
   form: UseFormReturn<AddPaymentFormValues>;
   placementId?: string;
   onPlacementsChange?: (placementIds: string[]) => void;
+  onPlacementsResolved?: (placements: Facultative[]) => void;
 }
 
 export function AddPaymentFormFields({
   form,
   placementId,
   onPlacementsChange,
+  onPlacementsResolved,
 }: AddPaymentFormFieldsProps) {
   const {
     register,
@@ -99,20 +97,52 @@ export function AddPaymentFormFields({
     formState: { errors },
   } = form;
 
-  const { data: facultatives = [] } = useFacultatives();
+  const { data: cedants = [] } = useCedants();
   const { data: currencyOptions = [] } = useCurrencyOptions();
-
-  const preFilledPlacement = useMemo(
-    () => (placementId ? facultatives.find((f) => f.id === placementId) : undefined),
-    [facultatives, placementId],
-  );
-
+  const { data: preFilledPlacement } = useFacultativePlacement(placementId ?? '');
+  const [businessQuery, setBusinessQuery] = useState('');
+  const [debouncedBusinessQuery, setDebouncedBusinessQuery] = useState('');
+  const [placementById, setPlacementById] = useState<Map<string, Facultative>>(() => new Map());
   const cedantId = watch('cedantId');
   const businessIds = watch('businessIds');
-  const selectedFacultatives = useMemo(
-    () => facultatives.filter((f) => businessIds.includes(f.id)),
-    [facultatives, businessIds],
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedBusinessQuery(businessQuery), 300);
+    return () => clearTimeout(timer);
+  }, [businessQuery]);
+
+  const { data: placementOptionsPage } = useFacultativeSearch(
+    {
+      archived: false,
+      cedantId: cedantId || undefined,
+      search: debouncedBusinessQuery || undefined,
+    },
+    { enabled: !preFilledPlacement && !!cedantId, limit: 25 },
   );
+
+  const placementOptions = useMemo(
+    () => placementOptionsPage?.items ?? [],
+    [placementOptionsPage?.items],
+  );
+
+  const availablePlacementById = useMemo(() => {
+    const map = new Map<string, Facultative>();
+    if (preFilledPlacement) map.set(preFilledPlacement.id, preFilledPlacement);
+    placementOptions.forEach((placement) => map.set(placement.id, placement));
+    return map;
+  }, [preFilledPlacement, placementOptions]);
+
+  const selectedFacultatives = useMemo(
+    () =>
+      businessIds
+        .map((id) => placementById.get(id) ?? availablePlacementById.get(id))
+        .filter(Boolean) as Facultative[],
+    [businessIds, placementById, availablePlacementById],
+  );
+
+  useEffect(() => {
+    onPlacementsResolved?.(selectedFacultatives);
+  }, [onPlacementsResolved, selectedFacultatives]);
 
   const positionQueries = useQueries({
     queries: selectedFacultatives.map((f) => ({
@@ -130,8 +160,6 @@ export function AddPaymentFormFields({
     return map;
   }, [selectedFacultatives, positionQueries]);
 
-  // For the payment-status summary below the business picker — same authoritative figures
-  // (financial position + pending receipts) the Premiums page and placement Details page use.
   const paymentsQueries = useQueries({
     queries: selectedFacultatives.map((f) => ({
       queryKey: paymentsKey(f.id),
@@ -156,29 +184,29 @@ export function AddPaymentFormFields({
   }, [preFilledPlacement, setValue]);
 
   const cedantOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const f of facultatives) {
-      if (f.status !== 'CANCELLED') seen.set(f.cedant.id, f.cedant.name);
-    }
-    return Array.from(seen.entries())
-      .map(([id, name]) => ({ value: id, label: name }))
+    return cedants
+      .map((cedant) => ({ value: cedant.id, label: cedant.name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [facultatives]);
+  }, [cedants]);
 
-  const businessOptions = useMemo(
-    () =>
-      facultatives
-        .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
-        .map((f) => {
-          const parts = [f.classOfBusiness, f.title].filter(Boolean);
-          return {
-            value: f.id,
-            label: `${displayPolicyNumber(f.policyNumber)} · ${f.title}`,
-            sublabel: parts.join(' · '),
-          };
-        }),
-    [facultatives, cedantId],
-  );
+  const businessOptions = useMemo(() => {
+    const options = new Map<string, Facultative>();
+    selectedFacultatives.forEach((f) => options.set(f.id, f));
+    placementOptions
+      .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
+      .forEach((f) => options.set(f.id, f));
+
+    return Array.from(options.values())
+      .map((f) => {
+        const parts = [f.classOfBusiness, f.title].filter(Boolean);
+        return {
+          value: f.id,
+          label: `${displayPolicyNumber(f.policyNumber)} · ${f.title}`,
+          sublabel: parts.join(' · '),
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [placementOptions, selectedFacultatives, cedantId]);
 
   const totalExpected = useMemo(() => {
     return selectedFacultatives.reduce((sum, f) => {
@@ -235,8 +263,14 @@ export function AddPaymentFormFields({
         totalExpected > 0 ? netPremium / totalExpected : 1 / selectedFacultatives.length;
       newAllocations[f.id] = (proportion * parsedAmount).toFixed(2);
     });
-    setValue('allocations', newAllocations);
+
+    const current = allocations ?? {};
+    const unchanged =
+      Object.keys(newAllocations).length === Object.keys(current).length &&
+      Object.entries(newAllocations).every(([id, value]) => current[id] === value);
+    if (!unchanged) setValue('allocations', newAllocations);
   }, [
+    allocations,
     parsedAmount,
     positionByPlacementId,
     selectedFacultatives,
@@ -268,9 +302,6 @@ export function AddPaymentFormFields({
       </p>
     ) : null;
 
-  // Whether payment has already been made (and how much is left) for each selected business —
-  // shown as soon as a business is picked, ahead of everything else, so it's answered before
-  // the user has to fill in an amount at all.
   const businessPaymentSummary = selectedFacultatives.length > 0 && (
     <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
       {selectedFacultatives.map((f) => {
@@ -299,6 +330,61 @@ export function AddPaymentFormFields({
       })}
     </div>
   );
+
+  const preFilledPosition = preFilledPlacement
+    ? positionByPlacementId.get(preFilledPlacement.id)
+    : undefined;
+  const preFilledOutstanding = preFilledPosition?.cedant.outstanding ?? 0;
+  const preFilledStatus: CedantPaymentStatus | null = preFilledPlacement
+    ? cedantPaymentStatusFromPosition(
+        preFilledPosition?.cedant.currentObligation ?? 0,
+        preFilledPosition?.cedant.netSettled ?? 0,
+        preFilledOutstanding,
+        pendingPremiumReceived(
+          preFilledPlacement ? (paymentsByPlacementId.get(preFilledPlacement.id) ?? []) : [],
+        ),
+      )
+    : null;
+
+  const preFilledSummary =
+    preFilledPlacement &&
+    preFilledStatus &&
+    (() => {
+      const cur = preFilledPosition?.currency ?? preFilledPlacement.currency ?? '';
+
+      const rows = [
+        { label: 'Cedant', value: preFilledPlacement.cedant.name, hint: null as React.ReactNode },
+        {
+          label: 'Business',
+          value: displayPolicyNumber(preFilledPlacement.policyNumber),
+          hint: preFilledPlacement.title || null,
+        },
+        {
+          label: 'Outstanding',
+          value:
+            preFilledOutstanding > 0.0001 ? `${cur} ${fmtNum(preFilledOutstanding)}` : 'Fully paid',
+          hint: <span className={PAYMENT_STATUS_CLASS[preFilledStatus]}>{preFilledStatus}</span>,
+        },
+      ];
+
+      return (
+        <dl className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+          {rows.map((row) => (
+            <div key={row.label} className="flex items-start justify-between gap-3">
+              <dt className="shrink-0 pt-0.5 text-xs font-medium text-gray-500">{row.label}</dt>
+              <dd className="min-w-0 text-right">
+                <span className="block truncate text-sm font-medium text-gray-900">
+                  {row.value}
+                </span>
+                {row.hint && (
+                  <span className="block truncate text-xs text-gray-400">{row.hint}</span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      );
+    })();
 
   const allocationSection = showAllocation && (
     <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
@@ -380,6 +466,17 @@ export function AddPaymentFormFields({
     />
   );
 
+  const notesField = (
+    <FormField
+      label="Notes"
+      type="textarea"
+      rows={3}
+      registration={register('notes')}
+      placeholder="Add any notes about this payment…"
+      error={errors.notes}
+    />
+  );
+
   const chequeFields = paymentType === 'cheque' && (
     <>
       <div className="grid grid-cols-5 gap-4">
@@ -455,6 +552,7 @@ export function AddPaymentFormFields({
         {totalExpectedHint}
       </div>
       {allocationSection}
+      {notesField}
     </>
   );
 
@@ -521,6 +619,7 @@ export function AddPaymentFormFields({
         {totalExpectedHint}
       </div>
       {allocationSection}
+      {notesField}
     </>
   );
 
@@ -554,9 +653,18 @@ export function AddPaymentFormFields({
           options={businessOptions}
           value={field.value}
           onChange={(vals) => {
+            setPlacementById((current) => {
+              const next = new Map(current);
+              vals.forEach((id) => {
+                const placement = availablePlacementById.get(id);
+                if (placement) next.set(id, placement);
+              });
+              return next;
+            });
             field.onChange(vals);
             onPlacementsChange?.(vals);
           }}
+          onQueryChange={setBusinessQuery}
           error={errors.businessIds?.message}
         />
       )}
@@ -566,12 +674,7 @@ export function AddPaymentFormFields({
   if (preFilledPlacement) {
     return (
       <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
-        <ReadOnlyField label="Cedant" value={preFilledPlacement.cedant.name} />
-        <ReadOnlyField
-          label="Business"
-          value={displayPolicyNumber(preFilledPlacement.policyNumber)}
-        />
-        {businessPaymentSummary}
+        {preFilledSummary}
         {paymentTypeField}
         {chequeFields}
         {bankFields}

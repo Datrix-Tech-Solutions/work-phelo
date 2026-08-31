@@ -38,6 +38,10 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
         name: data.name,
         isoCode: data.isoCode,
         symbol: data.symbol || undefined,
+        exchangeRateToBase: 1,
+        isBaseCurrency: false,
+        isActive: true,
+        displayOrder: 0,
       });
       toast.success('Currency created successfully');
       handleClose();

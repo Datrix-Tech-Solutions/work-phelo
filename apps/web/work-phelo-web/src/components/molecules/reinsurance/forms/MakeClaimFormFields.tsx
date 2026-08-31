@@ -11,8 +11,19 @@ import { useCurrencyOptions, usePlacementEffectiveView, usePremiumPaymentContext
 import { Facultative } from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
+/** Free-form classification tag. Front-end only for now — the back-end doesn't accept or
+ * persist it yet, so it's not sent in the create/update payload. Wire it into the claim
+ * DTO + payload once the field exists server-side. */
+export type ClaimTag = 'pending' | 'finalized';
+
+export const CLAIM_TAG_OPTIONS: { value: ClaimTag; label: string }[] = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'finalized', label: 'Finalized' },
+];
+
 export interface MakeClaimFormValues {
   claimNumber: string;
+  claimTag: ClaimTag;
   estimatedLossAmount: string;
   finalLossAmount: string;
   occurrenceDate: string;
@@ -27,6 +38,7 @@ export interface MakeClaimFormValues {
 
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
   claimNumber: '',
+  claimTag: 'pending',
   estimatedLossAmount: '',
   finalLossAmount: '',
   occurrenceDate: '',
@@ -77,16 +89,13 @@ export function MakeClaimFormFields({
   const claimCurrency = useWatch({ control, name: 'currency' });
   const rateValue = useWatch({ control, name: 'rate' });
   const showRate = !!claimCurrency && !!placement.currency && claimCurrency !== placement.currency;
-  // Amounts are entered in `claimCurrency` but persisted (and compared against sum insured)
-  // in the placement's currency, so validation needs to convert by the same rate submit does.
+
   const conversionRate = showRate ? parseFloat(rateValue) || 1 : 1;
 
   useEffect(() => {
     if (!showRate) setValue('rate', '');
   }, [showRate, setValue]);
 
-  // Premium payment context — same authoritative figures the Premiums page and placement
-  // Details page use, so this agrees with what's shown everywhere else.
   const { statusText: premiumPaymentStatusText, latestPaymentDate } = usePremiumPaymentContext(
     placement.id,
   );
@@ -132,6 +141,23 @@ export function MakeClaimFormFields({
         {...register('claimNumber', { required: 'Claim number is required' })}
         error={errors.claimNumber?.message}
       />
+      {/* Claim state (Pending / Finalized) — only on the Add Claim form, not Add Notification
+          or Edit. The "Move to Open" modal has its own copy of this field. */}
+      {mode === 'actual' && !isEditing && (
+        <Controller
+          name="claimTag"
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              label="Claim state"
+              placeholder="Select tag…"
+              options={CLAIM_TAG_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
+      )}
       <div className="flex flex-col gap-1 text-sm">
         <p className="text-gray-700">{premiumPaymentStatusText}</p>
         {latestPaymentDateText && (
@@ -242,7 +268,7 @@ export function MakeClaimFormFields({
           }}
           render={({ field }) => (
             <NumberField
-              label="Actual Claim Amount"
+              label="100% Claim Amount"
               value={field.value ? Number(field.value) : 0}
               onChange={(n) => field.onChange(String(n))}
               error={errors.finalLossAmount?.message}
@@ -268,7 +294,7 @@ export function MakeClaimFormFields({
           }}
           render={({ field }) => (
             <NumberField
-              label="Claim Amount"
+              label="100% Estimated Claim Amount"
               value={field.value ? Number(field.value) : 0}
               onChange={(n) => field.onChange(String(n))}
               error={errors.estimatedLossAmount?.message}

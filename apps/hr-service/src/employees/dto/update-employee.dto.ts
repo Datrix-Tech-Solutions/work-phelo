@@ -134,6 +134,14 @@ export class UpdateEmployeeDto {
   managerId?: string;
 
   @ApiPropertyOptional({
+    description: 'Updated official hire date',
+    example: '2026-01-05',
+  })
+  @IsOptional()
+  @IsDateString()
+  hireDate?: string;
+
+  @ApiPropertyOptional({
     description: 'Probation end date',
     example: '2026-07-01',
   })

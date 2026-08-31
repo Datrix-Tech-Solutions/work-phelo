@@ -38,6 +38,8 @@ interface DataTableProps<T extends { id: string | number }> {
   onFilter?: (value: string) => void;
   onExport?: () => void;
   extraFilters?: React.ReactNode;
+  /** Render extraFilters before the search input instead of after (default order is search, then extraFilters). */
+  searchAfterFilters?: boolean;
   secondaryButton?: {
     color?: string;
     label: string;
@@ -55,6 +57,9 @@ interface DataTableProps<T extends { id: string | number }> {
   }[];
   actionButton?: { label: string; onClick: () => void; disabled?: boolean };
   rowActions?: (row: T) => RowAction[];
+  /** When a row has exactly one action, it renders as a standalone inline button by default.
+   *  Set false to always render the ⋯ menu instead, even for a single action. */
+  singleActionAsButton?: boolean;
   onRowClick?: (row: T) => void;
   currentPage: number;
   totalPages: number;
@@ -187,10 +192,12 @@ export function DataTable<T extends { id: string | number }>({
   onFilter,
   onExport,
   extraFilters,
+  searchAfterFilters = false,
   secondaryButton,
   secondaryButtons,
   actionButton,
   rowActions,
+  singleActionAsButton = true,
   onRowClick,
   currentPage,
   totalPages,
@@ -213,7 +220,7 @@ export function DataTable<T extends { id: string | number }>({
       {hasToolbar && (
         <div className={cardClass('px-4 py-2 shrink-0')}>
           <div className="flex items-center gap-3 flex-wrap">
-            {onSearch && (
+            {!searchAfterFilters && onSearch && (
               <div className="relative flex-1 min-w-52 max-w-sm">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 w-5 h-5" />
                 <input
@@ -227,6 +234,19 @@ export function DataTable<T extends { id: string | number }>({
             )}
 
             {extraFilters}
+
+            {searchAfterFilters && onSearch && (
+              <div className="relative flex-1 min-w-52 max-w-sm">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={searchValue ?? undefined}
+                  onChange={(e) => onSearch(e.target.value)}
+                  className={inputClass(undefined, 'pl-9 pr-4 py-2')}
+                />
+              </div>
+            )}
 
             {filterOptions && onFilter && (
               <div className="relative">
@@ -416,7 +436,7 @@ export function DataTable<T extends { id: string | number }>({
                         (() => {
                           const actions = rowActions(row);
                           if (actions.length === 0) return null;
-                          if (actions.length === 1) {
+                          if (actions.length === 1 && singleActionAsButton) {
                             const action = actions[0];
                             return (
                               <div className="flex justify-center">

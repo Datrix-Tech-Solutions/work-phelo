@@ -30,9 +30,11 @@ import {
   ValidateEndorsementParticipantResponse,
   ForceCloseEndorsementResponse,
   PlacementDocument,
+  FacultativeRowStateResponse,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
+const WORKLIST_BASE = '/operations/reinsurance/worklists';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
 const ARCHIVED_FACULTATIVES_KEY = ['reinsurance', 'placements', 'archived'] as const;
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
@@ -43,6 +45,50 @@ const placementNotesKey = (placementId: string) =>
 const placementLockStatusKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'lock-status'] as const;
 const paymentEligibleFacultativesKey = [...FACULTATIVES_KEY, 'payment-eligible'] as const;
+const facultativeRowStateKey = (placementIds: string[]) =>
+  ['reinsurance', 'worklists', 'facultative-row-state', [...new Set(placementIds)].sort()] as const;
+
+async function invalidateFacultativeLists(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: [...FACULTATIVES_KEY, 'page'],
+    }),
+    queryClient.invalidateQueries({
+      queryKey: FACULTATIVES_KEY,
+      exact: true,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ARCHIVED_FACULTATIVES_KEY,
+    }),
+  ]);
+}
+const PLACEMENT_PAGE_LIMIT = 10;
+const PLACEMENT_SELECTOR_LIMIT = 25;
+
+export interface FacultativesPageMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedFacultatives {
+  items: Facultative[];
+  meta: FacultativesPageMeta;
+}
+
+export interface FacultativesPageParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: FacultativeStatus;
+  statuses?: FacultativeStatus[];
+  placementType?: 'FACULTATIVE';
+  cedantId?: string;
+  riskTypeId?: string;
+  classOfBusiness?: string;
+  archived?: boolean;
+}
 
 export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
 export const placementClosingsKey = (placementId: string) =>
@@ -78,6 +124,91 @@ function extractList(data: unknown): Facultative[] {
       (data as { items?: unknown[]; data?: unknown[] })?.data ??
       []);
   return raw.map(transformPlacement);
+}
+
+function normalizePageParams(params: FacultativesPageParams = {}) {
+  return {
+    page: params.page ?? 1,
+    limit: params.limit ?? PLACEMENT_PAGE_LIMIT,
+    ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+    ...(params.status ? { status: params.status } : {}),
+    ...(params.statuses?.length ? { statuses: params.statuses.join(',') } : {}),
+    ...(params.placementType ? { placementType: params.placementType } : {}),
+    ...(params.cedantId ? { cedantId: params.cedantId } : {}),
+    ...(params.riskTypeId ? { riskTypeId: params.riskTypeId } : {}),
+    ...(params.classOfBusiness?.trim() ? { classOfBusiness: params.classOfBusiness.trim() } : {}),
+    ...(typeof params.archived === 'boolean' ? { archived: params.archived } : {}),
+  };
+}
+
+function extractPage(data: unknown, fallbackParams: ReturnType<typeof normalizePageParams>) {
+  const items = extractList(data);
+  const rawMeta = (data as { meta?: Partial<FacultativesPageMeta> })?.meta;
+  const meta: FacultativesPageMeta = {
+    page: rawMeta?.page ?? fallbackParams.page,
+    limit: rawMeta?.limit ?? fallbackParams.limit,
+    total: rawMeta?.total ?? items.length,
+    totalPages: rawMeta?.totalPages ?? Math.max(1, Math.ceil(items.length / fallbackParams.limit)),
+  };
+
+  return { items, meta };
+}
+
+export function useFacultativesPage(
+  params: FacultativesPageParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  const normalizedParams = normalizePageParams(params);
+
+  return useQuery({
+    queryKey: [...FACULTATIVES_KEY, 'page', normalizedParams],
+    queryFn: async () => {
+      const res = await api.get(BASE, { params: normalizedParams });
+      return extractPage(res.data, normalizedParams);
+    },
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useFacultativeRowState(
+  placementIds: string[],
+  options: { enabled?: boolean } = {},
+) {
+  const uniquePlacementIds = useMemo(
+    () => [...new Set(placementIds)].filter(Boolean),
+    [placementIds],
+  );
+
+  return useQuery({
+    queryKey: facultativeRowStateKey(uniquePlacementIds),
+    queryFn: async () => {
+      const res = await api.get<FacultativeRowStateResponse>(
+        `${WORKLIST_BASE}/facultative-row-state`,
+        {
+          params: { placementIds: uniquePlacementIds.join(',') },
+        },
+      );
+      return res.data;
+    },
+    enabled:
+      (options.enabled ?? true) &&
+      uniquePlacementIds.length > 0 &&
+      uniquePlacementIds.length <= 100,
+  });
+}
+
+export function useFacultativeSearch(
+  params: Omit<FacultativesPageParams, 'page' | 'limit'> = {},
+  options: { enabled?: boolean; limit?: number } = {},
+) {
+  return useFacultativesPage(
+    {
+      ...params,
+      page: 1,
+      limit: options.limit ?? PLACEMENT_SELECTOR_LIMIT,
+    },
+    { enabled: options.enabled },
+  );
 }
 
 export function useFacultatives() {
@@ -136,13 +267,14 @@ export function useNextFacultativeReference(enabled = true) {
 
 export function useCreateFacultative() {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (payload: CreateFacultativePayload) => {
       const res = await api.post<Facultative>(BASE, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
+    onSuccess: async () => {
+      await invalidateFacultativeLists(queryClient);
     },
   });
 }
@@ -154,8 +286,8 @@ export function useUpdateFacultative() {
       const res = await api.patch<Facultative>(`${BASE}/${id}`, payload);
       return res.data;
     },
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
+    onSuccess: async (_, { id }) => {
+      await invalidateFacultativeLists(queryClient);
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, id] });
       queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey });
       queryClient.invalidateQueries({ queryKey: placementLockStatusKey(id) });
@@ -172,9 +304,11 @@ export function useUpdateFacultativeStatus(placementId: string) {
       const res = await api.patch(`${BASE}/${placementId}/status`, { status, note });
       return transformPlacement(res.data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
-      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    onSuccess: async () => {
+      await invalidateFacultativeLists(queryClient);
+      queryClient.invalidateQueries({
+        queryKey: [...FACULTATIVES_KEY, placementId],
+      });
     },
   });
 }
@@ -187,9 +321,8 @@ export function useDeleteFacultative() {
         data: archiveReason ? { archiveReason } : undefined,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
-      queryClient.invalidateQueries({ queryKey: ARCHIVED_FACULTATIVES_KEY });
+    onSuccess: async () => {
+      await invalidateFacultativeLists(queryClient);
     },
   });
 }
@@ -201,10 +334,11 @@ export function useRestoreFacultative() {
       const res = await api.post<Facultative>(`${BASE}/${id}/restore`);
       return transformPlacement(res.data);
     },
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
-      queryClient.invalidateQueries({ queryKey: ARCHIVED_FACULTATIVES_KEY });
-      queryClient.invalidateQueries({ queryKey: placementQueryKey(id) });
+    onSuccess: async (_, id) => {
+      await invalidateFacultativeLists(queryClient);
+      queryClient.invalidateQueries({
+        queryKey: placementQueryKey(id),
+      });
     },
   });
 }
@@ -216,9 +350,11 @@ export function useAddParticipant(placementId: string) {
       const res = await api.post(`${BASE}/${placementId}/participants`, payload);
       return transformPlacement(res.data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
-      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    onSuccess: async () => {
+      await invalidateFacultativeLists(queryClient);
+      queryClient.invalidateQueries({
+        queryKey: [...FACULTATIVES_KEY, placementId],
+      });
     },
   });
 }
@@ -253,10 +389,13 @@ export function useUpdateParticipant(placementId: string) {
       const res = await api.patch(`${BASE}/${placementId}/participants/${participantId}`, payload);
       return transformPlacement(res.data);
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
+    onSuccess: async (_data, variables) => {
+      await invalidateFacultativeLists(queryClient);
+
       if (!variables.suppressInvalidation) {
-        queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+        queryClient.invalidateQueries({
+          queryKey: placementQueryKey(placementId),
+        });
       }
     },
   });
@@ -277,10 +416,13 @@ export function useUpdateParticipantStatus(placementId: string) {
       );
       return transformPlacement(res.data);
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
+    onSuccess: async (_data, variables) => {
+      await invalidateFacultativeLists(queryClient);
+
       if (!variables.suppressInvalidation) {
-        queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+        queryClient.invalidateQueries({
+          queryKey: placementQueryKey(placementId),
+        });
       }
     },
   });
@@ -293,9 +435,11 @@ export function useDeleteParticipant(placementId: string) {
       const res = await api.delete(`${BASE}/${placementId}/participants/${participantId}`);
       return transformPlacement(res.data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
-      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    onSuccess: async () => {
+      await invalidateFacultativeLists(queryClient);
+      queryClient.invalidateQueries({
+        queryKey: [...FACULTATIVES_KEY, placementId],
+      });
     },
   });
 }
@@ -449,8 +593,8 @@ export function useAcceptAndConfirmPlacementParticipant(placementId: string) {
       );
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
+    onSuccess: async () => {
+      await invalidateFacultativeLists(queryClient);
       queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
@@ -504,7 +648,7 @@ function invalidateEndorsementWorkflow(
   }
 }
 
-export function usePlacementEndorsements(placementId: string) {
+export function usePlacementEndorsements(placementId: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: endorsementKey(placementId),
     queryFn: async () => {
@@ -512,7 +656,7 @@ export function usePlacementEndorsements(placementId: string) {
       const raw = res.data?.items ?? res.data ?? [];
       return raw as PlacementEndorsement[];
     },
-    enabled: !!placementId,
+    enabled: !!placementId && (options.enabled ?? true),
   });
 }
 

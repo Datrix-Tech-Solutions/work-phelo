@@ -84,6 +84,7 @@ type DebitClosingSnapshot = {
   grossPremium: Prisma.Decimal | null;
   commissionAmount: Prisma.Decimal | null;
   currency: string | null;
+  isForeignReinsurer: boolean;
 };
 
 type EndorsementDebitClosingSnapshot = {
@@ -91,6 +92,7 @@ type EndorsementDebitClosingSnapshot = {
   premiumSnapshot: Prisma.Decimal;
   commissionAmount: Prisma.Decimal | null;
   currency: string | null;
+  isForeignReinsurer: boolean;
 };
 
 type CurrentEffectiveDebitNotePreview = EffectiveDebitNotePreviewResponseDto & {
@@ -181,6 +183,15 @@ export class PlacementNotesService {
           grossPremium: true,
           commissionAmount: true,
           currency: true,
+          participant: {
+            select: {
+              counterparty: {
+                select: {
+                  addresses: { select: { country: true, isPrimary: true } },
+                },
+              },
+            },
+          },
         },
       });
       if (closings.length === 0) {
@@ -200,7 +211,12 @@ export class PlacementNotesService {
         tx,
         user.tenantId,
         placement.currency,
-        closings,
+        closings.map((closing) => ({
+          ...closing,
+          isForeignReinsurer: this.isForeignReinsurer(
+            closing.participant?.counterparty?.addresses,
+          ),
+        })),
         noteDate,
       );
 
@@ -251,6 +267,7 @@ export class PlacementNotesService {
                 select: {
                   id: true,
                   type: true,
+                  addresses: { select: { country: true, isPrimary: true } },
                 },
               },
             },
@@ -282,6 +299,7 @@ export class PlacementNotesService {
         user.tenantId,
         closing,
         noteDate,
+        this.isForeignReinsurer(closing.participant.counterparty.addresses),
       );
 
       return tx.placementNote.create({
@@ -354,6 +372,15 @@ export class PlacementNotesService {
           premiumSnapshot: true,
           commissionAmount: true,
           currency: true,
+          endorsementParticipant: {
+            select: {
+              counterparty: {
+                select: {
+                  addresses: { select: { country: true, isPrimary: true } },
+                },
+              },
+            },
+          },
         },
       });
       if (closings.length === 0) {
@@ -372,7 +399,12 @@ export class PlacementNotesService {
       const snapshot = await this.endorsementDebitSnapshot(
         tx,
         user.tenantId,
-        closings,
+        closings.map((closing) => ({
+          ...closing,
+          isForeignReinsurer: this.isForeignReinsurer(
+            closing.endorsementParticipant?.counterparty?.addresses,
+          ),
+        })),
         noteDate,
       );
 
@@ -579,6 +611,7 @@ export class PlacementNotesService {
                 select: {
                   id: true,
                   type: true,
+                  addresses: { select: { country: true, isPrimary: true } },
                 },
               },
             },
@@ -611,6 +644,9 @@ export class PlacementNotesService {
         user.tenantId,
         closing,
         noteDate,
+        this.isForeignReinsurer(
+          closing.endorsementParticipant.counterparty.addresses,
+        ),
       );
 
       return tx.placementNote.create({
@@ -1182,16 +1218,19 @@ export class PlacementNotesService {
     // rate that the summed commissionAmount actually represents against grossAmount.
     const commissionPercent =
       grossAmount > 0 ? (commissionAmount / grossAmount) * 100 : null;
-    const chargeResult = await this.chargeSettings.calculateCharges(
-      tenantId,
-      {
-        currency,
-        grossAmount,
-        commissionAmount,
-        brokerageAmount: 0,
-        effectiveAt,
-      },
+    // NIC Levy / Withholding Tax only apply to the share ceded to non-resident
+    // reinsurers, so the pool is split by residency and the levies computed on
+    // the foreign sub-pool only.
+    const chargeResult = await this.pooledChargeResult(
       tx,
+      tenantId,
+      currency,
+      effectiveAt,
+      closings.map((closing) => ({
+        grossAmount: this.toNumber(closing.grossPremium),
+        commissionAmount: this.toNumber(closing.commissionAmount),
+        isForeignReinsurer: closing.isForeignReinsurer,
+      })),
     );
     const legacyCharges = this.legacyChargeFields(chargeResult);
 
@@ -1221,6 +1260,7 @@ export class PlacementNotesService {
       netPremium: Prisma.Decimal | null;
     },
     effectiveAt: Date,
+    isForeignReinsurer: boolean,
   ) {
     if (!closing.currency) {
       throw new BadRequestException(
@@ -1239,6 +1279,7 @@ export class PlacementNotesService {
         commissionAmount: commissionAmount ?? 0,
         brokerageAmount: brokerageAmount ?? 0,
         effectiveAt,
+        isForeignReinsurer,
       },
       tx,
     );
@@ -1298,16 +1339,18 @@ export class PlacementNotesService {
     // from the summed amounts rather than reusing a single closing's percent verbatim.
     const commissionPercent =
       grossAmount > 0 ? (commissionAmount / grossAmount) * 100 : null;
-    const chargeResult = await this.chargeSettings.calculateCharges(
-      tenantId,
-      {
-        currency,
-        grossAmount,
-        commissionAmount,
-        brokerageAmount: 0,
-        effectiveAt,
-      },
+    // As with debitSnapshot, the foreign-cession levies apply only to the share
+    // ceded to non-resident reinsurers.
+    const chargeResult = await this.pooledChargeResult(
       tx,
+      tenantId,
+      currency,
+      effectiveAt,
+      closings.map((closing) => ({
+        grossAmount: this.toNumber(closing.premiumSnapshot),
+        commissionAmount: this.toNumber(closing.commissionAmount),
+        isForeignReinsurer: closing.isForeignReinsurer,
+      })),
     );
     const legacyCharges = this.legacyChargeFields(chargeResult);
 
@@ -1337,6 +1380,7 @@ export class PlacementNotesService {
       netPremium: Prisma.Decimal | null;
     },
     effectiveAt: Date,
+    isForeignReinsurer: boolean,
   ) {
     if (!closing.currency) {
       throw new BadRequestException(
@@ -1355,6 +1399,7 @@ export class PlacementNotesService {
         commissionAmount: commissionAmount ?? 0,
         brokerageAmount: brokerageAmount ?? 0,
         effectiveAt,
+        isForeignReinsurer,
       },
       tx,
     );
@@ -1374,6 +1419,114 @@ export class PlacementNotesService {
           : chargeResult.netAmount,
       appliedCharges: this.appliedChargesSnapshot(chargeResult),
     };
+  }
+
+  /**
+   * A reinsurer counts as foreign for levy purposes when its primary address
+   * (or first address, if none is flagged primary) is in a country other than
+   * Ghana. Matches PlacementsService.isForeignCedant.
+   */
+  private isForeignReinsurer(
+    addresses: { country: string; isPrimary: boolean }[] | null | undefined,
+  ): boolean {
+    if (!addresses?.length) return false;
+    const primary =
+      addresses.find((address) => address.isPrimary) ?? addresses[0];
+    return !!primary && primary.country.toUpperCase() !== 'GH';
+  }
+
+  /**
+   * Runs the charge engine separately for the foreign-ceded and resident-ceded
+   * portions of a pooled note, then merges the results. NIC Levy / Withholding
+   * Tax are computed only against the foreign sub-pool; every other figure is the
+   * sum across both.
+   */
+  private async pooledChargeResult(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    currency: string,
+    effectiveAt: Date,
+    rows: {
+      grossAmount: number;
+      commissionAmount: number;
+      isForeignReinsurer: boolean;
+    }[],
+  ): Promise<ChargeCalculationResult> {
+    const groups = [true, false]
+      .map((isForeignReinsurer) => ({
+        isForeignReinsurer,
+        rows: rows.filter(
+          (row) => row.isForeignReinsurer === isForeignReinsurer,
+        ),
+      }))
+      .filter((group) => group.rows.length > 0);
+
+    const results: ChargeCalculationResult[] = [];
+    for (const group of groups) {
+      results.push(
+        await this.chargeSettings.calculateCharges(
+          tenantId,
+          {
+            currency,
+            grossAmount: group.rows.reduce(
+              (total, row) => total + row.grossAmount,
+              0,
+            ),
+            commissionAmount: group.rows.reduce(
+              (total, row) => total + row.commissionAmount,
+              0,
+            ),
+            brokerageAmount: 0,
+            effectiveAt,
+            isForeignReinsurer: group.isForeignReinsurer,
+          },
+          tx,
+        ),
+      );
+    }
+
+    return this.combineChargeResults(results, currency, effectiveAt);
+  }
+
+  private combineChargeResults(
+    results: ChargeCalculationResult[],
+    fallbackCurrency: string,
+    fallbackEffectiveAt: Date,
+  ): ChargeCalculationResult {
+    if (results.length === 1) return results[0];
+    const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+    return results.reduce<ChargeCalculationResult>(
+      (acc, result) => ({
+        currency: acc.currency,
+        effectiveAt: acc.effectiveAt,
+        grossAmount: round2(acc.grossAmount + result.grossAmount),
+        commissionAmount: round2(
+          acc.commissionAmount + result.commissionAmount,
+        ),
+        brokerageAmount: round2(acc.brokerageAmount + result.brokerageAmount),
+        netBeforeCharges: round2(
+          acc.netBeforeCharges + result.netBeforeCharges,
+        ),
+        additions: round2(acc.additions + result.additions),
+        deductions: round2(acc.deductions + result.deductions),
+        netAmount: round2(acc.netAmount + result.netAmount),
+        charges: [...acc.charges, ...result.charges],
+      }),
+      {
+        currency: results[0]?.currency ?? fallbackCurrency.toUpperCase(),
+        effectiveAt:
+          results[0]?.effectiveAt ?? fallbackEffectiveAt.toISOString(),
+        grossAmount: 0,
+        commissionAmount: 0,
+        brokerageAmount: 0,
+        netBeforeCharges: 0,
+        additions: 0,
+        deductions: 0,
+        netAmount: 0,
+        charges: [],
+      },
+    );
   }
 
   private legacyChargeFields(result: ChargeCalculationResult) {

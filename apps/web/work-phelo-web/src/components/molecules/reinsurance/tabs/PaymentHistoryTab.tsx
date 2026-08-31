@@ -2,11 +2,19 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
+import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
+import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { usePlacementPayments, useReversePayment } from '@/hooks';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
+import { DocumentPrintLayout } from '@/components/organisms/reinsurance/documents/DocumentPrintLayout';
+import { DisbursementAdviceContent } from '@/components/molecules/documents/content/DisbursementAdviceContent';
+import { downloadReceiptsZip } from '@/lib/reinsurance/downloadReceiptsZip';
+import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -34,9 +42,20 @@ function fmtType(type: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const BULK_RECEIPT_ROOT_PREFIX = 'bulk-disbursement-receipt-';
+
+function receiptFileName(payment: PlacementPayment): string {
+  const party = payment.counterparty.name
+    .trim()
+    .replace(/[^\w-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const date = payment.paymentDate.slice(0, 10);
+  return `disbursement-advice-${party || 'reinsurer'}-${date}`;
+}
+
 const STATUS_LABEL: Record<string, string> = {
   RECORDED: 'Recorded',
-  BANK_CONFIRMED: 'Bank Confirmed',
+  BANK_CONFIRMED: 'Disbursed',
   FAILED: 'Failed',
   CANCELLED: 'Cancelled',
   REVERSED: 'Reversed',
@@ -56,22 +75,55 @@ interface PaymentHistoryTabProps {
 }
 
 export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabProps) {
-  const { data: payments = [], isLoading } = usePlacementPayments(placementId);
+  const { data: allPayments = [], isLoading } = usePlacementPayments(placementId);
+  // The reversal entry itself (the negative-amount offsetting record) is bookkeeping noise
+  // here — the original payment stays visible, marked REVERSED, for audit purposes.
+  const payments = allPayments.filter((p) => !p.reversalOfPaymentId);
   const reversePayment = useReversePayment();
   const addToast = useToastStore((s) => s.addToast);
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
+  const [reverseTarget, setReverseTarget] = useState<PlacementPayment | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
 
-  const handleReverse = async (payment: PlacementPayment) => {
-    if (
-      !window.confirm(
-        'Reverse this recorded transaction? The original payment will remain in history, be marked reversed, and a reversal entry will be created.',
-      )
-    ) {
-      return;
-    }
+  // "Download all receipts" only covers reinsurer disbursements that have been
+  // bank-confirmed ("Disbursed").
+  const disbursementReceipts = payments.filter(
+    (p) => p.type === 'REINSURER_DISBURSEMENT' && p.status === 'BANK_CONFIRMED',
+  );
+
+  const isDownloading = downloadProgress !== null;
+
+  const handleDownloadAllReceipts = async () => {
+    if (disbursementReceipts.length === 0 || isDownloading) return;
+    setDownloadProgress({ done: 0, total: disbursementReceipts.length });
+    // Let React mount the hidden print roots before we look them up.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     try {
-      await reversePayment.mutateAsync({ placementId, paymentId: payment.id });
+      const policyLabel = displayPolicyNumber(placement.policyNumber) || placement.reference;
+      await downloadReceiptsZip(
+        disbursementReceipts.map((p) => ({
+          rootId: `${BULK_RECEIPT_ROOT_PREFIX}${p.id}`,
+          fileName: receiptFileName(p),
+          title: `Disbursement Advice - ${policyLabel}`,
+        })),
+        `disbursement-receipts-${policyLabel}`,
+        (done, total) => setDownloadProgress({ done, total }),
+      );
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleReverse = async () => {
+    if (!reverseTarget) return;
+    try {
+      await reversePayment.mutateAsync({ placementId, paymentId: reverseTarget.id });
       addToast({ message: 'Payment reversed successfully', type: 'success' });
+      setReverseTarget(null);
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
     }
@@ -103,29 +155,25 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       width: 'minmax(100px, 0.7fr)',
       render: (row) => <span className="font-semibold text-gray-700">{row.counterparty.name}</span>,
     },
-    // {
-    //   key: 'closing',
-    //   label: 'Closing',
-    //   width: '120px',
-    //   render: (row) => {
-    //     const label = row.endorsementClosing
-    //       ? `Endorsement · ${row.endorsementClosing.closingNumber}`
-    //       : row.closing
-    //         ? `Original · ${row.closing.closingNumber}`
-    //         : 'Placement-level';
-    //     return <span className="text-gray-700">{label}</span>;
-    //   },
-    // },
+
     {
       key: 'notes',
       label: 'Payment Details',
       width: 'minmax(120px, 1fr)',
-      render: (row) => (
-        <div className="flex flex-col">
-          <span className="text-gray-700">{row.notes || '—'}</span>
-          {row.reference && <span className="text-xs text-gray-400">{row.reference}</span>}
-        </div>
-      ),
+      render: (row) => {
+        const mainText = [
+          row.settlementMethod ? fmtType(row.settlementMethod) : null,
+          row.reference,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        return (
+          <div className="flex flex-col">
+            <span className="text-gray-700">{mainText || '—'}</span>
+            {row.notes && <span className="text-xs text-gray-400">{row.notes}</span>}
+          </div>
+        );
+      },
     },
     {
       key: 'amount',
@@ -153,11 +201,13 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       className: 'pr-6',
       render: (row) => (
         <div className="flex items-center gap-2">
-          <TableButton variant="blue" onClick={() => setReceiptTarget(row)}>
-            Reciept
-          </TableButton>
+          {row.status !== 'REVERSED' && (
+            <TableButton variant="blue" onClick={() => setReceiptTarget(row)}>
+              Reciept
+            </TableButton>
+          )}
           {canReversePayment(row) && (
-            <TableButton variant="red" onClick={() => handleReverse(row)}>
+            <TableButton variant="red" onClick={() => setReverseTarget(row)}>
               Reverse
             </TableButton>
           )}
@@ -176,6 +226,35 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
 
   return (
     <>
+      <div className="mb-3 flex flex-col items-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          icon={<Icons.Download className="h-4 w-4" />}
+          onClick={handleDownloadAllReceipts}
+          isLoading={isDownloading}
+          loadingText={
+            downloadProgress
+              ? `Preparing ${downloadProgress.done}/${downloadProgress.total}…`
+              : 'Preparing…'
+          }
+          disabled={disbursementReceipts.length === 0}
+        >
+          Download All Receipts
+        </Button>
+        {downloadProgress && (
+          <div className="w-full sm:w-72">
+            <ProgressBar
+              value={
+                downloadProgress.total > 0
+                  ? Math.round((downloadProgress.done / downloadProgress.total) * 100)
+                  : 0
+              }
+            />
+          </div>
+        )}
+      </div>
+
       <DataTable
         columns={COLUMNS}
         data={payments}
@@ -192,10 +271,48 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
           isOpen
           placement={placement}
           payment={receiptTarget}
-          onPrint={() => {}}
           onClose={() => setReceiptTarget(null)}
         />
       )}
+
+      {/* Hidden print roots for the bulk "Download all receipts" zip. */}
+      {isDownloading &&
+        disbursementReceipts.map((p) => (
+          <DocumentPrintLayout
+            key={p.id}
+            rootId={`${BULK_RECEIPT_ROOT_PREFIX}${p.id}`}
+            documentTitle="Disbursement Advice"
+            afterContent={null}
+          >
+            <DisbursementAdviceContent placement={placement} payment={p} />
+          </DocumentPrintLayout>
+        ))}
+
+      <Modal
+        isOpen={!!reverseTarget}
+        onClose={() => setReverseTarget(null)}
+        title="Reverse Payment?"
+        description="The original payment will remain in history, be marked reversed, and a reversal entry will be created."
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setReverseTarget(null)}
+              disabled={reversePayment.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={reversePayment.isPending}
+              loadingText="Reversing…"
+              onClick={handleReverse}
+            >
+              Reverse
+            </Button>
+          </div>
+        }
+      />
     </>
   );
 }

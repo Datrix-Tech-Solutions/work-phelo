@@ -80,6 +80,7 @@ import {
   Receipt,
   FileText,
   FileX2,
+  Bell,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -120,6 +121,7 @@ export const Icons = {
   // Time & Status
   Clock,
   PartyPopper,
+  Bell,
 
   // Business / HR
   Building2,

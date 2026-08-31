@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -11,7 +11,6 @@ import {
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
 import {
-  useFacultatives,
   useCreatePlacementPayment,
   useConfirmPlacementPaymentBank,
   useFacultativePlacement,
@@ -24,9 +23,13 @@ import { PaymentReceiptModal } from '@/components/organisms/reinsurance/document
 
 interface AddPaymentFormProps {
   placementId?: string;
+  /** Pre-selects this cedant when the panel opens (e.g. the table's active cedant filter).
+   *  Ignored when `placementId` is set, since that already locks a single cedant + business. */
+  defaultCedantId?: string;
   onPaymentRecorded?: (amount: number) => void;
   onAllocationsRecorded?: (allocations: Record<string, number>) => void;
   onPlacementsChange?: (placementIds: string[]) => void;
+  onPlacementsResolved?: (placements: Facultative[]) => void;
   defaultOpen?: boolean;
   /** Externally controlled open state — when provided, this component stops rendering its own
    *  "Receive Cedant Premium" trigger button and open/close is owned entirely by the caller
@@ -38,9 +41,11 @@ interface AddPaymentFormProps {
 
 export default function AddPaymentForm({
   placementId,
+  defaultCedantId,
   onPaymentRecorded,
   onAllocationsRecorded,
   onPlacementsChange,
+  onPlacementsResolved,
   defaultOpen = false,
   isOpen,
   onClose,
@@ -61,8 +66,8 @@ export default function AddPaymentForm({
     placement: Facultative;
   } | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [resolvedPlacements, setResolvedPlacements] = useState<Facultative[]>([]);
 
-  const { data: facultatives = [] } = useFacultatives();
   const { data: singlePlacement } = useFacultativePlacement(placementId ?? '');
   const createPayment = useCreatePlacementPayment();
   const confirmPaymentBank = useConfirmPlacementPaymentBank();
@@ -71,11 +76,28 @@ export default function AddPaymentForm({
   const form = useForm<AddPaymentFormValues>({ defaultValues: ADD_PAYMENT_DEFAULTS });
   const {
     handleSubmit,
+    setValue,
     formState: { isSubmitting },
   } = form;
 
+  // Pre-select the cedant every time the panel opens with one supplied (e.g. the table's
+  // active cedant filter) — skipped when placementId is set, since that already locks a
+  // single cedant + business via the read-only path in AddPaymentFormFields.
+  useEffect(() => {
+    if (panelOpen && !placementId && defaultCedantId) {
+      setValue('cedantId', defaultCedantId);
+      setValue('businessIds', []);
+    }
+  }, [panelOpen, placementId, defaultCedantId, setValue]);
+
   const onSubmit = async (values: AddPaymentFormValues) => {
-    const selectedFacs = facultatives.filter((f) => values.businessIds.includes(f.id));
+    const selectedFacs = placementId
+      ? singlePlacement
+        ? [singlePlacement]
+        : []
+      : values.businessIds
+          .map((id) => resolvedPlacements.find((placement) => placement.id === id))
+          .filter((placement): placement is Facultative => Boolean(placement));
     if (selectedFacs.length === 0) return;
 
     const parsedAmount = parseFloat(values.amount) || 0;
@@ -92,6 +114,7 @@ export default function AddPaymentForm({
     const reference = refParts.join(' — ') || undefined;
 
     const notesStr = values.paymentType === 'cheque' ? 'Cheque payment' : 'Bank transfer';
+    const notes = values.notes ? `${notesStr} — ${values.notes}` : notesStr;
 
     try {
       const positions = await Promise.all(
@@ -153,7 +176,7 @@ export default function AddPaymentForm({
           reference,
           settlementMethod: values.paymentType === 'cheque' ? 'CHEQUE' : 'BANK_TRANSFER',
           settlementCurrency: placementCurrency,
-          notes: notesStr,
+          notes,
         });
 
         // Confirm right after recording — everything the confirm endpoint needs
@@ -189,6 +212,8 @@ export default function AddPaymentForm({
 
       closePanel();
       form.reset(ADD_PAYMENT_DEFAULTS);
+      setResolvedPlacements([]);
+      onPlacementsResolved?.([]);
 
       // Offer receipt generation when placement context is available
       const firstPayment = results[0];
@@ -241,6 +266,10 @@ export default function AddPaymentForm({
             form={form}
             placementId={placementId}
             onPlacementsChange={onPlacementsChange}
+            onPlacementsResolved={(placements) => {
+              setResolvedPlacements(placements);
+              onPlacementsResolved?.(placements);
+            }}
           />
         </form>
       </SidePanel>
@@ -267,7 +296,6 @@ export default function AddPaymentForm({
           isOpen={receiptOpen}
           placement={receiptData.placement}
           payment={receiptData.payment}
-          onPrint={() => {}}
           onClose={() => {
             setReceiptOpen(false);
             setReceiptData(null);

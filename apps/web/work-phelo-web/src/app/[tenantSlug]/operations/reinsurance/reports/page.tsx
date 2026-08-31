@@ -11,11 +11,6 @@ import {
 } from 'lucide-react';
 import { ReportCard } from '@/components/molecules/shared/ReportCard';
 
-const ON_DEMAND_STATS = [
-  { label: 'Load', value: 'On demand' },
-  { label: 'Opens', value: 'Report page' },
-];
-
 export default function ReinsuranceReportsPage() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -37,7 +32,6 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-amber-600 text-amber-100"
           title="Facultative"
           description="Facultative placement activity and closings."
-          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/facultative`)}
         />
         <ReportCard
@@ -45,7 +39,6 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-blue-600 text-blue-100"
           title="Cedants"
           description="Business performance and placement activity by cedant."
-          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/cedants`)}
         />
 
@@ -54,7 +47,6 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-purple-600 text-purple-100"
           title="Reinsurers"
           description="Participation and revenue breakdown by reinsurer."
-          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/reinsurers`)}
         />
 
@@ -75,7 +67,6 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-cyan-600 text-cyan-100"
           title="Premiums"
           description="Premium and payment history across placements."
-          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/premiums`)}
         />
 
@@ -84,7 +75,6 @@ export default function ReinsuranceReportsPage() {
           iconClassName="bg-rose-600 text-rose-100"
           title="Claims"
           description="Claims activity and settlement history."
-          stats={ON_DEMAND_STATS}
           onClick={() => router.push(`${base}/claims`)}
         />
       </div>

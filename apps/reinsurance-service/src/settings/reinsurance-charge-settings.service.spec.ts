@@ -261,12 +261,43 @@ describe('ReinsuranceChargeSettingsService', () => {
       commissionAmount: 1000,
       brokerageAmount: 500,
       effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+      isForeignReinsurer: true,
     });
 
     expect(result.netBeforeCharges).toBe(8500);
     expect(result.deductions).toBe(85);
     expect(result.additions).toBe(25);
     expect(result.netAmount).toBe(8440);
+  });
+
+  it('excludes NIC Levy and Withholding Tax when the reinsurer is not foreign', async () => {
+    prisma.reinsuranceChargeConfiguration.findMany.mockResolvedValue([
+      { ...config, id: 'nic', code: ReinsuranceChargeCode.NIC_LEVY },
+      {
+        ...config,
+        id: 'wht',
+        code: ReinsuranceChargeCode.WITHHOLDING_TAX,
+        displayOrder: 2,
+      },
+    ]);
+
+    const resident = await service.calculateCharges('tenant-1', {
+      currency: 'USD',
+      grossAmount: 10000,
+      effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+    });
+    expect(resident.charges).toEqual([]);
+    expect(resident.deductions).toBe(0);
+    expect(resident.netAmount).toBe(10000);
+
+    const foreign = await service.calculateCharges('tenant-1', {
+      currency: 'USD',
+      grossAmount: 10000,
+      effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+      isForeignReinsurer: true,
+    });
+    expect(foreign.charges).toHaveLength(2);
+    expect(foreign.deductions).toBeGreaterThan(0);
   });
 
   it('prefers currency-specific configuration over all-currency configuration', async () => {
@@ -286,6 +317,7 @@ describe('ReinsuranceChargeSettingsService', () => {
       commissionAmount: 0,
       brokerageAmount: 0,
       effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+      isForeignReinsurer: true,
     });
 
     expect(result.charges).toHaveLength(1);
@@ -342,6 +374,7 @@ describe('ReinsuranceChargeSettingsService', () => {
       commissionAmount: 100,
       brokerageAmount: 50,
       effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+      isForeignReinsurer: true,
     });
 
     expect(result.charges).toEqual([]);
@@ -381,6 +414,7 @@ describe('ReinsuranceChargeSettingsService', () => {
       commissionAmount: 100,
       brokerageAmount: 50,
       effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+      isForeignReinsurer: true,
     });
 
     expect(result.charges.map((charge) => charge.configurationId)).toEqual([
@@ -410,6 +444,7 @@ describe('ReinsuranceChargeSettingsService', () => {
       currency: 'USD',
       grossAmount: 100,
       effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+      isForeignReinsurer: true,
     });
 
     expect(result.charges[0].amount).toBe(expectedAmount);

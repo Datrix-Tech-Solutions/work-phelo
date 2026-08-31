@@ -197,23 +197,43 @@ events.
 
 ## Key Environment Variables
 
-| Variable                                       | Required                       | Secret                         | Purpose                               |
-| ---------------------------------------------- | ------------------------------ | ------------------------------ | ------------------------------------- |
-| `DATABASE_URL`                                 | Yes                            | Yes                            | Reinsurance PostgreSQL schema         |
-| `JWT_SECRET`                                   | Yes                            | Yes                            | User JWT verification                 |
-| `RABBITMQ_URL`                                 | Yes                            | Yes                            | Messaging publisher configuration     |
-| `RABBITMQ_PUBLISH_TIMEOUT_MS`                  | Optional                       | No                             | Publisher timeout override            |
-| `ACCOUNTING_SERVICE_URL`                       | Historical compatibility only  | No                             | Retired Accounting integration target |
-| `ACCOUNTING_SERVICE_TIMEOUT_MS`                | Historical compatibility only  | No                             | Retired Accounting HTTP timeout       |
-| `INTERNAL_SERVICE_AUTH_SECRET`                 | For Auth/document integrations | Yes                            | Signed internal-service requests      |
-| `AUTH_SERVICE_URL`                             | For document profile lookups   | No                             | Auth tenant profile endpoint base     |
-| `REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS` | Optional                       | No                             | Tenant profile cache TTL              |
-| `REINSURANCE_TENANT_PROFILE_TIMEOUT_MS`        | Optional                       | No                             | Tenant profile request timeout        |
-| `REINSURANCE_DOCUMENT_S3_*`                    | For document storage           | Yes where credentials are used | Private generated document storage    |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`          | Optional                       | No                             | PDF renderer Chromium path            |
-| `REINSURANCE_ATTACHMENT_ALLOWED_MIME_TYPES`    | Optional                       | No                             | Upload MIME allow-list                |
-| `REINSURANCE_ATTACHMENT_MAX_BYTES`             | Optional                       | No                             | Upload size limit                     |
-| `REINSURANCE_MAILBOX_TOKEN_ENCRYPTION_KEY`     | For mailbox connections        | Yes                            | Encrypt provider tokens               |
+| Variable                                       | Required                       | Secret | Purpose                               |
+| ---------------------------------------------- | ------------------------------ | ------ | ------------------------------------- |
+| `DATABASE_URL`                                 | Yes                            | Yes    | Reinsurance PostgreSQL schema         |
+| `JWT_SECRET`                                   | Yes                            | Yes    | User JWT verification                 |
+| `RABBITMQ_URL`                                 | Yes                            | Yes    | Messaging publisher configuration     |
+| `RABBITMQ_PUBLISH_TIMEOUT_MS`                  | Optional                       | No     | Publisher timeout override            |
+| `ACCOUNTING_SERVICE_URL`                       | Historical compatibility only  | No     | Retired Accounting integration target |
+| `ACCOUNTING_SERVICE_TIMEOUT_MS`                | Historical compatibility only  | No     | Retired Accounting HTTP timeout       |
+| `INTERNAL_SERVICE_AUTH_SECRET`                 | For Auth/document integrations | Yes    | Signed internal-service requests      |
+| `AUTH_SERVICE_URL`                             | For document profile lookups   | No     | Auth tenant profile endpoint base     |
+| `REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS` | Optional                       | No     | Tenant profile cache TTL              |
+| `REINSURANCE_TENANT_PROFILE_TIMEOUT_MS`        | Optional                       | No     | Tenant profile request timeout        |
+| `REINSURANCE_DOCUMENT_STORAGE_PROVIDER`        | For persisted documents        | No     | `cloudinary` or `s3` storage provider |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`          | Optional                       | No     | PDF renderer Chromium path            |
+| `REINSURANCE_ATTACHMENT_ALLOWED_MIME_TYPES`    | Optional                       | No     | Upload MIME allow-list                |
+| `REINSURANCE_ATTACHMENT_MAX_BYTES`             | Optional                       | No     | Upload size limit                     |
+| `REINSURANCE_MAILBOX_TOKEN_ENCRYPTION_KEY`     | For mailbox connections        | Yes    | Encrypt provider tokens               |
+
+Production Reinsurance document storage uses private Cloudinary authenticated
+raw assets for new PDFs and attachments. Production sets
+`REINSURANCE_DOCUMENT_STORAGE_PROVIDER=cloudinary` and requires
+`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
+`REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER` controls the Cloudinary namespace
+and `REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS` controls signed-read lifetime.
+
+Stored references are provider-qualified for Cloudinary
+(`cloudinary:raw:authenticated:<public_id>`). Historical plain object keys remain
+treated as S3 references for backward-compatible reads when the corresponding S3
+configuration is available.
+
+Production RabbitMQ is expected to be supplied through `PROD_RABBITMQ_URL` as an
+external broker connection. The production compose file intentionally does not
+start a RabbitMQ container.
+
+For tenant document profiles, Auth must receive the same
+`INTERNAL_SERVICE_AUTH_SECRET`, and `INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES`
+must include `reinsurance-service`.
 
 Retired Accounting outbox dispatcher compatibility configuration. The dispatcher
 is disabled by default after decoupling:

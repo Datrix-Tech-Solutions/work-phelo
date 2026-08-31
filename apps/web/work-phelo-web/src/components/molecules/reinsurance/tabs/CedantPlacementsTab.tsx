@@ -13,6 +13,7 @@ import {
   usePlacementClosings,
   usePlacementPayments,
 } from '@/hooks';
+import { useFacultativePlacementRowActions } from '@/hooks/reinsurance/useFacultativePlacementRowActions';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
@@ -196,24 +197,48 @@ type PlacementFilter = 'all' | 'pending' | 'closed' | 'unpaid' | 'paid';
 interface CedantPlacementsTabProps {
   placements: Facultative[];
   isLoading: boolean;
-  onEditPlacement: (placement: Facultative) => void;
-  onEndorsement: (placement: Facultative) => void;
   onView: (placement: Facultative) => void;
   onPremiums: (placement: Facultative) => void;
+  onDisbursement: (placement: Facultative) => void;
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
 }
 
 export function CedantPlacementsTab({
   placements,
   isLoading,
-  onEditPlacement,
-  onEndorsement,
   onView,
   onPremiums,
+  onDisbursement,
+  currentPage,
+  totalPages: serverTotalPages,
+  onPageChange,
 }: CedantPlacementsTabProps) {
   const [filter, _setFilter] = useState<PlacementFilter>('all');
-  const [page, setPage] = useState(1);
+  const [localPage, setLocalPage] = useState(1);
+  const page = currentPage ?? localPage;
+  const setPage = onPageChange ?? setLocalPage;
 
   const paymentStatuses = useCedantPlacementPaymentStatuses(placements);
+
+  const { getRowActions, dialogs } = useFacultativePlacementRowActions({
+    placements,
+    onView,
+    extraActions: (row) => {
+      // Premium receipt / disbursement only make sense once the policy is in force.
+      if (row.status !== 'CLOSED') return [];
+      const payStatus = paymentStatuses.get(row.id) ?? 'outstanding';
+      return [
+        ...(payStatus !== 'paid'
+          ? [{ label: 'Premium Payment', onClick: () => onPremiums(row) }]
+          : []),
+        ...(payStatus !== 'outstanding'
+          ? [{ label: 'Disbursement', onClick: () => onDisbursement(row) }]
+          : []),
+      ];
+    },
+  });
 
   const counts = useMemo(
     () => ({
@@ -264,8 +289,10 @@ export function CedantPlacementsTab({
     setPage(1);
   }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = serverTotalPages ?? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paged = serverTotalPages
+    ? filtered
+    : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-4">
@@ -307,19 +334,14 @@ export function CedantPlacementsTab({
         data={paged}
         isLoading={isLoading}
         emptyMessage="No placements found"
-        rowActions={(row) => [
-          { label: 'View', onClick: () => onView(row) },
-          { label: 'Edit', onClick: () => onEditPlacement(row) },
-          { label: 'Premium Payment', onClick: () => onPremiums(row) },
-          ...(row.status !== 'CANCELLED'
-            ? [{ label: 'Endorsement', onClick: () => onEndorsement(row) }]
-            : []),
-        ]}
+        rowActions={getRowActions}
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
       />
+
+      {dialogs}
     </div>
   );
 }

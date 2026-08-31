@@ -207,6 +207,7 @@ export default function ReinsurerDetailPage({
                   <ReinsurerRevenueTab
                     placements={placements}
                     reinsurerId={reinsurerId}
+                    reinsurer={reinsurer}
                     reinsurerDefaultBrokerageFee={reinsurer.brokerageFee}
                     currencies={currencies}
                   />

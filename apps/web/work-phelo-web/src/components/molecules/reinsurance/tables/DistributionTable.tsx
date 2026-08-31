@@ -6,7 +6,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
 import { Facultative, PlacementParticipantStatus, toDisplayStatus } from '@/types/reinsurance';
-import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
+import { OfferSlipPreviewModal } from '@/components/organisms/reinsurance/documents/OfferSlipPreviewModal';
 import { cn } from '@/lib/utils';
 
 export interface DistributionEntry {
@@ -395,12 +395,11 @@ export function DistributionTable({
         noInternalScroll
       />
 
-      <SlipPreviewModal
+      <OfferSlipPreviewModal
         isOpen={!!slipPreviewId}
         placement={placement}
         brokerageFee={slipPreviewEntry?.brokerageFee ?? 0}
         counterpartyId={slipPreviewEntry?.counterpartyId}
-        onPrint={() => setSlipPreviewId(null)}
         onClose={() => setSlipPreviewId(null)}
       />
     </>

@@ -9,6 +9,8 @@ import {
   ConfirmPlacementPaymentBankPayload,
   PlacementFinancialPosition,
   PlacementParticipantClosing,
+  PaginatedPaymentWorklist,
+  PaymentWorklistStatusFilter,
 } from '@/types/reinsurance';
 import { useFacultatives } from './useFacultatives';
 import {
@@ -19,11 +21,52 @@ import {
 } from '@/lib/reinsurance/placementStatus';
 
 const BASE = '/operations/reinsurance/placements';
+const WORKLIST_BASE = '/operations/reinsurance/worklists/payments';
 
 export const paymentsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'payments'] as const;
 export const placementFinancialPositionKey = (placementId: string, asOfDate?: string) =>
   ['reinsurance', 'placements', placementId, 'financial-position', asOfDate ?? 'current'] as const;
+export const paymentsWorklistKey = (params: PaymentWorklistParams) =>
+  ['reinsurance', 'worklists', 'payments', normalizePaymentWorklistParams(params)] as const;
+const paymentsWorklistsKey = ['reinsurance', 'worklists', 'payments'] as const;
+
+export interface PaymentWorklistParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: PaymentWorklistStatusFilter | '';
+  cedantId?: string;
+  placementIds?: string[];
+}
+
+function normalizePaymentWorklistParams(params: PaymentWorklistParams = {}) {
+  return {
+    page: params.page ?? 1,
+    limit: params.limit ?? 10,
+    ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+    ...(params.status ? { status: params.status } : {}),
+    ...(params.cedantId ? { cedantId: params.cedantId } : {}),
+    ...(params.placementIds?.length ? { placementIds: params.placementIds.join(',') } : {}),
+  };
+}
+
+export function usePaymentsWorklist(
+  params: PaymentWorklistParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  const normalizedParams = normalizePaymentWorklistParams(params);
+  return useQuery({
+    queryKey: paymentsWorklistKey(params),
+    queryFn: async () => {
+      const res = await api.get<PaginatedPaymentWorklist>(WORKLIST_BASE, {
+        params: normalizedParams,
+      });
+      return res.data;
+    },
+    enabled: options.enabled ?? true,
+  });
+}
 
 export async function fetchPlacementPayments(placementId: string): Promise<PlacementPayment[]> {
   const res = await api.get(`${BASE}/${placementId}/payments`);
@@ -40,11 +83,11 @@ export async function fetchPlacementFinancialPosition(
   return res.data as PlacementFinancialPosition;
 }
 
-export function usePlacementPayments(placementId: string) {
+export function usePlacementPayments(placementId: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: paymentsKey(placementId),
     queryFn: () => fetchPlacementPayments(placementId),
-    enabled: !!placementId,
+    enabled: !!placementId && (options.enabled ?? true),
   });
 }
 
@@ -86,6 +129,7 @@ export function useCreatePlacementPayment() {
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentsWorklistsKey });
     },
   });
 }
@@ -107,6 +151,7 @@ export function useConfirmPlacementPaymentBank() {
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentsWorklistsKey });
     },
   });
 }
@@ -121,6 +166,7 @@ export function useReversePayment() {
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentsWorklistsKey });
     },
   });
 }
@@ -211,9 +257,15 @@ export interface CurrencyAmount {
 export interface PremiumsSummary {
   totalDue: number;
   totalPaid: number;
+  totalOutstanding: number;
+  /** Brokerage earned on premium actually collected — accrues only on the paid share of each
+   *  placement's premium, never on the outstanding share. Cash-basis, not accrual-basis. */
+  totalBrokerageEarned: number;
 
   dueByCurrency: CurrencyAmount[];
   paidByCurrency: CurrencyAmount[];
+  outstandingByCurrency: CurrencyAmount[];
+  brokerageEarnedByCurrency: CurrencyAmount[];
   isLoading: boolean;
 }
 
@@ -236,25 +288,153 @@ export function usePremiumsSummary(placements: Facultative[]): PremiumsSummary {
   const summary = useMemo(() => {
     let totalDue = 0;
     let totalPaid = 0;
+    let totalOutstanding = 0;
+    let totalBrokerageEarned = 0;
     const dueTotals = new Map<string, number>();
     const paidTotals = new Map<string, number>();
+    const outstandingTotals = new Map<string, number>();
+    const brokerageEarnedTotals = new Map<string, number>();
     placements.forEach((p, i) => {
       const position = positionQueries[i]?.data;
       const due = position?.cedant.currentObligation ?? 0;
       const paid = position?.cedant.netSettled ?? 0;
+      // Credit balances (outstanding < 0) belong to a different bucket than money still owed —
+      // this breakdown only totals what's still owed, matching dueByCurrency/paidByCurrency
+      // only totaling positive amounts.
+      const outstanding = Math.max(0, position?.cedant.outstanding ?? 0);
       const code = position?.currency ?? p.currency ?? 'UNKNOWN';
       totalDue += due;
       totalPaid += paid;
+      totalOutstanding += outstanding;
       if (due > 0.0001) dueTotals.set(code, (dueTotals.get(code) ?? 0) + due);
       if (paid > 0.0001) paidTotals.set(code, (paidTotals.get(code) ?? 0) + paid);
+      if (outstanding > 0.0001)
+        outstandingTotals.set(code, (outstandingTotals.get(code) ?? 0) + outstanding);
+
+      // Full accrual brokerage on this placement's premium (same formula the dashboard uses),
+      // then scaled down to only the collected share — nothing accrues on what's still owed.
+      const collectionRatio = due > 0.0001 ? Math.min(1, paid / due) : 0;
+      if (collectionRatio > 0 && p.premium != null) {
+        let placementBrokerage = 0;
+        for (const participant of p.participants) {
+          if (participant.status !== 'ACCEPTED' && participant.status !== 'CLOSED') continue;
+          const share =
+            participant.sharePercent != null ? parseFloat(participant.sharePercent) : null;
+          const fee =
+            participant.brokerageFee != null ? parseFloat(participant.brokerageFee) : null;
+          if (share == null || fee == null) continue;
+          placementBrokerage += p.premium * (share / 100) * (fee / 100);
+        }
+        const brokerageEarned = placementBrokerage * collectionRatio;
+        totalBrokerageEarned += brokerageEarned;
+        if (brokerageEarned > 0.0001)
+          brokerageEarnedTotals.set(code, (brokerageEarnedTotals.get(code) ?? 0) + brokerageEarned);
+      }
     });
     return {
       totalDue,
       totalPaid,
+      totalOutstanding,
+      totalBrokerageEarned,
       dueByCurrency: sortedCurrencyTotals(dueTotals),
       paidByCurrency: sortedCurrencyTotals(paidTotals),
+      outstandingByCurrency: sortedCurrencyTotals(outstandingTotals),
+      brokerageEarnedByCurrency: sortedCurrencyTotals(brokerageEarnedTotals),
     };
   }, [placements, positionQueries]);
+
+  return { ...summary, isLoading };
+}
+
+export interface PremiumsPeriodSummary {
+  /** Premium collected between `sinceIso` and now, by currency. */
+  paidByCurrency: CurrencyAmount[];
+  /** Brokerage earned on the premium collected in that window, by currency. */
+  brokerageEarnedByCurrency: CurrencyAmount[];
+  /** Premium collected in the window ÷ premium that was collectible during it
+   *  (owed at the window's start + newly due since). 0–100. */
+  collectionRate: number;
+  isLoading: boolean;
+}
+
+/**
+ * Premium collection *activity* over a time window, for the Premiums stats row's period
+ * toggle. Diffs each placement's financial position as-of `sinceIso` against its current
+ * position — so it needs two position queries per placement (both cached by their
+ * as-of key). Balances (due / outstanding) aren't windowable and stay on `usePremiumsSummary`.
+ */
+export function usePremiumsPeriodSummary(
+  placements: Facultative[],
+  sinceIso: string,
+): PremiumsPeriodSummary {
+  const currentQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: placementFinancialPositionKey(p.id),
+      queryFn: () => fetchPlacementFinancialPosition(p.id),
+    })),
+  });
+  const startQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: placementFinancialPositionKey(p.id, sinceIso),
+      queryFn: () => fetchPlacementFinancialPosition(p.id, sinceIso),
+    })),
+  });
+
+  const isLoading =
+    currentQueries.some((q) => q.isLoading) || startQueries.some((q) => q.isLoading);
+
+  const summary = useMemo(() => {
+    const paidTotals = new Map<string, number>();
+    const brokerageTotals = new Map<string, number>();
+    let totalPaidInPeriod = 0;
+    let totalCollectible = 0;
+
+    placements.forEach((p, i) => {
+      const now = currentQueries[i]?.data;
+      const start = startQueries[i]?.data;
+      if (!now || !start) return;
+      const code = now.currency ?? p.currency ?? 'UNKNOWN';
+
+      const paidInPeriod = Math.max(
+        0,
+        (now.cedant.netSettled ?? 0) - (start.cedant.netSettled ?? 0),
+      );
+      const newlyDue = Math.max(
+        0,
+        (now.cedant.currentObligation ?? 0) - (start.cedant.currentObligation ?? 0),
+      );
+      totalPaidInPeriod += paidInPeriod;
+      totalCollectible += Math.max(0, start.cedant.outstanding ?? 0) + newlyDue;
+      if (paidInPeriod > 0.0001) paidTotals.set(code, (paidTotals.get(code) ?? 0) + paidInPeriod);
+
+      // Brokerage accrues in proportion to premium collected, so the window earns the same
+      // fraction of this placement's full-accrual brokerage as the premium share it collected.
+      const totalDue = now.cedant.currentObligation ?? 0;
+      if (paidInPeriod > 0.0001 && totalDue > 0.0001 && p.premium != null) {
+        let placementBrokerage = 0;
+        for (const participant of p.participants) {
+          if (participant.status !== 'ACCEPTED' && participant.status !== 'CLOSED') continue;
+          const share =
+            participant.sharePercent != null ? parseFloat(participant.sharePercent) : null;
+          const fee =
+            participant.brokerageFee != null ? parseFloat(participant.brokerageFee) : null;
+          if (share == null || fee == null) continue;
+          placementBrokerage += p.premium * (share / 100) * (fee / 100);
+        }
+        const earned = placementBrokerage * (paidInPeriod / totalDue);
+        if (earned > 0.0001) brokerageTotals.set(code, (brokerageTotals.get(code) ?? 0) + earned);
+      }
+    });
+
+    const collectionRate =
+      totalCollectible > 0.0001 ? Math.min(100, (totalPaidInPeriod / totalCollectible) * 100) : 0;
+
+    return {
+      paidByCurrency: sortedCurrencyTotals(paidTotals),
+      brokerageEarnedByCurrency: sortedCurrencyTotals(brokerageTotals),
+      collectionRate,
+    };
+  }, [placements, currentQueries, startQueries]);
 
   return { ...summary, isLoading };
 }

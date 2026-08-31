@@ -84,7 +84,7 @@ export function ClaimDetailsPanel({
         {claim && (
           <>
             <DetailField label="Claim Number" value={claim.claimNumber} />
-            <DetailField label="Occurrence Date" value={fmtDate(claim.occurrenceDate)} />
+            <DetailField label="Date of Loss" value={fmtDate(claim.occurrenceDate)} />
             <DetailField label="Reported Date" value={fmtDate(claim.reportedDate)} />
             <DetailField label="Claim Cause" value={claim.claimCause} />
             {claim.occurrenceDetails && (

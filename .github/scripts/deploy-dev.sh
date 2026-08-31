@@ -98,6 +98,10 @@ write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.dev" \
   "AUTH_TENANT_ASSET_S3_REGION=${AUTH_TENANT_ASSET_S3_REGION}" \
   "AUTH_TENANT_ASSET_S3_PREFIX=${AUTH_TENANT_ASSET_S3_PREFIX}" \
   "AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS=${AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS}" \
+  "AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER=${AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER:-}" \
+  "CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}" \
+  "CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}" \
+  "CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}" \
   "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" \
   "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
@@ -162,6 +166,12 @@ write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
   "AUTH_SERVICE_URL=http://auth-service:4001" \
   "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "REINSURANCE_DOCUMENT_STORAGE_PROVIDER=${REINSURANCE_DOCUMENT_STORAGE_PROVIDER}" \
+  "REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER=${REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER}" \
+  "REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS=${REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS}" \
+  "CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}" \
+  "CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}" \
+  "CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}" \
   "REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS=${REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS}"
 
 write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
@@ -276,10 +286,12 @@ wait_for_http_ok "dev reinsurance via gateway" "http://127.0.0.1:4010/api/v1/ope
 wait_for_http_ok "dev accounting via gateway" "http://127.0.0.1:4010/api/v1/accounting/health"
 wait_for_http_ok "dev nextjs" "http://127.0.0.1:3000/health"
 
+record_successful_deploy_images
+
 section "Container Status"
 docker_compose ps
 
-docker image prune -f --filter "until=24h" >/dev/null || true
+post_deploy_capacity_maintenance
 
 log ""
 log "✓ Dev deployment complete at $(date -u +%Y-%m-%dT%H:%M:%SZ)"

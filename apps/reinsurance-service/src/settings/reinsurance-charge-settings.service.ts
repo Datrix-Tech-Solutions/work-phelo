@@ -30,7 +30,26 @@ export type ChargeCalculationInput = {
   commissionAmount?: number | null;
   brokerageAmount?: number | null;
   effectiveAt?: Date;
+  /**
+   * Whether the reinsurer receiving this premium is non-resident. NIC Levy and
+   * Withholding Tax are foreign-cession levies — they only apply when premium
+   * leaves the country to a non-resident reinsurer. When false (or omitted),
+   * those two charge codes are excluded regardless of currency.
+   */
+  isForeignReinsurer?: boolean;
 };
+
+/**
+ * Charge codes that only apply to cessions to non-resident reinsurers. Kept as a
+ * code constant rather than per-configuration data because every code in the
+ * enum today is a foreign-cession levy by definition; revisit if a
+ * resident-applicable charge code is ever added.
+ */
+const FOREIGN_REINSURER_ONLY_CODES: ReadonlySet<ReinsuranceChargeCode> =
+  new Set([
+    ReinsuranceChargeCode.NIC_LEVY,
+    ReinsuranceChargeCode.WITHHOLDING_TAX,
+  ]);
 
 export type AppliedChargeSnapshot = {
   configurationId: string;
@@ -313,6 +332,10 @@ export class ReinsuranceChargeSettingsService {
       commissionAmount: dto.commissionAmount ?? 0,
       brokerageAmount: dto.brokerageAmount ?? 0,
       effectiveAt: dto.effectiveAt ? new Date(dto.effectiveAt) : undefined,
+      // Preview is a "what charges would apply" tool; default to showing the
+      // foreign-cession levies unless the caller explicitly narrows to a
+      // resident reinsurer.
+      isForeignReinsurer: dto.isForeignReinsurer ?? true,
     });
   }
 
@@ -323,12 +346,17 @@ export class ReinsuranceChargeSettingsService {
   ): Promise<ChargeCalculationResult> {
     const effectiveAt = input.effectiveAt ?? new Date();
     const currency = input.currency.toUpperCase();
-    const configs = await this.findEffectiveConfigurations(
+    const effectiveConfigs = await this.findEffectiveConfigurations(
       client,
       tenantId,
       currency,
       effectiveAt,
     );
+    const configs = input.isForeignReinsurer
+      ? effectiveConfigs
+      : effectiveConfigs.filter(
+          (config) => !FOREIGN_REINSURER_ONLY_CODES.has(config.code),
+        );
     const grossAmount = this.round(input.grossAmount, 2);
     const commissionAmount = this.round(input.commissionAmount ?? 0, 2);
     const brokerageAmount = this.round(input.brokerageAmount ?? 0, 2);

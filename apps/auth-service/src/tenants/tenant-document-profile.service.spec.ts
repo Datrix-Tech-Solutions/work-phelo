@@ -357,6 +357,7 @@ describe('TenantDocumentProfileService', () => {
     expect(storage.store).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: 'tenant-1',
+        tenantSlug: 'acme',
         assetType: 'logo',
         contentType: 'image/png',
       }),

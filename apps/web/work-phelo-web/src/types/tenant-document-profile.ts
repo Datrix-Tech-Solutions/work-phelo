@@ -52,6 +52,9 @@ export interface TenantDocumentProfile {
   signatureMimeType: string | null;
   signatureFileName: string | null;
   signatureSizeBytes: number | null;
+  /** Short-lived signed URL for the uploaded signature image. */
+  signatureUrl?: string | null;
+  signatureUrlExpiresAt?: string | null;
   authorizedSignatoryName: string | null;
   authorizedSignatoryTitle: string | null;
   isActive: boolean;

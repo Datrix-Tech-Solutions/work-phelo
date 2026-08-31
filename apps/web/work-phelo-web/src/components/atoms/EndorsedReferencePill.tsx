@@ -5,11 +5,19 @@ import { usePlacementEndorsements } from '@/hooks';
 interface EndorsedReferencePillProps {
   id: string;
   reference: string;
+  endorsementCount?: number;
 }
 
-export function EndorsedReferencePill({ id, reference }: EndorsedReferencePillProps) {
-  const { data: endorsements = [] } = usePlacementEndorsements(id);
-  const count = endorsements.filter((e) => e.status !== 'VOID').length;
+export function EndorsedReferencePill({
+  id,
+  reference,
+  endorsementCount,
+}: EndorsedReferencePillProps) {
+  const shouldFetch = endorsementCount === undefined;
+  const { data: endorsements = [] } = usePlacementEndorsements(id, {
+    enabled: shouldFetch,
+  });
+  const count = endorsementCount ?? endorsements.filter((e) => e.status !== 'VOID').length;
 
   return (
     <div className="relative inline-flex group">

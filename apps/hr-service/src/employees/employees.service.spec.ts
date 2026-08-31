@@ -1,5 +1,7 @@
 import { RequestUser } from '@work-phelo/types';
+import { validate } from 'class-validator';
 import { PayrollTaxPolicy } from '../../prisma/generated/client';
+import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeesService } from './employees.service';
 
 const ACTOR: RequestUser = {
@@ -13,6 +15,13 @@ const ACTOR: RequestUser = {
   moduleConfig: {},
   featureConfig: {},
   permissions: [],
+};
+
+const EMPLOYEE_ACTOR: RequestUser = {
+  ...ACTOR,
+  id: 'employee-user-id',
+  email: 'employee@acmeghana.com',
+  role: 'EMPLOYEE',
 };
 
 function makePrismaMock() {
@@ -55,6 +64,13 @@ describe('EmployeesService', () => {
     );
   });
 
+  function getLastEmployeeUpdateData() {
+    const calls = prisma.employee.update.mock.calls as Array<
+      [{ data: Record<string, unknown> }]
+    >;
+    return calls.at(-1)?.[0].data ?? {};
+  }
+
   it('clears employee fixedTaxAmount when tax policy changes away from FIXED_AMOUNT', async () => {
     const existing = {
       id: 'employee-uuid',
@@ -84,11 +100,147 @@ describe('EmployeesService', () => {
     expect(prisma.employee.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'employee-uuid' },
-        data: expect.objectContaining({
-          taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
-          fixedTaxAmount: null,
-        }),
       }),
     );
+    expect(getLastEmployeeUpdateData()).toEqual(
+      expect.objectContaining({
+        taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
+        fixedTaxAmount: null,
+      }),
+    );
+  });
+
+  it('preserves existing hire date when update omits hireDate', async () => {
+    const existing = {
+      id: 'employee-uuid',
+      tenantId: 'tenant-uuid',
+      hireDate: new Date('2026-01-01'),
+      probationEndsAt: null,
+      contractEndDate: null,
+      employmentStatus: 'ACTIVE',
+      taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
+      fixedTaxAmount: null,
+    };
+
+    prisma.employee.findFirst.mockResolvedValue(existing);
+    prisma.employee.update.mockResolvedValue({
+      ...existing,
+      firstName: 'Ama',
+    });
+
+    await service.update(
+      'tenant-uuid',
+      'employee-uuid',
+      { firstName: 'Ama' },
+      ACTOR,
+    );
+
+    expect(getLastEmployeeUpdateData()).not.toHaveProperty('hireDate');
+  });
+
+  it('persists a valid updated hire date for full HR/admin edits', async () => {
+    const existing = {
+      id: 'employee-uuid',
+      tenantId: 'tenant-uuid',
+      hireDate: new Date('2026-01-01'),
+      probationEndsAt: null,
+      contractEndDate: null,
+      employmentStatus: 'ACTIVE',
+      taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
+      fixedTaxAmount: null,
+    };
+
+    prisma.employee.findFirst.mockResolvedValue(existing);
+    prisma.employee.update.mockResolvedValue({
+      ...existing,
+      hireDate: new Date('2026-02-01'),
+    });
+
+    await service.update(
+      'tenant-uuid',
+      'employee-uuid',
+      { hireDate: '2026-02-01' },
+      ACTOR,
+    );
+
+    expect(getLastEmployeeUpdateData().hireDate).toEqual(
+      new Date('2026-02-01'),
+    );
+  });
+
+  it('rejects invalid hireDate values through update DTO validation', async () => {
+    const dto = Object.assign(new UpdateEmployeeDto(), {
+      hireDate: 'not-a-date',
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          property: 'hireDate',
+        }),
+      ]),
+    );
+  });
+
+  it('validates related employment dates against the newly supplied hire date', async () => {
+    const existing = {
+      id: 'employee-uuid',
+      tenantId: 'tenant-uuid',
+      hireDate: new Date('2026-01-01'),
+      probationEndsAt: null,
+      contractEndDate: null,
+      employmentStatus: 'ACTIVE',
+      taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
+      fixedTaxAmount: null,
+    };
+
+    prisma.employee.findFirst.mockResolvedValue(existing);
+
+    await expect(
+      service.update(
+        'tenant-uuid',
+        'employee-uuid',
+        {
+          hireDate: '2026-03-01',
+          probationEndsAt: '2026-02-15',
+        },
+        ACTOR,
+      ),
+    ).rejects.toThrow('Probation end date cannot be before the hire date.');
+
+    expect(prisma.employee.update).not.toHaveBeenCalled();
+  });
+
+  it('does not allow self-service updates to change hireDate', async () => {
+    const existing = {
+      id: 'employee-uuid',
+      tenantId: 'tenant-uuid',
+      userId: EMPLOYEE_ACTOR.id,
+      hireDate: new Date('2026-01-01'),
+      probationEndsAt: null,
+      contractEndDate: null,
+      employmentStatus: 'ACTIVE',
+      taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
+      fixedTaxAmount: null,
+    };
+
+    prisma.employee.findFirst
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce({ id: existing.id, departmentId: null });
+    prisma.employee.update.mockResolvedValue({
+      ...existing,
+      firstName: 'Self',
+    });
+
+    await service.update(
+      'tenant-uuid',
+      'employee-uuid',
+      { firstName: 'Self', hireDate: '2026-02-01' },
+      EMPLOYEE_ACTOR,
+    );
+
+    expect(getLastEmployeeUpdateData()).not.toHaveProperty('hireDate');
   });
 });

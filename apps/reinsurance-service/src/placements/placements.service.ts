@@ -209,7 +209,11 @@ export class PlacementsService {
     const where: Prisma.PlacementWhereInput = {
       tenantId,
       archivedAt: query.archived ? { not: null } : null,
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.status
+        ? { status: query.status }
+        : query.statuses?.length
+          ? { status: { in: query.statuses } }
+          : {}),
       ...(query.placementType ? { placementType: query.placementType } : {}),
       ...(query.cedantId ? { cedantId: query.cedantId } : {}),
       ...(query.riskTypeId ? { riskTypeId: query.riskTypeId } : {}),

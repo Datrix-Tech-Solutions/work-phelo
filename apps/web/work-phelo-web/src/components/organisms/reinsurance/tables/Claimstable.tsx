@@ -9,31 +9,37 @@ import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { FacultativeStatus } from '@/types/reinsurance';
 import {
-  useFacultatives,
-  useClaimsByTab,
   ClaimTabRow,
   useDeletePlacementClaim,
   useUpdatePlacementClaimUnbound,
   useClaimAllocations,
   useGenerateClaimAllocationsMutation,
+  useClaimsWorklist,
+  useCedants,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { cn } from '@/lib/utils';
+import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
+import {
+  ClaimTag,
+  CLAIM_TAG_OPTIONS,
+} from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
+
+// "Claim state" = the Pending/Finalized selector on the claim form. Front-end only for now;
+// the column stays blank until the back-end persists it on the claim.
+const CLAIM_STATE_CHIP_COLOR: Record<ClaimTag, TypeChipColor> = {
+  pending: 'amber',
+  finalized: 'green',
+};
+
+const claimStateLabel = (tag: ClaimTag) =>
+  CLAIM_TAG_OPTIONS.find((o) => o.value === tag)?.label ?? tag;
 
 const PAGE_SIZE = 10;
-
-const CLOSING_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
-  'PLACED',
-  'CLOSING',
-  'CLOSED',
-  'DECLINED',
-  'CANCELLED',
-];
 
 export type ClaimsTableTab = 'notification' | 'open' | 'closed';
 
@@ -55,112 +61,190 @@ function fmtDate(val: string | null | undefined) {
 }
 
 function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
-  return [
-    {
-      key: 'reference',
-      label: 'Policy Number',
-      width: '150px',
-      render: (row) => (
-        <EndorsedReferencePill
-          id={row.placement.id}
-          reference={displayPolicyNumber(row.placement.policyNumber)}
-        />
-      ),
-    },
-    {
-      key: 'title',
-      label: 'Insured / Risk Type',
-      width: 'minmax(150px, 1fr)',
-      render: (row) => (
-        <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-gray-900 leading-tight">{row.placement.title}</span>
-          <span className="text-xs text-gray-400">{row.placement.classOfBusiness ?? '—'}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'claimNumber',
-      label: 'Claim Number',
-      width: '130px',
-      render: (row) => <span className="font-medium text-gray-900">{row.claim.claimNumber}</span>,
-    },
-    {
-      key: 'cedant',
-      label: 'Cedant',
-      width: 'minmax(100px, 1fr)',
-      render: (row) => <span className="text-gray-700">{row.placement.cedant.name}</span>,
-    },
-    tab === 'open'
-      ? {
-          key: 'recoveredAmount',
-          label: 'Total Recovered',
-          width: '120px',
-          className: 'text-right',
-          render: (row) => (
-            <span className="text-gray-900 whitespace-nowrap">
-              {fmtAmount(row.recoveredAmount, row.claim.currency)}
-            </span>
-          ),
-        }
-      : {
-          key: 'facultativeOffer',
-          label: 'Sum Insured',
-          width: '120px',
-          className: 'text-right',
-          render: (row) => {
-            const placement = row.placement;
-            const facSumInsured =
-              placement.sumInsured != null && placement.facultativeOffer != null
-                ? placement.sumInsured * (placement.facultativeOffer / 100)
-                : null;
-            return (
-              <span className="text-gray-900 whitespace-nowrap">
-                {facSumInsured != null
-                  ? `${placement.currency ?? ''} ${fmtAmount(facSumInsured)}`
-                  : '—'}
-              </span>
-            );
-          },
-        },
-    tab !== 'notification'
-      ? {
-          key: 'finalLossAmount',
-          label: 'Actual Claim',
-          width: '120px',
-          className: 'text-right',
-          render: (row) => (
-            <span className="font-medium text-gray-900 whitespace-nowrap">
-              {fmtAmount(row.claim.finalLossAmount, row.claim.currency)}
-            </span>
-          ),
-        }
-      : {
-          key: 'estimatedLossAmount',
-          label: 'Claim Amount',
-          width: '120px',
-          className: 'text-right',
-          render: (row) => (
-            <span className="font-medium text-gray-900 whitespace-nowrap">
-              {fmtAmount(row.claim.estimatedLossAmount, row.claim.currency)}
-            </span>
-          ),
-        },
+  const policyNumber: Column<ClaimTabRow> = {
+    key: 'reference',
+    label: 'Policy Number',
+    width: '130px',
+    render: (row) => (
+      <EndorsedReferencePill
+        id={row.placement.id}
+        reference={displayPolicyNumber(row.placement.policyNumber)}
+        endorsementCount={row.nonVoidEndorsementCount}
+      />
+    ),
+  };
 
-    tab === 'closed'
-      ? {
-          key: 'recoveredAt',
-          label: 'Recovered Date',
-          width: '120px',
-          render: (row) => <span className="text-gray-600">{fmtDate(row.recoveredAt)}</span>,
-        }
-      : {
-          key: 'createdAt',
-          label: 'Claim entry date',
-          width: '130px',
-          render: (row) => (
-            <span className="text-gray-600">{fmtDate(row.claim.occurrenceDate)}</span>
-          ),
-        },
+  const insuredRiskType: Column<ClaimTabRow> = {
+    key: 'title',
+    label: 'Insured / Risk Type',
+    width: 'minmax(150px, 1fr)',
+    render: (row) => (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-semibold text-gray-900 leading-tight">{row.placement.title}</span>
+        <span className="text-xs text-gray-400">{row.placement.classOfBusiness ?? '—'}</span>
+      </div>
+    ),
+  };
+
+  const claimNumber: Column<ClaimTabRow> = {
+    key: 'claimNumber',
+    label: 'Claim Number',
+    width: '120px',
+    render: (row) => <span className="font-medium text-gray-900">{row.claim.claimNumber}</span>,
+  };
+
+  const cedant: Column<ClaimTabRow> = {
+    key: 'cedant',
+    label: 'Cedant',
+    width: 'minmax(100px, 1fr)',
+    render: (row) => <span className="font-bold text-gray-700">{row.placement.cedant.name}</span>,
+  };
+
+  const offerPercent: Column<ClaimTabRow> = {
+    key: 'offerPercent',
+    label: 'Offer %',
+    width: '60px',
+    className: 'text-right',
+    render: (row) => (
+      <span className="font-bold text-gray-900 whitespace-nowrap">
+        {row.placement.facultativeOffer != null
+          ? `${row.placement.facultativeOffer.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+          : '—'}
+      </span>
+    ),
+  };
+
+  const actualClaim: Column<ClaimTabRow> = {
+    key: 'finalLossAmount',
+    label: '100% Actual Claim',
+    width: '130px',
+    className: 'text-right',
+    render: (row) => (
+      <span className="font-bold text-gray-900 whitespace-nowrap">
+        {fmtAmount(row.claim.finalLossAmount, row.claim.currency)}
+      </span>
+    ),
+  };
+
+  const claimShare: Column<ClaimTabRow> = {
+    key: 'claimShare',
+    label: 'Claim Share',
+    width: '120px',
+    className: 'text-right',
+    render: (row) => (
+      <span className="font-semibold text-gray-900 whitespace-nowrap">
+        {fmtAmount(row.claimShare, row.claim.currency)}
+      </span>
+    ),
+  };
+
+  const totalRecovered: Column<ClaimTabRow> = {
+    key: 'recoveredAmount',
+    label: 'Total Recovered',
+    width: '120px',
+    className: 'text-right',
+    render: (row) => (
+      <span
+        className={cn(
+          'font-bold whitespace-nowrap',
+          row.recoveredAmount && row.recoveredAmount > 0 ? 'text-emerald-600' : 'text-gray-400',
+        )}
+      >
+        {fmtAmount(row.recoveredAmount, row.claim.currency)}
+      </span>
+    ),
+  };
+
+  const claimState: Column<ClaimTabRow> = {
+    key: 'claimState',
+    label: 'Claim State',
+    width: '110px',
+    render: (row) => {
+      const tag = row.claim.claimTag;
+      return tag ? (
+        <TypeChip label={claimStateLabel(tag)} color={CLAIM_STATE_CHIP_COLOR[tag]} />
+      ) : (
+        <span className="text-gray-400">—</span>
+      );
+    },
+  };
+
+  const claimEntryDate: Column<ClaimTabRow> = {
+    key: 'createdAt',
+    label: 'Claim entry date',
+    width: '130px',
+    render: (row) => (
+      <span className="font-semibold text-gray-600">{fmtDate(row.claim.occurrenceDate)}</span>
+    ),
+  };
+
+  if (tab === 'open') {
+    return [
+      policyNumber,
+      insuredRiskType,
+      claimNumber,
+      cedant,
+      claimState,
+      actualClaim,
+      offerPercent,
+      claimShare,
+      totalRecovered,
+      claimEntryDate,
+    ];
+  }
+
+  if (tab === 'closed') {
+    return [
+      policyNumber,
+      insuredRiskType,
+      claimNumber,
+      cedant,
+      actualClaim,
+      offerPercent,
+      claimShare,
+      {
+        key: 'recoveredAt',
+        label: 'Recovered Date',
+        width: '120px',
+        render: (row) => (
+          <span className="font-semibold text-gray-600">{fmtDate(row.recoveredAt)}</span>
+        ),
+      },
+    ];
+  }
+
+  // notification
+  return [
+    policyNumber,
+    insuredRiskType,
+    claimNumber,
+    cedant,
+    {
+      key: 'estimatedLossAmount',
+      label: '100% Claim Amount',
+      width: '150px',
+      className: 'text-right',
+      render: (row) => (
+        <span className="font-medium text-gray-900 whitespace-nowrap">
+          {fmtAmount(row.claim.estimatedLossAmount, row.claim.currency)}
+        </span>
+      ),
+    },
+    offerPercent,
+    {
+      // Reinsurer's share of the estimated claim = 100% estimate × fac offer %. Matches the
+      // Total Allocated Claim figure once the claim is finalized and allocations are generated.
+      key: 'notificationPayable',
+      label: 'Payable Amount',
+      width: '120px',
+      className: 'text-right',
+      render: (row) => (
+        <span className="font-semibold text-gray-900 whitespace-nowrap">
+          {fmtAmount(row.claimShare, row.claim.currency)}
+        </span>
+      ),
+    },
+    claimEntryDate,
   ];
 }
 
@@ -184,66 +268,32 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const [finalizeTarget, setFinalizeTarget] = useState<ClaimTabRow | null>(null);
   const [finalAmount, setFinalAmount] = useState('');
   const [finalAmountError, setFinalAmountError] = useState('');
+  const [finalClaimTag, setFinalClaimTag] = useState<ClaimTag>('pending');
   const updateClaim = useUpdatePlacementClaimUnbound();
   const generateAllocationsForClaim = useGenerateClaimAllocationsMutation();
+  const { data: cedants = [], isLoading: isLoadingCedants } = useCedants();
 
   const { data: finalizeAllocations = [] } = useClaimAllocations(
     finalizeTarget?.placement.id ?? '',
     finalizeTarget?.claim.id ?? '',
   );
 
-  const { data: allRows = [], isLoading } = useFacultatives();
-
-  const closingRows = useMemo(
-    () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
-    [allRows],
-  );
-
-  const {
-    notification,
-    open: openRows,
-    closed: closedRows,
-    isLoadingClaims,
-    isLoadingFinancials,
-  } = useClaimsByTab(closingRows);
-
-  const claimRows = tab === 'notification' ? notification : tab === 'open' ? openRows : closedRows;
-  const isLoadingTabData = isLoadingClaims || (tab !== 'notification' && isLoadingFinancials);
+  const claimsWorklist = useClaimsWorklist({
+    tab,
+    page,
+    limit: PAGE_SIZE,
+    search,
+    cedantId: cedantFilter || undefined,
+  });
+  const claimRows = claimsWorklist.data?.items ?? [];
 
   const cedantOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of claimRows) seen.set(r.placement.cedant.id, r.placement.cedant.name);
-    return Array.from(seen.entries())
-      .map(([id, name]) => ({ value: id, label: name }))
+    return cedants
+      .map((cedant) => ({ value: cedant.id, label: cedant.name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [claimRows]);
+  }, [cedants]);
 
-  const filtered = useMemo(() => {
-    let rows = claimRows;
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          (r.placement.policyNumber?.toLowerCase().includes(q) ?? false) ||
-          r.placement.title.toLowerCase().includes(q) ||
-          (r.placement.classOfBusiness?.toLowerCase().includes(q) ?? false) ||
-          r.claim.claimNumber.toLowerCase().includes(q),
-      );
-    }
-    if (cedantFilter) {
-      rows = rows.filter((r) => r.placement.cedant.id === cedantFilter);
-    }
-
-    const dateOf = (r: ClaimTabRow) => (tab === 'closed' ? r.recoveredAt : r.claim.occurrenceDate);
-    return [...rows].sort((a, b) => {
-      const bTime = dateOf(b) ? new Date(dateOf(b) as string).getTime() : 0;
-      const aTime = dateOf(a) ? new Date(dateOf(a) as string).getTime() : 0;
-      return bTime - aTime;
-    });
-  }, [claimRows, search, cedantFilter, tab]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, claimsWorklist.data?.meta.totalPages ?? 1);
   const columns = useMemo(() => buildColumns(tab), [tab]);
 
   const handleDelete = () => {
@@ -264,6 +314,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     setFinalizeTarget(null);
     setFinalAmount('');
     setFinalAmountError('');
+    setFinalClaimTag('pending');
   };
 
   const handleFinalize = async () => {
@@ -305,8 +356,8 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     <>
       <DataTable
         columns={columns}
-        data={paged}
-        isLoading={isLoading || isLoadingTabData}
+        data={claimRows}
+        isLoading={claimsWorklist.isLoading || isLoadingCedants}
         searchPlaceholder="Search claims…"
         searchValue={search}
         onRowClick={(row) =>
@@ -457,7 +508,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
             .
           </p>
           <NumberField
-            label="Actual Claim Amount"
+            label="100 % Claim Amount"
             value={finalAmount ? Number(finalAmount) : 0}
             onChange={(n) => {
               setFinalAmount(String(n));
@@ -465,6 +516,13 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
             }}
             error={finalAmountError}
             placeholder="0.00"
+          />
+          <SearchSelect
+            label="Claim state"
+            placeholder="Select tag…"
+            options={CLAIM_TAG_OPTIONS}
+            value={finalClaimTag}
+            onChange={(v) => setFinalClaimTag(v as ClaimTag)}
           />
         </div>
       </Modal>

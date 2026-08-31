@@ -1,129 +1,69 @@
 'use client';
 
-import { useMemo } from 'react';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
-import {
-  CurrencyAmountScrollCard,
-  CurrencyAmountRow,
-} from '@/components/molecules/reinsurance/stats/CurrencyAmountScrollCard';
+import { CurrencyAmountListCard } from '@/components/molecules/reinsurance/stats/CurrencyAmountListCard';
 import { Icons } from '@/components/atoms/icons';
-import { useFacultatives, useClaimsSummary, useClaimsByTab, ClaimTabRow } from '@/hooks';
-import { FacultativeStatus } from '@/types/reinsurance';
+import { useClaimsWorklistSummary, useCurrencies } from '@/hooks';
+import type { ClaimsCurrencyAmount } from '@/types/reinsurance';
 
-const CLOSING_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
-  'PLACED',
-  'CLOSING',
-  'CLOSED',
-  'DECLINED',
-  'CANCELLED',
-];
-
-/** Sums `amountFor(row)` per claim currency, most first — each caller sorts independently,
- *  since the currency with the biggest claims total isn't necessarily the one with the
- *  biggest recovered total. */
-function sumByCurrency(
-  rows: ClaimTabRow[],
-  amountFor: (row: ClaimTabRow) => number | undefined,
-): CurrencyAmountRow[] {
-  const totals = new Map<string, number>();
-  for (const row of rows) {
-    const amount = amountFor(row);
-    if (amount == null) continue;
-    const code = row.claim.currency;
-    totals.set(code, (totals.get(code) ?? 0) + amount);
-  }
-  return Array.from(totals.entries())
-    .map(([code, amount]) => ({ code, amount }))
-    .sort((a, b) => b.amount - a.amount);
-}
+const toAmountMap = (rows: ClaimsCurrencyAmount[]) =>
+  new Map(rows.map((row) => [row.code, row.amount]));
 
 export function ClaimsStatsRow() {
-  const { data: allPlacements = [], isLoading: loadingPlacements } = useFacultatives();
-
-  const closingPlacements = useMemo(
-    () => allPlacements.filter((p) => CLOSING_STATUSES.includes(p.status)),
-    [allPlacements],
-  );
-
-  const { totalClaims, isLoading: loadingClaims } = useClaimsSummary(closingPlacements);
-
-  // Open/Closed counts mirror the Open Claims/Closed Claims tables exactly — both draw
-  // from useClaimsByTab, which buckets by actual reinsurer recovery rather than claim.status.
-  const {
-    open,
-    closed,
-    isLoadingClaims: loadingTabClaims,
-    isLoadingFinancials,
-  } = useClaimsByTab(closingPlacements);
-  const openClaims = open.length;
-  const closedClaims = closed.length;
-  const finalizedClaims = openClaims + closedClaims;
-
-  const isLoading = loadingPlacements || loadingClaims || loadingTabClaims || isLoadingFinancials;
-  // % of finalized claims fully recovered from reinsurers.
-  const recoveryRate = finalizedClaims > 0 ? (closedClaims / finalizedClaims) * 100 : 0;
-
-  // Finalized claims only (Open + Closed) — Notification-stage claims are still just an
-  // estimate, so folding them in here would overstate exposure with unconfirmed amounts.
-  const finalizedRows = useMemo(() => [...open, ...closed], [open, closed]);
-
-  const claimsByCurrency = useMemo(
-    () =>
-      sumByCurrency(finalizedRows, (row) =>
-        row.claim.finalLossAmount != null ? parseFloat(row.claim.finalLossAmount) : undefined,
-      ),
-    [finalizedRows],
-  );
-
-  const recoveredByCurrency = useMemo(
-    () => sumByCurrency(finalizedRows, (row) => row.recoveredAmount),
-    [finalizedRows],
-  );
+  const { data: summary, isLoading } = useClaimsWorklistSummary();
+  const { data: currencies = [] } = useCurrencies();
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <KpiCard
           label="Total Claims"
-          value={totalClaims}
+          value={summary?.totalClaims ?? 0}
           icon={Icons.FileWarning}
           iconColor="#2a78d6"
           isLoading={isLoading}
         />
         <KpiCard
           label="Open Claims"
-          value={openClaims}
+          value={summary?.openClaims ?? 0}
           icon={Icons.Clock}
           iconColor="#4a3aa7"
           isLoading={isLoading}
         />
         <KpiCard
           label="Closed Claims"
-          value={closedClaims}
+          value={summary?.closedClaims ?? 0}
           icon={Icons.CircleCheckBig}
           iconColor="#6b7280"
           isLoading={isLoading}
         />
         <KpiCard
-          label="Recovery Rate"
-          value={`${recoveryRate.toFixed(1)}%`}
-          icon={Icons.RotateCcw}
+          label="Notifications"
+          value={summary?.notificationClaims ?? 0}
+          icon={Icons.Bell}
           iconColor="#eda100"
           isLoading={isLoading}
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <CurrencyAmountScrollCard
+        <CurrencyAmountListCard
           title="Claims Amount by Currency"
-          rows={claimsByCurrency}
+          columnLabel="Claim Amount"
+          amountsByCode={toAmountMap(summary?.claimsByCurrency ?? [])}
+          currencies={currencies}
           isLoading={isLoading}
+          emptyMessage="No claims yet"
+          className="h-64"
         />
-        <CurrencyAmountScrollCard
+        <CurrencyAmountListCard
           title="Recovered by Currency"
-          rows={recoveredByCurrency}
+          columnLabel="Recovered"
+          amountsByCode={toAmountMap(summary?.recoveredByCurrency ?? [])}
+          currencies={currencies}
           isLoading={isLoading}
+          emptyMessage="No recoveries yet"
+          className="h-64"
         />
       </div>
     </div>

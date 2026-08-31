@@ -56,6 +56,7 @@ export function EditEmployeePanel({
   const editTypeValue = useWatch({ control: editForm.control, name: 'employmentType' });
   const editStatusValue = useWatch({ control: editForm.control, name: 'employmentStatus' });
   const editGenderValue = useWatch({ control: editForm.control, name: 'gender' });
+  const editHireDateValue = useWatch({ control: editForm.control, name: 'hireDate' });
   const basicSalaryValue = useWatch({ control: editForm.control, name: 'basicSalary' });
   const compensationTypeValue =
     useWatch({ control: editForm.control, name: 'compensationType' }) ?? 'SALARY';
@@ -75,6 +76,7 @@ export function EditEmployeePanel({
       managerId: employee.managerId ?? '',
       employmentType: employee.employmentType,
       employmentStatus: employee.employmentStatus,
+      hireDate: employee.hireDate ?? '',
       dateOfBirth: employee.dateOfBirth ?? '',
       gender: employee.gender ?? undefined,
       maritalStatus: employee.maritalStatus ?? undefined,
@@ -122,7 +124,7 @@ export function EditEmployeePanel({
               }
 
               editForm.clearErrors('dateOfBirth');
-              const dateFields = ['dateOfBirth'] as const;
+              const dateFields = ['dateOfBirth', 'hireDate'] as const;
               for (const field of dateFields) {
                 if (!data[field]) data[field] = undefined;
               }
@@ -236,6 +238,12 @@ export function EditEmployeePanel({
               }))}
           />
         )}
+        <DatePicker
+          label="Date Hired"
+          value={editHireDateValue}
+          onChange={(v) => editForm.setValue('hireDate', v)}
+          disableFuture
+        />
         <SearchSelect
           label="Employment Type"
           placeholder="Select type"

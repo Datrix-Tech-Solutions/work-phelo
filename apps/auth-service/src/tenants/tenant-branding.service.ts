@@ -212,6 +212,7 @@ export class TenantBrandingService {
     const uploadedFile = file as Express.Multer.File;
     const stored = await this.storage.storeBrandingAsset({
       tenantId,
+      tenantSlug: tenant.slug,
       assetType: assetType as TenantBrandingAssetType,
       body: uploadedFile.buffer,
       contentType: uploadedFile.mimetype,

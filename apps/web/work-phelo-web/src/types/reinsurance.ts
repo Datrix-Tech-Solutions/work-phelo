@@ -412,6 +412,8 @@ export interface Facultative {
   classOfBusiness: string | null;
   riskTypeId: string | null;
   cedant: { id: string; name: string };
+  cedantId: string;
+  cedantName: string;
   businessDetails: Record<string, unknown> | null;
   offerDetails: Record<string, unknown> | null;
   description: string | null;
@@ -982,6 +984,8 @@ export type PlacementPaymentStatus =
   | 'FAILED'
   | 'CANCELLED'
   | 'REVERSED';
+export type PaymentWorklistPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
+export type PaymentWorklistStatusFilter = 'Placed' | 'Closed' | PaymentWorklistPaymentStatus;
 export type PlacementSettlementMethod =
   | 'BANK_TRANSFER'
   | 'CHEQUE'
@@ -1068,6 +1072,50 @@ export interface PlacementPayment {
     } | null;
   } | null;
   allocations?: PlacementPaymentAllocation[];
+}
+
+export interface PaymentWorklistRow {
+  id: string;
+  placementId: string;
+  reference: string | null;
+  policyNumber: string | null;
+  title: string;
+  classOfBusiness: string | null;
+  cedantId: string;
+  cedantName: string;
+  sumInsured: number | null;
+  facultativeOffer: number | null;
+  commission: number | null;
+  facultativeSumInsured: number | null;
+  acceptedParticipantCount: number;
+  currency: string | null;
+  paidAmount: number;
+  outstandingAmount: number;
+  outstandingLabel: 'outstanding' | 'credit';
+  currentObligation: number;
+  latestConfirmedPaymentDate: string | null;
+  placementStatus: FacultativeStatus;
+  paymentStatus: PaymentWorklistPaymentStatus;
+  sortDate: string;
+}
+
+export interface PaginatedPaymentWorklist {
+  items: PaymentWorklistRow[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export type FacultativeRowPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
+
+export interface FacultativeRowState {
+  placementId: string;
+  paymentStatus: FacultativeRowPaymentStatus;
+  hasRecordedPayment: boolean;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface FacultativeRowStateResponse {
+  items: FacultativeRowState[];
 }
 
 export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';
@@ -1213,6 +1261,88 @@ export interface PlacementClaimRecoveryPosition {
     recoveredMinusSettled: string;
   };
   cedantSettlementStatus: string;
+}
+
+export type ClaimRowBucket = 'notification' | 'open' | 'closed';
+
+export interface ClaimRowState {
+  claimId: string;
+  placementId: string;
+  bucket: ClaimRowBucket;
+  recoveredAmount: string;
+  recoveredAt: string | null;
+  isFullyRecovered: boolean;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface ClaimRowStateResponse {
+  items: ClaimRowState[];
+}
+
+export interface ClaimsWorklistPlacement {
+  id: string;
+  reference: string | null;
+  policyNumber: string | null;
+  title: string;
+  classOfBusiness: string | null;
+  riskTypeId: string | null;
+  cedant: { id: string; name: string };
+  businessDetails: Record<string, unknown> | null;
+  offerDetails: Record<string, unknown> | null;
+  description: string | null;
+  sumInsured: number | null;
+  rate: number | null;
+  commission: number | null;
+  facultativeOffer: number | null;
+  premium: number | null;
+  currency: string | null;
+  inceptionDate: string | null;
+  expiryDate: string | null;
+  status: FacultativeStatus;
+  createdAt: string;
+  updatedAt: string;
+  archivedByUserId: string | null;
+  archiveReason: string | null;
+  archivedAt: string | null;
+  closeMode: string | null;
+  forceClosedAt: string | null;
+  forceClosedByUserId: string | null;
+}
+
+export interface ClaimsWorklistRow {
+  id: string;
+  claimId: string;
+  placementId: string;
+  bucket: ClaimRowBucket;
+  placement: ClaimsWorklistPlacement;
+  claim: PlacementClaim;
+  recoveredAmount: number;
+  recoveredAt: string | null;
+  isFullyRecovered: boolean;
+  claimShare: number;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface PaginatedClaimsWorklist {
+  items: ClaimsWorklistRow[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface ClaimsCurrencyAmount {
+  code: string;
+  amount: number;
+}
+
+export interface ClaimsWorklistSummary {
+  totalClaims: number;
+  settledClaims: number;
+  notificationClaims: number;
+  openClaims: number;
+  closedClaims: number;
+  claimsByCurrency: ClaimsCurrencyAmount[];
+  recoveredByCurrency: ClaimsCurrencyAmount[];
 }
 
 export interface ApprovePlacementClaimPayablePayload {
@@ -1435,6 +1565,9 @@ export interface PlacementClaim {
   voidedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** "Claim state" tag (Pending / Finalized) from the claim form. Not yet persisted by the
+   * back-end — optional until the DTO adds it. */
+  claimTag?: 'pending' | 'finalized' | null;
 }
 
 export interface CreatePlacementClaimPayload {

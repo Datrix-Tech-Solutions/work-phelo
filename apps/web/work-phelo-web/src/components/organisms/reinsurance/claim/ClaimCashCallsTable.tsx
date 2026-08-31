@@ -6,7 +6,7 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { RecordRecoveryReceiptModal } from '@/components/organisms/reinsurance/RecordRecoveryReceiptModal';
 import { useClaimCashCalls, useClaimRecoveryPosition, RecoveryRow } from '@/hooks';
-import { fmt, OFFSET_CLAIM_RECEIPT_NOTE } from '@/lib/reinsurance/claimFormat';
+import { fmt } from '@/lib/reinsurance/claimFormat';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { Facultative, PlacementClaim, PlacementClaimCashCall } from '@/types/reinsurance';
 
@@ -64,12 +64,6 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
 
   const columns: Column<PlacementClaimCashCall>[] = useMemo(
     () => [
-      {
-        key: 'cashCallNumber',
-        label: 'Cash Call',
-        width: '100px',
-        render: (row) => <span className="font-medium text-gray-900">{row.cashCallNumber}</span>,
-      },
       {
         key: 'counterparty',
         label: 'Reinsurer',
@@ -141,7 +135,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
           const perCashCall = perCashCallFor(row);
 
           const hasOffsetReceipt = (perCashCall?.receipts ?? []).some(
-            (receipt) => receipt.notes === OFFSET_CLAIM_RECEIPT_NOTE,
+            (receipt) => receipt.settlementMethod === 'INTERNAL_OFFSET',
           );
 
           const recoveryStatus = perCashCall?.recoveryStatus;
@@ -176,9 +170,6 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
           const issuedAtMs = new Date(row.issuedAt).getTime();
 
           if (perCashCall?.recoveryStatus === 'FULLY_RECOVERED') {
-            // Once paid, freeze the clock at when it actually finished — how long it took
-            // to recover — rather than blanking it out or letting it keep climbing past
-            // completion. The last bank-confirmed receipt marks that moment.
             const confirmedTimes = (perCashCall.receipts ?? [])
               .filter(
                 (receipt) =>
@@ -248,7 +239,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
             <span className="text-sm font-bold text-gray-900">Claim Recoveries</span>
           </div>
         }
-        emptyMessage="No cash calls for this claim"
+        emptyMessage="No recoveries for this claim"
         currentPage={1}
         totalPages={0}
         onPageChange={() => {}}
