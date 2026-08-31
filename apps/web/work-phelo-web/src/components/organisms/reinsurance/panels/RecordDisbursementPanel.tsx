@@ -38,6 +38,11 @@ function parseMoney(value: string | number | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** Round a monetary value to 2 decimal places (cents). */
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 type DisbursementSource = {
   closingId?: string;
   endorsementClosingId?: string;
@@ -152,7 +157,7 @@ export function RecordDisbursementPanel({
   useEffect(() => {
     if (!target) return;
     const prefill = suggestedAmount ?? totalOutstanding;
-    setAmount(prefill > 0 ? Math.round(prefill * 100) / 100 : 0);
+    setAmount(prefill > 0 ? round2(prefill) : 0);
     setPaymentMethod('BANK_TRANSFER');
     setNotes('');
     setReferenceValue('');
@@ -164,12 +169,15 @@ export function RecordDisbursementPanel({
     setReferenceValue('');
   };
 
+  // Compare against the outstanding rounded to cents so a legitimate 2-decimal
+  // entry (e.g. 12.18 for an outstanding of 12.1793843) isn't rejected as an overpayment.
+  const maxAmount = round2(totalOutstanding);
   const amountError =
     totalOutstanding <= 0
       ? null
       : amount <= 0
         ? 'Enter an amount greater than zero.'
-        : amount > totalOutstanding + 0.0001
+        : amount > maxAmount + 0.0001
           ? 'Amount cannot exceed the outstanding balance.'
           : null;
 
@@ -296,6 +304,7 @@ export function RecordDisbursementPanel({
           label={`Amount (${currency})`}
           value={amount}
           onChange={setAmount}
+          onBlur={(v) => setAmount(round2(v))}
           error={amountError ?? undefined}
           disabled={isSubmitting}
           placeholder="0.00"

@@ -347,7 +347,7 @@ export function usePremiumsSummary(placements: Facultative[]): PremiumsSummary {
 }
 
 export interface PremiumsPeriodSummary {
-  /** Premium collected between `sinceIso` and now, by currency. */
+  /** Premium collected between `sinceIso` and `untilIso` (or now), by currency. */
   paidByCurrency: CurrencyAmount[];
   /** Brokerage earned on the premium collected in that window, by currency. */
   brokerageEarnedByCurrency: CurrencyAmount[];
@@ -359,18 +359,22 @@ export interface PremiumsPeriodSummary {
 
 /**
  * Premium collection *activity* over a time window, for the Premiums stats row's period
- * toggle. Diffs each placement's financial position as-of `sinceIso` against its current
- * position — so it needs two position queries per placement (both cached by their
- * as-of key). Balances (due / outstanding) aren't windowable and stay on `usePremiumsSummary`.
+ * toggle. Diffs each placement's financial position as-of `sinceIso` against its position
+ * as-of `untilIso` (or its current position when `untilIso` is omitted — i.e. the window runs
+ * up to now) — so it needs two position queries per placement (both cached by their as-of
+ * key). Balances (due / outstanding) aren't windowable and stay on `usePremiumsSummary`.
  */
 export function usePremiumsPeriodSummary(
   placements: Facultative[],
   sinceIso: string,
+  untilIso?: string,
 ): PremiumsPeriodSummary {
-  const currentQueries = useQueries({
+  // `untilIso` undefined → the live ("current") position; a value → the position as-of the end
+  // of a past calendar year picked from the year dropdown.
+  const endQueries = useQueries({
     queries: placements.map((p) => ({
-      queryKey: placementFinancialPositionKey(p.id),
-      queryFn: () => fetchPlacementFinancialPosition(p.id),
+      queryKey: placementFinancialPositionKey(p.id, untilIso),
+      queryFn: () => fetchPlacementFinancialPosition(p.id, untilIso),
     })),
   });
   const startQueries = useQueries({
@@ -380,8 +384,7 @@ export function usePremiumsPeriodSummary(
     })),
   });
 
-  const isLoading =
-    currentQueries.some((q) => q.isLoading) || startQueries.some((q) => q.isLoading);
+  const isLoading = endQueries.some((q) => q.isLoading) || startQueries.some((q) => q.isLoading);
 
   const summary = useMemo(() => {
     const paidTotals = new Map<string, number>();
@@ -390,18 +393,18 @@ export function usePremiumsPeriodSummary(
     let totalCollectible = 0;
 
     placements.forEach((p, i) => {
-      const now = currentQueries[i]?.data;
+      const end = endQueries[i]?.data;
       const start = startQueries[i]?.data;
-      if (!now || !start) return;
-      const code = now.currency ?? p.currency ?? 'UNKNOWN';
+      if (!end || !start) return;
+      const code = end.currency ?? p.currency ?? 'UNKNOWN';
 
       const paidInPeriod = Math.max(
         0,
-        (now.cedant.netSettled ?? 0) - (start.cedant.netSettled ?? 0),
+        (end.cedant.netSettled ?? 0) - (start.cedant.netSettled ?? 0),
       );
       const newlyDue = Math.max(
         0,
-        (now.cedant.currentObligation ?? 0) - (start.cedant.currentObligation ?? 0),
+        (end.cedant.currentObligation ?? 0) - (start.cedant.currentObligation ?? 0),
       );
       totalPaidInPeriod += paidInPeriod;
       totalCollectible += Math.max(0, start.cedant.outstanding ?? 0) + newlyDue;
@@ -409,7 +412,7 @@ export function usePremiumsPeriodSummary(
 
       // Brokerage accrues in proportion to premium collected, so the window earns the same
       // fraction of this placement's full-accrual brokerage as the premium share it collected.
-      const totalDue = now.cedant.currentObligation ?? 0;
+      const totalDue = end.cedant.currentObligation ?? 0;
       if (paidInPeriod > 0.0001 && totalDue > 0.0001 && p.premium != null) {
         let placementBrokerage = 0;
         for (const participant of p.participants) {
@@ -434,7 +437,7 @@ export function usePremiumsPeriodSummary(
       brokerageEarnedByCurrency: sortedCurrencyTotals(brokerageTotals),
       collectionRate,
     };
-  }, [placements, currentQueries, startQueries]);
+  }, [placements, endQueries, startQueries]);
 
   return { ...summary, isLoading };
 }

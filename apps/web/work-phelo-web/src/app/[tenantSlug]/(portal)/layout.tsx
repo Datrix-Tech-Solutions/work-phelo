@@ -25,7 +25,7 @@ export default function PortalLayout({
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
-  const isTenantAdmin = user?.role === 'TENANT_ADMIN';
+  // const isTenantAdmin = user?.role === 'TENANT_ADMIN';
 
   // Picked once per mount (i.e. each fresh visit to the portal, such as after login) so the
   // three photos rotate. Server and client each roll independently, which is an intentional,
@@ -35,9 +35,9 @@ export default function PortalLayout({
   );
 
   const tabs: NavTab[] = [{ key: 'modules', label: 'Modules', href: `/${tenantSlug}/modules` }];
-  if (isTenantAdmin) {
-    tabs.push({ key: 'executive', label: 'Executive Dashboard', href: `/${tenantSlug}/executive` });
-  }
+  // if (isTenantAdmin) {
+  //   tabs.push({ key: 'executive', label: 'Executive Dashboard', href: `/${tenantSlug}/executive` });
+  // }
 
   return (
     <AppBackground backgroundImage={background} className="h-dvh overflow-hidden flex flex-col">

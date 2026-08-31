@@ -55,7 +55,7 @@ function receiptFileName(payment: PlacementPayment): string {
 
 const STATUS_LABEL: Record<string, string> = {
   RECORDED: 'Recorded',
-  BANK_CONFIRMED: 'Disbursed',
+  BANK_CONFIRMED: 'Paid',
   FAILED: 'Failed',
   CANCELLED: 'Cancelled',
   REVERSED: 'Reversed',

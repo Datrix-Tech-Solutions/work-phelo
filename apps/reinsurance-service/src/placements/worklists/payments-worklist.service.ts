@@ -10,6 +10,7 @@ import {
   PaymentWorklistStatusFilter,
   QueryPaymentWorklistDto,
 } from '../dto/query-payment-worklist.dto';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 type PaymentWorklistRawRow = {
@@ -22,6 +23,7 @@ type PaymentWorklistRawRow = {
   cedantId: string;
   cedantName: string;
   sumInsured: Prisma.Decimal | string | number | null;
+  premium: Prisma.Decimal | string | number | null;
   facultativeOffer: Prisma.Decimal | string | number | null;
   commission: Prisma.Decimal | string | number | null;
   acceptedParticipantCount: bigint | number | string;
@@ -32,8 +34,15 @@ type PaymentWorklistRawRow = {
   latestConfirmedPaymentDate: Date | string | null;
   placementStatus: PlacementStatus;
   paymentStatus: PaymentWorklistPaymentStatus;
+  hasNonVoidEndorsement: boolean;
   sortDate: Date | string;
   totalCount: bigint | number | string;
+};
+
+type EffectivePlacementTerms = {
+  sumInsured: number | null;
+  premium: number | null;
+  facultativeOfferPercent: number | null;
 };
 
 @Injectable()
@@ -41,6 +50,7 @@ export class ReinsurancePaymentsWorklistService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly money: ReinsuranceMoneyHelper,
+    private readonly effectiveViewService: PlacementEffectiveViewService,
   ) {}
 
   async findPayments(
@@ -69,6 +79,7 @@ export class ReinsurancePaymentsWorklistService {
           p."classOfBusiness",
           p."cedantId",
           p."sumInsured",
+          p."premium",
           p."facultativeOffer",
           p."commission",
           p."currency",
@@ -189,8 +200,16 @@ export class ReinsurancePaymentsWorklistService {
           bp."cedantId",
           bp."cedantName",
           bp."sumInsured",
+          bp."premium",
           bp."facultativeOffer",
           bp."commission",
+          EXISTS (
+            SELECT 1
+            FROM "reinsurance"."PlacementEndorsement" e2
+            WHERE e2."placementId" = bp."id"
+              AND e2."tenantId" = ${tenantId}
+              AND e2."status" <> 'VOID'
+          ) AS "hasNonVoidEndorsement",
           COALESCE(ac."acceptedParticipantCount", 0) AS "acceptedParticipantCount",
           bp."currency",
           COALESCE(pt."paidAmount", 0) AS "paidAmount",
@@ -233,9 +252,41 @@ export class ReinsurancePaymentsWorklistService {
       OFFSET ${offset}
     `;
 
+    // Endorsements amend the policy without touching the base Placement row, so raw
+    // sumInsured / premium / facultativeOffer never move. Resolve the canonical effective
+    // view for the endorsed placements on this page and overlay it below; everything else
+    // keeps its base terms.
+    const endorsedPlacementIds = rows
+      .filter((row) => row.hasNonVoidEndorsement)
+      .map((row) => row.placementId);
+    const effectiveTermsByPlacement = new Map<
+      string,
+      EffectivePlacementTerms
+    >();
+    await Promise.all(
+      [...new Set(endorsedPlacementIds)].map(async (placementId) => {
+        try {
+          const view = await this.effectiveViewService.getEffectiveView(
+            tenantId,
+            placementId,
+          );
+          effectiveTermsByPlacement.set(placementId, {
+            sumInsured: view.effectiveTotals.sumInsured,
+            premium: view.effectiveTotals.premium,
+            facultativeOfferPercent:
+              view.effectiveTotals.facultativeOfferPercent,
+          });
+        } catch {
+          // Fall back to base terms for this row rather than failing the worklist.
+        }
+      }),
+    );
+
     const total = rows[0] ? this.toInteger(rows[0].totalCount) : 0;
     return {
-      items: rows.map((row) => this.toDto(row)),
+      items: rows.map((row) =>
+        this.toDto(row, effectiveTermsByPlacement.get(row.placementId)),
+      ),
       meta: {
         page,
         limit,
@@ -271,12 +322,29 @@ export class ReinsurancePaymentsWorklistService {
     `;
   }
 
-  private toDto(row: PaymentWorklistRawRow): PaymentWorklistRowDto {
+  private toDto(
+    row: PaymentWorklistRawRow,
+    effective?: EffectivePlacementTerms,
+  ): PaymentWorklistRowDto {
     const sumInsured = this.toOptionalMoneyNumber(row.sumInsured);
     const facultativeOffer = this.toOptionalMoneyNumber(row.facultativeOffer);
+    const premium = this.toOptionalMoneyNumber(row.premium);
     const outstandingAmount = this.money.roundMoney(
       this.toMoneyNumber(row.outstandingAmount),
     );
+
+    const effectiveSumInsured = effective?.sumInsured ?? sumInsured;
+    const effectivePremium = effective?.premium ?? premium;
+    const effectiveFacultativeOfferPercent =
+      effective?.facultativeOfferPercent ?? facultativeOffer;
+    const facultativeSumInsuredOf = (
+      si: number | null,
+      offer: number | null,
+    ): number | null =>
+      si == null || offer == null
+        ? null
+        : this.money.roundMoney(si * (offer / 100));
+
     return {
       id: row.id,
       placementId: row.placementId,
@@ -289,10 +357,17 @@ export class ReinsurancePaymentsWorklistService {
       sumInsured,
       facultativeOffer,
       commission: this.toOptionalMoneyNumber(row.commission),
-      facultativeSumInsured:
-        sumInsured == null || facultativeOffer == null
-          ? null
-          : this.money.roundMoney(sumInsured * (facultativeOffer / 100)),
+      facultativeSumInsured: facultativeSumInsuredOf(
+        sumInsured,
+        facultativeOffer,
+      ),
+      effectiveSumInsured,
+      effectivePremium,
+      effectiveFacultativeOfferPercent,
+      effectiveFacultativeSumInsured: facultativeSumInsuredOf(
+        effectiveSumInsured,
+        effectiveFacultativeOfferPercent,
+      ),
       acceptedParticipantCount: this.toInteger(row.acceptedParticipantCount),
       currency: row.currency,
       paidAmount: this.money.roundMoney(this.toMoneyNumber(row.paidAmount)),

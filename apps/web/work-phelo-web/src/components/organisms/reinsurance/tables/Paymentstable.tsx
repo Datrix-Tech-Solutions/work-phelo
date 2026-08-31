@@ -166,36 +166,39 @@ const COLUMNS: Column<PaymentWorklistRow>[] = [
     key: 'cedant',
     label: 'Cedant',
     width: 'minmax(100px, 1fr)',
-    render: (row) => <span className="text-gray-700">{row.cedantName}</span>,
+    render: (row) => <span className="font-bold text-gray-700">{row.cedantName}</span>,
   },
   {
     key: 'sumInsured',
     label: '100% Sum Insured',
     width: '130px',
     className: 'text-right',
-    render: (row) => (
-      <span className="font-small text-gray-900 whitespace-nowrap">
-        {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
-      </span>
-    ),
+    render: (row) => {
+      const value = row.effectiveSumInsured ?? row.sumInsured;
+      return (
+        <span className="font-semibold text-gray-900 whitespace-nowrap">
+          {value != null ? `${row.currency ?? ''} ${fmtAmount(value)}` : '—'}
+        </span>
+      );
+    },
   },
   {
     key: 'facultativeOffer',
     label: 'Share of S.I.',
     width: '130px',
     className: 'text-right',
-    render: (row) => (
-      <div className="flex flex-col gap-0.5 items-end">
-        <span className="font-small text-gray-900 whitespace-nowrap">
-          {row.facultativeSumInsured != null
-            ? `${row.currency ?? ''} ${fmtAmount(row.facultativeSumInsured)}`
-            : '—'}
-        </span>
-        <span className="text-xs text-gray-400">
-          {row.facultativeOffer != null ? `${row.facultativeOffer}% share` : '—'}
-        </span>
-      </div>
-    ),
+    render: (row) => {
+      const share = row.effectiveFacultativeSumInsured ?? row.facultativeSumInsured;
+      const offer = row.effectiveFacultativeOfferPercent ?? row.facultativeOffer;
+      return (
+        <div className="flex flex-col gap-0.5 items-end">
+          <span className="font-semibold text-gray-900 whitespace-nowrap">
+            {share != null ? `${row.currency ?? ''} ${fmtAmount(share)}` : '—'}
+          </span>
+          <span className="text-xs text-gray-400">{offer != null ? `${offer}% share` : '—'}</span>
+        </div>
+      );
+    },
   },
   // {
   //   key: 'participants',
@@ -219,7 +222,9 @@ const COLUMNS: Column<PaymentWorklistRow>[] = [
     label: 'Commission',
     width: '90px',
     render: (row) => (
-      <span className="text-gray-700">{row.commission != null ? `${row.commission}%` : '—'}</span>
+      <span className="font-bold text-gray-700">
+        {row.commission != null ? `${row.commission}%` : '—'}
+      </span>
     ),
   },
   // {

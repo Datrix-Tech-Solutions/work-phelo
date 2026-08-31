@@ -1,19 +1,23 @@
 import { PlacementStatus } from '../../../prisma/generated/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 import { ReinsurancePaymentsWorklistService } from './payments-worklist.service';
 
 describe('ReinsurancePaymentsWorklistService', () => {
   let prisma: { $queryRaw: jest.Mock };
+  let effectiveViewService: { getEffectiveView: jest.Mock };
   let service: ReinsurancePaymentsWorklistService;
 
   beforeEach(() => {
     prisma = {
       $queryRaw: jest.fn(),
     };
+    effectiveViewService = { getEffectiveView: jest.fn() };
     service = new ReinsurancePaymentsWorklistService(
       prisma as unknown as PrismaService,
       new ReinsuranceMoneyHelper(),
+      effectiveViewService as unknown as PlacementEffectiveViewService,
     );
   });
 
@@ -95,6 +99,105 @@ describe('ReinsurancePaymentsWorklistService', () => {
     expect(result).toEqual({
       items: [],
       meta: { page: 1, limit: 10, total: 0, totalPages: 0 },
+    });
+  });
+
+  it('overlays effective endorsement terms for endorsed placements', async () => {
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        id: 'placement-1',
+        placementId: 'placement-1',
+        reference: 'FAC-001',
+        policyNumber: 'POL-001',
+        title: 'Xpress Group',
+        classOfBusiness: 'Marine',
+        cedantId: 'cedant-1',
+        cedantName: 'Acme Insurance',
+        sumInsured: '1000000.00',
+        premium: '50000.00',
+        facultativeOffer: '80.0000',
+        commission: '10.0000',
+        hasNonVoidEndorsement: true,
+        acceptedParticipantCount: 2n,
+        currency: 'GHS',
+        paidAmount: '0.00',
+        outstandingAmount: '0.00',
+        currentObligation: '0.00',
+        latestConfirmedPaymentDate: null,
+        placementStatus: PlacementStatus.CLOSED,
+        paymentStatus: 'Outstanding',
+        sortDate: new Date('2026-08-20T12:00:00.000Z'),
+        totalCount: 1n,
+      },
+    ]);
+    effectiveViewService.getEffectiveView.mockResolvedValue({
+      effectiveTotals: {
+        sumInsured: 1500000,
+        premium: 72000,
+        facultativeOfferPercent: 75,
+      },
+    });
+
+    const result = await service.findPayments('tenant-1', {
+      page: 1,
+      limit: 10,
+    });
+
+    expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    expect(result.items[0]).toMatchObject({
+      sumInsured: 1000000,
+      facultativeOffer: 80,
+      facultativeSumInsured: 800000,
+      effectiveSumInsured: 1500000,
+      effectivePremium: 72000,
+      effectiveFacultativeOfferPercent: 75,
+      effectiveFacultativeSumInsured: 1125000,
+    });
+  });
+
+  it('falls back to base terms when a placement has no endorsement', async () => {
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        id: 'placement-1',
+        placementId: 'placement-1',
+        reference: 'FAC-001',
+        policyNumber: 'POL-001',
+        title: 'Xpress Group',
+        classOfBusiness: 'Marine',
+        cedantId: 'cedant-1',
+        cedantName: 'Acme Insurance',
+        sumInsured: '1000000.00',
+        premium: '50000.00',
+        facultativeOffer: '80.0000',
+        commission: '10.0000',
+        hasNonVoidEndorsement: false,
+        acceptedParticipantCount: 2n,
+        currency: 'GHS',
+        paidAmount: '0.00',
+        outstandingAmount: '0.00',
+        currentObligation: '0.00',
+        latestConfirmedPaymentDate: null,
+        placementStatus: PlacementStatus.CLOSED,
+        paymentStatus: 'Outstanding',
+        sortDate: new Date('2026-08-20T12:00:00.000Z'),
+        totalCount: 1n,
+      },
+    ]);
+
+    const result = await service.findPayments('tenant-1', {
+      page: 1,
+      limit: 10,
+    });
+
+    expect(effectiveViewService.getEffectiveView).not.toHaveBeenCalled();
+    expect(result.items[0]).toMatchObject({
+      effectiveSumInsured: 1000000,
+      effectivePremium: 50000,
+      effectiveFacultativeOfferPercent: 80,
+      effectiveFacultativeSumInsured: 800000,
     });
   });
 

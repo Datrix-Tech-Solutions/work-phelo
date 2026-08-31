@@ -45,8 +45,9 @@ const placementNotesKey = (placementId: string) =>
 const placementLockStatusKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'lock-status'] as const;
 const paymentEligibleFacultativesKey = [...FACULTATIVES_KEY, 'payment-eligible'] as const;
+const facultativeRowStatePrefixKey = ['reinsurance', 'worklists', 'facultative-row-state'] as const;
 const facultativeRowStateKey = (placementIds: string[]) =>
-  ['reinsurance', 'worklists', 'facultative-row-state', [...new Set(placementIds)].sort()] as const;
+  [...facultativeRowStatePrefixKey, [...new Set(placementIds)].sort()] as const;
 
 async function invalidateFacultativeLists(queryClient: ReturnType<typeof useQueryClient>) {
   await Promise.all([
@@ -626,6 +627,13 @@ function invalidateEndorsementWorkflow(
   endorsementId?: string,
 ) {
   queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY, exact: true });
+  // The facultative table renders from the paginated list and the row-state worklist, neither of
+  // which is a descendant of FACULTATIVES_KEY's exact match — invalidate them so passing an
+  // endorsement refreshes the table rows and the endorsement-count / reopen-gating state.
+  queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, 'page'] });
+  queryClient.invalidateQueries({ queryKey: facultativeRowStatePrefixKey });
+  // The payments worklist also carries effective (post-endorsement) placement terms.
+  queryClient.invalidateQueries({ queryKey: ['reinsurance', 'worklists', 'payments'] });
   queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
   queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
   queryClient.invalidateQueries({ queryKey: placementEffectiveViewKey(placementId) });
