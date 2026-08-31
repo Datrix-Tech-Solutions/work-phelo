@@ -2,8 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import type { CSSProperties, ReactNode } from 'react';
-import { SIGNATURE_SRC, SIGNATORY_NAME, SIGNATORY_TITLE } from '@/lib/reinsurance/documentBranding';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useSignatoryBranding } from '@/lib/reinsurance/useSignatoryBranding';
 import { documentRootStyle } from './documentTypography';
 
 const titleStyle: CSSProperties = {
@@ -160,14 +160,27 @@ export function DocumentAmountTable({ rows }: { rows: DocumentAmountRow[] }) {
   );
 }
 
-/** The issuer's signature — image plus name and title, drawn from the fixed
- *  document branding. Placed after a letter's "Yours faithfully,". */
+/** The issuer's signature — image plus name and title, from the tenant's saved
+ *  document profile (falling back to the fixed iRisk branding). Placed after a
+ *  letter's "Yours faithfully,". */
 export function DocumentSignature() {
+  const { signatureSrc, fallbackSignatureSrc, signatoryName, signatoryTitle } =
+    useSignatoryBranding();
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const src = failedSrc === signatureSrc ? fallbackSignatureSrc : signatureSrc;
+
   return (
     <div className="mt-[0.6em]" style={{ fontFamily: 'var(--doc-font-content)' }}>
-      <img src={SIGNATURE_SRC} alt="" className="h-[8em] w-auto max-w-[16em] object-contain" />
-      <p className="font-semibold text-gray-900">{SIGNATORY_NAME}</p>
-      <p className="text-gray-700">{SIGNATORY_TITLE}</p>
+      {/* Explicit box (not w-auto) so html2canvas sizes it without the decoded
+          intrinsic dimensions; object-contain keeps the aspect ratio. */}
+      <img
+        src={src}
+        alt=""
+        className="h-[8em] w-[12em] object-contain object-left"
+        onError={() => setFailedSrc(signatureSrc)}
+      />
+      <p className="font-semibold text-gray-900">{signatoryName}</p>
+      <p className="text-gray-700">{signatoryTitle}</p>
     </div>
   );
 }

@@ -69,13 +69,31 @@ export class TenantDocumentProfileService {
 
   async get(tenantId: string): Promise<TenantDocumentProfileResponseDto> {
     const tenant = await this.findTenant(tenantId);
-    return this.toProfileResponse(tenant);
+    const response = this.toProfileResponse(tenant);
+    const signature = await this.resolveSignatureUrl(tenant.documentProfile);
+    response.signatureUrl = signature.url;
+    response.signatureUrlExpiresAt = signature.expiresAt;
+    return response;
+  }
+
+  private async resolveSignatureUrl(
+    profile: TenantDocumentProfile | null,
+  ): Promise<{ url: string | null; expiresAt: string | null }> {
+    if (!profile) return { url: null, expiresAt: null };
+    const asset = await this.resolveInternalAsset(
+      profile.signatureObjectKey,
+      profile.signatureMimeType,
+      profile.signatureFileName,
+      profile.signatureSizeBytes,
+    );
+    return { url: asset?.readUrl ?? null, expiresAt: asset?.expiresAt ?? null };
   }
 
   async getInternalResolved(
     tenantId: string,
   ): Promise<InternalTenantDocumentProfileDto> {
-    const profile = await this.get(tenantId);
+    const tenant = await this.findTenant(tenantId);
+    const profile = this.toProfileResponse(tenant);
     const [logo, signature] = await Promise.all([
       this.resolveInternalAsset(
         profile.logoObjectKey,
@@ -671,6 +689,8 @@ export class TenantDocumentProfileService {
       signatureMimeType: profile?.signatureMimeType ?? null,
       signatureFileName: profile?.signatureFileName ?? null,
       signatureSizeBytes: profile?.signatureSizeBytes ?? null,
+      signatureUrl: null,
+      signatureUrlExpiresAt: null,
       authorizedSignatoryName: profile?.authorizedSignatoryName ?? null,
       authorizedSignatoryTitle: profile?.authorizedSignatoryTitle ?? null,
       isActive: profile?.isActive ?? true,

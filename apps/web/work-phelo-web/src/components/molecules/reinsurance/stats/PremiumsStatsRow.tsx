@@ -69,25 +69,25 @@ export function PremiumsStatsRow() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <TopCedantsByOffersChart period="monthly" closedOnly sinceIso={sinceIso} className="h-56" />
+        <TopCedantsByOffersChart period="monthly" closedOnly sinceIso={sinceIso} className="h-50" />
 
-        <div className="grid grid-cols-2 grid-rows-2 gap-4 lg:h-56">
+        <div className="grid grid-cols-2 grid-rows-2 gap-4 lg:h-50">
           <KpiCard
-            label="Premium Due"
+            label="Total Premium"
             value={premiumDueCount}
             icon={Icons.FileCheck2}
             iconColor="#2a78d6"
             isLoading={isLoading}
           />
           <KpiCard
-            label="Premium Fully Paid"
+            label="Premium Fully Received"
             value={fullyPaidCount}
             icon={Icons.CircleDollarSign}
             iconColor="#008300"
             isLoading={isLoading}
           />
           <KpiCard
-            label="Outstanding"
+            label="Outstanding Premium"
             value={outstandingCount}
             icon={Icons.Clock}
             iconColor="#eda100"
@@ -105,7 +105,7 @@ export function PremiumsStatsRow() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <CurrencyAmountListCard
-          title="Premium Due"
+          title="Total Premium"
           columnLabel="Due"
           amountsByCode={toAmountMap(dueByCurrency)}
           currencies={currencies}
@@ -114,7 +114,7 @@ export function PremiumsStatsRow() {
           className="h-64"
         />
         <CurrencyAmountListCard
-          title={`Premium Paid ${periodLabel}`}
+          title={`Premium Received ${periodLabel}`}
           columnLabel="Paid"
           amountsByCode={toAmountMap(periodSummary.paidByCurrency)}
           currencies={currencies}

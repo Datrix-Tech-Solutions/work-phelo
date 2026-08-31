@@ -1,7 +1,7 @@
 'use client';
 
-import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { useDocumentFileName } from '@/lib/reinsurance/useDocumentFileName';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
   GuaranteeNoteContent,
@@ -20,16 +20,17 @@ export function GuaranteeNotePreviewModal({
   ...content
 }: GuaranteeNotePreviewModalProps) {
   const policyNumber = content.policyNumberOverride ?? content.placement.policyNumber;
+  const fileName = useDocumentFileName({
+    documentName: 'Guarantee Note',
+    placement: content.placement,
+    policyNumber,
+  });
 
   return (
     <DocumentPreviewShell
       isOpen={isOpen}
       title={`Guarantee Note — ${displayPolicyNumber(policyNumber)}`}
-      fileName={buildDocumentFileName(
-        'Guarantee Note',
-        displayPolicyNumber(policyNumber),
-        content.placement.title,
-      )}
+      fileName={fileName}
       printRootId="guarantee-note-print-root"
       onClose={onClose}
     >

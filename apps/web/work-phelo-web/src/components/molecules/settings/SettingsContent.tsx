@@ -9,7 +9,7 @@ import { TabItem } from '@/components/molecules/shared/TabBar';
 import { useAuthStore } from '@/store/auth.store';
 import { SelfServiceTab } from './SelfServiceTab';
 import { DocumentTemplateStudio } from '@/components/organisms/settings/DocumentTemplateStudio';
-import { ReinsuranceAccountingIntegrationControl } from '@/components/organisms/shared/ReinsuranceAccountingIntegrationControl';
+// import { ReinsuranceAccountingIntegrationControl } from '@/components/organisms/shared/ReinsuranceAccountingIntegrationControl';
 
 type SettingsTab = 'security' | 'appearance' | 'self-service' | 'documents';
 
@@ -54,12 +54,12 @@ export function SettingsContent() {
           {activeTab === 'self-service' && (
             <div className="flex flex-col gap-8">
               <SelfServiceTab />
-              {user?.tenantId && (
+              {/* {user?.tenantId && (
                 <ReinsuranceAccountingIntegrationControl
                   tenantId={user.tenantId}
                   canManage={user.role === 'SUPER_ADMIN'}
                 />
-              )}
+              )} */}
             </div>
           )}
           {activeTab === 'documents' && <DocumentTemplateStudio />}
