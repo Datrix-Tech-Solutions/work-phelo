@@ -93,11 +93,22 @@ export function DebitNoteContent({
   const commissionPct = numberValue(note.commissionPercent) ?? 0;
   const commissionAmt = numberValue(note.commissionAmount);
   const netAmount = numberValue(note.netAmount);
-  const totalPremium = placement?.premium ?? null;
+
+  // For a current-effective debit note (issued after an endorsement) the backend
+  // carries the post-endorsement totals on the note itself. The base placement is
+  // never mutated by endorsements, so `placement.premium` / `placement.facultativeOffer`
+  // are stale — deriving the facultative share from them scales the percentage by
+  // (effectivePremium / originalPremium). Prefer the snapshot's effective totals.
+  const effectiveTotals = record(record(record(note.sourceSnapshot).effectiveView).effectiveTotals);
+  const effectivePremium = numberValue(effectiveTotals.premium);
+  const snapshotFacPct = numberValue(effectiveTotals.facultativeOfferPercent);
+
+  const totalPremium = effectivePremium ?? placement?.premium ?? null;
   const impliedFacOffer =
-    totalPremium && grossAmount != null && totalPremium !== 0
+    snapshotFacPct ??
+    (totalPremium && grossAmount != null && totalPremium !== 0
       ? (grossAmount / totalPremium) * 100
-      : (placement?.facultativeOffer ?? 0);
+      : (placement?.facultativeOffer ?? 0));
 
   const debitNo =
     text(note.noteNumber) !== '—'

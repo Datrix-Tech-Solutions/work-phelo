@@ -473,21 +473,75 @@ export function FacultativeTable({
     const actorName = (userId: string | null) =>
       userId ? (userNameById.get(userId) ?? 'Unknown user') : 'Unknown user';
 
+    // Endorsements amend the policy without touching the base placement record, so the raw
+    // row.sumInsured / row.premium / row.facultativeOffer never move. Overlay the effective
+    // terms from row-state (which the backend already falls back to base values for) so the
+    // table matches the placement detail page once an endorsement has passed.
+    const effectiveTermsFor = (placementId: string) =>
+      tab === 'archived' ? undefined : rowStateByPlacementId.get(placementId);
+
     const columnsWithRowState = COLUMNS.map((col) => {
-      if (col.key !== 'reference' || tab === 'archived') {
-        return col;
+      if (tab === 'archived') return col;
+
+      if (col.key === 'reference') {
+        return {
+          ...col,
+          render: (row: Facultative) => (
+            <EndorsedReferencePill
+              id={row.id}
+              reference={displayPolicyNumber(row.policyNumber)}
+              endorsementCount={endorsementCountMap.get(row.id) ?? 0}
+            />
+          ),
+        };
       }
 
-      return {
-        ...col,
-        render: (row: Facultative) => (
-          <EndorsedReferencePill
-            id={row.id}
-            reference={displayPolicyNumber(row.policyNumber)}
-            endorsementCount={endorsementCountMap.get(row.id) ?? 0}
-          />
-        ),
-      };
+      if (col.key === 'sumInsured') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value = effectiveTermsFor(row.id)?.effectiveSumInsured ?? row.sumInsured;
+            return (
+              <span className="font-semibold text-gray-900">
+                {value != null ? `${row.currency ?? ''} ${fmtAmount(value)}` : '—'}
+              </span>
+            );
+          },
+        };
+      }
+
+      if (col.key === 'premium') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value = effectiveTermsFor(row.id)?.effectivePremium ?? row.premium;
+            return (
+              <span className="font-semibold text-gray-900">
+                {value != null ? `${row.currency ?? ''} ${fmtAmount(value)}` : '—'}
+              </span>
+            );
+          },
+        };
+      }
+
+      if (col.key === 'facultativeOffer') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value =
+              effectiveTermsFor(row.id)?.effectiveFacultativeOfferPercent ?? row.facultativeOffer;
+            return (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-semibold text-gray-900">
+                  {value != null ? `${value}%` : '—'}
+                </span>
+              </div>
+            );
+          },
+        };
+      }
+
+      return col;
     });
 
     if (tab === 'closing') {
@@ -558,7 +612,7 @@ export function FacultativeTable({
         ),
       },
     ];
-  }, [tab, tenantUsers, paymentStatusMap, endorsementCountMap]);
+  }, [tab, tenantUsers, paymentStatusMap, endorsementCountMap, rowStateByPlacementId]);
 
   const closeArchiveModal = () => {
     setArchiveTarget(null);

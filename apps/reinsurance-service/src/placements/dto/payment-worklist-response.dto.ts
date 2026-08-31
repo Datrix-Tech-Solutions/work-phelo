@@ -48,6 +48,38 @@ export class PaymentWorklistRowDto {
   @ApiPropertyOptional({ example: 800000, nullable: true })
   facultativeSumInsured!: number | null;
 
+  @ApiPropertyOptional({
+    example: 1200000,
+    nullable: true,
+    description:
+      'Sum insured after applying every closed, in-force endorsement. Equals sumInsured when no endorsement applies.',
+  })
+  effectiveSumInsured!: number | null;
+
+  @ApiPropertyOptional({
+    example: 90000,
+    nullable: true,
+    description:
+      'Facultative premium after applying every closed, in-force endorsement. Equals the base placement premium when no endorsement applies.',
+  })
+  effectivePremium!: number | null;
+
+  @ApiPropertyOptional({
+    example: 75,
+    nullable: true,
+    description:
+      'Facultative offer percentage after applying every closed, in-force endorsement. Equals facultativeOffer when no endorsement applies.',
+  })
+  effectiveFacultativeOfferPercent!: number | null;
+
+  @ApiPropertyOptional({
+    example: 900000,
+    nullable: true,
+    description:
+      'effectiveSumInsured * effectiveFacultativeOfferPercent / 100. Equals facultativeSumInsured when no endorsement applies.',
+  })
+  effectiveFacultativeSumInsured!: number | null;
+
   @ApiProperty({ example: 2 })
   acceptedParticipantCount!: number;
 

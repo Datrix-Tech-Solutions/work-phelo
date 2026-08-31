@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import { Facultative, PlacementClaim, PlacementParticipant } from '@/types/reinsurance';
-import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
 import { ClaimCedantSettlementPanel } from '@/components/organisms/reinsurance/claim/ClaimCedantSettlementPanel';
 import { ClaimReinsurersTable } from '@/components/molecules/reinsurance/claim/ClaimReinsurersTable';
@@ -10,8 +9,13 @@ import {
   useAllPlacementParticipants,
   useClaimAllocations,
   useClaimCashCalls,
-  useReinsurers,
+  useUpdateClaimStatus,
+  useCreateClaimCashCall,
+  useUpdateClaimCashCallStatus,
+  useApproveClaimRecovery,
 } from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 import { cardClass } from '@/lib/utils';
 import { fmt } from '@/lib/reinsurance/claimFormat';
 
@@ -21,11 +25,16 @@ interface ClaimOverviewTabProps {
 }
 
 export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
-  const { data: reinsurers = [] } = useReinsurers();
   const { data: allocations = [] } = useClaimAllocations(placement.id, claim?.id ?? '');
   const { data: cashCalls = [] } = useClaimCashCalls(placement.id, claim?.id ?? '');
-  const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
+  const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
+
+  const updateClaimStatus = useUpdateClaimStatus(placement.id, claim?.id ?? '');
+  const createCashCall = useCreateClaimCashCall(placement.id, claim?.id ?? '');
+  const updateCashCallStatus = useUpdateClaimCashCallStatus(placement.id, claim?.id ?? '');
+  const approveRecovery = useApproveClaimRecovery(placement.id, claim?.id ?? '');
+  const addToast = useToastStore((s) => s.addToast);
 
   // Includes reinsurers added via an endorsement — placement.participants alone only reflects
   // the original placement closing, so it silently misses those.
@@ -41,31 +50,50 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
     [cashCalls],
   );
 
-  // Match by counterpartyId, not participantId — allocations sourced from an endorsement closing
-  // carry endorsementParticipantId instead, so participantId alone would miss those reinsurers.
-  const mailAllocation = mailTarget
-    ? allocations.find((a) => a.counterpartyId === mailTarget.counterpartyId)
-    : undefined;
   const debitNoteAllocation = debitNoteTarget
     ? allocations.find((a) => a.counterpartyId === debitNoteTarget.counterpartyId)
     : undefined;
 
-  const reinsurerEmails = useMemo<Record<string, string[]>>(
-    () =>
-      Object.fromEntries(
-        reinsurers.map((r) => {
-          const emails: string[] = [];
-          if (r.email) emails.push(r.email);
-          r.contacts.forEach((c) => {
-            if (c.email) emails.push(c.email);
-          });
-          return [r.id, emails];
-        }),
-      ),
-    [reinsurers],
-  );
+  // Skips the mail compose/preview modal entirely — the "Send Mail" button fires the same
+  // notify → issue cash call → approve recovery chain the modal used to run on Send, matching
+  // the one-click flow the distribution list uses for its mail action.
+  const handleSendMail = async (participant: PlacementParticipant) => {
+    if (!claim) return;
+    // Match by counterpartyId, not participantId — allocations sourced from an endorsement
+    // closing carry endorsementParticipantId instead, so participantId alone would miss those.
+    const allocation = allocations.find((a) => a.counterpartyId === participant.counterpartyId);
+    const key = allocation?.id ?? participant.id;
+    if (sendingIds.has(key)) return;
 
-  const mailRecipients = mailTarget ? (reinsurerEmails[mailTarget.counterpartyId] ?? []) : [];
+    setSendingIds((prev) => new Set(prev).add(key));
+    try {
+      await updateClaimStatus.mutateAsync('NOTIFIED');
+      if (allocation) {
+        const cashCall = await createCashCall.mutateAsync(allocation.id);
+        await updateCashCallStatus.mutateAsync({ cashCallId: cashCall.id, status: 'ISSUED' });
+        // Recognizes the receivable for the full demanded amount at send time, so a recovery
+        // approval always exists once a cash call is issued — recording a receipt against it
+        // later (Cash Calls tab) no longer needs a separate approval step of its own.
+        await approveRecovery.mutateAsync({
+          allocationId: allocation.id,
+          approvedAmount: parseFloat(cashCall.amount),
+          cashCallId: cashCall.id,
+        });
+      }
+      addToast({
+        message: `Cash call sent to ${participant.counterparty.name}.`,
+        type: 'success',
+      });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setSendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
 
   const totalActualClaim = useMemo(() => {
     if (allocations.length > 0) {
@@ -96,7 +124,8 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
         isActualAmount={isActualAmount}
         currency={claim?.currency ?? placement.currency}
         sentAllocationIds={sentAllocationIds}
-        onMail={setMailTarget}
+        busyIds={sendingIds}
+        onMail={handleSendMail}
         onPreview={setDebitNoteTarget}
       />
 
@@ -110,19 +139,6 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
       </div>
 
       {claim && <ClaimCedantSettlementPanel placementId={placement.id} claim={claim} />}
-
-      {mailTarget && (
-        <MailPreviewModal
-          isOpen
-          placement={placement}
-          brokerageFee={parseFloat(mailTarget.brokerageFee ?? '0')}
-          recipients={mailRecipients}
-          claim={claim}
-          allocation={mailAllocation}
-          onSend={() => setMailTarget(null)}
-          onClose={() => setMailTarget(null)}
-        />
-      )}
 
       {debitNoteTarget && (
         <ClaimDebitNoteModal

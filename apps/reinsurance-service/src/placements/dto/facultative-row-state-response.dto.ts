@@ -32,6 +32,37 @@ export class FacultativeRowStateDto {
 
   @ApiProperty({ example: true })
   hasNonVoidEndorsement!: boolean;
+
+  @ApiProperty({
+    example: 5000000,
+    nullable: true,
+    description:
+      'Sum insured after applying every closed, in-force endorsement. Equals the base placement value when no endorsement applies.',
+  })
+  effectiveSumInsured!: number | null;
+
+  @ApiProperty({
+    example: 75000,
+    nullable: true,
+    description:
+      'Facultative premium after applying every closed, in-force endorsement. Equals the base placement value when no endorsement applies.',
+  })
+  effectivePremium!: number | null;
+
+  @ApiProperty({
+    example: 40,
+    nullable: true,
+    description:
+      'Facultative offer percentage after applying every closed, in-force endorsement. Equals the base placement value when no endorsement applies.',
+  })
+  effectiveFacultativeOfferPercent!: number | null;
+
+  @ApiProperty({
+    example: 3,
+    description:
+      'Effective participant count after applying every closed, in-force endorsement.',
+  })
+  effectiveParticipantCount!: number;
 }
 
 export class FacultativeRowStateResponseDto {

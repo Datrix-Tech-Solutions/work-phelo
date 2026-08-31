@@ -8,7 +8,9 @@ import {
   PremiumsPeriodToggle,
   PREMIUMS_PERIOD_LABEL,
   premiumsPeriodStart,
+  premiumsPeriodEnd,
 } from '@/components/atoms/PremiumsPeriodToggle';
+import { YearSelect } from '@/components/atoms/YearSelect';
 import { TopCedantsByOffersChart } from '@/components/molecules/reinsurance/stats/TopCedantsByOffersChart';
 import { Icons } from '@/components/atoms/icons';
 import {
@@ -23,10 +25,23 @@ import {
 
 const toAmountMap = (rows: CurrencyAmount[]) => new Map(rows.map((row) => [row.code, row.amount]));
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 export function PremiumsStatsRow() {
   const [period, setPeriod] = useState<PremiumsPeriod>('monthly');
-  const sinceIso = useMemo(() => premiumsPeriodStart(period).toISOString(), [period]);
-  const periodLabel = PREMIUMS_PERIOD_LABEL[period];
+  const [year, setYear] = useState(CURRENT_YEAR);
+
+  const sinceIso = useMemo(
+    () => premiumsPeriodStart(period, { year }).toISOString(),
+    [period, year],
+  );
+  const untilIso = useMemo(
+    () => premiumsPeriodEnd(period, { year })?.toISOString(),
+    [period, year],
+  );
+
+  const isPastYear = period === 'yearly' && year !== CURRENT_YEAR;
+  const periodLabel = isPastYear ? String(year) : PREMIUMS_PERIOD_LABEL[period];
 
   const { data: allPlacements = [], isLoading: loadingPlacements } = useFacultatives();
 
@@ -43,7 +58,7 @@ export function PremiumsStatsRow() {
   } = usePremiumsSummary(closingPlacements);
 
   // Flows (paid / brokerage / collection rate) — scoped to the selected period.
-  const periodSummary = usePremiumsPeriodSummary(closingPlacements, sinceIso);
+  const periodSummary = usePremiumsPeriodSummary(closingPlacements, sinceIso, untilIso);
 
   const { data: currencies = [] } = useCurrencies();
 
@@ -52,35 +67,45 @@ export function PremiumsStatsRow() {
     () => [...paymentStatuses.values()].filter((s) => s === 'paid').length,
     [paymentStatuses],
   );
-  const outstandingCount = useMemo(
-    () =>
-      [...paymentStatuses.values()].filter((s) => s === 'outstanding' || s === 'partial').length,
-    [paymentStatuses],
-  );
-  const premiumDueCount = paymentStatuses.size;
+  // const outstandingCount = useMemo(
+  //   () =>
+  //     [...paymentStatuses.values()].filter((s) => s === 'outstanding' || s === 'partial').length,
+  //   [paymentStatuses],
+  // );
+  // const premiumDueCount = paymentStatuses.size;
+  const totalOffersCount = allPlacements.length;
+  // Whatever isn't fully paid by the cedant is still outstanding.
+  const outstandingCount = Math.max(0, totalOffersCount - fullyPaidCount);
 
   const isLoading = loadingPlacements || loadingPayments || periodSummary.isLoading;
   const collectionRate = periodSummary.collectionRate;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
+    <div className="flex flex-col">
+      <div className="flex justify-end items-center gap-2">
+        {period === 'yearly' && <YearSelect value={year} onChange={setYear} />}
         <PremiumsPeriodToggle value={period} onChange={setPeriod} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <TopCedantsByOffersChart period="monthly" closedOnly sinceIso={sinceIso} className="h-50" />
+        <TopCedantsByOffersChart
+          period="monthly"
+          closedOnly
+          sinceIso={sinceIso}
+          untilIso={untilIso}
+          className="h-45"
+        />
 
-        <div className="grid grid-cols-2 grid-rows-2 gap-4 lg:h-50">
+        <div className="grid grid-cols-2 grid-rows-2 gap-2 lg:h-45">
           <KpiCard
-            label="Total Premium"
-            value={premiumDueCount}
+            label="Total Offers"
+            value={totalOffersCount}
             icon={Icons.FileCheck2}
             iconColor="#2a78d6"
             isLoading={isLoading}
           />
           <KpiCard
-            label="Premium Fully Received"
+            label="Offers Fully Paid by Cedants"
             value={fullyPaidCount}
             icon={Icons.CircleDollarSign}
             iconColor="#008300"
@@ -111,7 +136,7 @@ export function PremiumsStatsRow() {
           currencies={currencies}
           isLoading={isLoading}
           emptyMessage="No premium due yet"
-          className="h-64"
+          className="h-50"
         />
         <CurrencyAmountListCard
           title={`Premium Received ${periodLabel}`}
@@ -120,7 +145,7 @@ export function PremiumsStatsRow() {
           currencies={currencies}
           isLoading={isLoading}
           emptyMessage="No premium received in this period"
-          className="h-64"
+          className="h-50"
         />
         <CurrencyAmountListCard
           title="Premium Outstanding"
@@ -129,7 +154,7 @@ export function PremiumsStatsRow() {
           currencies={currencies}
           isLoading={isLoading}
           emptyMessage="No premium outstanding"
-          className="h-64"
+          className="h-50"
         />
         <CurrencyAmountListCard
           title={`Brokerage Earned ${periodLabel}`}
@@ -138,7 +163,7 @@ export function PremiumsStatsRow() {
           currencies={currencies}
           isLoading={isLoading}
           emptyMessage="No brokerage earned in this period"
-          className="h-64"
+          className="h-50"
         />
       </div>
     </div>

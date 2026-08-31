@@ -1087,6 +1087,14 @@ export interface PaymentWorklistRow {
   facultativeOffer: number | null;
   commission: number | null;
   facultativeSumInsured: number | null;
+  /**
+   * Terms after applying every closed, in-force endorsement. The backend returns the base
+   * placement value here when no endorsement applies, so these are always safe to display.
+   */
+  effectiveSumInsured: number | null;
+  effectivePremium: number | null;
+  effectiveFacultativeOfferPercent: number | null;
+  effectiveFacultativeSumInsured: number | null;
   acceptedParticipantCount: number;
   currency: string | null;
   paidAmount: number;
@@ -1112,6 +1120,14 @@ export interface FacultativeRowState {
   hasRecordedPayment: boolean;
   nonVoidEndorsementCount: number;
   hasNonVoidEndorsement: boolean;
+  /**
+   * Terms after applying every closed, in-force endorsement. The backend returns the base
+   * placement value here when no endorsement applies, so these are always safe to display.
+   */
+  effectiveSumInsured: number | null;
+  effectivePremium: number | null;
+  effectiveFacultativeOfferPercent: number | null;
+  effectiveParticipantCount: number;
 }
 
 export interface FacultativeRowStateResponse {
