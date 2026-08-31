@@ -138,6 +138,16 @@ function PaymentStatusCell({
   );
 }
 
+// Closing tab only: when the offer was created.
+const OFFER_DATE_COLUMN: Column<Facultative> = {
+  key: 'createdAt',
+  label: 'Offer Date',
+  width: '90px',
+  render: (row) => (
+    <span className="font-semibold text-gray-700">{fmtDateTime(row.createdAt)}</span>
+  ),
+};
+
 const SUM_INSURED_COLUMN: Column<Facultative> = {
   key: 'sumInsured',
   label: '100% Sum Insured',
@@ -174,9 +184,21 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'cedant',
     label: 'Cedant',
     width: 'minmax(120px, 0.8fr)',
-    render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
+    render: (row) => <span className="font-bold text-gray-700">{row.cedant.name}</span>,
   },
+
   SUM_INSURED_COLUMN,
+  {
+    key: 'premium',
+    label: 'Premium',
+    width: '100px',
+    className: 'text-right',
+    render: (row) => (
+      <span className="font-semibold text-gray-900">
+        {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
+      </span>
+    ),
+  },
   {
     key: 'facultativeOffer',
     label: 'Fac Offer',
@@ -189,17 +211,7 @@ const COLUMNS: Column<Facultative>[] = [
       </div>
     ),
   },
-  {
-    key: 'premium',
-    label: 'Fac Premium',
-    width: '100px',
-    className: 'text-right',
-    render: (row) => (
-      <span className="font-semibold text-gray-900">
-        {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
-      </span>
-    ),
-  },
+
   {
     key: 'totalAcceptedPercent',
     label: 'Signing Progress',
@@ -224,7 +236,6 @@ const COLUMNS: Column<Facultative>[] = [
       );
     },
   },
-
   {
     key: 'participants' as keyof Facultative,
     label: 'Participants',
@@ -548,22 +559,25 @@ export function FacultativeTable({
       // Signing Progress is dropped for closed placements; 100% Sum Insured (from COLUMNS) stays.
       return columnsWithRowState
         .filter((col) => col.key !== 'totalAcceptedPercent')
-        .map((col) => {
-          if (col.key === 'participants') return CLOSED_PARTICIPANTS_COLUMN;
+        .flatMap((col) => {
+          if (col.key === 'participants') return [CLOSED_PARTICIPANTS_COLUMN];
 
           if (col.key === 'status') {
-            return {
-              ...col,
-              render: (row: Facultative) => (
-                <PaymentStatusCell
-                  placement={row}
-                  paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
-                />
-              ),
-            };
+            return [
+              OFFER_DATE_COLUMN,
+              {
+                ...col,
+                render: (row: Facultative) => (
+                  <PaymentStatusCell
+                    placement={row}
+                    paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
+                  />
+                ),
+              },
+            ];
           }
 
-          return col;
+          return [col];
         });
     }
 

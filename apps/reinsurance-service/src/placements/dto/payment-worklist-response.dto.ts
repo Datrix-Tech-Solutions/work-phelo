@@ -110,6 +110,14 @@ export class PaymentWorklistRowDto {
   })
   paymentStatus!: PaymentWorklistPaymentStatus;
 
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    description:
+      'When the offer was entered in the system (placement.createdAt).',
+  })
+  createdAt!: string;
+
   @ApiProperty({ type: String, format: 'date-time' })
   sortDate!: string;
 }

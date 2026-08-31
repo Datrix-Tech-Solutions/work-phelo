@@ -143,7 +143,7 @@ export function TopCedantsByOffersChart({
                   disableTicks: true,
                   width: 'auto',
                   tickLabelStyle: { fontSize: 11, fill: 'var(--color-gray-700)' },
-                  categoryGapRatio: 0.5,
+                  categoryGapRatio: 0.65,
                 },
               ]}
               xAxis={[

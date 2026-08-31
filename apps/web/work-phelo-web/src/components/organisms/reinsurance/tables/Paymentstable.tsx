@@ -183,8 +183,21 @@ const COLUMNS: Column<PaymentWorklistRow>[] = [
     },
   },
   {
+    key: 'premium',
+    label: '100% Premium',
+    width: '130px',
+    className: 'text-right',
+    render: (row) => (
+      <span className="font-semibold text-gray-900 whitespace-nowrap">
+        {row.effectivePremium != null
+          ? `${row.currency ?? ''} ${fmtAmount(row.effectivePremium)}`
+          : '—'}
+      </span>
+    ),
+  },
+  {
     key: 'facultativeOffer',
-    label: 'Share of S.I.',
+    label: 'Your Share',
     width: '130px',
     className: 'text-right',
     render: (row) => {
@@ -227,12 +240,12 @@ const COLUMNS: Column<PaymentWorklistRow>[] = [
       </span>
     ),
   },
-  // {
-  //   key: 'createdAt',
-  //   label: 'Offer Date',
-  //   width: '100px',
-  //   render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
-  // },
+  {
+    key: 'createdAt',
+    label: 'Offer Date',
+    width: '90px',
+    render: (row) => <span className="font-semibold text-gray-700">{fmtDate(row.createdAt)}</span>,
+  },
   {
     key: 'status',
     label: 'Status',
