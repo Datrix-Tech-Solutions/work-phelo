@@ -1104,6 +1104,8 @@ export interface PaymentWorklistRow {
   latestConfirmedPaymentDate: string | null;
   placementStatus: FacultativeStatus;
   paymentStatus: PaymentWorklistPaymentStatus;
+  /** When the offer was entered in the system (placement.createdAt). */
+  createdAt: string;
   sortDate: string;
 }
 

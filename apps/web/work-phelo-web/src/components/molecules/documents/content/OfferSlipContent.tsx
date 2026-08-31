@@ -185,6 +185,7 @@ export function OfferSlipContent({
 
       {description && (
         <div
+          data-print-block
           className="text-gray-700"
           style={{
             fontFamily: 'var(--doc-font-content)',
@@ -192,7 +193,7 @@ export function OfferSlipContent({
           }}
         >
           <p className="text-gray-400">Kindly Refer:</p>
-          <div dangerouslySetInnerHTML={{ __html: description }} />
+          <div data-rich-text dangerouslySetInnerHTML={{ __html: description }} />
         </div>
       )}
 

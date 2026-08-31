@@ -35,6 +35,7 @@ type PaymentWorklistRawRow = {
   placementStatus: PlacementStatus;
   paymentStatus: PaymentWorklistPaymentStatus;
   hasNonVoidEndorsement: boolean;
+  createdAt: Date | string;
   sortDate: Date | string;
   totalCount: bigint | number | string;
 };
@@ -203,6 +204,7 @@ export class ReinsurancePaymentsWorklistService {
           bp."premium",
           bp."facultativeOffer",
           bp."commission",
+          bp."createdAt",
           EXISTS (
             SELECT 1
             FROM "reinsurance"."PlacementEndorsement" e2
@@ -381,6 +383,7 @@ export class ReinsurancePaymentsWorklistService {
       ),
       placementStatus: row.placementStatus,
       paymentStatus: row.paymentStatus,
+      createdAt: this.toIso(row.createdAt),
       sortDate: this.toIso(row.sortDate),
     };
   }

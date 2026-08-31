@@ -251,9 +251,10 @@ export function PremiumCreditNoteModal({
         </table>
 
         {description && (
-          <div>
+          <div data-print-block>
             <p className="text-sm font-semibold text-gray-400  tracking-wide mb-1">Kindly Refer:</p>
             <div
+              data-rich-text
               className="text-base text-gray-700"
               dangerouslySetInnerHTML={{ __html: description }}
             />

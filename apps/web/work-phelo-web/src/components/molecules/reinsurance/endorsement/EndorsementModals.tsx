@@ -118,6 +118,7 @@ export function EndorsementModals({
         onClose={onCloseAddPanel}
         onAdd={onAddReinsurers}
         existingIds={existingParticipantIds}
+        excludeName={placement.cedant?.name ?? placement.cedantName}
         title="Add Endorsement Participant"
       />
 
