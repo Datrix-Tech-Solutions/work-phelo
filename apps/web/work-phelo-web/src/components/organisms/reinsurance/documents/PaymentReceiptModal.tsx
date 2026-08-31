@@ -1,7 +1,7 @@
 'use client';
 
-import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { useDocumentFileName } from '@/lib/reinsurance/useDocumentFileName';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
   PaymentReceiptContent,
@@ -22,17 +22,17 @@ interface PaymentReceiptModalProps extends PaymentReceiptContentProps {
 export function PaymentReceiptModal({ isOpen, onClose, ...content }: PaymentReceiptModalProps) {
   const isDisbursement = content.payment.type === 'REINSURER_DISBURSEMENT';
   const label = isDisbursement ? 'Disbursement Advice' : 'Payment Receipt';
+  const fileName = useDocumentFileName({
+    documentName: label,
+    placement: content.placement,
+    recipientName: content.payment.counterparty?.name ?? null,
+  });
 
   return (
     <DocumentPreviewShell
       isOpen={isOpen}
       title={`${label} — ${displayPolicyNumber(content.placement.policyNumber)}`}
-      fileName={buildDocumentFileName(
-        label,
-        displayPolicyNumber(content.placement.policyNumber),
-        content.placement.title,
-        content.payment.counterparty?.name ? `to ${content.payment.counterparty.name}` : null,
-      )}
+      fileName={fileName}
       printRootId="payment-receipt-print-root"
       onClose={onClose}
     >

@@ -16,6 +16,7 @@ import {
   PlacementEndorsementSummary,
   PlacementNote,
 } from '@/types/reinsurance';
+import { useRiskTypes } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
@@ -484,6 +485,11 @@ export function EndorsementSlipPreviewModal({
   confirmedClosing,
   onClose,
 }: EndorsementSlipPreviewModalProps) {
+  const { data: riskTypes = [] } = useRiskTypes();
+  const riskTypeName = placement.riskTypeId
+    ? (riskTypes.find((rt) => rt.id === placement.riskTypeId)?.name ?? null)
+    : null;
+
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = getSnapshotPlacement(endorsement.proposedSnapshot ?? {});
   const confirmedClosings = closings.filter((closing) => closing.status === 'CONFIRMED');
@@ -505,8 +511,9 @@ export function EndorsementSlipPreviewModal({
         fileName={buildDocumentFileName(
           documentTitle,
           displayPolicyNumber(placement.policyNumber),
+          riskTypeName,
           placement.title,
-          `endorsement ${endorsement.endorsementNumber}`,
+          focusedReinsurerName ? `to ${focusedReinsurerName}` : null,
         )}
         printRootId="endorsement-offer-slip-print-root"
         onClose={onClose}
@@ -531,8 +538,9 @@ export function EndorsementSlipPreviewModal({
         fileName={buildDocumentFileName(
           docTitle,
           displayPolicyNumber(placement.policyNumber),
+          riskTypeName,
           placement.title,
-          `endorsement ${endorsement.endorsementNumber}`,
+          focusedReinsurerName ? `to ${focusedReinsurerName}` : null,
         )}
         printRootId="endorsement-certificate-print-root"
         onClose={onClose}
@@ -557,6 +565,7 @@ export function EndorsementSlipPreviewModal({
       fileName={buildDocumentFileName(
         documentTitle,
         displayPolicyNumber(placement.policyNumber),
+        riskTypeName,
         placement.title,
         `endorsement ${endorsement.endorsementNumber}`,
       )}

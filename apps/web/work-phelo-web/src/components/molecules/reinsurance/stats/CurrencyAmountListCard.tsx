@@ -62,7 +62,7 @@ export function CurrencyAmountListCard({
 
   return (
     <div className={cn(transparentCardClass('flex flex-col gap-3 py-5 h-80'), className)}>
-      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <h3 className="text-sm font-semibold text-blue-900">{title}</h3>
       <div className="flex-1 min-h-0 overflow-y-auto -mx-3 px-3">
         <DataList
           columns={buildColumns(columnLabel)}

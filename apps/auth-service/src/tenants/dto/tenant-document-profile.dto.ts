@@ -300,6 +300,15 @@ export class TenantDocumentProfileResponseDto {
   @ApiPropertyOptional({ nullable: true })
   signatureSizeBytes!: number | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Short-lived signed URL for reading the signature image.',
+  })
+  signatureUrl!: string | null;
+
+  @ApiPropertyOptional({ format: 'date-time', nullable: true })
+  signatureUrlExpiresAt!: string | null;
+
   @ApiPropertyOptional({ nullable: true })
   authorizedSignatoryName!: string | null;
 

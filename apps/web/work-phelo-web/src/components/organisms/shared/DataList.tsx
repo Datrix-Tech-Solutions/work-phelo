@@ -169,7 +169,7 @@ export function DataList<T extends { id: string | number }>({
                 onRowClick && 'cursor-pointer',
               )}
             >
-              <div className="flex items-center gap-x-4 px-4 py-4 text-sm text-gray-800">
+              <div className="flex items-center gap-x-4 px-4 py-2 text-sm text-gray-800">
                 {columns.map((col) => {
                   const width = col.width ?? '1fr';
                   const flexible = width.endsWith('fr');

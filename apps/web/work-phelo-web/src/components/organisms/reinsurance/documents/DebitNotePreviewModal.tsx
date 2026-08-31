@@ -1,7 +1,6 @@
 'use client';
 
-import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
-import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { useDocumentFileName } from '@/lib/reinsurance/useDocumentFileName';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
   DebitNoteContent,
@@ -21,16 +20,17 @@ export function DebitNotePreviewModal({
   onClose,
   ...content
 }: DebitNotePreviewModalProps) {
+  const fileName = useDocumentFileName({
+    documentName: 'Debit Note',
+    placement: content.placement,
+    recipientName: content.cedantName,
+  });
+
   return (
     <DocumentPreviewShell
       isOpen={isOpen}
       title={title}
-      fileName={buildDocumentFileName(
-        'Debit Note',
-        displayPolicyNumber(content.placement?.policyNumber),
-        content.placement?.title,
-        content.cedantName ? `to ${content.cedantName}` : null,
-      )}
+      fileName={fileName}
       printRootId="debit-note-print-root"
       onClose={onClose}
     >
