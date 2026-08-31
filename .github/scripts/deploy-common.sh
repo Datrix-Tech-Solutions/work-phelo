@@ -19,6 +19,14 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
+deployment_includes_service() {
+  local service_name="$1"
+  local compose_file="${COMPOSE_FILE:-}"
+
+  [[ -n "$compose_file" && -f "$compose_file" ]] || return 1
+  grep -Eq "^[[:space:]]{2}${service_name}:" "$compose_file"
+}
+
 bytes_to_gib() {
   awk -v bytes="$1" 'BEGIN { printf "%.1f GiB", bytes / 1024 / 1024 / 1024 }'
 }
@@ -50,14 +58,9 @@ required_env_vars_for() {
     BUILD_REF
     IMAGE_PREFIX
     AUTH_TENANT_ASSET_STORAGE_PROVIDER
-    AUTH_TENANT_ASSET_S3_BUCKET
-    AUTH_TENANT_ASSET_S3_REGION
-    AUTH_TENANT_ASSET_S3_PREFIX
     AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS
     INTERNAL_SERVICE_AUTH_SECRET
     INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES
-    AWS_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY
   )
 
   case "$deploy_env" in
@@ -68,6 +71,10 @@ required_env_vars_for() {
     required+=(DATABASE_URL REDIS_PASSWORD)
     ;;
 esac
+
+  if deployment_includes_service "reinsurance-service"; then
+    required+=(REINSURANCE_DOCUMENT_STORAGE_PROVIDER)
+  fi
 
   printf '%s\n' "${required[@]}"
 }
@@ -85,6 +92,31 @@ contains_any() {
   done
 
   return 1
+}
+
+validate_optional_boolean() {
+  local name="$1"
+  local value="${!name:-}"
+
+  [[ -z "$value" ]] && return 0
+
+  case "$value" in
+    true|false) ;;
+    *)
+      die "${name} must be 'true' or 'false' when set (got '${value}')"
+      ;;
+  esac
+}
+
+validate_optional_positive_int() {
+  local name="$1"
+  local value="${!name:-}"
+
+  [[ -z "$value" ]] && return 0
+
+  if [[ ! "$value" =~ ^[0-9]+$ || "$value" -lt 1 ]]; then
+    die "${name} must be a positive integer when set"
+  fi
 }
 
 validate_required_envs() {
@@ -116,6 +148,9 @@ validate_required_envs() {
 
   case "$(printf '%s' "${AUTH_TENANT_ASSET_STORAGE_PROVIDER}" | tr '[:upper:]' '[:lower:]')" in
     s3)
+      for name in         AUTH_TENANT_ASSET_S3_BUCKET         AUTH_TENANT_ASSET_S3_REGION         AUTH_TENANT_ASSET_S3_PREFIX         AWS_ACCESS_KEY_ID         AWS_SECRET_ACCESS_KEY; do
+        [[ -n "${!name:-}" ]] || missing+=("$name")
+      done
       ;;
     cloudinary)
       for name in CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
@@ -129,6 +164,44 @@ validate_required_envs() {
 
   if (( ${#missing[@]} > 0 )); then
     die "Missing required deployment variables for ${deploy_env}: ${missing[*]}"
+  fi
+
+  if deployment_includes_service "reinsurance-service"; then
+    case "$(printf '%s' "${REINSURANCE_DOCUMENT_STORAGE_PROVIDER}" | tr '[:upper:]' '[:lower:]')" in
+      cloudinary)
+        local -a cloudinary_missing=()
+        local name
+        for name in CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
+          if [[ -z "${!name:-}" ]]; then
+            cloudinary_missing+=("$name")
+          fi
+        done
+
+        if (( ${#cloudinary_missing[@]} > 0 )); then
+          die "Missing required Reinsurance Cloudinary variables for ${deploy_env}: ${cloudinary_missing[*]}"
+        fi
+        ;;
+      s3)
+        local -a s3_missing=()
+        local name
+        for name in REINSURANCE_DOCUMENT_S3_BUCKET REINSURANCE_DOCUMENT_S3_REGION; do
+          if [[ -z "${!name:-}" ]]; then
+            s3_missing+=("$name")
+          fi
+        done
+
+        if (( ${#s3_missing[@]} > 0 )); then
+          die "Missing required Reinsurance S3 variables for ${deploy_env}: ${s3_missing[*]}"
+        fi
+
+        validate_optional_boolean REINSURANCE_DOCUMENT_S3_FORCE_PATH_STYLE
+        ;;
+      *)
+        die "Reinsurance document storage provider must be one of: s3, cloudinary (got '${REINSURANCE_DOCUMENT_STORAGE_PROVIDER}')"
+        ;;
+    esac
+
+    validate_optional_positive_int REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS
   fi
 
   validate_database_target "$deploy_env"
