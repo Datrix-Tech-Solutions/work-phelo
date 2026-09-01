@@ -85,6 +85,7 @@ export function ReinsurerFormFields({
           registration={register('name', { required: 'Reinsurer name is required' })}
           error={errors.name}
           placeholder="e.g. Reinsurance Company Ltd."
+          readOnly={!!prefillId}
         />
       </FormSection>
 

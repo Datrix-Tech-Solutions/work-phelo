@@ -22,6 +22,7 @@ export function inputClass(error?: string, extra?: string) {
     'w-full px-2 py-2 border rounded-input text-sm bg-transparent text-gray-900',
     'placeholder:text-gray-400 transition-colors',
     'focus:outline-none',
+    'read-only:cursor-not-allowed read-only:bg-gray-50 read-only:text-gray-500 read-only:border-gray-200',
     error
       ? 'border-red-500 focus:ring-2 focus:ring-red-500/30 focus:border-red-500'
       : 'border-(--input-border,var(--color-gray-400)) focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',

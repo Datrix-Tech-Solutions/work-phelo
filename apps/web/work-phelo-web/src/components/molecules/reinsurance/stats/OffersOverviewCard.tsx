@@ -13,6 +13,7 @@ const PERIOD_LABELS: Record<Period, string> = {
   daily: 'day',
   weekly: 'week',
   monthly: 'month',
+  quarterly: 'quarter',
   yearly: 'year',
 };
 
@@ -20,6 +21,7 @@ const PERIOD_PREV_LABELS: Record<Period, string> = {
   daily: 'Yesterday',
   weekly: 'Last week',
   monthly: 'Last month',
+  quarterly: 'Last quarter',
   yearly: 'Last year',
 };
 
@@ -59,10 +61,11 @@ const METRICS: MetricDef[] = [
 
 interface OffersOverviewCardProps {
   period: Period;
+  year?: number;
 }
 
-export function OffersOverviewCard({ period }: OffersOverviewCardProps) {
-  const { data, isLoading } = useReinsuranceDashboard({ period });
+export function OffersOverviewCard({ period, year }: OffersOverviewCardProps) {
+  const { data, isLoading } = useReinsuranceDashboard({ period, year });
   const [selected, setSelected] = useState<MetricKey | null>(null);
   // Whichever key is currently being reset to zero (no transition) right before
   // it sweeps back up — forces a fresh "from the bottom" animation on every click,

@@ -286,17 +286,16 @@ export function DistributionTable({
               </TableButton>
             )}
             {showMail && (
-              <button
-                type="button"
-                title="Mark as offer sent"
+              <TableButton
+                variant="green"
+                tooltip="Mark as offer sent"
+                isLoading={isBusy}
                 onClick={() => {
                   if (!isBusy) onMailSent(row);
                 }}
-                disabled={isBusy}
-                className={`text-green-500 hover:text-green-700 transition-colors ${disabledActionClass} ${row.status === 'INVITED' ? 'mail-pending-bounce' : ''}`}
               >
-                <Icons.Mail className="w-5 h-5" />
-              </button>
+                Send Mail
+              </TableButton>
             )}
             {showAccept && (
               <button

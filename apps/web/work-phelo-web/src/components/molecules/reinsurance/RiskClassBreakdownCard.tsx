@@ -6,14 +6,15 @@ import { cardClass } from '@/lib/utils';
 
 interface RiskClassBreakdownCardProps {
   period: Period;
+  year: number;
 }
 
-export function RiskClassBreakdownCard({ period }: RiskClassBreakdownCardProps) {
+export function RiskClassBreakdownCard({ period, year }: RiskClassBreakdownCardProps) {
   return (
     <div className={cardClass('flex flex-col gap-3 p-5 h-80', 'glass')}>
       <h3 className="text-sm font-semibold text-gray-900">Offers by Risk Class</h3>
       <div className="flex-1 min-h-0">
-        <RiskClassPieChart period={period} />
+        <RiskClassPieChart period={period} year={year} />
       </div>
     </div>
   );

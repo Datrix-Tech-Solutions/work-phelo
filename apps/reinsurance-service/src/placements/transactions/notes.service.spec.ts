@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  CounterpartyOrigin,
   CounterpartyType,
   PlacementClosingStatus,
   PlacementEndorsementImpactType,
@@ -58,6 +59,16 @@ describe('PlacementNotesService', () => {
     tenantId: 'tenant-1',
     cedantId: 'cedant-1',
     currency: 'USD',
+    cedant: {
+      origin: CounterpartyOrigin.LOCAL,
+    },
+  };
+
+  const foreignCedantPlacement = {
+    ...placement,
+    cedant: {
+      origin: CounterpartyOrigin.FOREIGN,
+    },
   };
 
   const note = {
@@ -206,6 +217,77 @@ describe('PlacementNotesService', () => {
   };
   let financialPosition: { getFinancialPosition: jest.Mock };
   let effectiveView: { getEffectiveView: jest.Mock };
+
+  const configuredChargeResult = (
+    input: ChargeCalculationInput,
+    charges: { nicLevyAmount?: number; withholdingTaxAmount?: number },
+  ) => {
+    const grossAmount = input.grossAmount;
+    const commissionAmount = input.commissionAmount ?? 0;
+    const brokerageAmount = input.brokerageAmount ?? 0;
+    const netBeforeCharges = grossAmount - commissionAmount - brokerageAmount;
+    const nicLevyAmount = charges.nicLevyAmount ?? 0;
+    const withholdingTaxAmount = charges.withholdingTaxAmount ?? 0;
+    const deductions = nicLevyAmount + withholdingTaxAmount;
+
+    return {
+      currency: input.currency,
+      effectiveAt: (input.effectiveAt ?? new Date()).toISOString(),
+      grossAmount,
+      commissionAmount,
+      brokerageAmount,
+      netBeforeCharges,
+      additions: 0,
+      deductions,
+      netAmount: netBeforeCharges - deductions,
+      charges: [
+        ...(nicLevyAmount
+          ? [
+              {
+                configurationId: 'charge-nic',
+                code: ReinsuranceChargeCode.NIC_LEVY,
+                name: 'NIC Levy',
+                chargeType: ReinsuranceChargeType.LEVY,
+                rateType: ReinsuranceChargeRateType.PERCENTAGE,
+                rate: '1',
+                calculationBasis:
+                  ReinsuranceChargeCalculationBasis.NET_BEFORE_CHARGES,
+                direction: ReinsuranceChargeDirection.DEDUCTION,
+                currency: null,
+                effectiveFrom: '2026-01-01T00:00:00.000Z',
+                effectiveTo: null,
+                roundingMode: ReinsuranceChargeRoundingMode.HALF_UP,
+                decimalPlaces: 2,
+                basisAmount: netBeforeCharges,
+                amount: nicLevyAmount,
+              },
+            ]
+          : []),
+        ...(withholdingTaxAmount
+          ? [
+              {
+                configurationId: 'charge-wht',
+                code: ReinsuranceChargeCode.WITHHOLDING_TAX,
+                name: 'Withholding Tax',
+                chargeType: ReinsuranceChargeType.TAX,
+                rateType: ReinsuranceChargeRateType.PERCENTAGE,
+                rate: '5',
+                calculationBasis:
+                  ReinsuranceChargeCalculationBasis.NET_BEFORE_CHARGES,
+                direction: ReinsuranceChargeDirection.DEDUCTION,
+                currency: null,
+                effectiveFrom: '2026-01-01T00:00:00.000Z',
+                effectiveTo: null,
+                roundingMode: ReinsuranceChargeRoundingMode.HALF_UP,
+                decimalPlaces: 2,
+                basisAmount: netBeforeCharges,
+                amount: withholdingTaxAmount,
+              },
+            ]
+          : []),
+      ],
+    };
+  };
 
   beforeEach(() => {
     prisma = {
@@ -563,6 +645,46 @@ describe('PlacementNotesService', () => {
     });
   });
 
+  it('does not apply cedant levy charges to foreign-cedant debit notes', async () => {
+    prisma.placement.findFirst.mockResolvedValue(foreignCedantPlacement);
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        grossPremium: new Prisma.Decimal('10000.00'),
+        commissionAmount: new Prisma.Decimal('1000.00'),
+        currency: 'USD',
+        participant: {
+          counterparty: {
+            addresses: [{ country: 'GB', isPrimary: true }],
+          },
+        },
+      },
+    ]);
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue(note);
+
+    await service.createDebitNote(user, 'placement-1');
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      grossAmount: 10000,
+      commissionAmount: 1000,
+      nicLevyPercent: 0,
+      nicLevyAmount: 0,
+      withholdingTaxPercent: 0,
+      withholdingTaxAmount: 0,
+      netAmount: 9000,
+    });
+    expect(createArgs.data.appliedCharges).toMatchObject({
+      deductions: 0,
+      netAmount: 9000,
+      charges: [],
+    });
+    expect(chargeSettings.calculateCharges).not.toHaveBeenCalled();
+  });
+
   it('applies foreign-cession levies only to the share ceded to non-resident reinsurers', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementNote.findFirst.mockResolvedValue(null);
@@ -877,6 +999,127 @@ describe('PlacementNotesService', () => {
       netAmount: 1800,
     });
     expect(result.noteNumber).toBe('EDN-001');
+  });
+
+  it('preserves configured charge calculations for local-cedant endorsement debit notes', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        id: 'endorsement-closing-1',
+        premiumSnapshot: new Prisma.Decimal('2000.00'),
+        commissionAmount: new Prisma.Decimal('200.00'),
+        currency: 'USD',
+        endorsementParticipant: {
+          counterparty: {
+            addresses: [{ country: 'GB', isPrimary: true }],
+          },
+        },
+      },
+    ]);
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      noteNumber: 'EDN-001',
+      endorsementId: 'endorsement-1',
+    });
+    chargeSettings.calculateCharges.mockImplementation(
+      (_tenantId: string, input: ChargeCalculationInput) =>
+        Promise.resolve(
+          configuredChargeResult(input, {
+            nicLevyAmount: 18,
+            withholdingTaxAmount: 90,
+          }),
+        ),
+    );
+
+    await service.createEndorsementDebitNote(
+      user,
+      'placement-1',
+      'endorsement-1',
+    );
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      grossAmount: 2000,
+      commissionAmount: 200,
+      nicLevyPercent: 1,
+      nicLevyAmount: 18,
+      withholdingTaxPercent: 5,
+      withholdingTaxAmount: 90,
+      netAmount: 1692,
+    });
+    expect(createArgs.data.appliedCharges).toMatchObject({
+      deductions: 108,
+      netAmount: 1692,
+    });
+  });
+
+  it('does not apply cedant levy charges to foreign-cedant endorsement debit notes', async () => {
+    prisma.placement.findFirst.mockResolvedValue(foreignCedantPlacement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        id: 'endorsement-closing-1',
+        premiumSnapshot: new Prisma.Decimal('2000.00'),
+        commissionAmount: new Prisma.Decimal('200.00'),
+        currency: 'USD',
+        endorsementParticipant: {
+          counterparty: {
+            addresses: [{ country: 'GB', isPrimary: true }],
+          },
+        },
+      },
+    ]);
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      noteNumber: 'EDN-001',
+      endorsementId: 'endorsement-1',
+    });
+
+    await service.createEndorsementDebitNote(
+      user,
+      'placement-1',
+      'endorsement-1',
+    );
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      grossAmount: 2000,
+      commissionAmount: 200,
+      nicLevyPercent: 0,
+      nicLevyAmount: 0,
+      withholdingTaxPercent: 0,
+      withholdingTaxAmount: 0,
+      netAmount: 1800,
+    });
+    expect(createArgs.data.appliedCharges).toMatchObject({
+      deductions: 0,
+      netAmount: 1800,
+      charges: [],
+    });
+    expect(chargeSettings.calculateCharges).not.toHaveBeenCalled();
   });
 
   it('rejects endorsement debit note when no confirmed endorsement closing exists', async () => {

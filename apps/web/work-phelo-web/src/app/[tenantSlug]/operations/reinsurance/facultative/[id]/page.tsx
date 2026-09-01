@@ -148,8 +148,8 @@ export default function FacultativeDetailPage({
               <TabBar
                 tabs={[
                   { key: 'distribution', label: 'Distribution List' },
-                  { key: 'closings', label: 'Placement Closings' },
-                  { key: 'endorsement', label: 'Endorsement', count: pendingEndorsementCount },
+                  { key: 'closings', label: 'Closings' },
+                  { key: 'endorsement', label: 'Endorsements', count: pendingEndorsementCount },
                 ]}
                 activeTab={activeTab}
                 onTabChange={(t) => setActiveTab(t as FacultativeTab)}

@@ -12,7 +12,15 @@ import {
   FacultativeRowStateResponseDto,
 } from '../dto/facultative-row-state-response.dto';
 import { QueryFacultativeRowStateDto } from '../dto/query-facultative-row-state.dto';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
+
+type EffectiveTerms = {
+  sumInsured: number | null;
+  premium: number | null;
+  facultativeOfferPercent: number | null;
+  participantCount: number;
+};
 
 type SnapshotCandidate = {
   placementId: string;
@@ -39,6 +47,7 @@ export class ReinsuranceFacultativeRowStateService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly money: ReinsuranceMoneyHelper,
+    private readonly effectiveViewService: PlacementEffectiveViewService,
   ) {}
 
   async findRowState(
@@ -59,10 +68,29 @@ export class ReinsuranceFacultativeRowStateService {
         archivedAt: null,
         id: { in: requestedPlacementIds },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        sumInsured: true,
+        premium: true,
+        facultativeOffer: true,
+      },
     });
     const tenantPlacementIds = placements.map((placement) => placement.id);
     if (tenantPlacementIds.length === 0) return { items: [] };
+
+    const baseTermsById = new Map<string, EffectiveTerms>(
+      placements.map((placement) => [
+        placement.id,
+        {
+          sumInsured: this.money.toOptionalNumber(placement.sumInsured),
+          premium: this.money.toOptionalNumber(placement.premium),
+          facultativeOfferPercent: this.money.toOptionalNumber(
+            placement.facultativeOffer,
+          ),
+          participantCount: 0,
+        },
+      ]),
+    );
 
     const [originalClosings, endorsementClosings, payments, endorsementCounts] =
       await Promise.all([
@@ -182,6 +210,48 @@ export class ReinsuranceFacultativeRowStateService {
       endorsementCounts.map((row) => [row.placementId, row._count._all]),
     );
 
+    // Base participant count = distinct participants across a placement's confirmed
+    // original closings. Used as the fallback whenever no endorsement rewrites the view.
+    const baseParticipantsByPlacement = new Map<string, Set<string>>();
+    for (const closing of originalClosings) {
+      const participants =
+        baseParticipantsByPlacement.get(closing.placementId) ??
+        new Set<string>();
+      participants.add(closing.participantId);
+      baseParticipantsByPlacement.set(closing.placementId, participants);
+    }
+    for (const [placementId, participants] of baseParticipantsByPlacement) {
+      const baseTerms = baseTermsById.get(placementId);
+      if (baseTerms) baseTerms.participantCount = participants.size;
+    }
+
+    // Only endorsed placements can diverge from their base terms — resolve the canonical
+    // effective view for those so the table never disagrees with the placement detail page.
+    // Placements without a non-void endorsement fall back to their base terms below.
+    const endorsedPlacementIds = tenantPlacementIds.filter(
+      (placementId) => (endorsementCountByPlacement.get(placementId) ?? 0) > 0,
+    );
+    const effectiveTermsByPlacement = new Map<string, EffectiveTerms>();
+    await Promise.all(
+      endorsedPlacementIds.map(async (placementId) => {
+        try {
+          const view = await this.effectiveViewService.getEffectiveView(
+            tenantId,
+            placementId,
+          );
+          effectiveTermsByPlacement.set(placementId, {
+            sumInsured: view.effectiveTotals.sumInsured,
+            premium: view.effectiveTotals.premium,
+            facultativeOfferPercent:
+              view.effectiveTotals.facultativeOfferPercent,
+            participantCount: view.effectiveTotals.participantCount,
+          });
+        } catch {
+          // Leave this placement to fall back to base terms rather than fail the worklist.
+        }
+      }),
+    );
+
     const tenantPlacementIdSet = new Set(tenantPlacementIds);
     return {
       items: requestedPlacementIds
@@ -202,12 +272,28 @@ export class ReinsuranceFacultativeRowStateService {
           const nonVoidEndorsementCount =
             endorsementCountByPlacement.get(placementId) ?? 0;
 
+          const baseTerms: EffectiveTerms = baseTermsById.get(placementId) ?? {
+            sumInsured: null,
+            premium: null,
+            facultativeOfferPercent: null,
+            participantCount: 0,
+          };
+          const effectiveTerms =
+            effectiveTermsByPlacement.get(placementId) ?? baseTerms;
+
           return {
             placementId,
             paymentStatus,
             hasRecordedPayment: totals.hasRecordedPayment,
             nonVoidEndorsementCount,
             hasNonVoidEndorsement: nonVoidEndorsementCount > 0,
+            effectiveSumInsured:
+              effectiveTerms.sumInsured ?? baseTerms.sumInsured,
+            effectivePremium: effectiveTerms.premium ?? baseTerms.premium,
+            effectiveFacultativeOfferPercent:
+              effectiveTerms.facultativeOfferPercent ??
+              baseTerms.facultativeOfferPercent,
+            effectiveParticipantCount: effectiveTerms.participantCount,
           };
         }),
     };

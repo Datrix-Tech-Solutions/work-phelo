@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Styles applied inside both the editable area and the preview pane
-const richContentClass = [
+// Styles applied inside the editable area, the preview pane, and the read-only
+// `RichTextView` renderer.
+export const richContentClass = [
   'text-sm text-gray-900',
   '[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-2',
   '[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:my-2',
@@ -32,8 +33,10 @@ const richContentClass = [
   '[&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_code]:text-[0.8em]',
   '[&_pre]:bg-gray-100 [&_pre]:rounded [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-sm [&_pre]:overflow-x-auto [&_pre]:my-2',
   '[&_table]:border-collapse [&_table]:w-full [&_table]:my-2',
-  '[&_th]:border [&_th]:border-gray-300 [&_th]:px-3 [&_th]:py-2 [&_th]:bg-gray-50 [&_th]:text-left [&_th]:font-semibold [&_th]:text-sm',
-  '[&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:text-sm',
+  // `h-8` acts as a min-height on table cells, so empty rows match the height a
+  // filled row settles at (one `text-sm` line + padding) instead of collapsing.
+  '[&_th]:border [&_th]:border-gray-300 [&_th]:px-3 [&_th]:py-2 [&_th]:h-8 [&_th]:bg-gray-50 [&_th]:text-left [&_th]:font-semibold [&_th]:text-sm',
+  '[&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:h-8 [&_td]:text-sm',
   '[&_img]:max-w-full [&_img]:rounded [&_img]:my-1',
 ].join(' ');
 
@@ -43,9 +46,11 @@ const btnClass =
 const GRID_COLS = 10;
 const GRID_ROWS = 8;
 
+// `height` on a table cell is a minimum, so cells still grow with content but an
+// empty cell no longer collapses below one line of text.
 const TH_STYLE =
-  'border:1px solid #d1d5db;padding:6px 12px;background:#f9fafb;font-weight:600;text-align:left;min-width:60px;';
-const TD_STYLE = 'border:1px solid #d1d5db;padding:6px 12px;min-width:60px;';
+  'border:1px solid #d1d5db;padding:6px 12px;background:#f9fafb;font-weight:600;text-align:left;min-width:60px;height:2rem;';
+const TD_STYLE = 'border:1px solid #d1d5db;padding:6px 12px;min-width:60px;height:2rem;';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 

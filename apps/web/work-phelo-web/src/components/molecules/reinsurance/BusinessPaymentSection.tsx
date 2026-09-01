@@ -4,7 +4,11 @@ import { useState } from 'react';
 import { Facultative } from '@/types/reinsurance';
 import { PaymentBreakdown } from '@/components/molecules/reinsurance/PaymentBreakdown';
 import { ReinsurersPaymentTable } from '@/components/molecules/reinsurance/tables/ReinsurersPaymentTable';
-import { usePlacementFinancialPosition } from '@/hooks/reinsurance/usePayments';
+import {
+  usePlacementFinancialPosition,
+  usePlacementPayments,
+} from '@/hooks/reinsurance/usePayments';
+import { premiumForeignSettlement } from '@/lib/reinsurance/premiumSettlement';
 import { cardClass } from '@/lib/utils';
 
 function fmt(val: number, currency: string | null) {
@@ -29,7 +33,12 @@ export function BusinessPaymentSection({
 }: BusinessPaymentSectionProps) {
   const [total, setTotal] = useState(0);
   const { data: financialPosition } = usePlacementFinancialPosition(placement.id);
-  const currency = financialPosition?.currency ?? placement.currency;
+  const { data: payments = [] } = usePlacementPayments(placement.id);
+  const obligationCurrency = financialPosition?.currency ?? placement.currency;
+  // `ReinsurersPaymentTable` reports its total already converted into the premium's foreign
+  // settlement currency when one applies, so label the Total with that same currency.
+  const fx = premiumForeignSettlement(payments, obligationCurrency);
+  const currency = fx ? fx.currency : obligationCurrency;
 
   return (
     <div className={cardClass('flex flex-col gap-4 p-4')}>

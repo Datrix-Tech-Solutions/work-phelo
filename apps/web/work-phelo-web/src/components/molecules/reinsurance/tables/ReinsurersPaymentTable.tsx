@@ -11,6 +11,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { TableButton } from '@/components/atoms/TableButton';
 import { RecordDisbursementPanel } from '@/components/organisms/reinsurance/panels/RecordDisbursementPanel';
 import { usePlacementPayments } from '@/hooks';
+import { premiumForeignSettlement } from '@/lib/reinsurance/premiumSettlement';
 
 interface ReinsurersPaymentTableProps {
   placement: Facultative;
@@ -26,6 +27,10 @@ type ReinsurerPositionRow = PlacementReinsurerFinancialPosition & {
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';
   return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtRate(val: number) {
+  return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 }
 
 function positionBadge(position: PlacementReinsurerFinancialPosition['position']) {
@@ -44,6 +49,16 @@ export function ReinsurersPaymentTable({
   );
 
   const { data: payments = [] } = usePlacementPayments(placement.id);
+
+  const obligationCurrency = financialPosition?.currency ?? placement.currency ?? null;
+  // When the cedant premium came in as a single foreign currency, show every figure here in
+  // that currency at that rate: obligation = display × rate.
+  const fx = useMemo(
+    () => premiumForeignSettlement(payments, obligationCurrency),
+    [payments, obligationCurrency],
+  );
+  const displayCurrency = fx ? fx.currency : obligationCurrency;
+  const conv = (obligationValue: number) => (fx ? obligationValue / fx.rate : obligationValue);
 
   const pendingByCounterparty = useMemo(() => {
     const map = new Map<string, number>();
@@ -70,10 +85,11 @@ export function ReinsurersPaymentTable({
     () => rows.reduce((sum, row) => sum + row.currentEffectivePayable, 0),
     [rows],
   );
+  const displayTotal = fx ? total / fx.rate : total;
 
   useEffect(() => {
-    onTotalChange?.(total);
-  }, [total, onTotalChange]);
+    onTotalChange?.(displayTotal);
+  }, [displayTotal, onTotalChange]);
 
   const columns: Column<ReinsurerPositionRow>[] = useMemo(
     () => [
@@ -90,7 +106,7 @@ export function ReinsurersPaymentTable({
         className: 'text-right',
         render: (row) => (
           <span className="text-gray-900 block text-right">
-            {fmt(row.currentEffectivePayable, financialPosition?.currency ?? placement.currency)}
+            {fmt(conv(row.currentEffectivePayable), displayCurrency)}
           </span>
         ),
       },
@@ -100,11 +116,10 @@ export function ReinsurersPaymentTable({
         width: '130px',
         className: 'text-right',
         render: (row) => {
-          const currency = financialPosition?.currency ?? placement.currency;
           if (row.netSettled > 0.0001) {
             return (
               <span className="block text-right font-bold text-green-600">
-                {fmt(row.netSettled, currency)}
+                {fmt(conv(row.netSettled), displayCurrency)}
               </span>
             );
           }
@@ -112,12 +127,12 @@ export function ReinsurersPaymentTable({
           if (pending > 0.0001) {
             return (
               <span className="block text-right font-medium text-amber-600">
-                {fmt(pending, currency)}
+                {fmt(conv(pending), displayCurrency)}
                 {/* <span className="block text-xs font-normal text-amber-500">Pending approval</span> */}
               </span>
             );
           }
-          return <span className="block text-right text-gray-700">{fmt(0, currency)}</span>;
+          return <span className="block text-right text-gray-700">{fmt(0, displayCurrency)}</span>;
         },
       },
       {
@@ -131,7 +146,7 @@ export function ReinsurersPaymentTable({
               row.outstanding > 0 ? 'text-orange-600' : 'text-gray-900'
             }`}
           >
-            {fmt(Math.abs(row.outstanding), financialPosition?.currency ?? placement.currency)}
+            {fmt(conv(Math.abs(row.outstanding)), displayCurrency)}
           </span>
         ),
       },
@@ -160,11 +175,17 @@ export function ReinsurersPaymentTable({
         },
       },
     ],
-    [financialPosition?.currency, placement.currency, pendingByCounterparty],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [displayCurrency, fx?.rate, pendingByCounterparty],
   );
 
   return (
     <div className="flex flex-col gap-0">
+      {fx && (
+        <p className="mb-1 text-xs text-gray-500">
+          Amounts in {fx.currency} · 1 {fx.currency} = {fmtRate(fx.rate)} {obligationCurrency ?? ''}
+        </p>
+      )}
       <DataTable
         columns={columns}
         data={rows}

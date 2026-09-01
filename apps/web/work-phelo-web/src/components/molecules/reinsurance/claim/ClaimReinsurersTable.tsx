@@ -14,6 +14,7 @@ interface ClaimReinsurersTableProps {
   currency?: string | null;
 
   sentAllocationIds: Set<string>;
+  busyIds?: Set<string>;
   onMail: (participant: PlacementParticipant) => void;
   onPreview: (participant: PlacementParticipant) => void;
 }
@@ -35,6 +36,7 @@ export function ClaimReinsurersTable({
   isActualAmount,
   currency,
   sentAllocationIds,
+  busyIds,
   onMail,
   onPreview,
 }: ClaimReinsurersTableProps) {
@@ -133,7 +135,11 @@ export function ClaimReinsurersTable({
               {sentAllocationIds.has(row.id) ? (
                 <span className="text-xs text-gray-400">Mail sent</span>
               ) : (
-                <TableButton variant="green" onClick={() => onMail(participant)}>
+                <TableButton
+                  variant="green"
+                  isLoading={busyIds?.has(row.id) ?? false}
+                  onClick={() => onMail(participant)}
+                >
                   Send Mail
                 </TableButton>
               )}
@@ -142,7 +148,7 @@ export function ClaimReinsurersTable({
         },
       },
     ],
-    [isActualAmount, currency, onMail, onPreview, participants, sentAllocationIds],
+    [isActualAmount, currency, onMail, onPreview, participants, sentAllocationIds, busyIds],
   );
 
   return (

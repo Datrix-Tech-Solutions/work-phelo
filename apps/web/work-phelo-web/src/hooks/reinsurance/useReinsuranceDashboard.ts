@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import { useCurrencies } from '@/hooks/reinsurance/useCurrencies';
 import { useFacultatives } from '@/hooks/reinsurance/useFacultatives';
 import { Currency, Facultative } from '@/types/reinsurance';
-import { Period } from '@/components/atoms/PeriodToggle';
+import { Period, periodWindow } from '@/components/atoms/PeriodToggle';
 
 const DASHBOARD_BASE = '/operations/reinsurance/dashboard';
 
@@ -173,35 +173,17 @@ function useDashboardClaims() {
   });
 }
 
-function periodBounds(period: Period, now: Date): { start: Date; prevStart: Date } {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const dayOfWeek = now.getDay();
-  const mondayOffset = (dayOfWeek + 6) % 7;
-
-  switch (period) {
-    case 'daily':
-      return {
-        start: new Date(y, m, d),
-        prevStart: new Date(y, m, d - 1),
-      };
-    case 'weekly':
-      return {
-        start: new Date(y, m, d - mondayOffset),
-        prevStart: new Date(y, m, d - mondayOffset - 7),
-      };
-    case 'monthly':
-      return {
-        start: new Date(y, m, 1),
-        prevStart: new Date(y, m - 1, 1),
-      };
-    case 'yearly':
-      return {
-        start: new Date(y, 0, 1),
-        prevStart: new Date(y - 1, 0, 1),
-      };
-  }
+/**
+ * `start` / `end` / `prevStart` for the selected period. `year` applies only when
+ * `period` is `'yearly'` (from the dashboard year dropdown); for every other case, and for
+ * the running year, `end` is "now" so behaviour is unchanged.
+ */
+function periodBounds(
+  period: Period,
+  now: Date,
+  year?: number,
+): { start: Date; end: Date; prevStart: Date } {
+  return periodWindow(period, { year, now });
 }
 
 function computeStats(items: Facultative[]) {
@@ -283,9 +265,11 @@ function emptyFinancialsByCurrency(): FinancialsByCurrency {
 
 export function useReinsuranceFinancials({
   period,
+  year,
   currency,
 }: {
   period: Period;
+  year?: number;
   currency: string;
 }): { data: FinancialStats; isLoading: boolean } {
   const { data: all = [], isLoading: loadingFac } = useFacultatives();
@@ -293,7 +277,7 @@ export function useReinsuranceFinancials({
 
   const stats = useMemo<FinancialStats>(() => {
     const now = new Date();
-    const { start, prevStart } = periodBounds(period, now);
+    const { start, end, prevStart } = periodBounds(period, now, year);
 
     const baseCurrency = currencies.find((c) => c.isBaseCurrency);
     const targetIso = currency || baseCurrency?.isoCode || '';
@@ -303,7 +287,7 @@ export function useReinsuranceFinancials({
 
     const filtered = all.filter((f) => {
       const t = new Date(f.createdAt);
-      return t >= start && t <= now;
+      return t >= start && t <= end;
     });
 
     const prevFiltered = all.filter((f) => {
@@ -328,7 +312,7 @@ export function useReinsuranceFinancials({
         totalBrokerage: prev.totalBrokerage,
       },
     };
-  }, [all, currencies, period, currency]);
+  }, [all, currencies, period, year, currency]);
 
   return { data: stats, isLoading: loadingFac || loadingCur };
 }
@@ -389,18 +373,18 @@ export function useReinsurancePremiumTrend({ currency }: { currency: string }): 
   return { ...result, isLoading: loadingFac || loadingCur };
 }
 
-export function useReinsuranceDashboard({ period }: { period: Period }) {
+export function useReinsuranceDashboard({ period, year }: { period: Period; year?: number }) {
   const { data: all = [], isLoading } = useFacultatives();
   const { data: overview, isLoading: loadingOverview } = useDashboardOverview();
   const { data: placementTotals } = useDashboardPlacements();
 
   const stats = useMemo<DashboardStats>(() => {
     const now = new Date();
-    const { start, prevStart } = periodBounds(period, now);
+    const { start, end, prevStart } = periodBounds(period, now, year);
 
     const current = all.filter((f) => {
       const t = new Date(f.createdAt);
-      return t >= start && t <= now;
+      return t >= start && t <= end;
     });
 
     const previous = all.filter((f) => {
@@ -438,7 +422,7 @@ export function useReinsuranceDashboard({ period }: { period: Period }) {
         closedRate: prev.closedRate,
       },
     };
-  }, [all, overview, placementTotals, period]);
+  }, [all, overview, placementTotals, period, year]);
 
   return { data: stats, isLoading: isLoading || loadingOverview };
 }
@@ -517,7 +501,13 @@ export function useReinsuranceClaimRatio(_options: { period: Period; currency: s
 }
 
 /** Native-currency financial breakdown, backed by aggregate dashboard endpoints where available. */
-export function useReinsuranceFinancialsByCurrency({ period }: { period: Period }): {
+export function useReinsuranceFinancialsByCurrency({
+  period,
+  year,
+}: {
+  period: Period;
+  year?: number;
+}): {
   data: FinancialsByCurrency;
   isLoading: boolean;
 } {
@@ -526,12 +516,13 @@ export function useReinsuranceFinancialsByCurrency({ period }: { period: Period 
   const { isLoading: loadingClaims } = useDashboardClaims();
 
   const data = useMemo(() => {
-    const { start } = periodBounds(period, new Date());
+    const { start, end } = periodBounds(period, new Date(), year);
     const maps = emptyFinancialsByCurrency();
 
     all.forEach((f) => {
       if (f.currency == null) return;
-      if (new Date(f.createdAt) < start) return;
+      const createdAt = new Date(f.createdAt);
+      if (createdAt < start || createdAt > end) return;
 
       if (f.sumInsured != null) {
         addToMap(maps.sumInsured, f.currency, f.sumInsured);
@@ -556,7 +547,7 @@ export function useReinsuranceFinancialsByCurrency({ period }: { period: Period 
       premium: breakdownToMap(financials?.grossPremiumByCurrency),
       outstandingPremium: breakdownToMap(financials?.outstandingByCurrency),
     };
-  }, [all, financials, period]);
+  }, [all, financials, period, year]);
 
   const isLoading = loadingFac || loadingFinancials || loadingClaims;
 

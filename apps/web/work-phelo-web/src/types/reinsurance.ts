@@ -1087,6 +1087,14 @@ export interface PaymentWorklistRow {
   facultativeOffer: number | null;
   commission: number | null;
   facultativeSumInsured: number | null;
+  /**
+   * Terms after applying every closed, in-force endorsement. The backend returns the base
+   * placement value here when no endorsement applies, so these are always safe to display.
+   */
+  effectiveSumInsured: number | null;
+  effectivePremium: number | null;
+  effectiveFacultativeOfferPercent: number | null;
+  effectiveFacultativeSumInsured: number | null;
   acceptedParticipantCount: number;
   currency: string | null;
   paidAmount: number;
@@ -1096,6 +1104,8 @@ export interface PaymentWorklistRow {
   latestConfirmedPaymentDate: string | null;
   placementStatus: FacultativeStatus;
   paymentStatus: PaymentWorklistPaymentStatus;
+  /** When the offer was entered in the system (placement.createdAt). */
+  createdAt: string;
   sortDate: string;
 }
 
@@ -1112,6 +1122,14 @@ export interface FacultativeRowState {
   hasRecordedPayment: boolean;
   nonVoidEndorsementCount: number;
   hasNonVoidEndorsement: boolean;
+  /**
+   * Terms after applying every closed, in-force endorsement. The backend returns the base
+   * placement value here when no endorsement applies, so these are always safe to display.
+   */
+  effectiveSumInsured: number | null;
+  effectivePremium: number | null;
+  effectiveFacultativeOfferPercent: number | null;
+  effectiveParticipantCount: number;
 }
 
 export interface FacultativeRowStateResponse {
@@ -1460,6 +1478,11 @@ export interface ConfirmPlacementPaymentBankPayload {
   bankConfirmedAt: string;
   bankReference?: string;
   notes?: string;
+  /** Currency the counterparty actually settled in, when it differs from the obligation
+   * currency. Persisted so cross-currency receipts can be shown in the money that moved. */
+  settlementCurrency?: string;
+  /** Obligation-currency units per 1 unit of `settlementCurrency` (obligation = settlement × rate). */
+  agreedExchangeRate?: number;
 }
 
 export type PlacementFinancialPositionState =

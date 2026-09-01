@@ -4,6 +4,7 @@ import {
   PlacementPaymentType,
 } from '../../../prisma/generated/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PlacementEffectiveViewService } from '../placement-effective-view.service';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 import { ReinsuranceFacultativeRowStateService } from './facultative-row-state.service';
 
@@ -20,6 +21,7 @@ describe('ReinsuranceFacultativeRowStateService', () => {
     placementPayment: { findMany: jest.Mock };
     placementEndorsement: { groupBy: jest.Mock };
   };
+  let effectiveViewService: { getEffectiveView: jest.Mock };
   let service: ReinsuranceFacultativeRowStateService;
 
   beforeEach(() => {
@@ -30,17 +32,27 @@ describe('ReinsuranceFacultativeRowStateService', () => {
       placementPayment: { findMany: jest.fn() },
       placementEndorsement: { groupBy: jest.fn() },
     };
+    effectiveViewService = { getEffectiveView: jest.fn() };
     service = new ReinsuranceFacultativeRowStateService(
       prisma as unknown as PrismaService,
       new ReinsuranceMoneyHelper(),
+      effectiveViewService as unknown as PlacementEffectiveViewService,
     );
-    prisma.placement.findMany.mockResolvedValue([{ id: PLACEMENT_ID }]);
+    prisma.placement.findMany.mockResolvedValue([basePlacement(PLACEMENT_ID)]);
     prisma.placementClosing.findMany.mockResolvedValue([
       originalClosing(PLACEMENT_ID, 'participant-1', '100.00'),
     ]);
     prisma.placementEndorsementClosing.findMany.mockResolvedValue([]);
     prisma.placementPayment.findMany.mockResolvedValue([]);
     prisma.placementEndorsement.groupBy.mockResolvedValue([]);
+    effectiveViewService.getEffectiveView.mockResolvedValue(
+      effectiveView({
+        sumInsured: 900,
+        premium: 90,
+        facultativeOfferPercent: 45,
+        participantCount: 2,
+      }),
+    );
   });
 
   it('returns an empty response without database work when no placementIds are provided', async () => {
@@ -63,7 +75,7 @@ describe('ReinsuranceFacultativeRowStateService', () => {
   });
 
   it('uses bounded tenant-scoped queries and omits unknown or cross-tenant placements', async () => {
-    prisma.placement.findMany.mockResolvedValue([{ id: PLACEMENT_ID }]);
+    prisma.placement.findMany.mockResolvedValue([basePlacement(PLACEMENT_ID)]);
 
     const result = await service.findRowState(TENANT_ID, {
       placementIds: [PLACEMENT_ID, CROSS_TENANT_ID],
@@ -75,7 +87,12 @@ describe('ReinsuranceFacultativeRowStateService', () => {
         archivedAt: null,
         id: { in: [PLACEMENT_ID, CROSS_TENANT_ID] },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        sumInsured: true,
+        premium: true,
+        facultativeOffer: true,
+      },
     });
     const placementClosingFindMany = prisma.placementClosing
       .findMany as jest.MockedFunction<
@@ -227,8 +244,8 @@ describe('ReinsuranceFacultativeRowStateService', () => {
 
   it('returns mixed placement row states in requested order', async () => {
     prisma.placement.findMany.mockResolvedValue([
-      { id: PLACEMENT_ID },
-      { id: OTHER_PLACEMENT_ID },
+      basePlacement(PLACEMENT_ID),
+      basePlacement(OTHER_PLACEMENT_ID),
     ]);
     prisma.placementClosing.findMany.mockResolvedValue([
       originalClosing(PLACEMENT_ID, 'participant-1', '100.00'),
@@ -266,6 +283,88 @@ describe('ReinsuranceFacultativeRowStateService', () => {
     ]);
   });
 
+  it('falls back to base placement terms when a placement has no endorsement', async () => {
+    prisma.placement.findMany.mockResolvedValue([
+      basePlacement(PLACEMENT_ID, {
+        sumInsured: '1000.00',
+        premium: '120.00',
+        facultativeOffer: '50.00',
+      }),
+    ]);
+
+    const result = await service.findRowState(TENANT_ID, {
+      placementIds: [PLACEMENT_ID],
+    });
+
+    expect(effectiveViewService.getEffectiveView).not.toHaveBeenCalled();
+    expect(result.items[0]).toMatchObject({
+      effectiveSumInsured: 1000,
+      effectivePremium: 120,
+      effectiveFacultativeOfferPercent: 50,
+      effectiveParticipantCount: 1,
+    });
+  });
+
+  it('overlays the canonical effective view terms for an endorsed placement', async () => {
+    prisma.placement.findMany.mockResolvedValue([
+      basePlacement(PLACEMENT_ID, {
+        sumInsured: '1000.00',
+        premium: '120.00',
+        facultativeOffer: '50.00',
+      }),
+    ]);
+    prisma.placementEndorsement.groupBy.mockResolvedValue([
+      { placementId: PLACEMENT_ID, _count: { _all: 1 } },
+    ]);
+    effectiveViewService.getEffectiveView.mockResolvedValue(
+      effectiveView({
+        sumInsured: 1500,
+        premium: 180,
+        facultativeOfferPercent: 60,
+        participantCount: 3,
+      }),
+    );
+
+    const result = await service.findRowState(TENANT_ID, {
+      placementIds: [PLACEMENT_ID],
+    });
+
+    expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
+      TENANT_ID,
+      PLACEMENT_ID,
+    );
+    expect(result.items[0]).toMatchObject({
+      effectiveSumInsured: 1500,
+      effectivePremium: 180,
+      effectiveFacultativeOfferPercent: 60,
+      effectiveParticipantCount: 3,
+    });
+  });
+
+  it('falls back to base terms when the effective view lookup throws', async () => {
+    prisma.placement.findMany.mockResolvedValue([
+      basePlacement(PLACEMENT_ID, {
+        sumInsured: '1000.00',
+        premium: '120.00',
+        facultativeOffer: '50.00',
+      }),
+    ]);
+    prisma.placementEndorsement.groupBy.mockResolvedValue([
+      { placementId: PLACEMENT_ID, _count: { _all: 1 } },
+    ]);
+    effectiveViewService.getEffectiveView.mockRejectedValue(new Error('boom'));
+
+    const result = await service.findRowState(TENANT_ID, {
+      placementIds: [PLACEMENT_ID],
+    });
+
+    expect(result.items[0]).toMatchObject({
+      effectiveSumInsured: 1000,
+      effectivePremium: 120,
+      effectiveFacultativeOfferPercent: 50,
+    });
+  });
+
   it('uses effective endorsement closing snapshots when deriving current obligation', async () => {
     prisma.placementEndorsementClosing.findMany.mockResolvedValue([
       {
@@ -299,6 +398,31 @@ describe('ReinsuranceFacultativeRowStateService', () => {
     expect(result.items[0]).toMatchObject({ paymentStatus: 'Part Payment' });
   });
 });
+
+function basePlacement(
+  id: string,
+  overrides: Partial<{
+    sumInsured: string | null;
+    premium: string | null;
+    facultativeOffer: string | null;
+  }> = {},
+) {
+  return {
+    id,
+    sumInsured: overrides.sumInsured ?? null,
+    premium: overrides.premium ?? null,
+    facultativeOffer: overrides.facultativeOffer ?? null,
+  };
+}
+
+function effectiveView(totals: {
+  sumInsured: number | null;
+  premium: number | null;
+  facultativeOfferPercent: number | null;
+  participantCount: number;
+}) {
+  return { effectiveTotals: totals };
+}
 
 function originalClosing(
   placementId: string,

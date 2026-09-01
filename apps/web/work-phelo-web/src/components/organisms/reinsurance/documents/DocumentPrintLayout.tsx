@@ -179,7 +179,10 @@ export function DocumentPrintLayout({
                 <div>{children}</div>
 
                 {signOff ? (
-                  <div style={{ marginTop: 'auto', paddingTop: '64px', paddingBottom: '40px' }}>
+                  <div
+                    data-print-block
+                    style={{ marginTop: 'auto', paddingTop: '64px', paddingBottom: '40px' }}
+                  >
                     {signOff}
                   </div>
                 ) : null}

@@ -176,6 +176,7 @@ export function CreditNoteContent({ note, placement, reinsurerCompany }: CreditN
 
       {placement?.description && (
         <div
+          data-print-block
           className="text-gray-700"
           style={{
             fontFamily: 'var(--doc-font-content)',
@@ -183,7 +184,7 @@ export function CreditNoteContent({ note, placement, reinsurerCompany }: CreditN
           }}
         >
           <p className="text-gray-400">Kindly Refer:</p>
-          <div dangerouslySetInnerHTML={{ __html: placement.description }} />
+          <div data-rich-text dangerouslySetInnerHTML={{ __html: placement.description }} />
         </div>
       )}
 

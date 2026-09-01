@@ -153,17 +153,19 @@ export default function AddPaymentForm({
         const paymentCurrency = values.currency;
         const placementCurrency =
           positionByPlacementId.get(f.id)?.currency ?? f.currency ?? values.currency;
-        let submittedAmount = rawAmount;
+        const isCrossCurrency = paymentCurrency !== placementCurrency;
 
-        if (paymentCurrency !== placementCurrency) {
-          const rateStr = allSameCurrency
-            ? values.rate
-            : (values.allocationRates[f.id] ?? values.rate);
-          const rate = parseFloat(rateStr) || 1;
-          submittedAmount = rawAmount * rate;
-        }
-
-        submittedAmount = Math.round(submittedAmount * 100) / 100;
+        // `rawAmount` is the money the cedant actually moved, in `paymentCurrency`. For a
+        // cross-currency receipt we store the obligation-currency equivalent as `amount`
+        // (rawAmount × rate) and keep the settlement currency + rate so the original figure
+        // stays recoverable (settlement = amount ÷ rate).
+        const rate = isCrossCurrency
+          ? parseFloat(
+              allSameCurrency ? values.rate : (values.allocationRates[f.id] ?? values.rate),
+            ) || 1
+          : 1;
+        const submittedAmount =
+          Math.round((isCrossCurrency ? rawAmount * rate : rawAmount) * 100) / 100;
 
         const created = await createPayment.mutateAsync({
           placementId: f.id,
@@ -175,18 +177,22 @@ export default function AddPaymentForm({
           paymentDate: new Date(resolvedDate).toISOString(),
           reference,
           settlementMethod: values.paymentType === 'cheque' ? 'CHEQUE' : 'BANK_TRANSFER',
-          settlementCurrency: placementCurrency,
+          settlementCurrency: isCrossCurrency ? paymentCurrency : placementCurrency,
           notes,
         });
 
         // Confirm right after recording — everything the confirm endpoint needs
         // (settlement method/currency/reference) is already on the payment from the
-        // create call above, so this needs nothing further from the user.
+        // create call above. The FX rate + settlement currency only round-trip through
+        // bank-confirmation, so pass them here for cross-currency receipts.
         try {
           return await confirmPaymentBank.mutateAsync({
             placementId: f.id,
             paymentId: created.id,
             bankConfirmedAt: new Date(resolvedDate).toISOString(),
+            ...(isCrossCurrency
+              ? { settlementCurrency: paymentCurrency, agreedExchangeRate: rate }
+              : {}),
           });
         } catch (confirmError) {
           addToast({

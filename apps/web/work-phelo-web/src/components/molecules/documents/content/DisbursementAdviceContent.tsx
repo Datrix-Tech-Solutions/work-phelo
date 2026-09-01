@@ -1,9 +1,10 @@
 'use client';
 
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
-import { useReinsurers } from '@/hooks';
+import { useReinsurers, usePlacementPayments } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { premiumForeignSettlement } from '@/lib/reinsurance/premiumSettlement';
 import {
   DocumentAmountTable,
   DocumentContentFrame,
@@ -40,6 +41,16 @@ function fmtAmount(val: number | null | undefined, currency: string | null | und
   })}`.trim();
 }
 
+function fmtRate(val: number): string {
+  return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+
+function parseCheque(p: PlacementPayment): { isCheque: boolean; chequeNumber: string | null } {
+  const isCheque = p.settlementMethod === 'CHEQUE' || (p.notes ?? '').startsWith('Cheque payment');
+  const parts = (p.reference ?? '').split(' — ').filter(Boolean);
+  return { isCheque, chequeNumber: isCheque ? (parts[0] ?? null) : null };
+}
+
 function longToday(): string {
   return new Date().toLocaleDateString('en-GB', {
     day: '2-digit',
@@ -58,6 +69,7 @@ export interface DisbursementAdviceContentProps {
  *  payments only. Content only; the signatory block is fixed branding. */
 export function DisbursementAdviceContent({ placement, payment }: DisbursementAdviceContentProps) {
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: payments = [] } = usePlacementPayments(placement.id);
   const reinsurer = reinsurers.find((r) => r.id === payment.counterparty.id);
   const addr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
   const reinsurerCity = addr?.city ?? null;
@@ -86,22 +98,103 @@ export function DisbursementAdviceContent({ placement, payment }: DisbursementAd
   const commissionAmt = facPremium != null ? ((commission ?? 0) / 100) * facPremium : null;
   const paidAmount = parseFloat(payment.amount);
 
-  const isCheque =
-    payment.settlementMethod === 'CHEQUE' || (payment.notes ?? '').startsWith('Cheque payment');
-  const refParts = (payment.reference ?? '').split(' — ').filter(Boolean);
-  const chequeNumber = isCheque ? (refParts[0] ?? null) : null;
-  const bankName = isCheque ? (refParts[1] ?? null) : (refParts[0] ?? null);
+  // Every figure in this letter stays in the obligation currency. When the disbursement (or,
+  // failing that, the cedant premium it stems from) settled in a single foreign currency, the
+  // footnote states the rate that was applied — obligation = foreign × rate.
+  const ownFx =
+    payment.settlementCurrency &&
+    payment.agreedExchangeRate &&
+    payment.settlementCurrency !== payment.currency
+      ? { currency: payment.settlementCurrency, rate: parseFloat(payment.agreedExchangeRate) }
+      : null;
+  const placementFx = premiumForeignSettlement(payments, currency);
+  const advFx =
+    ownFx && Number.isFinite(ownFx.rate) && ownFx.rate > 0
+      ? ownFx
+      : placementFx && placementFx.currency !== currency
+        ? placementFx
+        : null;
 
-  const methodPhrase = isCheque
-    ? `by cheque${chequeNumber ? ` no. ${chequeNumber}` : ''}${
-        bankName ? ` drawn on ${bankName}` : ''
-      } dated ${fmtDate(payment.paymentDate)}`
-    : `by bank transfer${bankName ? ` through ${bankName}` : ''} on the ${fmtDate(payment.paymentDate)}`;
+  const { isCheque, chequeNumber } = parseCheque(payment);
 
-  const paymentSentence = `We have disbursed a payment of ${fmtAmount(
-    paidAmount,
-    payment.currency,
-  )} ${methodPhrase}.`;
+  const sameSource = (p: PlacementPayment) =>
+    payment.closingId
+      ? p.closingId === payment.closingId
+      : payment.endorsementClosingId
+        ? p.endorsementClosingId === payment.endorsementClosingId
+        : true;
+  const priorDisbursements = payments.filter(
+    (p) =>
+      p.id !== payment.id &&
+      p.type === 'REINSURER_DISBURSEMENT' &&
+      p.counterpartyId === payment.counterpartyId &&
+      (p.status === 'BANK_CONFIRMED' || p.status === 'RECORDED') &&
+      !p.reversalOfPaymentId &&
+      sameSource(p) &&
+      new Date(p.createdAt).getTime() < new Date(payment.createdAt).getTime(),
+  );
+  const priorTotal = priorDisbursements.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  const hasPrior = priorTotal > 0.01;
+
+  const netPremiumTarget = parseFloat(
+    payment.closing?.netPremium ?? payment.endorsementClosing?.netPremium ?? '',
+  );
+  const clearsBalance = Number.isFinite(netPremiumTarget)
+    ? priorTotal + paidAmount >= netPremiumTarget - 0.01
+    : true;
+
+  // The sentence quotes the money that actually moved: if the disbursement settled in a
+  // foreign currency, show that; the footnote then states the rate back to the obligation
+  // currency. The detail table above stays in the obligation currency.
+  const footnoteCurrency = advFx ? advFx.currency : currency;
+  const toFootnote = (obligationValue: number) =>
+    advFx ? obligationValue / advFx.rate : obligationValue;
+
+  const amountText = fmtAmount(toFootnote(paidAmount), footnoteCurrency);
+  const chequePhrase = chequeNumber
+    ? `to be paid with our Access Bank cheque number ${chequeNumber}`
+    : 'to be paid with our Access Bank cheque';
+  const transferPhrase = 'to be transferred to your bank';
+  const methodPhrase = isCheque ? chequePhrase : transferPhrase;
+
+  let leadText: string;
+  let priorNote: string | null = null;
+  if (hasPrior && clearsBalance) {
+    leadText = 'Kindly find attached final payment in the amount of ';
+    const priorText = fmtAmount(toFootnote(priorTotal), footnoteCurrency);
+    if (isCheque) {
+      const priorCheques = priorDisbursements
+        .map((p) => parseCheque(p).chequeNumber)
+        .filter((n): n is string => !!n);
+      const how = priorCheques.length
+        ? `with cheque number ${priorCheques.join(', ')}`
+        : 'by cheque';
+      priorNote = ` Note that an initial payment of ${priorText} was made ${how}.`;
+    } else {
+      priorNote = ` Note that an initial payment of ${priorText} was transferred to your bank.`;
+    }
+  } else if (!hasPrior && clearsBalance) {
+    leadText = 'Kindly find attached payment in the amount of ';
+  } else {
+    leadText = 'Kindly find attached initial payment in the amount of ';
+  }
+
+  const paymentSentence = (
+    <>
+      {leadText}
+      <strong>{amountText}</strong> {methodPhrase}.{priorNote}
+      {advFx && (
+        <>
+          {' '}
+          Converted at an exchange rate of{' '}
+          <strong>
+            1 {advFx.currency}: {currency ?? ''} {fmtRate(advFx.rate)}
+          </strong>
+          .
+        </>
+      )}
+    </>
+  );
 
   const riskDetailRows: Row[] = [
     ...placementDetailEntries(businessDetails),
@@ -127,7 +220,7 @@ export function DisbursementAdviceContent({ placement, payment }: DisbursementAd
       pct: `${commission ?? 0}%`,
       value: fmtAmount(commissionAmt, currency),
     },
-    { label: 'Net Premium', value: fmtAmount(paidAmount, payment.currency), bold: true },
+    { label: 'Net Premium', value: fmtAmount(paidAmount, currency), bold: true },
   ];
 
   return (

@@ -53,6 +53,7 @@ export function PaymentOverview({ placement }: PaymentOverviewProps) {
         placement={placement}
         financialPosition={financialPosition}
         effectiveView={effectiveView}
+        payments={payments}
       />
     </CollapsibleOverview>
   );

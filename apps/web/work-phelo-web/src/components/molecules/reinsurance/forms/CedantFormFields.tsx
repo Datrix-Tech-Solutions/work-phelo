@@ -81,6 +81,7 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
           registration={register('name', { required: 'Cedant name is required' })}
           error={errors.name}
           placeholder="e.g. Insurance Company Ltd."
+          readOnly={!!prefillId}
         />
       </FormSection>
 

@@ -138,6 +138,16 @@ function PaymentStatusCell({
   );
 }
 
+// Closing tab only: when the offer was created.
+const OFFER_DATE_COLUMN: Column<Facultative> = {
+  key: 'createdAt',
+  label: 'Offer Date',
+  width: '90px',
+  render: (row) => (
+    <span className="font-semibold text-gray-700">{fmtDateTime(row.createdAt)}</span>
+  ),
+};
+
 const SUM_INSURED_COLUMN: Column<Facultative> = {
   key: 'sumInsured',
   label: '100% Sum Insured',
@@ -174,9 +184,21 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'cedant',
     label: 'Cedant',
     width: 'minmax(120px, 0.8fr)',
-    render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
+    render: (row) => <span className="font-bold text-gray-700">{row.cedant.name}</span>,
   },
+
   SUM_INSURED_COLUMN,
+  {
+    key: 'premium',
+    label: '100% Premium',
+    width: '100px',
+    className: 'text-right',
+    render: (row) => (
+      <span className="font-semibold text-gray-900">
+        {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
+      </span>
+    ),
+  },
   {
     key: 'facultativeOffer',
     label: 'Fac Offer',
@@ -189,17 +211,7 @@ const COLUMNS: Column<Facultative>[] = [
       </div>
     ),
   },
-  {
-    key: 'premium',
-    label: 'Fac Premium',
-    width: '100px',
-    className: 'text-right',
-    render: (row) => (
-      <span className="font-semibold text-gray-900">
-        {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
-      </span>
-    ),
-  },
+
   {
     key: 'totalAcceptedPercent',
     label: 'Signing Progress',
@@ -224,7 +236,6 @@ const COLUMNS: Column<Facultative>[] = [
       );
     },
   },
-
   {
     key: 'participants' as keyof Facultative,
     label: 'Participants',
@@ -473,43 +484,100 @@ export function FacultativeTable({
     const actorName = (userId: string | null) =>
       userId ? (userNameById.get(userId) ?? 'Unknown user') : 'Unknown user';
 
+    // Endorsements amend the policy without touching the base placement record, so the raw
+    // row.sumInsured / row.premium / row.facultativeOffer never move. Overlay the effective
+    // terms from row-state (which the backend already falls back to base values for) so the
+    // table matches the placement detail page once an endorsement has passed.
+    const effectiveTermsFor = (placementId: string) =>
+      tab === 'archived' ? undefined : rowStateByPlacementId.get(placementId);
+
     const columnsWithRowState = COLUMNS.map((col) => {
-      if (col.key !== 'reference' || tab === 'archived') {
-        return col;
+      if (tab === 'archived') return col;
+
+      if (col.key === 'reference') {
+        return {
+          ...col,
+          render: (row: Facultative) => (
+            <EndorsedReferencePill
+              id={row.id}
+              reference={displayPolicyNumber(row.policyNumber)}
+              endorsementCount={endorsementCountMap.get(row.id) ?? 0}
+            />
+          ),
+        };
       }
 
-      return {
-        ...col,
-        render: (row: Facultative) => (
-          <EndorsedReferencePill
-            id={row.id}
-            reference={displayPolicyNumber(row.policyNumber)}
-            endorsementCount={endorsementCountMap.get(row.id) ?? 0}
-          />
-        ),
-      };
+      if (col.key === 'sumInsured') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value = effectiveTermsFor(row.id)?.effectiveSumInsured ?? row.sumInsured;
+            return (
+              <span className="font-semibold text-gray-900">
+                {value != null ? `${row.currency ?? ''} ${fmtAmount(value)}` : '—'}
+              </span>
+            );
+          },
+        };
+      }
+
+      if (col.key === 'premium') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value = effectiveTermsFor(row.id)?.effectivePremium ?? row.premium;
+            return (
+              <span className="font-semibold text-gray-900">
+                {value != null ? `${row.currency ?? ''} ${fmtAmount(value)}` : '—'}
+              </span>
+            );
+          },
+        };
+      }
+
+      if (col.key === 'facultativeOffer') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value =
+              effectiveTermsFor(row.id)?.effectiveFacultativeOfferPercent ?? row.facultativeOffer;
+            return (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-semibold text-gray-900">
+                  {value != null ? `${value}%` : '—'}
+                </span>
+              </div>
+            );
+          },
+        };
+      }
+
+      return col;
     });
 
     if (tab === 'closing') {
       // Signing Progress is dropped for closed placements; 100% Sum Insured (from COLUMNS) stays.
       return columnsWithRowState
         .filter((col) => col.key !== 'totalAcceptedPercent')
-        .map((col) => {
-          if (col.key === 'participants') return CLOSED_PARTICIPANTS_COLUMN;
+        .flatMap((col) => {
+          if (col.key === 'participants') return [CLOSED_PARTICIPANTS_COLUMN];
 
           if (col.key === 'status') {
-            return {
-              ...col,
-              render: (row: Facultative) => (
-                <PaymentStatusCell
-                  placement={row}
-                  paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
-                />
-              ),
-            };
+            return [
+              OFFER_DATE_COLUMN,
+              {
+                ...col,
+                render: (row: Facultative) => (
+                  <PaymentStatusCell
+                    placement={row}
+                    paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
+                  />
+                ),
+              },
+            ];
           }
 
-          return col;
+          return [col];
         });
     }
 
@@ -558,7 +626,7 @@ export function FacultativeTable({
         ),
       },
     ];
-  }, [tab, tenantUsers, paymentStatusMap, endorsementCountMap]);
+  }, [tab, tenantUsers, paymentStatusMap, endorsementCountMap, rowStateByPlacementId]);
 
   const closeArchiveModal = () => {
     setArchiveTarget(null);

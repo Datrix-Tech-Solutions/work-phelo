@@ -261,7 +261,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           <TableButton variant="green" onClick={() => handleViewEffectiveClosing(row)}>
             View Closing
           </TableButton>
-          <TableButton
+          {/* <TableButton
             variant="blue"
             onClick={() =>
               setMailToReinsurerRow({
@@ -271,7 +271,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
             }
           >
             Mail Reinsurer
-          </TableButton>
+          </TableButton> */}
         </div>
       ),
     },

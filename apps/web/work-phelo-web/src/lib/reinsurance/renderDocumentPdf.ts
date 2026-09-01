@@ -74,6 +74,53 @@ async function captureElement(el: HTMLElement, transparent = false) {
   });
 }
 
+/**
+ * Vertical offsets within the captured content canvas (in canvas pixels) where a
+ * page break may fall without slicing through a line of text or a keep-together
+ * block. We take the top edge of every candidate block, then drop any that land
+ * *inside* a block that must not be split — an explicit `[data-print-block]`, a
+ * whole rich-text table (`[data-rich-text] table`), or anything with
+ * `break-inside: avoid` — so a nested row/paragraph collapses onto its atomic
+ * wrapper and that wrapper moves to the next page as one piece.
+ *
+ * Must run while the print root is still staged (laid out) and after the
+ * content's print-only `minHeight` has been cleared, so offsets line up with the
+ * captured canvas. Returns `[0]` if the content isn't measurable, which makes
+ * the slicer fall back to fixed page-height cuts.
+ */
+function collectBreakOffsets(content: HTMLElement, canvasHeight: number): number[] {
+  if (!content.offsetHeight) return [0];
+  const scale = canvasHeight / content.offsetHeight;
+  const contentTop = content.getBoundingClientRect().top;
+  const toOffset = (clientTop: number) => (clientTop - contentTop) * scale;
+
+  const candidates = Array.from(
+    content.querySelectorAll<HTMLElement>('p, li, tr, h1, h2, h3, h4, h5, h6, [data-print-block]'),
+  )
+    .map((el) => el.getBoundingClientRect())
+    .filter((rect) => rect.height > 0)
+    .map((rect) => toOffset(rect.top));
+
+  // Blocks that must never be sliced: explicit markers, whole tables authored in
+  // the rich-text comment, and anything asking for `break-inside: avoid`.
+  const atomicSelector = '[data-print-block], [data-rich-text] table';
+  const atomicBoxes = Array.from(content.querySelectorAll<HTMLElement>('*'))
+    .filter((el) => el.matches(atomicSelector) || getComputedStyle(el).breakInside === 'avoid')
+    .map((el) => {
+      const rect = el.getBoundingClientRect();
+      return { top: toOffset(rect.top), bottom: toOffset(rect.bottom) };
+    })
+    .filter((box) => box.bottom - box.top > 2);
+
+  const valid = candidates.filter(
+    (offset) => !atomicBoxes.some((box) => offset > box.top + 1 && offset < box.bottom - 1),
+  );
+
+  return Array.from(new Set([0, ...valid.map((offset) => Math.round(offset))])).sort(
+    (a, b) => a - b,
+  );
+}
+
 /** Waits for every <img> under `el` to finish loading so captures don't miss images. */
 async function waitForImages(el: HTMLElement) {
   const imgs = Array.from(el.querySelectorAll('img'));
@@ -126,6 +173,7 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
   let footerCanvas: HTMLCanvasElement | null = null;
   let watermarkCanvas: HTMLCanvasElement | null = null;
   let contentCanvas: HTMLCanvasElement;
+  let breakOffsets: number[] = [0];
   try {
     [headerCanvas, footerCanvas, watermarkCanvas, contentCanvas] = await Promise.all([
       header ? captureElement(header) : Promise.resolve(null),
@@ -133,6 +181,8 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
       watermark ? captureElement(watermark, true) : Promise.resolve(null),
       captureElement(content, true),
     ]);
+    // Measure now, while the root is still staged and `minHeight` is cleared.
+    breakOffsets = collectBreakOffsets(content, contentCanvas.height);
   } finally {
     if (header) header.style.position = prevHeaderPosition;
     if (footer) footer.style.position = prevFooterPosition;
@@ -155,10 +205,28 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
     : 0;
 
   const pxPerMm = contentCanvas.width / contentWmm;
-  const sliceHeightPx = Math.max(1, Math.floor(contentAreaHmm * pxPerMm));
-  const totalPages = Math.max(1, Math.ceil(contentCanvas.height / sliceHeightPx));
+  const maxSliceHeightPx = Math.max(1, Math.floor(contentAreaHmm * pxPerMm));
 
-  for (let page = 0; page < totalPages; page++) {
+  // Turn the legal break offsets into concrete page boundaries: each page takes
+  // as many whole blocks as fit in `maxSliceHeightPx`, snapping its bottom edge
+  // to the largest break offset that fits. A block taller than a full page has
+  // no legal break inside it, so it's hard-cut at the page height.
+  const pageStarts = [0];
+  let cursor = 0;
+  while (cursor < contentCanvas.height) {
+    const idealEnd = cursor + maxSliceHeightPx;
+    if (idealEnd >= contentCanvas.height) break;
+    let cut = idealEnd;
+    for (const offset of breakOffsets) {
+      if (offset > cursor && offset <= idealEnd) cut = offset;
+      else if (offset > idealEnd) break;
+    }
+    if (cut <= cursor) cut = idealEnd;
+    pageStarts.push(cut);
+    cursor = cut;
+  }
+
+  for (let page = 0; page < pageStarts.length; page++) {
     if (page > 0) pdf.addPage();
 
     if (watermarkCanvas) {
@@ -179,8 +247,9 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
       pdf.addImage(footerCanvas, 'PNG', 0, A4_HEIGHT_MM - footerHmm, A4_WIDTH_MM, footerHmm);
     }
 
-    const startPx = page * sliceHeightPx;
-    const sliceHeightPxForPage = Math.min(sliceHeightPx, contentCanvas.height - startPx);
+    const startPx = pageStarts[page];
+    const endPx = page + 1 < pageStarts.length ? pageStarts[page + 1] : contentCanvas.height;
+    const sliceHeightPxForPage = endPx - startPx;
     if (sliceHeightPxForPage <= 0) continue;
 
     const slice = document.createElement('canvas');

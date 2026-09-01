@@ -6,13 +6,14 @@ import { FinancialStatsRow } from '@/components/molecules/reinsurance/stats/Fina
 
 interface GeneralDashboardProps {
   period: Period;
+  year: number;
 }
 
-export function GeneralDashboard({ period }: GeneralDashboardProps) {
+export function GeneralDashboard({ period, year }: GeneralDashboardProps) {
   return (
     <div className="flex flex-col">
-      <OffersOverviewRow period={period} />
-      <FinancialStatsRow period={period} />
+      <OffersOverviewRow period={period} year={year} />
+      <FinancialStatsRow period={period} year={year} />
     </div>
   );
 }

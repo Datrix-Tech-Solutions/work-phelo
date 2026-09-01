@@ -2,7 +2,6 @@
 
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
-import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import {
@@ -260,14 +259,9 @@ export function EndorsementParticipantsTable({
                 </TableButton>
               )}
               {!mailed && !hasResponded && (
-                <button
-                  type="button"
-                  title="Share"
-                  onClick={() => onMailReinsurer(row.counterpartyId)}
-                  className="text-green-500 hover:text-green-700 transition-colors mail-pending-bounce"
-                >
-                  <Icons.Mail className="w-5 h-5" />
-                </button>
+                <TableButton variant="green" onClick={() => onMailReinsurer(row.counterpartyId)}>
+                  Send Mail
+                </TableButton>
               )}
               {mailed && (!hasResponded || isEditingRevision) && (
                 <TableButton
@@ -367,14 +361,13 @@ export function EndorsementParticipantsTable({
             ) : isDeclined ? null : (
               <>
                 {!mailed && (
-                  <button
-                    type="button"
-                    title="Send Endorsement Email"
+                  <TableButton
+                    variant="green"
+                    tooltip="Send Endorsement Email"
                     onClick={() => onMailReinsurer(row.counterpartyId)}
-                    className="text-green-500 hover:text-green-700 transition-colors mail-pending-bounce"
                   >
-                    <Icons.Mail className="w-5 h-5" />
-                  </button>
+                    Send Mail
+                  </TableButton>
                 )}
                 {mailed && (
                   <TableButton
