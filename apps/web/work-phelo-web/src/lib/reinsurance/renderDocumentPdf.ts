@@ -128,7 +128,9 @@ function collectBreakOffsets(content: HTMLElement, canvasHeight: number): number
   const toOffset = (clientTop: number) => (clientTop - contentTop) * scale;
 
   const candidates = Array.from(
-    content.querySelectorAll<HTMLElement>('p, li, tr, h1, h2, h3, h4, h5, h6, [data-print-block]'),
+    content.querySelectorAll<HTMLElement>(
+      'p, li, tr, h1, h2, h3, h4, h5, h6, [data-doc-field], [data-print-block]',
+    ),
   )
     .map((el) => el.getBoundingClientRect())
     .filter((rect) => rect.height > 0)
