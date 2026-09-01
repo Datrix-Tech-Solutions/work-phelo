@@ -264,6 +264,7 @@ export function CreditNoteModal({
               </p>
               <div
                 data-rich-text
+                data-rich-text-doc
                 className="text-base text-gray-700"
                 dangerouslySetInnerHTML={{ __html: description }}
               />

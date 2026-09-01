@@ -255,6 +255,7 @@ export function PremiumCreditNoteModal({
             <p className="text-sm font-semibold text-gray-400  tracking-wide mb-1">Kindly Refer:</p>
             <div
               data-rich-text
+              data-rich-text-doc
               className="text-base text-gray-700"
               dangerouslySetInnerHTML={{ __html: description }}
             />

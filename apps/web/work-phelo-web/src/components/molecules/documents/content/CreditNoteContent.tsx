@@ -184,7 +184,11 @@ export function CreditNoteContent({ note, placement, reinsurerCompany }: CreditN
           }}
         >
           <p className="text-gray-400">Kindly Refer:</p>
-          <div data-rich-text dangerouslySetInnerHTML={{ __html: placement.description }} />
+          <div
+            data-rich-text
+            data-rich-text-doc
+            dangerouslySetInnerHTML={{ __html: placement.description }}
+          />
         </div>
       )}
 

@@ -929,6 +929,21 @@ body {
   text-align: left;
 }
 
+/* Document render sites tag the container `data-rich-text-doc` as well: in a
+   document the table just renders smaller (smaller font, tighter padding) so it
+   fits the sheet. Column widths are the browser's normal `auto` layout — no
+   `table-layout: fixed`, no `overflow-wrap`/`word-break` overrides — so a column
+   is never squeezed below its longest word and text never breaks mid-character.
+   `!important` beats the per-cell `style="…"` that pre-bare-markup tables still
+   carry. The editor and the panel `RichTextView` lack this attribute, so they're
+   untouched. */
+[data-rich-text-doc] th,
+[data-rich-text-doc] td {
+  padding: 2px 6px !important;
+  font-size: 0.7em !important;
+  height: auto !important;
+}
+
 /* A table with more columns than the container is wide scrolls inside this
    wrapper (added by `insertTableFromGrid`) instead of overflowing the comment
    area or the document page. The margin moves here so the scrollbar sits flush
