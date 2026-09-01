@@ -4,15 +4,28 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Bell, Home, LayoutGrid, LogOutIcon, Menu, Settings, UserIcon } from 'lucide-react';
-import { cn, frostedAvatarStyle, popupClass } from '@/lib/utils';
+import { cardClass, cn, frostedAvatarStyle, popupClass } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { HelpCenter } from '@/components/organisms/shared/HelpCenter';
 import { Button } from '@/components/atoms/Button';
 import { useAuthStore } from '@/store/auth.store';
-import { useLogout } from '@/hooks/useAuth';
+import { useLogout, useUnreadCount, useNotifications, useMarkRead, useMarkAllRead } from '@/hooks';
 import { useRouter, usePathname } from 'next/navigation';
+import type { Notification } from '@/types/notification';
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
 export interface NavTab {
   key: string;
@@ -24,7 +37,6 @@ interface TopNavProps {
   showMenuButton?: boolean;
   onMenuClick?: () => void;
   tabs?: NavTab[];
-  notificationCount?: number;
   userInitials: string;
   userColor?: string;
   logoVariant?: 'text' | 'image';
@@ -205,12 +217,89 @@ function ProfileDropdown({
   );
 }
 
+/* ── Notification list ── */
+function NotificationRow({
+  notification,
+  slug,
+  onNavigate,
+  onMarkRead,
+}: {
+  notification: Notification;
+  slug: string;
+  onNavigate: () => void;
+  onMarkRead: (id: string) => void;
+}) {
+  const content = (
+    <div
+      className={cardClass(
+        'flex items-start gap-3 px-3 py-3 cursor-pointer transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-1 hover:shadow-[0_16px_28px_-16px_rgba(0,0,0,0.4),0_4px_10px_-2px_rgba(0,0,0,0.2),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))] hover:bg-orange-50/60',
+      )}
+      onClick={() => {
+        onMarkRead(notification.id);
+        onNavigate();
+      }}
+    >
+      <span className="mt-1.5 w-2 h-2 rounded-full bg-orange-500 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">{notification.title}</p>
+        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notification.message}</p>
+        <p className="text-[11px] text-gray-400 mt-1">{timeAgo(notification.createdAt)}</p>
+      </div>
+    </div>
+  );
+
+  if (!notification.link) return content;
+
+  return (
+    <Link href={`/${slug}${notification.link}`} className="block">
+      {content}
+    </Link>
+  );
+}
+
+function NotificationsPanelContent({ slug, onNavigate }: { slug: string; onNavigate: () => void }) {
+  const { data: notifications, isLoading } = useNotifications();
+  const { mutate: markRead } = useMarkRead();
+
+  // Read notifications drop off the list immediately — only unread ones stay visible.
+  const unread = (notifications ?? []).filter((n) => !n.isRead);
+
+  if (isLoading) {
+    return <p className="text-sm text-gray-400 text-center py-16">Loading…</p>;
+  }
+
+  if (unread.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+        <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+          <Bell className="w-6 h-6" />
+        </div>
+        <p className="text-sm font-medium text-gray-500">No notifications yet</p>
+        <p className="text-xs text-gray-400">You&apos;re all caught up! Check back later.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {unread.map((notification) => (
+        <NotificationRow
+          key={notification.id}
+          notification={notification}
+          slug={slug}
+          onNavigate={onNavigate}
+          onMarkRead={markRead}
+        />
+      ))}
+    </div>
+  );
+}
+
 /* ── TopNav ── */
 export function TopNav({
   showMenuButton = false,
   onMenuClick,
   tabs,
-  notificationCount,
   userInitials,
   userColor,
   logoVariant = 'text',
@@ -220,6 +309,11 @@ export function TopNav({
   const { user } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const slug = user?.tenantSlug || pathname.split('/')[1];
+
+  const { data: unreadData } = useUnreadCount();
+  const notificationCount = unreadData?.count ?? 0;
+  const { mutate: markAllRead, isPending: isMarkingAllRead } = useMarkAllRead();
 
   const { mutate: performLogout, isPending: isLoggingOut } = useLogout();
 
@@ -342,14 +436,22 @@ export function TopNav({
         onClose={() => setNotificationsOpen(false)}
         title="Notifications"
         description="Stay up to date with what's happening."
+        descriptionAction={
+          notificationCount > 0 && (
+            <button
+              onClick={() => markAllRead()}
+              disabled={isMarkingAllRead}
+              className="text-xs font-medium text-orange-600 hover:text-orange-700 disabled:opacity-50 whitespace-nowrap"
+            >
+              Mark all as read
+            </button>
+          )
+        }
+        glass
       >
-        <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-          <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-            <Bell className="w-6 h-6" />
-          </div>
-          <p className="text-sm font-medium text-gray-500">No notifications yet</p>
-          <p className="text-xs text-gray-400">You&apos;re all caught up! Check back later.</p>
-        </div>
+        {notificationsOpen && (
+          <NotificationsPanelContent slug={slug} onNavigate={() => setNotificationsOpen(false)} />
+        )}
       </SidePanel>
 
       {/* Logout confirmation modal */}

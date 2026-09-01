@@ -1236,7 +1236,7 @@ export class PayrollService {
       throw new BadRequestException('Payroll must be approved first');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const paidRun = await this.prisma.$transaction(async (tx) => {
       const updatedRun = await tx.payrollRun.update({
         where: { id },
         data: { status: 'PAID', paidAt: new Date() },
@@ -1246,6 +1246,48 @@ export class PayrollService {
 
       return updatedRun;
     });
+
+    await this.notifyPayslipsPaid(
+      tenantId,
+      run.id,
+      run.month,
+      run.year,
+      run.items,
+    );
+
+    return paidRun;
+  }
+
+  private async notifyPayslipsPaid(
+    tenantId: string,
+    payrollRunId: string,
+    month: number,
+    year: number,
+    items: { employeeId: string }[],
+  ) {
+    const employeeIds = [...new Set(items.map((item) => item.employeeId))];
+    if (employeeIds.length === 0) return;
+
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: employeeIds }, userId: { not: null } },
+      select: { id: true, userId: true },
+    });
+
+    if (employees.length === 0) return;
+
+    const periodLabel = `${month}/${year}`;
+    await this.notificationsService.createMany(
+      employees.map((employee) => ({
+        tenantId,
+        userId: employee.userId!,
+        type: 'PAYSLIP_PAID',
+        title: 'Payslip Available',
+        message: `Your payslip for ${periodLabel} is ready.`,
+        link: '/hr',
+        entityType: 'payrollRun',
+        entityId: payrollRunId,
+      })),
+    );
   }
 
   async getPayrollRuns(tenantId: string, actor: RequestUser) {

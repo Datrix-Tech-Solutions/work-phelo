@@ -5,7 +5,7 @@ import { Button } from '@/components/atoms/Button';
 import { AssetTypeIcon } from '@/components/atoms/assetIcons';
 import { Asset, AssetStatus, AssetCondition } from '@/types/asset';
 import { useBranchOptions } from '@/hooks';
-import { VEHICLE_TYPE_OPTIONS, getAssetTypeLabel } from '@/lib/assetOptions';
+import { getAssetTypeLabel, VEHICLE_TYPE_OPTIONS } from '@/lib/assetOptions';
 import { cn } from '@/lib/utils';
 
 const STATUS_STYLES: Record<AssetStatus, { dot: string; text: string; bg: string; label: string }> =

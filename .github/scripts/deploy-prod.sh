@@ -32,6 +32,7 @@ API_GATEWAY_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "API_GATEWAY_IMAGE" "
 AUTH_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "AUTH_SERVICE_IMAGE" "auth-service" "auth-service" "prod")"
 HR_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "HR_SERVICE_IMAGE" "hr-service" "hr-service" "prod")"
 NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service" "prod")"
+REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "prod")"
 NEXTJS_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "prod")"
 
 section "Compose Env"
@@ -44,6 +45,7 @@ write_env_file "$COMPOSE_ENV_FILE" \
   "AUTH_SERVICE_IMAGE=${AUTH_SERVICE_IMAGE}" \
   "HR_SERVICE_IMAGE=${HR_SERVICE_IMAGE}" \
   "NOTIFICATION_SERVICE_IMAGE=${NOTIFICATION_SERVICE_IMAGE}" \
+  "REINSURANCE_SERVICE_IMAGE=${REINSURANCE_SERVICE_IMAGE}" \
   "NEXTJS_IMAGE=${NEXTJS_IMAGE}" \
   "WEB_PUBLIC_API_URL=${WEB_PUBLIC_API_URL:-https://api.workphelo.com/api/v1}" \
   "WEB_PUBLIC_APP_BASE_URL=${WEB_PUBLIC_APP_BASE_URL:-https://app.workphelo.com}"
@@ -58,7 +60,8 @@ write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.prod" \
   "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
   "AUTH_SERVICE_URL=http://auth-service:4001" \
   "HR_SERVICE_URL=http://hr-service:4002" \
-  "NOTIFICATION_SERVICE_URL=http://notification-service:4004"
+  "NOTIFICATION_SERVICE_URL=http://notification-service:4004" \
+  "REINSURANCE_SERVICE_URL=http://reinsurance-service:4007"
 
 write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.prod" \
   "PORT=4001" \
@@ -79,7 +82,21 @@ write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.prod" \
   "MICROSOFT_CLIENT_ID=${AUTH_MICROSOFT_CLIENT_ID}" \
   "MICROSOFT_CLIENT_SECRET=${AUTH_MICROSOFT_CLIENT_SECRET}" \
   "MICROSOFT_CALLBACK_URL=${AUTH_MICROSOFT_CALLBACK_URL}" \
-  "SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}"
+  "SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}" \
+  "AUTH_TENANT_ASSET_STORAGE_PROVIDER=${AUTH_TENANT_ASSET_STORAGE_PROVIDER}" \
+  "AUTH_TENANT_ASSET_S3_BUCKET=${AUTH_TENANT_ASSET_S3_BUCKET}" \
+  "AUTH_TENANT_ASSET_S3_REGION=${AUTH_TENANT_ASSET_S3_REGION}" \
+  "AUTH_TENANT_ASSET_S3_PREFIX=${AUTH_TENANT_ASSET_S3_PREFIX}" \
+  "AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS=${AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS}" \
+  "AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER=${AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER:-}" \
+  "CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}" \
+  "CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}" \
+  "CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}" \
+  "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" \
+  "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
+
 
 write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
   "PORT=4002" \
@@ -109,6 +126,31 @@ write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.prod" \
   "TERMII_SENDER_ID=${NOTIFY_TERMII_SENDER_ID:-WorkPhelo}" \
   "PILOSMS_API_KEY=${NOTIFY_PILOSMS_API_KEY:-}" \
   "PILOSMS_SENDER_ID=${NOTIFY_PILOSMS_SENDER_ID:-WorkPhelo}"
+
+write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.prod" \
+  "PORT=4007" \
+  "DEPLOY_ENV=${DEPLOY_ENV}" \
+  "NODE_ENV=production" \
+  "DATABASE_URL=$(db_url_for_schema reinsurance)" \
+  "RABBITMQ_URL=${RABBITMQ_URL}" \
+  "JWT_SECRET=${JWT_SECRET}" \
+  "AUTH_SERVICE_URL=http://auth-service:4001" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "REINSURANCE_DOCUMENT_STORAGE_PROVIDER=${REINSURANCE_DOCUMENT_STORAGE_PROVIDER}" \
+  "REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER=${REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER}" \
+  "REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS=${REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS:-300}" \
+  "CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}" \
+  "CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}" \
+  "CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}" \
+  "REINSURANCE_DOCUMENT_S3_BUCKET=${REINSURANCE_DOCUMENT_S3_BUCKET:-}" \
+  "REINSURANCE_DOCUMENT_S3_REGION=${REINSURANCE_DOCUMENT_S3_REGION:-}" \
+  "REINSURANCE_DOCUMENT_S3_PREFIX=${REINSURANCE_DOCUMENT_S3_PREFIX:-reinsurance}" \
+  "REINSURANCE_DOCUMENT_S3_ENDPOINT=${REINSURANCE_DOCUMENT_S3_ENDPOINT:-}" \
+  "REINSURANCE_DOCUMENT_S3_FORCE_PATH_STYLE=${REINSURANCE_DOCUMENT_S3_FORCE_PATH_STYLE:-false}" \
+  "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}" \
+  "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}" \
+  "REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS=${REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS:-}" \
+  "REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED=false"
 log "✓ Service env files written"
 
 section "Compose Validation"
@@ -125,6 +167,7 @@ ensure_image_available "$API_GATEWAY_IMAGE" "api-gateway" "api-gateway"
 ensure_image_available "$AUTH_SERVICE_IMAGE" "auth-service" "auth-service"
 ensure_image_available "$HR_SERVICE_IMAGE" "hr-service" "hr-service"
 ensure_image_available "$NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service"
+ensure_image_available "$REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service"
 ensure_image_available "$NEXTJS_IMAGE" "nextjs-web" "nextjs-web"
 log "✓ Required images available"
 
@@ -133,6 +176,7 @@ preflight_runtime_env "$API_GATEWAY_IMAGE" "${DEPLOY_PATH}/apps/api-gateway/.env
 preflight_runtime_env "$AUTH_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/auth-service/.env.prod" "dist/config/runtime-env.js" "auth-service"
 preflight_runtime_env "$HR_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/hr-service/.env.prod" "dist/config/runtime-env.js" "hr-service"
 preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notification-service/.env.prod" "dist/config/runtime-env.js" "notification-service"
+preflight_runtime_env "$REINSURANCE_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/reinsurance-service/.env.prod" "dist/config/runtime-env.js" "reinsurance-service"
 log "✓ Runtime env validation passed"
 
 section "Database Migrations"
@@ -142,10 +186,16 @@ section "Database Migrations"
 docker_compose run --rm --no-deps auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
 docker_compose run --rm --no-deps hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
 docker_compose run --rm --no-deps notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
+docker_compose run --rm --no-deps reinsurance-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/reinsurance-service/prisma/schema.prisma"
 log "✓ Migrations complete"
 
 section "Deploy"
-docker_compose up -d --remove-orphans --no-build
+if docker_compose up -d --remove-orphans --no-build; then
+  :
+else
+  print_compose_failure_diagnostics
+  exit 1
+fi
 log "✓ Compose rollout finished"
 
 section "Container Health"
@@ -153,6 +203,7 @@ wait_for_container_health redis
 wait_for_container_health auth-service
 wait_for_container_health hr-service
 wait_for_container_health notification-service
+wait_for_container_health reinsurance-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
@@ -173,13 +224,17 @@ section "Reachability"
 wait_for_http_ok "prod auth-service" "http://127.0.0.1:4101/health"
 wait_for_http_ok "prod hr-service" "http://127.0.0.1:4102/health"
 wait_for_http_ok "prod notification-service" "http://127.0.0.1:4104/api/health"
+wait_for_http_ok "prod reinsurance-service" "http://127.0.0.1:4107/api/health"
 wait_for_http_ok "prod api-gateway" "http://127.0.0.1:4110/health"
+wait_for_http_ok "prod gateway reinsurance route" "http://127.0.0.1:4110/api/v1/operations/reinsurance/health"
 wait_for_http_ok "prod nextjs" "http://127.0.0.1:3001/health"
+
+record_successful_deploy_images
 
 section "Container Status"
 docker_compose ps
 
-docker image prune -f --filter "until=24h" >/dev/null || true
+post_deploy_capacity_maintenance
 
 log ""
 log "✓ Production deployment complete at $(date -u +%Y-%m-%dT%H:%M:%SZ)"

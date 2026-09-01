@@ -5,6 +5,7 @@ import { useFacultatives } from './useFacultatives';
 import { useCurrencies } from './useCurrencies';
 import { useReportCurrencyTotals, ReportCurrencyTotals } from './useReportCurrencyTotals';
 import { Currency, Facultative, FacultativeStatus, PlacementPayment } from '@/types/reinsurance';
+import { pendingPremiumReceived } from '@/lib/reinsurance/placementStatus';
 
 const BASE = '/operations/reinsurance/placements';
 const paymentsKey = (placementId: string) =>
@@ -17,9 +18,15 @@ function netPremiumFor(p: Facultative): number {
   return p.commission != null ? fac * (1 - p.commission / 100) : fac;
 }
 
+/** Only BANK_CONFIRMED receipts count as settled — matches the financial-position/netSettled
+ *  convention used everywhere else, so this report's Outstanding agrees with the Payments and
+ *  Facultative tables instead of treating a merely-RECORDED (unconfirmed) receipt as paid. */
 function totalPaidFor(payments: PlacementPayment[]): number {
   return payments
-    .filter((p) => p.status === 'RECORDED')
+    .filter(
+      (p) =>
+        p.type === 'PREMIUM_RECEIVED' && p.status === 'BANK_CONFIRMED' && !p.reversalOfPaymentId,
+    )
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
 
@@ -55,12 +62,17 @@ export interface CedantReportRow {
   placementCount: number;
   totalPremium: number;
   outstanding: number;
+  /** Recorded but not yet bank-confirmed receipts — already reflected in `outstanding`, just called out separately. */
+  pending: number;
 }
 
 export interface CedantsReportSummary {
   activeCedants: number;
+  totalPlacements: number;
+  cedantsWithOutstanding: number;
   totalPremium: number;
   outstanding: number;
+  pending: number;
   currencySymbol: string;
 }
 
@@ -135,6 +147,7 @@ export function useCedantsReport(
         placementCount: 0,
         totalPremium: 0,
         outstanding: 0,
+        pending: 0,
       };
       existing.placementCount += 1;
       existing.totalPremium += convertToTarget(
@@ -152,6 +165,12 @@ export function useCedantsReport(
       const entry = map.get(p.cedant.id);
       if (entry) {
         entry.outstanding += convertToTarget(unpaid, p.currency, currencies, targetRate);
+        entry.pending += convertToTarget(
+          pendingPremiumReceived(payments),
+          p.currency,
+          currencies,
+          targetRate,
+        );
       }
     });
 
@@ -162,8 +181,11 @@ export function useCedantsReport(
     const targetCurrency = currencies.find((c) => c.isoCode === targetIso);
     return {
       activeCedants: rows.length,
+      totalPlacements: rows.reduce((sum, r) => sum + r.placementCount, 0),
+      cedantsWithOutstanding: rows.filter((r) => r.outstanding > 0).length,
       totalPremium: rows.reduce((sum, r) => sum + r.totalPremium, 0),
       outstanding: rows.reduce((sum, r) => sum + r.outstanding, 0),
+      pending: rows.reduce((sum, r) => sum + r.pending, 0),
       currencySymbol: targetCurrency?.symbol ?? targetIso,
     };
   }, [rows, currencies, targetIso]);

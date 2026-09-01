@@ -184,6 +184,10 @@ export function EndorsementCertificateModal({
       onPrint={onPrint}
       onClose={onClose}
     >
+      <p className="text-sm font-semibold text-gray-900 uppercase tracking-wide pt-1 pb-2 text-center">
+        Endorsement Certificate
+      </p>
+
       {/* Letter header */}
       <div className="flex flex-col gap-0.5 text-base mb-6">
         <p className="text-gray-400 mb-3">{fmtDate(new Date().toISOString())}</p>
@@ -237,7 +241,7 @@ export function EndorsementCertificateModal({
 
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>
-      <ul className="text-base text-gray-700 space-y-1 list-none mb-2">
+      <ul className="text-sm text-gray-700 space-y-1 list-none mb-2">
         <li>• All other terms remain unchanged.</li>
         <li>• This endorsement forms part of the original facultative slip.</li>
       </ul>

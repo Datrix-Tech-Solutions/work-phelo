@@ -20,6 +20,8 @@ interface InlineTableProps {
   fieldIds: string[];
   onAddRow: () => void;
   onRemoveRow: (index: number) => void;
+  /** Optional extra line rendered below the totals footer, e.g. a balance/difference summary. */
+  footerNote?: React.ReactNode;
 }
 
 export function InlineTable({
@@ -29,6 +31,7 @@ export function InlineTable({
   fieldIds,
   onAddRow,
   onRemoveRow,
+  footerNote,
 }: InlineTableProps) {
   const colTemplate = [...columns.map((c) => c.width ?? '1fr'), '44px'].join(' ');
   const hasFooter = columns.some((c) => c.renderFooter);
@@ -130,6 +133,7 @@ export function InlineTable({
                   <div />
                 </div>
               </div>
+              {footerNote && <div className="flex justify-end px-6 pt-2">{footerNote}</div>}
             </div>
           )}
         </div>

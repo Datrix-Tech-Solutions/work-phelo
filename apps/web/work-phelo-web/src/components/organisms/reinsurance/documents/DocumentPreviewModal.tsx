@@ -1,12 +1,17 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import Image from 'next/image';
 import QRCode from 'react-qr-code';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { CompanyLogo } from '@/components/atoms/CompanyLogo';
 import { DocumentPrintLayout } from '@/components/organisms/reinsurance/documents/DocumentPrintLayout';
+import {
+  openPdfPreview,
+  renderPrintRootToPdf,
+  stagePrintRoot,
+} from '@/lib/reinsurance/renderDocumentPdf';
 
 const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
 
@@ -38,15 +43,43 @@ export function DocumentPreviewModal({
   children,
   afterContent,
 }: DocumentPreviewModalProps) {
-  const handlePrint = () => {
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const handlePrint = async () => {
     const el = document.getElementById('irisk-print-root');
-    if (el) el.style.display = 'block';
-    const previousTitle = document.title;
-    document.title = fileName ?? documentTitle;
-    window.print();
-    document.title = previousTitle;
-    if (el) el.style.display = 'none';
-    onPrint();
+    if (!el || isPrinting) return;
+    const printTitle = fileName ?? documentTitle;
+
+    // Open the tab synchronously so popup blockers treat it as click-driven.
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.title = printTitle;
+      printWindow.document.body.innerHTML =
+        '<p style="font-family: sans-serif; padding: 24px; color: #6b7280;">Preparing document…</p>';
+    }
+
+    setIsPrinting(true);
+    const restore = stagePrintRoot(el);
+    try {
+      const blob = await renderPrintRootToPdf(el, printTitle);
+      if (printWindow && !printWindow.closed) {
+        await openPdfPreview(printWindow, blob, printTitle);
+      }
+    } catch (error) {
+      console.error('Failed to generate print PDF', error);
+      if (printWindow && !printWindow.closed) {
+        printWindow.document.body.innerHTML =
+          '<p style="font-family: sans-serif; padding: 24px; color: #b91c1c;">Could not generate the document. Please try again.</p>';
+      }
+    } finally {
+      restore();
+      setIsPrinting(false);
+      // Deferred until the capture is done: several callers use onPrint to close
+      // this modal, which unmounts the portaled #irisk-print-root. Firing it any
+      // earlier races html2canvas's async clone-and-capture of that same element,
+      // causing "Unable to find element in cloned iframe".
+      onPrint();
+    }
   };
 
   return (
@@ -63,7 +96,9 @@ export function DocumentPreviewModal({
             <Button variant="outline" onClick={onClose}>
               Close Preview
             </Button>
-            <Button onClick={handlePrint}>Print</Button>
+            <Button onClick={handlePrint} isLoading={isPrinting} loadingText="Preparing…">
+              Print
+            </Button>
           </>
         }
       >

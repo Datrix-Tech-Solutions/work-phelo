@@ -1,449 +1,54 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import {
-  Facultative,
-  PlacementClaim,
-  PlacementClaimAllocation,
-  PlacementClaimStatus,
-  PlacementParticipant,
-} from '@/types/reinsurance';
-import { DetailField } from '@/components/atoms/DetailField';
-import { Badge } from '@/components/atoms/Badge';
-import { Icons } from '@/components/atoms/icons';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
-import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
-import { useReinsurers, useCedants, useClaimAllocations } from '@/hooks';
-import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
-import { cardClass } from '@/lib/utils';
-import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { useState } from 'react';
+import { TabBar } from '@/components/molecules/shared/TabBar';
+import { ClaimOverview } from '@/components/molecules/reinsurance/stats/ClaimOverview';
+import { ClaimOverviewTab } from '@/components/organisms/reinsurance/claim/ClaimOverviewTab';
+import { ClaimCashCallsTable } from '@/components/organisms/reinsurance/claim/ClaimCashCallsTable';
+import { ClaimFinancialHistoryTable } from '@/components/organisms/reinsurance/claim/ClaimFinancialHistoryTable';
+import { Facultative, PlacementClaim } from '@/types/reinsurance';
 
-const CLAIM_STATUS_VARIANT: Record<
-  PlacementClaimStatus,
-  'neutral' | 'warning' | 'success' | 'danger'
-> = {
-  DRAFT: 'neutral',
-  NOTIFIED: 'warning',
-  RESERVED: 'warning',
-  PARTIALLY_SETTLED: 'warning',
-  SETTLED: 'success',
-  DECLINED: 'danger',
-  CLOSED: 'success',
-  VOID: 'danger',
-};
+type ClaimTab = 'details' | 'cashCalls' | 'history';
 
-const CLAIM_STATUS_LABEL: Record<PlacementClaimStatus, string> = {
-  DRAFT: 'Draft',
-  NOTIFIED: 'Notified',
-  RESERVED: 'Reserved',
-  PARTIALLY_SETTLED: 'Partly Settled',
-  SETTLED: 'Settled',
-  DECLINED: 'Declined',
-  CLOSED: 'Closed',
-  VOID: 'Void',
-};
-
-function fmt(val: number | string | null | undefined, currency?: string | null) {
-  if (val == null || val === '') return '—';
-  const num = typeof val === 'string' ? parseFloat(val) : val;
-  if (isNaN(num)) return '—';
-  const prefix = currency ? `${currency} ` : '';
-  return `${prefix}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function fmtDate(iso: string | null | undefined) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+const CLAIM_TABS = [
+  { key: 'details', label: 'Details' },
+  { key: 'cashCalls', label: 'Recoveries' },
+  { key: 'history', label: 'History' },
+];
 
 interface ClaimOverviewSectionProps {
   placement: Facultative;
   claim?: PlacementClaim;
 }
 
-function ClaimDetailsPanel({
-  placement,
-  claim,
-  deductionRate,
-}: Pick<ClaimOverviewSectionProps, 'placement' | 'claim'> & { deductionRate: number }) {
-  const { facultativeOffer, sumInsured, premium, commission, currency, createdAt } = placement;
-
-  const facSumInsured =
-    sumInsured != null && facultativeOffer != null ? sumInsured * (facultativeOffer / 100) : null;
-
-  const facPremium =
-    premium != null && facultativeOffer != null ? (facultativeOffer / 100) * premium : null;
-
-  const netPremium =
-    facPremium != null && commission != null
-      ? facPremium * (1 - commission / 100) - facPremium * deductionRate
-      : facPremium;
-
-  return (
-    <div className={cardClass('flex flex-col gap-3 p-5')}>
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-900">
-            {displayPolicyNumber(placement.policyNumber)}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {placement.cedant?.name && (
-            <span className="text-xs text-gray-600">{placement.cedant.name}</span>
-          )}
-          {placement.cedant?.name && placement.title && (
-            <span className="text-gray-400 text-xs">·</span>
-          )}
-          {placement.title && <span className="text-xs text-gray-400">{placement.title}</span>}
-          {placement.classOfBusiness && (
-            <>
-              <span className="text-gray-400 text-xs">·</span>
-              <span className="text-xs text-gray-400">{placement.classOfBusiness}</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      <hr className="border-gray-100" />
-
-      <DetailField
-        horizontal
-        label="Facultative Offer"
-        value={facultativeOffer != null ? `${facultativeOffer}%` : '—'}
-      />
-      <DetailField horizontal label="Fac. Sum Insured" value={fmt(facSumInsured, currency)} />
-      <DetailField
-        horizontal
-        label="Period of Insurance"
-        value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
-      />
-      <DetailField
-        horizontal
-        label="Fac. Premium"
-        value={<span className="font-semibold text-gray-900">{fmt(netPremium, currency)}</span>}
-      />
-      <DetailField horizontal label="Created At" value={fmtDate(createdAt)} />
-
-      {claim && (
-        <>
-          <hr className="border-gray-100" />
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-gray-900">{claim.claimNumber}</span>
-            <Badge
-              label={CLAIM_STATUS_LABEL[claim.status]}
-              variant={CLAIM_STATUS_VARIANT[claim.status]}
-            />
-          </div>
-
-          <DetailField horizontal label="Occurrence Date" value={fmtDate(claim.occurrenceDate)} />
-          <DetailField horizontal label="Reported Date" value={fmtDate(claim.reportedDate)} />
-          <DetailField horizontal label="Claim Cause" value={claim.claimCause} />
-          {claim.occurrenceDetails && (
-            <DetailField horizontal label="Details" value={claim.occurrenceDetails} />
-          )}
-          <DetailField
-            horizontal
-            label="Estimated Loss"
-            value={
-              <span className="font-semibold text-gray-900">
-                {fmt(claim.estimatedLossAmount, claim.currency)}
-              </span>
-            }
-          />
-          {claim.finalLossAmount && (
-            <DetailField
-              horizontal
-              label="Final Loss"
-              value={
-                <span className="font-semibold text-gray-900">
-                  {fmt(claim.finalLossAmount, claim.currency)}
-                </span>
-              }
-            />
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function ClaimReinsurersTable({
-  participants,
-  allocations,
-  claimAmount,
-  isActualAmount,
-  currency,
-  onMail,
-  onPreview,
-}: {
-  participants: PlacementParticipant[];
-  allocations: PlacementClaimAllocation[];
-  claimAmount?: number | null;
-  isActualAmount?: boolean;
-  currency?: string | null;
-  onMail: (participant: PlacementParticipant) => void;
-  onPreview: (participant: PlacementParticipant) => void;
-}) {
-  type ClaimReinsurerRow = {
-    id: string;
-    reinsurerName: string;
-    signedLinePercent: string | null;
-    allocationSource: string;
-    allocatedAmount: number | null;
-    createdAt: string | null;
-    participant: PlacementParticipant | null;
-  };
-
-  const rows = useMemo<ClaimReinsurerRow[]>(() => {
-    if (allocations.length > 0) {
-      return allocations.map((allocation) => ({
-        id: allocation.id,
-        reinsurerName: allocation.counterparty.name,
-        signedLinePercent: allocation.signedLinePercent,
-        allocationSource:
-          allocation.endorsementClosing?.closingNumber ??
-          allocation.placementClosing?.closingNumber ??
-          'Confirmed closing snapshot',
-        allocatedAmount: parseFloat(
-          allocation.allocatedFinalLossAmount ?? allocation.allocatedEstimatedLossAmount,
-        ),
-        createdAt: allocation.createdAt,
-        participant: null,
-      }));
-    }
-
-    return participants
-      .filter((p) => p.role !== 'BROKER' && (p.status === 'ACCEPTED' || p.status === 'CLOSED'))
-      .map((participant) => ({
-        id: participant.id,
-        reinsurerName: participant.counterparty.name,
-        signedLinePercent: participant.sharePercent,
-        allocationSource: 'Estimate before allocation generation',
-        allocatedAmount:
-          participant.sharePercent != null && claimAmount != null
-            ? (parseFloat(participant.sharePercent) / 100) * claimAmount
-            : null,
-        createdAt: participant.createdAt ?? null,
-        participant,
-      }));
-  }, [allocations, claimAmount, participants]);
-
-  const columns: Column<ClaimReinsurerRow>[] = useMemo(
-    () => [
-      {
-        key: 'reinsurerName',
-        label: 'Reinsurer',
-        render: (row) => <span className="font-medium text-gray-900">{row.reinsurerName}</span>,
-      },
-      {
-        key: 'signedLinePercent',
-        label: allocations.length > 0 ? 'Effective Line' : 'Est. Share',
-        width: '110px',
-        className: 'text-center',
-        render: (row) => (
-          <span className="text-gray-600 block text-center">
-            {row.signedLinePercent != null ? `${row.signedLinePercent}%` : '—'}
-          </span>
-        ),
-      },
-      {
-        key: 'allocationSource',
-        label: 'Source',
-        width: '180px',
-        render: (row) => <span className="text-gray-600">{row.allocationSource}</span>,
-      },
-      {
-        key: 'allocatedAmount',
-        label: isActualAmount ? 'Actual Claim' : 'Est. Claim',
-        width: '180px',
-        className: 'text-right pr-8',
-        render: (row) => (
-          <span className="text-gray-900 block text-right">
-            {fmt(row.allocatedAmount, currency)}
-          </span>
-        ),
-      },
-      {
-        key: 'createdAt',
-        label: 'Created At',
-        width: '130px',
-        render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
-      },
-      {
-        key: 'status',
-        label: 'Actions',
-        width: '100px',
-        className: 'pr-6',
-        render: (row) =>
-          row.participant ? (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                title="Preview Debit Note"
-                className="text-blue-500 hover:text-blue-600 transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (row.participant) onPreview(row.participant);
-                }}
-              >
-                <Icons.Eye className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                title="Send Mail"
-                className="text-green-500 hover:text-green-700 transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (row.participant) onMail(row.participant);
-                }}
-              >
-                <Icons.Mail className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <span className="text-xs text-gray-400">Backend allocation</span>
-          ),
-      },
-    ],
-    [allocations.length, isActualAmount, currency, onMail, onPreview],
-  );
-
-  return (
-    <div className="flex flex-col gap-0">
-      <div className="px-4 pt-4 pb-2 bg-white rounded-t-xl border border-b-0 border-gray-200">
-        <span className="text-sm font-bold text-gray-900">
-          {allocations.length > 0 ? 'Claim Allocations' : 'Participants'}
-        </span>
-        {allocations.length === 0 && claimAmount != null && (
-          <p className="text-xs text-gray-400 mt-1">
-            Estimated from current participants until backend allocations are generated.
-          </p>
-        )}
-      </div>
-      <DataTable
-        columns={columns}
-        data={rows}
-        emptyMessage="No accepted reinsurers"
-        currentPage={1}
-        totalPages={0}
-        onPageChange={() => {}}
-        noInternalScroll
-      />
-    </div>
-  );
-}
-
 export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionProps) {
-  const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
-  const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
-  const { data: reinsurers = [] } = useReinsurers();
-  const { data: cedants = [] } = useCedants();
-  const { data: allocations = [] } = useClaimAllocations(placement.id, claim?.id ?? '');
+  const [activeTab, setActiveTab] = useState<ClaimTab>('details');
 
-  const deductionRate = isForeignCedant(cedants.find((c) => c.id === placement.cedant.id))
-    ? FOREIGN_CEDANT_DEDUCTION_RATE
-    : 0;
-
-  const claimAmount = claim ? parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount) : null;
-  const isActualAmount = !!claim?.finalLossAmount;
-  const mailAllocation = mailTarget
-    ? allocations.find((a) => a.participantId === mailTarget.id)
-    : undefined;
-
-  const reinsurerEmails = useMemo<Record<string, string[]>>(
-    () =>
-      Object.fromEntries(
-        reinsurers.map((r) => {
-          const emails: string[] = [];
-          if (r.email) emails.push(r.email);
-          r.contacts.forEach((c) => {
-            if (c.email) emails.push(c.email);
-          });
-          return [r.id, emails];
-        }),
-      ),
-    [reinsurers],
-  );
-
-  const mailRecipients = mailTarget ? (reinsurerEmails[mailTarget.counterpartyId] ?? []) : [];
-
-  const totalActualClaim = useMemo(() => {
-    if (allocations.length > 0) {
-      return allocations.reduce(
-        (sum, allocation) =>
-          sum +
-          parseFloat(
-            allocation.allocatedFinalLossAmount ?? allocation.allocatedEstimatedLossAmount,
-          ),
-        0,
-      );
-    }
-    if (claimAmount == null) return null;
-    return (placement.participants ?? [])
-      .filter((p) => p.role !== 'BROKER' && (p.status === 'ACCEPTED' || p.status === 'CLOSED'))
-      .reduce((sum, p) => {
-        const share = p.sharePercent != null ? parseFloat(p.sharePercent) / 100 : 0;
-        return sum + share * claimAmount;
-      }, 0);
-  }, [allocations, placement.participants, claimAmount]);
+  const isNotification = !claim || claim.finalLossAmount == null;
+  const visibleTabs = isNotification ? CLAIM_TABS.filter((t) => t.key === 'details') : CLAIM_TABS;
+  const effectiveTab: ClaimTab = isNotification ? 'details' : activeTab;
 
   return (
-    <div className={cardClass('flex flex-col gap-4 p-4')}>
-      <div className="flex flex-col md:flex-row gap-4 items-start">
-        <div className="w-full md:flex-1 min-w-0">
-          <ClaimDetailsPanel placement={placement} claim={claim} deductionRate={deductionRate} />
-        </div>
-        <div className="w-full md:flex-2 min-w-0">
-          <ClaimReinsurersTable
-            participants={placement.participants ?? []}
-            allocations={allocations}
-            claimAmount={claimAmount}
-            isActualAmount={isActualAmount}
-            currency={claim?.currency ?? placement.currency}
-            onMail={setMailTarget}
-            onPreview={setDebitNoteTarget}
-          />
+    <div className="flex flex-col gap-4">
+      <ClaimOverview placement={placement} claim={claim} />
+
+      <div className="flex flex-col">
+        <TabBar
+          tabs={visibleTabs}
+          activeTab={effectiveTab}
+          onTabChange={(tab) => setActiveTab(tab as ClaimTab)}
+        />
+
+        <div className="pt-5">
+          {effectiveTab === 'details' && <ClaimOverviewTab placement={placement} claim={claim} />}
+          {claim && effectiveTab === 'cashCalls' && (
+            <ClaimCashCallsTable placement={placement} claim={claim} />
+          )}
+          {claim && effectiveTab === 'history' && (
+            <ClaimFinancialHistoryTable placement={placement} claim={claim} />
+          )}
         </div>
       </div>
-
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm">
-        <span className="font-semibold text-gray-900">
-          {allocations.length > 0 ? 'Total Allocated Claim' : 'Total Claim Estimate'}
-        </span>
-        <span className="font-semibold text-gray-900">
-          {fmt(totalActualClaim, claim?.currency ?? placement.currency)}
-        </span>
-      </div>
-
-      {mailTarget && (
-        <MailPreviewModal
-          isOpen
-          placement={placement}
-          brokerageFee={parseFloat(mailTarget.brokerageFee ?? '0')}
-          recipients={mailRecipients}
-          claim={claim}
-          allocation={mailAllocation}
-          onSend={() => setMailTarget(null)}
-          onClose={() => setMailTarget(null)}
-        />
-      )}
-
-      {debitNoteTarget && (
-        <ClaimDebitNoteModal
-          isOpen
-          placement={placement}
-          participant={debitNoteTarget}
-          claimAmount={claimAmount}
-          onPrint={() => {}}
-          onClose={() => setDebitNoteTarget(null)}
-        />
-      )}
     </div>
   );
 }

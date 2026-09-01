@@ -14,7 +14,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
     const [visible, setVisible] = useState(false);
 
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         {label && (
           <label className="block truncate text-sm font-bold text-gray-900" title={label}>
             {label}

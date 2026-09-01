@@ -135,7 +135,7 @@ export function EditCurrencyPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <FormField
           label="Currency Name"
           registration={register('name', { required: 'Currency name is required' })}
@@ -143,7 +143,7 @@ export function EditCurrencyPanel({
           placeholder="e.g. Ghana Cedi"
         />
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">ISO Code</label>
           <div
             className={inputClass(undefined, 'bg-gray-50 text-gray-500 cursor-default select-none')}

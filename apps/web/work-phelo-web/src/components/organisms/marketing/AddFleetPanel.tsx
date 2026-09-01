@@ -74,7 +74,7 @@ export function AddFleetPanel({ isOpen, onClose, onSubmit }: Props) {
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Vehicle Details
         </p>
@@ -87,7 +87,7 @@ export function AddFleetPanel({ isOpen, onClose, onSubmit }: Props) {
         />
 
         {/* Asset type — fixed to Vehicle, not editable */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Asset Type</label>
           <div className="flex items-center px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-500 cursor-not-allowed select-none">
             Vehicle
@@ -140,7 +140,7 @@ export function AddFleetPanel({ isOpen, onClose, onSubmit }: Props) {
           options={branchOptions.map((b) => ({ value: b.id, label: b.name }))}
         />
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Notes</label>
           <textarea
             {...register('notes')}

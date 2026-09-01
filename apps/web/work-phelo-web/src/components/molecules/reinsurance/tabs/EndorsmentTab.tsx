@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef, Ref, MutableRefObject } from 'react';
+import { useState, useEffect, useRef, Ref, MutableRefObject } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   EndorsementParticipantClosing,
   Facultative,
   PlacementEndorsement,
+  PlacementEndorsementParticipant,
   PlacementDocument,
   ENDORSEMENT_STATUS_LABELS,
   ENDORSEMENT_STATUS_VARIANT,
@@ -14,6 +15,7 @@ import {
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
+  useReinviteEndorsementParticipant,
   useUpdateEndorsementParticipant,
   useUpdateEndorsementParticipantStatus,
   useEndorsementClosings,
@@ -24,6 +26,7 @@ import {
   usePlacementEffectiveView,
   useReinsurers,
   useUpdateEndorsementStatus,
+  useForceCloseEndorsement,
   endorsementParticipantKey,
   endorsementClosingsKey,
   endorsementSummaryKey,
@@ -47,6 +50,8 @@ import { EndorsementCapacitySection } from '@/components/molecules/reinsurance/e
 import { EndorsementParticipantsTable } from '@/components/molecules/reinsurance/endorsement/EndorsementParticipantsTable';
 import { EndorsementCloseSection } from '@/components/molecules/reinsurance/endorsement/EndorsementCloseSection';
 import { EndorsementModals } from '@/components/molecules/reinsurance/endorsement/EndorsementModals';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
 import {
   EndorsementMarketPreviewState,
   EndorsementParticipantRow,
@@ -88,8 +93,12 @@ function EndorsementCard({
     useState<EndorsementParticipantClosing | null>(null);
   const [documentPreview, setDocumentPreview] = useState<PlacementDocument | null>(null);
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
-  const [mailPreviewCounterpartyId, setMailPreviewCounterpartyId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [pendingValidation, setPendingValidation] = useState<{
+    row: EndorsementParticipantRow;
+    share: number;
+  } | null>(null);
+  const [editingCounterpartyIds, setEditingCounterpartyIds] = useState<Set<string>>(new Set());
 
   const cardElRef = useRef<HTMLDivElement | null>(null);
   const setCardRef = (node: HTMLDivElement | null) => {
@@ -100,25 +109,13 @@ function EndorsementCard({
 
   const { data: reinsurers = [] } = useReinsurers();
 
-  const reinsurerEmails = useMemo<Record<string, string[]>>(
-    () =>
-      Object.fromEntries(
-        reinsurers.map((r) => {
-          const emails: string[] = [];
-          if (r.email) emails.push(r.email);
-          r.contacts.forEach((c) => {
-            if (c.email) emails.push(c.email);
-          });
-          return [r.id, emails];
-        }),
-      ),
-    [reinsurers],
-  );
   const {
     mutate: updateStatus,
     mutateAsync: updateStatusAsync,
     isPending: isUpdatingStatus,
   } = useUpdateEndorsementStatus(placement.id);
+  const { mutateAsync: forceCloseEndorsementAsync, isPending: isForceClosingEndorsement } =
+    useForceCloseEndorsement(placement.id);
   const { data: endorsementParticipants = [] } = usePlacementEndorsementParticipants(
     placement.id,
     endorsement.id,
@@ -131,6 +128,10 @@ function EndorsementCard({
   );
   const { data: placementDocuments = [] } = usePlacementDocuments(placement.id);
   const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
+    placement.id,
+    endorsement.id,
+  );
+  const reinviteEndorsementParticipant = useReinviteEndorsementParticipant(
     placement.id,
     endorsement.id,
   );
@@ -185,12 +186,25 @@ function EndorsementCard({
       .map((p) => p.counterpartyId),
   );
 
+  // Re-inviting a declined participant preserves the declined row for history
+  // and creates a new one — a counterparty can briefly have more than one
+  // endorsement participant record. Only the most recently created attempt
+  // per counterparty should drive the table row, not just the first match.
+  const latestEndorsementParticipantByCounterpartyId = new Map<
+    string,
+    PlacementEndorsementParticipant
+  >();
+  for (const p of endorsementParticipants) {
+    const existing = latestEndorsementParticipantByCounterpartyId.get(p.counterpartyId);
+    if (!existing || new Date(p.createdAt).getTime() >= new Date(existing.createdAt).getTime()) {
+      latestEndorsementParticipantByCounterpartyId.set(p.counterpartyId, p);
+    }
+  }
+
   const snapshotRows: EndorsementParticipantRow[] = snapshotParticipants.map((p) => {
     const r = reinsurers.find((r) => r.id === p.counterpartyId);
     const cid = String(p.counterpartyId);
-    const endorsementParticipant = endorsementParticipants.find(
-      (item) => item.counterpartyId === cid,
-    );
+    const endorsementParticipant = latestEndorsementParticipantByCounterpartyId.get(cid);
     const originalShare = parseFloat(String(p.signedLinePercent ?? p.sharePercent ?? '0'));
     const originalParticipantId =
       typeof p.originalParticipantId === 'string'
@@ -211,7 +225,9 @@ function EndorsementCard({
     };
   });
 
-  const extraRows: EndorsementParticipantRow[] = endorsementParticipants
+  const extraRows: EndorsementParticipantRow[] = Array.from(
+    latestEndorsementParticipantByCounterpartyId.values(),
+  )
     .filter((p) => !snapshotCounterpartyIds.has(p.counterpartyId))
     .map((p) => {
       const r = reinsurers.find((r) => r.id === p.counterpartyId);
@@ -236,7 +252,7 @@ function EndorsementCard({
   const acceptedCapacityRows = endorsementRows
     .filter((r) => acceptedCounterpartyIds.has(r.counterpartyId))
     .map((r) => {
-      const ep = endorsementParticipants.find((item) => item.counterpartyId === r.counterpartyId);
+      const ep = latestEndorsementParticipantByCounterpartyId.get(r.counterpartyId);
       const share = parseFloat(String(ep?.signedLinePercent ?? ep?.sharePercent ?? r.offeredShare));
       return { ...r, share: Number.isFinite(share) ? share : 0 };
     });
@@ -292,8 +308,8 @@ function EndorsementCard({
   };
 
   const handlePreviewMarketDocument = (row: EndorsementParticipantRow) => {
-    const endorsementParticipant = endorsementParticipants.find(
-      (item) => item.id === row.participantId || item.counterpartyId === row.counterpartyId,
+    const endorsementParticipant = latestEndorsementParticipantByCounterpartyId.get(
+      row.counterpartyId,
     );
     const offeredLine = Number(
       endorsementParticipant?.signedLinePercent ??
@@ -344,6 +360,18 @@ function EndorsementCard({
     }
   };
 
+  const handleMailReinsurer = (counterpartyId: string) => {
+    const participant = latestEndorsementParticipantByCounterpartyId.get(counterpartyId);
+    if (participant && participant.status === 'INVITED') {
+      updateEndorsementParticipantStatus
+        .mutateAsync({ participantId: participant.id, status: 'OFFER_SENT' })
+        .catch((error) => {
+          useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+        });
+    }
+    setMailedIds((prev) => new Set([...prev, counterpartyId]));
+  };
+
   const handleRejectEndorsementParticipant = async (row: EndorsementParticipantRow) => {
     if (!row.participantId || busyEPIds.has(row.counterpartyId)) return;
     setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
@@ -367,39 +395,38 @@ function EndorsementCard({
     }
   };
 
-  const handleRevertEndorsementParticipant = async (row: EndorsementParticipantRow) => {
-    if (!row.participantId || busyEPIds.has(row.counterpartyId)) return;
-    setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
-    try {
-      await updateEndorsementParticipantStatus.mutateAsync({
-        participantId: row.participantId,
-        status: 'QUOTED',
-      });
-      useToastStore.getState().addToast({
-        message: `${row.reinsurerName} reverted to pending for this endorsement`,
-        type: 'success',
-      });
-    } catch (error) {
-      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
-    } finally {
-      setBusyEPIds((prev) => {
-        const n = new Set(prev);
-        n.delete(row.counterpartyId);
-        return n;
-      });
-    }
+  // ACCEPTED is not a terminal endorsement participant status, so the revised
+  // share can be edited and resubmitted in place — there is no backend
+  // "revert to pending" transition from ACCEPTED, only ACCEPTED -> CLOSED.
+  // This just re-opens the row's share input locally; re-accepting sends the
+  // update with status still ACCEPTED.
+  const handleEditRevisedOffer = (row: EndorsementParticipantRow) => {
+    setEditingCounterpartyIds((prev) => new Set([...prev, row.counterpartyId]));
   };
 
   const handleReopenEndorsementParticipant = async (row: EndorsementParticipantRow) => {
     if (!row.participantId || busyEPIds.has(row.counterpartyId)) return;
     setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
     try {
-      await updateEndorsementParticipantStatus.mutateAsync({
-        participantId: row.participantId,
-        status: 'OFFER_SENT',
+      // DECLINED has no valid status transition on the backend — reopening a
+      // declined participant goes through the dedicated reinvite endpoint,
+      // which preserves the declined row for history and creates a fresh
+      // INVITED attempt for the same reinsurer.
+      await reinviteEndorsementParticipant.mutateAsync({ participantId: row.participantId });
+      await invalidateEndorsementView();
+      // The new attempt starts back at INVITED and needs its own offer sent
+      // before it can move to OFFER_SENT and then be accepted — mailedIds is
+      // keyed by counterparty, so without clearing it here the row would
+      // still read as "already sent" from the declined attempt and skip
+      // straight to Accept, which the backend rejects (INVITED -> ACCEPTED
+      // isn't a valid transition).
+      setMailedIds((prev) => {
+        const n = new Set(prev);
+        n.delete(row.counterpartyId);
+        return n;
       });
       useToastStore.getState().addToast({
-        message: `${row.reinsurerName} reopened for this endorsement`,
+        message: `${row.reinsurerName} re-invited for this endorsement`,
         type: 'success',
       });
     } catch (error) {
@@ -473,9 +500,25 @@ function EndorsementCard({
     const revised = parseFloat(revisedShares[row.counterpartyId] ?? String(row.offeredShare));
     const share = isNaN(revised) ? row.offeredShare : revised;
 
-    if (share > leftoverFacOffer) {
+    // Re-accepting an already-accepted participant replaces their existing
+    // signed line rather than adding on top of it — credit that share back
+    // before checking it against the leftover capacity, otherwise it's
+    // counted as already spent against itself.
+    const existingParticipant = latestEndorsementParticipantByCounterpartyId.get(
+      row.counterpartyId,
+    );
+    const existingAcceptedShare =
+      existingParticipant?.status === 'ACCEPTED'
+        ? parseFloat(
+            String(existingParticipant.signedLinePercent ?? existingParticipant.sharePercent ?? 0),
+          )
+        : 0;
+    const availableForRow =
+      leftoverFacOffer + (Number.isFinite(existingAcceptedShare) ? existingAcceptedShare : 0);
+
+    if (share > availableForRow) {
       useToastStore.getState().addToast({
-        message: `${row.reinsurerName}'s share (${share}%) exceeds the ${leftoverFacOffer}% still available on this endorsement.`,
+        message: `${row.reinsurerName}'s share (${share}%) exceeds the ${availableForRow}% still available on this endorsement.`,
         type: 'error',
       });
       return;
@@ -508,16 +551,21 @@ function EndorsementCard({
         participantId = created.id;
       }
 
-      // Accept and validate are collapsed into a single step — an accepted
-      // participant's closing is confirmed immediately rather than waiting
-      // for a separate "Validate" click.
-      await validateAndConfirmEndorsementParticipant.mutateAsync({ participantId });
-
       await invalidateEndorsementView();
       useToastStore.getState().addToast({
-        message: `${row.reinsurerName} accepted and validated for this endorsement`,
+        message: `${row.reinsurerName} accepted for this endorsement`,
         type: 'success',
       });
+      setEditingCounterpartyIds((prev) => {
+        const n = new Set(prev);
+        n.delete(row.counterpartyId);
+        return n;
+      });
+      // Accept and validate are separate steps — prompt to validate now
+      // rather than confirming the closing automatically. Declining the
+      // prompt re-opens the revised offer for editing instead of locking
+      // in the acceptance.
+      setPendingValidation({ row: { ...row, participantId }, share });
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
     } finally {
@@ -529,6 +577,19 @@ function EndorsementCard({
     }
   };
 
+  const handleConfirmValidationPrompt = async () => {
+    if (!pendingValidation) return;
+    const { row } = pendingValidation;
+    setPendingValidation(null);
+    await handleValidateEndorsementParticipant(row);
+  };
+
+  const handleDeclineValidationPrompt = () => {
+    if (!pendingValidation) return;
+    handleEditRevisedOffer(pendingValidation.row);
+    setPendingValidation(null);
+  };
+
   const confirmedClosingByEndorsementParticipantId = Object.fromEntries(
     endorsementClosings
       .filter((closing) => closing.status === 'CONFIRMED')
@@ -536,6 +597,20 @@ function EndorsementCard({
   );
 
   const isReadyToClose = endorsementSummary?.canClose ?? false;
+  const pendingParticipantsCount = endorsementSummary
+    ? endorsementSummary.participants.total -
+      endorsementSummary.participants.accepted -
+      endorsementSummary.participants.declined
+    : 0;
+  // Force close is only offered once every invited participant has responded
+  // (accepted or declined) but the endorsement still can't reach full target
+  // capacity — it is a fallback for a stalled endorsement, not a shortcut
+  // around waiting on outstanding invitations.
+  const canForceClose =
+    !isReadyToClose &&
+    endorsement.status !== 'CLOSED' &&
+    pendingParticipantsCount === 0 &&
+    (endorsementSummary?.participants.accepted ?? 0) > 0;
   const isInClosingPhase =
     !isReadyToClose &&
     endorsement.status !== 'CLOSED' &&
@@ -564,6 +639,23 @@ function EndorsementCard({
       await invalidateEndorsementView();
       useToastStore.getState().addToast({
         message: 'Endorsement closed',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({
+        message: extractError(error),
+        type: 'error',
+      });
+    }
+  };
+
+  const handleForceCloseEndorsement = async () => {
+    if (!canForceClose || isForceClosingEndorsement) return;
+    try {
+      await forceCloseEndorsementAsync({ endorsementId: endorsement.id });
+      await invalidateEndorsementView();
+      useToastStore.getState().addToast({
+        message: 'Endorsement force closed at agreed participant lines',
         type: 'success',
       });
     } catch (error) {
@@ -636,6 +728,7 @@ function EndorsementCard({
 
               <EndorsementCapacitySection
                 isDraft={endorsement.status === 'DRAFT'}
+                isClosed={endorsement.status === 'CLOSED'}
                 original={original}
                 proposed={proposed}
                 endorsementSummary={endorsementSummary}
@@ -651,6 +744,7 @@ function EndorsementCard({
                   endorsementParticipants={endorsementParticipants}
                   isEndorsementClosed={endorsement.status === 'CLOSED'}
                   acceptedCounterpartyIds={acceptedCounterpartyIds}
+                  editingCounterpartyIds={editingCounterpartyIds}
                   confirmedClosingByEndorsementParticipantId={
                     confirmedClosingByEndorsementParticipantId
                   }
@@ -663,10 +757,10 @@ function EndorsementCard({
                   hasAvailableCapacity={leftoverFacOffer > 0}
                   onAddParticipant={() => setAddPanelOpen(true)}
                   onPreviewMarketDocument={handlePreviewMarketDocument}
-                  onMailReinsurer={(counterpartyId) => setMailPreviewCounterpartyId(counterpartyId)}
+                  onMailReinsurer={handleMailReinsurer}
                   onAccept={handleAcceptEndorsement}
                   onReject={handleRejectEndorsementParticipant}
-                  onRevert={handleRevertEndorsementParticipant}
+                  onEditRevision={handleEditRevisedOffer}
                   onReopen={handleReopenEndorsementParticipant}
                   onValidate={handleValidateEndorsementParticipant}
                   onViewClosing={(closing) => setEndorsementClosingPreview(closing)}
@@ -677,11 +771,41 @@ function EndorsementCard({
               {endorsement.status !== 'DRAFT' && (
                 <EndorsementCloseSection
                   isClosed={endorsement.status === 'CLOSED'}
-                  isUpdatingStatus={isUpdatingStatus}
+                  isUpdatingStatus={isUpdatingStatus || isForceClosingEndorsement}
                   isReadyToClose={isReadyToClose}
+                  canForceClose={canForceClose}
+                  acceptedPercent={endorsementSummary?.acceptedPercent ?? 0}
+                  targetPercent={endorsementSummary?.targetPercent ?? null}
                   onClose={handleCloseEndorsement}
+                  onForceClose={handleForceCloseEndorsement}
                 />
               )}
+
+              <Modal
+                isOpen={!!pendingValidation}
+                onClose={() => setPendingValidation(null)}
+                title="Validate Endorsement Participant?"
+                description={
+                  pendingValidation
+                    ? `${pendingValidation.row.reinsurerName} has been accepted at ${pendingValidation.share}%. Validate now to issue and confirm their closing, or change the offer to edit their revised share again.`
+                    : undefined
+                }
+                footer={
+                  <>
+                    <Button variant="secondary" size="sm" onClick={handleDeclineValidationPrompt}>
+                      Change Offer
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      isLoading={busyEPIds.has(pendingValidation?.row.counterpartyId ?? '')}
+                      onClick={handleConfirmValidationPrompt}
+                    >
+                      Validate
+                    </Button>
+                  </>
+                }
+              />
             </div>
           </div>
         </div>
@@ -700,31 +824,6 @@ function EndorsementCard({
         onCloseEndorsementSlipPreview={() => setEndorsementSlipPreviewOpen(false)}
         marketPreview={marketPreview}
         onCloseMarketPreview={() => setMarketPreview(null)}
-        mailPreviewCounterpartyId={mailPreviewCounterpartyId}
-        mailBrokerageFee={
-          endorsementRows.find((r) => r.counterpartyId === mailPreviewCounterpartyId)
-            ?.brokerageFee ?? 0
-        }
-        mailRecipients={reinsurerEmails[mailPreviewCounterpartyId ?? ''] ?? []}
-        onSendMail={() => {
-          if (mailPreviewCounterpartyId) {
-            const participant = endorsementParticipants.find(
-              (item) => item.counterpartyId === mailPreviewCounterpartyId,
-            );
-            if (participant) {
-              updateEndorsementParticipantStatus
-                .mutateAsync({ participantId: participant.id, status: 'OFFER_SENT' })
-                .catch((error) => {
-                  useToastStore
-                    .getState()
-                    .addToast({ message: extractError(error), type: 'error' });
-                });
-            }
-            setMailedIds((prev) => new Set([...prev, mailPreviewCounterpartyId]));
-          }
-          setMailPreviewCounterpartyId(null);
-        }}
-        onCloseMailPreview={() => setMailPreviewCounterpartyId(null)}
         addPanelOpen={addPanelOpen}
         onCloseAddPanel={() => setAddPanelOpen(false)}
         onAddReinsurers={handleAddReinsurers}

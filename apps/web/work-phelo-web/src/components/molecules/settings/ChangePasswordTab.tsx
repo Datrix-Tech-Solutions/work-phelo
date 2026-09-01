@@ -62,7 +62,10 @@ export function ChangePasswordTab() {
 
       <div className="border-t border-gray-100" />
 
-      <form onSubmit={handleSubmit(handleChange)} className="flex flex-col gap-4">
+      <form
+        onSubmit={handleSubmit(handleChange)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <FormField
           label="Current Password"
           registration={register('oldPassword', { required: 'Current password is required' })}

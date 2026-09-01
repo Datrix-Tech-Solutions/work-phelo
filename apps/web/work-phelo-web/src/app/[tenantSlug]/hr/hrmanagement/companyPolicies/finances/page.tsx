@@ -142,7 +142,7 @@ export default function FinancesPage() {
               )}
             />
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <label className="text-sm font-bold text-gray-900">Payroll Currency</label>
               <div className="px-4 py-3 border border-gray-200 rounded-input text-sm text-gray-500 bg-gray-50 select-none">
                 {(() => {
@@ -192,7 +192,7 @@ export default function FinancesPage() {
 
           {tier3Enabled && (
             <div className="flex flex-col gap-4 mt-1">
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                 <label className="text-sm font-bold text-gray-900">Contribution Rate (%)</label>
                 <div className="relative">
                   <input
@@ -217,7 +217,7 @@ export default function FinancesPage() {
                 )}
               </div>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                 <label className="text-sm font-bold text-gray-900">Scheme Name</label>
                 <input
                   type="text"

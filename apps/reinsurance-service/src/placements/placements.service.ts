@@ -9,6 +9,11 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementDocumentStatus,
+  PlacementDocumentType,
+  PlacementEndorsementStatus,
+  PlacementNoteStatus,
+  PlacementNoteType,
   PlacementParticipantRole,
   PlacementParticipantStatus,
   PlacementStatus,
@@ -19,6 +24,7 @@ import {
 } from '../../prisma/generated/client';
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
+import { ArchivePlacementDto } from './dto/archive-placement.dto';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
@@ -27,7 +33,12 @@ import { UpdatePlacementParticipantStatusDto } from './dto/update-placement-part
 import { UpdatePlacementParticipantDto } from './dto/update-placement-participant.dto';
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
-import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
+
+/** Reserved key in businessDetails/offerDetails holding the list of schema fieldKeys the
+ *  tenant has opted to hide from generated documents (Slip, Notes, …) for that section.
+ *  Mirrors the frontend's FIELD_VISIBILITY_KEY in placementFormDetails.ts — keep in sync. */
+const FIELD_VISIBILITY_KEY = '__fieldVisibility';
 
 const placementInclude = {
   cedant: {
@@ -56,6 +67,9 @@ const placementInclude = {
     take: 20,
   },
 } satisfies Prisma.PlacementInclude;
+
+const DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE =
+  'This placement has progressed beyond negotiation and cannot be edited directly. Create an endorsement instead.';
 
 const participantAcceptanceInclude = {
   counterparty: {
@@ -130,6 +144,7 @@ type PlacementWithAggregates = PlacementRecord & {
   totalOfferedPercent: number;
   totalAcceptedPercent: number;
   remainingPercent: number;
+  forceClosed?: boolean;
   lockStatus?: PlacementLockStatusDto;
 };
 
@@ -148,6 +163,18 @@ type PlacementParticipantAcceptanceClosingRecord =
 type PlacementParticipantAcceptanceResult = {
   participant: PlacementParticipantAcceptanceRecord;
   closing: PlacementParticipantAcceptanceClosingRecord;
+};
+
+type PlacementEditClassification = 'ADMINISTRATIVE' | 'MATERIAL';
+
+type PlacementReopeningAudit = {
+  reopened: boolean;
+  editClassification: PlacementEditClassification;
+  changedMaterialFields: string[];
+  participantsRequiringReoffer: number;
+  participantsPreservedAsAccepted: number;
+  fromStatus: PlacementStatus;
+  toStatus: PlacementStatus;
 };
 
 type ParticipantCapacityInput = {
@@ -181,8 +208,12 @@ export class PlacementsService {
     const limit = query.limit ?? 20;
     const where: Prisma.PlacementWhereInput = {
       tenantId,
-      archivedAt: null,
-      ...(query.status ? { status: query.status } : {}),
+      archivedAt: query.archived ? { not: null } : null,
+      ...(query.status
+        ? { status: query.status }
+        : query.statuses?.length
+          ? { status: { in: query.statuses } }
+          : {}),
       ...(query.placementType ? { placementType: query.placementType } : {}),
       ...(query.cedantId ? { cedantId: query.cedantId } : {}),
       ...(query.riskTypeId ? { riskTypeId: query.riskTypeId } : {}),
@@ -252,21 +283,21 @@ export class PlacementsService {
 
     return this.withLockStatus(
       this.withAggregates(placement),
-      await this.financialLockPolicy.evaluate(placement),
+      await this.evaluateDirectEditability(placement),
     );
   }
 
   async getLockStatus(tenantId: string, id: string) {
     const placement = await this.prisma.placement.findFirst({
       where: { id, tenantId, archivedAt: null },
-      select: { id: true, tenantId: true, status: true },
+      select: { id: true, tenantId: true, status: true, archivedAt: true },
     });
 
     if (!placement) {
       throw new NotFoundException('Placement not found');
     }
 
-    return this.financialLockPolicy.evaluate(placement);
+    return this.evaluateDirectEditability(placement);
   }
 
   async getOfferSlipPreview(tenantId: string, id: string) {
@@ -390,6 +421,7 @@ export class PlacementsService {
       tenantId: user.tenantId,
       reference: this.cleanRequired(dto.reference),
       normalizedReference: this.normalizeReference(dto.reference),
+      policyNumber: this.cleanOptional(dto.policyNumber),
       title: this.cleanRequired(dto.title),
       placementType: dto.placementType ?? PlacementType.FACULTATIVE,
       status: PlacementStatus.DRAFT,
@@ -450,23 +482,21 @@ export class PlacementsService {
     }
 
     const existing = await this.findOne(user.tenantId, id);
+
     this.validateDates(
       dto.inceptionDate ?? existing.inceptionDate?.toISOString(),
       dto.expiryDate ?? existing.expiryDate?.toISOString(),
     );
 
+    if (dto.participants !== undefined) {
+      throw new BadRequestException(
+        'Placement participants must be changed through participant endpoints.',
+      );
+    }
+
     if (dto.cedantId) {
       await this.assertCedant(user.tenantId, dto.cedantId);
     }
-    if (dto.participants) {
-      await this.assertParticipants(user.tenantId, dto.participants);
-      const effectiveCap =
-        dto.facultativeOffer !== undefined
-          ? dto.facultativeOffer
-          : existing.facultativeOffer;
-      this.assertAcceptedCap(dto.participants, effectiveCap);
-    }
-    await this.assertEditable(existing);
 
     // Resolve riskTypeId update
     let riskTypePatch:
@@ -530,6 +560,9 @@ export class PlacementsService {
             normalizedReference: this.normalizeReference(dto.reference),
           }
         : {}),
+      ...(dto.policyNumber !== undefined
+        ? { policyNumber: this.cleanOptional(dto.policyNumber) }
+        : {}),
       ...(dto.title !== undefined
         ? { title: this.cleanRequired(dto.title) }
         : {}),
@@ -586,36 +619,85 @@ export class PlacementsService {
         ? { preliminaryBrokerage: dto.preliminaryBrokerage }
         : {}),
       updatedByUserId: user.id,
-      ...(dto.participants !== undefined
-        ? {
-            participants: {
-              deleteMany: {},
-              ...this.participantsCreateInput(dto.participants),
-            },
-          }
-        : {}),
+    };
+
+    const changedMaterialFields = this.getChangedMaterialFields(existing, dto);
+    const editClassification: PlacementEditClassification =
+      changedMaterialFields.length > 0 ? 'MATERIAL' : 'ADMINISTRATIVE';
+    const isAdministrativeOnlyEdit = editClassification === 'ADMINISTRATIVE';
+    if (
+      existing.lockStatus &&
+      !existing.lockStatus.canEdit &&
+      !isAdministrativeOnlyEdit
+    ) {
+      throw new ConflictException(
+        existing.lockStatus.editRequiresEndorsement
+          ? DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE
+          : existing.lockStatus.reason,
+      );
+    }
+
+    const nextStatus = isAdministrativeOnlyEdit
+      ? existing.status
+      : this.deriveReopenedStatus(existing);
+    let participantResetSummary = {
+      participantsRequiringReoffer: 0,
+      participantsPreservedAsAccepted: 0,
     };
 
     try {
-      const placement = await this.prisma.placement.update({
-        where: {
-          id_tenantId: { id, tenantId: user.tenantId },
-          archivedAt: null,
-        },
-        data,
-        include: placementInclude,
+      const placement = await this.prisma.$transaction(async (tx) => {
+        if (nextStatus !== existing.status) {
+          await tx.placementStatusHistory.create({
+            data: {
+              tenantId: user.tenantId,
+              placementId: id,
+              fromStatus: existing.status,
+              toStatus: nextStatus,
+              changedByUserId: user.id,
+              note: this.buildReopeningHistoryNote(
+                editClassification,
+                changedMaterialFields,
+              ),
+            },
+          });
+        }
+
+        if (!isAdministrativeOnlyEdit) {
+          participantResetSummary =
+            await this.supersedePlacementMarketArtifacts(tx, user.tenantId, id);
+        }
+
+        return tx.placement.update({
+          where: {
+            id_tenantId: { id, tenantId: user.tenantId },
+            archivedAt: null,
+          },
+          data: {
+            ...data,
+            status: nextStatus,
+          },
+          include: placementInclude,
+        });
       });
-      const finalPlacement =
-        dto.participants !== undefined
-          ? await this.syncParticipantDrivenStatus(
-              user,
-              existing,
-              this.withAggregates(placement),
-            )
-          : this.withAggregates(placement);
+      const finalPlacement = this.withAggregates(placement);
+      const reopeningAudit: PlacementReopeningAudit = {
+        reopened: nextStatus !== existing.status,
+        editClassification,
+        changedMaterialFields,
+        participantsRequiringReoffer:
+          participantResetSummary.participantsRequiringReoffer,
+        participantsPreservedAsAccepted:
+          participantResetSummary.participantsPreservedAsAccepted,
+        fromStatus: existing.status,
+        toStatus: nextStatus,
+      };
       this.publish('updated', finalPlacement, user, {
         before: this.auditSnapshot(existing),
-        after: this.auditSnapshot(finalPlacement),
+        after: {
+          ...this.auditSnapshot(finalPlacement),
+          reopening: reopeningAudit,
+        },
       });
       return finalPlacement;
     } catch (error) {
@@ -676,12 +758,150 @@ export class PlacementsService {
     return this.withAggregates(placement);
   }
 
-  async archive(
+  async forceClose(
     user: RequestUser,
     id: string,
   ): Promise<PlacementWithAggregates> {
-    const existing = await this.findOne(user.tenantId, id);
-    await this.assertArchivable(existing);
+    const existing = await this.prisma.placement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: placementInclude,
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Placement not found');
+    }
+    if (existing.archivedAt) {
+      throw new ConflictException('Archived placements cannot be force closed');
+    }
+    if (
+      existing.status === PlacementStatus.CANCELLED ||
+      existing.status === PlacementStatus.DECLINED
+    ) {
+      throw new ConflictException(
+        `Cannot force close a ${existing.status.toLowerCase()} placement`,
+      );
+    }
+    if (
+      existing.status === PlacementStatus.CLOSED &&
+      existing.closeMode === 'FORCED'
+    ) {
+      return this.withAggregates(existing);
+    }
+
+    const placement = await this.prisma.$transaction(async (tx) => {
+      const lockedPlacement = await tx.placement.findFirst({
+        where: { id, tenantId: user.tenantId },
+        include: placementInclude,
+      });
+      if (!lockedPlacement) {
+        throw new NotFoundException('Placement not found');
+      }
+      if (lockedPlacement.archivedAt) {
+        throw new ConflictException(
+          'Archived placements cannot be force closed',
+        );
+      }
+      if (
+        lockedPlacement.status === PlacementStatus.CANCELLED ||
+        lockedPlacement.status === PlacementStatus.DECLINED
+      ) {
+        throw new ConflictException(
+          `Cannot force close a ${lockedPlacement.status.toLowerCase()} placement`,
+        );
+      }
+      if (
+        lockedPlacement.status === PlacementStatus.CLOSED &&
+        lockedPlacement.closeMode === 'FORCED'
+      ) {
+        return lockedPlacement;
+      }
+
+      const confirmedClosings = await tx.placementClosing.findMany({
+        where: {
+          tenantId: user.tenantId,
+          placementId: id,
+          status: PlacementClosingStatus.CONFIRMED,
+          participant: {
+            status: { not: PlacementParticipantStatus.DECLINED },
+          },
+        },
+        select: { signedLinePercent: true },
+      });
+      const actualPlacedPercent = this.roundPercent(
+        confirmedClosings.reduce(
+          (sum, closing) =>
+            sum + this.decimalToNumber(closing.signedLinePercent),
+          0,
+        ),
+      );
+
+      await tx.placementStatusHistory.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId: id,
+          fromStatus: lockedPlacement.status,
+          toStatus: PlacementStatus.CLOSED,
+          changedByUserId: user.id,
+          note: `FORCED_OPERATION: Force closed placement at actual placed capacity ${actualPlacedPercent}%. Outstanding workflow remains historical.`,
+        },
+      });
+
+      return tx.placement.update({
+        where: {
+          id_tenantId: { id, tenantId: user.tenantId },
+        },
+        data: {
+          status: PlacementStatus.CLOSED,
+          facultativeOffer: new Prisma.Decimal(actualPlacedPercent.toFixed(4)),
+          closeMode: 'FORCED',
+          forceClosedAt: new Date(),
+          forceClosedByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+        include: placementInclude,
+      });
+    });
+
+    this.publish(
+      'statusChanged',
+      placement,
+      user,
+      {
+        before: this.auditSnapshot(existing),
+        after: {
+          ...this.auditSnapshot(placement),
+          closeMode: 'FORCED',
+          actualPlacedPercent: this.nullableDecimalToNumber(
+            placement.facultativeOffer,
+          ),
+        },
+      },
+      existing.status,
+      PlacementStatus.CLOSED,
+      'FORCED_OPERATION',
+    );
+
+    return this.withAggregates(placement);
+  }
+
+  async archive(
+    user: RequestUser,
+    id: string,
+    dto: ArchivePlacementDto = {},
+  ): Promise<PlacementWithAggregates> {
+    const existing = await this.prisma.placement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: placementInclude,
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Placement not found');
+    }
+    if (existing.archivedAt) {
+      throw new ConflictException('Placement is already archived');
+    }
+
+    await this.assertArchivable(this.withAggregates(existing));
     const placement = await this.prisma.placement.update({
       where: {
         id_tenantId: { id, tenantId: user.tenantId },
@@ -690,14 +910,80 @@ export class PlacementsService {
       data: {
         archivedAt: new Date(),
         archivedByUserId: user.id,
+        archiveReason: this.cleanOptional(dto.archiveReason),
         updatedByUserId: user.id,
       },
       include: placementInclude,
     });
 
-    this.publish('deleted', placement, user, {
-      before: this.auditSnapshot(existing),
-      after: this.auditSnapshot(placement),
+    this.publish('updated', placement, user, {
+      before: {
+        ...this.auditSnapshot(existing),
+        lifecycleEvent: 'PLACEMENT_ARCHIVED',
+      },
+      after: {
+        ...this.auditSnapshot(placement),
+        lifecycleEvent: 'PLACEMENT_ARCHIVED',
+        reason: this.cleanOptional(dto.archiveReason),
+      },
+    });
+    return this.withAggregates(placement);
+  }
+
+  async restore(
+    user: RequestUser,
+    id: string,
+  ): Promise<PlacementWithAggregates> {
+    const existing = await this.prisma.placement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: placementInclude,
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Placement not found');
+    }
+    if (!existing.archivedAt) {
+      throw new ConflictException('Placement is already active');
+    }
+
+    const activeReferenceConflict = await this.prisma.placement.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        id: { not: id },
+        normalizedReference: existing.normalizedReference,
+        archivedAt: null,
+      },
+      select: { id: true, reference: true },
+    });
+    if (activeReferenceConflict) {
+      throw new ConflictException(
+        `Cannot restore placement because active placement ${activeReferenceConflict.reference} already uses reference ${existing.reference}`,
+      );
+    }
+
+    const placement = await this.prisma.placement.update({
+      where: {
+        id_tenantId: { id, tenantId: user.tenantId },
+      },
+      data: {
+        archivedAt: null,
+        archivedByUserId: null,
+        archiveReason: null,
+        updatedByUserId: user.id,
+      },
+      include: placementInclude,
+    });
+
+    this.publish('updated', placement, user, {
+      before: {
+        ...this.auditSnapshot(existing),
+        lifecycleEvent: 'PLACEMENT_RESTORED',
+        reason: existing.archiveReason,
+      },
+      after: {
+        ...this.auditSnapshot(placement),
+        lifecycleEvent: 'PLACEMENT_RESTORED',
+      },
     });
     return this.withAggregates(placement);
   }
@@ -823,10 +1109,24 @@ export class PlacementsService {
       existing,
       participantId,
     );
+    await this.assertParticipantHasNoDependencies(
+      user.tenantId,
+      placementId,
+      participant.id,
+    );
 
-    await this.prisma.placementParticipant.delete({
-      where: { id: participant.id },
-    });
+    try {
+      await this.prisma.placementParticipant.delete({
+        where: { id: participant.id },
+      });
+    } catch (error) {
+      if (this.isForeignKeyDependencyError(error)) {
+        throw new ConflictException(
+          'This participant cannot be deleted because it is referenced by one or more related records.',
+        );
+      }
+      throw error;
+    }
 
     const placement = await this.syncParticipantDrivenStatus(
       user,
@@ -1033,13 +1333,44 @@ export class PlacementsService {
       return [];
     }
 
-    return Object.entries(value as Record<string, unknown>).map(
-      ([key, entryValue]) => ({
-        key,
-        label: this.toFrontendLabel(key),
-        value: entryValue,
-      }),
-    );
+    const entries: Array<{ key: string; label: string; value: unknown }> = [];
+
+    for (const [key, entryValue] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      if (key === FIELD_VISIBILITY_KEY) continue;
+      if (key !== 'customFields') {
+        entries.push({
+          key,
+          label: this.toFrontendLabel(key),
+          value: entryValue,
+        });
+        continue;
+      }
+
+      if (!Array.isArray(entryValue)) continue;
+
+      entryValue.forEach((field, index) => {
+        if (!field || typeof field !== 'object' || Array.isArray(field)) {
+          return;
+        }
+        const record = field as Record<string, unknown>;
+        const label =
+          typeof record.label === 'string' ? record.label.trim() : '';
+        if (!label) return;
+
+        entries.push({
+          key:
+            typeof record.id === 'string' && record.id.trim()
+              ? record.id
+              : `custom-${index + 1}`,
+          label,
+          value: record.value ?? '',
+        });
+      });
+    }
+
+    return entries;
   }
 
   private toFrontendLabel(key: string): string {
@@ -1141,6 +1472,16 @@ export class PlacementsService {
     };
   }
 
+  /** Non-resident cedant premiums remitted to reinsurers attract NIC Levy + Withholding Tax. */
+  private isForeignCedant(
+    cedant: SlipPreviewPlacementRecord['cedant'],
+  ): boolean {
+    const primary =
+      cedant.addresses.find((address) => address.isPrimary) ??
+      cedant.addresses[0];
+    return !!primary && primary.country.toUpperCase() !== 'GH';
+  }
+
   private calculateCreditNoteFinancials(
     placement: SlipPreviewPlacementRecord,
     participant: SlipPreviewPlacementRecord['participants'][number],
@@ -1159,6 +1500,8 @@ export class PlacementsService {
     const totalCommissionPct = commission + brokerageFee;
     const commissionAmount =
       yourPremium !== null ? (totalCommissionPct / 100) * yourPremium : null;
+    // Official tax/levy amounts now come from tenant charge configuration when
+    // financial notes are generated. Slip previews must not assume statutory rates.
     const nicLevyPct = 0;
     const withholdingTaxPct = 0;
     const nicLevyAmount =
@@ -1260,12 +1603,88 @@ export class PlacementsService {
     return participant;
   }
 
+  private async assertParticipantHasNoDependencies(
+    tenantId: string,
+    placementId: string,
+    participantId: string,
+  ): Promise<void> {
+    const [
+      closingCount,
+      noteCount,
+      paymentCount,
+      claimAllocationCount,
+      documentCount,
+      attachmentCount,
+      endorsementParticipantCount,
+    ] = await Promise.all([
+      this.prisma.placementClosing.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementNote.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementPayment.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementClaimAllocation.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementDocument.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementAttachment.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementEndorsementParticipant.count({
+        where: {
+          tenantId,
+          placementId,
+          originalParticipantId: participantId,
+        },
+      }),
+    ]);
+
+    const dependencies: string[] = [];
+    if (closingCount > 0) {
+      dependencies.push('placement closings');
+    }
+    if (noteCount > 0) {
+      dependencies.push('placement notes');
+    }
+    if (paymentCount > 0) {
+      dependencies.push('placement payments');
+    }
+    if (claimAllocationCount > 0) {
+      dependencies.push('claim allocations');
+    }
+    if (documentCount > 0) {
+      dependencies.push('placement documents');
+    }
+    if (attachmentCount > 0) {
+      dependencies.push('placement attachments');
+    }
+    if (endorsementParticipantCount > 0) {
+      dependencies.push('endorsement participants');
+    }
+
+    if (dependencies.length > 0) {
+      throw new ConflictException(
+        `Cannot delete placement participant because it has dependent financial/workflow records: ${dependencies.join(
+          ', ',
+        )}. Use the related workflow to void or reverse those records instead.`,
+      );
+    }
+  }
+
   private async acceptParticipantAndConfirmInTransaction(
     tx: Prisma.TransactionClient,
     user: RequestUser,
     placementId: string,
     participantId: string,
-  ): Promise<PlacementParticipantAcceptanceResult> {
+  ): Promise<{
+    participant: PlacementParticipantAcceptanceRecord;
+    closing: PlacementParticipantAcceptanceClosingRecord;
+  }> {
     const placement = await tx.placement.findFirst({
       where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
       include: placementInclude,
@@ -1349,7 +1768,7 @@ export class PlacementsService {
     await this.syncPlacementClosedIfFullyConfirmedInTransaction(
       tx,
       user,
-      placement,
+      placement.id,
     );
 
     return {
@@ -1483,9 +1902,18 @@ export class PlacementsService {
   private async syncPlacementClosedIfFullyConfirmedInTransaction(
     tx: Prisma.TransactionClient,
     user: RequestUser,
-    placement: Pick<PlacementRecord, 'id' | 'status' | 'facultativeOffer'>,
+    placementId: string,
   ): Promise<void> {
-    if (placement.status !== PlacementStatus.CLOSING) return;
+    const placement = await tx.placement.findFirst({
+      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
+      select: {
+        id: true,
+        status: true,
+        facultativeOffer: true,
+        participants: { select: { id: true, role: true, status: true } },
+      },
+    });
+    if (!placement || placement.status === PlacementStatus.CLOSED) return;
 
     const targetPercent = this.nullableDecimalToNumber(
       placement.facultativeOffer,
@@ -1498,16 +1926,68 @@ export class PlacementsService {
         placementId: placement.id,
         status: PlacementClosingStatus.CONFIRMED,
       },
-      select: { signedLinePercent: true },
+      select: { participantId: true, signedLinePercent: true },
     });
+    const confirmedParticipantIds = new Set(
+      confirmedClosings.map((item) => item.participantId),
+    );
     const confirmedPlacedPercent = this.roundPercent(
       confirmedClosings.reduce(
         (total, item) => total + this.decimalToNumber(item.signedLinePercent),
         0,
       ),
     );
+    const fullyFilled = confirmedPlacedPercent + 0.0001 >= targetPercent;
 
-    if (confirmedPlacedPercent + 0.0001 < targetPercent) return;
+    // "Room left on the offer" is only meaningful once every invited reinsurer has been
+    // resolved (closed or declined) — a still-pending participant could yet fill the gap, so
+    // the placement can't be called partially closed while anyone is still outstanding.
+    const reinsurerRoles: PlacementParticipantRole[] = [
+      PlacementParticipantRole.REINSURER,
+      PlacementParticipantRole.LEAD_REINSURER,
+      PlacementParticipantRole.CO_REINSURER,
+    ];
+    const reinsurers = placement.participants.filter((participant) =>
+      reinsurerRoles.includes(participant.role),
+    );
+    const allReinsurersResolved =
+      reinsurers.length > 0 &&
+      reinsurers.every(
+        (participant) =>
+          confirmedParticipantIds.has(participant.id) ||
+          participant.status === PlacementParticipantStatus.DECLINED,
+      );
+
+    if (!fullyFilled && !allReinsurersResolved) return;
+
+    const nextStatus = fullyFilled
+      ? PlacementStatus.CLOSED
+      : PlacementStatus.CLOSING;
+    if (placement.status === nextStatus) return;
+
+    if (placement.status !== PlacementStatus.CLOSING) {
+      await tx.placementStatusHistory.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId: placement.id,
+          fromStatus: placement.status,
+          toStatus: PlacementStatus.CLOSING,
+          changedByUserId: user.id,
+          note: fullyFilled
+            ? 'Confirmed placement closings reached facultative offer'
+            : 'All invited reinsurers have resolved their offers with capacity remaining',
+        },
+      });
+
+      await tx.placement.update({
+        where: {
+          id_tenantId: { id: placement.id, tenantId: user.tenantId },
+        },
+        data: { status: PlacementStatus.CLOSING, updatedByUserId: user.id },
+      });
+    }
+
+    if (!fullyFilled) return;
 
     await tx.placementStatusHistory.create({
       data: {
@@ -1689,6 +2169,341 @@ export class PlacementsService {
 
   private async assertEditable(placement: PlacementRecord): Promise<void> {
     await this.financialLockPolicy.assertEditable(placement);
+  }
+
+  private async evaluateDirectEditability(placement: {
+    id: string;
+    tenantId: string;
+    status: PlacementStatus;
+    archivedAt?: Date | null;
+  }): Promise<PlacementLockStatusDto> {
+    if (placement.archivedAt) {
+      return {
+        editable: false,
+        locked: false,
+        endorsementRequired: false,
+        reason: 'Cannot edit an archived placement.',
+        lockSource: 'ARCHIVED',
+        canEdit: false,
+        editBlockedReason: 'Placement is archived.',
+        editRequiresEndorsement: false,
+      };
+    }
+
+    if (
+      placement.status === PlacementStatus.CLOSED ||
+      placement.status === PlacementStatus.CANCELLED
+    ) {
+      return {
+        editable: false,
+        locked: false,
+        endorsementRequired: true,
+        reason: DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE,
+        lockSource: 'STATUS_TERMINAL',
+        canEdit: false,
+        editBlockedReason: `Cannot edit a ${placement.status} placement.`,
+        editRequiresEndorsement: true,
+      };
+    }
+
+    const financialStatus = await this.financialLockPolicy.evaluate(placement);
+    if (!financialStatus.editable) {
+      return {
+        ...financialStatus,
+        canEdit: false,
+        editBlockedReason:
+          financialStatus.editBlockedReason ?? financialStatus.reason,
+        editRequiresEndorsement: financialStatus.endorsementRequired,
+      };
+    }
+
+    const blocker = await this.findDirectEditBlocker(
+      placement.tenantId,
+      placement.id,
+    );
+    if (blocker) {
+      return {
+        editable: false,
+        locked: false,
+        endorsementRequired: true,
+        reason: DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE,
+        lockSource: 'DOWNSTREAM_ACTIVITY',
+        canEdit: false,
+        editBlockedReason: blocker,
+        editRequiresEndorsement: true,
+      };
+    }
+
+    return {
+      ...financialStatus,
+      canEdit: true,
+      editRequiresEndorsement: false,
+    };
+  }
+
+  private async findDirectEditBlocker(
+    tenantId: string,
+    placementId: string,
+  ): Promise<string | null> {
+    const payment = await this.prisma.placementPayment.findFirst({
+      where: { tenantId, placementId },
+      select: { id: true },
+    });
+    if (payment) return 'Payment history exists.';
+
+    const claim = await this.prisma.placementClaim.findFirst({
+      where: { tenantId, placementId },
+      select: { id: true },
+    });
+    if (claim) return 'Claim exists.';
+
+    const claimAllocation =
+      await this.prisma.placementClaimAllocation.findFirst({
+        where: { tenantId, placementId },
+        select: { id: true },
+      });
+    if (claimAllocation) return 'Claim allocation exists.';
+
+    const cashCall = await this.prisma.placementClaimCashCall.findFirst({
+      where: { tenantId, placementId },
+      select: { id: true },
+    });
+    if (cashCall) return 'Claim cash call exists.';
+
+    const endorsement = await this.prisma.placementEndorsement.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        status: {
+          notIn: [
+            PlacementEndorsementStatus.DRAFT,
+            PlacementEndorsementStatus.VOID,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    if (endorsement) return 'Active endorsement workflow exists.';
+
+    return null;
+  }
+
+  private deriveReopenedStatus(placement: {
+    participants: Array<{ status: PlacementParticipantStatus }>;
+  }): PlacementStatus {
+    const hasActiveParticipants = placement.participants.some(
+      (participant) =>
+        participant.status !== PlacementParticipantStatus.DECLINED,
+    );
+    return hasActiveParticipants
+      ? PlacementStatus.MARKETING
+      : PlacementStatus.DRAFT;
+  }
+
+  private getChangedMaterialFields(
+    placement: PlacementRecord,
+    dto: UpdatePlacementDto,
+  ): string[] {
+    const changed: string[] = [];
+
+    const textFields: Array<
+      keyof Pick<
+        UpdatePlacementDto,
+        | 'reference'
+        | 'title'
+        | 'placementType'
+        | 'cedantId'
+        | 'riskTypeId'
+        | 'classOfBusiness'
+        | 'currency'
+      >
+    > = [
+      'reference',
+      'title',
+      'placementType',
+      'cedantId',
+      'riskTypeId',
+      'classOfBusiness',
+      'currency',
+    ];
+
+    for (const field of textFields) {
+      if (
+        dto[field] !== undefined &&
+        this.normalizeTextForCompare(placement[field]) !==
+          this.normalizeTextForCompare(
+            field === 'currency'
+              ? this.cleanOptional(dto[field])?.toUpperCase()
+              : dto[field],
+          )
+      ) {
+        changed.push(field);
+      }
+    }
+
+    const decimalFields: Array<{
+      field: keyof Pick<
+        UpdatePlacementDto,
+        | 'sumInsured'
+        | 'rate'
+        | 'premium'
+        | 'commission'
+        | 'facultativeOffer'
+        | 'preliminaryBrokerage'
+      >;
+      decimalPlaces: number;
+    }> = [
+      { field: 'sumInsured', decimalPlaces: 2 },
+      { field: 'rate', decimalPlaces: 4 },
+      { field: 'premium', decimalPlaces: 2 },
+      { field: 'commission', decimalPlaces: 4 },
+      { field: 'facultativeOffer', decimalPlaces: 4 },
+      { field: 'preliminaryBrokerage', decimalPlaces: 4 },
+    ];
+
+    for (const { field, decimalPlaces } of decimalFields) {
+      if (
+        dto[field] !== undefined &&
+        this.normalizeDecimalForCompare(placement[field], decimalPlaces) !==
+          this.normalizeDecimalForCompare(dto[field], decimalPlaces)
+      ) {
+        changed.push(field);
+      }
+    }
+
+    const dateFields: Array<
+      keyof Pick<UpdatePlacementDto, 'inceptionDate' | 'expiryDate'>
+    > = ['inceptionDate', 'expiryDate'];
+    for (const field of dateFields) {
+      if (
+        dto[field] !== undefined &&
+        this.normalizeDateForCompare(placement[field]) !==
+          this.normalizeDateForCompare(dto[field])
+      ) {
+        changed.push(field);
+      }
+    }
+
+    const jsonFields: Array<
+      keyof Pick<UpdatePlacementDto, 'businessDetails' | 'offerDetails'>
+    > = ['businessDetails', 'offerDetails'];
+    for (const field of jsonFields) {
+      if (dto[field] === undefined) continue;
+      const normalizedIncoming = this.normalizeJsonObject(dto[field], field);
+      if (
+        this.stableStringifyForCompare(placement[field] ?? null) !==
+        this.stableStringifyForCompare(normalizedIncoming ?? null)
+      ) {
+        changed.push(field);
+      }
+    }
+
+    return changed;
+  }
+
+  private buildReopeningHistoryNote(
+    editClassification: PlacementEditClassification,
+    changedMaterialFields: string[],
+  ): string {
+    if (editClassification === 'ADMINISTRATIVE') {
+      return 'Placement edited and returned to Open Offers (administrative edit)';
+    }
+
+    return `Placement edited and returned to Open Offers (material edit: ${changedMaterialFields.join(
+      ', ',
+    )})`;
+  }
+
+  private async supersedePlacementMarketArtifacts(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    placementId: string,
+  ): Promise<{
+    participantsRequiringReoffer: number;
+    participantsPreservedAsAccepted: number;
+  }> {
+    const now = new Date();
+
+    await tx.placementClosing.updateMany({
+      where: {
+        tenantId,
+        placementId,
+        status: {
+          in: [
+            PlacementClosingStatus.DRAFT,
+            PlacementClosingStatus.ISSUED,
+            PlacementClosingStatus.CONFIRMED,
+          ],
+        },
+      },
+      data: { status: PlacementClosingStatus.VOID },
+    });
+
+    await tx.placementNote.updateMany({
+      where: {
+        tenantId,
+        placementId,
+        endorsementId: null,
+        type: {
+          in: [PlacementNoteType.DEBIT_NOTE, PlacementNoteType.CREDIT_NOTE],
+        },
+        status: {
+          in: [PlacementNoteStatus.DRAFT, PlacementNoteStatus.ISSUED],
+        },
+      },
+      data: {
+        status: PlacementNoteStatus.VOID,
+        voidedAt: now,
+        voidReason: 'Placement edited; note superseded',
+      },
+    });
+
+    await tx.placementDocument.updateMany({
+      where: {
+        tenantId,
+        placementId,
+        endorsementId: null,
+        type: {
+          in: [
+            PlacementDocumentType.OFFER_SLIP,
+            PlacementDocumentType.CLOSING_SLIP,
+            PlacementDocumentType.DEBIT_NOTE,
+            PlacementDocumentType.CREDIT_NOTE,
+          ],
+        },
+        status: {
+          in: [
+            PlacementDocumentStatus.DRAFT,
+            PlacementDocumentStatus.GENERATED,
+            PlacementDocumentStatus.FAILED,
+          ],
+        },
+      },
+      data: {
+        status: PlacementDocumentStatus.VOID,
+        voidedAt: now,
+        voidReason: 'Placement edited; document superseded',
+      },
+    });
+
+    const reset = await tx.placementParticipant.updateMany({
+      where: {
+        tenantId,
+        placementId,
+        status: {
+          in: [
+            PlacementParticipantStatus.CLOSED,
+            PlacementParticipantStatus.ACCEPTED,
+            PlacementParticipantStatus.QUOTED,
+          ],
+        },
+      },
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
+    });
+    return {
+      participantsRequiringReoffer: reset.count,
+      participantsPreservedAsAccepted: 0,
+    };
   }
 
   private async assertArchivable(placement: PlacementRecord): Promise<void> {
@@ -1889,6 +2704,7 @@ export class PlacementsService {
     return {
       ...placement,
       ...aggregates,
+      forceClosed: placement.closeMode === 'FORCED',
     };
   }
 
@@ -1954,6 +2770,59 @@ export class PlacementsService {
     return this.decimalToNumber(value);
   }
 
+  private normalizeTextForCompare(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    const normalized =
+      value instanceof Date
+        ? value.toISOString()
+        : typeof value === 'string' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean'
+          ? String(value)
+          : JSON.stringify(value);
+    const trimmed = normalized.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeDecimalForCompare(
+    value: number | Prisma.Decimal | string | null | undefined,
+    decimalPlaces: number,
+  ): string | null {
+    if (value === null || value === undefined) return null;
+    const numeric = this.decimalToNumber(value);
+    return numeric.toFixed(decimalPlaces);
+  }
+
+  private normalizeDateForCompare(
+    value: Date | string | null | undefined,
+  ): number | null {
+    if (value === null || value === undefined) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    const timestamp = date.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  private stableStringifyForCompare(value: unknown): string {
+    return JSON.stringify(this.normalizeJsonForCompare(value));
+  }
+
+  private normalizeJsonForCompare(value: unknown): unknown {
+    if (value === null || value === undefined) return null;
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.normalizeJsonForCompare(entry));
+    }
+    if (typeof value === 'object') {
+      const normalized: Record<string, unknown> = {};
+      for (const key of Object.keys(value).sort()) {
+        normalized[key] = this.normalizeJsonForCompare(
+          (value as Record<string, unknown>)[key],
+        );
+      }
+      return normalized;
+    }
+    return value;
+  }
+
   private roundPercent(value: number): number {
     return Math.round(value * 10000) / 10000;
   }
@@ -1973,8 +2842,9 @@ export class PlacementsService {
     return value.trim();
   }
 
-  private cleanOptional(value?: string): string | null | undefined {
+  private cleanOptional(value?: string | null): string | null | undefined {
     if (value === undefined) return undefined;
+    if (value === null) return null;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   }
@@ -2002,10 +2872,40 @@ export class PlacementsService {
     const result: Record<string, Prisma.InputJsonValue> = {};
 
     for (const [key, entry] of Object.entries(value)) {
+      if (fieldName === 'businessDetails' && key === 'customFields') {
+        result[key] = this.trimCustomFieldsJsonValue(entry);
+        continue;
+      }
+      if (key === FIELD_VISIBILITY_KEY) {
+        result[key] = this.trimFieldVisibilityJsonValue(entry);
+        continue;
+      }
       result[key] = this.trimJsonValue(entry, fieldName);
     }
 
     return result;
+  }
+
+  private trimCustomFieldsJsonValue(value: unknown): Prisma.InputJsonValue {
+    this.validateCustomFields(value);
+    return (value as Array<Record<string, unknown>>).map((field) => {
+      const type = typeof field.type === 'string' ? field.type.trim() : 'TEXT';
+      return {
+        id: String(field.id).trim(),
+        label: String(field.label).trim(),
+        value: String(field.value),
+        type,
+        ...(typeof field.displayOrder === 'number'
+          ? { displayOrder: field.displayOrder }
+          : {}),
+        showOnDocument: field.showOnDocument !== false,
+      };
+    }) as Prisma.InputJsonValue;
+  }
+
+  private trimFieldVisibilityJsonValue(value: unknown): Prisma.InputJsonValue {
+    this.validateFieldVisibility(value);
+    return (value as string[]).map((key) => key.trim());
   }
 
   private trimJsonValue(
@@ -2041,6 +2941,7 @@ export class PlacementsService {
       status: placement.status,
       cedantId: placement.cedantId,
       placementType: placement.placementType,
+      archiveReason: placement.archiveReason,
       archivedAt: placement.archivedAt?.toISOString() ?? null,
     };
   }
@@ -2171,6 +3072,14 @@ export class PlacementsService {
     const definedKeys = new Set(fields.map((f) => f.fieldKey));
 
     for (const key of Object.keys(provided)) {
+      if (sectionName === 'businessDetails' && key === 'customFields') {
+        this.validateCustomFields(provided[key]);
+        continue;
+      }
+      if (key === FIELD_VISIBILITY_KEY) {
+        this.validateFieldVisibility(provided[key]);
+        continue;
+      }
       if (!definedKeys.has(key)) {
         throw new BadRequestException(
           `Unknown field key '${key}' in ${sectionName}`,
@@ -2237,6 +3146,68 @@ export class PlacementsService {
     }
   }
 
+  private validateCustomFields(value: unknown): void {
+    if (value === undefined || value === null) return;
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(
+        "Field 'customFields' in businessDetails must be an array",
+      );
+    }
+
+    value.forEach((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw new BadRequestException(
+          `Custom field at index ${index} must be an object`,
+        );
+      }
+      const field = item as Record<string, unknown>;
+      if (typeof field.id !== 'string' || field.id.trim().length === 0) {
+        throw new BadRequestException(
+          `Custom field at index ${index} requires an id`,
+        );
+      }
+      if (typeof field.label !== 'string' || field.label.trim().length === 0) {
+        throw new BadRequestException(
+          `Custom field at index ${index} requires a label`,
+        );
+      }
+      if (typeof field.value !== 'string') {
+        throw new BadRequestException(
+          `Custom field at index ${index} requires a string value`,
+        );
+      }
+      if (field.type !== undefined && field.type !== 'TEXT') {
+        throw new BadRequestException(
+          `Custom field at index ${index} has unsupported type`,
+        );
+      }
+      if (
+        field.displayOrder !== undefined &&
+        typeof field.displayOrder !== 'number'
+      ) {
+        throw new BadRequestException(
+          `Custom field at index ${index} displayOrder must be a number`,
+        );
+      }
+    });
+  }
+
+  private validateFieldVisibility(value: unknown): void {
+    if (value === undefined || value === null) return;
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(
+        `Field '${FIELD_VISIBILITY_KEY}' must be an array of field keys`,
+      );
+    }
+    value.forEach((key, index) => {
+      if (typeof key !== 'string' || key.trim().length === 0) {
+        throw new BadRequestException(
+          `${FIELD_VISIBILITY_KEY} entry at index ${index} must be a non-empty string`,
+        );
+      }
+    });
+  }
+
   private async resolveExchangeRate(
     tenantId: string,
     isoCode: string | null,
@@ -2270,6 +3241,13 @@ export class PlacementsService {
     return (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2034'
+    );
+  }
+
+  private isForeignKeyDependencyError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      ['P2003', 'P2014'].includes(error.code)
     );
   }
 }

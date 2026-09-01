@@ -479,6 +479,37 @@ export class TenantsController {
     return this.config.updateModules(id, dto, req.user.id);
   }
 
+  @Get(':id/integrations/reinsurance-accounting')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  getReinsuranceAccountingIntegration(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    if (req.user.role === 'TENANT_ADMIN' && id !== req.user.tenantId) {
+      throw new ForbiddenException('You can only access your own company.');
+    }
+    return this.config.getReinsuranceAccountingIntegration(id);
+  }
+
+  @Patch(':id/integrations/reinsurance-accounting')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  updateReinsuranceAccountingIntegration(
+    @Param('id') id: string,
+    @Body() dto: { enabled: boolean },
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.config.updateReinsuranceAccountingIntegration(
+      id,
+      Boolean(dto.enabled),
+      req.user.id,
+    );
+  }
+
   @Patch(':id/features')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
@@ -535,9 +566,16 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resend invite to Company Admin — SuperAdmin only' })
+  @ApiOperation({
+    summary: 'Resend invite to pending Company Admin — SuperAdmin only',
+  })
   @ApiParam({ name: 'id', description: 'Tenant ID' })
-  @ApiResponse({ status: 200, description: 'Invite resent successfully' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Invite resent successfully. Previous invite link is invalidated.',
+    schema: { example: { message: 'Invitation resent successfully' } },
+  })
   @ApiResponse({
     status: 404,
     description: 'No pending admin found for this company',

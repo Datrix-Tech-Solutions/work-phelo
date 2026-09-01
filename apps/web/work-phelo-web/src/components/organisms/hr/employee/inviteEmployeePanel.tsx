@@ -73,10 +73,6 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
     },
   });
 
-  useEffect(() => {
-    register('hireDate', { required: 'Please select the date this employee was hired.' });
-  }, [register]);
-
   const phoneValue = useWatch({ control, name: 'phone' });
   const hireDateValue = useWatch({ control, name: 'hireDate' });
   const probationDateValue = useWatch({ control, name: 'probationEndsAt' });
@@ -270,7 +266,7 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
         <DatePicker
           label="Date Hired"
           value={hireDateValue}
-          onChange={(v) => setValue('hireDate', v, { shouldValidate: true })}
+          onChange={(v) => setValue('hireDate', v)}
           error={errors.hireDate?.message}
           disableFuture
         />

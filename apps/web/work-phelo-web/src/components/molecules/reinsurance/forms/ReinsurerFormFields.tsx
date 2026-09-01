@@ -6,7 +6,7 @@ import type { Control, UseFormRegister, UseFormSetValue, FieldErrors } from 'rea
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { Input } from '@/components/atoms/Input';
 import { Icons } from '@/components/atoms/icons';
 import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/forms/CounterpartyAddressFields';
 import { CONTACT_PERSON_DEFAULTS } from '@/types/reinsurance';
@@ -65,7 +65,7 @@ export function ReinsurerFormFields({
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       {/* ── Prefill from cedant ── */}
       <div className="flex flex-col gap-1">
         <SearchSelect
@@ -85,12 +85,13 @@ export function ReinsurerFormFields({
           registration={register('name', { required: 'Reinsurer name is required' })}
           error={errors.name}
           placeholder="e.g. Reinsurance Company Ltd."
+          readOnly={!!prefillId}
         />
       </FormSection>
 
       {/* ── Brokerage fee ── */}
       <FormSection title="Financials">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Brokerage Fee (%)</label>
           <div className="relative">
             <input
@@ -131,12 +132,14 @@ export function ReinsurerFormFields({
             placeholder="e.g. info@reinsurancecompany.com"
           />
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <span className="text-sm font-bold text-gray-900">Primary Phone Number</span>
-            <PhoneInput
+            <Input
+              type="tel"
+              inputMode="numeric"
               placeholder="00 000 0000"
               value={primaryPhone ?? ''}
-              onChange={(v) => setValue('phone', v)}
+              onChange={(e) => setValue('phone', e.target.value.replace(/\D/g, ''))}
               error={errors.phone?.message}
             />
           </div>
@@ -182,12 +185,16 @@ export function ReinsurerFormFields({
                 placeholder="e.g. kwame@example.com"
               />
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                 <span className="text-sm font-bold text-gray-900">Contact Phone</span>
-                <PhoneInput
+                <Input
+                  type="tel"
+                  inputMode="numeric"
                   placeholder="00 000 0000"
                   value={watchedContacts?.[index]?.phone ?? ''}
-                  onChange={(v) => setValue(`contacts.${index}.phone`, v)}
+                  onChange={(e) =>
+                    setValue(`contacts.${index}.phone`, e.target.value.replace(/\D/g, ''))
+                  }
                   error={errors.contacts?.[index]?.phone?.message}
                 />
               </div>

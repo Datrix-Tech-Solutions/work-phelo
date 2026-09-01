@@ -132,7 +132,7 @@ function BandEditPanel({
               },
             })}
           />
-          <div className="flex flex-col gap-1.5 flex-1">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem) flex-1">
             <label className="text-sm font-bold text-gray-900">Max</label>
             <input
               type="number"

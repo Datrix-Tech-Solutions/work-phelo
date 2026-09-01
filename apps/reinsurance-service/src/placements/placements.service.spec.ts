@@ -8,14 +8,18 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementNoteStatus,
   PlacementParticipantRole,
   PlacementParticipantStatus,
   PlacementStatus,
   PlacementType,
+  Prisma,
+  RiskTypeFieldSection,
+  RiskTypeFieldType,
 } from '../../prisma/generated/client';
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
-import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
 import { PlacementsService } from './placements.service';
 
 describe('PlacementsService', () => {
@@ -51,6 +55,7 @@ describe('PlacementsService', () => {
     createdByUserId: 'user-1',
     updatedByUserId: 'user-1',
     archivedByUserId: null,
+    archiveReason: null,
     archivedAt: null,
     createdAt: new Date('2026-05-28T10:00:00.000Z'),
     updatedAt: new Date('2026-05-28T10:00:00.000Z'),
@@ -150,9 +155,10 @@ describe('PlacementsService', () => {
       update: PrismaMethod;
     };
     placementParticipant: {
-      findFirst: PrismaMethod;
       create: PrismaMethod;
+      findFirst: PrismaMethod;
       update: PrismaMethod;
+      updateMany: PrismaMethod;
       delete: PrismaMethod;
     };
     placementClosing: {
@@ -161,6 +167,40 @@ describe('PlacementsService', () => {
       count: PrismaMethod;
       create: PrismaMethod;
       update: PrismaMethod;
+      updateMany: PrismaMethod;
+    };
+    placementNote: {
+      count: PrismaMethod;
+      findFirst: PrismaMethod;
+      updateMany: PrismaMethod;
+    };
+    placementPayment: {
+      count: PrismaMethod;
+      findFirst: PrismaMethod;
+    };
+    placementClaim: {
+      findFirst: PrismaMethod;
+    };
+    placementClaimAllocation: {
+      count: PrismaMethod;
+      findFirst: PrismaMethod;
+    };
+    placementClaimCashCall: {
+      findFirst: PrismaMethod;
+    };
+    placementDocument: {
+      count: PrismaMethod;
+      findMany: PrismaMethod;
+      updateMany: PrismaMethod;
+    };
+    placementEndorsement: {
+      findFirst: PrismaMethod;
+    };
+    placementAttachment: {
+      count: PrismaMethod;
+    };
+    placementEndorsementParticipant: {
+      count: PrismaMethod;
     };
     placementStatusHistory: {
       create: PrismaMethod;
@@ -197,17 +237,72 @@ describe('PlacementsService', () => {
         update: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementParticipant: {
-        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         create: jest.fn<Promise<unknown>, [unknown]>(),
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
         delete: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementClosing: {
-        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+        findMany: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue([]),
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
+      },
+      placementNote: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
+      },
+      placementPayment: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
+      },
+      placementClaim: {
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
+      },
+      placementClaimAllocation: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
+      },
+      placementClaimCashCall: {
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
+      },
+      placementDocument: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+        findMany: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue([]),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
+      },
+      placementEndorsement: {
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
+      },
+      placementAttachment: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+      },
+      placementEndorsementParticipant: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
       },
       placementStatusHistory: {
         create: jest.fn<Promise<unknown>, [unknown]>(),
@@ -229,6 +324,8 @@ describe('PlacementsService', () => {
         endorsementRequired: false,
         reason: 'Placement has no financial activity and can be edited.',
         lockSource: 'NONE',
+        canEdit: true,
+        editRequiresEndorsement: false,
       }),
       assertEditable: jest.fn((item: { status: PlacementStatus }) => {
         if (
@@ -241,14 +338,7 @@ describe('PlacementsService', () => {
         }
         return Promise.resolve();
       }),
-      assertArchivable: jest.fn((item: { status: PlacementStatus }) => {
-        if (item.status === PlacementStatus.CLOSED) {
-          return Promise.reject(
-            new BadRequestException('Cannot archive a closed placement'),
-          );
-        }
-        return Promise.resolve();
-      }),
+      assertArchivable: jest.fn().mockResolvedValue(undefined),
     };
     service = new PlacementsService(
       prisma as unknown as PrismaService,
@@ -294,6 +384,93 @@ describe('PlacementsService', () => {
     });
   });
 
+  it('filters open placement statuses before pagination and count', async () => {
+    prisma.placement.findMany.mockResolvedValue([
+      { ...placement, status: PlacementStatus.DRAFT },
+    ]);
+    prisma.placement.count.mockResolvedValue(25);
+
+    const openStatuses = [
+      PlacementStatus.DRAFT,
+      PlacementStatus.MARKETING,
+      PlacementStatus.PARTIALLY_PLACED,
+      PlacementStatus.PLACED,
+    ];
+
+    const result = await service.findAll('tenant-1', {
+      statuses: openStatuses,
+      page: 1,
+      limit: 20,
+    });
+
+    const expectedWhere = {
+      tenantId: 'tenant-1',
+      archivedAt: null,
+      status: { in: openStatuses },
+    };
+    expect(prisma.placement.findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: expectedWhere,
+      skip: 0,
+      take: 20,
+    });
+    expect(prisma.placement.count.mock.calls[0]?.[0]).toMatchObject({
+      where: expectedWhere,
+    });
+    expect(openStatuses).not.toContain(PlacementStatus.CLOSING);
+    expect(openStatuses).not.toContain(PlacementStatus.CLOSED);
+    expect(openStatuses).not.toContain(PlacementStatus.DECLINED);
+    expect(openStatuses).not.toContain(PlacementStatus.CANCELLED);
+    expect(result.meta).toEqual({
+      page: 1,
+      limit: 20,
+      total: 25,
+      totalPages: 2,
+    });
+  });
+
+  it('lists archived records with the same filters, search and pagination', async () => {
+    const archivedPlacement = {
+      ...placement,
+      archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      archivedByUserId: 'user-1',
+      archiveReason: 'Duplicate placement',
+    };
+    prisma.placement.findMany.mockResolvedValue([archivedPlacement]);
+    prisma.placement.count.mockResolvedValue(1);
+
+    const result = await service.findAll('tenant-1', {
+      archived: true,
+      search: 'Acme',
+      status: PlacementStatus.DRAFT,
+      placementType: PlacementType.FACULTATIVE,
+      page: 3,
+      limit: 5,
+    });
+
+    const findManyArgs = prisma.placement.findMany.mock.calls[0]?.[0] as {
+      where?: { OR?: unknown };
+      orderBy?: unknown;
+      skip?: number;
+      take?: number;
+    };
+    expect(findManyArgs).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        archivedAt: { not: null },
+        status: PlacementStatus.DRAFT,
+        placementType: PlacementType.FACULTATIVE,
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: 10,
+      take: 5,
+    });
+    expect(Array.isArray(findManyArgs.where?.OR)).toBe(true);
+    expect(result.items[0]).toMatchObject({
+      archivedByUserId: 'user-1',
+      archiveReason: 'Duplicate placement',
+    });
+  });
+
   it('does not expose another tenant record by id', async () => {
     prisma.placement.findFirst.mockResolvedValue(null);
 
@@ -334,6 +511,7 @@ describe('PlacementsService', () => {
       id: 'placement-1',
       tenantId: 'tenant-1',
       status: PlacementStatus.MARKETING,
+      archivedAt: null,
     });
 
     const result = await service.getLockStatus('tenant-1', 'placement-1');
@@ -344,7 +522,7 @@ describe('PlacementsService', () => {
         tenantId: 'tenant-1',
         archivedAt: null,
       },
-      select: { id: true, tenantId: true, status: true },
+      select: { id: true, tenantId: true, status: true, archivedAt: true },
     });
     expect(result).toMatchObject({
       editable: true,
@@ -372,6 +550,7 @@ describe('PlacementsService', () => {
       reference: ' FAC-2026-0001 ',
       title: ' Acme Energy Placement ',
       cedantId: 'cedant-1',
+      description: ' Subject to survey and signed proposal. ',
       participants: [
         {
           counterpartyId: 'reinsurer-1',
@@ -396,6 +575,7 @@ describe('PlacementsService', () => {
         tenantId: 'tenant-1',
         reference: 'FAC-2026-0001',
         normalizedReference: 'fac-2026-0001',
+        description: 'Subject to survey and signed proposal.',
         status: PlacementStatus.DRAFT,
         participants: {
           create: [
@@ -414,6 +594,99 @@ describe('PlacementsService', () => {
         actorUserId: 'user-1',
       }),
     );
+  });
+
+  it('accepts structured custom placement fields alongside configured risk fields', async () => {
+    prisma.counterparty.findFirst.mockResolvedValue({ id: 'cedant-1' });
+    prisma.counterparty.findMany.mockResolvedValue([]);
+    prisma.riskType.findFirst
+      .mockResolvedValueOnce({ id: 'risk-type-1', name: 'Marine Cargo' })
+      .mockResolvedValueOnce({
+        fields: [
+          {
+            section: RiskTypeFieldSection.BUSINESS_DETAILS,
+            fieldKey: 'vessel_name',
+            fieldType: RiskTypeFieldType.TEXT,
+            required: true,
+            options: null,
+          },
+          {
+            section: RiskTypeFieldSection.BUSINESS_DETAILS,
+            fieldKey: 'estimated_value',
+            fieldType: RiskTypeFieldType.NUMBER,
+            required: false,
+            options: null,
+          },
+          {
+            section: RiskTypeFieldSection.BUSINESS_DETAILS,
+            fieldKey: 'war_cover',
+            fieldType: RiskTypeFieldType.CHECKBOX,
+            required: false,
+            options: null,
+          },
+        ],
+      });
+    prisma.placement.create.mockResolvedValue({
+      ...placement,
+      riskTypeId: 'risk-type-1',
+      classOfBusiness: 'Marine Cargo',
+      businessDetails: {
+        vessel_name: 'MV Ocean Pioneer',
+        estimated_value: 125000,
+        war_cover: true,
+        customFields: [
+          {
+            id: 'custom-special-condition',
+            label: 'Special Condition',
+            value: 'Subject to survey',
+            type: 'TEXT',
+            displayOrder: 1,
+          },
+        ],
+      },
+    });
+
+    await service.create(user, {
+      reference: 'FAC-2026-0002',
+      title: 'Marine Cargo Placement',
+      cedantId: 'cedant-1',
+      riskTypeId: 'risk-type-1',
+      businessDetails: {
+        vessel_name: 'MV Ocean Pioneer',
+        estimated_value: 125000,
+        war_cover: true,
+        customFields: [
+          {
+            id: 'custom-special-condition',
+            label: 'Special Condition',
+            value: 'Subject to survey',
+            type: 'TEXT',
+            displayOrder: 1,
+          },
+        ],
+      },
+    });
+
+    expect(prisma.placement.create.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        riskTypeId: 'risk-type-1',
+        classOfBusiness: 'Marine Cargo',
+        businessDetails: {
+          vessel_name: 'MV Ocean Pioneer',
+          estimated_value: 125000,
+          war_cover: true,
+          customFields: [
+            {
+              id: 'custom-special-condition',
+              label: 'Special Condition',
+              value: 'Subject to survey',
+              type: 'TEXT',
+              displayOrder: 1,
+            },
+          ],
+        },
+      },
+    });
   });
 
   it('rejects participant roles that do not match counterparty type', async () => {
@@ -828,15 +1101,336 @@ describe('PlacementsService', () => {
         },
       }),
     );
+    const updateArgs = prisma.placement.update.mock.calls[0]?.[0] as {
+      data?: Record<string, unknown>;
+    };
+    expect(updateArgs.data).not.toHaveProperty('description');
     expect(publisher.updated).toHaveBeenCalled();
   });
 
-  it('blocks placement updates when financial activity has locked the placement', async () => {
-    financialLockPolicy.assertEditable.mockRejectedValueOnce(
-      new ConflictException(
-        'Placement is financially locked. Changes require endorsement.',
-      ),
+  it('updates placement description when explicitly supplied', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placement.update.mockResolvedValue({
+      ...placement,
+      description: 'Revised placement comment',
+    });
+
+    await service.update(user, 'placement-1', {
+      description: ' Revised placement comment ',
+    });
+
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      data: { description: 'Revised placement comment' },
+    });
+  });
+
+  it('clears placement description when an empty description is supplied', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      description: 'Existing placement comment',
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placement,
+      description: null,
+    });
+
+    await service.update(user, 'placement-1', { description: '   ' });
+
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      data: { description: null },
+    });
+  });
+
+  it('updates administrative placement fields without reopening or superseding market artifacts', async () => {
+    const placedWithoutImmutableActivity = {
+      ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
+      status: PlacementStatus.PARTIALLY_PLACED,
+    };
+    const updated = {
+      ...placedWithoutImmutableActivity,
+      description: 'Internal admin note',
+    };
+    prisma.placement.findFirst.mockResolvedValue(
+      placedWithoutImmutableActivity,
     );
+    prisma.placement.update.mockResolvedValue(updated);
+
+    const result = await service.update(user, 'placement-1', {
+      description: 'Internal admin note',
+    });
+
+    expect(result.status).toBe(PlacementStatus.PARTIALLY_PLACED);
+    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+    expect(prisma.placementClosing.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementNote.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementDocument.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementParticipant.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        description: 'Internal admin note',
+        status: PlacementStatus.PARTIALLY_PLACED,
+      },
+    });
+  });
+
+  it.each([
+    PlacementStatus.CLOSED,
+    PlacementStatus.PARTIALLY_PLACED,
+    PlacementStatus.CLOSING,
+  ])(
+    'updates policy number on a %s placement without reopening or mutating historical records',
+    async (status) => {
+      const placementWithConfirmedHistory = {
+        ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
+        policyNumber: null,
+        status,
+      };
+      prisma.placement.findFirst.mockResolvedValue(
+        placementWithConfirmedHistory,
+      );
+      prisma.placement.update.mockResolvedValue({
+        ...placementWithConfirmedHistory,
+        policyNumber: 'POL-2026-001',
+      });
+
+      const result = await service.update(user, 'placement-1', {
+        policyNumber: 'POL-2026-001',
+      });
+
+      expect(result.status).toBe(status);
+      expect(result.policyNumber).toBe('POL-2026-001');
+      expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+      expect(prisma.placementClosing.updateMany).not.toHaveBeenCalled();
+      expect(prisma.placementNote.updateMany).not.toHaveBeenCalled();
+      expect(prisma.placementDocument.updateMany).not.toHaveBeenCalled();
+      expect(prisma.placementParticipant.updateMany).not.toHaveBeenCalled();
+      expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+        data: {
+          policyNumber: 'POL-2026-001',
+          status,
+        },
+      });
+    },
+  );
+
+  it('keeps a safely editable placement with no active participants in draft without duplicate status history', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placement.update.mockResolvedValue({
+      ...placement,
+      title: 'Draft Edit',
+      status: PlacementStatus.DRAFT,
+    });
+
+    const result = await service.update(user, 'placement-1', {
+      title: 'Draft Edit',
+    });
+
+    expect(result.status).toBe(PlacementStatus.DRAFT);
+    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+  });
+
+  it('allows direct placement edits with closings and issued notes when no financial/downstream lock exists', async () => {
+    prisma.placement.findFirst.mockResolvedValue(
+      placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+    );
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      title: 'Safe Update',
+    });
+
+    await service.update(user, 'placement-1', { title: 'Safe Update' });
+
+    expect(prisma.placementClosing.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { status: PlacementClosingStatus.VOID },
+      }),
+    );
+    const noteArgs = prisma.placementNote.updateMany.mock.calls[0]?.[0] as
+      | { data: Record<string, unknown> }
+      | undefined;
+    expect(noteArgs?.data).toMatchObject({
+      status: PlacementNoteStatus.VOID,
+    });
+    expect(prisma.placement.update).toHaveBeenCalled();
+  });
+
+  it('resets accepted and closed participants to offer-sent when premium changes', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
+      premium: '1000.00',
+      status: PlacementStatus.PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.OFFER_SENT),
+      premium: '1250.00',
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', { premium: 1250 });
+
+    expect(
+      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
+    ).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        status: {
+          in: [
+            PlacementParticipantStatus.CLOSED,
+            PlacementParticipantStatus.ACCEPTED,
+            PlacementParticipantStatus.QUOTED,
+          ],
+        },
+      },
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
+    });
+    const historyArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as
+      | {
+          data: Record<string, unknown>;
+        }
+      | undefined;
+    expect(historyArgs?.data).toMatchObject({
+      note: 'Placement edited and returned to Open Offers (material edit: premium)',
+    });
+    expect(prisma.placementClosing.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { status: PlacementClosingStatus.VOID },
+      }),
+    );
+  });
+
+  it('resets accepted participants to offer-sent when expiry date changes', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      expiryDate: new Date('2027-05-31T00:00:00.000Z'),
+      status: PlacementStatus.PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.OFFER_SENT),
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', {
+      expiryDate: '2027-06-30T00:00:00.000Z',
+    });
+
+    expect(
+      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
+    ).toMatchObject({
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
+    });
+  });
+
+  it('resets quoted participants to offer-sent when business details change', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.QUOTED),
+      businessDetails: { occupancy: 'Warehouse' },
+      status: PlacementStatus.PARTIALLY_PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.OFFER_SENT),
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', {
+      businessDetails: { occupancy: 'Factory' },
+    });
+
+    expect(
+      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
+    ).toMatchObject({
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
+    });
+  });
+
+  it('does not treat decimal and date formatting-only differences as material edits', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
+      premium: '1000.00',
+      expiryDate: new Date('2027-05-31T00:00:00.000Z'),
+      status: PlacementStatus.PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.PLACED,
+    });
+
+    await service.update(user, 'placement-1', {
+      premium: 1000,
+      expiryDate: '2027-05-31T00:00:00.000Z',
+    });
+
+    expect(prisma.placementParticipant.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+    expect(prisma.placementClosing.updateMany).not.toHaveBeenCalled();
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      data: { status: PlacementStatus.PLACED },
+    });
+  });
+
+  it('leaves invited and declined participants out of material reoffer resets', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.INVITED),
+      premium: '1000.00',
+      status: PlacementStatus.PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.INVITED),
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', { premium: 1250 });
+
+    const participantArgs = prisma.placementParticipant.updateMany.mock
+      .calls[0]?.[0] as
+      | {
+          where: {
+            status?: { in?: PlacementParticipantStatus[] };
+          };
+        }
+      | undefined;
+    expect(participantArgs?.where.status?.in).not.toContain(
+      PlacementParticipantStatus.INVITED,
+    );
+    expect(participantArgs?.where.status?.in).not.toContain(
+      PlacementParticipantStatus.DECLINED,
+    );
+  });
+
+  it('exposes direct edit blocking reason through lock status', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      id: 'placement-1',
+      tenantId: 'tenant-1',
+      status: PlacementStatus.MARKETING,
+      archivedAt: null,
+    });
+    prisma.placementClaim.findFirst.mockResolvedValueOnce({ id: 'claim-1' });
+
+    const status = await service.getLockStatus('tenant-1', 'placement-1');
+
+    expect(status).toMatchObject({
+      editable: false,
+      canEdit: false,
+      endorsementRequired: true,
+      editRequiresEndorsement: true,
+      lockSource: 'DOWNSTREAM_ACTIVITY',
+      editBlockedReason: 'Claim exists.',
+    });
+  });
+
+  it('blocks placement updates when financial activity has locked the placement', async () => {
+    financialLockPolicy.evaluate.mockResolvedValueOnce({
+      editable: false,
+      locked: true,
+      endorsementRequired: true,
+      reason: 'Placement is financially locked. Changes require endorsement.',
+      lockSource: 'PREMIUM_PAYMENT',
+      canEdit: false,
+      editBlockedReason:
+        'Placement is financially locked. Changes require endorsement.',
+      editRequiresEndorsement: true,
+    });
     prisma.placement.findFirst.mockResolvedValue(placement);
 
     await expect(
@@ -853,7 +1447,7 @@ describe('PlacementsService', () => {
 
     await expect(
       service.update(user, 'placement-1', { title: 'Unsafe Update' }),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toThrow(ConflictException);
     expect(prisma.placement.update).not.toHaveBeenCalled();
   });
 
@@ -1016,15 +1610,212 @@ describe('PlacementsService', () => {
     expect(updateArgs.data.title).toBe('Corrected Placement');
   });
 
+  it('force closes placement using confirmed closing percentage', async () => {
+    const closingPlacement = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.CLOSING,
+      closeMode: null,
+      forceClosedAt: null,
+      forceClosedByUserId: null,
+    };
+    const forceClosedAt = new Date('2026-05-28T12:00:00.000Z');
+    const closed = {
+      ...closingPlacement,
+      status: PlacementStatus.CLOSED,
+      facultativeOffer: new Prisma.Decimal('80.0000'),
+      closeMode: 'FORCED',
+      forceClosedAt,
+      forceClosedByUserId: user.id,
+    };
+    prisma.placement.findFirst.mockResolvedValue(closingPlacement);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { signedLinePercent: new Prisma.Decimal('40.0000') },
+      { signedLinePercent: new Prisma.Decimal('40.0000') },
+    ]);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+    prisma.placement.update.mockResolvedValue(closed);
+
+    const result = await service.forceClose(user, 'placement-1');
+
+    expect(result.status).toBe(PlacementStatus.CLOSED);
+    expect(result.forceClosed).toBe(true);
+    expect(result.facultativeOffer?.toString()).toBe('80');
+    expect(prisma.placementClosing.findMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: user.tenantId,
+        placementId: 'placement-1',
+        status: PlacementClosingStatus.CONFIRMED,
+        participant: {
+          status: { not: PlacementParticipantStatus.DECLINED },
+        },
+      },
+      select: { signedLinePercent: true },
+    });
+    const historyArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as
+      | {
+          data: {
+            fromStatus: PlacementStatus;
+            toStatus: PlacementStatus;
+            note: string;
+          };
+        }
+      | undefined;
+    expect(historyArgs?.data).toMatchObject({
+      fromStatus: PlacementStatus.CLOSING,
+      toStatus: PlacementStatus.CLOSED,
+    });
+    expect(historyArgs?.data.note).toContain('FORCED_OPERATION');
+    const updateArgs = prisma.placement.update.mock.calls[0]?.[0] as {
+      data: {
+        status: PlacementStatus;
+        facultativeOffer: Prisma.Decimal;
+        closeMode: string;
+        forceClosedByUserId: string;
+      };
+    };
+    expect(updateArgs.data.status).toBe(PlacementStatus.CLOSED);
+    expect(updateArgs.data.facultativeOffer.toString()).toBe('80');
+    expect(updateArgs.data.closeMode).toBe('FORCED');
+    expect(updateArgs.data.forceClosedByUserId).toBe(user.id);
+    expect(publisher.statusChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousStatus: PlacementStatus.CLOSING,
+        nextStatus: PlacementStatus.CLOSED,
+        note: 'FORCED_OPERATION',
+      }),
+    );
+  });
+
+  it('force closes a fully placed placement at 100 percent', async () => {
+    const placed = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.CLOSING,
+      closeMode: null,
+      forceClosedAt: null,
+      forceClosedByUserId: null,
+    };
+    prisma.placement.findFirst.mockResolvedValue(placed);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { signedLinePercent: new Prisma.Decimal('60.0000') },
+      { signedLinePercent: new Prisma.Decimal('40.0000') },
+    ]);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placed,
+      status: PlacementStatus.CLOSED,
+      facultativeOffer: new Prisma.Decimal('100.0000'),
+      closeMode: 'FORCED',
+      forceClosedAt: new Date('2026-05-28T12:00:00.000Z'),
+      forceClosedByUserId: user.id,
+    });
+
+    const result = await service.forceClose(user, 'placement-1');
+
+    expect(result.facultativeOffer?.toString()).toBe('100');
+  });
+
+  it('force closes with zero actual placed percentage when no confirmed closings exist', async () => {
+    const inClosing = {
+      ...placementWithParticipant(PlacementParticipantStatus.OFFER_SENT),
+      status: PlacementStatus.CLOSING,
+      closeMode: null,
+      forceClosedAt: null,
+      forceClosedByUserId: null,
+    };
+    prisma.placement.findFirst.mockResolvedValue(inClosing);
+    prisma.placementClosing.findMany.mockResolvedValue([]);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...inClosing,
+      status: PlacementStatus.CLOSED,
+      facultativeOffer: new Prisma.Decimal('0.0000'),
+      closeMode: 'FORCED',
+      forceClosedAt: new Date('2026-05-28T12:00:00.000Z'),
+      forceClosedByUserId: user.id,
+    });
+
+    const result = await service.forceClose(user, 'placement-1');
+
+    expect(result.status).toBe(PlacementStatus.CLOSED);
+    expect(result.facultativeOffer?.toString()).toBe('0');
+  });
+
+  it('treats repeated force close on an already forced placement as idempotent', async () => {
+    const forced = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.CLOSED,
+      closeMode: 'FORCED',
+      forceClosedAt: new Date('2026-05-28T12:00:00.000Z'),
+      forceClosedByUserId: user.id,
+    };
+    prisma.placement.findFirst.mockResolvedValue(forced);
+
+    const result = await service.forceClose(user, 'placement-1');
+
+    expect(result.status).toBe(PlacementStatus.CLOSED);
+    expect(result.forceClosed).toBe(true);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.placementClosing.findMany).not.toHaveBeenCalled();
+    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects force close for archived placements', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      archivedAt: new Date('2026-05-28T12:00:00.000Z'),
+    });
+
+    await expect(service.forceClose(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it.each([PlacementStatus.CANCELLED, PlacementStatus.DECLINED])(
+    'rejects force close for %s placements',
+    async (status) => {
+      prisma.placement.findFirst.mockResolvedValue({
+        ...placement,
+        status,
+      });
+
+      await expect(service.forceClose(user, 'placement-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not reveal cross-tenant placements during force close', async () => {
+    prisma.placement.findFirst.mockResolvedValue(null);
+
+    await expect(service.forceClose(user, 'placement-1')).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('archives only an active record in the current tenant', async () => {
     const archived = {
       ...placement,
       archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      archivedByUserId: 'user-1',
+      archiveReason: 'Duplicate placement',
     };
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placement.update.mockResolvedValue(archived);
 
-    await service.archive(user, 'placement-1');
+    await service.archive(user, 'placement-1', {
+      archiveReason: 'Duplicate placement',
+    });
 
     expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
       where: {
@@ -1033,9 +1824,31 @@ describe('PlacementsService', () => {
       },
       data: {
         archivedByUserId: 'user-1',
+        archiveReason: 'Duplicate placement',
       },
     });
-    expect(publisher.deleted).toHaveBeenCalled();
+    const updatedMock = publisher.updated as jest.MockedFunction<
+      (event: unknown) => Promise<void>
+    >;
+    const archiveEvent = updatedMock.mock.calls[0]?.[0] as {
+      changes?: { after?: Record<string, unknown> };
+    };
+    expect(archiveEvent.changes?.after).toMatchObject({
+      lifecycleEvent: 'PLACEMENT_ARCHIVED',
+      reason: 'Duplicate placement',
+    });
+  });
+
+  it('rejects archiving a placement that is already archived', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+    });
+
+    await expect(service.archive(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.placement.update).not.toHaveBeenCalled();
   });
 
   it('blocks archive when financial activity has locked the placement', async () => {
@@ -1050,6 +1863,122 @@ describe('PlacementsService', () => {
       ConflictException,
     );
     expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('archives a closed placement that has no financial activity', async () => {
+    const closed = { ...placement, status: PlacementStatus.CLOSED };
+    prisma.placement.findFirst.mockResolvedValue(closed);
+    prisma.placement.update.mockResolvedValue({
+      ...closed,
+      archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      archivedByUserId: 'user-1',
+    });
+
+    await service.archive(user, 'placement-1');
+
+    expect(prisma.placement.update).toHaveBeenCalled();
+  });
+
+  it('restores an archived placement and clears archive metadata', async () => {
+    const archived = {
+      ...placement,
+      archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      archivedByUserId: 'user-1',
+      archiveReason: 'Duplicate placement',
+    };
+    const restored = {
+      ...placement,
+      archivedAt: null,
+      archivedByUserId: null,
+      archiveReason: null,
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(archived)
+      .mockResolvedValueOnce(null);
+    prisma.placement.update.mockResolvedValue(restored);
+
+    await service.restore(user, 'placement-1');
+
+    expect(prisma.placement.findFirst.mock.calls[1]?.[0]).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        id: { not: 'placement-1' },
+        normalizedReference: 'fac-2026-0001',
+        archivedAt: null,
+      },
+      select: { id: true, reference: true },
+    });
+
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      where: {
+        id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' },
+      },
+      data: {
+        archivedAt: null,
+        archivedByUserId: null,
+        archiveReason: null,
+        updatedByUserId: 'user-1',
+      },
+    });
+    const updatedMock = publisher.updated as jest.MockedFunction<
+      (event: unknown) => Promise<void>
+    >;
+    const restoreEvent = updatedMock.mock.calls[0]?.[0] as {
+      changes?: {
+        before?: Record<string, unknown>;
+        after?: Record<string, unknown>;
+      };
+    };
+    expect(restoreEvent.changes?.before).toMatchObject({
+      lifecycleEvent: 'PLACEMENT_RESTORED',
+      reason: 'Duplicate placement',
+    });
+    expect(restoreEvent.changes?.after).toMatchObject({
+      lifecycleEvent: 'PLACEMENT_RESTORED',
+    });
+  });
+
+  it('rejects restoring when another active placement already uses the reference', async () => {
+    prisma.placement.findFirst
+      .mockResolvedValueOnce({
+        ...placement,
+        archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      })
+      .mockResolvedValueOnce({
+        id: 'placement-2',
+        reference: 'FAC-2026-0001',
+      });
+
+    await expect(service.restore(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects restoring an active placement', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+
+    await expect(service.restore(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('does not restore placements from another tenant', async () => {
+    prisma.placement.findFirst.mockResolvedValue(null);
+
+    await expect(service.restore(user, 'placement-1')).rejects.toThrow(
+      NotFoundException,
+    );
+    const findFirstArgs = prisma.placement.findFirst.mock.calls[0]?.[0] as {
+      where?: Record<string, unknown>;
+      include?: unknown;
+    };
+    expect(findFirstArgs.where).toEqual({
+      id: 'placement-1',
+      tenantId: 'tenant-1',
+    });
+    expect(findFirstArgs.include).toBeDefined();
   });
 
   it('adds one participant without replacing the full participant collection', async () => {
@@ -1585,6 +2514,7 @@ describe('PlacementsService', () => {
     prisma.placement.findFirst
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placementAfterWorkflow)
       .mockResolvedValueOnce(placementAfterWorkflow);
     prisma.placementParticipant.update.mockResolvedValue(acceptedParticipant);
     prisma.placement.update.mockResolvedValue(placementAfterWorkflow);
@@ -1632,6 +2562,91 @@ describe('PlacementsService', () => {
     expect(result.closing.status).toBe(PlacementClosingStatus.CONFIRMED);
   });
 
+  it('moves a placement to CLOSING when the sole invited reinsurer closes but capacity remains unfilled', async () => {
+    const existingPlacement = placementWithParticipant(
+      PlacementParticipantStatus.QUOTED,
+    );
+    const placementAfterWorkflow = {
+      ...existingPlacement,
+      status: PlacementStatus.PARTIALLY_PLACED,
+      participants: [acceptedParticipant],
+    };
+    const draftClosing = {
+      ...confirmedClosing,
+      status: PlacementClosingStatus.DRAFT,
+      issuedAt: null,
+      confirmedAt: null,
+    };
+    const issuedClosing = {
+      ...draftClosing,
+      status: PlacementClosingStatus.ISSUED,
+      issuedAt: new Date('2026-05-28T10:01:00.000Z'),
+    };
+
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placementAfterWorkflow)
+      .mockResolvedValueOnce(placementAfterWorkflow);
+    prisma.placementParticipant.update.mockResolvedValue(acceptedParticipant);
+    prisma.placement.update.mockResolvedValue(placementAfterWorkflow);
+    prisma.placementClosing.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.count.mockResolvedValue(0);
+    prisma.placementClosing.create.mockResolvedValue(draftClosing);
+    prisma.placementClosing.update
+      .mockResolvedValueOnce(issuedClosing)
+      .mockResolvedValueOnce(confirmedClosing);
+    // The one invited reinsurer now has a confirmed closing at 40%, short of the 60% offer —
+    // everyone invited has been resolved, but there's still capacity left on the offer.
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { participantId: 'participant-1', signedLinePercent: '40.0000' },
+    ]);
+    prisma.placementStatusHistory.create.mockResolvedValue({ id: 'sh-1' });
+
+    await service.acceptParticipantAndConfirm(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+
+    type StatusHistoryCreateCall = [
+      {
+        data: {
+          fromStatus: PlacementStatus;
+          toStatus: PlacementStatus;
+          note?: string;
+        };
+      },
+    ];
+    const statusHistoryCalls = prisma.placementStatusHistory.create.mock
+      .calls as unknown as StatusHistoryCreateCall[];
+    const closingTransition = statusHistoryCalls.find(
+      ([args]) => args.data.toStatus === PlacementStatus.CLOSING,
+    );
+    expect(closingTransition?.[0].data).toMatchObject({
+      fromStatus: PlacementStatus.PARTIALLY_PLACED,
+      toStatus: PlacementStatus.CLOSING,
+      note: 'All invited reinsurers have resolved their offers with capacity remaining',
+    });
+    expect(prisma.placement.update).toHaveBeenCalledWith({
+      where: { id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' } },
+      data: { status: PlacementStatus.CLOSING, updatedByUserId: 'user-1' },
+    });
+
+    const closedTransition = statusHistoryCalls.some(
+      ([args]) => args.data.toStatus === PlacementStatus.CLOSED,
+    );
+    expect(closedTransition).toBe(false);
+
+    type PlacementUpdateCall = [{ data: { status?: PlacementStatus } }];
+    const placementUpdateCalls = prisma.placement.update.mock
+      .calls as unknown as PlacementUpdateCall[];
+    const closedUpdate = placementUpdateCalls.some(
+      ([args]) => args.data.status === PlacementStatus.CLOSED,
+    );
+    expect(closedUpdate).toBe(false);
+  });
+
   it('auto closes a CLOSING placement when accept-and-confirm reaches the facultative offer', async () => {
     const existingPlacement = {
       ...placementWithParticipant(PlacementParticipantStatus.QUOTED),
@@ -1651,6 +2666,7 @@ describe('PlacementsService', () => {
     };
 
     prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce({
@@ -1706,6 +2722,92 @@ describe('PlacementsService', () => {
     });
   });
 
+  it('moves a fully confirmed PLACED placement through CLOSING to CLOSED during accept-and-confirm', async () => {
+    const existingPlacement = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.PLACED,
+      facultativeOffer: '40.0000',
+      participants: [acceptedParticipant],
+    };
+    const closedPlacement = {
+      ...existingPlacement,
+      status: PlacementStatus.CLOSED,
+    };
+    const draftClosing = {
+      ...confirmedClosing,
+      status: PlacementClosingStatus.DRAFT,
+      issuedAt: null,
+      confirmedAt: null,
+    };
+    const issuedClosing = {
+      ...draftClosing,
+      status: PlacementClosingStatus.ISSUED,
+      issuedAt: new Date('2026-05-28T10:01:00.000Z'),
+    };
+
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(closedPlacement);
+    prisma.placementParticipant.findFirst.mockResolvedValue(
+      acceptedParticipant,
+    );
+    prisma.placementClosing.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.count.mockResolvedValue(0);
+    prisma.placementClosing.create.mockResolvedValue(draftClosing);
+    prisma.placementClosing.update
+      .mockResolvedValueOnce(issuedClosing)
+      .mockResolvedValueOnce(confirmedClosing);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      { signedLinePercent: '40.0000' },
+    ]);
+    prisma.placement.update.mockResolvedValue(closedPlacement);
+    prisma.placementStatusHistory.create.mockResolvedValue({ id: 'history' });
+
+    await service.acceptParticipantAndConfirm(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+
+    type StatusHistoryCreateCall = [
+      { data: { fromStatus: PlacementStatus; toStatus: PlacementStatus } },
+    ];
+    const statusHistoryCalls = prisma.placementStatusHistory.create.mock
+      .calls as unknown as StatusHistoryCreateCall[];
+    const statusHistoryTransitions = statusHistoryCalls.map(([args]) => ({
+      fromStatus: args.data.fromStatus,
+      toStatus: args.data.toStatus,
+    }));
+    expect(statusHistoryTransitions).toContainEqual({
+      fromStatus: PlacementStatus.PLACED,
+      toStatus: PlacementStatus.CLOSING,
+    });
+    expect(statusHistoryTransitions).toContainEqual({
+      fromStatus: PlacementStatus.CLOSING,
+      toStatus: PlacementStatus.CLOSED,
+    });
+    expect(prisma.placement.update).toHaveBeenCalledWith({
+      where: {
+        id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' },
+      },
+      data: {
+        status: PlacementStatus.CLOSING,
+        updatedByUserId: 'user-1',
+      },
+    });
+    expect(prisma.placement.update).toHaveBeenCalledWith({
+      where: {
+        id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' },
+      },
+      data: {
+        status: PlacementStatus.CLOSED,
+        updatedByUserId: 'user-1',
+      },
+    });
+  });
+
   it('reuses an existing confirmed closing on retry without creating a duplicate', async () => {
     const existingPlacement = {
       ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
@@ -1713,6 +2815,7 @@ describe('PlacementsService', () => {
       participants: [acceptedParticipant],
     };
     prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement);
@@ -1757,6 +2860,7 @@ describe('PlacementsService', () => {
     prisma.placement.findFirst
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placementAfterWorkflow)
       .mockResolvedValueOnce(placementAfterWorkflow);
     prisma.placementParticipant.update.mockResolvedValue(acceptedParticipant);
     prisma.placement.update.mockResolvedValue(placementAfterWorkflow);
@@ -1776,29 +2880,7 @@ describe('PlacementsService', () => {
   });
 
   it('deletes one participant without archiving the placement', async () => {
-    const existingPlacement = {
-      ...placement,
-      participants: [
-        {
-          id: 'participant-1',
-          tenantId: 'tenant-1',
-          placementId: 'placement-1',
-          counterpartyId: 'reinsurer-1',
-          role: PlacementParticipantRole.REINSURER,
-          status: PlacementParticipantStatus.INVITED,
-          sharePercent: 20,
-          signedLinePercent: null,
-          brokerageFee: null,
-          notes: null,
-          counterparty: {
-            id: 'reinsurer-1',
-            type: CounterpartyType.REINSURER,
-            name: 'Ghana Re',
-            registrationNumber: null,
-          },
-        },
-      ],
-    };
+    const existingPlacement = placementWithParticipant();
     prisma.placement.findFirst
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(placement);
@@ -1812,6 +2894,126 @@ describe('PlacementsService', () => {
       where: { id: 'participant-1' },
     });
     expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant deletion when a placement closing depends on it', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementClosing.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow('placement closings');
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant deletion when notes or payments depend on it', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementNote.count.mockResolvedValueOnce(1);
+    prisma.placementPayment.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow('placement notes, placement payments');
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant deletion when claim allocations, documents, or endorsement participants depend on it', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementClaimAllocation.count.mockResolvedValueOnce(1);
+    prisma.placementDocument.count.mockResolvedValueOnce(1);
+    prisma.placementEndorsementParticipant.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow(
+      'claim allocations, placement documents, endorsement participants',
+    );
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant deletion when attachments reference the participant', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementAttachment.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow('placement attachments');
+    expect(prisma.placementAttachment.count).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        participantId: 'participant-1',
+      },
+    });
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not block participant deletion for placement-level or other-participant attachments', async () => {
+    const existingPlacement = placementWithParticipant();
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placement);
+    prisma.placementParticipant.delete.mockResolvedValue({
+      id: 'participant-1',
+    });
+
+    await service.deleteParticipant(user, 'placement-1', 'participant-1');
+
+    expect(prisma.placementAttachment.count).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        participantId: 'participant-1',
+      },
+    });
+    expect(prisma.placementParticipant.delete).toHaveBeenCalledWith({
+      where: { id: 'participant-1' },
+    });
+  });
+
+  it('blocks participant deletion when a voided attachment still preserves participant history', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementAttachment.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow(ConflictException);
+    const countArgs = prisma.placementAttachment.count.mock.calls[0]?.[0] as {
+      where?: Record<string, unknown>;
+    };
+    expect(countArgs.where).not.toHaveProperty('status');
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('converts late participant FK delete failures into business conflicts', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementParticipant.delete.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError(
+        'Foreign key constraint failed',
+        {
+          code: 'P2003',
+          clientVersion: '5.22.0',
+        },
+      ),
+    );
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow(
+      'This participant cannot be deleted because it is referenced by one or more related records.',
+    );
   });
 
   it('does not fail a completed write when audit event delivery fails', async () => {

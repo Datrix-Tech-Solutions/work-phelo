@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
-import { Period } from '@/components/atoms/PeriodToggle';
+import { Period, periodWindow } from '@/components/atoms/PeriodToggle';
 import { useFacultatives, useRiskTypes, useRiskClasses } from '@/hooks';
 import { useThemeStore } from '@/store/theme.store';
 
@@ -19,23 +19,6 @@ const COLORS = [
   '#f59e0b',
 ];
 
-function periodStart(period: Period, now: Date): Date {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const mondayOffset = (now.getDay() + 6) % 7;
-  switch (period) {
-    case 'daily':
-      return new Date(y, m, d);
-    case 'weekly':
-      return new Date(y, m, d - mondayOffset);
-    case 'monthly':
-      return new Date(y, m, 1);
-    case 'yearly':
-      return new Date(y, 0, 1);
-  }
-}
-
 function fmt(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -51,9 +34,10 @@ interface SliceMeta {
 
 interface RiskClassPieChartProps {
   period: Period;
+  year?: number;
 }
 
-export function RiskClassPieChart({ period }: RiskClassPieChartProps) {
+export function RiskClassPieChart({ period, year }: RiskClassPieChartProps) {
   const [hovered, setHovered] = useState<number | null>(null);
   const isDark = useThemeStore((s) => s.theme === 'dark');
   const { data: all = [] } = useFacultatives();
@@ -61,8 +45,11 @@ export function RiskClassPieChart({ period }: RiskClassPieChartProps) {
   const { data: riskClasses = [] } = useRiskClasses();
 
   const { pieData, meta } = useMemo(() => {
-    const start = periodStart(period, new Date());
-    const placements = all.filter((f) => new Date(f.createdAt) >= start);
+    const { start, end } = periodWindow(period, { year });
+    const placements = all.filter((f) => {
+      const t = new Date(f.createdAt);
+      return t >= start && t <= end;
+    });
 
     const riskTypeMap = new Map(riskTypes.map((rt) => [rt.id, rt]));
     const riskClassMap = new Map(riskClasses.map((rc) => [rc.id, rc.name]));
@@ -96,7 +83,7 @@ export function RiskClassPieChart({ period }: RiskClassPieChartProps) {
     }));
 
     return { pieData, meta };
-  }, [all, riskTypes, riskClasses, period]);
+  }, [all, riskTypes, riskClasses, period, year]);
 
   if (pieData.length === 0) {
     return (

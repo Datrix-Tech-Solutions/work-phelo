@@ -1,77 +1,71 @@
 'use client';
 
-import { useMemo } from 'react';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import { CurrencyAmountListCard } from '@/components/molecules/reinsurance/stats/CurrencyAmountListCard';
 import { Icons } from '@/components/atoms/icons';
-import { useFacultatives, useClaimsSummary } from '@/hooks';
-import { FacultativeStatus } from '@/types/reinsurance';
+import { useClaimsWorklistSummary, useCurrencies } from '@/hooks';
+import type { ClaimsCurrencyAmount } from '@/types/reinsurance';
 
-const CLOSING_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
-  'PLACED',
-  'CLOSING',
-  'CLOSED',
-  'DECLINED',
-  'CANCELLED',
-];
-
-function fmtAmount(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
-  return value.toFixed(2);
-}
+const toAmountMap = (rows: ClaimsCurrencyAmount[]) =>
+  new Map(rows.map((row) => [row.code, row.amount]));
 
 export function ClaimsStatsRow() {
-  const { data: allPlacements = [], isLoading: loadingPlacements } = useFacultatives();
-
-  const closingPlacements = useMemo(
-    () => allPlacements.filter((p) => CLOSING_STATUSES.includes(p.status)),
-    [allPlacements],
-  );
-
-  const {
-    totalClaims,
-    totalClaimedAmount,
-    openClaims,
-    settledClaims,
-    isLoading: loadingClaims,
-  } = useClaimsSummary(closingPlacements);
-
-  const isLoading = loadingPlacements || loadingClaims;
-  const settlementRate = totalClaims > 0 ? (settledClaims / totalClaims) * 100 : 0;
+  const { data: summary, isLoading } = useClaimsWorklistSummary();
+  const { data: currencies = [] } = useCurrencies();
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <KpiCard
-        label="Total Claims"
-        value={totalClaims}
-        icon={Icons.FileWarning}
-        iconColor="#2a78d6"
-        isLoading={isLoading}
-      />
-      <KpiCard
-        label="Total Claimed Amount"
-        value={fmtAmount(totalClaimedAmount)}
-        icon={Icons.CircleDollarSign}
-        iconColor="#eda100"
-        isLoading={isLoading}
-      />
-      <KpiCard
-        label="Open Claims"
-        value={openClaims}
-        icon={Icons.Clock}
-        iconColor="#4a3aa7"
-        isLoading={isLoading}
-      />
-      <KpiCard
-        label="Settlement Rate"
-        value={`${settlementRate.toFixed(1)}%`}
-        icon={Icons.Activity}
-        iconColor="#008300"
-        isLoading={isLoading}
-      />
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <KpiCard
+          label="Total Claims"
+          value={summary?.totalClaims ?? 0}
+          icon={Icons.FileWarning}
+          iconColor="#2a78d6"
+          isLoading={isLoading}
+        />
+        <KpiCard
+          label="Open Claims"
+          value={summary?.openClaims ?? 0}
+          icon={Icons.Clock}
+          iconColor="#4a3aa7"
+          isLoading={isLoading}
+        />
+        <KpiCard
+          label="Closed Claims"
+          value={summary?.closedClaims ?? 0}
+          icon={Icons.CircleCheckBig}
+          iconColor="#6b7280"
+          isLoading={isLoading}
+        />
+        <KpiCard
+          label="Notifications"
+          value={summary?.notificationClaims ?? 0}
+          icon={Icons.Bell}
+          iconColor="#eda100"
+          isLoading={isLoading}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CurrencyAmountListCard
+          title="Claims Amount by Currency"
+          columnLabel="Claim Amount"
+          amountsByCode={toAmountMap(summary?.claimsByCurrency ?? [])}
+          currencies={currencies}
+          isLoading={isLoading}
+          emptyMessage="No claims yet"
+          className="h-64"
+        />
+        <CurrencyAmountListCard
+          title="Recovered by Currency"
+          columnLabel="Recovered"
+          amountsByCode={toAmountMap(summary?.recoveredByCurrency ?? [])}
+          currencies={currencies}
+          isLoading={isLoading}
+          emptyMessage="No recoveries yet"
+          className="h-64"
+        />
+      </div>
     </div>
   );
 }

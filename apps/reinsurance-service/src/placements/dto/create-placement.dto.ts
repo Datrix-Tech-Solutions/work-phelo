@@ -34,6 +34,20 @@ export class CreatePlacementDto {
   @MaxLength(80)
   reference!: string;
 
+  @ApiPropertyOptional({
+    example: 'POL-2026-0001',
+    minLength: 2,
+    maxLength: 80,
+    description:
+      'Cedant-issued policy number, entered by the user. Distinct from reference.',
+  })
+  @TrimmedString()
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  policyNumber?: string | null;
+
   @ApiProperty({
     example: 'Acme Energy Facultative Placement',
     minLength: 2,

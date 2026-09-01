@@ -5,9 +5,8 @@ export const reinsuranceRequiredEnvVars = [
 ] as const;
 
 export function assertReinsuranceRuntimeEnv(): void {
-  const missing = reinsuranceRequiredEnvVars.filter(
-    (name) => !process.env[name],
-  );
+  const required = [...reinsuranceRequiredEnvVars];
+  const missing = required.filter((name) => !process.env[name]);
 
   if (missing.length > 0) {
     throw new Error(

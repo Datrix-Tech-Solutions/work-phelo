@@ -157,7 +157,7 @@ function ShiftForm({
       }
     >
       {/* Shift type */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">Shift Type</label>
         <SearchSelect
           placeholder="Select shift type…"
@@ -168,7 +168,7 @@ function ShiftForm({
         />
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">Work Mode</label>
         <SearchSelect
           placeholder="Select work mode…"
@@ -180,11 +180,11 @@ function ShiftForm({
 
       {/* Dates — side by side */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Start Date</label>
           <input type="date" value={initial.startDate} readOnly className={readonlyClass} />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">End Date</label>
           <input
             type="date"
@@ -198,7 +198,7 @@ function ShiftForm({
 
       {/* Times — side by side */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Start Time</label>
           <input
             type="time"
@@ -208,7 +208,7 @@ function ShiftForm({
           />
           {errors.start && <p className="text-xs text-red-500">{errors.start}</p>}
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">End Time</label>
           <input
             type="time"

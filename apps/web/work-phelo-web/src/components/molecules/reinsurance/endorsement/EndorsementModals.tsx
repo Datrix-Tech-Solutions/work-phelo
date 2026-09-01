@@ -2,7 +2,6 @@
 
 import { EditEndorsementPanel } from '@/components/organisms/reinsurance/panels/EditEndorsementPanel';
 import { CreateDistributionPanel } from '@/components/organisms/reinsurance/panels/CreateDistributionPanel';
-import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { EndorsementDocumentModal } from '@/components/organisms/reinsurance/documents/EndorsementDocumentModal';
 import { EndorsementClosingSnapshotModal } from '@/components/organisms/reinsurance/documents/EndorsementClosingSnapshotModal';
 import { EndorsementSlipPreviewModal } from '@/components/organisms/reinsurance/documents/EndorsementSlipPreviewModal';
@@ -35,12 +34,6 @@ interface EndorsementModalsProps {
   marketPreview: EndorsementMarketPreviewState | null;
   onCloseMarketPreview: () => void;
 
-  mailPreviewCounterpartyId: string | null;
-  mailBrokerageFee: number;
-  mailRecipients: string[];
-  onSendMail: () => void;
-  onCloseMailPreview: () => void;
-
   addPanelOpen: boolean;
   onCloseAddPanel: () => void;
   onAddReinsurers: (entries: ReinsurerEntry[]) => void;
@@ -67,11 +60,6 @@ export function EndorsementModals({
   onCloseEndorsementSlipPreview,
   marketPreview,
   onCloseMarketPreview,
-  mailPreviewCounterpartyId,
-  mailBrokerageFee,
-  mailRecipients,
-  onSendMail,
-  onCloseMailPreview,
   addPanelOpen,
   onCloseAddPanel,
   onAddReinsurers,
@@ -125,22 +113,12 @@ export function EndorsementModals({
         />
       )}
 
-      {/* Share document with reinsurer */}
-      <MailPreviewModal
-        key={mailPreviewCounterpartyId ?? ''}
-        isOpen={!!mailPreviewCounterpartyId}
-        placement={placement}
-        brokerageFee={mailBrokerageFee}
-        recipients={mailRecipients}
-        onSend={onSendMail}
-        onClose={onCloseMailPreview}
-      />
-
       <CreateDistributionPanel
         isOpen={addPanelOpen}
         onClose={onCloseAddPanel}
         onAdd={onAddReinsurers}
         existingIds={existingParticipantIds}
+        excludeName={placement.cedant?.name ?? placement.cedantName}
         title="Add Endorsement Participant"
       />
 

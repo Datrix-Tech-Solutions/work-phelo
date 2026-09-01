@@ -18,11 +18,17 @@ const CURRENCY_OPTIONS: SearchSelectOption[] = [
 interface InvoiceDetailsSectionProps {
   form: UseFormReturn<InvoiceFormValues>;
   vendorLabel?: string;
+  /** Real customer/vendor records to pick from — the backend keys invoices/bills
+   * to a party id, not a free-text name. */
+  partyOptions: SearchSelectOption[];
+  isLoadingParties?: boolean;
 }
 
 export function InvoiceDetailsSection({
   form,
   vendorLabel = 'Vendor',
+  partyOptions,
+  isLoadingParties,
 }: InvoiceDetailsSectionProps) {
   const {
     register,
@@ -33,21 +39,27 @@ export function InvoiceDetailsSection({
   return (
     <FormSection title="Entry Details">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <FormField
-          label={vendorLabel}
-          registration={register('vendor', { required: `${vendorLabel} is required` })}
-          error={errors.vendor}
-          placeholder={
-            vendorLabel === 'Customer' ? 'e.g. Bolt Ghana Ltd.' : 'e.g. Acme Supplies Ltd.'
-          }
+        <Controller
+          name="vendor"
+          control={control}
+          rules={{ required: `${vendorLabel} is required` }}
+          render={({ field }) => (
+            <SearchSelect
+              label={vendorLabel}
+              placeholder={isLoadingParties ? 'Loading…' : `Select ${vendorLabel.toLowerCase()}…`}
+              options={partyOptions}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.vendor?.message}
+            />
+          )}
         />
 
         <FormField
-          label="Invoice Number"
-          type="number"
-          registration={register('invoiceNumber', { required: 'Invoice number is required' })}
+          label="Reference Number"
+          registration={register('invoiceNumber')}
           error={errors.invoiceNumber}
-          placeholder="e.g. 10012"
+          placeholder="Optional — the posted document number is generated automatically"
         />
 
         <Controller

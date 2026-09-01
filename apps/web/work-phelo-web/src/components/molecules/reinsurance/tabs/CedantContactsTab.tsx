@@ -121,7 +121,7 @@ export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
           </div>
         }
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <FormField
             label="Contact Name"
             registration={register('fullName', { required: 'Contact name is required' })}
@@ -146,7 +146,7 @@ export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
             error={errors.email}
             placeholder="e.g. ama@example.com"
           />
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <span className="text-sm font-bold text-gray-900">Phone Number</span>
             <PhoneInput
               placeholder="00 000 0000"

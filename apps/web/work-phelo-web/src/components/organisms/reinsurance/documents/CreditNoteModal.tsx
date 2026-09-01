@@ -181,13 +181,13 @@ export function CreditNoteModal({
           <Image
             src="/signature.png"
             alt="Signature"
-            width={160}
-            height={80}
+            width={100}
+            height={10}
             style={{ objectFit: 'contain', marginTop: '8px', marginBottom: '4px' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>
-            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director (AG)</p>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director</p>
           </div>
         </div>
       }
@@ -222,7 +222,7 @@ export function CreditNoteModal({
               <td className="py-2 px-4 text-center text-gray-600 w-1/6 whitespace-nowrap">
                 {row.pct ?? ''}
               </td>
-              <td className="py-2 pl-4 text-right w-1/3 whitespace-nowrap text-gray-800">
+              <td className="py-2 pl-4 text-right w-1/3 wrap-break-word text-gray-800">
                 {row.value ?? ''}
               </td>
             </tr>
@@ -250,7 +250,7 @@ export function CreditNoteModal({
                   {row.pct ?? ''}
                 </td>
                 <td
-                  className={`py-2 pl-4 text-right w-1/3 whitespace-nowrap ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-800'}`}
+                  className={`py-2 pl-4 text-right w-1/3 wrap-break-word ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-800'}`}
                 >
                   {row.value ?? ''}
                 </td>
@@ -258,11 +258,12 @@ export function CreditNoteModal({
             ),
           )}
           {description && (
-            <div className="my-2">
-              <p className="text-sm font-semibold text-gray-400  tracking-wide mb-1">
+            <div data-print-block className="my-2">
+              <p className="text-xs font-semibold text-gray-400  tracking-wide mb-1">
                 Kindly Refer:
               </p>
               <div
+                data-rich-text
                 className="text-base text-gray-700"
                 dangerouslySetInnerHTML={{ __html: description }}
               />

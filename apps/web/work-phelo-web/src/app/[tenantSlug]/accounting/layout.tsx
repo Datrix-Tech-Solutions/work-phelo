@@ -6,6 +6,7 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { ACCOUNTING_NAV_GROUPS } from '@/config/accounting-nav';
 import { AppBackground } from '@/components/atoms/AppBackground';
+import { useModuleThemeScope } from '@/hooks';
 
 export default function AccountingLayout({
   children,
@@ -15,6 +16,7 @@ export default function AccountingLayout({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  useModuleThemeScope('accounting');
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
@@ -46,7 +48,6 @@ export default function AccountingLayout({
           showMenuButton
           onMenuClick={() => setCollapsed((v) => !v)}
           userInitials={initials}
-          notificationCount={0}
           logoVariant="image"
         />
         {!collapsed && (

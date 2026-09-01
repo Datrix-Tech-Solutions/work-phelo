@@ -348,7 +348,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
           </>
         }
       >
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-medium text-gray-700">Reason for cancellation</label>
           <textarea
             rows={3}

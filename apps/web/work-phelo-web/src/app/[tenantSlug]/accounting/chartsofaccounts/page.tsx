@@ -6,15 +6,21 @@ import { cardClass, inputClass } from '@/lib/utils';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { TwoPanelShell } from '@/components/organisms/shared/TwoPanelShell';
 import { ActionMenuButton } from '@/components/organisms/shared/ActionMenuButton';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
 import { ChartOfAccountsTree } from '@/components/organisms/accounting/ChartOfAccountsTree';
 import { AddClassificationPanel } from '@/components/organisms/accounting/panels/AddClassificationPanel';
 import { AddParentAccountPanel } from '@/components/organisms/accounting/panels/AddParentAccountPanel';
 import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
-import { GLAccount } from '@/types/accounting';
+import { GLAccountDetail } from '@/components/organisms/accounting/GLAccountDetail';
+import { GLAccount, GLAccountStatus } from '@/types/accounting';
+import { useSeedStandardAccountHierarchy } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 const STATUS_OPTIONS: SearchSelectOption[] = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Inactive', label: 'Inactive' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Inactive' },
 ];
 
 type OpenPanel = 'classification' | 'parent-account' | 'leaf-account' | null;
@@ -24,6 +30,21 @@ export default function ChartOfAccountsPage() {
   const [status, setStatus] = useState('');
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
   const [selectedAccount, setSelectedAccount] = useState<GLAccount | null>(null);
+  const [seedDialogOpen, setSeedDialogOpen] = useState(false);
+  const seedHierarchy = useSeedStandardAccountHierarchy();
+  const toast = useToast();
+
+  const seedStandardHierarchy = async () => {
+    try {
+      const result = await seedHierarchy.mutateAsync();
+      setSeedDialogOpen(false);
+      toast.success(
+        `Standard hierarchy updated: ${result.classificationsCreated} classifications and ${result.groupsCreated} groups created.`,
+      );
+    } catch (error) {
+      toast.error(extractError(error, 'Unable to seed the standard account hierarchy'));
+    }
+  };
 
   return (
     <>
@@ -75,6 +96,11 @@ export default function ChartOfAccountsPage() {
                       description: 'e.g. Ecobank',
                       onClick: () => setOpenPanel('leaf-account'),
                     },
+                    {
+                      label: 'Seed Standard Hierarchy',
+                      description: 'Add any missing standard classifications and account groups',
+                      onClick: () => setSeedDialogOpen(true),
+                    },
                   ]}
                 />
               </div>
@@ -87,11 +113,13 @@ export default function ChartOfAccountsPage() {
             onExpand={expand}
             selectedAccountId={selectedAccount?.id}
             onSelectAccount={setSelectedAccount}
+            search={search}
+            status={(status || undefined) as GLAccountStatus | undefined}
           />
         )}
         rightPanel={
           selectedAccount ? (
-            <h3 className="text-base font-semibold text-gray-900">{selectedAccount.name}</h3>
+            <GLAccountDetail account={selectedAccount} />
           ) : (
             <p className="text-sm text-gray-400">Select a leaf account to view its details</p>
           )
@@ -109,6 +137,30 @@ export default function ChartOfAccountsPage() {
       <AddLeafAccountPanel
         isOpen={openPanel === 'leaf-account'}
         onClose={() => setOpenPanel(null)}
+      />
+      <Modal
+        isOpen={seedDialogOpen}
+        onClose={() => setSeedDialogOpen(false)}
+        title="Seed Standard Account Hierarchy"
+        description="This safely adds missing standard classifications and account groups. Existing tenant hierarchy records are preserved and will not be overwritten."
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setSeedDialogOpen(false)}
+              disabled={seedHierarchy.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={seedStandardHierarchy}
+              isLoading={seedHierarchy.isPending}
+              loadingText="Seeding…"
+            >
+              Seed Hierarchy
+            </Button>
+          </>
+        }
       />
     </>
   );

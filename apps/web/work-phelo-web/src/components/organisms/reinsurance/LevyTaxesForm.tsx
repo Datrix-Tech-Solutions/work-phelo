@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { Icons } from '@/components/atoms/icons';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { TableButton } from '@/components/atoms/TableButton';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { cardClass } from '@/lib/utils';
 import {
   useActivateReinsuranceCharge,
@@ -96,6 +98,7 @@ function fromConfiguration(config: ReinsuranceChargeConfiguration): LevyTaxFormV
 export function LevyTaxesForm() {
   const toast = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   const charges = useReinsuranceCharges();
   const createCharge = useCreateReinsuranceCharge();
@@ -119,6 +122,18 @@ export function LevyTaxesForm() {
     if (selectedCharge) reset(fromConfiguration(selectedCharge));
   }, [reset, selectedCharge]);
 
+  const openCreate = () => {
+    setSelectedId(null);
+    reset(LEVY_TAX_FORM_DEFAULTS);
+    setIsPanelOpen(true);
+  };
+
+  const openEdit = (charge: ReinsuranceChargeConfiguration) => {
+    setSelectedId(charge.id);
+    reset(fromConfiguration(charge));
+    setIsPanelOpen(true);
+  };
+
   const onSubmit = async (values: LevyTaxFormValues) => {
     try {
       const payload = toPayload(values);
@@ -130,6 +145,7 @@ export function LevyTaxesForm() {
         setSelectedId(created.id);
         toast.success('Tax and levy configuration created');
       }
+      setIsPanelOpen(false);
     } catch (error) {
       toast.error(errorMessage(error, 'Could not save tax and levy configuration'));
     }
@@ -150,10 +166,13 @@ export function LevyTaxesForm() {
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
+    <div className="flex flex-col gap-6">
       <div className={cardClass('overflow-hidden h-fit')}>
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-900">Configured Charges</h3>
+          <Button size="sm" icon={<Icons.Plus className="w-4 h-4" />} onClick={openCreate}>
+            New Configuration
+          </Button>
         </div>
         <div className="divide-y divide-gray-100">
           {charges.isLoading ? (
@@ -188,7 +207,7 @@ export function LevyTaxesForm() {
                   >
                     {charge.isEnabled ? 'Enabled' : 'Disabled'}
                   </span>
-                  <TableButton variant="blue" onClick={() => setSelectedId(charge.id)}>
+                  <TableButton variant="blue" onClick={() => openEdit(charge)}>
                     Edit
                   </TableButton>
                   <TableButton
@@ -209,16 +228,36 @@ export function LevyTaxesForm() {
         </div>
       </div>
 
-      <div className={cardClass('p-6 h-fit')}>
-        <h2 className="text-base font-semibold text-gray-900 mb-1">
-          {selectedId ? 'Edit Configuration' : 'New Configuration'}
-        </h2>
-        <p className="text-sm text-gray-500 mb-5">
-          Configure the tenant-approved rate. No statutory rate is assumed by WorkPhelo.
-        </p>
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
+      <SidePanel
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+        title={selectedId ? 'Edit Configuration' : 'New Configuration'}
+        description="Configure the tenant-approved rate. No statutory rate is assumed by WorkPhelo."
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsPanelOpen(false)}
+              disabled={createCharge.isPending || updateCharge.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!isDirty}
+              isLoading={createCharge.isPending || updateCharge.isPending}
+              onClick={handleSubmit(onSubmit)}
+            >
+              {selectedId ? 'Update Configuration' : 'Create Configuration'}
+            </Button>
+          </div>
+        }
+      >
+        <form
+          className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+          onSubmit={handleSubmit(onSubmit)}
+        >
           {selectedId ? (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <label className="text-sm font-bold text-gray-900">Type</label>
               <div className="rounded-input border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700">
                 {selectedCharge
@@ -283,17 +322,8 @@ export function LevyTaxesForm() {
               />
             )}
           />
-
-          <Button
-            type="submit"
-            className="mt-2"
-            disabled={!isDirty}
-            isLoading={createCharge.isPending || updateCharge.isPending}
-          >
-            {selectedId ? 'Update Configuration' : 'Create Configuration'}
-          </Button>
         </form>
-      </div>
+      </SidePanel>
     </div>
   );
 }

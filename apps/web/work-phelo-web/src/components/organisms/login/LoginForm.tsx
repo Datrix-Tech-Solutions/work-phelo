@@ -86,7 +86,10 @@ export function LoginForm({
 
       <h1 className="text-xl font-semibold text-gray-900 text-center mb-3">Sign in</h1>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <FormField
           label="Email"
           registration={register('email', { required: 'Email is required' })}

@@ -347,7 +347,7 @@ export default function EmployeeAppraisalDetailPage({
             </div>
           }
         >
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-medium text-gray-700">Rejection Note</label>
             <textarea
               value={rejectReason}
@@ -406,7 +406,7 @@ export default function EmployeeAppraisalDetailPage({
             </div>
           }
         >
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-medium text-gray-700">Overall Message</label>
             <textarea
               value={approveNote}

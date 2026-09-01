@@ -61,7 +61,7 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className="p-1.5 rounded-lg text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-600)) hover:bg-(--surface-hover,var(--color-gray-100)) transition-colors"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-700)) hover:[&>svg]:stroke-[2.5] transition-colors"
       >
         <Icons.EllipsisVertical />
       </button>
@@ -169,7 +169,7 @@ export function DataList<T extends { id: string | number }>({
                 onRowClick && 'cursor-pointer',
               )}
             >
-              <div className="flex items-center gap-x-4 px-4 py-4 text-sm text-gray-800">
+              <div className="flex items-center gap-x-4 px-4 py-2 text-sm text-gray-800">
                 {columns.map((col) => {
                   const width = col.width ?? '1fr';
                   const flexible = width.endsWith('fr');

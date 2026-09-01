@@ -1006,6 +1006,13 @@ export class EmployeesService {
       );
     }
 
+    if ('managerId' in rest) {
+      await this.prisma.appraisal.updateMany({
+        where: { tenantId, employeeId: id, status: 'IN_PROGRESS' },
+        data: { managerId: rest.managerId ?? null },
+      });
+    }
+
     return this.encryption.decryptEmployeeFields(updated);
   }
 
@@ -1746,7 +1753,10 @@ export class EmployeesService {
       data: {
         tenantId,
         employeeId,
-        name: this.allowanceNameFromType(dto.type),
+        name:
+          dto.type === 'OTHER' && dto.name?.trim()
+            ? dto.name.trim()
+            : this.allowanceNameFromType(dto.type),
         type: dto.type as AllowanceType,
         amount: dto.amount,
         effectiveFrom: new Date(),
@@ -1766,15 +1776,19 @@ export class EmployeesService {
     });
     if (!existing) throw new NotFoundException('Allowance not found');
 
+    const resolvedType = dto.type ?? existing.type;
+    const nameUpdate =
+      dto.type != null || dto.name != null
+        ? resolvedType === 'OTHER' && dto.name?.trim()
+          ? dto.name.trim()
+          : this.allowanceNameFromType(resolvedType)
+        : undefined;
+
     return this.prisma.employeeAllowance.update({
       where: { id: allowanceId },
       data: {
-        ...(dto.type != null
-          ? {
-              type: dto.type as AllowanceType,
-              name: this.allowanceNameFromType(dto.type),
-            }
-          : {}),
+        ...(dto.type != null ? { type: dto.type as AllowanceType } : {}),
+        ...(nameUpdate != null ? { name: nameUpdate } : {}),
         ...(dto.amount != null ? { amount: dto.amount } : {}),
       },
     });

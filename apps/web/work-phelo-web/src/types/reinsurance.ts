@@ -248,16 +248,12 @@ export interface CurrencyFormValues {
   name: string;
   isoCode: string;
   symbol: string;
-  exchangeRateToBase: number | '';
-  isBaseCurrency: boolean;
 }
 
 export const CURRENCY_FORM_DEFAULTS: CurrencyFormValues = {
   name: '',
   isoCode: '',
   symbol: '',
-  exchangeRateToBase: '',
-  isBaseCurrency: false,
 };
 
 /* ── Risk Type ── */
@@ -416,6 +412,8 @@ export interface Facultative {
   classOfBusiness: string | null;
   riskTypeId: string | null;
   cedant: { id: string; name: string };
+  cedantId: string;
+  cedantName: string;
   businessDetails: Record<string, unknown> | null;
   offerDetails: Record<string, unknown> | null;
   description: string | null;
@@ -796,6 +794,7 @@ export interface PlacementParticipantClosing {
   status: PlacementParticipantClosingStatus;
   signedLinePercent: string;
   sharePercent: string | null;
+  sumInsuredSnapshot: string | null;
   grossPremium: string | null;
   commissionPercent: string | null;
   commissionAmount: string | null;
@@ -831,7 +830,8 @@ export type PlacementNoteType =
   | 'DEBIT_NOTE'
   | 'CREDIT_NOTE'
   | 'ENDORSEMENT_DEBIT_NOTE'
-  | 'ENDORSEMENT_CREDIT_NOTE';
+  | 'ENDORSEMENT_CREDIT_NOTE'
+  | 'CURRENT_EFFECTIVE_DEBIT_NOTE';
 
 export type PlacementNoteStatus = 'DRAFT' | 'ISSUED' | 'VOID';
 
@@ -924,6 +924,13 @@ export interface ValidateEndorsementParticipantResponse {
   effectiveStatus: PlacementEndorsementStatus;
 }
 
+export interface ForceCloseEndorsementResponse {
+  endorsement: PlacementEndorsement;
+  closings: EndorsementParticipantClosing[];
+  summary: PlacementEndorsementSummary;
+  effectiveStatus: PlacementEndorsementStatus;
+}
+
 export type PlacementDocumentType =
   | 'OFFER_SLIP'
   | 'CLOSING_SLIP'
@@ -971,7 +978,41 @@ export type PlacementPaymentType =
   | 'CLAIM_SETTLEMENT';
 
 export type PlacementPaymentDirection = 'INBOUND' | 'OUTBOUND';
-export type PlacementPaymentStatus = 'RECORDED' | 'REVERSED';
+export type PlacementPaymentStatus =
+  | 'RECORDED'
+  | 'BANK_CONFIRMED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REVERSED';
+export type PaymentWorklistPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
+export type PaymentWorklistStatusFilter = 'Placed' | 'Closed' | PaymentWorklistPaymentStatus;
+export type PlacementSettlementMethod =
+  | 'BANK_TRANSFER'
+  | 'CHEQUE'
+  | 'CASH'
+  | 'MOBILE_MONEY'
+  | 'INTERNAL_OFFSET'
+  | 'JOURNAL'
+  | 'OTHER';
+
+export interface PlacementPaymentAllocation {
+  id: string;
+  noteId: string;
+  allocatedAmount: string;
+  allocatedCurrency: string;
+  obligationAmount: string;
+  obligationCurrency: string;
+  agreedExchangeRate: string | null;
+  note: {
+    id: string;
+    noteNumber: string;
+    type: string;
+    currency: string;
+    nicLevyAmount?: string | null;
+    withholdingTaxAmount?: string | null;
+    withholdingTaxPercent?: string | null;
+  };
+}
 
 export interface PlacementPayment {
   id: string;
@@ -987,16 +1028,434 @@ export interface PlacementPayment {
   currency: string;
   paymentDate: string;
   reference: string | null;
+  settlementReference: string | null;
+  settlementMethod: PlacementSettlementMethod | null;
+  settlementCurrency: string | null;
+  bankReference: string | null;
+  bankConfirmedAt: string | null;
+  bankConfirmedByUserId: string | null;
+  agreedExchangeRate: string | null;
+  bankChargeAmount: string;
+  withholdingTaxAmount: string;
   notes: string | null;
   status: PlacementPaymentStatus;
   reversalOfPaymentId: string | null;
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
+  placement?: {
+    id: string;
+    reference: string;
+    policyNumber: string | null;
+    title: string;
+    currency?: string | null;
+  };
   counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
   participant: { id: string; counterpartyId: string } | null;
-  closing: { id: string; closingNumber: string } | null;
-  endorsementClosing: { id: string; closingNumber: string } | null;
+  closing: {
+    id: string;
+    closingNumber: string;
+    netPremium?: string | null;
+    currency?: string | null;
+  } | null;
+  endorsementClosing: {
+    id: string;
+    closingNumber: string;
+    netPremium?: string | null;
+    currency?: string | null;
+    endorsementId?: string;
+    endorsement?: {
+      id: string;
+      endorsementNumber: string;
+      effectiveDate: string;
+      type: string;
+    } | null;
+  } | null;
+  allocations?: PlacementPaymentAllocation[];
+}
+
+export interface PaymentWorklistRow {
+  id: string;
+  placementId: string;
+  reference: string | null;
+  policyNumber: string | null;
+  title: string;
+  classOfBusiness: string | null;
+  cedantId: string;
+  cedantName: string;
+  sumInsured: number | null;
+  facultativeOffer: number | null;
+  commission: number | null;
+  facultativeSumInsured: number | null;
+  /**
+   * Terms after applying every closed, in-force endorsement. The backend returns the base
+   * placement value here when no endorsement applies, so these are always safe to display.
+   */
+  effectiveSumInsured: number | null;
+  effectivePremium: number | null;
+  effectiveFacultativeOfferPercent: number | null;
+  effectiveFacultativeSumInsured: number | null;
+  acceptedParticipantCount: number;
+  currency: string | null;
+  paidAmount: number;
+  outstandingAmount: number;
+  outstandingLabel: 'outstanding' | 'credit';
+  currentObligation: number;
+  latestConfirmedPaymentDate: string | null;
+  placementStatus: FacultativeStatus;
+  paymentStatus: PaymentWorklistPaymentStatus;
+  /** When the offer was entered in the system (placement.createdAt). */
+  createdAt: string;
+  sortDate: string;
+}
+
+export interface PaginatedPaymentWorklist {
+  items: PaymentWorklistRow[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export type FacultativeRowPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
+
+export interface FacultativeRowState {
+  placementId: string;
+  paymentStatus: FacultativeRowPaymentStatus;
+  hasRecordedPayment: boolean;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+  /**
+   * Terms after applying every closed, in-force endorsement. The backend returns the base
+   * placement value here when no endorsement applies, so these are always safe to display.
+   */
+  effectiveSumInsured: number | null;
+  effectivePremium: number | null;
+  effectiveFacultativeOfferPercent: number | null;
+  effectiveParticipantCount: number;
+}
+
+export interface FacultativeRowStateResponse {
+  items: FacultativeRowState[];
+}
+
+export type PlacementClaimRecoveryReceiptStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';
+export type PlacementClaimCedantSettlementStatus = 'RECORDED' | 'BANK_CONFIRMED' | 'REVERSED';
+export type PlacementClaimRecoveryStatus =
+  | 'UNRECOVERED'
+  | 'PARTIALLY_RECOVERED'
+  | 'FULLY_RECOVERED';
+
+export interface PlacementClaimRecoveryReceipt {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  allocationId: string;
+  cashCallId: string;
+  recoveryApprovalId: string | null;
+  counterpartyId: string;
+  currency: string;
+  amount: string;
+  paymentDate: string;
+  reference: string | null;
+  settlementMethod: PlacementSettlementMethod | null;
+  settlementCurrency: string | null;
+  bankReference: string | null;
+  accountingCashAccountId: string | null;
+  bankConfirmedAt: string | null;
+  bankConfirmedByUserId: string | null;
+  agreedExchangeRate: string | null;
+  bankChargeAmount: string;
+  notes: string | null;
+  status: PlacementClaimRecoveryReceiptStatus;
+  reversalOfReceiptId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
+}
+
+export interface PlacementClaimCedantSettlement {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  payableApprovalId: string | null;
+  currency: string;
+  amount: string;
+  settlementDate: string;
+  reference: string | null;
+  settlementMethod: PlacementSettlementMethod | null;
+  settlementCurrency: string | null;
+  bankReference: string | null;
+  accountingCashAccountId: string | null;
+  bankConfirmedAt: string | null;
+  bankConfirmedByUserId: string | null;
+  agreedExchangeRate: string | null;
+  bankChargeAmount: string;
+  notes: string | null;
+  status: PlacementClaimCedantSettlementStatus;
+  reversalOfSettlementId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A reinsurer's formal agreement to pay a recovery amount — precedes (and may be referenced by) a recovery receipt. */
+export interface PlacementClaimRecoveryApproval {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  allocationId: string;
+  cashCallId: string | null;
+  counterpartyId: string;
+  approvalVersion: number;
+  approvedAmount: string;
+  eligibleAmount: string;
+  currency: string;
+  approvedAt: string;
+  approvedByUserId: string;
+  reference: string | null;
+  notes: string | null;
+  createdAt: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
+}
+
+export interface PlacementClaimRecoveryPositionCashCall {
+  cashCallId: string;
+  allocationId: string;
+  counterpartyId: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
+  cashCallNumber: string;
+  cashCallStatus: PlacementClaimCashCallStatus;
+  currency: string;
+  calledAmount: string;
+  recoveredAmount: string;
+  /** Operational receipts recorded but not yet financially confirmed by Accounting. */
+  recordedAmount: string;
+  /** Bank-confirmed recovery receipts that reduce financial outstanding. */
+  confirmedAmount: string;
+  reversedAmount: string;
+  outstandingAmount: string;
+  recoveryStatus: PlacementClaimRecoveryStatus;
+  receipts: PlacementClaimRecoveryReceipt[];
+}
+
+export interface PlacementClaimRecoveryPosition {
+  claimId: string;
+  placementId: string;
+  currency: string;
+  claim: {
+    finalLossAmount: string | null;
+    approvedPayableAmount: string | null;
+    approvedAt: string | null;
+    approvedByUserId: string | null;
+  };
+  recoveries: {
+    totalAllocated: string;
+    totalCashCalled: string;
+    totalRecovered: string;
+    /** Operational receipts recorded but not yet financially confirmed by Accounting. */
+    totalRecorded: string;
+    /** Bank-confirmed recovery receipts that reduce financial outstanding. */
+    totalConfirmed: string;
+    totalReversed: string;
+    totalOutstanding: string;
+  };
+  perCashCall: PlacementClaimRecoveryPositionCashCall[];
+  cedantSettlement: {
+    approvedPayableAmount: string | null;
+    settledAmount: string;
+    /** Operational Cedant settlements recorded but not yet financially confirmed by Accounting. */
+    recordedAmount: string;
+    /** Bank-confirmed Cedant settlements that reduce financial payable outstanding. */
+    bankConfirmedAmount: string;
+    reversedAmount: string;
+    outstandingAmount: string;
+    operationalSettledAmount: string;
+    settlementStatus: 'PENDING_APPROVAL' | 'APPROVED_UNSETTLED' | 'PARTIALLY_SETTLED' | 'SETTLED';
+  };
+  funding: {
+    brokerFundedExposure: string;
+    recoveredMinusSettled: string;
+  };
+  cedantSettlementStatus: string;
+}
+
+export type ClaimRowBucket = 'notification' | 'open' | 'closed';
+
+export interface ClaimRowState {
+  claimId: string;
+  placementId: string;
+  bucket: ClaimRowBucket;
+  recoveredAmount: string;
+  recoveredAt: string | null;
+  isFullyRecovered: boolean;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface ClaimRowStateResponse {
+  items: ClaimRowState[];
+}
+
+export interface ClaimsWorklistPlacement {
+  id: string;
+  reference: string | null;
+  policyNumber: string | null;
+  title: string;
+  classOfBusiness: string | null;
+  riskTypeId: string | null;
+  cedant: { id: string; name: string };
+  businessDetails: Record<string, unknown> | null;
+  offerDetails: Record<string, unknown> | null;
+  description: string | null;
+  sumInsured: number | null;
+  rate: number | null;
+  commission: number | null;
+  facultativeOffer: number | null;
+  premium: number | null;
+  currency: string | null;
+  inceptionDate: string | null;
+  expiryDate: string | null;
+  status: FacultativeStatus;
+  createdAt: string;
+  updatedAt: string;
+  archivedByUserId: string | null;
+  archiveReason: string | null;
+  archivedAt: string | null;
+  closeMode: string | null;
+  forceClosedAt: string | null;
+  forceClosedByUserId: string | null;
+}
+
+export interface ClaimsWorklistRow {
+  id: string;
+  claimId: string;
+  placementId: string;
+  bucket: ClaimRowBucket;
+  placement: ClaimsWorklistPlacement;
+  claim: PlacementClaim;
+  recoveredAmount: number;
+  recoveredAt: string | null;
+  isFullyRecovered: boolean;
+  claimShare: number;
+  nonVoidEndorsementCount: number;
+  hasNonVoidEndorsement: boolean;
+}
+
+export interface PaginatedClaimsWorklist {
+  items: ClaimsWorklistRow[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface ClaimsCurrencyAmount {
+  code: string;
+  amount: number;
+}
+
+export interface ClaimsWorklistSummary {
+  totalClaims: number;
+  settledClaims: number;
+  notificationClaims: number;
+  openClaims: number;
+  closedClaims: number;
+  claimsByCurrency: ClaimsCurrencyAmount[];
+  recoveredByCurrency: ClaimsCurrencyAmount[];
+}
+
+export interface ApprovePlacementClaimPayablePayload {
+  approvedPayableAmount: number;
+  notes?: string;
+}
+
+export interface ApprovePlacementClaimRecoveryPayload {
+  approvedAmount: number;
+  currency?: string;
+  cashCallId?: string;
+  reference?: string;
+  notes?: string;
+}
+
+export interface CreatePlacementClaimCedantSettlementPayload {
+  payableApprovalId?: string;
+  currency: string;
+  amount: number;
+  settlementDate: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
+  agreedExchangeRate?: number;
+  reference?: string;
+  notes?: string;
+}
+
+export interface CreatePlacementClaimRecoveryReceiptPayload {
+  recoveryApprovalId?: string;
+  currency: string;
+  amount: number;
+  paymentDate: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
+  agreedExchangeRate?: number;
+  reference?: string;
+  notes?: string;
+}
+
+/** Reinsurance-owned financial confirmation that a Cedant settlement / recovery receipt cleared. */
+export interface ConfirmPlacementClaimFinancialBankPayload {
+  bankConfirmedAt: string;
+  bankReference?: string;
+  accountingCashAccountId?: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
+  confirmedExchangeRate?: number;
+  /** @deprecated use confirmedExchangeRate */
+  agreedExchangeRate?: number;
+  bankChargeAmount?: number;
+  notes?: string;
+}
+
+export type ConfirmPlacementClaimCedantSettlementBankPayload =
+  ConfirmPlacementClaimFinancialBankPayload;
+export type ConfirmPlacementClaimRecoveryReceiptBankPayload =
+  ConfirmPlacementClaimFinancialBankPayload;
+
+/* ── Claim financial-close readiness ── */
+export const PLACEMENT_CLAIM_FINANCIAL_CLOSE_BLOCKERS = [
+  'PAYABLE_NOT_APPROVED',
+  'CLAIM_PAYABLE_OUTSTANDING',
+  'RECOVERY_OUTSTANDING',
+  'CEDANT_SETTLEMENT_CONFIRMATION_PENDING',
+  'RECOVERY_RECEIPT_CONFIRMATION_PENDING',
+] as const;
+
+export type PlacementClaimFinancialCloseBlocker =
+  (typeof PLACEMENT_CLAIM_FINANCIAL_CLOSE_BLOCKERS)[number];
+
+export interface PlacementClaimFinancialCloseReadiness {
+  claimId: string;
+  currentClaimStatus: PlacementClaimStatus;
+  payable: {
+    approvedPayableAmount: string | null;
+    bankConfirmedSettledAmount: string;
+    outstandingPayable: string;
+  };
+  recovery: {
+    approvedRecoveryAmount: string;
+    bankConfirmedRecoveryAmount: string;
+    outstandingRecovery: string;
+  };
+  pendingConfirmations: {
+    recordedCedantSettlementCount: number;
+    recordedCedantSettlementAmount: string;
+    recordedRecoveryReceiptCount: number;
+    recordedRecoveryReceiptAmount: string;
+  };
+  isPayableFullySettled: boolean;
+  areRecoveriesFullyReceived: boolean;
+  hasPendingFinancialConfirmations: boolean;
+  isFinanciallyReadyToSettle: boolean;
+  isFinanciallyReadyToClose: boolean;
+  blockers: PlacementClaimFinancialCloseBlocker[];
 }
 
 export interface CreatePlacementPaymentPayload {
@@ -1009,8 +1468,21 @@ export interface CreatePlacementPaymentPayload {
   amount: number;
   currency: string;
   paymentDate: string;
+  settlementMethod?: PlacementSettlementMethod;
+  settlementCurrency?: string;
   reference?: string;
   notes?: string;
+}
+
+export interface ConfirmPlacementPaymentBankPayload {
+  bankConfirmedAt: string;
+  bankReference?: string;
+  notes?: string;
+  /** Currency the counterparty actually settled in, when it differs from the obligation
+   * currency. Persisted so cross-currency receipts can be shown in the money that moved. */
+  settlementCurrency?: string;
+  /** Obligation-currency units per 1 unit of `settlementCurrency` (obligation = settlement × rate). */
+  agreedExchangeRate?: number;
 }
 
 export type PlacementFinancialPositionState =
@@ -1107,15 +1579,22 @@ export interface PlacementClaim {
   finalLossAmount: string | null;
   finalizedAt: string | null;
   finalizedByUserId: string | null;
+  approvedPayableAmount: string | null;
+  approvedAt: string | null;
+  approvedByUserId: string | null;
   createdByUserId: string;
   updatedByUserId: string | null;
   closedAt: string | null;
   voidedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** "Claim state" tag (Pending / Finalized) from the claim form. Not yet persisted by the
+   * back-end — optional until the DTO adds it. */
+  claimTag?: 'pending' | 'finalized' | null;
 }
 
 export interface CreatePlacementClaimPayload {
+  claimNumber: string;
   occurrenceDate: string;
   reportedDate: string;
   claimCause: string;
@@ -1188,6 +1667,14 @@ export interface PlacementClaimCashCall {
   };
 }
 
+export interface UpdatePlacementClaimCashCallStatusPayload {
+  status: Exclude<PlacementClaimCashCallStatus, 'PAID'>;
+}
+
+export interface VoidPlacementClaimCashCallPayload {
+  voidReason: string;
+}
+
 /* ── Facultative form ── */
 export interface FacultativeFormValues {
   insuranceCompany: string;
@@ -1207,12 +1694,18 @@ export interface FacultativeFormValues {
   periodTo: string;
   comment: string;
   riskDetails: Record<string, unknown>;
+  /** Per-fieldKey opt-out from appearing on generated documents (Slip, Notes, etc.).
+   *  Absent/true = shown; false = hidden. Only applies to document rendering — the
+   *  field always stays visible on this form. */
+  riskDetailsVisibility: Record<string, boolean>;
   extraRiskFields: {
     id?: string;
     label: string;
     value: string;
     type?: 'TEXT';
     displayOrder?: number;
+    /** Same opt-out as riskDetailsVisibility, but inline since extra fields aren't keyed by a schema fieldKey. */
+    showOnDocument?: boolean;
   }[];
 }
 
@@ -1234,6 +1727,7 @@ export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   periodTo: '',
   comment: '',
   riskDetails: {},
+  riskDetailsVisibility: {},
   extraRiskFields: [],
 };
 
@@ -1654,3 +2148,108 @@ export const QUOTA_SHARE_DEFAULTS: QuotaShareFormValues = {
   reinsurerPanel: [{ ...DEFAULT_REINSURER_ROW }],
   supportingDocument: null,
 };
+
+export type MailboxProvider = 'MICROSOFT_GRAPH' | 'GOOGLE_GMAIL';
+export type MailboxConnectionStatus = 'ACTIVE' | 'DISCONNECTED' | 'ERROR';
+
+export interface MailboxConnection {
+  id: string;
+  tenantId: string;
+  provider: MailboxProvider;
+  emailAddress: string;
+  normalizedEmail: string;
+  displayName: string | null;
+  status: MailboxConnectionStatus;
+  externalMailboxId: string | null;
+  tokenExpiresAt: string | null;
+  lastSyncedAt: string | null;
+  lastSyncError: string | null;
+  connectedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConnectMailboxPayload {
+  provider: MailboxProvider;
+  emailAddress: string;
+  displayName?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  tokenExpiresAt?: string;
+}
+
+export interface PaginatedMailboxes {
+  items: MailboxConnection[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface MailboxSyncResponse {
+  mailbox: MailboxConnection;
+  threadsSynced: number;
+  messagesSynced: number;
+}
+
+export interface EmailParticipant {
+  email?: string;
+  name?: string;
+}
+
+export interface EmailThreadParticipants {
+  from?: EmailParticipant;
+  to?: EmailParticipant[];
+  cc?: EmailParticipant[];
+}
+
+export type EmailMessageDirection = 'INBOUND' | 'OUTBOUND';
+export type EmailMessageStatus = 'DRAFT' | 'SENDING' | 'SENT' | 'FAILED';
+
+export interface EmailAttachmentMetadata {
+  id: string;
+  messageId: string;
+  providerAttachmentId: string;
+  fileName: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  isInline: boolean;
+}
+
+export interface EmailMessage {
+  id: string;
+  threadId: string;
+  mailboxConnectionId: string;
+  direction: EmailMessageDirection;
+  status: EmailMessageStatus;
+  subject: string | null;
+  fromEmail: string | null;
+  fromName: string | null;
+  toRecipients: EmailParticipant[] | null;
+  ccRecipients: EmailParticipant[] | null;
+  receivedAt: string | null;
+  sentAt: string | null;
+  bodyPreview: string | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+  hasAttachments: boolean;
+  isRead: boolean;
+  attachments: EmailAttachmentMetadata[];
+}
+
+export interface EmailThread {
+  id: string;
+  mailboxConnectionId: string;
+  subject: string | null;
+  participants: EmailThreadParticipants | null;
+  lastMessageAt: string | null;
+  messageCount: number;
+  hasAttachments: boolean;
+  createdAt: string;
+  updatedAt: string;
+  /** Undocumented-but-real: up to 5 most-recent messages, included on both list and detail responses. */
+  messages: EmailMessage[];
+}
+
+export interface PaginatedEmailThreads {
+  items: EmailThread[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
