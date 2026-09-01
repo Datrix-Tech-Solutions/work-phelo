@@ -14,6 +14,11 @@ import {
   UpdatePermissionSetDto,
 } from './dto/grant-permission.dto';
 import { PermissionAction } from './dto/grant-permission.dto';
+import {
+  isResourceEnabledForTenant,
+  PermissionResourceWithId,
+  TenantEntitlementConfig,
+} from './permission-entitlements';
 
 @Injectable()
 export class PermissionsService {
@@ -24,11 +29,18 @@ export class PermissionsService {
 
   // ── Resources ─────────────────────────────────────────────────────────────
 
-  async getAllResources() {
-    return this.prisma.resource.findMany({
+  async getAllResources(tenantId?: string, includeAll = false) {
+    const resources = await this.prisma.resource.findMany({
       where: { isActive: true },
       orderBy: [{ module: 'asc' }, { name: 'asc' }],
     });
+
+    if (!tenantId || includeAll) return resources;
+
+    const config = await this.getTenantEntitlementConfig(tenantId);
+    return resources.filter((resource) =>
+      isResourceEnabledForTenant(resource, config),
+    );
   }
 
   async getResourceByName(name: string) {
@@ -56,6 +68,7 @@ export class PermissionsService {
       where: { id: dto.resourceId },
     });
     if (!resource) throw new NotFoundException('Resource not found');
+    await this.assertResourcesGrantableForTenant(tenantId, [resource]);
 
     // Upsert — if row exists (was previously revoked), reactivate it
     const existing = await this.prisma.userPermission.findUnique({
@@ -203,11 +216,11 @@ export class PermissionsService {
       ];
       const found = await this.prisma.resource.findMany({
         where: { id: { in: uniqueResourceIds } },
-        select: { id: true },
       });
       if (found.length !== uniqueResourceIds.length) {
         throw new NotFoundException('One or more resources not found');
       }
+      await this.assertResourcesGrantableForTenant(tenantId, found);
     }
 
     return this.prisma.permissionSet.create({
@@ -233,11 +246,14 @@ export class PermissionsService {
   ) {
     const set = await this.prisma.permissionSet.findFirst({
       where: { id, tenantId, isActive: true },
+      include: { resources: { include: { resource: true } } },
     });
     if (!set) throw new NotFoundException('Permission set not found');
     if (set.isSystem) {
       throw new ForbiddenException('System permission sets cannot be edited');
     }
+
+    const resourcesToPersist = [...dto.resources];
 
     if (dto.resources.length > 0) {
       const uniqueResourceIds = [
@@ -245,11 +261,35 @@ export class PermissionsService {
       ];
       const found = await this.prisma.resource.findMany({
         where: { id: { in: uniqueResourceIds } },
-        select: { id: true },
       });
       if (found.length !== uniqueResourceIds.length) {
         throw new NotFoundException('One or more resources not found');
       }
+      await this.assertResourcesGrantableForTenant(tenantId, found, {
+        existingGrantKeys: new Set(
+          set.resources.map((r) => `${r.resourceId}:${r.action}`),
+        ),
+        requestedGrantKeys: dto.resources.map(
+          (r) => `${r.resourceId}:${r.action}`,
+        ),
+      });
+    }
+
+    const tenantConfig = await this.getTenantEntitlementConfig(tenantId);
+    const hiddenExistingResources = set.resources.filter(
+      (r) => !isResourceEnabledForTenant(r.resource, tenantConfig),
+    );
+    const requestedKeys = new Set(
+      resourcesToPersist.map((r) => `${r.resourceId}:${r.action}`),
+    );
+    for (const existing of hiddenExistingResources) {
+      const key = `${existing.resourceId}:${existing.action}`;
+      if (requestedKeys.has(key)) continue;
+      requestedKeys.add(key);
+      resourcesToPersist.push({
+        resourceId: existing.resourceId,
+        action: existing.action as PermissionAction,
+      });
     }
 
     // Replace all resources atomically
@@ -263,7 +303,7 @@ export class PermissionsService {
         ...(dto.name && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
         resources: {
-          create: dto.resources.map((r) => ({
+          create: resourcesToPersist.map((r) => ({
             resourceId: r.resourceId,
             action: r.action,
           })),
@@ -436,6 +476,7 @@ export class PermissionsService {
   ) {
     const set = await this.prisma.permissionSet.findFirst({
       where: { id: dto.permissionSetId, tenantId },
+      include: { resources: { include: { resource: true } } },
     });
     if (!set) throw new NotFoundException('Permission set not found');
     if (set.isSystem) {
@@ -443,6 +484,10 @@ export class PermissionsService {
         'System permission sets cannot be assigned through the tenant permission management flow',
       );
     }
+    await this.assertResourcesGrantableForTenant(
+      tenantId,
+      set.resources.map((r) => r.resource),
+    );
 
     const user = await this.prisma.user.findFirst({
       where: { id: dto.userId, tenantId },
@@ -498,6 +543,53 @@ export class PermissionsService {
       where: { userId_permissionSetId: { userId, permissionSetId } },
     });
     return { message: 'Permission set removed from user' };
+  }
+
+  private async getTenantEntitlementConfig(
+    tenantId: string,
+  ): Promise<TenantEntitlementConfig> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { moduleConfig: true, featureConfig: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    return {
+      moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {},
+      featureConfig:
+        (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
+    };
+  }
+
+  private async assertResourcesGrantableForTenant(
+    tenantId: string,
+    resources: PermissionResourceWithId[],
+    options?: {
+      existingGrantKeys?: Set<string>;
+      requestedGrantKeys?: string[];
+    },
+  ) {
+    const config = await this.getTenantEntitlementConfig(tenantId);
+    const existingGrantKeys = options?.existingGrantKeys ?? new Set<string>();
+    const requestedGrantKeys = options?.requestedGrantKeys;
+    const disabled = resources.filter((resource) => {
+      if (isResourceEnabledForTenant(resource, config)) return false;
+      if (!requestedGrantKeys) return true;
+      if (!resource.id) return true;
+
+      return requestedGrantKeys
+        .filter((key) => key.startsWith(`${resource.id}:`))
+        .some((key) => !existingGrantKeys.has(key));
+    });
+
+    if (disabled.length === 0) return;
+
+    const names = [...new Set(disabled.map((resource) => resource.name))].join(
+      ', ',
+    );
+    throw new ForbiddenException(
+      `Cannot grant permissions for disabled tenant module or feature: ${names}`,
+    );
   }
 
   // ── User Effective Permissions ─────────────────────────────────────────────

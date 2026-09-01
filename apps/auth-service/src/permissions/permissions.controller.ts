@@ -49,11 +49,17 @@ export class PermissionsController {
 
   @Get('resources')
   @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
-  @ApiOperation({ summary: 'List all platform resources' })
+  @ApiOperation({
+    summary:
+      'List resources grantable for the current tenant enabled modules and features',
+  })
   @ApiResponse({ status: 200, description: 'Resources list retrieved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  getAllResources() {
-    return this.permissionsService.getAllResources();
+  getAllResources(@Req() req: AuthenticatedRequest) {
+    return this.permissionsService.getAllResources(
+      req.user.tenantId,
+      req.user.role === 'SUPER_ADMIN',
+    );
   }
 
   @Get('users/:userId')
