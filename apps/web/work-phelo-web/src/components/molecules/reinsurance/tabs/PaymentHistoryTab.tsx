@@ -5,6 +5,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
+import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -18,7 +19,12 @@ import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { premiumForeignSettlement } from '@/lib/reinsurance/premiumSettlement';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { canReversePayment, paymentReversalRequest } from './paymentHistoryActions';
+import {
+  canReversePayment,
+  isActiveReinsurerDisbursement,
+  paymentReversalRequest,
+  premiumReversalBlockedByDisbursements,
+} from './paymentHistoryActions';
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -59,6 +65,25 @@ function fmtType(type: string): string {
     .toLowerCase()
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const TYPE_CHIP_COLOR: Record<string, TypeChipColor> = {
+  PREMIUM_RECEIVED: 'green',
+  REINSURER_DISBURSEMENT: 'blue',
+  CLAIM_SETTLEMENT: 'amber',
+};
+
+const TYPE_CHIP_LABEL: Record<string, string> = {
+  PREMIUM_RECEIVED: 'Premium',
+  REINSURER_DISBURSEMENT: 'Disbursement',
+};
+
+function typeChipColor(type: string): TypeChipColor {
+  return TYPE_CHIP_COLOR[type] ?? 'gray';
+}
+
+function typeChipLabel(type: string): string {
+  return TYPE_CHIP_LABEL[type] ?? fmtType(type);
 }
 
 const BULK_RECEIPT_ROOT_PREFIX = 'bulk-disbursement-receipt-';
@@ -105,6 +130,17 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
   const addToast = useToastStore((s) => s.addToast);
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
   const [reverseTarget, setReverseTarget] = useState<PlacementPayment | null>(null);
+  const [disbursementBlockOpen, setDisbursementBlockOpen] = useState(false);
+
+  const activeDisbursementCount = allPayments.filter(isActiveReinsurerDisbursement).length;
+
+  const requestReverse = (row: PlacementPayment) => {
+    if (premiumReversalBlockedByDisbursements(row, allPayments)) {
+      setDisbursementBlockOpen(true);
+      return;
+    }
+    setReverseTarget(row);
+  };
   const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(
     null,
   );
@@ -142,6 +178,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
 
   const handleReverse = async () => {
     if (!reverseTarget) return;
+    if (premiumReversalBlockedByDisbursements(reverseTarget, allPayments)) return;
     try {
       await reversePayment.mutateAsync(paymentReversalRequest(placementId, reverseTarget));
       addToast({ message: 'Payment reversed successfully', type: 'success' });
@@ -162,11 +199,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       key: 'type',
       label: 'Type',
       width: '150px',
-      render: (row) => (
-        <div className="flex flex-col">
-          <span className="font-semibold text-gray-700">{fmtType(row.type)}</span>
-        </div>
-      ),
+      render: (row) => <TypeChip label={typeChipLabel(row.type)} color={typeChipColor(row.type)} />,
     },
     {
       key: 'counterparty',
@@ -246,7 +279,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
             </TableButton>
           )}
           {canReversePayment(row) && (
-            <TableButton variant="red" onClick={() => setReverseTarget(row)}>
+            <TableButton variant="red" onClick={() => requestReverse(row)}>
               Reverse
             </TableButton>
           )}
@@ -318,6 +351,24 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
             <DisbursementAdviceContent placement={placement} payment={p} />
           </DocumentPrintLayout>
         ))}
+
+      <Modal
+        isOpen={disbursementBlockOpen}
+        onClose={() => setDisbursementBlockOpen(false)}
+        title="Reverse the reinsurer disbursements first"
+        description={`This premium funded ${activeDisbursementCount} reinsurer disbursement${
+          activeDisbursementCount === 1 ? '' : 's'
+        } that ${
+          activeDisbursementCount === 1 ? 'is' : 'are'
+        } still active. Reverse each of those from this list before reversing the premium.`}
+        footer={
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setDisbursementBlockOpen(false)}>
+              Got it
+            </Button>
+          </div>
+        }
+      />
 
       <Modal
         isOpen={!!reverseTarget}
