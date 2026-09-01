@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -22,13 +22,10 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
     register,
     handleSubmit,
     reset,
-    control,
     formState: { errors },
   } = useForm<CurrencyFormValues>({
     defaultValues: CURRENCY_FORM_DEFAULTS,
   });
-
-  const isBaseCurrency = useWatch({ control, name: 'isBaseCurrency' });
 
   const handleClose = () => {
     reset(CURRENCY_FORM_DEFAULTS);
@@ -41,8 +38,10 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
         name: data.name,
         isoCode: data.isoCode,
         symbol: data.symbol || undefined,
-        exchangeRateToBase: data.isBaseCurrency ? undefined : (data.exchangeRateToBase as number),
-        isBaseCurrency: data.isBaseCurrency || undefined,
+        exchangeRateToBase: 1,
+        isBaseCurrency: false,
+        isActive: true,
+        displayOrder: 0,
       });
       toast.success('Currency created successfully');
       handleClose();
@@ -56,7 +55,7 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
       isOpen={isOpen}
       onClose={handleClose}
       title="Add Currency"
-      description="Add a new currency and set its exchange rate."
+      description="Add a new currency."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -94,32 +93,6 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
           error={errors.symbol}
           placeholder="e.g. ₵"
         /> */}
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="isBaseCurrency"
-            {...register('isBaseCurrency')}
-            className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-          />
-          <label htmlFor="isBaseCurrency" className="text-sm text-gray-700">
-            Set as base currency
-          </label>
-        </div>
-
-        {!isBaseCurrency && (
-          <FormField
-            label="Exchange Rate to Base Currency"
-            type="number"
-            registration={register('exchangeRateToBase', {
-              required: 'Exchange rate is required',
-              min: { value: 0.000001, message: 'Rate must be greater than 0' },
-              valueAsNumber: true,
-            })}
-            error={errors.exchangeRateToBase}
-            placeholder="e.g. 16.5"
-          />
-        )}
       </div>
     </SidePanel>
   );

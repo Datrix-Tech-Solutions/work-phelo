@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { DataList, Column } from '@/components/organisms/shared/DataList';
-import { Period } from '@/components/atoms/PeriodToggle';
+import { Period, periodWindow } from '@/components/atoms/PeriodToggle';
 import { useFacultatives, useCurrencies } from '@/hooks';
 import { Currency } from '@/types/reinsurance';
 import { transparentCardClass } from '@/lib/utils';
@@ -26,23 +26,6 @@ function fmtAmount(value: number, symbol: string): string {
   if (abs >= 1_000_000) return `${symbol} ${(value / 1_000_000).toFixed(2)}M`;
   if (abs >= 1_000) return `${symbol} ${(value / 1_000).toFixed(2)}K`;
   return `${symbol} ${value.toFixed(2)}`;
-}
-
-function periodStart(period: Period, now: Date): Date {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const mondayOffset = (now.getDay() + 6) % 7;
-  switch (period) {
-    case 'daily':
-      return new Date(y, m, d);
-    case 'weekly':
-      return new Date(y, m, d - mondayOffset);
-    case 'monthly':
-      return new Date(y, m, 1);
-    case 'yearly':
-      return new Date(y, 0, 1);
-  }
 }
 
 function buildColumns(symbol: string): Column<CedantRow>[] {
@@ -74,15 +57,16 @@ function buildColumns(symbol: string): Column<CedantRow>[] {
 
 interface TopCedantsListProps {
   period: Period;
+  year?: number;
   currency: string;
 }
 
-export function TopCedantsList({ period, currency }: TopCedantsListProps) {
+export function TopCedantsList({ period, year, currency }: TopCedantsListProps) {
   const { data: all = [], isLoading: loadingFac } = useFacultatives();
   const { data: currencies = [], isLoading: loadingCur } = useCurrencies();
 
   const { rows, symbol } = useMemo(() => {
-    const start = periodStart(period, new Date());
+    const { start, end } = periodWindow(period, { year });
 
     const baseCurrency = currencies.find((c) => c.isBaseCurrency);
     const targetIso = currency || baseCurrency?.isoCode || '';
@@ -93,7 +77,8 @@ export function TopCedantsList({ period, currency }: TopCedantsListProps) {
     const map = new Map<string, { name: string; count: number; premium: number }>();
 
     for (const f of all) {
-      if (new Date(f.createdAt) < start) continue;
+      const createdAt = new Date(f.createdAt);
+      if (createdAt < start || createdAt > end) continue;
 
       const { id, name } = f.cedant;
       const prev = map.get(id) ?? { name, count: 0, premium: 0 };
@@ -113,7 +98,7 @@ export function TopCedantsList({ period, currency }: TopCedantsListProps) {
       .slice(0, 5);
 
     return { rows, symbol };
-  }, [all, currencies, period, currency]);
+  }, [all, currencies, period, year, currency]);
 
   return (
     <div className={transparentCardClass('flex flex-col gap-3 py-5 h-80')}>

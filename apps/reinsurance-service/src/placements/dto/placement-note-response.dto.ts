@@ -36,6 +36,22 @@ export class PlacementNoteClosingDto {
   closingNumber!: string;
 }
 
+export class PlacementNoteEndorsementParticipantDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  counterpartyId!: string;
+}
+
+export class PlacementNoteEndorsementClosingDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ example: 'ENC-001' })
+  closingNumber!: string;
+}
+
 export class PlacementNoteResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -51,6 +67,15 @@ export class PlacementNoteResponseDto {
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   participantId!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  endorsementId!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  endorsementClosingId!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  endorsementParticipantId!: string | null;
 
   @ApiProperty({ format: 'uuid' })
   counterpartyId!: string;
@@ -116,6 +141,46 @@ export class PlacementNoteResponseDto {
   @ApiProperty({ type: String, example: '3712.50' })
   netAmount!: string;
 
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    description:
+      'Immutable snapshot of charge configurations and calculated charge lines applied when the note was generated.',
+  })
+  appliedCharges!: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    description:
+      'Immutable source snapshot used to generate statement-style notes and preserve traceability.',
+  })
+  sourceSnapshot!: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    format: 'date-time',
+    description:
+      'As-of date used for current-effective statement generation, when applicable.',
+  })
+  effectiveAsOf!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'Deterministic effective business version key used to reuse the same logical current-effective note.',
+  })
+  effectiveVersionKey!: string | null;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'False for non-posting statements that must not enqueue Accounting events when issued.',
+  })
+  postingEnabled!: boolean;
+
   @ApiProperty({ type: String, format: 'date-time' })
   noteDate!: string;
 
@@ -145,6 +210,18 @@ export class PlacementNoteResponseDto {
 
   @ApiPropertyOptional({ type: PlacementNoteClosingDto, nullable: true })
   closing!: PlacementNoteClosingDto | null;
+
+  @ApiPropertyOptional({
+    type: PlacementNoteEndorsementParticipantDto,
+    nullable: true,
+  })
+  endorsementParticipant!: PlacementNoteEndorsementParticipantDto | null;
+
+  @ApiPropertyOptional({
+    type: PlacementNoteEndorsementClosingDto,
+    nullable: true,
+  })
+  endorsementClosing!: PlacementNoteEndorsementClosingDto | null;
 }
 
 export class PlacementNoteListResponseDto {

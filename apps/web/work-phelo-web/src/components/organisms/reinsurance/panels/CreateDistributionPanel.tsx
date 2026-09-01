@@ -13,6 +13,8 @@ interface CreateDistributionPanelProps {
   onClose: () => void;
   onAdd: (entries: ReinsurerEntry[]) => void;
   existingIds?: string[];
+  /** Reinsurer matching this name (the placement's cedant) is hidden from the picker. */
+  excludeName?: string;
   title?: string;
 }
 
@@ -21,6 +23,7 @@ export function CreateDistributionPanel({
   onClose,
   onAdd,
   existingIds = [],
+  excludeName,
   title = 'Add to Distribution List',
 }: CreateDistributionPanelProps) {
   const [entries, setEntries] = useState<ReinsurerEntry[]>([]);
@@ -51,11 +54,12 @@ export function CreateDistributionPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <ReinsurerDistributionSelect
           value={entries}
           onChange={setEntries}
           excludeIds={existingIds}
+          excludeName={excludeName}
         />
       </div>
     </SidePanel>

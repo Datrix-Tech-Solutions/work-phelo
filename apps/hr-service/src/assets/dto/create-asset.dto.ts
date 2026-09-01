@@ -23,10 +23,10 @@ export class CreateAssetDto {
   type!: AssetType;
 
   @ApiPropertyOptional({
-    description: 'Custom label for the asset type, required when type is OTHER',
+    description: 'Free-text label describing the asset type when type is OTHER',
     example: 'Projector',
   })
-  @ValidateIf((dto: CreateAssetDto) => dto.type === AssetType.OTHER)
+  @ValidateIf((dto) => dto.type === AssetType.OTHER)
   @IsString()
   @MinLength(1)
   customType?: string;
@@ -74,7 +74,10 @@ export class CreateAssetDto {
   @IsString()
   notes?: string;
 
-  @ApiPropertyOptional({ description: 'Branch the asset is assigned to' })
+  @ApiPropertyOptional({
+    description: 'Branch the asset is assigned to',
+    example: 'branch-789',
+  })
   @IsOptional()
   @IsUUID()
   branchId?: string;

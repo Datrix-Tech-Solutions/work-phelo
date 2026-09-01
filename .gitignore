@@ -74,10 +74,9 @@ HOME
 # Local UI specs / design references
 roles-ui-spec/
 
-# Local/internal docs
+# Local-only docs directories
 docs/
-!docs/
-docs/*
+**/docs/
 
 .compose.local.env
 .env.dev

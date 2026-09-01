@@ -35,6 +35,7 @@ NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NOTIFICATIO
 SUBSCRIPTION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service" "dev")"
 MARKETING_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service" "dev")"
 REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "dev")"
+ACCOUNTING_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service" "dev")"
 NEXTJS_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "dev")"
 
 section "Compose Env"
@@ -49,7 +50,10 @@ write_env_file "$COMPOSE_ENV_FILE" \
   "SUBSCRIPTION_SERVICE_IMAGE=${SUBSCRIPTION_SERVICE_IMAGE}" \
   "MARKETING_SERVICE_IMAGE=${MARKETING_SERVICE_IMAGE}" \
   "REINSURANCE_SERVICE_IMAGE=${REINSURANCE_SERVICE_IMAGE}" \
-  "NEXTJS_IMAGE=${NEXTJS_IMAGE}"
+  "ACCOUNTING_SERVICE_IMAGE=${ACCOUNTING_SERVICE_IMAGE}" \
+  "NEXTJS_IMAGE=${NEXTJS_IMAGE}" \
+  "WEB_PUBLIC_API_URL=${WEB_PUBLIC_API_URL:-https://dev-api.workphelo.com/api/v1}" \
+  "WEB_PUBLIC_APP_BASE_URL=${WEB_PUBLIC_APP_BASE_URL:-https://dev-app.workphelo.com}"
 log "✓ ${COMPOSE_ENV_FILE}"
 
 section "Service Env Files"
@@ -65,7 +69,8 @@ write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.dev" \
   "NOTIFICATION_SERVICE_URL=http://notification-service:4004" \
   "SUBSCRIPTION_SERVICE_URL=http://subscription-service:4005" \
   "MARKETING_SERVICE_URL=http://marketing-service:4006" \
-  "REINSURANCE_SERVICE_URL=http://reinsurance-service:4007"
+  "REINSURANCE_SERVICE_URL=http://reinsurance-service:4007" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008"
 
 write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.dev" \
   "PORT=4001" \
@@ -87,7 +92,21 @@ write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.dev" \
   "MICROSOFT_CLIENT_ID=${AUTH_MICROSOFT_CLIENT_ID}" \
   "MICROSOFT_CLIENT_SECRET=${AUTH_MICROSOFT_CLIENT_SECRET}" \
   "MICROSOFT_CALLBACK_URL=${AUTH_MICROSOFT_CALLBACK_URL}" \
-  "SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}"
+  "SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}" \
+  "AUTH_TENANT_ASSET_STORAGE_PROVIDER=${AUTH_TENANT_ASSET_STORAGE_PROVIDER}" \
+  "AUTH_TENANT_ASSET_S3_BUCKET=${AUTH_TENANT_ASSET_S3_BUCKET}" \
+  "AUTH_TENANT_ASSET_S3_REGION=${AUTH_TENANT_ASSET_S3_REGION}" \
+  "AUTH_TENANT_ASSET_S3_PREFIX=${AUTH_TENANT_ASSET_S3_PREFIX}" \
+  "AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS=${AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS}" \
+  "AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER=${AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER:-}" \
+  "CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}" \
+  "CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}" \
+  "CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}" \
+  "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" \
+  "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
+
 
 write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.dev" \
   "PORT=4002" \
@@ -143,7 +162,27 @@ write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
   "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema reinsurance)" \
   "JWT_SECRET=${JWT_SECRET}" \
-  "RABBITMQ_URL=${RABBITMQ_URL}"
+  "RABBITMQ_URL=${RABBITMQ_URL}" \
+  "AUTH_SERVICE_URL=http://auth-service:4001" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "REINSURANCE_DOCUMENT_STORAGE_PROVIDER=${REINSURANCE_DOCUMENT_STORAGE_PROVIDER}" \
+  "REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER=${REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER}" \
+  "REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS=${REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS}" \
+  "CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}" \
+  "CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}" \
+  "CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}" \
+  "REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS=${REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS}"
+
+write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
+  "PORT=4008" \
+  "DEPLOY_ENV=${DEPLOY_ENV}" \
+  "NODE_ENV=production" \
+  "ENABLE_SWAGGER=true" \
+  "DATABASE_URL=$(db_url_for_schema accounting)" \
+  "JWT_SECRET=${JWT_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 log "✓ Service env files written"
 
 section "Compose Validation"
@@ -163,6 +202,7 @@ ensure_image_available "$NOTIFICATION_SERVICE_IMAGE" "notification-service" "not
 ensure_image_available "$SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service"
 ensure_image_available "$MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service"
 ensure_image_available "$REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service"
+ensure_image_available "$ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service"
 ensure_image_available "$NEXTJS_IMAGE" "nextjs-web" "nextjs-web"
 log "✓ Required images available"
 
@@ -172,6 +212,7 @@ preflight_runtime_env "$AUTH_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/auth-service/.e
 preflight_runtime_env "$HR_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/hr-service/.env.dev" "dist/config/runtime-env.js" "hr-service"
 preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notification-service/.env.dev" "dist/config/runtime-env.js" "notification-service"
 preflight_runtime_env "$REINSURANCE_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" "dist/config/runtime-env.js" "reinsurance-service"
+preflight_runtime_env "$ACCOUNTING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/accounting-service/.env.dev" "dist/config/runtime-env.js" "accounting-service"
 log "✓ Runtime env validation passed"
 
 section "Infrastructure Services"
@@ -187,10 +228,14 @@ docker_compose run --rm notification-service sh -c "npx prisma@5.22.0 migrate de
 docker_compose run --rm subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
 docker_compose run --rm marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" || true
 docker_compose run --rm reinsurance-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/reinsurance-service/prisma/schema.prisma"
+docker_compose run --rm accounting-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/accounting-service/prisma/schema.prisma"
 log "✓ Migrations complete"
 
 section "Deploy"
-docker_compose up -d --remove-orphans --no-build
+if ! docker_compose up -d --remove-orphans --no-build; then
+  print_compose_failure_diagnostics
+  die "Docker Compose rollout failed"
+fi
 log "✓ Compose rollout finished"
 
 section "Container Health"
@@ -202,6 +247,7 @@ wait_for_container_health notification-service
 wait_for_container_health subscription-service
 wait_for_container_health marketing-service
 wait_for_container_health reinsurance-service
+wait_for_container_health accounting-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
@@ -234,14 +280,18 @@ wait_for_http_ok "dev notification-service" "http://127.0.0.1:4004/api/health"
 wait_for_http_ok "dev subscription-service" "http://127.0.0.1:4005/api/health"
 wait_for_http_ok "dev marketing-service" "http://127.0.0.1:4006/api/health"
 wait_for_http_ok "dev reinsurance-service" "http://127.0.0.1:4007/api/health"
+wait_for_http_ok "dev accounting-service" "http://127.0.0.1:4008/api/health"
 wait_for_http_ok "dev api-gateway" "http://127.0.0.1:4010/health"
 wait_for_http_ok "dev reinsurance via gateway" "http://127.0.0.1:4010/api/v1/operations/reinsurance/health"
+wait_for_http_ok "dev accounting via gateway" "http://127.0.0.1:4010/api/v1/accounting/health"
 wait_for_http_ok "dev nextjs" "http://127.0.0.1:3000/health"
+
+record_successful_deploy_images
 
 section "Container Status"
 docker_compose ps
 
-docker image prune -f --filter "until=24h" >/dev/null || true
+post_deploy_capacity_maintenance
 
 log ""
 log "✓ Dev deployment complete at $(date -u +%Y-%m-%dT%H:%M:%SZ)"

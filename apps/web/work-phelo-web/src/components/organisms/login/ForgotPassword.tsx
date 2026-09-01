@@ -100,7 +100,10 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
         Enter your email and we&apos;ll send you a link to reset your password.
       </p>
 
-      <form onSubmit={handleSubmit(handleSubmit2)} className="flex flex-col gap-4">
+      <form
+        onSubmit={handleSubmit(handleSubmit2)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <FormField
           label="Email"
           registration={register('email', { required: 'Email is required' })}

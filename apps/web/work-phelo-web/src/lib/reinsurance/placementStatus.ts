@@ -1,4 +1,9 @@
-import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
+import {
+  Facultative,
+  FacultativeStatus,
+  PlacementPayment,
+  toStatusLabel,
+} from '@/types/reinsurance';
 
 export type StatusVariant = 'success' | 'warning' | 'neutral' | 'danger';
 
@@ -13,14 +18,6 @@ export const RAW_STATUS_VARIANT_MAP: Record<FacultativeStatus, StatusVariant> = 
   CANCELLED: 'danger',
 };
 
-/**
- * Raw status alone can't tell 'Closed' apart from 'Partially Placed' once a placement has
- * been through CLOSING — reopening a closed offer for edits reuses the CLOSING status, and
- * validating a fully-placed offer moves it into CLOSING too. So for the in-flight CLOSING
- * status we fall back to the actual accepted percentage against facultativeOffer instead of
- * trusting the raw status. PLACED, however, means the offer is fully placed but the closing
- * workflow hasn't been initiated yet — it stays "open" until the user acts on it.
- */
 export function acceptedPercentFor(placement: Facultative): number {
   return (
     placement.participants
@@ -44,7 +41,6 @@ export function isEffectivelyClosed(placement: Facultative): boolean {
   return false;
 }
 
-/** Raw backend status, human-formatted only (no grouping/collapsing across statuses). */
 export function rawStatusLabel(status: FacultativeStatus): string {
   return status
     .toLowerCase()
@@ -53,15 +49,50 @@ export function rawStatusLabel(status: FacultativeStatus): string {
     .join(' ');
 }
 
-// Business-friendly wording for specific statuses — still one label per raw status, no grouping.
 const STATUS_LABEL_OVERRIDES: Partial<Record<FacultativeStatus, string>> = {
   MARKETING: 'On Market',
   CLOSING: 'Partially Closed',
 };
 
-/** Same as rawStatusLabel, but swaps in business-friendly wording for a few statuses. */
 export function facultativeStatusLabel(status: FacultativeStatus): string {
   return STATUS_LABEL_OVERRIDES[status] ?? rawStatusLabel(status);
+}
+
+export type CedantPaymentStatus = 'Outstanding' | 'Pending' | 'Part Payment' | 'Paid';
+
+export function pendingPremiumReceived(payments: PlacementPayment[]): number {
+  return payments
+    .filter(
+      (p) => p.type === 'PREMIUM_RECEIVED' && p.status === 'RECORDED' && !p.reversalOfPaymentId,
+    )
+    .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+}
+
+export function cedantPaymentStatusFromPosition(
+  due: number,
+  paid: number,
+  outstanding: number,
+  pendingReceived: number,
+): CedantPaymentStatus {
+  if (due > 0 && outstanding <= 0.0001) return 'Paid';
+  if (paid > 0) return 'Part Payment';
+  if (pendingReceived > 0.0001) return 'Pending';
+  return 'Outstanding';
+}
+
+export const PREMIUM_PAYMENT_STATUS_TEXT: Record<CedantPaymentStatus, string> = {
+  Paid: 'Premium fully paid',
+  'Part Payment': 'Premium partly paid',
+  Pending: 'Premium payment pending',
+  Outstanding: 'Premium not yet paid',
+};
+
+export function latestConfirmedPremiumPaymentDate(payments: PlacementPayment[]): string | null {
+  const received = payments.filter((p) => p.type === 'PREMIUM_RECEIVED' && !p.reversalOfPaymentId);
+  return received.reduce<string | null>(
+    (latest, p) => (!latest || p.createdAt > latest ? p.createdAt : latest),
+    null,
+  );
 }
 
 export function displayStatusFor(placement: Facultative): {

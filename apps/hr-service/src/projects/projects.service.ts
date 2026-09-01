@@ -15,6 +15,7 @@ import {
   ProjectTaskStatus,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   HR_PERMISSION_DENY_MESSAGE,
   hasPermissionRule,
@@ -61,7 +62,10 @@ type ProjectWithDetails = Prisma.ProjectGetPayload<{
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private hasAnyPermission(user: RequestUser, rules: string[]) {
     return rules.some((rule) => hasPermissionRule(user, rule));
@@ -154,11 +158,35 @@ export class ProjectsService {
         tenantId,
         employmentStatus: { not: EmploymentStatus.OFFBOARDED },
       },
-      select: { id: true, firstName: true, lastName: true },
+      select: { id: true, firstName: true, lastName: true, userId: true },
     });
 
     if (!employee) throw new NotFoundException('Employee not found');
     return employee;
+  }
+
+  /** Notify an employee (fire-and-forget, in-app only) that a task was assigned to them. */
+  private async notifyTaskAssigned(
+    tenantId: string,
+    actor: RequestUser,
+    assignee: { userId: string | null },
+    projectId: string,
+    projectName: string,
+    taskId: string,
+    taskName: string,
+  ) {
+    if (!assignee.userId || assignee.userId === actor.id) return;
+
+    await this.notificationsService.create({
+      tenantId,
+      userId: assignee.userId,
+      type: 'TASK_ASSIGNED',
+      title: 'Task Assigned',
+      message: `You were assigned "${taskName}" in ${projectName}.`,
+      link: `/hr/projects/${projectId}/tasks`,
+      entityType: 'projectTask',
+      entityId: taskId,
+    });
   }
 
   private validateProjectDates(startDate: Date, endDate?: Date | null) {
@@ -710,7 +738,7 @@ export class ProjectsService {
     user: RequestUser,
     dto: CreateProjectTaskDto,
   ) {
-    await this.getProjectOrThrow(tenantId, projectId);
+    const project = await this.getProjectOrThrow(tenantId, projectId);
 
     const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
     const membership = await this.getProjectMembership(
@@ -722,11 +750,11 @@ export class ProjectsService {
       this.canCreateTask(user) || this.isProjectLead(membership?.role),
     );
 
-    if (dto.assignedEmployeeId) {
-      await this.ensureEmployee(tenantId, dto.assignedEmployeeId);
-    }
+    const assignedEmployee = dto.assignedEmployeeId
+      ? await this.ensureEmployee(tenantId, dto.assignedEmployeeId)
+      : null;
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const task = await tx.projectTask.create({
         data: {
           tenantId,
@@ -776,6 +804,20 @@ export class ProjectsService {
 
       return this.serializeTask(task);
     });
+
+    if (assignedEmployee) {
+      await this.notifyTaskAssigned(
+        tenantId,
+        user,
+        assignedEmployee,
+        projectId,
+        project.name,
+        result.id,
+        result.name,
+      );
+    }
+
+    return result;
   }
 
   async updateTask(
@@ -785,7 +827,7 @@ export class ProjectsService {
     user: RequestUser,
     dto: UpdateProjectTaskDto,
   ) {
-    await this.getProjectOrThrow(tenantId, projectId);
+    const project = await this.getProjectOrThrow(tenantId, projectId);
 
     const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
     const membership = await this.getProjectMembership(
@@ -803,14 +845,22 @@ export class ProjectsService {
     });
     if (!task) throw new NotFoundException('Project task not found');
 
+    let newlyAssignedEmployee: { userId: string | null } | null = null;
     if (dto.assignedEmployeeId) {
       this.assertAccess(
         this.canAssignTask(user) || this.isProjectLead(membership?.role),
       );
-      await this.ensureEmployee(tenantId, dto.assignedEmployeeId);
+      const employee = await this.ensureEmployee(
+        tenantId,
+        dto.assignedEmployeeId,
+      );
+      // Only notify when the assignee actually changes — not on every edit.
+      if (dto.assignedEmployeeId !== task.assignedEmployeeId) {
+        newlyAssignedEmployee = employee;
+      }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const status = dto.status;
       const updated = await tx.projectTask.update({
         where: { id: taskId },
@@ -898,6 +948,20 @@ export class ProjectsService {
 
       return this.serializeTask(updated);
     });
+
+    if (newlyAssignedEmployee) {
+      await this.notifyTaskAssigned(
+        tenantId,
+        user,
+        newlyAssignedEmployee,
+        projectId,
+        project.name,
+        result.id,
+        result.name,
+      );
+    }
+
+    return result;
   }
 
   async updateTaskStatus(

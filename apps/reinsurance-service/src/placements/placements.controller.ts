@@ -14,6 +14,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiConflictResponse,
   ApiCookieAuth,
   ApiCreatedResponse,
@@ -41,64 +42,43 @@ import {
   PaginatedPlacementsResponseDto,
   PlacementResponseDto,
 } from './dto/placement-response.dto';
-import { CreatePlacementClaimDto } from './dto/create-placement-claim.dto';
-import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
-import { CreatePlacementEndorsementParticipantDto } from './dto/create-placement-endorsement-participant.dto';
-import {
-  PlacementEndorsementClosingListResponseDto,
-  PlacementEndorsementClosingResponseDto,
-} from './dto/placement-endorsement-closing-response.dto';
-import {
-  PlacementEndorsementParticipantListResponseDto,
-  PlacementEndorsementParticipantResponseDto,
-} from './dto/placement-endorsement-participant-response.dto';
-import {
-  PlacementEndorsementListResponseDto,
-  PlacementEndorsementResponseDto,
-} from './dto/placement-endorsement-response.dto';
-import { PlacementEndorsementSummaryResponseDto } from './dto/placement-endorsement-summary-response.dto';
-import { UpdatePlacementEndorsementParticipantStatusDto } from './dto/update-placement-endorsement-participant-status.dto';
-import { UpdatePlacementEndorsementParticipantDto } from './dto/update-placement-endorsement-participant.dto';
-import { UpdatePlacementEndorsementClosingStatusDto } from './dto/update-placement-endorsement-closing-status.dto';
-import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
-import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
-import { ValidateEndorsementParticipantResponseDto } from './dto/validate-endorsement-participant-response.dto';
-import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
-import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
-import { PlacementEndorsementsService } from './placement-endorsements.service';
-import {
-  PlacementClaimAllocationListResponseDto,
-  PlacementClaimListResponseDto,
-  PlacementClaimResponseDto,
-} from './dto/placement-claim-response.dto';
-import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
-import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
-import { PlacementClaimsService } from './placement-claims.service';
+import { EffectivePlacementViewResponseDto } from './dto/placement-effective-view-response.dto';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import {
   PlacementClosingListResponseDto,
   PlacementClosingResponseDto,
 } from './dto/placement-closing-response.dto';
 import { UpdatePlacementClosingStatusDto } from './dto/update-placement-closing-status.dto';
-import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementClosingsService } from './closings/closings.service';
+import {
+  CreateEffectiveDebitNoteDto,
+  EffectiveDebitNoteListResponseDto,
+  EffectiveDebitNotePreviewResponseDto,
+  EffectiveDebitNoteQueryDto,
+} from './dto/effective-debit-note.dto';
 import {
   PlacementNoteListResponseDto,
   PlacementNoteResponseDto,
 } from './dto/placement-note-response.dto';
 import { UpdatePlacementNoteStatusDto } from './dto/update-placement-note-status.dto';
 import { VoidPlacementNoteDto } from './dto/void-placement-note.dto';
-import { PlacementNotesService } from './placement-notes.service';
+import { PlacementNotesService } from './transactions/notes.service';
 import {
   PlacementPaymentListResponseDto,
   PlacementPaymentResponseDto,
 } from './dto/placement-payment-response.dto';
+import { PlacementFinancialPositionResponseDto } from './dto/placement-financial-position-response.dto';
+import { ConfirmPlacementPaymentBankDto } from './dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
-import { PlacementPaymentsService } from './placement-payments.service';
+import { PlacementFinancialPositionService } from './finance/financial-position.service';
+import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
 import {
   ClosingSlipPreviewResponseDto,
   OfferSlipPreviewResponseDto,
 } from './dto/slip-preview-response.dto';
 import { AcceptPlacementParticipantResponseDto } from './dto/accept-placement-participant-response.dto';
+import { ArchivePlacementDto } from './dto/archive-placement.dto';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
@@ -127,27 +107,92 @@ export class PlacementsController {
   constructor(
     private readonly placementsService: PlacementsService,
     private readonly closingsService: PlacementClosingsService,
-    private readonly endorsementsService: PlacementEndorsementsService,
-    private readonly endorsementParticipantsService: PlacementEndorsementParticipantsService,
-    private readonly endorsementClosingsService: PlacementEndorsementClosingsService,
+    private readonly effectiveViewService: PlacementEffectiveViewService,
     private readonly notesService: PlacementNotesService,
     private readonly paymentsService: PlacementPaymentsService,
-    private readonly claimsService: PlacementClaimsService,
+    private readonly financialPositionService: PlacementFinancialPositionService,
   ) {}
+
+  @Get('payments/pending-bank-confirmation')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List payments awaiting Accounting financial confirmation',
+    description:
+      'Returns tenant-scoped RECORDED inbound premium receipts and outbound reinsurer disbursements that Accounting must confirm before financial recognition and posting begin.',
+  })
+  @ApiOkResponse({ type: PlacementPaymentListResponseDto })
+  async findPendingBankConfirmationPayments(
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.paymentsService.findPendingBankConfirmations(
+      request.user.tenantId,
+    );
+    return { items };
+  }
+
+  @Get(':id/effective-view')
+  @ApiTags('Reinsurance - Placements')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get effective placement view',
+    description:
+      'Returns the read-only effective placement state after confirmed endorsement closings. ' +
+      'Original placement records remain immutable; DRAFT, MARKETING and otherwise unconfirmed endorsement activity is reported as pending.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiQuery({
+    name: 'asOfDate',
+    required: false,
+    description:
+      'Optional ISO date/time for historical effective-view reconstruction. Defaults to now.',
+  })
+  @ApiOkResponse({ type: EffectivePlacementViewResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  getEffectiveView(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('asOfDate') asOfDate: string | undefined,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.effectiveViewService.getEffectiveView(
+      request.user.tenantId,
+      id,
+      asOfDate,
+    );
+  }
 
   @Get()
   @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
-    summary: 'List active facultative placements',
+    summary: 'List facultative placements',
     description:
-      'Returns only non-archived placements in the authenticated tenant.',
+      'Returns active placements by default. Pass archived=true to return archived placements only. ' +
+      'Both modes are tenant-scoped and support the same filters and pagination.',
   })
   @ApiQuery({ name: 'search', required: false, example: 'FAC-2026' })
+  @ApiQuery({
+    name: 'archived',
+    required: false,
+    schema: { type: 'boolean', default: false },
+    description: 'When true, returns archived placements only.',
+  })
   @ApiQuery({
     name: 'status',
     required: false,
     enum: PlacementStatus,
+  })
+  @ApiQuery({
+    name: 'statuses',
+    required: false,
+    enum: PlacementStatus,
+    isArray: true,
+    description:
+      'Comma-separated placement lifecycle statuses. Applied before pagination.',
   })
   @ApiQuery({
     name: 'placementType',
@@ -240,93 +285,14 @@ export class PlacementsController {
     return this.placementsService.getLockStatus(request.user.tenantId, id);
   }
 
-  @Get(':id/endorsements')
-  @ApiTags('Reinsurance - Endorsements')
+  @Get(':id/endorsements/:endorsementId/notes')
+  @ApiTags('Reinsurance - Endorsement Notes')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
-    summary: 'List placement endorsements',
+    summary: 'List endorsement debit and credit notes',
     description:
-      'Returns versioned placement adjustment records. Endorsements are child records and do not mutate the original placement, participants, closings, payments or notes.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiOkResponse({ type: PlacementEndorsementListResponseDto })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'The placement is archived, missing or belongs to another tenant.',
-  })
-  findEndorsements(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementsService
-      .findAll(request.user.tenantId, id)
-      .then((items) => ({ items }));
-  }
-
-  @Post(':id/endorsements')
-  @ApiTags('Reinsurance - Endorsements')
-  @RequirePermissions(PlacementPermission.CREATE)
-  @ApiOperation({
-    summary: 'Create placement endorsement',
-    description:
-      'Creates a DRAFT versioned adjustment linked to the original placement. The backend captures originalSnapshot at creation. No endorsement participants, closings, notes, payments, claims, documents or frontend changes are created in PR1.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiCreatedResponse({ type: PlacementEndorsementResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'Invalid endorsement payload or the placement has no closing yet.',
-  })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'The placement is archived, missing or belongs to another tenant.',
-  })
-  createEndorsement(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CreatePlacementEndorsementDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementsService.create(request.user, id, dto);
-  }
-
-  @Get(':id/endorsements/:endorsementId')
-  @ApiTags('Reinsurance - Endorsements')
-  @RequirePermissions(PlacementPermission.VIEW)
-  @ApiOperation({ summary: 'Get placement endorsement by ID' })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementResponseDto })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'The placement endorsement is missing or belongs to another tenant/placement.',
-  })
-  findEndorsement(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementsService.findOne(
-      request.user.tenantId,
-      id,
-      endorsementId,
-    );
-  }
-
-  @Get(':id/endorsements/:endorsementId/summary')
-  @ApiTags('Reinsurance - Endorsements')
-  @RequirePermissions(PlacementPermission.VIEW)
-  @ApiOperation({
-    summary: 'Get placement endorsement aggregate summary',
-    description:
-      'Returns read-only endorsement workflow totals using endorsement participants, endorsement closings and endorsement notes only. Original placement participants, closings and notes are excluded from capacity and completion calculations.',
+      'Returns endorsement-scoped debit/credit note records generated from confirmed endorsement closing snapshots. ' +
+      'Endorsement notes do not mutate original placement notes, closings or participants.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -334,116 +300,18 @@ export class PlacementsController {
     format: 'uuid',
     description: 'Placement endorsement ID.',
   })
-  @ApiOkResponse({ type: PlacementEndorsementSummaryResponseDto })
+  @ApiOkResponse({ type: PlacementNoteListResponseDto })
   @ApiNotFoundResponse({
     type: ApiErrorResponseDto,
     description:
-      'The placement endorsement is missing or belongs to another tenant/placement.',
+      'The placement endorsement is archived, missing or belongs to another tenant/placement.',
   })
-  getEndorsementSummary(
+  async findEndorsementNotes(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.endorsementsService.getSummary(
-      request.user.tenantId,
-      id,
-      endorsementId,
-    );
-  }
-
-  @Patch(':id/endorsements/:endorsementId')
-  @ApiTags('Reinsurance - Endorsements')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Update draft placement endorsement',
-    description:
-      'Updates editable endorsement metadata and proposedSnapshot. Only DRAFT endorsements can be edited directly. Original placement and financial history remain unchanged.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Endorsement is no longer DRAFT or payload is invalid.',
-  })
-  updateEndorsement(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Body() dto: UpdatePlacementEndorsementDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementsService.update(
-      request.user,
-      id,
-      endorsementId,
-      dto,
-    );
-  }
-
-  @Patch(':id/endorsements/:endorsementId/status')
-  @ApiTags('Reinsurance - Endorsements')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Change placement endorsement status',
-    description:
-      'Moves an endorsement through the PR1 lifecycle. CLOSED, DECLINED and VOID are terminal. Status changes do not mutate the original placement.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Unsupported endorsement status transition.',
-  })
-  changeEndorsementStatus(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Body() dto: UpdatePlacementEndorsementStatusDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementsService.changeStatus(
-      request.user,
-      id,
-      endorsementId,
-      dto,
-    );
-  }
-
-  @Get(':id/endorsements/:endorsementId/closings')
-  @ApiTags('Reinsurance - Endorsement Closings')
-  @RequirePermissions(PlacementPermission.VIEW)
-  @ApiOperation({
-    summary: 'List endorsement closings',
-    description:
-      'Returns endorsement-scoped closing snapshots for accepted endorsement participants. These records do not mutate original placement closings, participants, payments or notes.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementClosingListResponseDto })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'The placement endorsement is missing or belongs to another tenant/placement.',
-  })
-  async findEndorsementClosings(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    const items = await this.endorsementClosingsService.findAll(
+    const items = await this.notesService.findAllEndorsementNotes(
       request.user.tenantId,
       id,
       endorsementId,
@@ -451,13 +319,91 @@ export class PlacementsController {
     return { items };
   }
 
-  @Get(':id/endorsements/:endorsementId/closings/:closingId')
-  @ApiTags('Reinsurance - Endorsement Closings')
+  @Get(':id/endorsements/:endorsementId/notes/:noteId')
+  @ApiTags('Reinsurance - Endorsement Notes')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
-    summary: 'Get endorsement closing by ID',
+    summary: 'Get an endorsement note',
     description:
-      'Returns a single endorsement closing scoped to the authenticated tenant, placement and endorsement.',
+      'Returns one endorsement debit or credit note scoped to the authenticated tenant, placement and endorsement.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Endorsement note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The endorsement note is missing or belongs to another tenant/placement/endorsement.',
+  })
+  findEndorsementNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.findEndorsementNote(
+      request.user.tenantId,
+      id,
+      endorsementId,
+      noteId,
+    );
+  }
+
+  @Post(':id/endorsements/:endorsementId/notes/debit')
+  @ApiTags('Reinsurance - Endorsement Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create endorsement debit note',
+    description:
+      'Creates a DRAFT endorsement debit note for the cedant from all CONFIRMED endorsement closing snapshots. ' +
+      'Only one active endorsement debit note is allowed per endorsement; VOID notes are inactive and retain their numbers.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'No confirmed endorsement closing exists or required closing currency/amount data is missing.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'An active endorsement debit note already exists for this endorsement.',
+  })
+  createEndorsementDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.createEndorsementDebitNote(
+      request.user,
+      id,
+      endorsementId,
+    );
+  }
+
+  @Post(':id/endorsements/:endorsementId/closings/:closingId/notes/credit')
+  @ApiTags('Reinsurance - Endorsement Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create endorsement closing credit note',
+    description:
+      'Creates a DRAFT endorsement credit note for one CONFIRMED endorsement closing and its reinsurer. ' +
+      'Values are copied from PlacementEndorsementClosing snapshots; original placement records are not recalculated or mutated.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -468,35 +414,40 @@ export class PlacementsController {
   @ApiParam({
     name: 'closingId',
     format: 'uuid',
-    description: 'Endorsement closing ID.',
+    description: 'Confirmed endorsement closing ID.',
   })
-  @ApiOkResponse({ type: PlacementEndorsementClosingResponseDto })
-  @ApiNotFoundResponse({
+  @ApiCreatedResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
     type: ApiErrorResponseDto,
     description:
-      'The endorsement closing is missing or belongs to another tenant/placement/endorsement.',
+      'Endorsement closing is not CONFIRMED, is missing snapshot data, or does not belong to a reinsurer.',
   })
-  findEndorsementClosing(
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'An active endorsement credit note already exists for this endorsement closing.',
+  })
+  createEndorsementCreditNote(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
     @Param('closingId', ParseUUIDPipe) closingId: string,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.endorsementClosingsService.findOne(
-      request.user.tenantId,
+    return this.notesService.createEndorsementCreditNote(
+      request.user,
       id,
       endorsementId,
       closingId,
     );
   }
 
-  @Post(':id/endorsements/:endorsementId/participants/:participantId/closings')
-  @ApiTags('Reinsurance - Endorsement Closings')
+  @Patch(':id/endorsements/:endorsementId/notes/:noteId/status')
+  @ApiTags('Reinsurance - Endorsement Notes')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
-    summary: 'Create endorsement closing',
+    summary: 'Issue a draft endorsement note',
     description:
-      'Creates a DRAFT endorsement closing from an ACCEPTED endorsement participant with signedLinePercent > 0. The closing snapshots endorsement version values and never mutates original placement closing records.',
+      'Only DRAFT → ISSUED is supported. VOID uses the dedicated void endpoint. Settlement is deferred.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -505,165 +456,38 @@ export class PlacementsController {
     description: 'Placement endorsement ID.',
   })
   @ApiParam({
-    name: 'participantId',
+    name: 'noteId',
     format: 'uuid',
-    description: 'Endorsement participant ID.',
+    description: 'Endorsement note ID.',
   })
-  @ApiCreatedResponse({ type: PlacementEndorsementClosingResponseDto })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
   @ApiBadRequestResponse({
     type: ApiErrorResponseDto,
-    description:
-      'Endorsement is VOID, participant is not ACCEPTED, signedLinePercent is missing/zero or endorsement snapshot premium is missing.',
+    description: 'Unsupported note status transition.',
   })
-  @ApiConflictResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'An active endorsement closing already exists for this endorsement participant.',
-  })
-  createEndorsementClosing(
+  issueEndorsementNote(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: UpdatePlacementNoteStatusDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.endorsementClosingsService.create(
+    return this.notesService.issueEndorsementNote(
       request.user,
       id,
       endorsementId,
-      participantId,
-    );
-  }
-
-  @Post(
-    ':id/endorsements/:endorsementId/participants/:participantId/validate-and-confirm',
-  )
-  @ApiTags('Reinsurance - Endorsement Closings')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Validate and confirm an endorsement participant atomically',
-    description:
-      'Creates or reuses the active endorsement closing for an ACCEPTED endorsement participant, issues it when needed, confirms it, and marks the endorsement participant CLOSED in one transaction. The endpoint is idempotent for already confirmed endorsement closings and does not mutate original placement participants or original placement closings.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiParam({
-    name: 'participantId',
-    format: 'uuid',
-    description: 'Endorsement participant ID.',
-  })
-  @ApiCreatedResponse({ type: ValidateEndorsementParticipantResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'Endorsement is not in a valid workflow state, participant is not ACCEPTED, signed line is missing/zero, capacity exceeds targetPercent, or required snapshot values are missing.',
-  })
-  @ApiConflictResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'Endorsement or participant is terminal, or the participant is closed without a confirmed active endorsement closing.',
-  })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'Placement, endorsement, or endorsement participant is missing or belongs to another tenant.',
-  })
-  validateAndConfirmEndorsementParticipant(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Param('participantId', ParseUUIDPipe) participantId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementClosingsService.validateAndConfirm(
-      request.user,
-      id,
-      endorsementId,
-      participantId,
-    );
-  }
-
-  @Patch(':id/endorsements/:endorsementId/closings/:closingId/status')
-  @ApiTags('Reinsurance - Endorsement Closings')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Change endorsement closing status',
-    description:
-      'Moves an endorsement closing through DRAFT, ISSUED, CONFIRMED and VOID. CONFIRMED and VOID are terminal.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiParam({
-    name: 'closingId',
-    format: 'uuid',
-    description: 'Endorsement closing ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementClosingResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Unsupported endorsement closing status transition.',
-  })
-  changeEndorsementClosingStatus(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Param('closingId', ParseUUIDPipe) closingId: string,
-    @Body() dto: UpdatePlacementEndorsementClosingStatusDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementClosingsService.changeStatus(
-      request.user,
-      id,
-      endorsementId,
-      closingId,
+      noteId,
       dto,
     );
   }
 
-  @Get(':id/endorsements/:endorsementId/participants')
-  @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.VIEW)
-  @ApiOperation({
-    summary: 'List endorsement participants',
-    description:
-      'Returns endorsement-scoped reinsurer response records and capacity aggregates. These records do not mutate original placement participants.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementParticipantListResponseDto })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'The placement endorsement is missing or belongs to another tenant/placement.',
-  })
-  findEndorsementParticipants(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementParticipantsService.findAll(
-      request.user.tenantId,
-      id,
-      endorsementId,
-    );
-  }
-
-  @Post(':id/endorsements/:endorsementId/participants')
-  @ApiTags('Reinsurance - Endorsement Participants')
+  @Post(':id/endorsements/:endorsementId/notes/:noteId/void')
+  @ApiTags('Reinsurance - Endorsement Notes')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
-    summary: 'Add endorsement participant',
+    summary: 'Void a draft or issued endorsement note',
     description:
-      'Adds an existing or new reinsurer to the endorsement market workflow. originalParticipantId is optional and identifies existing reinsurers from the original placement. Original placement participants are never mutated.',
+      'Moves DRAFT or ISSUED endorsement notes to VOID with a required void reason. VOID is terminal.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -671,358 +495,30 @@ export class PlacementsController {
     format: 'uuid',
     description: 'Placement endorsement ID.',
   })
-  @ApiCreatedResponse({ type: PlacementEndorsementParticipantResponseDto })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Endorsement note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
   @ApiBadRequestResponse({
     type: ApiErrorResponseDto,
-    description:
-      'Counterparty is not an active reinsurer, original participant does not match, status values are invalid or accepted capacity exceeds targetPercent.',
+    description: 'Void reason is missing or note is already terminal.',
   })
-  @ApiConflictResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'An active endorsement participant already exists for this reinsurer.',
-  })
-  createEndorsementParticipant(
+  voidEndorsementNote(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Body() dto: CreatePlacementEndorsementParticipantDto,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: VoidPlacementNoteDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.endorsementParticipantsService.create(
+    return this.notesService.voidEndorsementNote(
       request.user,
       id,
       endorsementId,
+      noteId,
       dto,
     );
-  }
-
-  @Get(':id/endorsements/:endorsementId/participants/:participantId')
-  @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.VIEW)
-  @ApiOperation({ summary: 'Get endorsement participant by ID' })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiParam({
-    name: 'participantId',
-    format: 'uuid',
-    description: 'Endorsement participant ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementParticipantResponseDto })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'The endorsement participant is missing or belongs to another tenant/placement/endorsement.',
-  })
-  findEndorsementParticipant(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Param('participantId', ParseUUIDPipe) participantId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementParticipantsService.findOne(
-      request.user.tenantId,
-      id,
-      endorsementId,
-      participantId,
-    );
-  }
-
-  @Patch(':id/endorsements/:endorsementId/participants/:participantId')
-  @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Update endorsement participant',
-    description:
-      'Updates an endorsement-scoped participant while the endorsement and participant are non-terminal. Original placement participant records remain immutable.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiParam({
-    name: 'participantId',
-    format: 'uuid',
-    description: 'Endorsement participant ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementParticipantResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'Participant or endorsement is terminal, values are invalid or accepted capacity exceeds targetPercent.',
-  })
-  updateEndorsementParticipant(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Param('participantId', ParseUUIDPipe) participantId: string,
-    @Body() dto: UpdatePlacementEndorsementParticipantDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementParticipantsService.update(
-      request.user,
-      id,
-      endorsementId,
-      participantId,
-      dto,
-    );
-  }
-
-  @Patch(':id/endorsements/:endorsementId/participants/:participantId/status')
-  @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Change endorsement participant status',
-    description:
-      'Moves an endorsement participant through INVITED, OFFER_SENT, QUOTED, ACCEPTED, DECLINED and CLOSED. DECLINED and CLOSED are terminal.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiParam({
-    name: 'participantId',
-    format: 'uuid',
-    description: 'Endorsement participant ID.',
-  })
-  @ApiOkResponse({ type: PlacementEndorsementParticipantResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'Unsupported status transition, missing accepted signed line or accepted capacity exceeds targetPercent.',
-  })
-  changeEndorsementParticipantStatus(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Param('participantId', ParseUUIDPipe) participantId: string,
-    @Body() dto: UpdatePlacementEndorsementParticipantStatusDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.endorsementParticipantsService.changeStatus(
-      request.user,
-      id,
-      endorsementId,
-      participantId,
-      dto,
-    );
-  }
-
-  @Delete(':id/endorsements/:endorsementId/participants/:participantId')
-  @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Delete non-terminal endorsement participant',
-    description:
-      'Removes an endorsement-scoped participant only while the endorsement and participant are non-terminal. Original placement participants are not changed.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({
-    name: 'endorsementId',
-    format: 'uuid',
-    description: 'Placement endorsement ID.',
-  })
-  @ApiParam({
-    name: 'participantId',
-    format: 'uuid',
-    description: 'Endorsement participant ID.',
-  })
-  @ApiOkResponse({
-    schema: {
-      example: { deleted: true },
-    },
-  })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Participant or endorsement is terminal.',
-  })
-  async deleteEndorsementParticipant(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
-    @Param('participantId', ParseUUIDPipe) participantId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    await this.endorsementParticipantsService.delete(
-      request.user,
-      id,
-      endorsementId,
-      participantId,
-    );
-    return { deleted: true };
-  }
-
-  @Get(':id/claims')
-  @ApiTags('Reinsurance - Claims')
-  @RequirePermissions(PlacementPermission.VIEW)
-  @ApiOperation({
-    summary: 'List placement claims',
-    description:
-      'Returns loss-event claim records for the placement. Claims do not create cash calls, notes, payments or financial locks in PR1.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiOkResponse({ type: PlacementClaimListResponseDto })
-  async findClaims(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    const items = await this.claimsService.findAll(request.user.tenantId, id);
-    return { items };
-  }
-
-  @Get(':id/claims/:claimId')
-  @ApiTags('Reinsurance - Claims')
-  @RequirePermissions(PlacementPermission.VIEW)
-  @ApiOperation({
-    summary: 'Get placement claim',
-    description:
-      'Returns one loss-event claim. The claim must belong to the placement and authenticated tenant.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
-  @ApiOkResponse({ type: PlacementClaimResponseDto })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'The placement or claim is missing, archived or belongs to another tenant.',
-  })
-  findClaim(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('claimId', ParseUUIDPipe) claimId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.claimsService.findOne(request.user.tenantId, id, claimId);
-  }
-
-  @Post(':id/claims')
-  @ApiTags('Reinsurance - Claims')
-  @RequirePermissions(PlacementPermission.CREATE)
-  @ApiOperation({
-    summary: 'Create placement claim loss event',
-    description:
-      'Creates a DRAFT loss-event claim with CLM-* placement-scoped numbering. This does not generate allocations, cash calls, payments, notes, documents or emails.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiCreatedResponse({ type: PlacementClaimResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description:
-      'Claim currency is invalid, amount is invalid or required loss-event fields are missing.',
-  })
-  createClaim(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CreatePlacementClaimDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.claimsService.create(request.user, id, dto);
-  }
-
-  @Patch(':id/claims/:claimId')
-  @ApiTags('Reinsurance - Claims')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Update editable placement claim',
-    description:
-      'Updates DRAFT, NOTIFIED or RESERVED claims. Setting finalLossAmount stamps finalized metadata. Terminal and settlement-stage claims cannot be edited in PR1.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
-  @ApiOkResponse({ type: PlacementClaimResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'The claim is terminal or no longer directly editable.',
-  })
-  updateClaim(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('claimId', ParseUUIDPipe) claimId: string,
-    @Body() dto: UpdatePlacementClaimDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.claimsService.update(request.user, id, claimId, dto);
-  }
-
-  @Patch(':id/claims/:claimId/status')
-  @ApiTags('Reinsurance - Claims')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Change placement claim status',
-    description:
-      'Moves a claim through DRAFT, NOTIFIED, RESERVED, PARTIALLY_SETTLED, SETTLED, CLOSED, DECLINED and VOID. CLOSED and VOID are terminal.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
-  @ApiOkResponse({ type: PlacementClaimResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Unsupported claim status transition.',
-  })
-  changeClaimStatus(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('claimId', ParseUUIDPipe) claimId: string,
-    @Body() dto: UpdatePlacementClaimStatusDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.claimsService.changeStatus(request.user, id, claimId, dto);
-  }
-
-  @Get(':id/claims/:claimId/allocations')
-  @ApiTags('Reinsurance - Claim Allocations')
-  @RequirePermissions(PlacementPermission.VIEW)
-  @ApiOperation({
-    summary: 'List claim liability allocations',
-    description:
-      'Returns reinsurer liability allocations generated from immutable confirmed placement and endorsement closing snapshots.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
-  @ApiOkResponse({ type: PlacementClaimAllocationListResponseDto })
-  async findClaimAllocations(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('claimId', ParseUUIDPipe) claimId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    const items = await this.claimsService.findAllocations(
-      request.user.tenantId,
-      id,
-      claimId,
-    );
-    return { items };
-  }
-
-  @Post(':id/claims/:claimId/allocations/generate')
-  @ApiTags('Reinsurance - Claim Allocations')
-  @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({
-    summary: 'Generate claim liability allocations',
-    description:
-      'Creates DRAFT allocation rows from CONFIRMED PlacementClosing and PlacementEndorsementClosing snapshots. DRAFT, ISSUED and VOID closings are excluded. This does not create cash calls, notes or payments.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
-  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
-  @ApiCreatedResponse({ type: PlacementClaimAllocationListResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'No confirmed closings exist or the claim is terminal.',
-  })
-  @ApiConflictResponse({
-    type: ApiErrorResponseDto,
-    description: 'Claim allocations have already been generated.',
-  })
-  async generateClaimAllocations(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('claimId', ParseUUIDPipe) claimId: string,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    const items = await this.claimsService.generateAllocations(
-      request.user,
-      id,
-      claimId,
-    );
-    return { items };
   }
 
   @Get(':id/notes')
@@ -1139,6 +635,128 @@ export class PlacementsController {
     return this.notesService.createCreditNote(request.user, id, closingId);
   }
 
+  @Get(':id/effective-debit-note/preview')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Preview current effective debit note',
+    description:
+      'Returns a non-persisted backend-truth preview of the consolidated current-effective cedant debit-note statement. ' +
+      'The statement includes original confirmed business plus CLOSED effective endorsements as of the requested date. ' +
+      'It is non-posting because original and endorsement-adjustment notes carry financial recognition.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiQuery({
+    name: 'asOfDate',
+    required: false,
+    description:
+      'Optional ISO date/time. Future-dated closed endorsements are excluded unless the as-of date reaches them.',
+  })
+  @ApiOkResponse({ type: EffectiveDebitNotePreviewResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The as-of date is invalid or the current effective cedant obligation is not positive.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The effective debit note contains multiple currencies and cannot be aggregated safely.',
+  })
+  previewEffectiveDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: EffectiveDebitNoteQueryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.previewCurrentEffectiveDebitNote(
+      request.user.tenantId,
+      id,
+      query.asOfDate,
+    );
+  }
+
+  @Post(':id/effective-debit-note')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create current effective debit note',
+    description:
+      'Creates or reuses a DRAFT current-effective debit-note statement for the same deterministic effective business version. ' +
+      'The note is explicitly non-posting, so issuing it does not enqueue an Accounting event and cannot duplicate AR recognition.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiBody({ type: CreateEffectiveDebitNoteDto })
+  @ApiCreatedResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The as-of date is invalid or the current effective cedant obligation is not positive.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The effective debit note contains multiple currencies and cannot be aggregated safely.',
+  })
+  createEffectiveDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateEffectiveDebitNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.createCurrentEffectiveDebitNote(
+      request.user,
+      id,
+      dto.asOfDate,
+    );
+  }
+
+  @Get(':id/effective-debit-notes')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List current effective debit notes',
+    description:
+      'Lists persisted current-effective debit-note statement versions for the placement. Historical versions remain immutable.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: EffectiveDebitNoteListResponseDto })
+  async findEffectiveDebitNotes(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.notesService.findAllCurrentEffectiveDebitNotes(
+      request.user.tenantId,
+      id,
+    );
+    return { items };
+  }
+
+  @Get(':id/effective-debit-notes/:noteId')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get current effective debit note',
+    description:
+      'Returns a persisted current-effective debit-note statement version scoped to the authenticated tenant and placement.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Current effective debit note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  findEffectiveDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.findCurrentEffectiveDebitNote(
+      request.user.tenantId,
+      id,
+      noteId,
+    );
+  }
+
   @Patch(':id/notes/:noteId/status')
   @ApiTags('Reinsurance - Notes')
   @RequirePermissions(PlacementPermission.EDIT)
@@ -1193,6 +811,45 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.notesService.void(request.user, id, noteId, dto);
+  }
+
+  @Get(':id/financial-position')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get placement financial position',
+    description:
+      'Returns the current effective premium obligation and settlement position for the placement. ' +
+      'Original closings, effective endorsement closing snapshots and immutable payment/reversal records are projected without mutating historical records.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiQuery({
+    name: 'asOfDate',
+    required: false,
+    description:
+      'Optional ISO date/time for historical or future financial-position reconstruction. Defaults to now.',
+  })
+  @ApiOkResponse({ type: PlacementFinancialPositionResponseDto })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The position contains multiple currencies and cannot be aggregated safely.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  getFinancialPosition(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('asOfDate') asOfDate: string | undefined,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.financialPositionService.getFinancialPosition(
+      request.user.tenantId,
+      id,
+      asOfDate,
+    );
   }
 
   @Get(':id/payments')
@@ -1256,7 +913,8 @@ export class PlacementsController {
       'Records the first payment foundation financial fact for a placement. ' +
       'The first recorded payment financially locks the placement and future direct placement/participant edits return 409 until endorsements are implemented. ' +
       'Payment creation remains allowed after lock so additional receipts/disbursements can be recorded. ' +
-      'Premium received is placement-level and must come from the cedant. Reinsurer disbursement requires a matching CONFIRMED closing and participant.',
+      'Premium received is placement-level and must come from the cedant. Reinsurer disbursement records the operational outbound payment against a confirmed original or endorsement closing. ' +
+      'Accounting confirmation, bank reference, FX, withholding tax, bank charges and posting happen in the later Accounting workflow.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiCreatedResponse({ type: PlacementPaymentResponseDto })
@@ -1276,6 +934,52 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.paymentsService.create(request.user, id, dto);
+  }
+
+  @Post(':id/payments/:paymentId/bank-confirmation')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Confirm payment financial completion',
+    description:
+      'Accounting-owned workflow step that transitions a RECORDED inbound premium receipt or outbound reinsurer disbursement to BANK_CONFIRMED, stores confirmation facts, and enqueues the corresponding Accounting event for posting.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'paymentId',
+    format: 'uuid',
+    description:
+      'RECORDED premium receipt or reinsurer disbursement payment ID.',
+  })
+  @ApiBody({ type: ConfirmPlacementPaymentBankDto })
+  @ApiOkResponse({ type: PlacementPaymentResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The payment is not an original inbound premium receipt/outbound reinsurer disbursement or is in a non-confirmable status.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The payment is already bank-confirmed or changed status before confirmation completed.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or payment is archived, missing or belongs to another tenant.',
+  })
+  confirmPaymentBankCompletion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: ConfirmPlacementPaymentBankDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.paymentsService.confirmBankPayment(
+      request.user,
+      id,
+      paymentId,
+      dto,
+    );
   }
 
   @Post(':id/payments/:paymentId/reverse')
@@ -1597,6 +1301,34 @@ export class PlacementsController {
     return this.placementsService.changeStatus(request.user, id, dto);
   }
 
+  @Post(':id/force-close')
+  @ApiTags('Reinsurance - Placements')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Force close placement using actual placed percentage',
+    description:
+      'Operational override that bypasses normal close workflow validation, sets status to CLOSED, ' +
+      'sets facultativeOffer to the percentage actually confirmed in placement closings, and leaves outstanding workflow history untouched. ' +
+      'Draft, issued, void closings and declined participants are excluded from the actual placed percentage.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description: 'The placement is missing or belongs to another tenant.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived or in a terminal state that cannot be force closed.',
+  })
+  forceClose(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.forceClose(request.user, id);
+  }
+
   @Post(':id/participants')
   @ApiTags('Reinsurance - Placement Participants')
   @RequirePermissions(PlacementPermission.EDIT)
@@ -1784,7 +1516,8 @@ export class PlacementsController {
     summary: 'Remove one placement participant',
     description:
       'Deletes a participant from an editable placement without archiving the placement itself. ' +
-      'Financially locked placements return 409 and require endorsement.',
+      'Deletion is allowed only when the participant has no history-bearing dependencies such as closings, notes, payments, claim allocations, documents, attachments or endorsement revisions. ' +
+      'Financially locked placements or dependency conflicts return 409 and require the related workflow instead.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -1801,7 +1534,7 @@ export class PlacementsController {
   @ApiConflictResponse({
     type: ApiErrorResponseDto,
     description:
-      'The placement is financially locked and participant changes require endorsement.',
+      'The placement is financially locked, or the participant is referenced by financial/workflow records that must be voided, reversed or preserved instead of hard-deleted.',
   })
   deleteParticipant(
     @Param('id', ParseUUIDPipe) id: string,
@@ -1822,9 +1555,11 @@ export class PlacementsController {
     summary: 'Archive a placement',
     description:
       'Soft-archives the active record. Archived records are excluded from standard list and detail requests. ' +
-      'Financially locked placements return 409 and cannot be archived directly.',
+      'Financially locked placements return 409 and cannot be archived directly. ' +
+      'Optional archiveReason is stored for the recycle-bin workflow.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiBody({ type: ArchivePlacementDto, required: false })
   @ApiOkResponse({ type: PlacementResponseDto })
   @ApiNotFoundResponse({
     type: ApiErrorResponseDto,
@@ -1837,8 +1572,34 @@ export class PlacementsController {
   })
   archive(
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ArchivePlacementDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.placementsService.archive(request.user, id);
+    return this.placementsService.archive(request.user, id, dto);
+  }
+
+  @Post(':id/restore')
+  @ApiTags('Reinsurance - Placements')
+  @RequirePermissions(PlacementPermission.DELETE)
+  @ApiOperation({
+    summary: 'Restore an archived placement',
+    description:
+      'Restores a tenant-owned archived placement to the active list. Child records and audit history are preserved.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description: 'The placement is missing or belongs to another tenant.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'The placement is already active.',
+  })
+  restore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.restore(request.user, id);
   }
 }

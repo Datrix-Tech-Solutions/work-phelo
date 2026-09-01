@@ -1,10 +1,13 @@
 import { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 
 interface DetailFieldProps {
   label: string;
   value: ReactNode;
   horizontal?: boolean;
   inline?: boolean;
+  /** Only applies when `inline` is set. Defaults to text-base for both label and value. */
+  compact?: boolean;
 }
 
 export function DetailField({
@@ -12,12 +15,22 @@ export function DetailField({
   value,
   horizontal = false,
   inline = false,
+  compact = false,
 }: DetailFieldProps) {
   if (inline) {
     return (
       <div className="flex items-baseline gap-6">
-        <span className="text-sm font-semibold text-gray-700 shrink-0 min-w-60">{label}:</span>
-        <span className="text-sm text-gray-800">{value ?? '—'}</span>
+        <span
+          className={cn(
+            'font-semibold text-gray-700 shrink-0 min-w-70',
+            compact ? 'text-xs' : 'text-base',
+          )}
+        >
+          {label}:
+        </span>
+        <span className={cn('text-gray-800', compact ? 'text-sm' : 'text-base')}>
+          {value ?? '—'}
+        </span>
       </div>
     );
   }

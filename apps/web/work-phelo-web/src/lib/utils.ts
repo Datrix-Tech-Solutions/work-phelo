@@ -6,11 +6,23 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Strips a full ISO datetime (e.g. "2026-08-01T00:00:00.000Z") down to its date-only
+ * portion ("2026-08-01"). Use before lexicographically comparing two date strings that
+ * may come from different sources — an API's ISO timestamp vs. a date-only picker value
+ * would otherwise compare unequal on the same calendar day (a date-only string is always
+ * "less than" its own timestamp form since it's a string prefix of it).
+ */
+export function toDateOnly(date?: string | null): string {
+  return date ? date.split('T')[0] : '';
+}
+
 export function inputClass(error?: string, extra?: string) {
   return cn(
     'w-full px-2 py-2 border rounded-input text-sm bg-transparent text-gray-900',
     'placeholder:text-gray-400 transition-colors',
     'focus:outline-none',
+    'read-only:cursor-not-allowed read-only:bg-gray-50 read-only:text-gray-500 read-only:border-gray-200',
     error
       ? 'border-red-500 focus:ring-2 focus:ring-red-500/30 focus:border-red-500'
       : 'border-(--input-border,var(--color-gray-400)) focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',

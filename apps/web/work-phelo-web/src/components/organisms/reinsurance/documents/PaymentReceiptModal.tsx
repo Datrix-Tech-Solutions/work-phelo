@@ -1,231 +1,46 @@
 'use client';
 
-import Image from 'next/image';
-import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
-import { Facultative, PlacementPayment } from '@/types/reinsurance';
-import { useCedants, useRiskTypes } from '@/hooks';
-import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { useDocumentFileName } from '@/lib/reinsurance/useDocumentFileName';
+import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
+import {
+  PaymentReceiptContent,
+  type PaymentReceiptContentProps,
+} from '@/components/molecules/documents/content/PaymentReceiptContent';
+import { DisbursementAdviceContent } from '@/components/molecules/documents/content/DisbursementAdviceContent';
 
-function fmtDate(iso: string | null | undefined) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function fmtAmount(val: number | string | null | undefined, currency: string | null | undefined) {
-  if (val == null) return '—';
-  const n = typeof val === 'string' ? parseFloat(val) : val;
-  if (isNaN(n)) return '—';
-  return `${currency ?? ''} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
-}
-
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <tr className="bg-blue-900">
-      <td
-        colSpan={2}
-        className="py-2 px-4 text-center text-sm font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
-      >
-        {label}
-      </td>
-    </tr>
-  );
-}
-
-function TableRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <tr>
-      <td className={`py-2 px-4 w-1/2 ${bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
-        {label}
-      </td>
-      <td
-        className={`py-2 px-4 text-right ${bold ? 'font-bold text-gray-900' : 'font-medium text-gray-900'}`}
-      >
-        {value}
-      </td>
-    </tr>
-  );
-}
-
-interface PaymentReceiptModalProps {
+interface PaymentReceiptModalProps extends PaymentReceiptContentProps {
   isOpen: boolean;
-  placement: Facultative;
-  payment: PlacementPayment;
-  onPrint: () => void;
   onClose: () => void;
 }
 
-export function PaymentReceiptModal({
-  isOpen,
-  placement,
-  payment,
-  onPrint,
-  onClose,
-}: PaymentReceiptModalProps) {
-  const { data: cedants = [] } = useCedants();
-  const { data: riskTypes = [] } = useRiskTypes();
-
-  const {
-    currency,
-    facultativeOffer,
-    premium,
-    commission,
-    classOfBusiness,
-    title,
-    policyNumber,
-    inceptionDate,
-    expiryDate,
-    cedant,
-    riskTypeId,
-  } = placement;
-
-  const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
-
-  const fullCedant = cedants.find((c) => c.id === cedant.id);
-  const primaryAddress =
-    fullCedant?.addresses?.find((a) => a.isPrimary) ?? fullCedant?.addresses?.[0];
-  const cedantLocation = primaryAddress
-    ? [primaryAddress.city, primaryAddress.state, primaryAddress.country].filter(Boolean).join(', ')
-    : null;
-
-  const facOffer = facultativeOffer ?? 0;
-  const facPremium = premium != null ? (facOffer / 100) * premium : null;
-  const commissionAmt = facPremium != null ? ((commission ?? 0) / 100) * facPremium : null;
-  const netPremium =
-    facPremium != null && commissionAmt != null ? facPremium - commissionAmt : null;
-
-  // Decode payment method from stored notes/reference
-  const isCheque = payment.notes === 'Cheque payment';
-  const refParts = (payment.reference ?? '').split(' — ');
-  const chequeNumber = isCheque ? refParts[0] || null : null;
-  const bankName = isCheque ? (refParts[1] ?? refParts[0] ?? null) : (refParts[0] ?? null);
-
-  const paidAmount = parseFloat(payment.amount);
-  const being = netPremium != null && paidAmount >= netPremium ? 'Full Payment' : 'Partial Payment';
-
-  const afterContent = (
-    <div className="mt-10 flex flex-col gap-6 border-t border-gray-200 pt-6">
-      <p className="text-base text-gray-700 italic text-center">Thank you for your payment!</p>
-
-      <div className="flex flex-col gap-1">
-        <span className="text-sm text-gray-500">Signature / Stamp</span>
-        <Image
-          src="/signature.png"
-          alt="Signature"
-          width={160}
-          height={80}
-          className="object-contain mt-2"
-        />
-        <div className="w-64 border-b border-gray-400" />
-      </div>
-    </div>
-  );
-
-  const clientRows = [
-    { label: 'Received From', value: cedant.name },
-    { label: 'Amount', value: fmtAmount(payment.amount, payment.currency) },
-    { label: 'Being', value: being },
-  ];
-
-  const paymentRows = [
-    { label: 'Payment Type', value: isCheque ? 'Cheque' : 'Bank Transfer' },
-    ...(isCheque && chequeNumber ? [{ label: 'Cheque Number', value: chequeNumber }] : []),
-    ...(bankName ? [{ label: 'Bank Name', value: bankName }] : []),
-    {
-      label: isCheque ? 'Date on Cheque' : 'Payment Date',
-      value: fmtDate(payment.paymentDate),
-    },
-  ];
-
-  const descriptionRows = [
-    { label: 'Reinsured', value: cedant.name },
-    { label: 'Policy Type', value: classOfBusiness ?? '—' },
-    { label: 'Insured', value: title ?? '—' },
-    { label: 'Policy Number', value: displayPolicyNumber(policyNumber) },
-    { label: 'Policy Period', value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}` },
-    { label: 'Currency', value: currency ?? '—' },
-  ];
-
-  const particularsRows: { label: string; value: string; bold?: boolean }[] = [
-    { label: '100% Gross Premium', value: fmtAmount(premium, currency) },
-    { label: `${facOffer}% Facultative Share`, value: fmtAmount(facPremium, currency) },
-    {
-      label: `Less Commission ${commission ?? 0}%`,
-      value: commissionAmt != null ? fmtAmount(commissionAmt, currency) : '—',
-    },
-    {
-      label: 'Net Premium Received by iRisk Re',
-      value: fmtAmount(payment.amount, payment.currency),
-      bold: true,
-    },
-  ];
+/**
+ * Content-only preview opened from the payment history. Reinsurer disbursements
+ * print the closing-style disbursement advice; every other payment type keeps
+ * the plain payment receipt.
+ */
+export function PaymentReceiptModal({ isOpen, onClose, ...content }: PaymentReceiptModalProps) {
+  const isDisbursement = content.payment.type === 'REINSURER_DISBURSEMENT';
+  const label = isDisbursement ? 'Disbursement Advice' : 'Payment Receipt';
+  const fileName = useDocumentFileName({
+    documentName: label,
+    placement: content.placement,
+    recipientName: content.payment.counterparty?.name ?? null,
+  });
 
   return (
-    <DocumentPreviewModal
+    <DocumentPreviewShell
       isOpen={isOpen}
-      title={`Payment Receipt — ${displayPolicyNumber(policyNumber)}`}
-      documentTitle="Payment Receipt"
-      fileName={buildDocumentFileName(
-        'Payment Receipt',
-        displayPolicyNumber(policyNumber),
-        riskTypeName,
-        title,
-      )}
-      onPrint={onPrint}
+      title={`${label} — ${displayPolicyNumber(content.placement.policyNumber)}`}
+      fileName={fileName}
+      printRootId="payment-receipt-print-root"
       onClose={onClose}
-      afterContent={afterContent}
     >
-      <div className="flex flex-col gap-4 text-base">
-        {/* Receipt No. / Date */}
-        <div className="flex items-start justify-between">
-          <div>
-            <span className="text-sm text-gray-400 uppercase tracking-wide">Receipt No.</span>
-            <p className="font-semibold text-gray-900">
-              {payment.reference ?? displayPolicyNumber(policyNumber)}
-            </p>
-          </div>
-          <div className="text-right">
-            <span className="text-sm text-gray-400 uppercase tracking-wide">Date</span>
-            <p className="font-semibold text-gray-900">{fmtDate(payment.paymentDate)}</p>
-          </div>
-        </div>
-
-        {/* Receipt To */}
-        <div className="flex flex-col gap-0.5">
-          <span className="text-sm text-gray-400 uppercase tracking-wide">Receipt To</span>
-          <p className="font-semibold text-gray-900">{cedant.name}</p>
-          {cedantLocation && <p className="text-gray-500">{cedantLocation}</p>}
-        </div>
-
-        {/* Table */}
-        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-base">
-          <tbody>
-            <SectionHeader label="Client Details" />
-            {clientRows.map((row) => (
-              <TableRow key={row.label} label={row.label} value={row.value} />
-            ))}
-
-            <SectionHeader label="Payment Details" />
-            {paymentRows.map((row) => (
-              <TableRow key={row.label} label={row.label} value={row.value} />
-            ))}
-
-            <SectionHeader label="Risk Description" />
-            {descriptionRows.map((row) => (
-              <TableRow key={row.label} label={row.label} value={row.value} />
-            ))}
-
-            <SectionHeader label="Payment Particulars" />
-            {particularsRows.map((row) => (
-              <TableRow key={row.label} label={row.label} value={row.value} bold={row.bold} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </DocumentPreviewModal>
+      {isDisbursement ? (
+        <DisbursementAdviceContent {...content} />
+      ) : (
+        <PaymentReceiptContent {...content} />
+      )}
+    </DocumentPreviewShell>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -10,13 +10,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Facultative } from '@/types/reinsurance';
-import {
-  useReinsurerClaims,
-  useReinsurerClaimPayments,
-  useCreatePlacementPayment,
-  useCurrencyOptions,
-  ReinsurerClaimRow,
-} from '@/hooks';
+import { RecoveryRow, useAllReinsurerClaims, useCreateClaimRecoveryReceipt } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -29,37 +23,28 @@ function fmtDate(iso: string) {
 }
 
 function fmtAmount(val: number, currency: string) {
-  return `${currency} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${currency} ${val.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
-interface RecoveryRow extends ReinsurerClaimRow {
-  paid: number;
-  outstanding: number;
-}
-
-interface RecordPaymentValues {
+interface RecordRecoveryValues {
   paymentType: string;
-  // cheque fields
   chequeNumber: string;
   valueDate: string;
-  // bank transfer fields
   paymentDate: string;
-  // shared
   amount: string;
   bankName: string;
-  currency: string;
-  rate: string;
 }
 
-const RECORD_PAYMENT_DEFAULTS: RecordPaymentValues = {
+const RECORD_RECOVERY_DEFAULTS: RecordRecoveryValues = {
   paymentType: '',
   chequeNumber: '',
   valueDate: '',
   paymentDate: '',
   amount: '',
   bankName: '',
-  currency: '',
-  rate: '',
 };
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -69,22 +54,20 @@ const PAYMENT_TYPE_OPTIONS = [
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       <label className="text-sm font-bold text-gray-900">{label}</label>
       <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-700">
-        {value || '—'}
+        {value || '-'}
       </div>
     </div>
   );
 }
 
-function RecordRecoveryPaymentModal({
+function RecordRecoveryReceiptModal({
   row,
-  reinsurerId,
   onClose,
 }: {
   row: RecoveryRow | null;
-  reinsurerId: string;
   onClose: () => void;
 }) {
   const {
@@ -93,229 +76,83 @@ function RecordRecoveryPaymentModal({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<RecordPaymentValues>({ defaultValues: RECORD_PAYMENT_DEFAULTS });
+  } = useForm<RecordRecoveryValues>({ defaultValues: RECORD_RECOVERY_DEFAULTS });
 
-  const createPayment = useCreatePlacementPayment();
-  const { data: currencyOptions = [] } = useCurrencyOptions();
+  const createReceipt = useCreateClaimRecoveryReceipt();
   const addToast = useToastStore((s) => s.addToast);
-
   const paymentType = useWatch({ control, name: 'paymentType' });
-  const paymentCurrency = useWatch({ control, name: 'currency' });
 
   useEffect(() => {
     if (row) {
       reset({
-        ...RECORD_PAYMENT_DEFAULTS,
-        amount: row.outstanding > 0 ? String(row.outstanding) : '',
-        currency: row.currency,
+        ...RECORD_RECOVERY_DEFAULTS,
+        amount: row.outstandingAmount > 0 ? String(row.outstandingAmount) : '',
       });
     }
   }, [row, reset]);
 
   const handleClose = () => {
-    reset(RECORD_PAYMENT_DEFAULTS);
+    reset(RECORD_RECOVERY_DEFAULTS);
     onClose();
   };
 
-  const showRate = !!paymentCurrency && !!row?.currency && paymentCurrency !== row.currency;
-
-  const onSubmit = async (values: RecordPaymentValues) => {
+  const onSubmit = async (values: RecordRecoveryValues) => {
     if (!row) return;
     try {
       const resolvedDate = values.paymentType === 'cheque' ? values.valueDate : values.paymentDate;
-      const rate = showRate ? parseFloat(values.rate) || 1 : 1;
-      const amount = Math.round((parseFloat(values.amount) || 0) * rate * 100) / 100;
+      const amount = Math.round((parseFloat(values.amount) || 0) * 100) / 100;
+      const refParts = [values.chequeNumber, values.bankName].filter(Boolean);
 
-      const refParts: string[] = [];
-      if (values.chequeNumber) refParts.push(values.chequeNumber);
-      if (values.bankName) refParts.push(values.bankName);
-
-      await createPayment.mutateAsync({
+      await createReceipt.mutateAsync({
         placementId: row.placementId,
-        type: 'CLAIM_SETTLEMENT',
-        direction: 'INBOUND',
-        counterpartyId: reinsurerId,
-        amount,
-        currency: row.currency,
-        paymentDate: new Date(resolvedDate).toISOString(),
-        reference: refParts.join(' — ') || undefined,
-        notes: `Claim ${row.claimNumber}`,
+        claimId: row.claimId,
+        cashCallId: row.cashCallId,
+        payload: {
+          currency: row.currency,
+          amount,
+          paymentDate: new Date(resolvedDate).toISOString(),
+          reference: refParts.join(' - ') || undefined,
+          notes: values.bankName ? `Received via ${values.bankName}` : undefined,
+        },
       });
-      addToast({ message: 'Recovery payment recorded', type: 'success' });
+      addToast({ message: 'Recovery receipt recorded', type: 'success' });
       handleClose();
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
     }
   };
 
-  const chequeFields = paymentType === 'cheque' && (
-    <>
-      <div className="grid grid-cols-5 gap-4">
-        <div className="col-span-3">
-          <FormField
-            label="Cheque Number"
-            registration={register('chequeNumber', { required: 'Cheque number is required' })}
-            placeholder="Enter cheque number…"
-            error={errors.chequeNumber}
-          />
-        </div>
-        <div className="col-span-2">
-          <Controller
-            name="valueDate"
-            control={control}
-            rules={{ required: 'Value date is required' }}
-            render={({ field }) => (
-              <DatePicker
-                label="Value Date"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.valueDate?.message}
-                size="sm"
-              />
-            )}
-          />
-        </div>
-      </div>
-
-      <FormField
-        label="Bank Name"
-        registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name…"
-        error={errors.bankName}
-      />
-
-      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
-        <Controller
-          name="currency"
-          control={control}
-          rules={{ required: 'Currency is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Currency"
-              placeholder="Select currency…"
-              options={currencyOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.currency?.message}
-              size="sm"
-            />
-          )}
-        />
-        {showRate && (
-          <FormField
-            label="Rate"
-            registration={register('rate', { required: 'Rate is required' })}
-            placeholder="0.00"
-            type="number"
-            step="any"
-            error={errors.rate}
-          />
-        )}
-      </div>
-
-      <FormField
-        label="Amount"
-        registration={register('amount', { required: 'Amount is required' })}
-        placeholder="0.00"
-        type="number"
-        step="any"
-        error={errors.amount}
-      />
-    </>
-  );
-
-  const bankFields = paymentType === 'bank_transfer' && (
-    <>
-      <Controller
-        name="paymentDate"
-        control={control}
-        rules={{ required: 'Payment date is required' }}
-        render={({ field }) => (
-          <DatePicker
-            label="Payment Date"
-            value={field.value}
-            onChange={field.onChange}
-            error={errors.paymentDate?.message}
-            size="sm"
-          />
-        )}
-      />
-
-      <FormField
-        label="Bank Name"
-        registration={register('bankName', { required: 'Bank name is required' })}
-        placeholder="Enter bank name…"
-        error={errors.bankName}
-      />
-
-      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
-        <Controller
-          name="currency"
-          control={control}
-          rules={{ required: 'Currency is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Currency"
-              placeholder="Select currency…"
-              options={currencyOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.currency?.message}
-              size="sm"
-            />
-          )}
-        />
-        {showRate && (
-          <FormField
-            label="Rate"
-            registration={register('rate', { required: 'Rate is required' })}
-            placeholder="0.00"
-            type="number"
-            step="any"
-            error={errors.rate}
-          />
-        )}
-      </div>
-
-      <FormField
-        label="Amount"
-        registration={register('amount', { required: 'Amount is required' })}
-        placeholder="0.00"
-        type="number"
-        step="any"
-        error={errors.amount}
-      />
-    </>
-  );
-
   return (
     <SidePanel
       isOpen={!!row}
       onClose={handleClose}
-      title="Record Recovery Payment"
-      description={row ? `${row.placementReference} — ${row.claimNumber}` : undefined}
+      title="Record Recovery Receipt"
+      description={row ? `${row.cashCallNumber} - ${row.claimNumber}` : undefined}
       footer={
         <div className="flex items-center justify-end gap-3">
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" form="record-recovery-payment-form" isLoading={isSubmitting}>
-            Record Payment
+          <Button type="submit" form="record-reinsurer-recovery-form" isLoading={isSubmitting}>
+            Record Recovery
           </Button>
         </div>
       }
     >
       <form
-        id="record-recovery-payment-form"
+        id="record-reinsurer-recovery-form"
         onSubmit={handleSubmit(onSubmit)}
-        className="flex flex-col gap-5"
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
       >
         {row && (
           <div className="grid grid-cols-2 gap-3">
-            <ReadOnlyField label="Offer" value={row.placementReference} />
-            <ReadOnlyField label="Cedant" value={row.cedantName} />
+            <ReadOnlyField label="Cash Call" value={row.cashCallNumber} />
             <ReadOnlyField label="Claim Number" value={row.claimNumber} />
-            <ReadOnlyField label="Outstanding" value={fmtAmount(row.outstanding, row.currency)} />
+            <ReadOnlyField label="Currency" value={row.currency} />
+            <ReadOnlyField
+              label="Outstanding Recovery"
+              value={fmtAmount(row.outstandingAmount, row.currency)}
+            />
           </div>
         )}
 
@@ -326,7 +163,7 @@ function RecordRecoveryPaymentModal({
           render={({ field }) => (
             <SearchSelect
               label="Payment Type"
-              placeholder="Select payment type…"
+              placeholder="Select payment type..."
               options={PAYMENT_TYPE_OPTIONS}
               value={field.value}
               onChange={field.onChange}
@@ -336,8 +173,66 @@ function RecordRecoveryPaymentModal({
           )}
         />
 
-        {chequeFields}
-        {bankFields}
+        {paymentType === 'cheque' && (
+          <>
+            <FormField
+              label="Cheque Number"
+              registration={register('chequeNumber', { required: 'Cheque number is required' })}
+              placeholder="Enter cheque number..."
+              error={errors.chequeNumber}
+            />
+            <Controller
+              name="valueDate"
+              control={control}
+              rules={{ required: 'Value date is required' }}
+              render={({ field }) => (
+                <DatePicker
+                  label="Value Date"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.valueDate?.message}
+                  size="sm"
+                />
+              )}
+            />
+          </>
+        )}
+
+        {paymentType === 'bank_transfer' && (
+          <Controller
+            name="paymentDate"
+            control={control}
+            rules={{ required: 'Payment date is required' }}
+            render={({ field }) => (
+              <DatePicker
+                label="Payment Date"
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.paymentDate?.message}
+                size="sm"
+              />
+            )}
+          />
+        )}
+
+        {!!paymentType && (
+          <>
+            <FormField
+              label="Bank Name"
+              registration={register('bankName', { required: 'Bank name is required' })}
+              placeholder="Enter bank name..."
+              error={errors.bankName}
+            />
+            <FormField
+              label="Amount Received"
+              registration={register('amount', { required: 'Amount is required' })}
+              placeholder="0.00"
+              type="number"
+              step="any"
+              error={errors.amount}
+            />
+          </>
+        )}
       </form>
     </SidePanel>
   );
@@ -349,82 +244,82 @@ interface ReinsurerRecoveriesTabProps {
 }
 
 export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRecoveriesTabProps) {
-  const { rows, isLoading } = useReinsurerClaims(placements, reinsurerId);
-  const { paidByPlacementId } = useReinsurerClaimPayments(placements, reinsurerId);
+  const { rows, isLoading } = useAllReinsurerClaims(placements);
   const [paymentRow, setPaymentRow] = useState<RecoveryRow | null>(null);
 
-  const recoveryRows: RecoveryRow[] = rows.map((row) => {
-    const paid = Math.min(paidByPlacementId.get(row.placementId) ?? 0, row.recoveryAmount);
-    return { ...row, paid, outstanding: Math.max(0, row.recoveryAmount - paid) };
-  });
+  const recoveryRows = useMemo(
+    () => rows.filter((row) => row.reinsurerId === reinsurerId),
+    [rows, reinsurerId],
+  );
 
   const columns: Column<RecoveryRow>[] = [
     {
-      key: 'placementReference',
-      label: 'Offer',
+      key: 'policyNumber',
+      label: 'Policy',
       width: 'minmax(130px, 1fr)',
-      render: (row) => <span className="font-medium text-gray-900">{row.placementReference}</span>,
+      render: (row) => <span className="font-medium text-gray-900">{row.policyNumber}</span>,
     },
     {
-      key: 'cedantName',
-      label: 'Cedant',
-      width: 'minmax(130px, 1fr)',
-      render: (row) => <span className="text-gray-700">{row.cedantName}</span>,
+      key: 'claimNumber',
+      label: 'Claim',
+      width: '120px',
+      render: (row) => <span className="text-gray-700">{row.claimNumber}</span>,
     },
+
     {
       key: 'occurrenceDate',
       label: 'Occurrence Date',
-      width: '100px',
+      width: '120px',
       render: (row) => <span className="text-gray-700">{fmtDate(row.occurrenceDate)}</span>,
     },
     {
-      key: 'sharePercent',
-      label: 'Share (%)',
-      width: '90px',
-      className: 'text-center',
-      render: (row) => <span className="text-gray-600 block text-center">{row.sharePercent}%</span>,
-    },
-    {
-      key: 'recoveryAmount',
+      key: 'calledAmount',
       label: 'Recovery Amount',
-      width: '150px',
+      width: '140px',
       render: (row) => (
         <span className="font-medium text-gray-900 block">
-          {fmtAmount(row.recoveryAmount, row.currency)}
+          {fmtAmount(row.calledAmount, row.currency)}
         </span>
       ),
     },
     {
-      key: 'paid',
-      label: 'Paid',
-      width: '150px',
+      key: 'recoveredAmount',
+      label: 'Recovered',
+      width: '140px',
       render: (row) => (
-        <span className="text-gray-700 block">{fmtAmount(row.paid, row.currency)}</span>
+        <span className="text-gray-700 block">{fmtAmount(row.recoveredAmount, row.currency)}</span>
       ),
     },
     {
-      key: 'outstanding',
+      key: 'outstandingAmount',
       label: 'Outstanding',
-      width: '150px',
+      width: '140px',
       render: (row) => (
         <span
-          className={` font-medium ${row.outstanding > 0 ? 'text-orange-600' : 'text-gray-900'}`}
+          className={`font-medium ${
+            row.outstandingAmount > 0 ? 'text-orange-600' : 'text-gray-900'
+          }`}
         >
-          {fmtAmount(row.outstanding, row.currency)}
+          {fmtAmount(row.outstandingAmount, row.currency)}
         </span>
       ),
     },
     {
       key: 'actions',
       label: 'Actions',
-      width: '120px',
-      render: () => (
+      width: '130px',
+      render: (row) => (
         <TableButton
-          variant="gray"
-          disabled
-          tooltip="Claim recovery receipts are deferred until the backend recovery settlement flow is implemented."
+          variant={row.outstandingAmount > 0 && row.cashCallStatus === 'ISSUED' ? 'blue' : 'gray'}
+          disabled={row.outstandingAmount <= 0 || row.cashCallStatus !== 'ISSUED'}
+          tooltip={
+            row.cashCallStatus === 'ISSUED'
+              ? undefined
+              : 'Only issued cash calls can receive recovery receipts.'
+          }
+          onClick={() => setPaymentRow(row)}
         >
-          Deferred
+          Record Recovery
         </TableButton>
       ),
     },
@@ -435,18 +330,14 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
       <DataTable
         columns={columns}
         data={recoveryRows}
-        emptyMessage={isLoading ? 'Loading…' : 'No offers with claims yet'}
+        emptyMessage={isLoading ? 'Loading...' : 'No cash-call recoveries for this reinsurer yet'}
         currentPage={1}
         totalPages={0}
         onPageChange={() => {}}
         noInternalScroll
       />
 
-      <RecordRecoveryPaymentModal
-        row={paymentRow}
-        reinsurerId={reinsurerId}
-        onClose={() => setPaymentRow(null)}
-      />
+      <RecordRecoveryReceiptModal row={paymentRow} onClose={() => setPaymentRow(null)} />
     </>
   );
 }

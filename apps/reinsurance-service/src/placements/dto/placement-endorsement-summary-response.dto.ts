@@ -149,7 +149,7 @@ export class PlacementEndorsementSummaryResponseDto {
     type: [String],
     example: [],
     description:
-      'Backend-derived workflow hints such as SEND_TO_MARKET, ADD_CAPACITY, ACCEPT_PARTICIPANTS, CREATE_CLOSING, ISSUE_CLOSING, CONFIRM_CLOSING, GENERATE_NOTES, ISSUE_NOTES or CLOSE_ENDORSEMENT.',
+      'Backend-derived workflow hints such as SEND_TO_MARKET, ADD_CAPACITY, ACCEPT_PARTICIPANTS, CREATE_CLOSING, ISSUE_CLOSING, CONFIRM_CLOSING or CLOSE_ENDORSEMENT. Financial note/document actions are post-closing artifacts and do not block close readiness.',
   })
   pendingActions!: string[];
 
@@ -171,7 +171,7 @@ export class PlacementEndorsementSummaryResponseDto {
   @ApiProperty({
     example: true,
     description:
-      'True only when capacity is fully placed, required endorsement closings are confirmed and no pending workflow action remains.',
+      'True only when capacity/participant requirements are resolved, required endorsement closings are confirmed and the endorsement status is CLOSED.',
   })
   isComplete!: boolean;
 }

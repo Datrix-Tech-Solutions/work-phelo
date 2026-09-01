@@ -1,12 +1,67 @@
 @import "tailwindcss";
 
+/* Scrollbars are invisible at rest and fade in only while actively scrolling —
+   AutoHideScrollbars (mounted in layout.tsx) has no ":scrolling" CSS pseudo-
+   class to hook, so it adds/removes this `is-scrolling` class on whichever
+   element was just scrolled instead. The thumb's hit-target is never disabled
+   (only its color/width change), so it's draggable the moment it's visible. */
 * {
   -ms-overflow-style: none;
   scrollbar-width: none;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+*.is-scrolling {
+  scrollbar-width: thin;
 }
 
 *::-webkit-scrollbar {
-  display: none;
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+
+*.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+}
+
+/* Fade-in for ScrollNudgeButtons — the click-to-scroll arrows that appear at
+   the scrollbar track ends on hover/focus, for users who can't drive a
+   scroll gesture directly. */
+@keyframes scroll-nudge-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Toast icon entrance (ToastContainer): the colored circle pops in, then the
+   check/X stroke draws itself. `stroke-dasharray`/`stroke-dashoffset` are set
+   to a value comfortably larger than either icon's actual path length (~20 at
+   16px), so the same keyframe fully hides then reveals the stroke regardless
+   of which icon (Check's single polyline vs X's two crossing lines) it's on. */
+@keyframes toast-icon-pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes toast-icon-draw {
+  from { stroke-dashoffset: 30; }
+  to { stroke-dashoffset: 0; }
+}
+
+.toast-icon-draw path,
+.toast-icon-draw polyline {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: toast-icon-draw 0.6s 0.3s ease-out forwards;
 }
 
 :root {
@@ -49,6 +104,11 @@
   --text-hover-muted:     var(--color-gray-600);
   --focus-ring:           var(--color-gray-400);
 
+  /* Auto-hide scrollbar thumb (see the `.is-scrolling` rules above) — dark
+     mode swaps to a light-on-navy wash for the same reason the other
+     hover/focus tokens above do. */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.35);
+
   /* Idle border for text inputs/pickers/comboboxes (Input, DatePicker, SearchSelect,
      PhoneInput, CurrencyInput, MultiSelect, RichTextEditor). Light mode matches the
      plain border-gray-400 this replaced. Dark mode deliberately does NOT reuse the
@@ -56,6 +116,15 @@
      brightness a 1px border reads as a harsh glowing outline against the dark navy
      background. A soft translucent white keeps the field visibly bounded instead. */
   --input-border: var(--color-gray-400);
+
+  /* Field vertical rhythm — the two spacing knobs every form field goes through, so
+     tightening either one is a single edit here instead of hunting down every atom/form.
+     --field-label-gap: space between a field's label and its input box (Input,
+     PasswordInput, NumberField, CurrencyInput, PhoneInput, DatePicker, endDatePicker,
+     SearchSelect, MultiSelect, MonthDayPicker, CreatableSearchSelect all read it).
+     --field-stack-gap: space between one field and the next inside a form. */
+  --field-label-gap: 0.125rem;
+  --field-stack-gap: 0.75rem;
 
   /* "Strong" glass surfaces (Sidebar, TopNav, ContactCard, DataCard, ModuleButton) —
      kept more opaque than cardClass's own glass for legibility. Dark mode needs a much
@@ -122,6 +191,7 @@
   --text-hover-muted:     #cbd5e1;
   --focus-ring:           rgba(255, 255, 255, 0.35);
   --input-border:         rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb:      rgba(255, 255, 255, 0.35);
   --glass-strong:         rgba(255, 255, 255, 0.08);
   --glass-subtle:         rgba(255, 255, 255, 0.05);
   --qa-tile-bg:           rgba(255, 255, 255, 0.08);
@@ -216,8 +286,16 @@
 /* Module layout classes — each defines the full derived palette from its identity color.
    --table-header-shadow mixes the same identity color toward transparent (rather than
    white/black like the other tokens) so it reads as a colored ambient glow under the
-   DataTable header pill — see the drop-shadow-[...] on the header bg in DataTable.tsx. */
-.layout-hr {
+   DataTable header pill — see the drop-shadow-[...] on the header bg in DataTable.tsx.
+
+   Each block is also keyed off :root[data-module='...'] (set on <html> by the module's
+   layout, same mechanism as [data-theme]) in addition to the .layout-* class on
+   <AppBackground>. Modal/SidePanel portal to document.body via createPortal, which
+   escapes the .layout-* div's subtree entirely — a class-only scope left every popup
+   button falling back to the plain --brand color instead of the active module's color.
+   :root is a genuine ancestor of portaled content, so the data-module attribute reaches
+   it too. */
+.layout-hr, :root[data-module='hr'] {
   --table-header-bg:     color-mix(in oklch, var(--module-hr) 10%, white);
   --table-header-shadow: color-mix(in oklch, var(--module-hr) 25%, transparent);
   --module-btn-bg:       var(--module-hr);
@@ -227,7 +305,7 @@
   --module-gradient-end: color-mix(in oklch, var(--module-hr) 88%, black);
   --module-border:       color-mix(in oklch, var(--module-hr) 28%, white);
 }
-.layout-operations {
+.layout-operations, :root[data-module='operations'] {
   --table-header-bg:     color-mix(in oklch, var(--module-operations) 10%, white);
   --table-header-shadow: color-mix(in oklch, var(--module-operations) 25%, transparent);
   --module-btn-bg:       var(--module-operations);
@@ -237,7 +315,7 @@
   --module-gradient-end: color-mix(in oklch, var(--module-operations) 88%, black);
   --module-border:       color-mix(in oklch, var(--module-operations) 28%, white);
 }
-.layout-accounting {
+.layout-accounting, :root[data-module='accounting'] {
   --table-header-bg:     color-mix(in oklch, var(--module-accounting) 20%, white);
   --table-header-shadow: color-mix(in oklch, var(--module-accounting) 45%, transparent);
   --module-btn-bg:       var(--module-accounting);
@@ -247,7 +325,7 @@
   --module-gradient-end: color-mix(in oklch, var(--module-accounting) 88%, black);
   --module-border:       color-mix(in oklch, var(--module-accounting) 28%, white);
 }
-.layout-marketing {
+.layout-marketing, :root[data-module='marketing'] {
   --table-header-bg:     color-mix(in oklch, var(--module-marketing) 20%, white);
   --table-header-shadow: color-mix(in oklch, var(--module-marketing) 45%, transparent);
   --module-btn-bg:       var(--module-marketing);
@@ -281,7 +359,7 @@
    green text on dark green background). --module-accent — already a lighter,
    toward-white tint of the same module color, used elsewhere for icons/blobs — gives
    enough contrast without introducing a new color. */
-:root[data-theme='dark'] .layout-hr {
+:root[data-theme='dark'] .layout-hr, :root[data-theme='dark'][data-module='hr'] {
   --table-header-bg: color-mix(in oklch, var(--module-hr) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-hr) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-hr) 32%, black);
@@ -291,7 +369,7 @@
   --tab-active-text:   var(--module-accent);
   --topnav-icon-text:  var(--module-accent);
 }
-:root[data-theme='dark'] .layout-operations {
+:root[data-theme='dark'] .layout-operations, :root[data-theme='dark'][data-module='operations'] {
   --table-header-bg: color-mix(in oklch, var(--module-operations) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-operations) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-operations) 32%, black);
@@ -301,7 +379,7 @@
   --tab-active-text:   var(--module-accent);
   --topnav-icon-text:  var(--module-accent);
 }
-:root[data-theme='dark'] .layout-accounting {
+:root[data-theme='dark'] .layout-accounting, :root[data-theme='dark'][data-module='accounting'] {
   --table-header-bg: color-mix(in oklch, var(--module-accounting) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-accounting) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-accounting) 32%, black);
@@ -311,7 +389,7 @@
   --tab-active-text:   var(--module-accent);
   --topnav-icon-text:  var(--module-accent);
 }
-:root[data-theme='dark'] .layout-marketing {
+:root[data-theme='dark'] .layout-marketing, :root[data-theme='dark'][data-module='marketing'] {
   --table-header-bg: color-mix(in oklch, var(--module-marketing) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-marketing) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-marketing) 32%, black);

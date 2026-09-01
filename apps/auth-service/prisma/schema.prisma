@@ -87,6 +87,7 @@ model Tenant {
   status         TenantStatus @default(PENDING)
   moduleConfig   Json         @default("{\"hr\": false, \"accounting\": false, \"marketing\": false}")
   featureConfig  Json         @default("{\"hr\": {\"leave\": false, \"time\": false, \"payroll\": false, \"appraisals\": false, \"projects\": false, \"assets\": false}, \"marketing\": {\"leads\": false, \"pipeline\": false, \"contacts\": false}}")
+  integrationConfig Json      @default("{}")
   logoUrl        String?
   website        String?
   industry       String?
@@ -100,6 +101,8 @@ model Tenant {
   permissionSets  PermissionSet[]
   userPermissions UserPermission[]
   branding        TenantBranding?
+  documentProfile TenantDocumentProfile?
+  bankAccounts    TenantBankAccount[]
 
   @@schema("w_auth")
 }
@@ -142,6 +145,75 @@ model TenantBranding {
   updatedBy User?  @relation("TenantBrandingUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
+  @@index([updatedByUserId])
+  @@schema("w_auth")
+}
+
+model TenantDocumentProfile {
+  id                       String   @id @default(uuid())
+  tenantId                 String   @unique
+  displayName              String
+  legalName                String
+  registrationNumber       String?
+  taxNumber                String?
+  physicalAddress          String?
+  postalAddress            String?
+  phone                    String?
+  email                    String?
+  website                  String?
+  footerText               String?
+  defaultCurrency          String
+  logoObjectKey            String?
+  logoMimeType             String?
+  logoFileName             String?
+  logoSizeBytes            Int?
+  signatureObjectKey       String?
+  signatureMimeType        String?
+  signatureFileName        String?
+  signatureSizeBytes       Int?
+  authorizedSignatoryName  String?
+  authorizedSignatoryTitle String?
+  isActive                 Boolean  @default(true)
+  version                  Int      @default(1)
+  createdByUserId          String?
+  updatedByUserId          String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("TenantDocumentProfileCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy User?  @relation("TenantDocumentProfileUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, isActive])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
+  @@schema("w_auth")
+}
+
+model TenantBankAccount {
+  id              String   @id @default(uuid())
+  tenantId        String
+  bankName        String
+  branchName      String?
+  accountName     String
+  accountNumber   String
+  currency        String
+  swiftCode       String?
+  sortCode        String?
+  isDefault       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("TenantBankAccountCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy User?  @relation("TenantBankAccountUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, currency, isActive])
+  @@index([createdByUserId])
   @@index([updatedByUserId])
   @@schema("w_auth")
 }
@@ -279,7 +351,11 @@ model User {
   userPermissions     UserPermission[]    @relation("UserPermissions")
   grantedPermissions  UserPermission[]    @relation("GrantedPermissions")
   permissionSets      UserPermissionSet[]
-  brandingUpdates     TenantBranding[]    @relation("TenantBrandingUpdatedBy")
+  brandingUpdates     TenantBranding[]     @relation("TenantBrandingUpdatedBy")
+  documentProfilesCreated   TenantDocumentProfile[] @relation("TenantDocumentProfileCreatedBy")
+  documentProfilesUpdated   TenantDocumentProfile[] @relation("TenantDocumentProfileUpdatedBy")
+  tenantBankAccountsCreated TenantBankAccount[]     @relation("TenantBankAccountCreatedBy")
+  tenantBankAccountsUpdated TenantBankAccount[]     @relation("TenantBankAccountUpdatedBy")
 
   @@unique([tenantId, email])
   @@schema("w_auth")

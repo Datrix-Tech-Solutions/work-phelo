@@ -106,11 +106,79 @@ export const RESOURCES = [
     module: 'FINANCE',
     description: 'Expense reports',
   },
+  {
+    name: 'accounting.settings',
+    module: 'ACCOUNTING',
+    description: 'Accounting configuration, currencies and fiscal periods',
+  },
+  {
+    name: 'accounting.accounts',
+    module: 'ACCOUNTING',
+    description: 'Chart of accounts, cost centres and subledger accounts',
+  },
+  {
+    name: 'accounting.account-classifications',
+    module: 'ACCOUNTING',
+    description: 'Accounting account hierarchy classifications',
+  },
+  {
+    name: 'accounting.account-groups',
+    module: 'ACCOUNTING',
+    description: 'Accounting account hierarchy groups',
+  },
+  {
+    name: 'accounting.customers',
+    module: 'ACCOUNTING',
+    description: 'Accounting customer master records and AR subledgers',
+  },
+  {
+    name: 'accounting.vendors',
+    module: 'ACCOUNTING',
+    description: 'Accounting vendor master records and AP subledgers',
+  },
+  {
+    name: 'accounting.cash-accounts',
+    module: 'ACCOUNTING',
+    description: 'Accounting-owned cash, bank and wallet account masters',
+  },
+  {
+    name: 'accounting.cashbook',
+    module: 'ACCOUNTING',
+    description: 'Standalone Accounting cashbook transaction workflows',
+  },
+  {
+    name: 'accounting.receivables',
+    module: 'ACCOUNTING',
+    description:
+      'Standalone Accounting accounts receivable documents, receipts and allocations',
+  },
+  {
+    name: 'accounting.payables',
+    module: 'ACCOUNTING',
+    description:
+      'Standalone Accounting accounts payable documents, payments and allocations',
+  },
+  {
+    name: 'accounting.journals',
+    module: 'ACCOUNTING',
+    description: 'Draft, post and reverse journal entries',
+  },
+  {
+    name: 'accounting.ledger',
+    module: 'ACCOUNTING',
+    description: 'Posted general-ledger activity',
+  },
 
   {
     name: 'operations.reinsurance.dashboard',
     module: 'OPERATIONS',
     description: 'Reinsurance operations dashboard',
+  },
+  {
+    name: 'operations.reinsurance.accounting-operations',
+    module: 'OPERATIONS',
+    description:
+      'Reinsurance Accounting integration operational diagnostics and support actions',
   },
   {
     name: 'operations.reinsurance.placements',
@@ -146,6 +214,11 @@ export const RESOURCES = [
     name: 'operations.reinsurance.settings',
     module: 'OPERATIONS',
     description: 'Reinsurance module configuration',
+  },
+  {
+    name: 'operations.reinsurance.taxes-levies',
+    module: 'OPERATIONS',
+    description: 'Reinsurance taxes, levies and charge configuration',
   },
 
   {

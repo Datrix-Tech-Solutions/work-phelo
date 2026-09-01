@@ -80,7 +80,10 @@ export default function SetPassword() {
         Create a password to access your WorkPhelo account.
       </p>
 
-      <form onSubmit={handleSubmit(handleSetPassword)} className="flex flex-col gap-4">
+      <form
+        onSubmit={handleSubmit(handleSetPassword)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <div>
           <FormField
             label="Password"

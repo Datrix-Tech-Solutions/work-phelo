@@ -5,8 +5,11 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { useAccountingCurrencyOptions, useCreateVendor } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 interface AddVendorPanelProps {
   isOpen: boolean;
@@ -14,32 +17,28 @@ interface AddVendorPanelProps {
 }
 
 type FormValues = {
-  vendorCode: string;
-  vendorName: string;
-  vendorCategory: string;
+  code: string;
+  legalName: string;
+  currency: string;
   contactName: string;
   contactNumber: string;
   email: string;
 };
 
 const DEFAULTS: FormValues = {
-  vendorCode: '',
-  vendorName: '',
-  vendorCategory: '',
+  code: '',
+  legalName: '',
+  currency: '',
   contactName: '',
   contactNumber: '',
   email: '',
 };
 
-const CATEGORY_OPTIONS: SearchSelectOption[] = [
-  { value: 'supplier', label: 'Supplier' },
-  { value: 'service-provider', label: 'Service Provider' },
-  { value: 'contractor', label: 'Contractor' },
-  { value: 'consultant', label: 'Consultant' },
-  { value: 'other', label: 'Other' },
-];
-
 export function AddVendorPanel({ isOpen, onClose }: AddVendorPanelProps) {
+  const toast = useToast();
+  const createVendor = useCreateVendor();
+  const { options: currencyOptions, isLoading: isLoadingCurrencies } =
+    useAccountingCurrencyOptions();
   const {
     register,
     handleSubmit,
@@ -53,10 +52,21 @@ export function AddVendorPanel({ isOpen, onClose }: AddVendorPanelProps) {
     onClose();
   };
 
-  const onSubmit = () => {
-    // Not wired to useCreateVendor yet: the backend requires `currency` (not on this
-    // form) and has no "category"/multi-contact fields to send vendorCategory/contacts to.
-    handleClose();
+  const onSubmit = async (data: FormValues) => {
+    try {
+      await createVendor.mutateAsync({
+        code: data.code,
+        legalName: data.legalName,
+        currency: data.currency,
+        primaryContactName: data.contactName || undefined,
+        phone: data.contactNumber || undefined,
+        email: data.email || undefined,
+      });
+      toast.success('Vendor created successfully.');
+      handleClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to create vendor'));
+    }
   };
 
   return (
@@ -67,41 +77,46 @@ export function AddVendorPanel({ isOpen, onClose }: AddVendorPanelProps) {
       description="Register a new vendor to your accounting records."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={createVendor.isPending}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)}>Add Vendor</Button>
+          <Button
+            isLoading={createVendor.isPending}
+            loadingText="Creating…"
+            onClick={handleSubmit(onSubmit)}
+          >
+            Add Vendor
+          </Button>
         </div>
       }
     >
       <div className="flex flex-col gap-6">
         <FormField
           label="Vendor Code"
-          type="number"
-          registration={register('vendorCode', { required: 'Vendor code is required' })}
-          error={errors.vendorCode}
-          placeholder="e.g. 2001"
+          registration={register('code', { required: 'Vendor code is required' })}
+          error={errors.code}
+          placeholder="e.g. VEN-0001"
         />
 
         <FormField
           label="Vendor Name"
-          registration={register('vendorName', { required: 'Vendor name is required' })}
-          error={errors.vendorName}
+          registration={register('legalName', { required: 'Vendor name is required' })}
+          error={errors.legalName}
           placeholder="e.g. Acme Supplies Ltd."
         />
 
         <Controller
-          name="vendorCategory"
+          name="currency"
           control={control}
-          rules={{ required: 'Vendor category is required' }}
+          rules={{ required: 'Currency is required' }}
           render={({ field }) => (
             <SearchSelect
-              label="Vendor Category"
-              placeholder="Select category…"
-              options={CATEGORY_OPTIONS}
+              label="Currency"
+              placeholder={isLoadingCurrencies ? 'Loading currencies…' : 'Select currency…'}
+              options={currencyOptions}
               value={field.value}
               onChange={field.onChange}
-              error={errors.vendorCategory?.message}
+              error={errors.currency?.message}
             />
           )}
         />

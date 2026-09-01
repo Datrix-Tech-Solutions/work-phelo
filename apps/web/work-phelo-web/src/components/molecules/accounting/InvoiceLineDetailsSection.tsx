@@ -6,9 +6,6 @@ import { inputClass } from '@/lib/utils';
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
 import { InvoiceFormValues, InvoiceLine } from '@/types/accounting';
 
-// TODO: populate from chart of accounts API
-const GL_ACCOUNT_OPTIONS: SearchSelectOption[] = [];
-
 const EMPTY_LINE: InvoiceLine = {
   description: '',
   glAccount: '',
@@ -23,9 +20,15 @@ function fmt(value: number) {
 
 interface InvoiceLineDetailsSectionProps {
   form: UseFormReturn<InvoiceFormValues>;
+  glAccountOptions: SearchSelectOption[];
+  isLoadingGLAccounts?: boolean;
 }
 
-export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionProps) {
+export function InvoiceLineDetailsSection({
+  form,
+  glAccountOptions,
+  isLoadingGLAccounts,
+}: InvoiceLineDetailsSectionProps) {
   const {
     register,
     control,
@@ -53,7 +56,7 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
     {
       key: 'description',
       label: 'Description',
-      width: '2fr',
+      width: 'minmax(150px, 1fr)',
       renderField: (index) => (
         <input
           {...register(`lines.${index}.description`)}
@@ -65,7 +68,7 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
     {
       key: 'glAccount',
       label: 'GL Account',
-      width: '1.5fr',
+      width: 'minmax(150px, 1fr)',
       renderField: (index) => {
         const err = errors.lines?.[index]?.glAccount;
         return (
@@ -75,8 +78,8 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
             rules={{ required: true }}
             render={({ field }) => (
               <SearchSelect
-                placeholder="Select account…"
-                options={GL_ACCOUNT_OPTIONS}
+                placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select account…'}
+                options={glAccountOptions}
                 value={field.value}
                 onChange={field.onChange}
                 error={err ? '' : undefined}
@@ -90,7 +93,7 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
     {
       key: 'unitPrice',
       label: 'Unit Price',
-      width: '110px',
+      width: '100px',
       align: 'right',
       renderField: (index) => {
         const err = errors.lines?.[index]?.unitPrice;
@@ -128,7 +131,7 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
     {
       key: 'tax',
       label: 'Tax (%)',
-      width: '90px',
+      width: '70px',
       align: 'right',
       renderField: (index) => (
         <input
@@ -156,7 +159,7 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
     {
       key: 'total',
       label: `Total${currency ? ` (${currency})` : ''}`,
-      width: '140px',
+      width: '120px',
       align: 'right',
       renderField: (index) => (
         <div className="py-2 px-1 text-sm text-right text-gray-900 font-semibold">

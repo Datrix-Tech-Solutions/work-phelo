@@ -23,6 +23,19 @@ interface SearchSelectProps {
   size?: 'sm' | 'md';
   /** Fires on every keystroke — lets callers drive async option sources (e.g. geocoding search). */
   onQueryChange?: (query: string) => void;
+  /** Rendered inside the control's own box, alongside the clear/chevron icons (e.g. a
+   *  visibility toggle). Not a native <button> internally, so it nests safely here. */
+  rightSlot?: React.ReactNode;
+  /** For filter bars: prepends a selectable "All" option (value `''`) — makes the already-implicit
+   *  "nothing selected = no filter" state a visible, explicit choice instead of just an empty field. */
+  showAllOption?: boolean;
+  /** Label for that "All" option. Defaults to "All {placeholder}" (e.g. "All Currency") so the
+   *  field names its own dimension once collapsed, rather than showing a bare, ambiguous "All". */
+  allLabel?: string;
+  /** Rendered in place of the plain "No results found" message when the filtered list is
+   *  empty — lets callers offer a quick action (e.g. "No account found — Create account").
+   *  Receives the typed query and a `close` callback to dismiss the dropdown afterwards. */
+  emptyState?: (ctx: { query: string; close: () => void }) => React.ReactNode;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -40,6 +53,10 @@ export function SearchSelect({
   error,
   size = 'sm',
   onQueryChange,
+  rightSlot,
+  showAllOption = false,
+  allLabel,
+  emptyState,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -81,7 +98,15 @@ export function SearchSelect({
     if (!open && e.propertyName === 'grid-template-rows') setShowDropdown(false);
   };
 
-  const selected = options.find((o) => o.value === value);
+  const effectiveOptions = useMemo(
+    () =>
+      showAllOption
+        ? [{ value: '', label: allLabel ?? `All ${placeholder}` }, ...options]
+        : options,
+    [options, showAllOption, allLabel, placeholder],
+  );
+
+  const selected = effectiveOptions.find((o) => o.value === value);
 
   /* What the input shows:
      - when open: whatever the user is typing (query)
@@ -102,13 +127,13 @@ export function SearchSelect({
   }, []);
 
   const filtered = useMemo(() => {
-    if (!query) return options;
+    if (!query) return effectiveOptions;
     const q = query.toLowerCase();
-    return options.filter(
+    return effectiveOptions.filter(
       (o) =>
         o.label.toLowerCase().includes(q) || (o.sublabel && o.sublabel.toLowerCase().includes(q)),
     );
-  }, [options, query]);
+  }, [effectiveOptions, query]);
 
   /* keep the highlighted option in range as the filtered list changes — adjusted during
      render (rather than an effect) per React's guidance for state that mirrors a prop/derived value */
@@ -205,7 +230,7 @@ export function SearchSelect({
   };
 
   return (
-    <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={containerRef}>
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
       {/* Combobox input */}
@@ -241,6 +266,7 @@ export function SearchSelect({
         />
 
         <div className="flex items-center gap-1 shrink-0 ml-2">
+          {rightSlot}
           {/* Clear button — only when something is selected */}
           {value && !open && (
             <button
@@ -291,7 +317,17 @@ export function SearchSelect({
                 style={{ maxHeight: Math.min(208, dropdownPos.maxHeight) }}
               >
                 {filtered.length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
+                  emptyState ? (
+                    emptyState({
+                      query,
+                      close: () => {
+                        closeDropdown();
+                        setQuery('');
+                      },
+                    })
+                  ) : (
+                    <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
+                  )
                 ) : (
                   filtered.map((opt, idx) => (
                     <button

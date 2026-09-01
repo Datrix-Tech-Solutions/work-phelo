@@ -2,9 +2,10 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement, usePlacementClaims } from '@/hooks';
+import { useFacultativePlacement, usePlacementClaim, useClaimTabBucket } from '@/hooks';
 import { ClaimOverviewSection } from '@/components/molecules/reinsurance/ClaimOverviewSection';
 import { Button } from '@/components/atoms/Button';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
@@ -16,17 +17,22 @@ export default function ClaimDetailPage({
   params: Promise<{ tenantSlug: string; id: string }>;
 }) {
   const { tenantSlug, id } = use(params);
-  const { data: placement } = useFacultativePlacement(id);
-  const { data: claims = [] } = usePlacementClaims(id);
-  const activeClaim = claims[0];
+  const searchParams = useSearchParams();
+  const placementId = searchParams.get('placementId') ?? '';
+  const { data: placement } = useFacultativePlacement(placementId);
+  const { data: activeClaim } = usePlacementClaim(placementId, id);
   const [panelOpen, setPanelOpen] = useState(false);
+
+  const referrerTab = searchParams.get('tab');
+  const { bucket } = useClaimTabBucket(placementId, activeClaim);
+  const backTab = referrerTab ?? bucket;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className={`${pageBreadcrumb} shrink-0 flex items-center justify-between`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link
-            href={`/${tenantSlug}/operations/reinsurance/claims`}
+            href={`/${tenantSlug}/operations/reinsurance/claims?tab=${backTab}`}
             className="hover:text-gray-700 transition-colors"
           >
             Claims
@@ -37,9 +43,9 @@ export default function ClaimDetailPage({
           </span>
         </nav>
 
-        {placement && (
+        {placement && activeClaim && (
           <Button size="sm" onClick={() => setPanelOpen(true)}>
-            {activeClaim ? 'Edit Claim' : 'Make Claim'}
+            Edit Claim
           </Button>
         )}
       </div>
@@ -52,7 +58,11 @@ export default function ClaimDetailPage({
       />
 
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto`}>
-        {placement ? (
+        {!placementId ? (
+          <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+            Missing placement context for this claim.
+          </div>
+        ) : placement && activeClaim ? (
           <ClaimOverviewSection placement={placement} claim={activeClaim} />
         ) : (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">

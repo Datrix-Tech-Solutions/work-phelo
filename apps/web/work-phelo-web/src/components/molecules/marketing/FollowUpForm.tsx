@@ -23,7 +23,7 @@ export function FollowUpForm({ values, onChange, errors, prospectOptions = [] }:
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       <SearchSelect
         label="Prospect Name"
         placeholder="Select a prospect"
@@ -40,7 +40,7 @@ export function FollowUpForm({ values, onChange, errors, prospectOptions = [] }:
         error={errors?.followUpDate}
       />
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">Notes</label>
         <textarea
           rows={4}

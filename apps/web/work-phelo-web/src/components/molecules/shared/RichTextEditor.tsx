@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Styles applied inside both the editable area and the preview pane
-const richContentClass = [
+// Styles applied inside the editable area, the preview pane, and the read-only
+// `RichTextView` renderer.
+export const richContentClass = [
   'text-sm text-gray-900',
   '[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-2',
   '[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:my-2',
@@ -32,8 +33,10 @@ const richContentClass = [
   '[&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_code]:text-[0.8em]',
   '[&_pre]:bg-gray-100 [&_pre]:rounded [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-sm [&_pre]:overflow-x-auto [&_pre]:my-2',
   '[&_table]:border-collapse [&_table]:w-full [&_table]:my-2',
-  '[&_th]:border [&_th]:border-gray-300 [&_th]:px-3 [&_th]:py-2 [&_th]:bg-gray-50 [&_th]:text-left [&_th]:font-semibold [&_th]:text-sm',
-  '[&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:text-sm',
+  // `h-8` acts as a min-height on table cells, so empty rows match the height a
+  // filled row settles at (one `text-sm` line + padding) instead of collapsing.
+  '[&_th]:border [&_th]:border-gray-300 [&_th]:px-3 [&_th]:py-2 [&_th]:h-8 [&_th]:bg-gray-50 [&_th]:text-left [&_th]:font-semibold [&_th]:text-sm',
+  '[&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:h-8 [&_td]:text-sm',
   '[&_img]:max-w-full [&_img]:rounded [&_img]:my-1',
 ].join(' ');
 
@@ -43,9 +46,11 @@ const btnClass =
 const GRID_COLS = 10;
 const GRID_ROWS = 8;
 
+// `height` on a table cell is a minimum, so cells still grow with content but an
+// empty cell no longer collapses below one line of text.
 const TH_STYLE =
-  'border:1px solid #d1d5db;padding:6px 12px;background:#f9fafb;font-weight:600;text-align:left;min-width:60px;';
-const TD_STYLE = 'border:1px solid #d1d5db;padding:6px 12px;min-width:60px;';
+  'border:1px solid #d1d5db;padding:6px 12px;background:#f9fafb;font-weight:600;text-align:left;min-width:60px;height:2rem;';
+const TD_STYLE = 'border:1px solid #d1d5db;padding:6px 12px;min-width:60px;height:2rem;';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -124,7 +129,10 @@ export function RichTextEditor({
       return;
     }
     if (contentRef.current.innerHTML !== value) contentRef.current.innerHTML = value;
-  }, [value]);
+    // Also re-run when switching back to the "write" tab: that remounts the
+    // contentEditable div as a fresh, empty node, so it needs to be
+    // re-populated even though `value` itself didn't change.
+  }, [value, tab]);
 
   const syncValue = useCallback(() => {
     isInternalChange.current = true;
@@ -381,14 +389,15 @@ export function RichTextEditor({
   // ── File handling ─────────────────────────────────────────────────────────
 
   const handleFileDrop = (e: React.DragEvent) => {
+    if (!onFilesAdded) return; // no handler wired up — let the browser's default drop behavior run
     e.preventDefault();
-    if (e.dataTransfer.files.length) onFilesAdded?.(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) onFilesAdded(e.dataTransfer.files);
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
-    if (e.clipboardData.files.length) {
+    if (onFilesAdded && e.clipboardData.files.length) {
       e.preventDefault();
-      onFilesAdded?.(e.clipboardData.files);
+      onFilesAdded(e.clipboardData.files);
       return;
     }
     setTimeout(syncValue, 0);
@@ -399,7 +408,7 @@ export function RichTextEditor({
   const sep = <span className="w-px h-4 bg-gray-200 mx-0.5 self-center" />;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
       {/* overflow-visible so the table grid picker popup isn't clipped */}
@@ -552,9 +561,11 @@ export function RichTextEditor({
               <ToolbarBtn title="Insert image" onMouseDown={handleImageBtn}>
                 <ImageIcon size={15} />
               </ToolbarBtn>
-              <ToolbarBtn title="Attach document" onMouseDown={handleFileBtn}>
-                <FileText size={15} />
-              </ToolbarBtn>
+              {onFilesAdded && (
+                <ToolbarBtn title="Attach document" onMouseDown={handleFileBtn}>
+                  <FileText size={15} />
+                </ToolbarBtn>
+              )}
 
               {sep}
 
@@ -565,15 +576,17 @@ export function RichTextEditor({
                 <Redo2 size={15} />
               </ToolbarBtn>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files?.length) onFilesAdded?.(e.target.files);
-                }}
-              />
+              {onFilesAdded && (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) onFilesAdded(e.target.files);
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -647,26 +660,28 @@ export function RichTextEditor({
         )}
 
         {/* ── Footer ────────────────────────────────────────────────── */}
-        <div className="flex items-center border-t border-gray-100 px-4 py-2 text-xs text-gray-400 rounded-b-input">
-          <span
-            className="flex items-center gap-1 cursor-pointer hover:text-gray-600"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+        {onFilesAdded && (
+          <div className="flex items-center border-t border-gray-100 px-4 py-2 text-xs text-gray-400 rounded-b-input">
+            <span
+              className="flex items-center gap-1 cursor-pointer hover:text-gray-600"
+              onClick={() => fileInputRef.current?.click()}
             >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="m21 15-5-5L5 21" />
-            </svg>
-            Paste, drop, or click to add files
-          </span>
-        </div>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="m21 15-5-5L5 21" />
+              </svg>
+              Paste, drop, or click to add files
+            </span>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-xs text-red-500">{error}</p>}

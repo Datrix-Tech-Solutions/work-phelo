@@ -49,9 +49,54 @@ export interface EmailProviderSyncInput {
   cursor?: string | null;
 }
 
+export interface EmailProviderRecipient {
+  email: string;
+  name?: string;
+}
+
+export interface EmailProviderFileAttachment {
+  fileName: string;
+  contentType: string;
+  contentBytes: Buffer;
+  sizeBytes?: number;
+}
+
+export interface EmailProviderSendInput {
+  accessToken?: string;
+  subject: string;
+  to: EmailProviderRecipient[];
+  cc?: EmailProviderRecipient[];
+  bcc?: EmailProviderRecipient[];
+  bodyText?: string;
+  bodyHtml?: string;
+  attachments?: EmailProviderFileAttachment[];
+}
+
+export interface EmailProviderReplyInput {
+  accessToken?: string;
+  providerMessageId: string;
+  to?: EmailProviderRecipient[];
+  cc?: EmailProviderRecipient[];
+  bcc?: EmailProviderRecipient[];
+  bodyText?: string;
+  bodyHtml?: string;
+  attachments?: EmailProviderFileAttachment[];
+}
+
+export interface EmailProviderSentMessage {
+  providerThreadId: string;
+  providerMessageId: string;
+  internetMessageId?: string;
+  sentAt: Date;
+}
+
 export interface EmailProvider {
   verifyConnection(
     input: EmailProviderVerifyInput,
   ): Promise<EmailProviderMailboxMetadata>;
   sync(input: EmailProviderSyncInput): Promise<EmailProviderSyncResult>;
+  sendMessage(input: EmailProviderSendInput): Promise<EmailProviderSentMessage>;
+  replyToMessage(
+    input: EmailProviderReplyInput,
+  ): Promise<EmailProviderSentMessage>;
 }

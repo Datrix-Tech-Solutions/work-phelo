@@ -33,7 +33,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
         'Starter baseline for employee self-service access after invite acceptance.',
       permissions: {
         employees: [PermissionAction.VIEW],
-        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'employee-profile': [PermissionAction.VIEW],
         'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
         attendance: [PermissionAction.CREATE],
         'time-corrections': [PermissionAction.CREATE],
@@ -49,7 +49,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
       description:
         'Starter template for line managers who approve people workflows without full HR administration.',
       permissions: {
-        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'employee-profile': [PermissionAction.VIEW],
         'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
         attendance: [PermissionAction.CREATE, PermissionAction.VIEW],
         'time-corrections': [PermissionAction.CREATE, PermissionAction.APPROVE],
@@ -89,7 +89,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
           PermissionAction.DELETE,
           PermissionAction.EXPORT,
         ],
-        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'employee-profile': [PermissionAction.VIEW],
         offboarding: [PermissionAction.EDIT],
         resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
         documents: [
@@ -193,16 +193,20 @@ async function buildLegacyPermissionSetName(
   currentName: string,
 ): Promise<string> {
   const preferredName = `Legacy ${currentName}`;
-  const existing = await prisma.permissionSet.findUnique({
-    where: { tenantId_name: { tenantId, name: preferredName } },
-    select: { id: true },
-  });
+  let candidateName = preferredName;
+  let suffix = new Date().getFullYear();
 
-  if (!existing) {
-    return preferredName;
+  while (
+    await prisma.permissionSet.findUnique({
+      where: { tenantId_name: { tenantId, name: candidateName } },
+      select: { id: true },
+    })
+  ) {
+    candidateName = `${preferredName} (${suffix})`;
+    suffix += 1;
   }
 
-  return `${preferredName} (${new Date().getFullYear()})`;
+  return candidateName;
 }
 
 async function reconcileLegacySystemPermissionSets(
@@ -392,14 +396,51 @@ export async function seedDefaultPermissionTemplates(
   // Migrate "Basic Employee" → "Employee" if the old name still exists
   const legacyBasicEmployee = await prisma.permissionSet.findUnique({
     where: { tenantId_name: { tenantId, name: BASIC_EMPLOYEE_LEGACY_NAME } },
-    select: { id: true },
+    select: {
+      id: true,
+      isActive: true,
+      description: true,
+      _count: { select: { users: true } },
+    },
   });
   if (legacyBasicEmployee) {
-    await prisma.permissionSet.update({
-      where: { id: legacyBasicEmployee.id },
-      data: { name: BASIC_EMPLOYEE_TEMPLATE_NAME },
+    const currentEmployee = await prisma.permissionSet.findUnique({
+      where: {
+        tenantId_name: { tenantId, name: BASIC_EMPLOYEE_TEMPLATE_NAME },
+      },
+      select: { id: true },
     });
-    log.log(`Renamed "Basic Employee" → "Employee" for tenant ${tenantId}`);
+
+    if (!currentEmployee) {
+      await prisma.permissionSet.update({
+        where: { id: legacyBasicEmployee.id },
+        data: { name: BASIC_EMPLOYEE_TEMPLATE_NAME },
+      });
+      log.log(`Renamed "Basic Employee" → "Employee" for tenant ${tenantId}`);
+    } else if (currentEmployee.id !== legacyBasicEmployee.id) {
+      const legacyName = await buildLegacyPermissionSetName(
+        prisma,
+        tenantId,
+        BASIC_EMPLOYEE_LEGACY_NAME,
+      );
+      await prisma.permissionSet.update({
+        where: { id: legacyBasicEmployee.id },
+        data: {
+          name: legacyName,
+          isSystem: false,
+          isActive:
+            legacyBasicEmployee._count.users > 0
+              ? legacyBasicEmployee.isActive
+              : false,
+          description:
+            legacyBasicEmployee.description ??
+            'Legacy Basic Employee permission template preserved during Employee template migration.',
+        },
+      });
+      log.warn(
+        `Preserved conflicting "Basic Employee" template as "${legacyName}" for tenant ${tenantId}; canonical "Employee" already exists.`,
+      );
+    }
   }
 
   for (const template of DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS) {

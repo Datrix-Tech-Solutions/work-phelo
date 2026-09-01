@@ -70,6 +70,7 @@ export function RenewFacultativePanel({ isOpen, placement, onClose }: RenewFacul
         values.riskDetails,
         selectedRiskType?.fields ?? [],
         values.extraRiskFields ?? [],
+        values.riskDetailsVisibility ?? {},
       );
 
       await createFacultative({

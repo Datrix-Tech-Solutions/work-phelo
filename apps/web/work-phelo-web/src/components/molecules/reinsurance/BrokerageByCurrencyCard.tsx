@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { DataList, Column } from '@/components/organisms/shared/DataList';
-import { Period } from '@/components/atoms/PeriodToggle';
+import { Period, periodWindow } from '@/components/atoms/PeriodToggle';
 import { Currency } from '@/types/reinsurance';
 import { useFacultatives, useCurrencies } from '@/hooks';
 import { transparentCardClass } from '@/lib/utils';
@@ -39,38 +39,23 @@ const BROKERAGE_COLUMNS: Column<AmountRow>[] = [
   },
 ];
 
-function periodStart(period: Period, now: Date): Date {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const mondayOffset = (now.getDay() + 6) % 7;
-  switch (period) {
-    case 'daily':
-      return new Date(y, m, d);
-    case 'weekly':
-      return new Date(y, m, d - mondayOffset);
-    case 'monthly':
-      return new Date(y, m, 1);
-    case 'yearly':
-      return new Date(y, 0, 1);
-  }
-}
-
 interface BrokerageByCurrencyCardProps {
   period: Period;
+  year?: number;
 }
 
-export function BrokerageByCurrencyCard({ period }: BrokerageByCurrencyCardProps) {
+export function BrokerageByCurrencyCard({ period, year }: BrokerageByCurrencyCardProps) {
   const { data: all = [] } = useFacultatives();
   const { data: currencies = [] } = useCurrencies();
 
   const brokerageByCode = useMemo(() => {
-    const start = periodStart(period, new Date());
+    const { start, end } = periodWindow(period, { year });
     const map = new Map<string, number>();
 
     for (const f of all) {
       if (f.premium == null || f.currency == null) continue;
-      if (new Date(f.createdAt) < start) continue;
+      const createdAt = new Date(f.createdAt);
+      if (createdAt < start || createdAt > end) continue;
 
       for (const p of f.participants) {
         if (p.status !== 'ACCEPTED' && p.status !== 'CLOSED') continue;
@@ -82,7 +67,7 @@ export function BrokerageByCurrencyCard({ period }: BrokerageByCurrencyCardProps
     }
 
     return map;
-  }, [all, period]);
+  }, [all, period, year]);
 
   const rows = currencies
     .map((c) => ({ ...c, amount: brokerageByCode.get(c.isoCode) ?? null }))

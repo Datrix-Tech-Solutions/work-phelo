@@ -8,8 +8,10 @@ import { AppearanceTab } from '@/components/molecules/settings/AppearanceTab';
 import { TabItem } from '@/components/molecules/shared/TabBar';
 import { useAuthStore } from '@/store/auth.store';
 import { SelfServiceTab } from './SelfServiceTab';
+import { DocumentTemplateStudio } from '@/components/organisms/settings/DocumentTemplateStudio';
+// import { ReinsuranceAccountingIntegrationControl } from '@/components/organisms/shared/ReinsuranceAccountingIntegrationControl';
 
-type SettingsTab = 'security' | 'appearance' | 'self-service';
+type SettingsTab = 'security' | 'appearance' | 'self-service' | 'documents';
 
 const TABS: TabItem[] = [
   { key: 'security', label: 'Change Password' },
@@ -21,7 +23,11 @@ export function SettingsContent() {
   const user = useAuthStore((state) => state.user);
   const canManageTenantSettings = user?.role === 'SUPER_ADMIN' || user?.role === 'TENANT_ADMIN';
   const tabs: TabItem[] = canManageTenantSettings
-    ? [...TABS, { key: 'self-service', label: 'Self Service' }]
+    ? [
+        ...TABS,
+        { key: 'self-service', label: 'Self Service' },
+        { key: 'documents', label: 'Document Template' },
+      ]
     : TABS;
 
   return (
@@ -45,7 +51,18 @@ export function SettingsContent() {
         <div className={pageContent}>
           {activeTab === 'security' && <ChangePasswordTab />}
           {activeTab === 'appearance' && <AppearanceTab />}
-          {activeTab === 'self-service' && <SelfServiceTab />}
+          {activeTab === 'self-service' && (
+            <div className="flex flex-col gap-8">
+              <SelfServiceTab />
+              {/* {user?.tenantId && (
+                <ReinsuranceAccountingIntegrationControl
+                  tenantId={user.tenantId}
+                  canManage={user.role === 'SUPER_ADMIN'}
+                />
+              )} */}
+            </div>
+          )}
+          {activeTab === 'documents' && <DocumentTemplateStudio />}
         </div>
       </div>
     </div>

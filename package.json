@@ -9,8 +9,8 @@
     "test:integration": "turbo run test:integration",
     "test:e2e": "turbo run test:e2e",
     "test:cov": "turbo run test:cov",
-    "test:auth": "turbo run test:all --filter=auth-service",
-    "test:hr": "turbo run test:all --filter=hr-service",
+    "test:auth": "npm run test:all --workspace=apps/auth-service",
+    "test:hr": "npm run test:all --workspace=apps/hr-service",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "db:generate:all": "turbo run db:generate",
@@ -22,6 +22,7 @@
     "dev:billing": "turbo run dev --filter=subscription-service",
     "dev:marketing": "turbo run dev --filter=marketing-service",
     "dev:reinsurance": "turbo run dev --filter=reinsurance-service",
+    "dev:accounting": "turbo run dev --filter=accounting-service",
     "dev:infra": "docker compose -f infrastructure/docker-compose.dev.yml up rabbitmq redis -d",
     "prepare": "husky",
     "check-types": "turbo run check-types",
@@ -57,6 +58,7 @@
     "apps/subscription-service",
     "apps/marketing-service",
     "apps/reinsurance-service",
+    "apps/accounting-service",
     "packages/*"
   ],
   "dependencies": {

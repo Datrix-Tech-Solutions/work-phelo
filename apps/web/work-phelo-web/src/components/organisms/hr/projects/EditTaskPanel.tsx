@@ -178,7 +178,7 @@ export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving, readOnl
         /* ── Edit form ── */
         <>
           {/* Task name */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-medium text-gray-700">Task Name</label>
             <input
               {...register('name', { required: 'Task name is required' })}
@@ -203,7 +203,7 @@ export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving, readOnl
           />
 
           {/* Status */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-medium text-gray-700">Status</label>
             <select {...register('status')} className={inputClass()}>
               {STATUS_OPTIONS.map((o) => (

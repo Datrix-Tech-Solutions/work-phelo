@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { cn, popupClass } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { cardClass, cn, popupClass } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
 interface SidePanelProps {
@@ -12,6 +13,12 @@ interface SidePanelProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   width?: string;
+  /** Translucent glass surface with the page behind the backdrop blurred, instead of the
+   * default near-solid popup surface with a plain dimming overlay. Opt-in — leaves every
+   * other SidePanel consumer unchanged. */
+  glass?: boolean;
+  /** Rendered at the end of the description line (only shown alongside a description). */
+  descriptionAction?: React.ReactNode;
 }
 
 export function SidePanel({
@@ -22,7 +29,17 @@ export function SidePanel({
   children,
   footer,
   width = 'sm:w-[480px]',
+  glass = false,
+  descriptionAction,
 }: SidePanelProps) {
+  // Portals need a browser DOM to render into — stay unmounted through SSR and the
+  // initial client render so hydration sees the same (empty) output, then flip on.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   // Close on Escape key
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -40,13 +57,16 @@ export function SidePanel({
     };
   }, [isOpen]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
         onClick={onClose}
         className={cn(
-          'fixed inset-0 bg-black/60 z-40 transition-opacity duration-300',
+          'fixed inset-0 z-40 transition-opacity duration-300',
+          glass ? 'bg-black/20' : 'bg-black/60',
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
       />
@@ -54,7 +74,7 @@ export function SidePanel({
       {/* Floating Side Panel */}
       <div
         className={cn(
-          popupClass(
+          (glass ? cardClass : popupClass)(
             cn(
               'fixed z-50 flex flex-col shadow-2xl overflow-hidden',
               'transition-all duration-300 ease-out',
@@ -74,11 +94,16 @@ export function SidePanel({
         {/* Header */}
         <div className="shrink-0 px-3 sm:px-6 py-1 sm:py-2 border-b border-(--glass-border,rgba(255,255,255,0.55))">
           <div className="flex items-start justify-between gap-1">
-            <div>
+            <div className="flex-1 min-w-0">
               <h2 className="text-xl sm:text-xl font-semibold text-gray-900 tracking-tight">
                 {title}
               </h2>
-              {description && <p className="text-sm text-gray-500 mt-1.5">{description}</p>}
+              {description && (
+                <div className="flex items-center justify-between gap-3 mt-1.5">
+                  <p className="text-sm text-gray-500">{description}</p>
+                  {descriptionAction}
+                </div>
+              )}
             </div>
 
             <button
@@ -103,6 +128,7 @@ export function SidePanel({
           </div>
         )}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

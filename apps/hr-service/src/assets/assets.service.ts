@@ -83,16 +83,16 @@ export class AssetsService {
   ): Prisma.AssetUncheckedUpdateInput {
     return {
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-      ...(dto.type !== undefined ? { type: dto.type } : {}),
       ...(dto.type !== undefined
         ? {
+            type: dto.type,
             customType:
               dto.type === AssetType.OTHER
                 ? dto.customType?.trim() || null
                 : null,
           }
         : dto.customType !== undefined
-          ? { customType: dto.customType.trim() || null }
+          ? { customType: dto.customType?.trim() || null }
           : {}),
       ...(dto.serialNumber !== undefined
         ? { serialNumber: dto.serialNumber.trim() || null }
@@ -108,18 +108,8 @@ export class AssetsService {
         : {}),
       ...(dto.condition !== undefined ? { condition: dto.condition } : {}),
       ...(dto.notes !== undefined ? { notes: dto.notes.trim() || null } : {}),
-      ...(dto.branchId !== undefined ? { branchId: dto.branchId } : {}),
+      ...(dto.branchId !== undefined ? { branchId: dto.branchId || null } : {}),
     };
-  }
-
-  private async assertBranchBelongsToTenant(
-    tenantId: string,
-    branchId: string,
-  ) {
-    const branch = await this.prisma.branch.findFirst({
-      where: { id: branchId, tenantId },
-    });
-    if (!branch) throw new NotFoundException('Branch not found');
   }
 
   private async generateAssetNumber(tenantId: string, type: AssetType) {
@@ -215,6 +205,17 @@ export class AssetsService {
   async findById(tenantId: string, id: string) {
     const asset = await this.getAssetOrThrow(tenantId, id);
     return this.serializeAsset(asset);
+  }
+
+  private async assertBranchBelongsToTenant(
+    tenantId: string,
+    branchId: string,
+  ) {
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: branchId, tenantId },
+      select: { id: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
   }
 
   async create(tenantId: string, dto: CreateAssetDto) {

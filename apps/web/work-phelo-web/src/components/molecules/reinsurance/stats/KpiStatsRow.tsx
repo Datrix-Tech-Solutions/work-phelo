@@ -13,6 +13,7 @@ const PERIOD_LABELS: Record<Period, string> = {
   daily: 'day',
   weekly: 'week',
   monthly: 'month',
+  quarterly: 'quarter',
   yearly: 'year',
 };
 
@@ -20,6 +21,7 @@ const PERIOD_PREV_LABELS: Record<Period, string> = {
   daily: 'Yesterday',
   weekly: 'Last week',
   monthly: 'Last month',
+  quarterly: 'Last quarter',
   yearly: 'Last year',
 };
 
@@ -40,12 +42,14 @@ function fmtAmount(value: number, symbol: string): string {
 
 interface KpiStatsRowProps {
   period: Period;
+  year: number;
   currency: string;
 }
 
-export function KpiStatsRow({ period, currency }: KpiStatsRowProps) {
+export function KpiStatsRow({ period, year, currency }: KpiStatsRowProps) {
   const { data: financials, isLoading: loadingFinancials } = useReinsuranceFinancials({
     period,
+    year,
     currency,
   });
   const {
