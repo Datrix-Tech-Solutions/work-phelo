@@ -901,3 +901,53 @@ body {
     animation: mood-very-happy-jump 1.1s ease-in-out infinite;
   }
 }
+
+/* Rich-text tables — RichTextEditor stores tables as bare
+   `<table><thead><th>…<td>` markup with no per-cell inline styles, so the HTML
+   stays small enough for character-limited fields. The editor/preview and
+   RichTextView style them via `richContentClass`; document and PDF layouts drop
+   the same HTML into `<div data-rich-text>` with no other styling, so the grid
+   is reconstructed here. Values mirror the inline styles they replace, so
+   already-saved documents render unchanged. */
+[data-rich-text] table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+}
+
+[data-rich-text] th,
+[data-rich-text] td {
+  border: 1px solid #d1d5db;
+  padding: 6px 12px;
+  min-width: 60px;
+  height: 2rem; /* min-height — keeps empty cells from collapsing */
+}
+
+[data-rich-text] th {
+  background: #f9fafb;
+  font-weight: 600;
+  text-align: left;
+}
+
+/* A table with more columns than the container is wide scrolls inside this
+   wrapper (added by `insertTableFromGrid`) instead of overflowing the comment
+   area or the document page. The margin moves here so the scrollbar sits flush
+   against the last row. */
+[data-rich-text] .rt-table-scroll {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+[data-rich-text] .rt-table-scroll table {
+  margin: 0;
+}
+
+/* In the off-screen print root (captured by html2canvas for the PDF) a scroll
+   container would clip every column past its right edge. Let the table flow at
+   its natural width there instead, exactly as it did before the wrapper. */
+[id$='-print-root'] [data-rich-text] .rt-table-scroll {
+  overflow: visible;
+  max-width: none;
+}
