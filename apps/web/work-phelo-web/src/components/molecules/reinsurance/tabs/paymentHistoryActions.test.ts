@@ -1,7 +1,9 @@
 import {
   canReversePayment,
+  isActiveReinsurerDisbursement,
   paymentReversalRequest,
   PaymentReversalCandidate,
+  premiumReversalBlockedByDisbursements,
 } from './paymentHistoryActions';
 
 function payment(overrides: Partial<PaymentReversalCandidate> = {}): PaymentReversalCandidate {
@@ -42,5 +44,78 @@ describe('canReversePayment', () => {
       placementId: 'placement-1',
       paymentId: 'payment-1',
     });
+  });
+});
+
+describe('isActiveReinsurerDisbursement', () => {
+  it('treats recorded and bank-confirmed disbursements as active', () => {
+    expect(
+      isActiveReinsurerDisbursement(
+        payment({ type: 'REINSURER_DISBURSEMENT', status: 'RECORDED' }),
+      ),
+    ).toBe(true);
+    expect(
+      isActiveReinsurerDisbursement(
+        payment({ type: 'REINSURER_DISBURSEMENT', status: 'BANK_CONFIRMED' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores reversed, cancelled and failed disbursements', () => {
+    for (const status of ['REVERSED', 'CANCELLED', 'FAILED']) {
+      expect(
+        isActiveReinsurerDisbursement(payment({ type: 'REINSURER_DISBURSEMENT', status })),
+      ).toBe(false);
+    }
+  });
+
+  it('ignores the linked reversal row and non-disbursement payments', () => {
+    expect(
+      isActiveReinsurerDisbursement(
+        payment({
+          type: 'REINSURER_DISBURSEMENT',
+          status: 'BANK_CONFIRMED',
+          reversalOfPaymentId: 'original-1',
+        }),
+      ),
+    ).toBe(false);
+    expect(isActiveReinsurerDisbursement(payment({ type: 'PREMIUM_RECEIVED' }))).toBe(false);
+  });
+});
+
+describe('premiumReversalBlockedByDisbursements', () => {
+  const premium = payment({ type: 'PREMIUM_RECEIVED', status: 'BANK_CONFIRMED' });
+
+  it('blocks a premium reversal while an active reinsurer disbursement remains', () => {
+    expect(
+      premiumReversalBlockedByDisbursements(premium, [
+        premium,
+        payment({ id: 'd1', type: 'REINSURER_DISBURSEMENT', status: 'BANK_CONFIRMED' }),
+      ]),
+    ).toBe(true);
+  });
+
+  it('allows the premium reversal once every disbursement is reversed', () => {
+    expect(
+      premiumReversalBlockedByDisbursements(premium, [
+        premium,
+        payment({ id: 'd1', type: 'REINSURER_DISBURSEMENT', status: 'REVERSED' }),
+        payment({
+          id: 'd1-rev',
+          type: 'REINSURER_DISBURSEMENT',
+          status: 'BANK_CONFIRMED',
+          reversalOfPaymentId: 'd1',
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it('never blocks a non-premium payment', () => {
+    expect(
+      premiumReversalBlockedByDisbursements(
+        payment({ type: 'REINSURER_DISBURSEMENT', status: 'BANK_CONFIRMED' }),
+        [payment({ id: 'd1', type: 'REINSURER_DISBURSEMENT', status: 'BANK_CONFIRMED' })],
+      ),
+    ).toBe(false);
   });
 });

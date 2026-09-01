@@ -1,13 +1,27 @@
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const PAGE_MARGIN_MM = 12;
-const CAPTURE_SCALE = 2;
+const CAPTURE_SCALE = 2; // content — stays crisp when the preview is zoomed
+const BAND_SCALE = 1.5; // letterhead / footer / watermark — logo + text + QR only
+const CONTENT_JPEG_QUALITY = 0.92;
 const WATERMARK_WIDTH_MM = 175;
 const STAGE_WIDTH_PX = 900;
 
 function pdfFileName(fileName: string): string {
   const cleaned = fileName.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim() || 'document';
   return /\.pdf$/i.test(cleaned) ? cleaned : `${cleaned}.pdf`;
+}
+
+let depsPreload: Promise<unknown> | null = null;
+
+/**
+ * Warm the heavy PDF libraries (`html2canvas-pro`, `jspdf`) before the first
+ * Print click so that click doesn't stall on the chunk download + parse. Safe to
+ * call repeatedly — the dynamic imports are module-cached.
+ */
+export function preloadDocumentPdfDeps(): void {
+  if (depsPreload || typeof window === 'undefined') return;
+  depsPreload = Promise.allSettled([import('html2canvas-pro'), import('jspdf')]);
 }
 
 /**
@@ -61,17 +75,36 @@ export function stagePrintRoot(el: HTMLElement): () => void {
   };
 }
 
-async function captureElement(el: HTMLElement, transparent = false) {
+async function captureElement(el: HTMLElement, transparent = false, scale = CAPTURE_SCALE) {
   // Tailwind v4 emits colors as lab()/oklch() for modern browsers, which the
   // classic html2canvas can't parse — html2canvas-pro is a drop-in fork that
   // adds support for those color functions.
   const { default: html2canvas } = await import('html2canvas-pro');
   return html2canvas(el, {
-    scale: CAPTURE_SCALE,
+    scale,
     useCORS: true,
     backgroundColor: transparent ? null : '#ffffff',
     logging: false,
   });
+}
+
+// The letterhead, footer and watermark are identical for every document in a
+// session, but each html2canvas call re-clones the whole document — the costly
+// part. Cache the band captures by their markup so only the first print pays.
+const bandCanvasCache = new Map<string, HTMLCanvasElement>();
+
+async function captureBand(
+  el: HTMLElement,
+  { transparent = false, scale = BAND_SCALE }: { transparent?: boolean; scale?: number } = {},
+): Promise<HTMLCanvasElement> {
+  const key = `${scale}|${transparent ? 't' : 'o'}|${el.outerHTML}`;
+  const cached = bandCanvasCache.get(key);
+  if (cached) return cached;
+  const canvas = await captureElement(el, transparent, scale);
+  // Don't cache a degenerate capture (e.g. an image that hadn't loaded yet) —
+  // the next print should get a real shot at it.
+  if (canvas.width > 0 && canvas.height > 0) bandCanvasCache.set(key, canvas);
+  return canvas;
 }
 
 /**
@@ -103,8 +136,15 @@ function collectBreakOffsets(content: HTMLElement, canvasHeight: number): number
 
   // Blocks that must never be sliced: explicit markers, whole tables authored in
   // the rich-text comment, and anything asking for `break-inside: avoid`.
+  // Something is only atomic if it's an explicit marker/table, or asks for
+  // `break-inside: avoid` — which in this inline-styled print markup only comes
+  // from an inline style or a Tailwind `break-inside-avoid` class. Checking just
+  // those elements avoids a `getComputedStyle` call for every node in the tree.
   const atomicSelector = '[data-print-block], [data-rich-text] table';
-  const atomicBoxes = Array.from(content.querySelectorAll<HTMLElement>('*'))
+  const breakAvoidSelector = '[style*="break-inside"], [class*="break-inside-avoid"]';
+  const atomicBoxes = Array.from(
+    content.querySelectorAll<HTMLElement>(`${atomicSelector}, ${breakAvoidSelector}`),
+  )
     .filter((el) => el.matches(atomicSelector) || getComputedStyle(el).breakInside === 'avoid')
     .map((el) => {
       const rect = el.getBoundingClientRect();
@@ -139,11 +179,11 @@ async function waitForImages(el: HTMLElement) {
  * Rasterizes a document's print layout (built by `DocumentPrintLayout`) into a
  * real, multi-page A4 PDF.
  *
- * Each page is stacked bottom-up: the faint watermark (`[data-print-watermark]`),
- * then the repeated header/footer bands, then a slice of the transparent content
- * canvas on top — so the watermark shows through the gaps in the text.
- * html2canvas can't replicate `position: fixed` elements across sliced pages, so
- * that repetition is done manually here.
+ * Per page: one flat JPEG holds the faint watermark (`[data-print-watermark]`)
+ * with a slice of the transparent content canvas composited on top — so the
+ * watermark still shows through the gaps in the text — then the cached
+ * header/footer PNGs are drawn over it. html2canvas can't replicate
+ * `position: fixed` elements across sliced pages, so that repetition is manual.
  */
 export async function renderPrintRootToPdf(root: HTMLElement, title: string): Promise<Blob> {
   const header = root.querySelector<HTMLElement>('[data-print-header]');
@@ -176,9 +216,9 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
   let breakOffsets: number[] = [0];
   try {
     [headerCanvas, footerCanvas, watermarkCanvas, contentCanvas] = await Promise.all([
-      header ? captureElement(header) : Promise.resolve(null),
-      footer ? captureElement(footer) : Promise.resolve(null),
-      watermark ? captureElement(watermark, true) : Promise.resolve(null),
+      header ? captureBand(header) : Promise.resolve(null),
+      footer ? captureBand(footer) : Promise.resolve(null),
+      watermark ? captureBand(watermark, { transparent: true }) : Promise.resolve(null),
       captureElement(content, true),
     ]);
     // Measure now, while the root is still staged and `minHeight` is cleared.
@@ -191,7 +231,7 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
   }
 
   const { default: jsPDF } = await import('jspdf');
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   pdf.setProperties({ title });
 
   const headerHmm = headerCanvas ? (headerCanvas.height / headerCanvas.width) * A4_WIDTH_MM : 0;
@@ -199,13 +239,25 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
   const contentWmm = A4_WIDTH_MM - PAGE_MARGIN_MM * 2;
   const contentAreaHmm = A4_HEIGHT_MM - headerHmm - footerHmm - PAGE_MARGIN_MM * 2;
 
-  const watermarkWmm = watermarkCanvas ? WATERMARK_WIDTH_MM : 0;
+  const pxPerMm = contentCanvas.width / contentWmm;
+  const maxSliceHeightPx = Math.max(1, Math.floor(contentAreaHmm * pxPerMm));
+
+  // Where the page-centred watermark falls *within* a content slice. It's the
+  // same on every page (each page's content image shares one origin below the
+  // header), so baking it into the slice lets that slice be a flat JPEG — far
+  // cheaper to encode than a transparent PNG — while still showing through the
+  // gaps in the text.
   const watermarkHmm = watermarkCanvas
     ? (watermarkCanvas.height / watermarkCanvas.width) * WATERMARK_WIDTH_MM
     : 0;
-
-  const pxPerMm = contentCanvas.width / contentWmm;
-  const maxSliceHeightPx = Math.max(1, Math.floor(contentAreaHmm * pxPerMm));
+  const watermarkRect = watermarkCanvas
+    ? {
+        x: ((A4_WIDTH_MM - WATERMARK_WIDTH_MM) / 2 - PAGE_MARGIN_MM) * pxPerMm,
+        y: ((A4_HEIGHT_MM - watermarkHmm) / 2 - (headerHmm + PAGE_MARGIN_MM)) * pxPerMm,
+        w: WATERMARK_WIDTH_MM * pxPerMm,
+        h: watermarkHmm * pxPerMm,
+      }
+    : null;
 
   // Turn the legal break offsets into concrete page boundaries: each page takes
   // as many whole blocks as fit in `maxSliceHeightPx`, snapping its bottom edge
@@ -229,17 +281,8 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
   for (let page = 0; page < pageStarts.length; page++) {
     if (page > 0) pdf.addPage();
 
-    if (watermarkCanvas) {
-      pdf.addImage(
-        watermarkCanvas,
-        'PNG',
-        (A4_WIDTH_MM - watermarkWmm) / 2,
-        (A4_HEIGHT_MM - watermarkHmm) / 2,
-        watermarkWmm,
-        watermarkHmm,
-      );
-    }
-
+    // Letterhead / footer: captured once and cached, kept as lossless PNG so the
+    // QR code stays crisp and scannable.
     if (headerCanvas) {
       pdf.addImage(headerCanvas, 'PNG', 0, 0, A4_WIDTH_MM, headerHmm);
     }
@@ -249,34 +292,50 @@ export async function renderPrintRootToPdf(root: HTMLElement, title: string): Pr
 
     const startPx = pageStarts[page];
     const endPx = page + 1 < pageStarts.length ? pageStarts[page + 1] : contentCanvas.height;
-    const sliceHeightPxForPage = endPx - startPx;
-    if (sliceHeightPxForPage <= 0) continue;
+    const usedPx = Math.min(endPx, contentCanvas.height) - startPx;
+    if (usedPx <= 0) continue;
 
+    // One flat JPEG per page: white ground, the page-centred watermark, then the
+    // content slice on top. Every page is the full content-area height so the
+    // watermark never clips on a short final page — the white tail below the
+    // content is just what a normal last page looks like.
     const slice = document.createElement('canvas');
     slice.width = contentCanvas.width;
-    slice.height = sliceHeightPxForPage;
+    slice.height = maxSliceHeightPx;
     const ctx = slice.getContext('2d');
     if (!ctx) continue;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, slice.width, slice.height);
+    if (watermarkCanvas && watermarkRect) {
+      ctx.drawImage(
+        watermarkCanvas,
+        watermarkRect.x,
+        watermarkRect.y,
+        watermarkRect.w,
+        watermarkRect.h,
+      );
+    }
     ctx.drawImage(
       contentCanvas,
       0,
       startPx,
       contentCanvas.width,
-      sliceHeightPxForPage,
+      usedPx,
       0,
       0,
       contentCanvas.width,
-      sliceHeightPxForPage,
+      usedPx,
     );
 
-    const sliceHmm = sliceHeightPxForPage / pxPerMm;
     pdf.addImage(
-      slice.toDataURL('image/png'),
-      'PNG',
+      slice.toDataURL('image/jpeg', CONTENT_JPEG_QUALITY),
+      'JPEG',
       PAGE_MARGIN_MM,
       headerHmm + PAGE_MARGIN_MM,
       contentWmm,
-      sliceHmm,
+      contentAreaHmm,
+      undefined,
+      'FAST',
     );
   }
 

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import {
   openPdfPreview,
+  preloadDocumentPdfDeps,
   renderPrintRootToPdf,
   stagePrintRoot,
 } from '@/lib/reinsurance/renderDocumentPdf';
@@ -40,6 +41,12 @@ export function DocumentPreviewShell({
   children,
 }: DocumentPreviewShellProps) {
   const [isPrinting, setIsPrinting] = useState(false);
+
+  // Warm html2canvas-pro + jsPDF while the user reads the preview, so the first
+  // Print click isn't spent downloading them.
+  useEffect(() => {
+    if (isOpen) preloadDocumentPdfDeps();
+  }, [isOpen]);
 
   if (!isOpen || typeof document === 'undefined') return null;
 
