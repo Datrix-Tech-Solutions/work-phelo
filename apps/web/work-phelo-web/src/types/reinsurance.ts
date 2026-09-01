@@ -1478,6 +1478,11 @@ export interface ConfirmPlacementPaymentBankPayload {
   bankConfirmedAt: string;
   bankReference?: string;
   notes?: string;
+  /** Currency the counterparty actually settled in, when it differs from the obligation
+   * currency. Persisted so cross-currency receipts can be shown in the money that moved. */
+  settlementCurrency?: string;
+  /** Obligation-currency units per 1 unit of `settlementCurrency` (obligation = settlement × rate). */
+  agreedExchangeRate?: number;
 }
 
 export type PlacementFinancialPositionState =

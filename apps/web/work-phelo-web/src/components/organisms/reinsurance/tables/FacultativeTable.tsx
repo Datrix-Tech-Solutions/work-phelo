@@ -190,7 +190,7 @@ const COLUMNS: Column<Facultative>[] = [
   SUM_INSURED_COLUMN,
   {
     key: 'premium',
-    label: 'Premium',
+    label: '100% Premium',
     width: '100px',
     className: 'text-right',
     render: (row) => (

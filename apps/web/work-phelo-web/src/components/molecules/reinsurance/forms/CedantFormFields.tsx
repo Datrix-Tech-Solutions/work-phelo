@@ -83,12 +83,6 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
           placeholder="e.g. Insurance Company Ltd."
           readOnly={!!prefillId}
         />
-        {prefillId && (
-          <p className="text-xs text-gray-400">
-            Name is linked to the selected reinsurer and cannot be edited — this keeps the two
-            records matched. Clear the selection above to use a different name.
-          </p>
-        )}
       </FormSection>
 
       {/* ── Primary contact ── */}

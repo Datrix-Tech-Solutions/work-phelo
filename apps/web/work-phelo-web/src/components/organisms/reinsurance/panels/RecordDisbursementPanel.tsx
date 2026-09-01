@@ -13,6 +13,7 @@ import {
   usePlacementPayments,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import { premiumForeignSettlement } from '@/lib/reinsurance/premiumSettlement';
 import { useToastStore } from '@/store/toast.store';
 import {
   Facultative,
@@ -69,6 +70,19 @@ export function RecordDisbursementPanel({
   const addToast = useToastStore((s) => s.addToast);
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
+
+  const obligationCurrency = financialPosition?.currency ?? placement.currency ?? null;
+  // Closings and the financial position are denominated in the obligation currency. If the
+  // cedant premium was received in a single foreign currency, disburse to the reinsurer in
+  // that same currency at that same rate: obligation = display × rate.
+  const fx = useMemo(
+    () => premiumForeignSettlement(payments, obligationCurrency),
+    [payments, obligationCurrency],
+  );
+  const displayCurrency = fx ? fx.currency : obligationCurrency;
+  const toDisplay = (obligationValue: number) => (fx ? obligationValue / fx.rate : obligationValue);
+  const toObligation = (displayValue: number) => (fx ? displayValue * fx.rate : displayValue);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [amount, setAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PlacementSettlementMethod>('BANK_TRANSFER');
@@ -156,13 +170,13 @@ export function RecordDisbursementPanel({
 
   useEffect(() => {
     if (!target) return;
-    const prefill = suggestedAmount ?? totalOutstanding;
+    const prefill = toDisplay(suggestedAmount ?? totalOutstanding);
     setAmount(prefill > 0 ? round2(prefill) : 0);
     setPaymentMethod('BANK_TRANSFER');
     setNotes('');
     setReferenceValue('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, totalOutstanding]);
+  }, [target, totalOutstanding, fx?.rate]);
 
   const handlePaymentMethodChange = (value: string) => {
     setPaymentMethod(value as PlacementSettlementMethod);
@@ -171,7 +185,7 @@ export function RecordDisbursementPanel({
 
   // Compare against the outstanding rounded to cents so a legitimate 2-decimal
   // entry (e.g. 12.18 for an outstanding of 12.1793843) isn't rejected as an overpayment.
-  const maxAmount = round2(totalOutstanding);
+  const maxAmount = round2(toDisplay(totalOutstanding));
   const amountError =
     totalOutstanding <= 0
       ? null
@@ -201,7 +215,9 @@ export function RecordDisbursementPanel({
     try {
       const now = new Date().toISOString();
 
-      let remaining = amount;
+      // The user enters the amount in the display (foreign) currency when `fx` is set; allocate
+      // against the closings — which are obligation-currency — after converting back.
+      let remaining = toObligation(amount);
       for (const source of sources) {
         if (remaining <= 0.0001) break;
         const portion = Math.min(source.outstanding, remaining);
@@ -217,10 +233,10 @@ export function RecordDisbursementPanel({
           closingId: source.closingId,
           endorsementClosingId: source.endorsementClosingId,
           participantId: source.participantId,
-          amount: portion,
+          amount: round2(portion),
           currency: source.currency,
           settlementMethod: paymentMethod,
-          settlementCurrency: source.currency,
+          settlementCurrency: fx ? fx.currency : source.currency,
           paymentDate: now,
           reference,
           notes: notes || undefined,
@@ -233,6 +249,7 @@ export function RecordDisbursementPanel({
             placementId: placement.id,
             paymentId: created.id,
             bankConfirmedAt: now,
+            ...(fx ? { settlementCurrency: fx.currency, agreedExchangeRate: fx.rate } : {}),
           });
         } catch (confirmError) {
           addToast({
@@ -252,7 +269,7 @@ export function RecordDisbursementPanel({
 
   if (!target) return null;
 
-  const currency = financialPosition?.currency ?? placement.currency;
+  const currency = displayCurrency;
 
   return (
     <Modal
@@ -280,8 +297,17 @@ export function RecordDisbursementPanel({
           , payable balance{' '}
           <span className="font-semibold text-gray-900">{fmt(amount, currency)}</span>, outstanding
           balance{' '}
-          <span className="font-semibold text-gray-900">{fmt(target.outstanding, currency)}</span>.
+          <span className="font-semibold text-gray-900">
+            {fmt(toDisplay(target.outstanding), currency)}
+          </span>
+          .
         </p>
+        {fx && (
+          <p className="text-xs text-gray-500">
+            Premium was received in {fx.currency}, amounts are shown and disbursed in {fx.currency}{' '}
+            at 1 {fx.currency} = {fmt(fx.rate, obligationCurrency)}.
+          </p>
+        )}
         <SearchSelect
           label="Payment Method"
           placeholder="Select payment method…"
@@ -301,7 +327,7 @@ export function RecordDisbursementPanel({
         )}
 
         <NumberField
-          label={`Amount (${currency})`}
+          label={currency ? `Amount (${currency})` : 'Amount'}
           value={amount}
           onChange={setAmount}
           onBlur={(v) => setAmount(round2(v))}
