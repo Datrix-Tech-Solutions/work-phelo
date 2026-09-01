@@ -5,6 +5,7 @@ import { ShieldCheck, Users } from 'lucide-react';
 import { extractError } from '@/lib/extractError';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
   usePermissionSets,
@@ -89,6 +90,31 @@ export function RolesContent() {
         </span>
       ),
     },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 'minmax(260px, auto)',
+      render: (row) => (
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <TableButton variant="blue" onClick={() => setMembersTarget(row)}>
+            Manage Members
+          </TableButton>
+          <TableButton
+            variant="orange"
+            onClick={() =>
+              router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/${row.id}/edit`)
+            }
+          >
+            Edit
+          </TableButton>
+          {!row.isSystem && (
+            <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
+              Delete
+            </TableButton>
+          )}
+        </div>
+      ),
+    },
   ];
 
   const handleDeleteConfirm = async () => {
@@ -135,17 +161,6 @@ export function RolesContent() {
           totalPages={totalPages}
           onPageChange={setPage}
           noInternalScroll
-          rowActions={(row) => [
-            { label: 'Manage Members', onClick: () => setMembersTarget(row) },
-            {
-              label: 'Edit',
-              onClick: () =>
-                router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/${row.id}/edit`),
-            },
-            ...(row.isSystem
-              ? []
-              : [{ label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) }]),
-          ]}
         />
       </div>
 

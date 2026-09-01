@@ -1,11 +1,14 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
 import type { PermissionAction, PermissionSetResourceDto } from '@/types/roles';
 
 interface PermissionTag {
   key: string;
   label: string;
+  /** Only shown when the tenant's moduleConfig has this key enabled. Omit for always-visible tags. */
+  moduleKey?: string;
 }
 
 interface PermissionTagGroup {
@@ -55,6 +58,15 @@ export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
       { key: 'view_all_departments', label: 'View All Departments' },
       { key: 'manage_branches', label: 'Manage Branches' },
       { key: 'view_all_branches', label: 'View All Branches' },
+    ],
+  },
+  {
+    group: 'Administrator',
+    tags: [
+      { key: 'operations_module_admin', label: 'Operations Admin', moduleKey: 'operations' },
+      { key: 'accounting_module_admin', label: 'Accounting Admin', moduleKey: 'accounting' },
+      { key: 'marketing_module_admin', label: 'Marketing Admin', moduleKey: 'marketing' },
+      { key: 'recruitment_module_admin', label: 'Recruitment Admin', moduleKey: 'recruitment' },
     ],
   },
 ];
@@ -167,6 +179,12 @@ export const PERMISSION_TAG_MAPPING: Record<
     { resource: 'branches', action: 'DELETE' },
   ],
   view_all_branches: [{ resource: 'branches', action: 'VIEW' }],
+
+  // Other modules — UI-only for now, not yet linked to backend permissions
+  operations_module_admin: null,
+  accounting_module_admin: null,
+  marketing_module_admin: null,
+  recruitment_module_admin: null,
 };
 
 /** Build the resources DTO from selected tags + auto self-service permissions. */
@@ -210,9 +228,7 @@ export function inferTagsFromResources(
     .map(([key]) => key);
 }
 
-const ALL_TAG_KEYS = PERMISSION_TAG_GROUPS.flatMap((g) => g.tags.map((t) => t.key)).filter(
-  (k) => k !== 'grant_all_permissions',
-);
+const EMPTY_MODULE_CONFIG: Record<string, boolean> = {};
 
 interface PermissionTagSelectorProps {
   value: string[];
@@ -220,13 +236,23 @@ interface PermissionTagSelectorProps {
 }
 
 export function PermissionTagSelector({ value, onChange }: PermissionTagSelectorProps) {
+  const moduleConfig = useAuthStore((s) => s.user?.moduleConfig ?? EMPTY_MODULE_CONFIG);
+  const visibleGroups = PERMISSION_TAG_GROUPS.map((group) => ({
+    ...group,
+    tags: group.tags.filter((tag) => !tag.moduleKey || moduleConfig[tag.moduleKey]),
+  })).filter((group) => group.tags.length > 0);
+
+  const allTagKeys = visibleGroups
+    .flatMap((g) => g.tags.map((t) => t.key))
+    .filter((k) => k !== 'grant_all_permissions');
+
   const selected = new Set(value);
-  const allGranted = ALL_TAG_KEYS.every((k) => selected.has(k));
+  const allGranted = allTagKeys.every((k) => selected.has(k));
 
   const toggle = (key: string) => {
     if (key === 'grant_all_permissions') {
       // Select all or deselect all
-      onChange(allGranted ? [] : ['grant_all_permissions', ...ALL_TAG_KEYS]);
+      onChange(allGranted ? [] : ['grant_all_permissions', ...allTagKeys]);
       return;
     }
 
@@ -237,14 +263,14 @@ export function PermissionTagSelector({ value, onChange }: PermissionTagSelector
     } else {
       next.add(key);
       // Auto-select "grant all" if every other tag is now selected
-      if (ALL_TAG_KEYS.every((k) => next.has(k))) next.add('grant_all_permissions');
+      if (allTagKeys.every((k) => next.has(k))) next.add('grant_all_permissions');
     }
     onChange(Array.from(next));
   };
 
   return (
     <div className="flex flex-col gap-6">
-      {PERMISSION_TAG_GROUPS.map((group) => (
+      {visibleGroups.map((group) => (
         <div key={group.group} className="flex flex-col gap-3">
           <p className="text-sm font-semibold text-gray-700">{group.group}</p>
           <div className="flex flex-wrap gap-2">

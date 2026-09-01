@@ -112,9 +112,15 @@ async function captureBand(
  * page break may fall without slicing through a line of text or a keep-together
  * block. We take the top edge of every candidate block, then drop any that land
  * *inside* a block that must not be split — an explicit `[data-print-block]`, a
- * whole rich-text table (`[data-rich-text] table`), or anything with
- * `break-inside: avoid` — so a nested row/paragraph collapses onto its atomic
+ * single rich-text table row (`[data-rich-text] tr`), or anything with
+ * `break-inside: avoid` — so a nested paragraph collapses onto its atomic
  * wrapper and that wrapper moves to the next page as one piece.
+ *
+ * A rich-text table is *not* kept together as a whole: the page may break
+ * between its rows (a row is still never sliced through its text), so a table
+ * longer than a page paginates row-by-row instead of being hard-cut. The
+ * `[data-print-block]` that wraps such a table is exempted from atomicity for
+ * the same reason.
  *
  * Must run while the print root is still staged (laid out) and after the
  * content's print-only `minHeight` has been cleared, so offsets line up with the
@@ -136,18 +142,24 @@ function collectBreakOffsets(content: HTMLElement, canvasHeight: number): number
     .filter((rect) => rect.height > 0)
     .map((rect) => toOffset(rect.top));
 
-  // Blocks that must never be sliced: explicit markers, whole tables authored in
-  // the rich-text comment, and anything asking for `break-inside: avoid`.
-  // Something is only atomic if it's an explicit marker/table, or asks for
-  // `break-inside: avoid` — which in this inline-styled print markup only comes
-  // from an inline style or a Tailwind `break-inside-avoid` class. Checking just
-  // those elements avoids a `getComputedStyle` call for every node in the tree.
-  const atomicSelector = '[data-print-block], [data-rich-text] table';
+  // Blocks that must never be sliced: explicit markers, individual rich-text
+  // table rows, and anything asking for `break-inside: avoid` — which in this
+  // inline-styled print markup only comes from an inline style or a Tailwind
+  // `break-inside-avoid` class. Checking just those elements avoids a
+  // `getComputedStyle` call for every node in the tree.
+  const atomicSelector = '[data-print-block], [data-rich-text] tr';
   const breakAvoidSelector = '[style*="break-inside"], [class*="break-inside-avoid"]';
   const atomicBoxes = Array.from(
     content.querySelectorAll<HTMLElement>(`${atomicSelector}, ${breakAvoidSelector}`),
   )
-    .filter((el) => el.matches(atomicSelector) || getComputedStyle(el).breakInside === 'avoid')
+    .filter((el) => {
+      // A print-block that wraps a rich-text table can't stay atomic — the table
+      // may run past a page; its rows (also atomic) still can't be sliced.
+      if (el.matches('[data-print-block]') && el.querySelector('[data-rich-text] table')) {
+        return false;
+      }
+      return el.matches(atomicSelector) || getComputedStyle(el).breakInside === 'avoid';
+    })
     .map((el) => {
       const rect = el.getBoundingClientRect();
       return { top: toOffset(rect.top), bottom: toOffset(rect.bottom) };
