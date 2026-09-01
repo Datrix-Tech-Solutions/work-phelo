@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import Image from 'next/image';
 import QRCode from 'react-qr-code';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -9,6 +9,7 @@ import { CompanyLogo } from '@/components/atoms/CompanyLogo';
 import { DocumentPrintLayout } from '@/components/organisms/reinsurance/documents/DocumentPrintLayout';
 import {
   openPdfPreview,
+  preloadDocumentPdfDeps,
   renderPrintRootToPdf,
   stagePrintRoot,
 } from '@/lib/reinsurance/renderDocumentPdf';
@@ -44,6 +45,12 @@ export function DocumentPreviewModal({
   afterContent,
 }: DocumentPreviewModalProps) {
   const [isPrinting, setIsPrinting] = useState(false);
+
+  // Warm html2canvas-pro + jsPDF while the user reads the preview, so the first
+  // Print click isn't spent downloading them.
+  useEffect(() => {
+    if (isOpen) preloadDocumentPdfDeps();
+  }, [isOpen]);
 
   const handlePrint = async () => {
     const el = document.getElementById('irisk-print-root');
