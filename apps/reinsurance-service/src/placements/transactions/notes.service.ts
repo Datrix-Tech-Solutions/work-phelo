@@ -7,6 +7,7 @@ import {
 import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
+  CounterpartyOrigin,
   CounterpartyType,
   PlacementClosingStatus,
   PlacementEndorsementImpactType,
@@ -211,6 +212,7 @@ export class PlacementNotesService {
         tx,
         user.tenantId,
         placement.currency,
+        this.isForeignCedant(placement),
         closings.map((closing) => ({
           ...closing,
           isForeignReinsurer: this.isForeignReinsurer(
@@ -399,6 +401,7 @@ export class PlacementNotesService {
       const snapshot = await this.endorsementDebitSnapshot(
         tx,
         user.tenantId,
+        this.isForeignCedant(placement),
         closings.map((closing) => ({
           ...closing,
           isForeignReinsurer: this.isForeignReinsurer(
@@ -801,6 +804,11 @@ export class PlacementNotesService {
         id: true,
         cedantId: true,
         currency: true,
+        cedant: {
+          select: {
+            origin: true,
+          },
+        },
       },
     });
     if (!placement) throw new NotFoundException('Placement not found');
@@ -1195,6 +1203,7 @@ export class PlacementNotesService {
     tx: Prisma.TransactionClient,
     tenantId: string,
     placementCurrency: string | null,
+    isForeignCedant: boolean,
     closings: DebitClosingSnapshot[],
     effectiveAt: Date,
   ) {
@@ -1218,20 +1227,24 @@ export class PlacementNotesService {
     // rate that the summed commissionAmount actually represents against grossAmount.
     const commissionPercent =
       grossAmount > 0 ? (commissionAmount / grossAmount) * 100 : null;
-    // NIC Levy / Withholding Tax only apply to the share ceded to non-resident
-    // reinsurers, so the pool is split by residency and the levies computed on
-    // the foreign sub-pool only.
-    const chargeResult = await this.pooledChargeResult(
-      tx,
-      tenantId,
-      currency,
-      effectiveAt,
-      closings.map((closing) => ({
-        grossAmount: this.toNumber(closing.grossPremium),
-        commissionAmount: this.toNumber(closing.commissionAmount),
-        isForeignReinsurer: closing.isForeignReinsurer,
-      })),
-    );
+    const chargeRows = closings.map((closing) => ({
+      grossAmount: this.toNumber(closing.grossPremium),
+      commissionAmount: this.toNumber(closing.commissionAmount),
+      isForeignReinsurer: closing.isForeignReinsurer,
+    }));
+    const chargeResult = isForeignCedant
+      ? this.debitNoteResultWithoutCedantLevies(
+          currency,
+          effectiveAt,
+          chargeRows,
+        )
+      : await this.pooledChargeResult(
+          tx,
+          tenantId,
+          currency,
+          effectiveAt,
+          chargeRows,
+        );
     const legacyCharges = this.legacyChargeFields(chargeResult);
 
     return {
@@ -1304,6 +1317,7 @@ export class PlacementNotesService {
   private async endorsementDebitSnapshot(
     tx: Prisma.TransactionClient,
     tenantId: string,
+    isForeignCedant: boolean,
     closings: EndorsementDebitClosingSnapshot[],
     effectiveAt: Date,
   ) {
@@ -1339,19 +1353,24 @@ export class PlacementNotesService {
     // from the summed amounts rather than reusing a single closing's percent verbatim.
     const commissionPercent =
       grossAmount > 0 ? (commissionAmount / grossAmount) * 100 : null;
-    // As with debitSnapshot, the foreign-cession levies apply only to the share
-    // ceded to non-resident reinsurers.
-    const chargeResult = await this.pooledChargeResult(
-      tx,
-      tenantId,
-      currency,
-      effectiveAt,
-      closings.map((closing) => ({
-        grossAmount: this.toNumber(closing.premiumSnapshot),
-        commissionAmount: this.toNumber(closing.commissionAmount),
-        isForeignReinsurer: closing.isForeignReinsurer,
-      })),
-    );
+    const chargeRows = closings.map((closing) => ({
+      grossAmount: this.toNumber(closing.premiumSnapshot),
+      commissionAmount: this.toNumber(closing.commissionAmount),
+      isForeignReinsurer: closing.isForeignReinsurer,
+    }));
+    const chargeResult = isForeignCedant
+      ? this.debitNoteResultWithoutCedantLevies(
+          currency,
+          effectiveAt,
+          chargeRows,
+        )
+      : await this.pooledChargeResult(
+          tx,
+          tenantId,
+          currency,
+          effectiveAt,
+          chargeRows,
+        );
     const legacyCharges = this.legacyChargeFields(chargeResult);
 
     return {
@@ -1433,6 +1452,43 @@ export class PlacementNotesService {
     const primary =
       addresses.find((address) => address.isPrimary) ?? addresses[0];
     return !!primary && primary.country.toUpperCase() !== 'GH';
+  }
+
+  private isForeignCedant(placement: {
+    cedant?: { origin: CounterpartyOrigin } | null;
+  }): boolean {
+    return placement.cedant?.origin === CounterpartyOrigin.FOREIGN;
+  }
+
+  private debitNoteResultWithoutCedantLevies(
+    currency: string,
+    effectiveAt: Date,
+    rows: {
+      grossAmount: number;
+      commissionAmount: number;
+    }[],
+  ): ChargeCalculationResult {
+    const round2 = (value: number): number => Math.round(value * 100) / 100;
+    const grossAmount = round2(
+      rows.reduce((total, row) => total + row.grossAmount, 0),
+    );
+    const commissionAmount = round2(
+      rows.reduce((total, row) => total + row.commissionAmount, 0),
+    );
+    const netBeforeCharges = round2(grossAmount - commissionAmount);
+
+    return {
+      currency: currency.toUpperCase(),
+      effectiveAt: effectiveAt.toISOString(),
+      grossAmount,
+      commissionAmount,
+      brokerageAmount: 0,
+      netBeforeCharges,
+      additions: 0,
+      deductions: 0,
+      netAmount: netBeforeCharges,
+      charges: [],
+    };
   }
 
   /**

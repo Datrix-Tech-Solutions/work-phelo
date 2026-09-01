@@ -18,6 +18,7 @@ import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { premiumForeignSettlement } from '@/lib/reinsurance/premiumSettlement';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
+import { canReversePayment, paymentReversalRequest } from './paymentHistoryActions';
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -142,7 +143,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
   const handleReverse = async () => {
     if (!reverseTarget) return;
     try {
-      await reversePayment.mutateAsync({ placementId, paymentId: reverseTarget.id });
+      await reversePayment.mutateAsync(paymentReversalRequest(placementId, reverseTarget));
       addToast({ message: 'Payment reversed successfully', type: 'success' });
       setReverseTarget(null);
     } catch (error) {
@@ -253,14 +254,6 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       ),
     },
   ];
-
-  const canReversePayment = (payment: PlacementPayment) => {
-    if (payment.reversalOfPaymentId) return false;
-    if (payment.type === 'REINSURER_DISBURSEMENT') {
-      return payment.status === 'BANK_CONFIRMED';
-    }
-    return payment.status === 'RECORDED';
-  };
 
   return (
     <>
