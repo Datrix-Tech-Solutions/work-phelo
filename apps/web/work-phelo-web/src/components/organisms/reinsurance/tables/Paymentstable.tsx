@@ -17,6 +17,7 @@ import { useCedants, usePaymentsWorklist, usePlacementPayments } from '@/hooks';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { cn } from '@/lib/utils';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
+import { ViewOfferPanel } from '@/components/organisms/reinsurance/panels/ViewOfferPanel';
 
 const PAGE_SIZE = 10;
 
@@ -225,21 +226,22 @@ const COLUMNS: Column<PaymentWorklistRow>[] = [
   //   ),
   // },
   {
-    key: 'collectedToDate',
-    label: 'Paid / Outstanding',
-    width: '150px',
-    render: (row) => <PaymentSummaryCell row={row} />,
-  },
-  {
     key: 'commission',
     label: 'Commission',
-    width: '90px',
+    width: '70px',
     render: (row) => (
       <span className="font-bold text-gray-700">
         {row.commission != null ? `${row.commission}%` : '—'}
       </span>
     ),
   },
+  {
+    key: 'collectedToDate',
+    label: 'Net Premium',
+    width: '150px',
+    render: (row) => <PaymentSummaryCell row={row} />,
+  },
+
   {
     key: 'createdAt',
     label: 'Offer Date',
@@ -264,6 +266,7 @@ export function PaymentsTable() {
   const [page, setPage] = useState(1);
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
   const [addPaymentPlacementId, setAddPaymentPlacementId] = useState<string | undefined>(undefined);
+  const [viewOfferRow, setViewOfferRow] = useState<PaymentWorklistRow | null>(null);
 
   const openAddPayment = (row?: PaymentWorklistRow) => {
     setAddPaymentPlacementId(row?.id);
@@ -295,8 +298,7 @@ export function PaymentsTable() {
   const getRowActions = (row: PaymentWorklistRow): RowAction[] => {
     const viewOffer: RowAction = {
       label: 'View Offer',
-      onClick: () =>
-        router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.placementId}`),
+      onClick: () => setViewOfferRow(row),
     };
     const disbursePayment: RowAction = {
       label: 'Disburse Payment',
@@ -386,6 +388,12 @@ export function PaymentsTable() {
         }}
         placementId={addPaymentPlacementId}
         defaultCedantId={cedantFilter || undefined}
+      />
+
+      <ViewOfferPanel
+        isOpen={!!viewOfferRow}
+        row={viewOfferRow}
+        onClose={() => setViewOfferRow(null)}
       />
     </>
   );

@@ -87,12 +87,6 @@ export function ReinsurerFormFields({
           placeholder="e.g. Reinsurance Company Ltd."
           readOnly={!!prefillId}
         />
-        {prefillId && (
-          <p className="text-xs text-gray-400">
-            Name is linked to the selected cedant and cannot be edited — this keeps the two records
-            matched. Clear the selection above to use a different name.
-          </p>
-        )}
       </FormSection>
 
       {/* ── Brokerage fee ── */}

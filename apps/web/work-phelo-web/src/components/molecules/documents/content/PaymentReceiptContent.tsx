@@ -48,6 +48,9 @@ export function PaymentReceiptContent({ placement, payment }: PaymentReceiptCont
   const { data: reinsurers = [] } = useReinsurers();
 
   const isDisbursement = payment.type === 'REINSURER_DISBURSEMENT';
+  // Claim recovery receipts reuse this template but carry no premium breakdown —
+  // the Payment Particulars section (gross premium / share / commission) is meaningless there.
+  const isRecovery = payment.type === 'CLAIM_SETTLEMENT';
 
   const {
     currency,
@@ -78,8 +81,10 @@ export function PaymentReceiptContent({ placement, payment }: PaymentReceiptCont
         .join(', ')
     : null;
 
-  const partyName = isDisbursement ? payment.counterparty.name : cedant.name;
-  const partyLocation = isDisbursement ? reinsurerLocation : cedantLocation;
+  // Recovery receipts are issued to / received from the participating reinsurer, not the cedant.
+  const useCounterparty = isDisbursement || isRecovery;
+  const partyName = useCounterparty ? payment.counterparty.name : cedant.name;
+  const partyLocation = useCounterparty ? reinsurerLocation : cedantLocation;
 
   const facOffer = facultativeOffer ?? 0;
   const facPremium = premium != null ? (facOffer / 100) * premium : null;
@@ -178,12 +183,16 @@ export function PaymentReceiptContent({ placement, payment }: PaymentReceiptCont
         <DocumentField key={row.label} label={row.label} value={row.value} />
       ))}
 
-      <p className="font-semibold text-gray-500" style={groupLabelStyle}>
-        Payment Particulars
-      </p>
-      {particularsRows.map((row) => (
-        <DocumentField key={row.label} label={row.label} value={row.value} strong={row.bold} />
-      ))}
+      {!isRecovery && (
+        <>
+          <p className="font-semibold text-gray-500" style={groupLabelStyle}>
+            Payment Particulars
+          </p>
+          {particularsRows.map((row) => (
+            <DocumentField key={row.label} label={row.label} value={row.value} strong={row.bold} />
+          ))}
+        </>
+      )}
 
       {displayNotes && (
         <>

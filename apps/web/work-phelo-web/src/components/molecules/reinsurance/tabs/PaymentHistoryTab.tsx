@@ -15,6 +15,7 @@ import { DocumentPrintLayout } from '@/components/organisms/reinsurance/document
 import { DisbursementAdviceContent } from '@/components/molecules/documents/content/DisbursementAdviceContent';
 import { downloadReceiptsZip } from '@/lib/reinsurance/downloadReceiptsZip';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
+import { premiumForeignSettlement } from '@/lib/reinsurance/premiumSettlement';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -26,13 +27,30 @@ function fmtDate(iso: string): string {
   });
 }
 
-function fmtAmount(val: string, currency: string): string {
-  const n = parseFloat(val);
+function fmtAmount(val: string | number, currency: string): string {
+  const n = typeof val === 'number' ? val : parseFloat(val);
   const abs = Math.abs(n).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
   return `${currency} ${n < 0 ? '-' : ''}${abs}`;
+}
+
+function fmtRate(val: number): string {
+  return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+
+/** The currency + rate to show a payment's amount in: the payment's own settlement FX when it
+ * carries one, else the placement-wide premium settlement FX, else null (show it as recorded). */
+function paymentDisplayFx(
+  p: PlacementPayment,
+  placementFx: { currency: string; rate: number } | null,
+): { currency: string; rate: number } | null {
+  if (p.settlementCurrency && p.agreedExchangeRate && p.settlementCurrency !== p.currency) {
+    const rate = parseFloat(p.agreedExchangeRate);
+    if (Number.isFinite(rate) && rate > 0) return { currency: p.settlementCurrency, rate };
+  }
+  return placementFx && placementFx.currency !== p.currency ? placementFx : null;
 }
 
 function fmtType(type: string): string {
@@ -79,6 +97,9 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
   // The reversal entry itself (the negative-amount offsetting record) is bookkeeping noise
   // here — the original payment stays visible, marked REVERSED, for audit purposes.
   const payments = allPayments.filter((p) => !p.reversalOfPaymentId);
+  // When the cedant premium settled in a single foreign currency, show the amounts here in
+  // that currency at that rate too.
+  const placementFx = premiumForeignSettlement(allPayments, placement.currency);
   const reversePayment = useReversePayment();
   const addToast = useToastStore((s) => s.addToast);
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
@@ -143,9 +164,6 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       render: (row) => (
         <div className="flex flex-col">
           <span className="font-semibold text-gray-700">{fmtType(row.type)}</span>
-          {/* <span className="text-xs text-gray-400">
-            {row.direction === 'INBOUND' ? 'Inflow' : 'Outflow'}
-          </span> */}
         </div>
       ),
     },
@@ -179,9 +197,29 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       key: 'amount',
       label: 'Amount',
       width: '120px',
-      render: (row) => (
-        <span className="font-medium text-gray-900">{fmtAmount(row.amount, row.currency)}</span>
-      ),
+      render: (row) => {
+        const rowFx = paymentDisplayFx(row, placementFx);
+        return (
+          <span className="font-medium text-gray-900">
+            {rowFx
+              ? fmtAmount(parseFloat(row.amount) / rowFx.rate, rowFx.currency)
+              : fmtAmount(row.amount, row.currency)}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'rate',
+      label: 'Rate',
+      width: '150px',
+      render: (row) => {
+        const rowFx = paymentDisplayFx(row, placementFx);
+        return (
+          <span className="text-xs text-gray-500">
+            {rowFx ? `1 ${rowFx.currency} = ${fmtRate(rowFx.rate)} ${row.currency}` : '—'}
+          </span>
+        );
+      },
     },
     {
       key: 'status',
