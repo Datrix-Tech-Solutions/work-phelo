@@ -1,42 +1,76 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ShieldCheck, Users } from 'lucide-react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-
-interface OperationsRole {
-  id: string;
-  name: string;
-  description?: string;
-  membersCount: number;
-  isSystem?: boolean;
-}
-
-// Not wired to a backend yet.
-const MOCK_ROLES: OperationsRole[] = [];
+import { TableButton } from '@/components/atoms/TableButton';
+import { usePermissionRule, useCanAccessRoles } from '@/hooks/hr/usePermission';
+import {
+  usePermissionSets,
+  useDeletePermissionSet,
+  usePermissionSetMembers,
+  useAssignPermissionSet,
+  useRemovePermissionSet,
+} from '@/hooks/hr/useRoles';
+import { useCurrentTenantUsers } from '@/hooks/useTenants';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import { PermissionSetMembersPanel } from '@/components/organisms/roles/PermissionSetMembersPanel';
+import type { PermissionSet } from '@/types/roles';
 
 const PAGE_SIZE = 10;
 
 export function RolesPermissionsTable() {
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
+  const toast = useToast();
   const base = `/${params.tenantSlug}/operations/reinsurance/settings/rolespermissions`;
+  const canAccessRoles = useCanAccessRoles();
+  const canCreateRoles = usePermissionRule('permission-sets:CREATE');
+  const canEditRoles = usePermissionRule('permission-sets:EDIT');
+  const canDeleteRoles = usePermissionRule('permission-sets:DELETE');
+  const canAssignRoles = usePermissionRule('permission-sets:ASSIGN');
 
-  const [roles, setRoles] = useState<OperationsRole[]>(MOCK_ROLES);
-  const [deleteTarget, setDeleteTarget] = useState<OperationsRole | null>(null);
+  const { data: sets = [], isLoading } = usePermissionSets({ enabled: canAccessRoles });
+  const { mutate: deletePermissionSet, isPending: isDeleting } = useDeletePermissionSet();
+  const { mutate: assignPermissionSet, isPending: isAssigningMember } = useAssignPermissionSet();
+  const { mutate: removePermissionSet, isPending: isRemovingMember } = useRemovePermissionSet();
+
+  const [deleteTarget, setDeleteTarget] = useState<PermissionSet | null>(null);
+  const [membersTarget, setMembersTarget] = useState<PermissionSet | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  const filtered = roles.filter((r) =>
-    search ? r.name.toLowerCase().includes(search.toLowerCase()) : true,
+  const { data: currentTenantUsers = [] } = useCurrentTenantUsers();
+  const { data: members = [], isLoading: isLoadingMembers } = usePermissionSetMembers(
+    membersTarget?.id ?? '',
+    { enabled: !!membersTarget },
+  );
+
+  // The tenant endpoint returns every permission set; show only the ones that
+  // grant reinsurance-operations resources (operations-created roles).
+  const operationsSets = useMemo(
+    () =>
+      sets.filter((s) =>
+        s.resources.some((r) => r.resource.name.startsWith('operations.reinsurance.')),
+      ),
+    [sets],
+  );
+
+  const filtered = useMemo(
+    () =>
+      operationsSets.filter((s) =>
+        search ? s.name.toLowerCase().includes(search.toLowerCase()) : true,
+      ),
+    [operationsSets, search],
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const columns: Column<OperationsRole>[] = [
+  const columns: Column<PermissionSet>[] = [
     {
       key: 'name',
       label: 'Roles',
@@ -57,7 +91,7 @@ export function RolesPermissionsTable() {
       render: (row) => (
         <div className="flex items-center gap-1.5 text-sm text-gray-600">
           <Users className="w-3.5 h-3.5 text-gray-400" />
-          {row.membersCount}
+          {row._count?.users ?? 0}
         </div>
       ),
     },
@@ -75,13 +109,50 @@ export function RolesPermissionsTable() {
         </span>
       ),
     },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 'minmax(280px, auto)',
+      render: (row) => (
+        <div className="flex items-center gap-3.5" onClick={(e) => e.stopPropagation()}>
+          {canAssignRoles && (
+            <TableButton variant="green" onClick={() => setMembersTarget(row)}>
+              Manage Members
+            </TableButton>
+          )}
+          {canEditRoles && !row.isSystem && (
+            <TableButton variant="blue" onClick={() => router.push(`${base}/${row.id}/edit`)}>
+              Edit
+            </TableButton>
+          )}
+          {canDeleteRoles && !row.isSystem && (
+            <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
+              Delete
+            </TableButton>
+          )}
+        </div>
+      ),
+    },
   ];
 
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
-    setRoles((prev) => prev.filter((r) => r.id !== deleteTarget.id));
-    setDeleteTarget(null);
+    deletePermissionSet(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success('Role deleted');
+        setDeleteTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to delete role')),
+    });
   };
+
+  if (!canAccessRoles) {
+    return (
+      <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+        You don&apos;t have permission to view roles and permissions.
+      </div>
+    );
+  }
 
   return (
     <>
@@ -96,6 +167,7 @@ export function RolesPermissionsTable() {
         <DataTable
           columns={columns}
           data={paged}
+          isLoading={isLoading}
           emptyMessage="No roles found"
           searchPlaceholder="Search roles..."
           searchValue={search}
@@ -103,22 +175,48 @@ export function RolesPermissionsTable() {
             setSearch(q);
             setPage(1);
           }}
-          actionButton={{
-            label: 'Create New Role',
-            onClick: () => router.push(`${base}/new`),
-          }}
+          actionButton={
+            canCreateRoles
+              ? { label: 'Create New Role', onClick: () => router.push(`${base}/new`) }
+              : undefined
+          }
           currentPage={page}
           totalPages={totalPages}
           onPageChange={setPage}
           noInternalScroll
-          rowActions={(row) => [
-            { label: 'Edit', onClick: () => router.push(`${base}/${row.id}/edit`) },
-            ...(row.isSystem
-              ? []
-              : [{ label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) }]),
-          ]}
         />
       </div>
+
+      {membersTarget && (
+        <PermissionSetMembersPanel
+          isOpen={!!membersTarget}
+          onClose={() => setMembersTarget(null)}
+          permissionSet={membersTarget}
+          members={members}
+          users={currentTenantUsers}
+          isLoadingMembers={isLoadingMembers}
+          isAssigning={isAssigningMember}
+          isRemoving={isRemovingMember}
+          onAssign={(userId) => {
+            assignPermissionSet(
+              { userId, permissionSetId: membersTarget.id },
+              {
+                onSuccess: () => toast.success('Member added to role'),
+                onError: (err) => toast.error(extractError(err, 'Failed to add member')),
+              },
+            );
+          }}
+          onRemove={(userId) => {
+            removePermissionSet(
+              { userId, permissionSetId: membersTarget.id },
+              {
+                onSuccess: () => toast.success('Member removed from role'),
+                onError: (err) => toast.error(extractError(err, 'Failed to remove member')),
+              },
+            );
+          }}
+        />
+      )}
 
       <Modal
         isOpen={!!deleteTarget}
@@ -127,10 +225,15 @@ export function RolesPermissionsTable() {
         description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
         footer={
           <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDeleteConfirm}>
+            <Button
+              variant="danger"
+              isLoading={isDeleting}
+              loadingText="Deleting…"
+              onClick={handleDeleteConfirm}
+            >
               Delete
             </Button>
           </div>

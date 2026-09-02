@@ -6,11 +6,13 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { AddRiskTypePanel } from '@/components/organisms/reinsurance/panels/AddRiskTypePanel';
 import { EditRiskTypePanel } from '@/components/organisms/reinsurance/panels/EditRiskTypePanel';
 import { useRiskTypes, useDeleteRiskType, useRiskClassOptions } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { extractError } from '@/lib/extractError';
 import { RiskType } from '@/types/reinsurance';
 
@@ -60,6 +62,8 @@ export function RiskTypesTable() {
   const [editTarget, setEditTarget] = useState<RiskType | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RiskType | null>(null);
 
+  const canEdit = usePermissionRule('operations.reinsurance.settings:EDIT');
+
   const { data: riskClassOptions = [] } = useRiskClassOptions();
   const { data = [], isLoading } = useRiskTypes(selectedClassId);
   const { mutate: deleteRiskType, isPending: isDeleting } = useDeleteRiskType();
@@ -68,7 +72,28 @@ export function RiskTypesTable() {
     () => new Map(riskClassOptions.map((o) => [o.value, o.label])),
     [riskClassOptions],
   );
-  const columns = useMemo(() => buildColumns(classMap), [classMap]);
+  const columns: Column<RiskType>[] = [
+    ...buildColumns(classMap),
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 'minmax(160px, auto)',
+      render: (row) => (
+        <div className="flex items-center gap-3.5" onClick={(e) => e.stopPropagation()}>
+          {canEdit && (
+            <TableButton variant="blue" onClick={() => setEditTarget(row)}>
+              Edit
+            </TableButton>
+          )}
+          {canEdit && (
+            <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
+              Delete
+            </TableButton>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -120,26 +145,9 @@ export function RiskTypesTable() {
         onRowClick={(row) =>
           router.push(`/${tenantSlug}/operations/reinsurance/settings/risk-types/${row.id}`)
         }
-        actionButton={{
-          label: 'Add Risk Type',
-          onClick: () => setPanelOpen(true),
-        }}
-        rowActions={(row) => [
-          {
-            label: 'View',
-            onClick: () =>
-              router.push(`/${tenantSlug}/operations/reinsurance/settings/risk-types/${row.id}`),
-          },
-          {
-            label: 'Edit',
-            onClick: () => setEditTarget(row),
-          },
-          {
-            label: 'Delete',
-            onClick: () => setDeleteTarget(row),
-            danger: true,
-          },
-        ]}
+        actionButton={
+          canEdit ? { label: 'Add Risk Type', onClick: () => setPanelOpen(true) } : undefined
+        }
         emptyMessage={
           selectedClassId ? 'No risk types found' : 'Select a risk class to view its types'
         }

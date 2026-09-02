@@ -4,43 +4,16 @@ import { useState, useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { AddRiskClassPanel } from '@/components/organisms/reinsurance/panels/AddRiskClassPanel';
 import { EditRiskClassPanel } from '@/components/organisms/reinsurance/panels/EditRiskClassPanel';
 import { useRiskClasses, useDeleteRiskClass } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { extractError } from '@/lib/extractError';
 import { RiskClass } from '@/types/reinsurance';
 
 const PAGE_SIZE = 10;
-
-const COLUMNS: Column<RiskClass>[] = [
-  {
-    key: 'name',
-    label: 'Class Name',
-    width: '150px',
-    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-  },
-  {
-    key: 'description',
-    label: 'Description',
-    width: 'minmax(200px, 2.5fr)',
-    render: (row) => <span className="text-gray-500 text-sm">{row.description ?? '—'}</span>,
-  },
-  {
-    key: 'createdAt',
-    label: 'Date Created',
-    width: '150px',
-    render: (row) => (
-      <span className="text-gray-600 text-sm">
-        {new Date(row.createdAt).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-        })}
-      </span>
-    ),
-  },
-];
 
 export function RiskClassesTable() {
   const toast = useToast();
@@ -50,8 +23,58 @@ export function RiskClassesTable() {
   const [editTarget, setEditTarget] = useState<RiskClass | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RiskClass | null>(null);
 
+  const canEdit = usePermissionRule('operations.reinsurance.settings:EDIT');
+
   const { data = [], isLoading } = useRiskClasses();
   const { mutate: deleteRiskClass, isPending: isDeleting } = useDeleteRiskClass();
+
+  const columns: Column<RiskClass>[] = [
+    {
+      key: 'name',
+      label: 'Class Name',
+      width: '150px',
+      render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
+    },
+    {
+      key: 'description',
+      label: 'Description',
+      width: 'minmax(200px, 2.5fr)',
+      render: (row) => <span className="text-gray-500 text-sm">{row.description ?? '—'}</span>,
+    },
+    {
+      key: 'createdAt',
+      label: 'Date Created',
+      width: '150px',
+      render: (row) => (
+        <span className="text-gray-600 text-sm">
+          {new Date(row.createdAt).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          })}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 'minmax(160px, auto)',
+      render: (row) => (
+        <div className="flex items-center gap-3.5" onClick={(e) => e.stopPropagation()}>
+          {canEdit && (
+            <TableButton variant="blue" onClick={() => setEditTarget(row)}>
+              Edit
+            </TableButton>
+          )}
+          {canEdit && (
+            <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
+              Delete
+            </TableButton>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -76,7 +99,7 @@ export function RiskClassesTable() {
   return (
     <>
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={paged}
         isLoading={isLoading}
         searchPlaceholder="Search risk classes…"
@@ -85,18 +108,9 @@ export function RiskClassesTable() {
           setSearch(q);
           setPage(1);
         }}
-        actionButton={{ label: 'Add Risk Class', onClick: () => setPanelOpen(true) }}
-        rowActions={(row) => [
-          {
-            label: 'Edit',
-            onClick: () => setEditTarget(row),
-          },
-          {
-            label: 'Delete',
-            onClick: () => setDeleteTarget(row),
-            danger: true,
-          },
-        ]}
+        actionButton={
+          canEdit ? { label: 'Add Risk Class', onClick: () => setPanelOpen(true) } : undefined
+        }
         emptyMessage="No risk classes found"
         currentPage={page}
         totalPages={totalPages}

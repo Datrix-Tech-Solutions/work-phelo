@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Button } from '@/components/atoms/Button';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import { FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@/types/reinsurance';
@@ -27,6 +28,8 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
     setValue,
     formState: { isSubmitting },
   } = form;
+
+  const [created, setCreated] = useState<{ policyNumber: string } | null>(null);
 
   const { mutateAsync: createFacultative } = useCreateFacultative();
   const { data: allRiskTypes = [] } = useRiskTypes();
@@ -76,9 +79,7 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
         businessDetails,
         offerDetails,
       });
-      useToastStore
-        .getState()
-        .addToast({ message: 'Placement created successfully', type: 'success' });
+      setCreated({ policyNumber: values.policyNumber?.trim() ?? '' });
       handleClose();
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
@@ -86,42 +87,55 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
   };
 
   return (
-    <SidePanel
-      isOpen={isOpen}
-      onClose={handleClose}
-      title="Facultative Placement Slip"
-      footer={
-        <div className="flex items-center justify-end gap-3">
-          {isReferenceError && (
-            <p className="mr-auto text-sm text-red-600">
-              Couldn&apos;t generate a reference number
-            </p>
-          )}
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
-            Cancel
-          </Button>
-          {isReferenceError ? (
-            <Button
-              onClick={() => refetchReference()}
-              isLoading={isReferenceFetching}
-              loadingText="Retrying…"
-            >
-              Retry
+    <>
+      <SuccessModal
+        isOpen={!!created}
+        onClose={() => setCreated(null)}
+        title="Offer Created!"
+        message={
+          created?.policyNumber
+            ? `Offer ${created.policyNumber} has been created successfully.`
+            : 'The offer has been created successfully.'
+        }
+        actionLabel="Done"
+      />
+      <SidePanel
+        isOpen={isOpen}
+        onClose={handleClose}
+        title="Facultative Placement Slip"
+        footer={
+          <div className="flex items-center justify-end gap-3">
+            {isReferenceError && (
+              <p className="mr-auto text-sm text-red-600">
+                Couldn&apos;t generate a reference number
+              </p>
+            )}
+            <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+              Cancel
             </Button>
-          ) : (
-            <Button
-              onClick={handleSubmit(onSubmit)}
-              isLoading={isSubmitting}
-              disabled={!generatedReference}
-              loadingText="Saving…"
-            >
-              Save
-            </Button>
-          )}
-        </div>
-      }
-    >
-      <FacultativeFormFields form={form} />
-    </SidePanel>
+            {isReferenceError ? (
+              <Button
+                onClick={() => refetchReference()}
+                isLoading={isReferenceFetching}
+                loadingText="Retrying…"
+              >
+                Retry
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSubmit(onSubmit)}
+                isLoading={isSubmitting}
+                disabled={!generatedReference}
+                loadingText="Saving…"
+              >
+                Save
+              </Button>
+            )}
+          </div>
+        }
+      >
+        <FacultativeFormFields form={form} />
+      </SidePanel>
+    </>
   );
 }

@@ -6,6 +6,7 @@ import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useRiskTypes, useRiskClassOptions, useFacultativesPage } from '@/hooks';
 import { EditRiskTypePanel } from '@/components/organisms/reinsurance/panels/EditRiskTypePanel';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { RiskTypeOverview } from '@/components/molecules/reinsurance/stats/RiskTypeOverview';
 import { RiskTypePoliciesSection } from '@/components/molecules/reinsurance/RiskTypePoliciesSection';
 
@@ -30,6 +31,7 @@ export default function RiskTypeDetailPage({
   const riskClassName = classOptions.find((o) => o.value === riskType?.riskClassId)?.label ?? '—';
 
   const [editOpen, setEditOpen] = useState(false);
+  const canEdit = usePermissionRule('operations.reinsurance.settings:EDIT');
 
   const settingsBase = `/${tenantSlug}/operations/reinsurance/settings/risk-types`;
 
@@ -46,7 +48,7 @@ export default function RiskTypeDetailPage({
           <Icons.ChevronRight className="w-5 h-5" />
           <span className="text-gray-700 font-medium">{riskType?.name ?? '—'}</span>
         </nav>
-        {riskType && (
+        {riskType && canEdit && (
           <button
             onClick={() => setEditOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"

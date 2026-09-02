@@ -17,6 +17,8 @@ interface EndorsementHeaderProps {
   displayedStatusVariant: 'neutral' | 'warning' | 'success' | 'danger';
   isUpdatingStatus: boolean;
   isOpen: boolean;
+  /** Gates the workflow buttons (Edit, Send to Market). Read-only actions stay. */
+  canManage: boolean;
   onEdit: () => void;
   onSendToMarket: () => void;
   endorsementSlipDocument: PlacementDocument | undefined;
@@ -29,6 +31,7 @@ export function EndorsementHeader({
   displayedStatusVariant,
   isUpdatingStatus,
   isOpen,
+  canManage,
   onEdit,
   onSendToMarket,
   endorsementSlipDocument,
@@ -44,7 +47,7 @@ export function EndorsementHeader({
       </div>
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          {endorsement.status === 'DRAFT' && (
+          {endorsement.status === 'DRAFT' && canManage && (
             <>
               <Button size="sm" variant="outline" onClick={onEdit}>
                 Edit

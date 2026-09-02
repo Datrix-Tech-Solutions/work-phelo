@@ -180,8 +180,58 @@ export const PERMISSION_TAG_MAPPING: Record<
   ],
   view_all_branches: [{ resource: 'branches', action: 'VIEW' }],
 
+  // Operations Admin — full access to every reinsurance-operations resource,
+  // plus the tenant Roles & Permissions surface (scoped by the backend to
+  // granting operations resources only).
+  operations_module_admin: [
+    { resource: 'operations.reinsurance.dashboard', action: 'VIEW' },
+
+    { resource: 'operations.reinsurance.placements', action: 'VIEW' },
+    { resource: 'operations.reinsurance.placements', action: 'CREATE' },
+    { resource: 'operations.reinsurance.placements', action: 'EDIT' },
+    { resource: 'operations.reinsurance.placements', action: 'DELETE' },
+    { resource: 'operations.reinsurance.placements', action: 'APPROVE' },
+    { resource: 'operations.reinsurance.placements', action: 'EXPORT' },
+
+    { resource: 'operations.reinsurance.counterparties', action: 'VIEW' },
+    { resource: 'operations.reinsurance.counterparties', action: 'CREATE' },
+    { resource: 'operations.reinsurance.counterparties', action: 'EDIT' },
+    { resource: 'operations.reinsurance.counterparties', action: 'DELETE' },
+
+    { resource: 'operations.reinsurance.claims', action: 'VIEW' },
+    { resource: 'operations.reinsurance.claims', action: 'CREATE' },
+    { resource: 'operations.reinsurance.claims', action: 'EDIT' },
+    { resource: 'operations.reinsurance.claims', action: 'DELETE' },
+    { resource: 'operations.reinsurance.claims', action: 'APPROVE' },
+    { resource: 'operations.reinsurance.claims', action: 'EXPORT' },
+
+    { resource: 'operations.reinsurance.email', action: 'VIEW' },
+    { resource: 'operations.reinsurance.email', action: 'CREATE' },
+    { resource: 'operations.reinsurance.email', action: 'EDIT' },
+
+    { resource: 'operations.reinsurance.email-settings', action: 'VIEW' },
+    { resource: 'operations.reinsurance.email-settings', action: 'EDIT' },
+
+    { resource: 'operations.reinsurance.reports', action: 'VIEW' },
+    { resource: 'operations.reinsurance.reports', action: 'EXPORT' },
+
+    { resource: 'operations.reinsurance.settings', action: 'VIEW' },
+    { resource: 'operations.reinsurance.settings', action: 'EDIT' },
+
+    { resource: 'operations.reinsurance.taxes-levies', action: 'VIEW' },
+    { resource: 'operations.reinsurance.taxes-levies', action: 'CREATE' },
+    { resource: 'operations.reinsurance.taxes-levies', action: 'EDIT' },
+    { resource: 'operations.reinsurance.taxes-levies', action: 'DELETE' },
+
+    { resource: 'permission-sets', action: 'VIEW' },
+    { resource: 'permission-sets', action: 'CREATE' },
+    { resource: 'permission-sets', action: 'EDIT' },
+    { resource: 'permission-sets', action: 'DELETE' },
+    { resource: 'permission-sets', action: 'ASSIGN' },
+    { resource: 'users', action: 'VIEW' },
+  ],
+
   // Other modules — UI-only for now, not yet linked to backend permissions
-  operations_module_admin: null,
   accounting_module_admin: null,
   marketing_module_admin: null,
   recruitment_module_admin: null,

@@ -14,6 +14,8 @@ import {
   usePlacementPayments,
 } from '@/hooks';
 import { useFacultativePlacementRowActions } from '@/hooks/reinsurance/useFacultativePlacementRowActions';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 const PAGE_SIZE = 10;
@@ -221,13 +223,14 @@ export function CedantPlacementsTab({
   const setPage = onPageChange ?? setLocalPage;
 
   const paymentStatuses = useCedantPlacementPaymentStatuses(placements);
+  const canAddPayment = useAnyPermissionRules(RiPerm.addPayment);
 
   const { getRowActions, dialogs } = useFacultativePlacementRowActions({
     placements,
     onView,
     extraActions: (row) => {
       // Premium receipt / disbursement only make sense once the policy is in force.
-      if (row.status !== 'CLOSED') return [];
+      if (row.status !== 'CLOSED' || !canAddPayment) return [];
       const payStatus = paymentStatuses.get(row.id) ?? 'outstanding';
       return [
         ...(payStatus !== 'paid'

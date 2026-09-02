@@ -11,6 +11,8 @@ import { Badge } from '@/components/atoms/Badge';
 import { TableButton } from '@/components/atoms/TableButton';
 import { RecordDisbursementPanel } from '@/components/organisms/reinsurance/panels/RecordDisbursementPanel';
 import { usePlacementPayments } from '@/hooks';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { premiumForeignSettlement } from '@/lib/reinsurance/premiumSettlement';
 
 interface ReinsurersPaymentTableProps {
@@ -49,6 +51,7 @@ export function ReinsurersPaymentTable({
   );
 
   const { data: payments = [] } = usePlacementPayments(placement.id);
+  const canDisburse = useAnyPermissionRules(RiPerm.addPayment);
 
   const obligationCurrency = financialPosition?.currency ?? placement.currency ?? null;
   // When the cedant premium came in as a single foreign currency, show every figure here in
@@ -156,27 +159,31 @@ export function ReinsurersPaymentTable({
         width: '100px',
         render: (row) => positionBadge(row.position),
       },
-      {
-        key: 'counterpartyId',
-        label: 'Actions',
-        width: '150px',
-        className: 'pr-6',
-        render: (row) => {
-          const pending = pendingByCounterparty.get(row.counterpartyId) ?? 0;
-          const fullyPending = pending >= row.outstanding - 0.0001;
-          return (
-            <TableButton
-              disabled={row.outstanding <= 0.0001 || fullyPending}
-              onClick={() => setPaymentTarget(row)}
-            >
-              Disburse Payment
-            </TableButton>
-          );
-        },
-      },
+      ...(canDisburse
+        ? [
+            {
+              key: 'counterpartyId',
+              label: 'Actions',
+              width: '150px',
+              className: 'pr-6',
+              render: (row: ReinsurerPositionRow) => {
+                const pending = pendingByCounterparty.get(row.counterpartyId) ?? 0;
+                const fullyPending = pending >= row.outstanding - 0.0001;
+                return (
+                  <TableButton
+                    disabled={row.outstanding <= 0.0001 || fullyPending}
+                    onClick={() => setPaymentTarget(row)}
+                  >
+                    Disburse Payment
+                  </TableButton>
+                );
+              },
+            } as Column<ReinsurerPositionRow>,
+          ]
+        : []),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [displayCurrency, fx?.rate, pendingByCounterparty],
+    [displayCurrency, fx?.rate, pendingByCounterparty, canDisburse],
   );
 
   return (

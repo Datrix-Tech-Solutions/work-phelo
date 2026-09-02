@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -10,25 +10,32 @@ import { RoleFormFields, RoleFormValues } from '@/components/molecules/roles/Rol
 import {
   OperationsPermissionsSection,
   buildOperationsPermissionResources,
+  inferOperationsTagsFromResources,
 } from '@/components/molecules/reinsurance/roles/OperationsPermissionsSection';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
-import { useCreatePermissionSet, usePermissionResources } from '@/hooks/hr/useRoles';
+import {
+  usePermissionSets,
+  usePermissionResources,
+  useUpdatePermissionSet,
+} from '@/hooks/hr/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
-export default function NewOperationsRolePage({
+export default function EditOperationsRolePage({
   params,
 }: {
-  params: Promise<{ tenantSlug: string }>;
+  params: Promise<{ tenantSlug: string; id: string }>;
 }) {
-  const { tenantSlug } = use(params);
+  const { tenantSlug, id } = use(params);
   const router = useRouter();
   const toast = useToast();
-  const canCreateRoles = usePermissionRule('permission-sets:CREATE');
+  const canEditRoles = usePermissionRule('permission-sets:EDIT');
 
   const base = `/${tenantSlug}/operations/reinsurance/settings/rolespermissions`;
 
-  const { mutate: createSet, isPending } = useCreatePermissionSet();
+  const { data: sets = [], isLoading } = usePermissionSets();
+  const set = sets.find((s) => s.id === id);
+  const { mutate: updateSet, isPending } = useUpdatePermissionSet();
   const { data: resources = [] } = usePermissionResources();
 
   const resourceIdMap = useMemo(() => {
@@ -38,36 +45,65 @@ export default function NewOperationsRolePage({
   }, [resources]);
 
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagsInitialised, setTagsInitialised] = useState(false);
+
+  // Seed tags from the set's resources on first load (render-time setState is safe here).
+  if (set && !tagsInitialised) {
+    setSelectedTags(inferOperationsTagsFromResources(set.resources));
+    setTagsInitialised(true);
+  }
 
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<RoleFormValues>({ defaultValues: { name: '', description: '' } });
 
+  useEffect(() => {
+    if (set) {
+      reset({ name: set.name, description: set.description ?? '' });
+    }
+  }, [set, reset]);
+
   const onValid = (values: RoleFormValues) => {
-    createSet(
+    updateSet(
       {
+        id,
         name: values.name,
         description: values.description || undefined,
         resources: buildOperationsPermissionResources(selectedTags, resourceIdMap),
       },
       {
         onSuccess: () => {
-          toast.success('Role created');
+          toast.success('Role updated');
           router.push(base);
         },
-        onError: (err) => toast.error(extractError(err, 'Failed to create role')),
+        onError: (err) => toast.error(extractError(err, 'Failed to update role')),
       },
     );
   };
 
-  if (!canCreateRoles) {
+  if (!canEditRoles) {
     return (
       <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-        You don&apos;t have permission to create roles.
+        You don&apos;t have permission to edit roles.
       </div>
     );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="h-5 w-64 bg-gray-100 rounded animate-pulse" />
+        <div className="h-8 w-48 bg-gray-100 rounded animate-pulse" />
+        <div className="h-40 bg-gray-100 rounded animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!set) {
+    return <div className="text-sm text-gray-500">Role not found.</div>;
   }
 
   return (
@@ -78,23 +114,23 @@ export default function NewOperationsRolePage({
           Roles &amp; Permissions
         </Link>
         <ChevronRight className="w-4 h-4" />
-        <span className="text-gray-700 font-medium">New Role</span>
+        <span className="text-gray-700 font-medium">{set.name}</span>
       </nav>
 
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">New Role</h2>
+          <h2 className="text-lg font-bold text-gray-900">Edit Role</h2>
           <p className="text-sm text-gray-400 mt-0.5">
-            Define a reusable role that can be assigned to operations users.
+            Update the name, description, and permissions for this role.
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <Button variant="secondary" onClick={() => router.push(base)} disabled={isPending}>
             Cancel
           </Button>
-          <Button isLoading={isPending} loadingText="Creating..." onClick={handleSubmit(onValid)}>
-            Create Role
+          <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onValid)}>
+            Save Changes
           </Button>
         </div>
       </div>

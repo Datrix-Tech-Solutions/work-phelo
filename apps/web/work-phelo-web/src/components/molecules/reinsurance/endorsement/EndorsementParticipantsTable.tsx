@@ -37,6 +37,8 @@ interface EndorsementParticipantsTableProps {
   revisedShares: Record<string, string>;
   onRevisedShareChange: (counterpartyId: string, value: string) => void;
   hasAvailableCapacity: boolean;
+  /** Endorsement workflow permission — hides the Actions column and Add button. */
+  canManage: boolean;
   onAddParticipant: () => void;
   onPreviewMarketDocument: (row: EndorsementParticipantRow) => void;
   onMailReinsurer: (counterpartyId: string) => void;
@@ -64,6 +66,7 @@ export function EndorsementParticipantsTable({
   revisedShares,
   onRevisedShareChange,
   hasAvailableCapacity,
+  canManage,
   onAddParticipant,
   onPreviewMarketDocument,
   onMailReinsurer,
@@ -116,6 +119,13 @@ export function EndorsementParticipantsTable({
           return <span className="text-gray-400">0%</span>;
         }
         const mailed = mailedIds.has(row.counterpartyId);
+        if (!canManage) {
+          return (
+            <span className="text-gray-700">
+              {revisedShares[row.counterpartyId] ?? String(row.offeredShare)}%
+            </span>
+          );
+        }
         return (
           <input
             type="number"
@@ -196,196 +206,203 @@ export function EndorsementParticipantsTable({
         return <span className="text-xs text-gray-400">Awaiting</span>;
       },
     },
-    {
-      key: 'id',
-      label: 'Actions',
-      width: 'minmax(200px, 1fr)',
-      render: (row) => {
-        const endorsementParticipant = findRowParticipant(endorsementParticipants, row);
-        // The real backend status — never overridden by the local "editing"
-        // flag. Actions that require a specific backend transition (like
-        // Decline, which only exists from INVITED/OFFER_SENT/QUOTED) must be
-        // gated on this, not on the edit-mode-aware `isAccepted` below,
-        // otherwise editing an already-accepted offer would let you try to
-        // decline a participant the backend still considers ACCEPTED.
-        const isActuallyAccepted =
-          endorsementParticipant?.status === 'ACCEPTED' ||
-          endorsementParticipant?.status === 'CLOSED';
-        const isEditingRevision =
-          endorsementParticipant?.status === 'ACCEPTED' &&
-          editingCounterpartyIds.has(row.counterpartyId);
-        const isAccepted = isActuallyAccepted && !isEditingRevision;
-        const isDeclined = endorsementParticipant?.status === 'DECLINED';
-        const isValidated = row.participantId
-          ? Boolean(confirmedClosingByEndorsementParticipantId[row.participantId])
-          : false;
-        const confirmedClosing = row.participantId
-          ? confirmedClosingByEndorsementParticipantId[row.participantId]
-          : undefined;
-        const isBusy = busyEPIds.has(row.counterpartyId);
-        const mailed = mailedIds.has(row.counterpartyId);
+    ...(canManage
+      ? [
+          {
+            key: 'id',
+            label: 'Actions',
+            width: 'minmax(200px, 1fr)',
+            render: (row: EndorsementParticipantRow) => {
+              const endorsementParticipant = findRowParticipant(endorsementParticipants, row);
+              // The real backend status — never overridden by the local "editing"
+              // flag. Actions that require a specific backend transition (like
+              // Decline, which only exists from INVITED/OFFER_SENT/QUOTED) must be
+              // gated on this, not on the edit-mode-aware `isAccepted` below,
+              // otherwise editing an already-accepted offer would let you try to
+              // decline a participant the backend still considers ACCEPTED.
+              const isActuallyAccepted =
+                endorsementParticipant?.status === 'ACCEPTED' ||
+                endorsementParticipant?.status === 'CLOSED';
+              const isEditingRevision =
+                endorsementParticipant?.status === 'ACCEPTED' &&
+                editingCounterpartyIds.has(row.counterpartyId);
+              const isAccepted = isActuallyAccepted && !isEditingRevision;
+              const isDeclined = endorsementParticipant?.status === 'DECLINED';
+              const isValidated = row.participantId
+                ? Boolean(confirmedClosingByEndorsementParticipantId[row.participantId])
+                : false;
+              const confirmedClosing = row.participantId
+                ? confirmedClosingByEndorsementParticipantId[row.participantId]
+                : undefined;
+              const isBusy = busyEPIds.has(row.counterpartyId);
+              const mailed = mailedIds.has(row.counterpartyId);
 
-        if (confirmedClosing) {
-          return (
-            <div className="flex flex-wrap items-center gap-2">
-              {/* <TableButton variant="green" onClick={() => onViewClosing(confirmedClosing)}>
+              if (confirmedClosing) {
+                return (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* <TableButton variant="green" onClick={() => onViewClosing(confirmedClosing)}>
                 View Closing
               </TableButton> */}
-              {!row.isNew && (
-                <TableButton
-                  variant="blue"
-                  isLoading={isBusy}
-                  onClick={() => {
-                    if (!isBusy) onViewCertificate(row, confirmedClosing);
-                  }}
-                >
-                  Certificate
-                </TableButton>
-              )}
-            </div>
-          );
-        }
+                    {!row.isNew && (
+                      <TableButton
+                        variant="blue"
+                        isLoading={isBusy}
+                        onClick={() => {
+                          if (!isBusy) onViewCertificate(row, confirmedClosing);
+                        }}
+                      >
+                        Certificate
+                      </TableButton>
+                    )}
+                  </div>
+                );
+              }
 
-        if (row.isNew) {
-          // Whether the backend has a final answer already (accepted or
-          // declined) — used to gate Decline, which is never valid once a
-          // participant has actually responded, edit mode or not.
-          const hasResponded = isActuallyAccepted || isDeclined;
-          return (
-            <div className="flex items-center gap-2">
-              {!isEndorsementClosed && (
-                <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
-                  Offer Slip
-                </TableButton>
-              )}
-              {!mailed && !hasResponded && (
-                <TableButton variant="green" onClick={() => onMailReinsurer(row.counterpartyId)}>
-                  Send Mail
-                </TableButton>
-              )}
-              {mailed && (!hasResponded || isEditingRevision) && (
-                <TableButton
-                  variant="green"
-                  isLoading={isBusy}
-                  onClick={() => {
-                    if (!isBusy) onAccept(row);
-                  }}
-                >
-                  Accept
-                </TableButton>
-              )}
-              {mailed && !hasResponded && (
-                <TableButton
-                  variant="red"
-                  isLoading={isBusy}
-                  onClick={() => {
-                    if (!isBusy) onReject(row);
-                  }}
-                >
-                  Decline
-                </TableButton>
-              )}
-              {isDeclined && !isEndorsementClosed && (
-                <TableButton
-                  variant="orange"
-                  isLoading={isBusy}
-                  tooltip="Re-invite this reinsurer"
-                  onClick={() => {
-                    if (!isBusy) onReopen(row);
-                  }}
-                >
-                  Reinvite
-                </TableButton>
-              )}
-              {isAccepted &&
-                (isValidated ? (
-                  <Badge label="Confirmed" variant="success" />
-                ) : (
-                  <>
-                    <TableButton
-                      isLoading={isBusy}
-                      tooltip="Validate endorsement closing"
-                      onClick={() => {
-                        if (!isBusy) onValidate(row);
-                      }}
-                    >
-                      Validate
-                    </TableButton>
-                    <TableButton
-                      variant="orange"
-                      isLoading={isBusy}
-                      tooltip="Edit revised offer"
-                      onClick={() => {
-                        if (!isBusy) onEditRevision(row);
-                      }}
-                    >
-                      Change Offer
-                    </TableButton>
-                  </>
-                ))}
-            </div>
-          );
-        }
+              if (row.isNew) {
+                // Whether the backend has a final answer already (accepted or
+                // declined) — used to gate Decline, which is never valid once a
+                // participant has actually responded, edit mode or not.
+                const hasResponded = isActuallyAccepted || isDeclined;
+                return (
+                  <div className="flex items-center gap-2">
+                    {!isEndorsementClosed && (
+                      <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
+                        Offer Slip
+                      </TableButton>
+                    )}
+                    {!mailed && !hasResponded && (
+                      <TableButton
+                        variant="green"
+                        onClick={() => onMailReinsurer(row.counterpartyId)}
+                      >
+                        Send Mail
+                      </TableButton>
+                    )}
+                    {mailed && (!hasResponded || isEditingRevision) && (
+                      <TableButton
+                        variant="green"
+                        isLoading={isBusy}
+                        onClick={() => {
+                          if (!isBusy) onAccept(row);
+                        }}
+                      >
+                        Accept
+                      </TableButton>
+                    )}
+                    {mailed && !hasResponded && (
+                      <TableButton
+                        variant="red"
+                        isLoading={isBusy}
+                        onClick={() => {
+                          if (!isBusy) onReject(row);
+                        }}
+                      >
+                        Decline
+                      </TableButton>
+                    )}
+                    {isDeclined && !isEndorsementClosed && (
+                      <TableButton
+                        variant="orange"
+                        isLoading={isBusy}
+                        tooltip="Re-invite this reinsurer"
+                        onClick={() => {
+                          if (!isBusy) onReopen(row);
+                        }}
+                      >
+                        Reinvite
+                      </TableButton>
+                    )}
+                    {isAccepted &&
+                      (isValidated ? (
+                        <Badge label="Confirmed" variant="success" />
+                      ) : (
+                        <>
+                          <TableButton
+                            isLoading={isBusy}
+                            tooltip="Validate endorsement closing"
+                            onClick={() => {
+                              if (!isBusy) onValidate(row);
+                            }}
+                          >
+                            Validate
+                          </TableButton>
+                          <TableButton
+                            variant="orange"
+                            isLoading={isBusy}
+                            tooltip="Edit revised offer"
+                            onClick={() => {
+                              if (!isBusy) onEditRevision(row);
+                            }}
+                          >
+                            Change Offer
+                          </TableButton>
+                        </>
+                      ))}
+                  </div>
+                );
+              }
 
-        return (
-          <div className="flex items-center gap-2">
-            <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
-              Endorsement
-            </TableButton>
-            {isAccepted ? (
-              isValidated ? (
-                <Badge label="Confirmed" variant="success" />
-              ) : (
-                <>
-                  <TableButton
-                    isLoading={isBusy}
-                    tooltip="Validate endorsement closing"
-                    onClick={() => {
-                      if (!isBusy) onValidate(row);
-                    }}
-                  >
-                    Validate
+              return (
+                <div className="flex items-center gap-2">
+                  <TableButton variant="gray" onClick={() => onPreviewMarketDocument(row)}>
+                    Endorsement
                   </TableButton>
-                  <TableButton
-                    variant="orange"
-                    isLoading={isBusy}
-                    tooltip="Edit revised offer"
-                    onClick={() => {
-                      if (!isBusy) onEditRevision(row);
-                    }}
-                  >
-                    Change Offer
-                  </TableButton>
-                </>
-              )
-            ) : isDeclined ? null : (
-              <>
-                {!mailed && (
-                  <TableButton
-                    variant="green"
-                    tooltip="Send Endorsement Email"
-                    onClick={() => onMailReinsurer(row.counterpartyId)}
-                  >
-                    Send Mail
-                  </TableButton>
-                )}
-                {mailed && (
-                  <TableButton
-                    variant="green"
-                    isLoading={isBusy}
-                    onClick={() => {
-                      if (!isBusy) onAccept(row);
-                    }}
-                  >
-                    Accept
-                  </TableButton>
-                )}
-              </>
-            )}
-          </div>
-        );
-      },
-    },
+                  {isAccepted ? (
+                    isValidated ? (
+                      <Badge label="Confirmed" variant="success" />
+                    ) : (
+                      <>
+                        <TableButton
+                          isLoading={isBusy}
+                          tooltip="Validate endorsement closing"
+                          onClick={() => {
+                            if (!isBusy) onValidate(row);
+                          }}
+                        >
+                          Validate
+                        </TableButton>
+                        <TableButton
+                          variant="orange"
+                          isLoading={isBusy}
+                          tooltip="Edit revised offer"
+                          onClick={() => {
+                            if (!isBusy) onEditRevision(row);
+                          }}
+                        >
+                          Change Offer
+                        </TableButton>
+                      </>
+                    )
+                  ) : isDeclined ? null : (
+                    <>
+                      {!mailed && (
+                        <TableButton
+                          variant="green"
+                          tooltip="Send Endorsement Email"
+                          onClick={() => onMailReinsurer(row.counterpartyId)}
+                        >
+                          Send Mail
+                        </TableButton>
+                      )}
+                      {mailed && (
+                        <TableButton
+                          variant="green"
+                          isLoading={isBusy}
+                          onClick={() => {
+                            if (!isBusy) onAccept(row);
+                          }}
+                        >
+                          Accept
+                        </TableButton>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            },
+          } as Column<EndorsementParticipantRow>,
+        ]
+      : []),
   ];
 
   return (
@@ -396,7 +413,7 @@ export function EndorsementParticipantsTable({
             Endorsement Participants
           </p>
         </div>
-        {hasAvailableCapacity && (
+        {hasAvailableCapacity && canManage && (
           <Button size="sm" onClick={onAddParticipant}>
             Add Endorsement Participant
           </Button>

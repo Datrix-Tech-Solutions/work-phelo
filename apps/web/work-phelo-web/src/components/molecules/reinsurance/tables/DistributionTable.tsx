@@ -7,6 +7,8 @@ import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
 import { Facultative, PlacementParticipantStatus, toDisplayStatus } from '@/types/reinsurance';
 import { OfferSlipPreviewModal } from '@/components/organisms/reinsurance/documents/OfferSlipPreviewModal';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { cn } from '@/lib/utils';
 
 export interface DistributionEntry {
@@ -77,6 +79,7 @@ export function DistributionTable({
   onRevert,
   onReopen,
 }: DistributionTableProps) {
+  const canClosePlacement = useAnyPermissionRules(RiPerm.editParticipants);
   const [slipPreviewId, setSlipPreviewId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftShare, setDraftShare] = useState('');
@@ -263,7 +266,8 @@ export function DistributionTable({
           (row.status === 'OFFER_SENT' || row.status === 'QUOTED') &&
           !responded;
         const showRevert = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
-        const showClose = !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized;
+        const showClose =
+          !isPlacementLocked && row.status === 'ACCEPTED' && !isFinalized && canClosePlacement;
         const showReopen =
           !isPlacementLocked &&
           row.status === 'DECLINED' &&
