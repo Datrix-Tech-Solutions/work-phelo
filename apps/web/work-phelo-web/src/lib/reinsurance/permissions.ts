@@ -1,13 +1,19 @@
 /**
- * Any-of permission rule lists that mirror the reinsurance-service controllers.
+ * Any-of permission rule lists that gate the reinsurance workflow UI.
  *
- * Every granular workflow endpoint is guarded with
- *   @RequireAnyPermission(<granular>:RUN, <coarse operations.reinsurance.placements action>)
- * so holding EITHER the granular workflow permission OR the coarse placements
- * fallback lets the request through. The UI must gate the same way — pass these
- * arrays to `useAnyPermissionRules` so a role granted only the granular RUN
- * permission still sees the button, and a role with just the coarse placements
- * action keeps working.
+ * FACULTATIVE OFFER lists mirror the controllers exactly:
+ *   @RequireAnyPermission(<granular>:RUN, placements:<ACTION>)
+ * — holding either the granular RUN permission or the coarse placements action
+ * passes, so the UI gates the same way.
+ *
+ * CLAIM and PREMIUM lists deliberately DROP the coarse `placements:*` fallback
+ * the backend still accepts. Every operations role holds `placements:VIEW` (via
+ * OPERATIONS_BASE_RESOURCES) and offer roles hold `placements:CREATE/EDIT`, so
+ * mirroring the backend would show every claim/premium control to any
+ * offer-only role. These lists require a claims-domain / premiums-domain
+ * permission instead. NOTE: this makes the UI stricter than the API — the
+ * backend still accepts `placements:*` on those routes, so the complete fix is
+ * to drop `PlacementPermission.*` from the claim/payment controller decorators.
  *
  * Keep in sync with:
  *  - apps/reinsurance-service/src/placements/placements.controller.ts
@@ -55,23 +61,28 @@ export const RiPerm = {
    * any offer-creator, so the UI requires a premium-specific permission here.
    */
   addPayment: [`${PR}.receive-from-cedant:RUN`, `${PR}.disburse-to-reinsurer:RUN`],
-  /** POST /placements/:id/payments/:paymentId/reverse. */
-  reversePayment: [`${PR}.reverse-payment:RUN`, `${P}:EDIT`],
+  /**
+   * POST /placements/:id/payments/:paymentId/reverse. Backend also accepts
+   * placements:EDIT; the UI requires the premium permission.
+   */
+  reversePayment: [`${PR}.reverse-payment:RUN`],
 
   // ── Claim workflows (placement-claims.controller.ts) ───────────────────────
-  /** GET routes — @RequirePermissions(PlacementPermission.VIEW). */
-  viewClaim: [`${P}:VIEW`],
   /**
-   * POST /:id/claims — add a claim loss event / notification.
-   * The backend also accepts placements:CREATE, but that leaks claim creation to
-   * any offer-creator, so the UI requires a claims-specific permission here
-   * (the granular RUN, or the coarse claims:CREATE held by claims-admin roles).
+   * GET routes — backend checks placements:VIEW (which every operations role
+   * has), so the UI gates on the claims-domain view permission instead.
    */
+  viewClaim: [`${C}:VIEW`],
+  /** POST /:id/claims — add a claim loss event / notification. */
   addClaim: [`${C}.add-claim:RUN`, `${C}:CREATE`],
-  /** PATCH /:id/claims/:claimId — edit claim details / finalize. */
-  editClaim: [`${P}:EDIT`],
+  /**
+   * PATCH /:id/claims/:claimId — edit claim details / finalize ("Move to Open").
+   * Backend checks placements:EDIT; the UI requires a claims-workflow permission
+   * (create a claim ⇒ amend it; run the notification workflow ⇒ finalize it).
+   */
+  editClaim: [`${C}.add-claim:RUN`, `${C}.create-notification:RUN`, `${C}:EDIT`],
   /** PATCH /:id/claims/:claimId/status — notify / void a claim. */
-  claimStatusChange: [`${C}.create-notification:RUN`, `${C}.void-claim:RUN`, `${P}:EDIT`],
+  claimStatusChange: [`${C}.create-notification:RUN`, `${C}.void-claim:RUN`, `${C}:EDIT`],
   /** POST /:id/claims/:claimId/cash-calls/:cashCallId/recovery-receipts. */
-  recordRecovery: [`${C}.record-recovery:RUN`, `${P}:EDIT`],
+  recordRecovery: [`${C}.record-recovery:RUN`, `${C}:EDIT`],
 } satisfies Record<string, string[]>;
