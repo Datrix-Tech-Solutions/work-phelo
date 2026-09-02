@@ -9,6 +9,8 @@ interface EndorsementCloseSectionProps {
   isUpdatingStatus: boolean;
   isReadyToClose: boolean;
   canForceClose: boolean;
+  /** Endorsement workflow permission — hides the whole section when absent. */
+  canManage: boolean;
   acceptedPercent: number;
   targetPercent: number | null;
   onClose: () => void;
@@ -27,6 +29,7 @@ export function EndorsementCloseSection({
   isUpdatingStatus,
   isReadyToClose,
   canForceClose,
+  canManage,
   acceptedPercent,
   targetPercent,
   onClose,
@@ -34,7 +37,7 @@ export function EndorsementCloseSection({
 }: EndorsementCloseSectionProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  if (isClosed) return null;
+  if (isClosed || !canManage) return null;
 
   const handleClick = () => {
     if (isReadyToClose) {

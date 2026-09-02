@@ -966,3 +966,186 @@ body {
   overflow: visible;
   max-width: none;
 }
+
+/* Animated success checkmark (CheckmarkAnimation atom, used by SuccessModal):
+   a dot expands into a spinning arc, the arc closes into a full circle, turns
+   green, and a checkmark draws in the centre. The draw-in sequence runs ONCE
+   (~1.9s) and holds on the finished state via `forwards`. The only thing that
+   repeats is a gentle settle-bounce on the wrapper — its iteration count is set
+   inline from the `loop` prop (infinite by default, 1 when loop={false}). */
+.cm-anim {
+  display: inline-block;
+  animation: cm-settle-bounce 2.4s 1.7s ease-in-out infinite;
+}
+
+.cm-anim-spin {
+  /* fill-box + center keeps the rotation origin at the arc's centre across
+     browsers; a bare `transform-origin` on an SVG node resolves against the
+     SVG's 0,0, which flings the arc out of view. */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cm-spin 1.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.cm-anim-arc {
+  stroke: #3b82f6; /* accent while spinning */
+  animation:
+    cm-arc-fill 1.4s cubic-bezier(0.4, 0, 0.2, 1) both,
+    cm-arc-color 1.4s ease-in-out both;
+}
+
+.cm-anim-dot {
+  fill: #3b82f6; /* accent */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cm-dot 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.cm-anim-check {
+  stroke: #22c55e; /* success */
+  /* pathLength is 100, so a 100-unit dash spans the whole stroke and
+     stroke-dashoffset in the keyframes can draw it on. */
+  stroke-dasharray: 100;
+  animation: cm-check 0.75s 1.15s cubic-bezier(0.25, 0.75, 0.35, 1) both;
+}
+
+@keyframes cm-dot {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  45% {
+    transform: scale(0.95);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+/* One full turn; linear through the middle so the speed stays constant, easing
+   only on the entry and the settle. Ends upright and visible. */
+@keyframes cm-spin {
+  0% {
+    opacity: 0;
+    transform: rotate(-25deg) scale(0.9);
+    animation-timing-function: ease-out;
+  }
+  15% {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    animation-timing-function: linear;
+  }
+  70% {
+    transform: rotate(360deg) scale(1);
+    animation-timing-function: ease-out;
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+/* Arc holds a short segment while spinning, then closes into the full circle. */
+@keyframes cm-arc-fill {
+  0% {
+    stroke-dasharray: 0 100;
+    animation-timing-function: ease-out;
+  }
+  15% {
+    stroke-dasharray: 25 100;
+    animation-timing-function: linear;
+  }
+  65% {
+    stroke-dasharray: 25 100;
+    animation-timing-function: ease-out;
+  }
+  100% {
+    stroke-dasharray: 100 100;
+  }
+}
+
+@keyframes cm-arc-color {
+  0%,
+  60% {
+    stroke: #3b82f6;
+  }
+  100% {
+    stroke: #22c55e;
+  }
+}
+
+/* Draws the tick on with a slight overshoot, then holds it fully drawn. */
+@keyframes cm-check {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 100;
+  }
+  20% {
+    opacity: 1;
+    stroke-dashoffset: 100;
+  }
+  75% {
+    stroke-dashoffset: -6;
+  }
+  90% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The looping bounce: a quick pop in the first ~0.8s, then rest at rest scale
+   for the remainder before repeating. Starts once the draw-in has settled. */
+@keyframes cm-settle-bounce {
+  0% {
+    transform: scale(1);
+  }
+  8% {
+    transform: scale(1.08);
+  }
+  18% {
+    transform: scale(0.97);
+  }
+  27% {
+    transform: scale(1.01);
+  }
+  35%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-anim,
+  .cm-anim-spin,
+  .cm-anim-arc,
+  .cm-anim-dot,
+  .cm-anim-check {
+    animation: none;
+  }
+  .cm-anim-spin {
+    opacity: 1;
+  }
+  .cm-anim-arc {
+    stroke: #22c55e;
+    stroke-dasharray: 100 100;
+  }
+  .cm-anim-dot {
+    opacity: 0;
+  }
+  .cm-anim-check {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}

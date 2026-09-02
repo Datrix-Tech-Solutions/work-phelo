@@ -11,6 +11,8 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Facultative } from '@/types/reinsurance';
 import { RecoveryRow, useAllReinsurerClaims, useCreateClaimRecoveryReceipt } from '@/hooks';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -245,6 +247,7 @@ interface ReinsurerRecoveriesTabProps {
 
 export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRecoveriesTabProps) {
   const { rows, isLoading } = useAllReinsurerClaims(placements);
+  const canRecordRecovery = useAnyPermissionRules(RiPerm.recordRecovery);
   const [paymentRow, setPaymentRow] = useState<RecoveryRow | null>(null);
 
   const recoveryRows = useMemo(
@@ -304,25 +307,31 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
         </span>
       ),
     },
-    {
-      key: 'actions',
-      label: 'Actions',
-      width: '130px',
-      render: (row) => (
-        <TableButton
-          variant={row.outstandingAmount > 0 && row.cashCallStatus === 'ISSUED' ? 'blue' : 'gray'}
-          disabled={row.outstandingAmount <= 0 || row.cashCallStatus !== 'ISSUED'}
-          tooltip={
-            row.cashCallStatus === 'ISSUED'
-              ? undefined
-              : 'Only issued cash calls can receive recovery receipts.'
-          }
-          onClick={() => setPaymentRow(row)}
-        >
-          Record Recovery
-        </TableButton>
-      ),
-    },
+    ...(canRecordRecovery
+      ? [
+          {
+            key: 'actions',
+            label: 'Actions',
+            width: '130px',
+            render: (row: RecoveryRow) => (
+              <TableButton
+                variant={
+                  row.outstandingAmount > 0 && row.cashCallStatus === 'ISSUED' ? 'blue' : 'gray'
+                }
+                disabled={row.outstandingAmount <= 0 || row.cashCallStatus !== 'ISSUED'}
+                tooltip={
+                  row.cashCallStatus === 'ISSUED'
+                    ? undefined
+                    : 'Only issued cash calls can receive recovery receipts.'
+                }
+                onClick={() => setPaymentRow(row)}
+              >
+                Record Recovery
+              </TableButton>
+            ),
+          } as Column<RecoveryRow>,
+        ]
+      : []),
   ];
 
   return (

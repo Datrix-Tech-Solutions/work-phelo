@@ -19,6 +19,8 @@ import { isEffectivelyClosed } from '@/lib/reinsurance/placementStatus';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { extractError } from '@/lib/extractError';
 import { useToast } from '@/hooks/useToast';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { Facultative } from '@/types/reinsurance';
 
 interface UseFacultativePlacementRowActionsOptions {
@@ -52,6 +54,14 @@ export function useFacultativePlacementRowActions({
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const router = useRouter();
   const toast = useToast();
+
+  const canEditOffer = useAnyPermissionRules(RiPerm.editOffer);
+  const canPartialEdit = useAnyPermissionRules(RiPerm.partialEdit);
+  const canReopenOffer = useAnyPermissionRules(RiPerm.reopenOffer);
+  const canForceCloseOffer = useAnyPermissionRules(RiPerm.forceClose);
+  const canEndorseOffer = useAnyPermissionRules(RiPerm.endorseOffer);
+  const canArchiveOffer = useAnyPermissionRules(RiPerm.archiveOffer);
+  const canCreateOffer = useAnyPermissionRules(RiPerm.createOffer);
 
   const [editTarget, setEditTarget] = useState<Facultative | null>(null);
   const [reopenTarget, setReopenTarget] = useState<Facultative | null>(null);
@@ -117,11 +127,12 @@ export function useFacultativePlacementRowActions({
       onClick: () => setArchiveTarget(row),
       danger: true,
     };
-    const renewAction: RowAction | null = rowIsClosed
-      ? { label: 'Renew Offer', onClick: () => setRenewTarget(row), variant: 'success' }
-      : null;
+    const renewAction: RowAction | null =
+      rowIsClosed && canCreateOffer
+        ? { label: 'Renew Offer', onClick: () => setRenewTarget(row), variant: 'success' }
+        : null;
     const endorseAction: RowAction | null =
-      row.status === 'CLOSED'
+      row.status === 'CLOSED' && canEndorseOffer
         ? { label: 'Endorse Policy', onClick: () => setEndorseTarget(row) }
         : null;
     const extras = extraActions?.(row) ?? [];
@@ -130,8 +141,8 @@ export function useFacultativePlacementRowActions({
     if (row.status === 'DECLINED' || row.status === 'CANCELLED') {
       return [
         { label: 'View', onClick: () => onView(row) },
-        { label: 'Edit Slip', onClick: () => setEditTarget(row) },
-        ...(canArchive ? [archiveAction] : []),
+        ...(canEditOffer ? [{ label: 'Edit Slip', onClick: () => setEditTarget(row) }] : []),
+        ...(canArchive && canArchiveOffer ? [archiveAction] : []),
         ...(renewAction ? [renewAction] : []),
         ...extras,
       ];
@@ -140,15 +151,14 @@ export function useFacultativePlacementRowActions({
     // Effectively closed (a policy is in force): amend via endorsement / partial edit, and
     // reopen only while no money has moved and nothing has been endorsed.
     if (rowIsClosed) {
-      const partialEditAction: RowAction = {
-        label: 'Partial Edit',
-        onClick: () => setPartialEditTarget(row),
-      };
+      const partialEditAction: RowAction | null = canPartialEdit
+        ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
+        : null;
 
       if (paymentStatus !== 'Outstanding') {
         return [
           { label: 'View Offer', onClick: () => onView(row) },
-          partialEditAction,
+          ...(partialEditAction ? [partialEditAction] : []),
           ...(endorseAction ? [endorseAction] : []),
           ...(renewAction ? [renewAction] : []),
           ...extras,
@@ -157,9 +167,11 @@ export function useFacultativePlacementRowActions({
 
       return [
         { label: 'View Offer Details', onClick: () => onView(row) },
-        ...(hasEndorsement ? [] : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
-        partialEditAction,
-        archiveAction,
+        ...(hasEndorsement || !canReopenOffer
+          ? []
+          : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
+        ...(partialEditAction ? [partialEditAction] : []),
+        ...(canArchiveOffer ? [archiveAction] : []),
         ...(endorseAction ? [endorseAction] : []),
         ...(renewAction ? [renewAction] : []),
         ...extras,
@@ -169,24 +181,28 @@ export function useFacultativePlacementRowActions({
     // Active / open offer.
     const isPartiallyClosed = row.status === 'PARTIALLY_PLACED' || row.status === 'CLOSING';
     const forceCloseAction: RowAction | null =
-      row.status === 'CLOSING'
+      row.status === 'CLOSING' && canForceCloseOffer
         ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
         : null;
     const reopenAction: RowAction | null =
-      isPartiallyClosed && !hasEndorsement
+      isPartiallyClosed && !hasEndorsement && canReopenOffer
         ? { label: 'Reopen Offer', onClick: () => setReopenTarget(row) }
         : null;
-    const editAction: RowAction =
-      isPartiallyClosed || hasRecordedPayment
+    const wantsPartialEdit = isPartiallyClosed || hasRecordedPayment;
+    const editAction: RowAction | null = wantsPartialEdit
+      ? canPartialEdit
         ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
-        : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
+        : null
+      : canEditOffer
+        ? { label: 'Edit Offer', onClick: () => setEditTarget(row) }
+        : null;
 
     return [
       { label: 'View Offer', onClick: () => onView(row) },
       ...(reopenAction ? [reopenAction] : []),
-      editAction,
+      ...(editAction ? [editAction] : []),
       ...(forceCloseAction ? [forceCloseAction] : []),
-      ...(canArchive ? [archiveAction] : []),
+      ...(canArchive && canArchiveOffer ? [archiveAction] : []),
       ...extras,
     ];
   };

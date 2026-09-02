@@ -5,10 +5,12 @@ import { cn } from '@/lib/utils';
 import { pagePx, pageHeader, pageContent } from '@/lib/layout';
 import { TabBar, TabGroup } from '@/components/molecules/shared/TabBar';
 import { AppBackground } from '@/components/atoms/AppBackground';
+import { useCanAccessRoles } from '@/hooks/hr/usePermission';
 
 export default function ReinsuranceSettingsLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ tenantSlug: string }>();
   const base = `/${params.tenantSlug}/operations/reinsurance/settings`;
+  const canAccessRoles = useCanAccessRoles();
 
   const groups: TabGroup[] = [
     {
@@ -23,15 +25,19 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
         { key: 'levytaxes', label: 'Taxes and Levies', href: `${base}/levytaxes` },
       ],
     },
-    {
-      tabs: [
-        {
-          key: 'rolespermissions',
-          label: 'Roles and Permissions',
-          href: `${base}/rolespermissions`,
-        },
-      ],
-    },
+    ...(canAccessRoles
+      ? [
+          {
+            tabs: [
+              {
+                key: 'rolespermissions',
+                label: 'Roles and Permissions',
+                href: `${base}/rolespermissions`,
+              },
+            ],
+          },
+        ]
+      : []),
   ];
   // const tabs = [
   //   { key: 'risk-classes', label: 'Risk Class', href: `${base}/risk-classes` },

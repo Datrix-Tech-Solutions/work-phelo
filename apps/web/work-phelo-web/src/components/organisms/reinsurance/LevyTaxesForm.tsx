@@ -18,6 +18,7 @@ import {
   useUpdateReinsuranceCharge,
 } from '@/hooks/reinsurance/useReinsuranceCharges';
 import { useToast } from '@/hooks/useToast';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import {
   LEVY_TAX_FORM_DEFAULTS,
   LevyTaxFormValues,
@@ -100,6 +101,10 @@ export function LevyTaxesForm() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
 
+  const canCreate = usePermissionRule('operations.reinsurance.taxes-levies:CREATE');
+  const canEdit = usePermissionRule('operations.reinsurance.taxes-levies:EDIT');
+  const canDelete = usePermissionRule('operations.reinsurance.taxes-levies:DELETE');
+
   const charges = useReinsuranceCharges();
   const createCharge = useCreateReinsuranceCharge();
   const updateCharge = useUpdateReinsuranceCharge();
@@ -170,9 +175,11 @@ export function LevyTaxesForm() {
       <div className={cardClass('overflow-hidden h-fit')}>
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-900">Configured Charges</h3>
-          <Button size="sm" icon={<Icons.Plus className="w-4 h-4" />} onClick={openCreate}>
-            New Configuration
-          </Button>
+          {canCreate && (
+            <Button size="sm" icon={<Icons.Plus className="w-4 h-4" />} onClick={openCreate}>
+              New Configuration
+            </Button>
+          )}
         </div>
         <div className="divide-y divide-gray-100">
           {charges.isLoading ? (
@@ -207,16 +214,20 @@ export function LevyTaxesForm() {
                   >
                     {charge.isEnabled ? 'Enabled' : 'Disabled'}
                   </span>
-                  <TableButton variant="blue" onClick={() => openEdit(charge)}>
-                    Edit
-                  </TableButton>
-                  <TableButton
-                    variant={charge.isEnabled ? 'red' : 'green'}
-                    isLoading={activateCharge.isPending || deactivateCharge.isPending}
-                    onClick={() => handleToggle(charge)}
-                  >
-                    {charge.isEnabled ? 'Deactivate' : 'Activate'}
-                  </TableButton>
+                  {canEdit && (
+                    <TableButton variant="blue" onClick={() => openEdit(charge)}>
+                      Edit
+                    </TableButton>
+                  )}
+                  {canDelete && (
+                    <TableButton
+                      variant={charge.isEnabled ? 'red' : 'green'}
+                      isLoading={activateCharge.isPending || deactivateCharge.isPending}
+                      onClick={() => handleToggle(charge)}
+                    >
+                      {charge.isEnabled ? 'Deactivate' : 'Activate'}
+                    </TableButton>
+                  )}
                 </div>
               </div>
             ))
