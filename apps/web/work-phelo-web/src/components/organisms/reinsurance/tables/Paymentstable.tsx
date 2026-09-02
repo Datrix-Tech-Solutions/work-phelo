@@ -14,6 +14,8 @@ import {
   toStatusLabel,
 } from '@/types/reinsurance';
 import { useCedants, usePaymentsWorklist, usePlacementPayments } from '@/hooks';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { cn } from '@/lib/utils';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
@@ -268,6 +270,8 @@ export function PaymentsTable() {
   const [addPaymentPlacementId, setAddPaymentPlacementId] = useState<string | undefined>(undefined);
   const [viewOfferRow, setViewOfferRow] = useState<PaymentWorklistRow | null>(null);
 
+  const canAddPayment = useAnyPermissionRules(RiPerm.addPayment);
+
   const openAddPayment = (row?: PaymentWorklistRow) => {
     setAddPaymentPlacementId(row?.id);
     setIsAddPaymentOpen(true);
@@ -307,14 +311,18 @@ export function PaymentsTable() {
 
     switch (row.paymentStatus) {
       case 'Outstanding':
-        return [viewOffer, { label: 'Add Payment', onClick: () => openAddPayment(row) }];
+        return [
+          viewOffer,
+          ...(canAddPayment ? [{ label: 'Add Payment', onClick: () => openAddPayment(row) }] : []),
+        ];
       case 'Paid':
-        return [viewOffer, disbursePayment];
+        return [viewOffer, ...(canAddPayment ? [disbursePayment] : [])];
       case 'Part Payment':
         return [
           viewOffer,
-          { label: 'Make Payment', onClick: () => openAddPayment(row) },
-          disbursePayment,
+          ...(canAddPayment
+            ? [{ label: 'Make Payment', onClick: () => openAddPayment(row) }, disbursePayment]
+            : []),
         ];
       default:
         return [viewOffer];
