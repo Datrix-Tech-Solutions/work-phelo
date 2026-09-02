@@ -4,7 +4,10 @@ import { RequestUser } from '@work-phelo/types';
 import { FeatureGuard, FEATURE_KEY } from './feature.guard';
 import { ModuleGuard, MODULE_KEY } from './module.guard';
 import { PermissionsGuard } from './permissions.guard';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+} from '../decorators/permissions.decorator';
 
 describe('Reinsurance entitlement and permission guards', () => {
   const user: RequestUser = {
@@ -83,6 +86,39 @@ describe('Reinsurance entitlement and permission guards', () => {
       guard.canActivate(contextFor({ ...user, permissions: [] })),
     ).toThrow(ForbiddenException);
     expect(getAllAndOverride).toHaveBeenCalledWith(PERMISSIONS_KEY, [
+      'handler',
+      'class',
+    ]);
+  });
+
+  it('permits users holding any accepted workflow permission', () => {
+    const getAllAndOverride = jest
+      .fn()
+      .mockImplementation((key: string) =>
+        key === ANY_PERMISSIONS_KEY
+          ? [
+              'operations.reinsurance.premiums.receive-from-cedant:RUN',
+              'operations.reinsurance.placements:CREATE',
+            ]
+          : undefined,
+      );
+    const reflector = { getAllAndOverride } as unknown as Reflector;
+    const guard = new PermissionsGuard(reflector);
+
+    expect(
+      guard.canActivate(
+        contextFor({
+          ...user,
+          permissions: [
+            'operations.reinsurance.premiums.receive-from-cedant:RUN',
+          ],
+        }),
+      ),
+    ).toBe(true);
+    expect(() =>
+      guard.canActivate(contextFor({ ...user, permissions: [] })),
+    ).toThrow(ForbiddenException);
+    expect(getAllAndOverride).toHaveBeenCalledWith(ANY_PERMISSIONS_KEY, [
       'handler',
       'class',
     ]);
