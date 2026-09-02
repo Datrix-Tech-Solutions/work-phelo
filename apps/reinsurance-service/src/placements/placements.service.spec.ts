@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
@@ -20,10 +21,20 @@ import {
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
+import {
+  FacultativeOfferPermission,
+  PlacementPermission,
+} from './placement.permissions';
 import { PlacementsService } from './placements.service';
 
 describe('PlacementsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
+
+  const firstCallArg = <TArgs>(mock: PrismaMethod): TArgs => {
+    const call = mock.mock.calls[0];
+    if (!call) throw new Error('Expected Prisma mock to be called');
+    return call[0] as TArgs;
+  };
 
   const user: RequestUser = {
     id: 'user-1',
@@ -35,8 +46,12 @@ describe('PlacementsService', () => {
     firstName: 'Ama',
     moduleConfig: { operations: true },
     featureConfig: { operations: { reinsurance: true } },
-    permissions: [],
+    permissions: [PlacementPermission.CREATE, PlacementPermission.EDIT],
   };
+  const employeeWithPermissions = (permissions: string[]) => ({
+    ...user,
+    permissions,
+  });
   const placement = {
     id: 'placement-1',
     tenantId: 'tenant-1',
@@ -1550,6 +1565,48 @@ describe('PlacementsService', () => {
         nextStatus: PlacementStatus.CLOSING,
       }),
     );
+  });
+
+  it('allows reopen-offer permission only for CLOSED to CLOSING', async () => {
+    const reopenUser = employeeWithPermissions([
+      FacultativeOfferPermission.REOPEN_OFFER,
+    ]);
+    const closed = {
+      ...placement,
+      status: PlacementStatus.CLOSED,
+    };
+    const reopened = {
+      ...placement,
+      status: PlacementStatus.CLOSING,
+    };
+    prisma.placement.findFirst.mockResolvedValue(closed);
+    prisma.placement.update.mockResolvedValue(reopened);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+
+    await service.changeStatus(reopenUser, 'placement-1', {
+      status: PlacementStatus.CLOSING,
+      note: 'Reopen unpaid placement for correction',
+    });
+
+    const placementUpdateArgs = firstCallArg<{
+      data: { status?: PlacementStatus };
+    }>(prisma.placement.update);
+    expect(placementUpdateArgs.data.status).toBe(PlacementStatus.CLOSING);
+
+    prisma.placement.update.mockClear();
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      status: PlacementStatus.DRAFT,
+    });
+
+    await expect(
+      service.changeStatus(reopenUser, 'placement-1', {
+        status: PlacementStatus.MARKETING,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.placement.update).not.toHaveBeenCalled();
   });
 
   it('blocks reopening a closed placement when financial activity exists', async () => {

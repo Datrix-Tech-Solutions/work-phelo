@@ -35,11 +35,67 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
     moduleKey: 'operations',
     featurePath: ['operations', 'reinsurance'],
   },
+  'operations.reinsurance.facultative-offers.create-offer': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.facultative-offers.edit-offer': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.facultative-offers.partial-edit': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.facultative-offers.reopen-offer': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.facultative-offers.force-close': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.facultative-offers.endorse-offer': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.facultative-offers.archive-offer': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.premiums.receive-from-cedant': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.premiums.disburse-to-reinsurer': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.premiums.reverse-payment': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
   'operations.reinsurance.counterparties': {
     moduleKey: 'operations',
     featurePath: ['operations', 'reinsurance'],
   },
   'operations.reinsurance.claims': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.claims.add-claim': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.claims.create-notification': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.claims.record-recovery': {
+    moduleKey: 'operations',
+    featurePath: ['operations', 'reinsurance'],
+  },
+  'operations.reinsurance.claims.void-claim': {
     moduleKey: 'operations',
     featurePath: ['operations', 'reinsurance'],
   },

@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClosingStatus,
@@ -7,8 +8,15 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentType,
 } from '../../prisma/generated/client';
-import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
-import { PlacementPermission } from './placement.permissions';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+} from '../auth/decorators/permissions.decorator';
+import {
+  FacultativeOfferPermission,
+  PlacementPermission,
+  PremiumPermission,
+} from './placement.permissions';
 import { PlacementClosingsService } from './closings/closings.service';
 import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementFinancialPositionService } from './finance/financial-position.service';
@@ -75,8 +83,23 @@ describe('PlacementsController', () => {
     reverse: jest.fn(),
   };
   const user = {
+    id: 'user-1',
+    email: 'broker@example.com',
     tenantId: 'tenant-1',
+    tenantSlug: 'broker',
+    tenantName: 'Broker',
+    firstName: 'Ama',
+    role: 'TENANT_ADMIN',
+    moduleConfig: { operations: true },
+    featureConfig: { operations: { reinsurance: true } },
+    permissions: [],
   } as RequestUser;
+  const employeeWithPermissions = (permissions: string[]) =>
+    ({
+      ...user,
+      role: 'EMPLOYEE',
+      permissions,
+    }) as RequestUser;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -117,16 +140,6 @@ describe('PlacementsController', () => {
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
     ['findPayment', PlacementPermission.VIEW],
-    ['create', PlacementPermission.CREATE],
-    ['createPayment', PlacementPermission.CREATE],
-    ['update', PlacementPermission.EDIT],
-    ['changeStatus', PlacementPermission.EDIT],
-    ['forceClose', PlacementPermission.EDIT],
-    ['addParticipant', PlacementPermission.EDIT],
-    ['updateParticipant', PlacementPermission.EDIT],
-    ['changeParticipantStatus', PlacementPermission.EDIT],
-    ['acceptParticipantAndConfirm', PlacementPermission.EDIT],
-    ['deleteParticipant', PlacementPermission.EDIT],
     ['createClosing', PlacementPermission.EDIT],
     ['changeClosingStatus', PlacementPermission.EDIT],
     ['createDebitNote', PlacementPermission.EDIT],
@@ -137,8 +150,6 @@ describe('PlacementsController', () => {
     ['voidEndorsementNote', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],
     ['voidNote', PlacementPermission.EDIT],
-    ['reversePayment', PlacementPermission.EDIT],
-    ['archive', PlacementPermission.DELETE],
     ['restore', PlacementPermission.DELETE],
   ])('requires %s permission on %s', (method, permission) => {
     expect(
@@ -148,6 +159,75 @@ describe('PlacementsController', () => {
       ),
     ).toEqual([permission]);
   });
+
+  it.each([
+    [
+      'create',
+      [FacultativeOfferPermission.CREATE_OFFER, PlacementPermission.CREATE],
+    ],
+    [
+      'createPayment',
+      [
+        PremiumPermission.RECEIVE_FROM_CEDANT,
+        PremiumPermission.DISBURSE_TO_REINSURER,
+        PlacementPermission.CREATE,
+      ],
+    ],
+    [
+      'update',
+      [
+        FacultativeOfferPermission.EDIT_OFFER,
+        FacultativeOfferPermission.PARTIAL_EDIT,
+        PlacementPermission.EDIT,
+      ],
+    ],
+    [
+      'changeStatus',
+      [FacultativeOfferPermission.REOPEN_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'forceClose',
+      [FacultativeOfferPermission.FORCE_CLOSE, PlacementPermission.EDIT],
+    ],
+    [
+      'addParticipant',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'updateParticipant',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'changeParticipantStatus',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'acceptParticipantAndConfirm',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'deleteParticipant',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'reversePayment',
+      [PremiumPermission.REVERSE_PAYMENT, PlacementPermission.EDIT],
+    ],
+    [
+      'archive',
+      [FacultativeOfferPermission.ARCHIVE_OFFER, PlacementPermission.DELETE],
+    ],
+  ])(
+    'allows any permitted workflow permission on %s',
+    (method, permissions) => {
+      expect(
+        Reflect.getMetadata(
+          ANY_PERMISSIONS_KEY,
+          PlacementsController.prototype[method as keyof PlacementsController],
+        ),
+      ).toEqual(permissions);
+    },
+  );
 
   it('delegates participant mutations with authenticated user context', async () => {
     const controller = createController();
@@ -608,5 +688,115 @@ describe('PlacementsController', () => {
       'placement-1',
       'payment-1',
     );
+  });
+
+  it('allows policy-number-only updates with partial edit permission only', async () => {
+    const controller = createController();
+    const partialEditor = employeeWithPermissions([
+      FacultativeOfferPermission.PARTIAL_EDIT,
+    ]);
+
+    await controller.update('placement-1', { policyNumber: 'POL-2026-002' }, {
+      user: partialEditor,
+    } as never);
+
+    expect(service.update).toHaveBeenCalledWith(partialEditor, 'placement-1', {
+      policyNumber: 'POL-2026-002',
+    });
+  });
+
+  it('rejects material placement updates with partial edit permission only', () => {
+    const controller = createController();
+    const partialEditor = employeeWithPermissions([
+      FacultativeOfferPermission.PARTIAL_EDIT,
+    ]);
+
+    expect(() =>
+      controller.update('placement-1', { title: 'Material title change' }, {
+        user: partialEditor,
+      } as never),
+    ).toThrow(ForbiddenException);
+    expect(service.update).not.toHaveBeenCalled();
+  });
+
+  it('allows material placement updates with edit-offer permission', async () => {
+    const controller = createController();
+    const editor = employeeWithPermissions([
+      FacultativeOfferPermission.EDIT_OFFER,
+    ]);
+
+    await controller.update('placement-1', { title: 'Material title change' }, {
+      user: editor,
+    } as never);
+
+    expect(service.update).toHaveBeenCalledWith(editor, 'placement-1', {
+      title: 'Material title change',
+    });
+  });
+
+  it('requires inbound premium permission for cedant receipts', async () => {
+    const controller = createController();
+    const receiptOnly = employeeWithPermissions([
+      PremiumPermission.RECEIVE_FROM_CEDANT,
+    ]);
+    const disbursementOnly = employeeWithPermissions([
+      PremiumPermission.DISBURSE_TO_REINSURER,
+    ]);
+    const dto = {
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      direction: PlacementPaymentDirection.INBOUND,
+      counterpartyId: 'cedant-1',
+      amount: 1000,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+    };
+
+    await controller.createPayment('placement-1', dto, {
+      user: receiptOnly,
+    } as never);
+
+    expect(paymentsService.create).toHaveBeenCalledWith(
+      receiptOnly,
+      'placement-1',
+      dto,
+    );
+    expect(() =>
+      controller.createPayment('placement-1', dto, {
+        user: disbursementOnly,
+      } as never),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('requires outbound premium permission for reinsurer disbursements', async () => {
+    const controller = createController();
+    const receiptOnly = employeeWithPermissions([
+      PremiumPermission.RECEIVE_FROM_CEDANT,
+    ]);
+    const disbursementOnly = employeeWithPermissions([
+      PremiumPermission.DISBURSE_TO_REINSURER,
+    ]);
+    const dto = {
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      counterpartyId: 'reinsurer-1',
+      amount: 1000,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+    };
+
+    await controller.createPayment('placement-1', dto, {
+      user: disbursementOnly,
+    } as never);
+
+    expect(paymentsService.create).toHaveBeenCalledWith(
+      disbursementOnly,
+      'placement-1',
+      dto,
+    );
+    expect(() =>
+      controller.createPayment('placement-1', dto, {
+        user: receiptOnly,
+      } as never),
+    ).toThrow(ForbiddenException);
   });
 });
