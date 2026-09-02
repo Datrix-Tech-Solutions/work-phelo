@@ -59,6 +59,7 @@ export class PermissionsController {
     return this.permissionsService.getAllResources(
       req.user.tenantId,
       req.user.role === 'SUPER_ADMIN',
+      { userId: req.user.id, role: req.user.role },
     );
   }
 
@@ -172,7 +173,10 @@ export class PermissionsController {
     },
   })
   grant(@Body() dto: GrantPermissionDto, @Req() req: AuthenticatedRequest) {
-    return this.permissionsService.grant(req.user.id, req.user.tenantId, dto);
+    return this.permissionsService.grant(req.user.id, req.user.tenantId, dto, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Patch('revoke')
@@ -193,7 +197,10 @@ export class PermissionsController {
     },
   })
   revoke(@Body() dto: RevokePermissionDto, @Req() req: AuthenticatedRequest) {
-    return this.permissionsService.revoke(req.user.id, req.user.tenantId, dto);
+    return this.permissionsService.revoke(req.user.id, req.user.tenantId, dto, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Get('sets')
@@ -201,7 +208,10 @@ export class PermissionsController {
   @ApiOperation({ summary: 'List all permission sets in tenant' })
   @ApiResponse({ status: 200, description: 'Permission sets retrieved' })
   getPermissionSets(@Req() req: AuthenticatedRequest) {
-    return this.permissionsService.getPermissionSets(req.user.tenantId);
+    return this.permissionsService.getPermissionSets(req.user.tenantId, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Get('sets/:id/members')
@@ -217,6 +227,7 @@ export class PermissionsController {
     return this.permissionsService.getPermissionSetMembers(
       req.user.tenantId,
       id,
+      { userId: req.user.id, role: req.user.role },
     );
   }
 
@@ -249,7 +260,10 @@ export class PermissionsController {
     @Body() dto: CreatePermissionSetDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.permissionsService.createPermissionSet(req.user.tenantId, dto);
+    return this.permissionsService.createPermissionSet(req.user.tenantId, dto, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Patch('sets/:id')
@@ -283,6 +297,7 @@ export class PermissionsController {
       req.user.tenantId,
       id,
       dto,
+      { userId: req.user.id, role: req.user.role },
     );
   }
 
@@ -294,7 +309,10 @@ export class PermissionsController {
   @ApiResponse({ status: 403, description: 'System sets cannot be deleted' })
   @ApiResponse({ status: 404, description: 'Permission set not found' })
   deleteSet(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.permissionsService.deletePermissionSet(req.user.tenantId, id);
+    return this.permissionsService.deletePermissionSet(req.user.tenantId, id, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Post('sets/assign')
@@ -318,6 +336,7 @@ export class PermissionsController {
       req.user.id,
       req.user.tenantId,
       dto,
+      { userId: req.user.id, role: req.user.role },
     );
   }
 
@@ -338,6 +357,7 @@ export class PermissionsController {
       req.user.tenantId,
       userId,
       permissionSetId,
+      { userId: req.user.id, role: req.user.role },
     );
   }
 }

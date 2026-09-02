@@ -71,6 +71,12 @@ function moduleKeyForResource(resource: PermissionResourceLike): string {
   return resource.module.toLowerCase();
 }
 
+export function isTenantAdminManagedResource(
+  resource: PermissionResourceLike,
+): boolean {
+  return ALWAYS_ENABLED_MODULES.has(resource.module);
+}
+
 export function isResourceEnabledForTenant(
   resource: PermissionResourceLike,
   config: TenantEntitlementConfig,

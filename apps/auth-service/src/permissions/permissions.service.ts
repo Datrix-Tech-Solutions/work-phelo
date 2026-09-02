@@ -16,9 +16,21 @@ import {
 import { PermissionAction } from './dto/grant-permission.dto';
 import {
   isResourceEnabledForTenant,
+  isTenantAdminManagedResource,
   PermissionResourceWithId,
   TenantEntitlementConfig,
 } from './permission-entitlements';
+
+type PermissionActor = {
+  userId: string;
+  role: string;
+};
+
+type PermissionGrant = {
+  resourceId: string;
+  action: PermissionAction;
+  resource: PermissionResourceWithId;
+};
 
 @Injectable()
 export class PermissionsService {
@@ -29,7 +41,11 @@ export class PermissionsService {
 
   // ── Resources ─────────────────────────────────────────────────────────────
 
-  async getAllResources(tenantId?: string, includeAll = false) {
+  async getAllResources(
+    tenantId?: string,
+    includeAll = false,
+    actor?: PermissionActor,
+  ) {
     const resources = await this.prisma.resource.findMany({
       where: { isActive: true },
       orderBy: [{ module: 'asc' }, { name: 'asc' }],
@@ -38,9 +54,23 @@ export class PermissionsService {
     if (!tenantId || includeAll) return resources;
 
     const config = await this.getTenantEntitlementConfig(tenantId);
-    return resources.filter((resource) =>
+    const enabledResources = resources.filter((resource) =>
       isResourceEnabledForTenant(resource, config),
     );
+
+    if (!actor || this.isSystemAdminActor(actor)) return enabledResources;
+
+    const grantScope = await this.getActorEffectivePermissionKeys(
+      tenantId,
+      actor,
+    );
+    return enabledResources.filter((resource) => {
+      if (isTenantAdminManagedResource(resource)) return false;
+      const actions = Object.values(PermissionAction);
+      return actions.some((action) =>
+        grantScope.has(`${resource.name}:${action}`),
+      );
+    });
   }
 
   async getResourceByName(name: string) {
@@ -52,7 +82,18 @@ export class PermissionsService {
   // ── Grant Permission ───────────────────────────────────────────────────────
   // Creates or reactivates a user_permission row. Never hard-deletes.
 
-  async grant(grantedBy: string, tenantId: string, dto: GrantPermissionDto) {
+  async grant(
+    grantedBy: string,
+    tenantId: string,
+    dto: GrantPermissionDto,
+    actor?: PermissionActor,
+  ) {
+    await this.assertActorHasPermissionSetAction(
+      tenantId,
+      actor,
+      PermissionAction.ASSIGN,
+    );
+
     const target = await this.prisma.user.findFirst({
       where: { id: dto.userId, tenantId },
     });
@@ -69,6 +110,9 @@ export class PermissionsService {
     });
     if (!resource) throw new NotFoundException('Resource not found');
     await this.assertResourcesGrantableForTenant(tenantId, [resource]);
+    await this.assertActorCanManageGrants(tenantId, actor, [
+      { resourceId: resource.id, resource, action: dto.action },
+    ]);
 
     // Upsert — if row exists (was previously revoked), reactivate it
     const existing = await this.prisma.userPermission.findUnique({
@@ -136,7 +180,18 @@ export class PermissionsService {
   // Soft update — sets is_active=false, records who revoked and when.
   // Row is NEVER hard-deleted.
 
-  async revoke(revokedBy: string, tenantId: string, dto: RevokePermissionDto) {
+  async revoke(
+    revokedBy: string,
+    tenantId: string,
+    dto: RevokePermissionDto,
+    actor?: PermissionActor,
+  ) {
+    await this.assertActorHasPermissionSetAction(
+      tenantId,
+      actor,
+      PermissionAction.ASSIGN,
+    );
+
     const user = await this.prisma.user.findFirst({
       where: { id: dto.userId, tenantId },
     });
@@ -146,6 +201,9 @@ export class PermissionsService {
       where: { id: dto.resourceId },
     });
     if (!resource) throw new NotFoundException('Resource not found');
+    await this.assertActorCanManageGrants(tenantId, actor, [
+      { resourceId: resource.id, resource, action: dto.action },
+    ]);
 
     const existing = await this.prisma.userPermission.findFirst({
       where: {
@@ -200,7 +258,17 @@ export class PermissionsService {
 
   // ── Permission Sets ────────────────────────────────────────────────────────
 
-  async createPermissionSet(tenantId: string, dto: CreatePermissionSetDto) {
+  async createPermissionSet(
+    tenantId: string,
+    dto: CreatePermissionSetDto,
+    actor?: PermissionActor,
+  ) {
+    await this.assertActorHasPermissionSetAction(
+      tenantId,
+      actor,
+      PermissionAction.CREATE,
+    );
+
     const existing = await this.prisma.permissionSet.findFirst({
       where: { tenantId, name: dto.name },
     });
@@ -210,18 +278,24 @@ export class PermissionsService {
       );
     }
 
-    if (dto.resources.length > 0) {
-      const uniqueResourceIds = [
-        ...new Set(dto.resources.map((r) => r.resourceId)),
-      ];
-      const found = await this.prisma.resource.findMany({
-        where: { id: { in: uniqueResourceIds } },
-      });
-      if (found.length !== uniqueResourceIds.length) {
-        throw new NotFoundException('One or more resources not found');
-      }
-      await this.assertResourcesGrantableForTenant(tenantId, found);
+    const uniqueResourceIds = [
+      ...new Set(dto.resources.map((r) => r.resourceId)),
+    ];
+    const found =
+      uniqueResourceIds.length > 0
+        ? await this.prisma.resource.findMany({
+            where: { id: { in: uniqueResourceIds } },
+          })
+        : [];
+    if (found.length !== uniqueResourceIds.length) {
+      throw new NotFoundException('One or more resources not found');
     }
+    await this.assertResourcesGrantableForTenant(tenantId, found);
+    await this.assertActorCanManageGrants(
+      tenantId,
+      actor,
+      this.mapDtoResourcesToGrants(dto.resources, found),
+    );
 
     return this.prisma.permissionSet.create({
       data: {
@@ -243,7 +317,14 @@ export class PermissionsService {
     tenantId: string,
     id: string,
     dto: UpdatePermissionSetDto,
+    actor?: PermissionActor,
   ) {
+    await this.assertActorHasPermissionSetAction(
+      tenantId,
+      actor,
+      PermissionAction.EDIT,
+    );
+
     const set = await this.prisma.permissionSet.findFirst({
       where: { id, tenantId, isActive: true },
       include: { resources: { include: { resource: true } } },
@@ -252,6 +333,11 @@ export class PermissionsService {
     if (set.isSystem) {
       throw new ForbiddenException('System permission sets cannot be edited');
     }
+    await this.assertActorCanManagePermissionSet(
+      tenantId,
+      actor,
+      set.resources,
+    );
 
     const resourcesToPersist = [...dto.resources];
 
@@ -273,6 +359,11 @@ export class PermissionsService {
           (r) => `${r.resourceId}:${r.action}`,
         ),
       });
+      await this.assertActorCanManageGrants(
+        tenantId,
+        actor,
+        this.mapDtoResourcesToGrants(dto.resources, found),
+      );
     }
 
     const tenantConfig = await this.getTenantEntitlementConfig(tenantId);
@@ -349,8 +440,8 @@ export class PermissionsService {
     });
   }
 
-  async getPermissionSets(tenantId: string) {
-    return this.prisma.permissionSet.findMany({
+  async getPermissionSets(tenantId: string, actor?: PermissionActor) {
+    const sets = await this.prisma.permissionSet.findMany({
       where: { tenantId, isActive: true },
       include: {
         resources: { include: { resource: true } },
@@ -358,14 +449,40 @@ export class PermissionsService {
       },
       orderBy: { name: 'asc' },
     });
+
+    if (!actor || this.isSystemAdminActor(actor)) return sets;
+
+    const grantScope = await this.getActorEffectivePermissionKeys(
+      tenantId,
+      actor,
+    );
+    return sets.filter((set) =>
+      this.areGrantsWithinActorScope(
+        grantScope,
+        set.resources.map((r) => ({
+          resourceId: r.resourceId,
+          resource: r.resource,
+          action: r.action as PermissionAction,
+        })),
+      ),
+    );
   }
 
-  async getPermissionSetMembers(tenantId: string, permissionSetId: string) {
+  async getPermissionSetMembers(
+    tenantId: string,
+    permissionSetId: string,
+    actor?: PermissionActor,
+  ) {
     const set = await this.prisma.permissionSet.findFirst({
       where: { id: permissionSetId, tenantId, isActive: true },
-      select: { id: true },
+      include: { resources: { include: { resource: true } } },
     });
     if (!set) throw new NotFoundException('Permission set not found');
+    await this.assertActorCanManagePermissionSet(
+      tenantId,
+      actor,
+      set.resources,
+    );
 
     const assignments = await this.prisma.userPermissionSet.findMany({
       where: { permissionSetId },
@@ -473,7 +590,14 @@ export class PermissionsService {
     grantedBy: string,
     tenantId: string,
     dto: AssignPermissionSetDto,
+    actor?: PermissionActor,
   ) {
+    await this.assertActorHasPermissionSetAction(
+      tenantId,
+      actor,
+      PermissionAction.ASSIGN,
+    );
+
     const set = await this.prisma.permissionSet.findFirst({
       where: { id: dto.permissionSetId, tenantId },
       include: { resources: { include: { resource: true } } },
@@ -487,6 +611,11 @@ export class PermissionsService {
     await this.assertResourcesGrantableForTenant(
       tenantId,
       set.resources.map((r) => r.resource),
+    );
+    await this.assertActorCanManagePermissionSet(
+      tenantId,
+      actor,
+      set.resources,
     );
 
     const user = await this.prisma.user.findFirst({
@@ -515,14 +644,30 @@ export class PermissionsService {
     });
   }
 
-  async deletePermissionSet(tenantId: string, id: string) {
+  async deletePermissionSet(
+    tenantId: string,
+    id: string,
+    actor?: PermissionActor,
+  ) {
+    await this.assertActorHasPermissionSetAction(
+      tenantId,
+      actor,
+      PermissionAction.DELETE,
+    );
+
     const set = await this.prisma.permissionSet.findFirst({
       where: { id, tenantId },
+      include: { resources: { include: { resource: true } } },
     });
     if (!set) throw new NotFoundException('Permission set not found');
     if (set.isSystem) {
       throw new ForbiddenException('System permission sets cannot be deleted');
     }
+    await this.assertActorCanManagePermissionSet(
+      tenantId,
+      actor,
+      set.resources,
+    );
     await this.prisma.permissionSet.delete({ where: { id } });
     return { message: 'Permission set deleted' };
   }
@@ -531,14 +676,30 @@ export class PermissionsService {
     tenantId: string,
     userId: string,
     permissionSetId: string,
+    actor?: PermissionActor,
   ) {
+    await this.assertActorHasPermissionSetAction(
+      tenantId,
+      actor,
+      PermissionAction.ASSIGN,
+    );
+
     const assignment = await this.prisma.userPermissionSet.findUnique({
       where: { userId_permissionSetId: { userId, permissionSetId } },
-      include: { permissionSet: true },
+      include: {
+        permissionSet: {
+          include: { resources: { include: { resource: true } } },
+        },
+      },
     });
     if (!assignment || assignment.permissionSet.tenantId !== tenantId) {
       throw new NotFoundException('Assignment not found');
     }
+    await this.assertActorCanManagePermissionSet(
+      tenantId,
+      actor,
+      assignment.permissionSet.resources,
+    );
     await this.prisma.userPermissionSet.delete({
       where: { userId_permissionSetId: { userId, permissionSetId } },
     });
@@ -589,6 +750,156 @@ export class PermissionsService {
     );
     throw new ForbiddenException(
       `Cannot grant permissions for disabled tenant module or feature: ${names}`,
+    );
+  }
+
+  private isSystemAdminActor(actor?: PermissionActor): boolean {
+    return actor?.role === 'SUPER_ADMIN' || actor?.role === 'TENANT_ADMIN';
+  }
+
+  private async getActorEffectivePermissionKeys(
+    tenantId: string,
+    actor?: PermissionActor,
+  ): Promise<Set<string>> {
+    if (!actor) return new Set();
+    if (this.isSystemAdminActor(actor)) return new Set();
+
+    const now = new Date();
+    const [directPerms, setAssignments] = await Promise.all([
+      this.prisma.userPermission.findMany({
+        where: {
+          tenantId,
+          userId: actor.userId,
+          isActive: true,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        include: { resource: true },
+      }),
+      this.prisma.userPermissionSet.findMany({
+        where: {
+          userId: actor.userId,
+          permissionSet: { tenantId, isActive: true },
+        },
+        include: {
+          permissionSet: {
+            include: { resources: { include: { resource: true } } },
+          },
+        },
+      }),
+    ]);
+
+    const keys = new Set<string>();
+    for (const permission of directPerms) {
+      keys.add(`${permission.resource.name}:${permission.action}`);
+    }
+    for (const assignment of setAssignments) {
+      for (const permission of assignment.permissionSet.resources) {
+        keys.add(`${permission.resource.name}:${permission.action}`);
+      }
+    }
+    return keys;
+  }
+
+  private async assertActorHasPermissionSetAction(
+    tenantId: string,
+    actor: PermissionActor | undefined,
+    action: PermissionAction,
+  ) {
+    if (!actor || this.isSystemAdminActor(actor)) return;
+
+    const grantScope = await this.getActorEffectivePermissionKeys(
+      tenantId,
+      actor,
+    );
+    if (grantScope.has(`permission-sets:${action}`)) return;
+
+    throw new ForbiddenException(
+      `Cannot ${action.toLowerCase()} permission sets without permission-sets:${action}`,
+    );
+  }
+
+  private mapDtoResourcesToGrants(
+    requestedResources: { resourceId: string; action: PermissionAction }[],
+    resources: PermissionResourceWithId[],
+  ): PermissionGrant[] {
+    const resourcesById = new Map(
+      resources
+        .filter((resource) => resource.id)
+        .map((resource) => [resource.id as string, resource]),
+    );
+
+    return requestedResources.reduce<PermissionGrant[]>((grants, requested) => {
+      const resource = resourcesById.get(requested.resourceId);
+      if (!resource) return grants;
+      grants.push({
+        resourceId: requested.resourceId,
+        resource,
+        action: requested.action,
+      });
+      return grants;
+    }, []);
+  }
+
+  private areGrantsWithinActorScope(
+    grantScope: Set<string>,
+    grants: PermissionGrant[],
+  ): boolean {
+    if (grants.length === 0) return false;
+
+    return grants.every(({ resource, action }) => {
+      if (isTenantAdminManagedResource(resource)) return false;
+      return grantScope.has(`${resource.name}:${action}`);
+    });
+  }
+
+  private async assertActorCanManageGrants(
+    tenantId: string,
+    actor: PermissionActor | undefined,
+    grants: PermissionGrant[],
+  ) {
+    if (!actor || this.isSystemAdminActor(actor)) return;
+    if (grants.length === 0) {
+      throw new ForbiddenException(
+        'Cannot manage permission sets without at least one permission inside your delegated module scope',
+      );
+    }
+
+    const grantScope = await this.getActorEffectivePermissionKeys(
+      tenantId,
+      actor,
+    );
+    const disallowed = grants.filter(
+      (grant) => !this.areGrantsWithinActorScope(grantScope, [grant]),
+    );
+    if (disallowed.length === 0) return;
+
+    const names = [
+      ...new Set(
+        disallowed.map((grant) => `${grant.resource.name}:${grant.action}`),
+      ),
+    ].join(', ');
+    throw new ForbiddenException(
+      `Cannot manage permissions outside your delegated module scope: ${names}`,
+    );
+  }
+
+  private async assertActorCanManagePermissionSet(
+    tenantId: string,
+    actor: PermissionActor | undefined,
+    resources: Array<{
+      resourceId: string;
+      action: PermissionAction | string;
+      resource: PermissionResourceWithId;
+    }>,
+  ) {
+    await this.assertActorCanManageGrants(
+      tenantId,
+      actor,
+      resources.map((resource) => ({
+        resourceId: resource.resourceId,
+        resource: resource.resource,
+        action: resource.action as PermissionAction,
+      })),
     );
   }
 
