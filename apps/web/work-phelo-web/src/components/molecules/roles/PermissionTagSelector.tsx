@@ -223,6 +223,25 @@ export const PERMISSION_TAG_MAPPING: Record<
     { resource: 'operations.reinsurance.taxes-levies', action: 'EDIT' },
     { resource: 'operations.reinsurance.taxes-levies', action: 'DELETE' },
 
+    // Granular reinsurance workflow resources (RUN) — Operations Admin can run
+    // every workflow, not just the ones the coarse placements/claims fallback covers.
+    { resource: 'operations.reinsurance.facultative-offers.create-offer', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.edit-offer', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.partial-edit', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.reopen-offer', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.force-close', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.endorse-offer', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.archive-offer', action: 'RUN' },
+
+    { resource: 'operations.reinsurance.premiums.receive-from-cedant', action: 'RUN' },
+    { resource: 'operations.reinsurance.premiums.disburse-to-reinsurer', action: 'RUN' },
+    { resource: 'operations.reinsurance.premiums.reverse-payment', action: 'RUN' },
+
+    { resource: 'operations.reinsurance.claims.add-claim', action: 'RUN' },
+    { resource: 'operations.reinsurance.claims.create-notification', action: 'RUN' },
+    { resource: 'operations.reinsurance.claims.record-recovery', action: 'RUN' },
+    { resource: 'operations.reinsurance.claims.void-claim', action: 'RUN' },
+
     { resource: 'permission-sets', action: 'VIEW' },
     { resource: 'permission-sets', action: 'CREATE' },
     { resource: 'permission-sets', action: 'EDIT' },
