@@ -10,6 +10,8 @@ import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { usePlacementPayments, useReversePayment } from '@/hooks';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
 import { DocumentPrintLayout } from '@/components/organisms/reinsurance/documents/DocumentPrintLayout';
@@ -127,6 +129,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
   // that currency at that rate too.
   const placementFx = premiumForeignSettlement(allPayments, placement.currency);
   const reversePayment = useReversePayment();
+  const canReverse = useAnyPermissionRules(RiPerm.reversePayment);
   const addToast = useToastStore((s) => s.addToast);
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
   const [reverseTarget, setReverseTarget] = useState<PlacementPayment | null>(null);
@@ -278,7 +281,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
               Reciept
             </TableButton>
           )}
-          {canReversePayment(row) && (
+          {canReverse && canReversePayment(row) && (
             <TableButton variant="red" onClick={() => requestReverse(row)}>
               Reverse
             </TableButton>

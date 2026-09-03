@@ -3,14 +3,20 @@ import {
   PlacementClaimCashCallStatus,
   PlacementClaimStatus,
 } from '../../../prisma/generated/client';
-import { PERMISSIONS_KEY } from '../../auth/decorators/permissions.decorator';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+} from '../../auth/decorators/permissions.decorator';
 import { PlacementClaimCashCallsService } from '../claims/cash-calls/cash-calls.service';
 import { PlacementClaimFinancialCloseReadinessService } from '../claims/close/financial-close-readiness.service';
 import { PlacementClaimRecoveryApprovalsService } from '../claims/recoveries/recovery-approvals.service';
 import { PlacementClaimRecoveryReceiptsService } from '../claims/recoveries/recovery-receipts.service';
 import { PlacementClaimCedantSettlementsService } from '../claims/settlements/cedant-settlements.service';
 import { PlacementClaimsService } from '../claims/claims.service';
-import { PlacementPermission } from '../placement.permissions';
+import {
+  ClaimWorkflowPermission,
+  PlacementPermission,
+} from '../placement.permissions';
 import { PlacementClaimsController } from './placement-claims.controller';
 
 describe('PlacementClaimsController', () => {
@@ -80,9 +86,7 @@ describe('PlacementClaimsController', () => {
     ['getClaimRecoveryPosition', PlacementPermission.VIEW],
     ['findClaimRecoveryApprovals', PlacementPermission.VIEW],
     ['findClaimRecoveryReceipts', PlacementPermission.VIEW],
-    ['createClaim', PlacementPermission.CREATE],
     ['updateClaim', PlacementPermission.EDIT],
-    ['changeClaimStatus', PlacementPermission.EDIT],
     ['generateClaimAllocations', PlacementPermission.EDIT],
     ['createClaimCashCall', PlacementPermission.EDIT],
     ['changeClaimCashCallStatus', PlacementPermission.EDIT],
@@ -92,7 +96,6 @@ describe('PlacementClaimsController', () => {
     ['createClaimCedantSettlement', PlacementPermission.EDIT],
     ['confirmClaimCedantSettlementBank', PlacementPermission.EDIT],
     ['reverseClaimCedantSettlement', PlacementPermission.EDIT],
-    ['createClaimRecoveryReceipt', PlacementPermission.EDIT],
     ['confirmClaimRecoveryReceiptBank', PlacementPermission.EDIT],
     ['reverseClaimRecoveryReceipt', PlacementPermission.EDIT],
   ])('requires %s permission on %s', (method, permission) => {
@@ -105,6 +108,37 @@ describe('PlacementClaimsController', () => {
       ),
     ).toEqual([permission]);
   });
+
+  it.each([
+    [
+      'createClaim',
+      [ClaimWorkflowPermission.ADD_CLAIM, PlacementPermission.CREATE],
+    ],
+    [
+      'changeClaimStatus',
+      [
+        ClaimWorkflowPermission.CREATE_NOTIFICATION,
+        ClaimWorkflowPermission.VOID_CLAIM,
+        PlacementPermission.EDIT,
+      ],
+    ],
+    [
+      'createClaimRecoveryReceipt',
+      [ClaimWorkflowPermission.RECORD_RECOVERY, PlacementPermission.EDIT],
+    ],
+  ])(
+    'allows granular claim workflow or legacy permission on %s',
+    (method, permissions) => {
+      expect(
+        Reflect.getMetadata(
+          ANY_PERMISSIONS_KEY,
+          PlacementClaimsController.prototype[
+            method as keyof PlacementClaimsController
+          ],
+        ),
+      ).toEqual(permissions);
+    },
+  );
 
   it('delegates claim reads and mutations with authenticated context', async () => {
     const controller = createController();

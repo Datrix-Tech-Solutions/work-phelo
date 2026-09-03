@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -19,6 +20,10 @@ import { PlacementEffectiveViewService } from '../placement-effective-view.servi
 import { PlacementClaimsService } from './claims.service';
 import { PlacementFinancialActivityReader } from '../finance/financial-activity.reader';
 import { PlacementFinancialLockPolicy } from '../finance/financial-lock.policy';
+import {
+  ClaimWorkflowPermission,
+  PlacementPermission,
+} from '../placement.permissions';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 describe('PlacementClaimsService', () => {
@@ -40,8 +45,12 @@ describe('PlacementClaimsService', () => {
     firstName: 'Ama',
     moduleConfig: { operations: true },
     featureConfig: { operations: { reinsurance: true } },
-    permissions: [] as string[],
+    permissions: [PlacementPermission.CREATE, PlacementPermission.EDIT],
   };
+  const employeeWithPermissions = (permissions: string[]) => ({
+    ...user,
+    permissions,
+  });
 
   const placement = {
     id: 'placement-1',
@@ -489,6 +498,73 @@ describe('PlacementClaimsService', () => {
         status: PlacementClaimStatus.NOTIFIED,
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('allows create-notification permission only for NOTIFIED transitions', async () => {
+    const notificationUser = employeeWithPermissions([
+      ClaimWorkflowPermission.CREATE_NOTIFICATION,
+    ]);
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaim.update.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.NOTIFIED,
+    });
+
+    await service.changeStatus(notificationUser, 'placement-1', 'claim-1', {
+      status: PlacementClaimStatus.NOTIFIED,
+    });
+
+    const notificationUpdateArgs = firstCallArg<{
+      data: { status?: PlacementClaimStatus };
+    }>(prisma.placementClaim.update);
+    expect(notificationUpdateArgs.data.status).toBe(
+      PlacementClaimStatus.NOTIFIED,
+    );
+
+    prisma.placementClaim.update.mockClear();
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.NOTIFIED,
+    });
+
+    await expect(
+      service.changeStatus(notificationUser, 'placement-1', 'claim-1', {
+        status: PlacementClaimStatus.RESERVED,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.placementClaim.update).not.toHaveBeenCalled();
+  });
+
+  it('allows void-claim permission only for VOID transitions', async () => {
+    const voidUser = employeeWithPermissions([
+      ClaimWorkflowPermission.VOID_CLAIM,
+    ]);
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaim.update.mockResolvedValue({
+      ...claim,
+      status: PlacementClaimStatus.VOID,
+    });
+
+    await service.changeStatus(voidUser, 'placement-1', 'claim-1', {
+      status: PlacementClaimStatus.VOID,
+    });
+
+    const voidUpdateArgs = firstCallArg<{
+      data: { status?: PlacementClaimStatus };
+    }>(prisma.placementClaim.update);
+    expect(voidUpdateArgs.data.status).toBe(PlacementClaimStatus.VOID);
+
+    prisma.placementClaim.update.mockClear();
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+
+    await expect(
+      service.changeStatus(voidUser, 'placement-1', 'claim-1', {
+        status: PlacementClaimStatus.NOTIFIED,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.placementClaim.update).not.toHaveBeenCalled();
   });
 
   it('requires financial readiness before moving to SETTLED', async () => {

@@ -6,6 +6,7 @@ import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useReinsurers, useFacultatives, useCurrencies, useFacultativePlacement } from '@/hooks';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { EditReinsurancePanel } from '@/components/organisms/reinsurance/panels/EditReinsurancePanel';
 import { ReinsurerOverview } from '@/components/molecules/reinsurance/stats/ReinsurerOverview';
 import { CedantContactsTab } from '@/components/molecules/reinsurance/tabs/CedantContactsTab';
@@ -83,6 +84,8 @@ export default function ReinsurerDetailPage({
   params: Promise<{ tenantSlug: string; reinsurerId: string }>;
 }) {
   const { tenantSlug, reinsurerId } = use(params);
+  const canView = usePermissionRule('operations.reinsurance.counterparties:VIEW');
+  const canEdit = usePermissionRule('operations.reinsurance.counterparties:EDIT');
   const { data: reinsurers = [], isLoading: reinsurersLoading } = useReinsurers();
   const { data: placements = [], isLoading: placementsLoading } = useFacultatives();
   const { data: currencies = [] } = useCurrencies();
@@ -147,7 +150,7 @@ export default function ReinsurerDetailPage({
             <span className="text-gray-700 font-medium">{reinsurer?.name ?? '—'}</span>
           )}
         </nav>
-        {!activeView && reinsurer && (
+        {!activeView && reinsurer && canView && canEdit && (
           <Button size="sm" onClick={() => setEditOpen(true)}>
             Edit
           </Button>
@@ -158,6 +161,10 @@ export default function ReinsurerDetailPage({
         {reinsurersLoading ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
+          </div>
+        ) : !canView ? (
+          <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+            You don&apos;t have permission to view this reinsurer.
           </div>
         ) : !reinsurer ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">

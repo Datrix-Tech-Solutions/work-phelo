@@ -7,7 +7,10 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+} from '../decorators/permissions.decorator';
 
 const DENY_MESSAGE =
   "You don't have permission to access this. Contact your administrator.";
@@ -21,8 +24,17 @@ export class PermissionsGuard implements CanActivate {
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const anyRequiredPermissions = this.reflector.getAllAndOverride<string[]>(
+      ANY_PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
-    if (!requiredPermissions || requiredPermissions.length === 0) return true;
+    if (
+      (!requiredPermissions || requiredPermissions.length === 0) &&
+      (!anyRequiredPermissions || anyRequiredPermissions.length === 0)
+    ) {
+      return true;
+    }
 
     const request = context
       .switchToHttp()
@@ -38,7 +50,17 @@ export class PermissionsGuard implements CanActivate {
     const userPermissions = new Set(user.permissions);
 
     if (
+      requiredPermissions?.length &&
       !requiredPermissions.every((permission) =>
+        userPermissions.has(permission),
+      )
+    ) {
+      throw new ForbiddenException(DENY_MESSAGE);
+    }
+
+    if (
+      anyRequiredPermissions?.length &&
+      !anyRequiredPermissions.some((permission) =>
         userPermissions.has(permission),
       )
     ) {

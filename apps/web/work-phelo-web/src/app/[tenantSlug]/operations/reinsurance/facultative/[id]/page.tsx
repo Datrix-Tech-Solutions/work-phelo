@@ -13,6 +13,8 @@ import {
   usePlacementEndorsements,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { extractError } from '@/lib/extractError';
 import { isEffectivelyClosed } from '@/lib/reinsurance/placementStatus';
 import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
@@ -46,6 +48,10 @@ export default function FacultativeDetailPage({
   ).length;
   const forceClose = useForceCloseFacultative(id);
   const toast = useToast();
+  const canEditOffer = useAnyPermissionRules(RiPerm.editOffer);
+  const canReopenOffer = useAnyPermissionRules(RiPerm.reopenOffer);
+  const canForceCloseOffer = useAnyPermissionRules(RiPerm.forceClose);
+  const canEndorseOffer = useAnyPermissionRules(RiPerm.endorseOffer);
   const [activeTab, setActiveTab] = useState<FacultativeTab>(
     tabParam === 'endorsement' ? 'endorsement' : 'distribution',
   );
@@ -101,25 +107,27 @@ export default function FacultativeDetailPage({
         </nav>
         {placement && (
           <div className="flex items-center gap-2">
-            {placement.status === 'CLOSED' && (
+            {placement.status === 'CLOSED' && canEndorseOffer && (
               <Button size="sm" variant="primary" onClick={() => setEndorsementOpen(true)}>
                 Endorse Policy
               </Button>
             )}
-            {paymentStatus === 'Outstanding Payment' && !(showReopen && hasEndorsement) && (
-              <Button
-                size="sm"
-                onClick={() => setEditOpen(true)}
-                className={
-                  showReopen
-                    ? 'bg-green-600 border-green-600 hover:bg-green-700 hover:border-green-700 focus:ring-green-600'
-                    : ''
-                }
-              >
-                {showReopen ? 'Reopen Offer' : 'Edit'}
-              </Button>
-            )}
-            {canForceClose && (
+            {paymentStatus === 'Outstanding Payment' &&
+              !(showReopen && hasEndorsement) &&
+              (showReopen ? canReopenOffer : canEditOffer) && (
+                <Button
+                  size="sm"
+                  onClick={() => setEditOpen(true)}
+                  className={
+                    showReopen
+                      ? 'bg-green-600 border-green-600 hover:bg-green-700 hover:border-green-700 focus:ring-green-600'
+                      : ''
+                  }
+                >
+                  {showReopen ? 'Reopen Offer' : 'Edit'}
+                </Button>
+              )}
+            {canForceClose && canForceCloseOffer && (
               <Button size="sm" variant="danger" onClick={() => setForceCloseOpen(true)}>
                 Force Close
               </Button>

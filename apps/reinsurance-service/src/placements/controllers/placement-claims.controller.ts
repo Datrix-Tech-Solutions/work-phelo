@@ -27,7 +27,10 @@ import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireFeature } from '../../auth/decorators/feature.decorator';
 import { RequireModule } from '../../auth/decorators/module.decorator';
-import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../../auth/decorators/permissions.decorator';
 import { FeatureGuard } from '../../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../auth/guards/module.guard';
@@ -73,7 +76,10 @@ import { UpdatePlacementClaimCashCallStatusDto } from '../dto/update-placement-c
 import { UpdatePlacementClaimStatusDto } from '../dto/update-placement-claim-status.dto';
 import { UpdatePlacementClaimDto } from '../dto/update-placement-claim.dto';
 import { VoidPlacementClaimCashCallDto } from '../dto/void-placement-claim-cash-call.dto';
-import { PlacementPermission } from '../placement.permissions';
+import {
+  ClaimWorkflowPermission,
+  PlacementPermission,
+} from '../placement.permissions';
 
 @Controller('placements')
 @ApiCookieAuth('access_token')
@@ -143,7 +149,10 @@ export class PlacementClaimsController {
 
   @Post(':id/claims')
   @ApiTags('Reinsurance - Claims')
-  @RequirePermissions(PlacementPermission.CREATE)
+  @RequireAnyPermission(
+    ClaimWorkflowPermission.ADD_CLAIM,
+    PlacementPermission.CREATE,
+  )
   @ApiOperation({
     summary: 'Create placement claim loss event',
     description:
@@ -190,7 +199,11 @@ export class PlacementClaimsController {
 
   @Patch(':id/claims/:claimId/status')
   @ApiTags('Reinsurance - Claims')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    ClaimWorkflowPermission.CREATE_NOTIFICATION,
+    ClaimWorkflowPermission.VOID_CLAIM,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Change placement claim status',
     description:
@@ -760,7 +773,10 @@ export class PlacementClaimsController {
 
   @Post(':id/claims/:claimId/cash-calls/:cashCallId/recovery-receipts')
   @ApiTags('Reinsurance - Claim Recoveries')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    ClaimWorkflowPermission.RECORD_RECOVERY,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Record recovery receipt for an issued cash call',
     description:

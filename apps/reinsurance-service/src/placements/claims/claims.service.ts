@@ -10,6 +10,7 @@ import {
   PlacementClaimStatus,
   Prisma,
 } from '../../../prisma/generated/client';
+import { assertUserHasAnyPermission } from '../../auth/permissions/permission-assertions';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClaimAllocationCalculator } from './allocation/allocation.calculator';
 import { ClosingSnapshot } from '../closings/closing-snapshot.reader';
@@ -19,6 +20,10 @@ import { UpdatePlacementClaimDto } from '../dto/update-placement-claim.dto';
 import { PlacementClaimFinancialCloseReadinessService } from './close/financial-close-readiness.service';
 import { PlacementEffectivePositionService } from '../placement-effective-position.service';
 import { PlacementEffectiveViewService } from '../placement-effective-view.service';
+import {
+  ClaimWorkflowPermission,
+  PlacementPermission,
+} from '../placement.permissions';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
 
 const claimAllocationInclude = {
@@ -228,6 +233,7 @@ export class PlacementClaimsService {
   ): Promise<PlacementClaimRecord> {
     const claim = await this.findOne(user.tenantId, placementId, claimId);
     if (claim.status === dto.status) return claim;
+    this.assertClaimStatusPermission(user, dto.status);
     this.assertStatusTransition(claim.status, dto.status);
     await this.assertFinanciallyReadyForStatus(
       user.tenantId,
@@ -430,6 +436,29 @@ export class PlacementClaimsService {
     if (!editableStatuses.includes(status)) {
       throw new BadRequestException(`Cannot edit claim while it is ${status}`);
     }
+  }
+
+  private assertClaimStatusPermission(
+    user: RequestUser,
+    status: PlacementClaimStatus,
+  ): void {
+    if (status === PlacementClaimStatus.NOTIFIED) {
+      assertUserHasAnyPermission(user, [
+        ClaimWorkflowPermission.CREATE_NOTIFICATION,
+        PlacementPermission.EDIT,
+      ]);
+      return;
+    }
+
+    if (status === PlacementClaimStatus.VOID) {
+      assertUserHasAnyPermission(user, [
+        ClaimWorkflowPermission.VOID_CLAIM,
+        PlacementPermission.EDIT,
+      ]);
+      return;
+    }
+
+    assertUserHasAnyPermission(user, [PlacementPermission.EDIT]);
   }
 
   private buildAllocation(input: {

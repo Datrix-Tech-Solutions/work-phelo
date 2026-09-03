@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm, UseFormReturn, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormSection } from '@/components/atoms/FormSection';
@@ -79,6 +80,7 @@ export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: Endo
   const toast = useToastStore.getState;
   const [pendingValues, setPendingValues] = useState<EndorsementFormValues | null>(null);
   const [confirmDate, setConfirmDate] = useState('');
+  const [created, setCreated] = useState<{ policyNumber: string } | null>(null);
 
   const form = useForm<EndorsementFormValues>({
     defaultValues: placementToFormValues(placement, allRiskTypes, effectiveView),
@@ -190,16 +192,20 @@ export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: Endo
             : Number(values.facultativeOffer),
       });
 
-      toast().addToast({
-        message: 'Endorsement successfully created created.',
-        type: 'success',
-      });
-      onCreated?.();
-      handleClose();
+      // Keep the panel mounted behind the SuccessModal; onCreated/handleClose
+      // (which unmount this component at most call sites) run once it's dismissed.
+      setPendingValues(null);
+      setCreated({ policyNumber: values.policyNumber?.trim() ?? '' });
     } catch (error) {
       setPendingValues(null);
       toast().addToast({ message: extractError(error), type: 'error' });
     }
+  };
+
+  const handleSuccessClose = () => {
+    setCreated(null);
+    onCreated?.();
+    handleClose();
   };
 
   const todayFormatted = new Date().toLocaleDateString('en-GB', {
@@ -219,93 +225,106 @@ export function EndorsementPanel({ isOpen, placement, onClose, onCreated }: Endo
         : undefined;
 
   return (
-    <SidePanel
-      isOpen={isOpen}
-      onClose={handleClose}
-      title="Endorse Bound Policy"
-      footer={
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit(onSubmit)} isLoading={isPending} loadingText="Saving…">
-            Create Endorsement
-          </Button>
-        </div>
-      }
-    >
-      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
-        <FormSection title="Endorsement Details">
-          <Controller
-            name="effectiveDate"
-            control={control}
-            rules={{
-              required: 'Effective date is required',
-              validate: (value) => {
-                if (periodFrom && value < periodFrom) {
-                  return 'Effective date cannot be before the offer inception date';
-                }
-                if (periodTo && value > periodTo) {
-                  return 'Effective date cannot be after the offer expiry date';
-                }
-                return true;
-              },
-            }}
-            render={({ field }) => (
-              <DatePicker
-                label="Effective Date"
-                value={field.value}
-                onChange={field.onChange}
-                minDate={periodFrom || undefined}
-                maxDate={periodTo || undefined}
-                error={errors.effectiveDate?.message}
-              />
-            )}
-          />
-        </FormSection>
-
-        <FacultativeFormFields
-          form={form as unknown as UseFormReturn<FacultativeFormValues>}
-          commentLabel="Reason for Endorsement"
-        />
-      </div>
-
-      <Modal
-        isOpen={!!pendingValues}
-        onClose={() => setPendingValues(null)}
-        title="Confirm Effective Date"
-        description={
-          dirtyFields.effectiveDate
-            ? 'Confirm the effective date for this endorsement, or pick another.'
-            : `You haven't selected an effective date, so it defaulted to today (${todayFormatted}). Confirm this date or pick another.`
+    <>
+      <SuccessModal
+        isOpen={!!created}
+        onClose={handleSuccessClose}
+        title="Endorsement Created!"
+        message={
+          created?.policyNumber
+            ? `Endorsement for offer ${created.policyNumber} has been created successfully.`
+            : 'The endorsement has been created successfully.'
         }
+        actionLabel="Done"
+      />
+      <SidePanel
+        isOpen={isOpen}
+        onClose={handleClose}
+        title="Endorse Bound Policy"
         footer={
-          <>
-            <Button variant="outline" onClick={() => setPendingValues(null)}>
-              Go Back
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+              Cancel
             </Button>
-            <Button
-              onClick={confirmPendingDate}
-              isLoading={isPending}
-              loadingText="Saving…"
-              disabled={!!confirmDateError}
-            >
-              Confirm &amp; Create
+            <Button onClick={handleSubmit(onSubmit)} isLoading={isPending} loadingText="Saving…">
+              Create Endorsement
             </Button>
-          </>
+          </div>
         }
       >
-        <div className="mt-4">
-          <DatePicker
-            label="Effective Date"
-            value={confirmDate}
-            onChange={setConfirmDate}
-            minDate={pendingPeriodFrom || undefined}
-            maxDate={pendingPeriodTo || undefined}
-            error={confirmDateError}
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
+          <FormSection title="Endorsement Details">
+            <Controller
+              name="effectiveDate"
+              control={control}
+              rules={{
+                required: 'Effective date is required',
+                validate: (value) => {
+                  if (periodFrom && value < periodFrom) {
+                    return 'Effective date cannot be before the offer inception date';
+                  }
+                  if (periodTo && value > periodTo) {
+                    return 'Effective date cannot be after the offer expiry date';
+                  }
+                  return true;
+                },
+              }}
+              render={({ field }) => (
+                <DatePicker
+                  label="Effective Date"
+                  value={field.value}
+                  onChange={field.onChange}
+                  minDate={periodFrom || undefined}
+                  maxDate={periodTo || undefined}
+                  error={errors.effectiveDate?.message}
+                />
+              )}
+            />
+          </FormSection>
+
+          <FacultativeFormFields
+            form={form as unknown as UseFormReturn<FacultativeFormValues>}
+            commentLabel="Reason for Endorsement"
           />
         </div>
-      </Modal>
-    </SidePanel>
+
+        <Modal
+          isOpen={!!pendingValues}
+          onClose={() => setPendingValues(null)}
+          title="Confirm Effective Date"
+          description={
+            dirtyFields.effectiveDate
+              ? 'Confirm the effective date for this endorsement, or pick another.'
+              : `You haven't selected an effective date, so it defaulted to today (${todayFormatted}). Confirm this date or pick another.`
+          }
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setPendingValues(null)}>
+                Go Back
+              </Button>
+              <Button
+                onClick={confirmPendingDate}
+                isLoading={isPending}
+                loadingText="Saving…"
+                disabled={!!confirmDateError}
+              >
+                Confirm &amp; Create
+              </Button>
+            </>
+          }
+        >
+          <div className="mt-4">
+            <DatePicker
+              label="Effective Date"
+              value={confirmDate}
+              onChange={setConfirmDate}
+              minDate={pendingPeriodFrom || undefined}
+              maxDate={pendingPeriodTo || undefined}
+              error={confirmDateError}
+            />
+          </div>
+        </Modal>
+      </SidePanel>
+    </>
   );
 }

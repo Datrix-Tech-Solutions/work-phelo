@@ -112,6 +112,18 @@ export function useUpdatePermissionSet() {
   });
 }
 
+export function useDeletePermissionSet() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/auth/permissions/sets/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
+    },
+  });
+}
+
 // ── User Effective Permissions ────────────────────────────
 
 export function useUserPermissions(userId: string) {

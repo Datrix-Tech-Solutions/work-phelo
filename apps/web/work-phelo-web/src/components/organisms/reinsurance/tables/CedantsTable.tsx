@@ -11,6 +11,7 @@ import { AddCedantPanel } from '@/components/organisms/reinsurance/panels/AddCed
 import { AddContactPanel } from '@/components/organisms/reinsurance/panels/AddContactPanel';
 import { useCedants, useDeleteCedant, useCedantOutstandingCounts } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { extractError } from '@/lib/extractError';
 import { Counterparty } from '@/types/reinsurance';
 import { codeToCountry } from '@/lib/geo';
@@ -33,6 +34,10 @@ export function CedantsTable() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Counterparty | null>(null);
   const [contactTarget, setContactTarget] = useState<Counterparty | null>(null);
+
+  const canCreate = usePermissionRule('operations.reinsurance.counterparties:CREATE');
+  const canEdit = usePermissionRule('operations.reinsurance.counterparties:EDIT');
+  const canDelete = usePermissionRule('operations.reinsurance.counterparties:DELETE');
 
   const { data = [], isLoading } = useCedants();
   const { mutate: deleteCedant, isPending: isDeleting } = useDeleteCedant();
@@ -74,7 +79,9 @@ export function CedantsTable() {
           setSearch(q);
           setPage(1);
         }}
-        actionButton={{ label: 'Add Cedant', onClick: () => setPanelOpen(true) }}
+        actionButton={
+          canCreate ? { label: 'Add Cedant', onClick: () => setPanelOpen(true) } : undefined
+        }
         emptyMessage="No cedants found"
         currentPage={page}
         totalPages={totalPages}
@@ -91,8 +98,8 @@ export function CedantsTable() {
               onClick={() =>
                 router.push(`/${tenantSlug}/operations/reinsurance/cedants/${cedant.id}`)
               }
-              onAddPerson={() => setContactTarget(cedant)}
-              onDelete={() => setDeleteTarget(cedant)}
+              onAddPerson={canEdit ? () => setContactTarget(cedant) : undefined}
+              onDelete={canDelete ? () => setDeleteTarget(cedant) : undefined}
             />
           );
         }}

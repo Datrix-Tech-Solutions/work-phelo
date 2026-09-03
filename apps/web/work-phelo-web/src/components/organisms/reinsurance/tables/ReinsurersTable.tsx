@@ -11,6 +11,7 @@ import { AddReinsurancePanel } from '@/components/organisms/reinsurance/panels/A
 import { AddContactPanel } from '@/components/organisms/reinsurance/panels/AddContactPanel';
 import { useReinsurers, useDeleteReinsurer } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { extractError } from '@/lib/extractError';
 import { Counterparty } from '@/types/reinsurance';
 import { codeToCountry } from '@/lib/geo';
@@ -33,6 +34,10 @@ export function ReinsurersTable() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Counterparty | null>(null);
   const [contactTarget, setContactTarget] = useState<Counterparty | null>(null);
+
+  const canCreate = usePermissionRule('operations.reinsurance.counterparties:CREATE');
+  const canEdit = usePermissionRule('operations.reinsurance.counterparties:EDIT');
+  const canDelete = usePermissionRule('operations.reinsurance.counterparties:DELETE');
 
   const { data = [], isLoading } = useReinsurers();
   const { mutate: deleteReinsurer, isPending: isDeleting } = useDeleteReinsurer();
@@ -73,7 +78,9 @@ export function ReinsurersTable() {
           setSearch(q);
           setPage(1);
         }}
-        actionButton={{ label: 'Add Reinsurer', onClick: () => setPanelOpen(true) }}
+        actionButton={
+          canCreate ? { label: 'Add Reinsurer', onClick: () => setPanelOpen(true) } : undefined
+        }
         emptyMessage="No reinsurers found"
         currentPage={page}
         totalPages={totalPages}
@@ -87,8 +94,8 @@ export function ReinsurersTable() {
             onClick={() =>
               router.push(`/${tenantSlug}/operations/reinsurance/reinsurers/${reinsurer.id}`)
             }
-            onAddPerson={() => setContactTarget(reinsurer)}
-            onDelete={() => setDeleteTarget(reinsurer)}
+            onAddPerson={canEdit ? () => setContactTarget(reinsurer) : undefined}
+            onDelete={canDelete ? () => setDeleteTarget(reinsurer) : undefined}
           />
         )}
       />

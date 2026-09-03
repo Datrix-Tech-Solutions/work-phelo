@@ -36,6 +36,8 @@ import {
   RAW_STATUS_VARIANT_MAP,
 } from '@/lib/reinsurance/placementStatus';
 import { useToast } from '@/hooks/useToast';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
@@ -288,6 +290,15 @@ export function FacultativeTable({
   const toast = useToast();
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+
+  const canCreateOffer = useAnyPermissionRules(RiPerm.createOffer);
+  const canEditOffer = useAnyPermissionRules(RiPerm.editOffer);
+  const canPartialEdit = useAnyPermissionRules(RiPerm.partialEdit);
+  const canReopenOffer = useAnyPermissionRules(RiPerm.reopenOffer);
+  const canForceCloseOffer = useAnyPermissionRules(RiPerm.forceClose);
+  const canEndorseOffer = useAnyPermissionRules(RiPerm.endorseOffer);
+  const canArchiveOffer = useAnyPermissionRules(RiPerm.archiveOffer);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -684,27 +695,27 @@ export function FacultativeTable({
     // Renewing only makes sense once an offer has left the draft/open stages; endorsing only
     // applies to an offer that has actually closed (a policy is in force to amend).
     const rowIsClosed = isEffectivelyClosed(row);
-    const renewAction: RowAction | null = rowIsClosed
-      ? { label: 'Renew Offer', onClick: () => setRenewTarget(row), variant: 'success' }
-      : null;
+    const renewAction: RowAction | null =
+      rowIsClosed && canCreateOffer
+        ? { label: 'Renew Offer', onClick: () => setRenewTarget(row), variant: 'success' }
+        : null;
     const endorseAction: RowAction | null =
-      row.status === 'CLOSED'
+      row.status === 'CLOSED' && canEndorseOffer
         ? { label: 'Endorse Policy', onClick: () => setEndorseTarget(row) }
         : null;
 
     if (tab === 'closing' && row.status !== 'DECLINED' && row.status !== 'CANCELLED') {
       const paymentStatus = paymentStatusMap.get(row.id) ?? 'Outstanding';
-      const partialEditAction: RowAction = {
-        label: 'Partial Edit',
-        onClick: () => setPartialEditTarget(row),
-      };
+      const partialEditAction: RowAction | null = canPartialEdit
+        ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
+        : null;
 
       // Anything other than a clean 'Outstanding' (Pending, Part Payment, or Paid) means money
       // has moved or is in flight — Reopen/Archive only make sense while nothing has happened yet.
       if (paymentStatus !== 'Outstanding') {
         return [
           { label: 'View Offer', onClick: () => router.push(detailUrl) },
-          partialEditAction,
+          ...(partialEditAction ? [partialEditAction] : []),
           ...(endorseAction ? [endorseAction] : []),
           ...(renewAction ? [renewAction] : []),
         ];
@@ -714,9 +725,13 @@ export function FacultativeTable({
 
       return [
         { label: 'View Offer Details', onClick: () => router.push(detailUrl) },
-        ...(hasEndorsement ? [] : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
-        partialEditAction,
-        { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
+        ...(hasEndorsement || !canReopenOffer
+          ? []
+          : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
+        ...(partialEditAction ? [partialEditAction] : []),
+        ...(canArchiveOffer
+          ? [{ label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }]
+          : []),
         ...(endorseAction ? [endorseAction] : []),
         ...(renewAction ? [renewAction] : []),
       ];
@@ -728,27 +743,32 @@ export function FacultativeTable({
       const isPartiallyClosed = row.status === 'PARTIALLY_PLACED' || row.status === 'CLOSING';
       const hasEndorsement = hasEndorsementMap.get(row.id) ?? false;
       const forceCloseAction: RowAction | null =
-        row.status === 'CLOSING'
+        row.status === 'CLOSING' && canForceCloseOffer
           ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
           : null;
-      const archiveAction: RowAction | null = canArchive
-        ? { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }
-        : null;
+      const archiveAction: RowAction | null =
+        canArchive && canArchiveOffer
+          ? { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }
+          : null;
       const reopenAction: RowAction | null =
-        isPartiallyClosed && !hasEndorsement
+        isPartiallyClosed && !hasEndorsement && canReopenOffer
           ? { label: 'Reopen Offer', onClick: () => setReopenTarget(row) }
           : null;
-      const editAction: RowAction =
-        isPartiallyClosed || hasPaymentMap.get(row.id)
+      const wantsPartialEdit = isPartiallyClosed || !!hasPaymentMap.get(row.id);
+      const editAction: RowAction | null = wantsPartialEdit
+        ? canPartialEdit
           ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
-          : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
+          : null
+        : canEditOffer
+          ? { label: 'Edit Offer', onClick: () => setEditTarget(row) }
+          : null;
 
       // Rows in this tab are, by definition, not yet effectively closed (draft/open statuses),
       // so neither Renew nor Endorse Policy applies here.
       return [
         { label: 'View Offer', onClick: () => router.push(detailUrl) },
         ...(reopenAction ? [reopenAction] : []),
-        editAction,
+        ...(editAction ? [editAction] : []),
         ...(forceCloseAction ? [forceCloseAction] : []),
         ...(archiveAction ? [archiveAction] : []),
       ];
@@ -759,8 +779,8 @@ export function FacultativeTable({
 
     return [
       { label: 'View', onClick: () => router.push(detailUrl) },
-      { label: 'Edit Slip', onClick: () => setEditTarget(row) },
-      ...(canArchiveFallback
+      ...(canEditOffer ? [{ label: 'Edit Slip', onClick: () => setEditTarget(row) }] : []),
+      ...(canArchiveFallback && canArchiveOffer
         ? [{ label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }]
         : []),
       ...(endorseAction ? [endorseAction] : []),
@@ -828,7 +848,7 @@ export function FacultativeTable({
           )
         }
         actionButton={
-          tab === 'placements'
+          tab === 'placements' && canCreateOffer
             ? { label: 'New Offer', onClick: () => setPanelOpen(true) }
             : undefined
         }

@@ -3,10 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Bold,
-  FileText,
+  // FileText,
   Heading2,
   CheckSquare,
-  Image as ImageIcon,
+  // Image as ImageIcon,
   Italic,
   List,
   ListOrdered,
@@ -32,6 +32,13 @@ export const richContentClass = [
   '[&_a]:text-brand [&_a]:underline',
   '[&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_code]:text-[0.8em]',
   '[&_pre]:bg-gray-100 [&_pre]:rounded [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-sm [&_pre]:overflow-x-auto [&_pre]:my-2',
+  // Tables are wrapped in `.rt-table-scroll` (see `insertTableFromGrid`) so a
+  // table with more columns than the editor is wide scrolls inside its own box
+  // instead of overflowing the comment area. The margin lives on the wrapper so
+  // the scrollbar hugs the last row; a table that predates the wrapper keeps its
+  // own `my-2`.
+  '[&_.rt-table-scroll]:block [&_.rt-table-scroll]:max-w-full [&_.rt-table-scroll]:overflow-x-auto [&_.rt-table-scroll]:my-2',
+  '[&_.rt-table-scroll_table]:my-0',
   '[&_table]:border-collapse [&_table]:w-full [&_table]:my-2',
   // `h-8` acts as a min-height on table cells, so empty rows match the height a
   // filled row settles at (one `text-sm` line + padding) instead of collapsing.
@@ -45,12 +52,6 @@ const btnClass =
 
 const GRID_COLS = 10;
 const GRID_ROWS = 8;
-
-// `height` on a table cell is a minimum, so cells still grow with content but an
-// empty cell no longer collapses below one line of text.
-const TH_STYLE =
-  'border:1px solid #d1d5db;padding:6px 12px;background:#f9fafb;font-weight:600;text-align:left;min-width:60px;height:2rem;';
-const TD_STYLE = 'border:1px solid #d1d5db;padding:6px 12px;min-width:60px;height:2rem;';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -211,16 +212,18 @@ export function RichTextEditor({
       setShowTablePicker(false);
       setPickerHover({ rows: 0, cols: 0 });
       contentRef.current?.focus();
-      const header = Array.from(
-        { length: cols },
-        (_, i) => `<th style="${TH_STYLE}">Column ${i + 1}</th>`,
-      ).join('');
+      // Bare markup — no per-cell inline styles. Tables are styled by
+      // `richContentClass` here and in `RichTextView`, and by the
+      // `[data-rich-text] table` rules in globals.css for document/PDF layouts.
+      // Keeping the HTML small is what lets tables fit character-limited fields.
+      // The `.rt-table-scroll` wrapper gives a wide table its own horizontal
+      // scrollbar so it stays contained in the comment area.
+      const header = Array.from({ length: cols }, (_, i) => `<th>Column ${i + 1}</th>`).join('');
       const bodyRows = Array.from(
         { length: rows },
-        () =>
-          `<tr>${Array.from({ length: cols }, () => `<td style="${TD_STYLE}"></td>`).join('')}</tr>`,
+        () => `<tr>${Array.from({ length: cols }, () => '<td></td>').join('')}</tr>`,
       ).join('');
-      const html = `<table style="border-collapse:collapse;width:100%;margin:8px 0;"><thead><tr>${header}</tr></thead><tbody>${bodyRows}</tbody></table><br/>`;
+      const html = `<div class="rt-table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${bodyRows}</tbody></table></div><br/>`;
       document.execCommand('insertHTML', false, html);
       syncValue();
     },
@@ -229,21 +232,21 @@ export function RichTextEditor({
 
   // ── Other toolbar handlers ────────────────────────────────────────────────
 
-  const handleImageBtn = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const url = window.prompt('Enter image URL:');
-      if (!url) return;
-      contentRef.current?.focus();
-      document.execCommand(
-        'insertHTML',
-        false,
-        `<img src="${url}" alt="Image" style="max-width:100%;border-radius:4px;display:block;margin:4px 0;" />`,
-      );
-      syncValue();
-    },
-    [syncValue],
-  );
+  // const handleImageBtn = useCallback(
+  //   (e: React.MouseEvent) => {
+  //     e.preventDefault();
+  //     const url = window.prompt('Enter image URL:');
+  //     if (!url) return;
+  //     contentRef.current?.focus();
+  //     document.execCommand(
+  //       'insertHTML',
+  //       false,
+  //       `<img src="${url}" alt="Image" style="max-width:100%;border-radius:4px;display:block;margin:4px 0;" />`,
+  //     );
+  //     syncValue();
+  //   },
+  //   [syncValue],
+  // );
 
   const handleTaskListBtn = useCallback(
     (e: React.MouseEvent) => {
@@ -259,10 +262,10 @@ export function RichTextEditor({
     [syncValue],
   );
 
-  const handleFileBtn = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    fileInputRef.current?.click();
-  }, []);
+  // const handleFileBtn = useCallback((e: React.MouseEvent) => {
+  //   e.preventDefault();
+  //   fileInputRef.current?.click();
+  // }, []);
 
   // ── Table row/column operations ───────────────────────────────────────────
 
@@ -273,11 +276,7 @@ export function RichTextEditor({
       if (!td) return;
       const tr = td.closest('tr')!;
       const newRow = document.createElement('tr');
-      Array.from(tr.cells).forEach((cell) => {
-        const c = document.createElement('td');
-        c.style.cssText = (cell as HTMLElement).style.cssText;
-        newRow.appendChild(c);
-      });
+      Array.from(tr.cells).forEach(() => newRow.appendChild(document.createElement('td')));
       tr.after(newRow);
       syncValue();
       refreshActiveFormats();
@@ -312,7 +311,6 @@ export function RichTextEditor({
         const isHeader = row.parentElement?.tagName === 'THEAD';
         const refCell = row.cells[colIdx] as HTMLElement | undefined;
         const newCell = document.createElement(isHeader ? 'th' : 'td');
-        newCell.style.cssText = refCell?.style.cssText ?? '';
         newCell.textContent = isHeader ? 'Column' : '';
         if (refCell) refCell.after(newCell);
         else row.appendChild(newCell);
@@ -373,11 +371,7 @@ export function RichTextEditor({
         const tbody = table.querySelector('tbody')!;
         const lastRow = tbody.lastElementChild as HTMLTableRowElement;
         const newRow = document.createElement('tr');
-        Array.from(lastRow.cells).forEach((cell) => {
-          const c = document.createElement('td');
-          c.style.cssText = (cell as HTMLElement).style.cssText;
-          newRow.appendChild(c);
-        });
+        Array.from(lastRow.cells).forEach(() => newRow.appendChild(document.createElement('td')));
         tbody.appendChild(newRow);
         moveTo(newRow.cells[0]);
         syncValue();
@@ -558,14 +552,14 @@ export function RichTextEditor({
                 )}
               </div>
 
-              <ToolbarBtn title="Insert image" onMouseDown={handleImageBtn}>
+              {/* <ToolbarBtn title="Insert image" onMouseDown={handleImageBtn}>
                 <ImageIcon size={15} />
               </ToolbarBtn>
               {onFilesAdded && (
                 <ToolbarBtn title="Attach document" onMouseDown={handleFileBtn}>
                   <FileText size={15} />
                 </ToolbarBtn>
-              )}
+              )} */}
 
               {sep}
 

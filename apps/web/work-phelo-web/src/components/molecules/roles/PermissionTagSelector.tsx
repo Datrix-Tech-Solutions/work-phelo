@@ -1,11 +1,14 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
 import type { PermissionAction, PermissionSetResourceDto } from '@/types/roles';
 
 interface PermissionTag {
   key: string;
   label: string;
+  /** Only shown when the tenant's moduleConfig has this key enabled. Omit for always-visible tags. */
+  moduleKey?: string;
 }
 
 interface PermissionTagGroup {
@@ -55,6 +58,15 @@ export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
       { key: 'view_all_departments', label: 'View All Departments' },
       { key: 'manage_branches', label: 'Manage Branches' },
       { key: 'view_all_branches', label: 'View All Branches' },
+    ],
+  },
+  {
+    group: 'Administrator',
+    tags: [
+      { key: 'operations_module_admin', label: 'Operations Admin', moduleKey: 'operations' },
+      { key: 'accounting_module_admin', label: 'Accounting Admin', moduleKey: 'accounting' },
+      { key: 'marketing_module_admin', label: 'Marketing Admin', moduleKey: 'marketing' },
+      { key: 'recruitment_module_admin', label: 'Recruitment Admin', moduleKey: 'recruitment' },
     ],
   },
 ];
@@ -167,6 +179,81 @@ export const PERMISSION_TAG_MAPPING: Record<
     { resource: 'branches', action: 'DELETE' },
   ],
   view_all_branches: [{ resource: 'branches', action: 'VIEW' }],
+
+  // Operations Admin — full access to every reinsurance-operations resource,
+  // plus the tenant Roles & Permissions surface (scoped by the backend to
+  // granting operations resources only).
+  operations_module_admin: [
+    { resource: 'operations.reinsurance.dashboard', action: 'VIEW' },
+
+    { resource: 'operations.reinsurance.placements', action: 'VIEW' },
+    { resource: 'operations.reinsurance.placements', action: 'CREATE' },
+    { resource: 'operations.reinsurance.placements', action: 'EDIT' },
+    { resource: 'operations.reinsurance.placements', action: 'DELETE' },
+    { resource: 'operations.reinsurance.placements', action: 'APPROVE' },
+    { resource: 'operations.reinsurance.placements', action: 'EXPORT' },
+
+    { resource: 'operations.reinsurance.counterparties', action: 'VIEW' },
+    { resource: 'operations.reinsurance.counterparties', action: 'CREATE' },
+    { resource: 'operations.reinsurance.counterparties', action: 'EDIT' },
+    { resource: 'operations.reinsurance.counterparties', action: 'DELETE' },
+
+    { resource: 'operations.reinsurance.claims', action: 'VIEW' },
+    { resource: 'operations.reinsurance.claims', action: 'CREATE' },
+    { resource: 'operations.reinsurance.claims', action: 'EDIT' },
+    { resource: 'operations.reinsurance.claims', action: 'DELETE' },
+    { resource: 'operations.reinsurance.claims', action: 'APPROVE' },
+    { resource: 'operations.reinsurance.claims', action: 'EXPORT' },
+
+    { resource: 'operations.reinsurance.email', action: 'VIEW' },
+    { resource: 'operations.reinsurance.email', action: 'CREATE' },
+    { resource: 'operations.reinsurance.email', action: 'EDIT' },
+
+    { resource: 'operations.reinsurance.email-settings', action: 'VIEW' },
+    { resource: 'operations.reinsurance.email-settings', action: 'EDIT' },
+
+    { resource: 'operations.reinsurance.reports', action: 'VIEW' },
+    { resource: 'operations.reinsurance.reports', action: 'EXPORT' },
+
+    { resource: 'operations.reinsurance.settings', action: 'VIEW' },
+    { resource: 'operations.reinsurance.settings', action: 'EDIT' },
+
+    { resource: 'operations.reinsurance.taxes-levies', action: 'VIEW' },
+    { resource: 'operations.reinsurance.taxes-levies', action: 'CREATE' },
+    { resource: 'operations.reinsurance.taxes-levies', action: 'EDIT' },
+    { resource: 'operations.reinsurance.taxes-levies', action: 'DELETE' },
+
+    // Granular reinsurance workflow resources (RUN) — Operations Admin can run
+    // every workflow, not just the ones the coarse placements/claims fallback covers.
+    { resource: 'operations.reinsurance.facultative-offers.create-offer', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.edit-offer', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.partial-edit', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.reopen-offer', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.force-close', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.endorse-offer', action: 'RUN' },
+    { resource: 'operations.reinsurance.facultative-offers.archive-offer', action: 'RUN' },
+
+    { resource: 'operations.reinsurance.premiums.receive-from-cedant', action: 'RUN' },
+    { resource: 'operations.reinsurance.premiums.disburse-to-reinsurer', action: 'RUN' },
+    { resource: 'operations.reinsurance.premiums.reverse-payment', action: 'RUN' },
+
+    { resource: 'operations.reinsurance.claims.add-claim', action: 'RUN' },
+    { resource: 'operations.reinsurance.claims.create-notification', action: 'RUN' },
+    { resource: 'operations.reinsurance.claims.record-recovery', action: 'RUN' },
+    { resource: 'operations.reinsurance.claims.void-claim', action: 'RUN' },
+
+    { resource: 'permission-sets', action: 'VIEW' },
+    { resource: 'permission-sets', action: 'CREATE' },
+    { resource: 'permission-sets', action: 'EDIT' },
+    { resource: 'permission-sets', action: 'DELETE' },
+    { resource: 'permission-sets', action: 'ASSIGN' },
+    { resource: 'users', action: 'VIEW' },
+  ],
+
+  // Other modules — UI-only for now, not yet linked to backend permissions
+  accounting_module_admin: null,
+  marketing_module_admin: null,
+  recruitment_module_admin: null,
 };
 
 /** Build the resources DTO from selected tags + auto self-service permissions. */
@@ -210,9 +297,7 @@ export function inferTagsFromResources(
     .map(([key]) => key);
 }
 
-const ALL_TAG_KEYS = PERMISSION_TAG_GROUPS.flatMap((g) => g.tags.map((t) => t.key)).filter(
-  (k) => k !== 'grant_all_permissions',
-);
+const EMPTY_MODULE_CONFIG: Record<string, boolean> = {};
 
 interface PermissionTagSelectorProps {
   value: string[];
@@ -220,13 +305,23 @@ interface PermissionTagSelectorProps {
 }
 
 export function PermissionTagSelector({ value, onChange }: PermissionTagSelectorProps) {
+  const moduleConfig = useAuthStore((s) => s.user?.moduleConfig ?? EMPTY_MODULE_CONFIG);
+  const visibleGroups = PERMISSION_TAG_GROUPS.map((group) => ({
+    ...group,
+    tags: group.tags.filter((tag) => !tag.moduleKey || moduleConfig[tag.moduleKey]),
+  })).filter((group) => group.tags.length > 0);
+
+  const allTagKeys = visibleGroups
+    .flatMap((g) => g.tags.map((t) => t.key))
+    .filter((k) => k !== 'grant_all_permissions');
+
   const selected = new Set(value);
-  const allGranted = ALL_TAG_KEYS.every((k) => selected.has(k));
+  const allGranted = allTagKeys.every((k) => selected.has(k));
 
   const toggle = (key: string) => {
     if (key === 'grant_all_permissions') {
       // Select all or deselect all
-      onChange(allGranted ? [] : ['grant_all_permissions', ...ALL_TAG_KEYS]);
+      onChange(allGranted ? [] : ['grant_all_permissions', ...allTagKeys]);
       return;
     }
 
@@ -237,14 +332,14 @@ export function PermissionTagSelector({ value, onChange }: PermissionTagSelector
     } else {
       next.add(key);
       // Auto-select "grant all" if every other tag is now selected
-      if (ALL_TAG_KEYS.every((k) => next.has(k))) next.add('grant_all_permissions');
+      if (allTagKeys.every((k) => next.has(k))) next.add('grant_all_permissions');
     }
     onChange(Array.from(next));
   };
 
   return (
     <div className="flex flex-col gap-6">
-      {PERMISSION_TAG_GROUPS.map((group) => (
+      {visibleGroups.map((group) => (
         <div key={group.group} className="flex flex-col gap-3">
           <p className="text-sm font-semibold text-gray-700">{group.group}</p>
           <div className="flex flex-wrap gap-2">

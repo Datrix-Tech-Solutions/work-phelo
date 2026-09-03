@@ -24,6 +24,7 @@ import {
 } from '../../prisma/generated/client';
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertUserHasAnyPermission } from '../auth/permissions/permission-assertions';
 import { ArchivePlacementDto } from './dto/archive-placement.dto';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
@@ -34,6 +35,10 @@ import { UpdatePlacementParticipantDto } from './dto/update-placement-participan
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
 import { PlacementFinancialLockPolicy } from './finance/financial-lock.policy';
+import {
+  FacultativeOfferPermission,
+  PlacementPermission,
+} from './placement.permissions';
 
 /** Reserved key in businessDetails/offerDetails holding the list of schema fieldKeys the
  *  tenant has opted to hide from generated documents (Slip, Notes, …) for that section.
@@ -715,6 +720,7 @@ export class PlacementsService {
     if (existing.status === dto.status) {
       return this.withAggregates(existing);
     }
+    this.assertPlacementStatusPermission(user, existing.status, dto.status);
     await this.assertStatusChangeAllowed(existing);
     this.assertStatusTransition(existing.status, dto.status);
 
@@ -2169,6 +2175,22 @@ export class PlacementsService {
 
   private async assertEditable(placement: PlacementRecord): Promise<void> {
     await this.financialLockPolicy.assertEditable(placement);
+  }
+
+  private assertPlacementStatusPermission(
+    user: RequestUser,
+    from: PlacementStatus,
+    to: PlacementStatus,
+  ): void {
+    const isReopenOffer =
+      from === PlacementStatus.CLOSED && to === PlacementStatus.CLOSING;
+
+    assertUserHasAnyPermission(
+      user,
+      isReopenOffer
+        ? [FacultativeOfferPermission.REOPEN_OFFER, PlacementPermission.EDIT]
+        : [PlacementPermission.EDIT],
+    );
   }
 
   private async evaluateDirectEditability(placement: {

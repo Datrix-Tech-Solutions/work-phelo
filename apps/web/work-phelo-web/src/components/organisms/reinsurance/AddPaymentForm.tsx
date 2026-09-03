@@ -16,6 +16,8 @@ import {
   useFacultativePlacement,
 } from '@/hooks';
 import { fetchPlacementFinancialPosition } from '@/hooks/reinsurance/usePayments';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
@@ -51,6 +53,7 @@ export default function AddPaymentForm({
   onClose,
 }: AddPaymentFormProps) {
   const isControlled = isOpen !== undefined;
+  const canAddPayment = useAnyPermissionRules(RiPerm.addPayment);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const panelOpen = isControlled ? isOpen : internalOpen;
   const closePanel = () => {
@@ -247,7 +250,7 @@ export default function AddPaymentForm({
 
   return (
     <>
-      {!isControlled && (
+      {!isControlled && canAddPayment && (
         <Button onClick={() => setInternalOpen(true)}>Receive Cedant Premium</Button>
       )}
 

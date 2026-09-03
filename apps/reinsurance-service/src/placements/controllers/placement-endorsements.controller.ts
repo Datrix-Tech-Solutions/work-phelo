@@ -28,7 +28,10 @@ import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireFeature } from '../../auth/decorators/feature.decorator';
 import { RequireModule } from '../../auth/decorators/module.decorator';
-import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../../auth/decorators/permissions.decorator';
 import { FeatureGuard } from '../../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../auth/guards/module.guard';
@@ -59,7 +62,10 @@ import { ValidateEndorsementParticipantResponseDto } from '../dto/validate-endor
 import { PlacementEndorsementClosingsService } from '../endorsements/closings.service';
 import { PlacementEndorsementParticipantsService } from '../endorsements/participants.service';
 import { PlacementEndorsementsService } from '../endorsements/endorsements.service';
-import { PlacementPermission } from '../placement.permissions';
+import {
+  FacultativeOfferPermission,
+  PlacementPermission,
+} from '../placement.permissions';
 
 @Controller('placements')
 @ApiCookieAuth('access_token')
@@ -108,7 +114,10 @@ export class PlacementEndorsementsController {
 
   @Post(':id/endorsements')
   @ApiTags('Reinsurance - Endorsements')
-  @RequirePermissions(PlacementPermission.CREATE)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.CREATE,
+  )
   @ApiOperation({
     summary: 'Create placement endorsement',
     description:
@@ -196,7 +205,10 @@ export class PlacementEndorsementsController {
 
   @Patch(':id/endorsements/:endorsementId')
   @ApiTags('Reinsurance - Endorsements')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Update draft placement endorsement',
     description:
@@ -229,7 +241,10 @@ export class PlacementEndorsementsController {
 
   @Patch(':id/endorsements/:endorsementId/status')
   @ApiTags('Reinsurance - Endorsements')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Change placement endorsement status',
     description:
@@ -334,7 +349,10 @@ export class PlacementEndorsementsController {
 
   @Post(':id/endorsements/:endorsementId/participants/:participantId/closings')
   @ApiTags('Reinsurance - Endorsement Closings')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Create endorsement closing',
     description:
@@ -380,7 +398,10 @@ export class PlacementEndorsementsController {
     ':id/endorsements/:endorsementId/participants/:participantId/validate-and-confirm',
   )
   @ApiTags('Reinsurance - Endorsement Closings')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Validate and confirm an endorsement participant atomically',
     description:
@@ -429,7 +450,10 @@ export class PlacementEndorsementsController {
 
   @Post(':id/endorsements/:endorsementId/force-close')
   @ApiTags('Reinsurance - Endorsement Closings')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Force close endorsement using agreed participant lines',
     description:
@@ -473,7 +497,10 @@ export class PlacementEndorsementsController {
 
   @Patch(':id/endorsements/:endorsementId/closings/:closingId/status')
   @ApiTags('Reinsurance - Endorsement Closings')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Change endorsement closing status',
     description:
@@ -545,7 +572,10 @@ export class PlacementEndorsementsController {
 
   @Post(':id/endorsements/:endorsementId/participants')
   @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Add endorsement participant',
     description:
@@ -619,7 +649,10 @@ export class PlacementEndorsementsController {
 
   @Patch(':id/endorsements/:endorsementId/participants/:participantId')
   @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Update endorsement participant',
     description:
@@ -660,7 +693,10 @@ export class PlacementEndorsementsController {
 
   @Patch(':id/endorsements/:endorsementId/participants/:participantId/status')
   @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Change endorsement participant status',
     description:
@@ -701,7 +737,10 @@ export class PlacementEndorsementsController {
 
   @Post(':id/endorsements/:endorsementId/participants/:participantId/reinvite')
   @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Re-invite a declined endorsement participant',
     description:
@@ -750,7 +789,10 @@ export class PlacementEndorsementsController {
 
   @Delete(':id/endorsements/:endorsementId/participants/:participantId')
   @ApiTags('Reinsurance - Endorsement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Delete non-terminal endorsement participant',
     description:

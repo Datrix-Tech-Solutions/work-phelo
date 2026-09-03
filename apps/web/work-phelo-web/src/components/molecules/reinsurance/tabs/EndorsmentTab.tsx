@@ -36,6 +36,8 @@ import {
   facultativePlacementKey,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { useToastStore } from '@/store/toast.store';
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 import {
@@ -99,6 +101,8 @@ function EndorsementCard({
     share: number;
   } | null>(null);
   const [editingCounterpartyIds, setEditingCounterpartyIds] = useState<Set<string>>(new Set());
+
+  const canManage = useAnyPermissionRules(RiPerm.manageEndorsement);
 
   const cardElRef = useRef<HTMLDivElement | null>(null);
   const setCardRef = (node: HTMLDivElement | null) => {
@@ -689,6 +693,7 @@ function EndorsementCard({
             displayedStatusVariant={displayedStatusVariant}
             isUpdatingStatus={isUpdatingStatus}
             isOpen={detailsOpen}
+            canManage={canManage}
             onEdit={() => setEditPanelOpen(true)}
             onSendToMarket={() =>
               updateStatus({ endorsementId: endorsement.id, status: 'MARKETING' })
@@ -743,6 +748,7 @@ function EndorsementCard({
                   rows={endorsementRows}
                   endorsementParticipants={endorsementParticipants}
                   isEndorsementClosed={endorsement.status === 'CLOSED'}
+                  canManage={canManage}
                   acceptedCounterpartyIds={acceptedCounterpartyIds}
                   editingCounterpartyIds={editingCounterpartyIds}
                   confirmedClosingByEndorsementParticipantId={
@@ -774,6 +780,7 @@ function EndorsementCard({
                   isUpdatingStatus={isUpdatingStatus || isForceClosingEndorsement}
                   isReadyToClose={isReadyToClose}
                   canForceClose={canForceClose}
+                  canManage={canManage}
                   acceptedPercent={endorsementSummary?.acceptedPercent ?? 0}
                   targetPercent={endorsementSummary?.targetPercent ?? null}
                   onClose={handleCloseEndorsement}

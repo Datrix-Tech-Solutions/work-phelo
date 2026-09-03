@@ -130,7 +130,7 @@ export class CreatePlacementDto {
   @TrimmedString()
   @IsOptional()
   @IsString()
-  @MaxLength(4000)
+  @MaxLength(20000)
   description?: string;
 
   @ApiPropertyOptional({ example: '2026-06-01T00:00:00.000Z' })

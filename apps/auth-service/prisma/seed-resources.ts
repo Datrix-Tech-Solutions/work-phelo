@@ -195,6 +195,62 @@ export const RESOURCES = [
     description: 'Reinsurance placement workflows',
   },
   {
+    name: 'operations.reinsurance.facultative-offers.create-offer',
+    module: 'OPERATIONS',
+    description: 'Create new Reinsurance facultative offers',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.edit-offer',
+    module: 'OPERATIONS',
+    description: 'Edit material Reinsurance facultative offer details',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.partial-edit',
+    module: 'OPERATIONS',
+    description:
+      'Apply non-material Reinsurance facultative offer edits such as policy number changes',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.reopen-offer',
+    module: 'OPERATIONS',
+    description:
+      'Reopen unpaid closed Reinsurance facultative offers into the closing workflow',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.force-close',
+    module: 'OPERATIONS',
+    description:
+      'Force close Reinsurance facultative offers using agreed closing capacity',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.endorse-offer',
+    module: 'OPERATIONS',
+    description:
+      'Initiate and manage Reinsurance facultative endorsement workflows',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.archive-offer',
+    module: 'OPERATIONS',
+    description:
+      'Archive Reinsurance facultative offers while preserving history',
+  },
+  {
+    name: 'operations.reinsurance.premiums.receive-from-cedant',
+    module: 'OPERATIONS',
+    description: 'Record inbound Reinsurance premium receipts from cedants',
+  },
+  {
+    name: 'operations.reinsurance.premiums.disburse-to-reinsurer',
+    module: 'OPERATIONS',
+    description:
+      'Record outbound Reinsurance premium disbursements to reinsurers',
+  },
+  {
+    name: 'operations.reinsurance.premiums.reverse-payment',
+    module: 'OPERATIONS',
+    description: 'Reverse Reinsurance premium receipts or disbursements',
+  },
+  {
     name: 'operations.reinsurance.counterparties',
     module: 'OPERATIONS',
     description: 'Reinsurance counterparties and contacts',
@@ -203,6 +259,26 @@ export const RESOURCES = [
     name: 'operations.reinsurance.claims',
     module: 'OPERATIONS',
     description: 'Reinsurance claims workflows',
+  },
+  {
+    name: 'operations.reinsurance.claims.add-claim',
+    module: 'OPERATIONS',
+    description: 'Create Reinsurance claim loss events',
+  },
+  {
+    name: 'operations.reinsurance.claims.create-notification',
+    module: 'OPERATIONS',
+    description: 'Move Reinsurance claims into notified status',
+  },
+  {
+    name: 'operations.reinsurance.claims.record-recovery',
+    module: 'OPERATIONS',
+    description: 'Record actual Reinsurance recovery receipts from reinsurers',
+  },
+  {
+    name: 'operations.reinsurance.claims.void-claim',
+    module: 'OPERATIONS',
+    description: 'Void Reinsurance claims while preserving audit history',
   },
   {
     name: 'operations.reinsurance.email',

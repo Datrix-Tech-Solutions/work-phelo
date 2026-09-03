@@ -193,7 +193,11 @@ export function OfferSlipContent({
           }}
         >
           <p className="text-gray-400">Kindly Refer:</p>
-          <div data-rich-text dangerouslySetInnerHTML={{ __html: description }} />
+          <div
+            data-rich-text
+            data-rich-text-doc
+            dangerouslySetInnerHTML={{ __html: description }}
+          />
         </div>
       )}
 

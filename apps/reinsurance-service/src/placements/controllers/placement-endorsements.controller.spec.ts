@@ -5,11 +5,17 @@ import {
   PlacementEndorsementStatus,
   PlacementEndorsementType,
 } from '../../../prisma/generated/client';
-import { PERMISSIONS_KEY } from '../../auth/decorators/permissions.decorator';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+} from '../../auth/decorators/permissions.decorator';
 import { PlacementEndorsementClosingsService } from '../endorsements/closings.service';
 import { PlacementEndorsementsService } from '../endorsements/endorsements.service';
 import { PlacementEndorsementParticipantsService } from '../endorsements/participants.service';
-import { PlacementPermission } from '../placement.permissions';
+import {
+  FacultativeOfferPermission,
+  PlacementPermission,
+} from '../placement.permissions';
 import { PlacementEndorsementsController } from './placement-endorsements.controller';
 
 describe('PlacementEndorsementsController', () => {
@@ -61,6 +67,18 @@ describe('PlacementEndorsementsController', () => {
     ['findEndorsementParticipant', PlacementPermission.VIEW],
     ['findEndorsementClosings', PlacementPermission.VIEW],
     ['findEndorsementClosing', PlacementPermission.VIEW],
+  ])('requires %s permission on %s', (method, permission) => {
+    expect(
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        PlacementEndorsementsController.prototype[
+          method as keyof PlacementEndorsementsController
+        ],
+      ),
+    ).toEqual([permission]);
+  });
+
+  it.each([
     ['createEndorsement', PlacementPermission.CREATE],
     ['updateEndorsement', PlacementPermission.EDIT],
     ['changeEndorsementStatus', PlacementPermission.EDIT],
@@ -73,15 +91,15 @@ describe('PlacementEndorsementsController', () => {
     ['validateAndConfirmEndorsementParticipant', PlacementPermission.EDIT],
     ['forceCloseEndorsement', PlacementPermission.EDIT],
     ['changeEndorsementClosingStatus', PlacementPermission.EDIT],
-  ])('requires %s permission on %s', (method, permission) => {
+  ])('allows endorse-offer or legacy permission on %s', (method, legacy) => {
     expect(
       Reflect.getMetadata(
-        PERMISSIONS_KEY,
+        ANY_PERMISSIONS_KEY,
         PlacementEndorsementsController.prototype[
           method as keyof PlacementEndorsementsController
         ],
       ),
-    ).toEqual([permission]);
+    ).toEqual([FacultativeOfferPermission.ENDORSE_OFFER, legacy]);
   });
 
   it('delegates endorsement reads with authenticated tenant context', async () => {

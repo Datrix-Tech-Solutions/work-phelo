@@ -261,12 +261,27 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   'operations.reinsurance.dashboard': ['VIEW'],
   'operations.reinsurance.placements': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'EXPORT'],
   'operations.reinsurance.counterparties': ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  'operations.reinsurance.claims': ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'EXPORT'],
+  'operations.reinsurance.claims': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'EXPORT'],
   'operations.reinsurance.email': ['VIEW', 'CREATE', 'EDIT'],
   'operations.reinsurance.email-settings': ['VIEW', 'EDIT'],
   'operations.reinsurance.reports': ['VIEW', 'EXPORT'],
   'operations.reinsurance.settings': ['VIEW', 'EDIT'],
   'operations.reinsurance.taxes-levies': ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  // Granular reinsurance workflow resources — RUN-gated (auth-service seed-resources.ts).
+  'operations.reinsurance.facultative-offers.create-offer': ['RUN'],
+  'operations.reinsurance.facultative-offers.edit-offer': ['RUN'],
+  'operations.reinsurance.facultative-offers.partial-edit': ['RUN'],
+  'operations.reinsurance.facultative-offers.reopen-offer': ['RUN'],
+  'operations.reinsurance.facultative-offers.force-close': ['RUN'],
+  'operations.reinsurance.facultative-offers.endorse-offer': ['RUN'],
+  'operations.reinsurance.facultative-offers.archive-offer': ['RUN'],
+  'operations.reinsurance.premiums.receive-from-cedant': ['RUN'],
+  'operations.reinsurance.premiums.disburse-to-reinsurer': ['RUN'],
+  'operations.reinsurance.premiums.reverse-payment': ['RUN'],
+  'operations.reinsurance.claims.add-claim': ['RUN'],
+  'operations.reinsurance.claims.create-notification': ['RUN'],
+  'operations.reinsurance.claims.record-recovery': ['RUN'],
+  'operations.reinsurance.claims.void-claim': ['RUN'],
 };
 
 // All seeded resource actions stay in RESOURCE_ACTIONS so hidden or future

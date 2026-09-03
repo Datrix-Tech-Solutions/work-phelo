@@ -7,6 +7,7 @@ import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useCedants, useCurrencies, useFacultativesPage, useFacultativePlacement } from '@/hooks';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { EditCedantPanel } from '@/components/organisms/reinsurance/panels/EditCedantPanel';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
@@ -84,6 +85,8 @@ export default function CedantDetailPage({
 }) {
   const { tenantSlug, cedantId } = use(params);
   const router = useRouter();
+  const canView = usePermissionRule('operations.reinsurance.counterparties:VIEW');
+  const canEdit = usePermissionRule('operations.reinsurance.counterparties:EDIT');
 
   const { data: cedants = [], isLoading: cedantsLoading } = useCedants();
   const [placementsPage, setPlacementsPage] = useState(1);
@@ -153,7 +156,9 @@ export default function CedantDetailPage({
             </Button>
           </div>
         ) : (
-          cedant && (
+          cedant &&
+          canView &&
+          canEdit && (
             <Button size="sm" onClick={() => setEditOpen(true)}>
               Edit
             </Button>
@@ -165,6 +170,10 @@ export default function CedantDetailPage({
         {cedantsLoading ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
+          </div>
+        ) : !canView ? (
+          <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+            You don&apos;t have permission to view this cedant.
           </div>
         ) : !cedant ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">

@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
@@ -19,6 +19,8 @@ import {
   useCedants,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { extractError } from '@/lib/extractError';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
@@ -256,6 +258,10 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const router = useRouter();
   const toast = useToast();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const canViewClaim = useAnyPermissionRules(RiPerm.viewClaim);
+  const canAddClaim = useAnyPermissionRules(RiPerm.addClaim);
+  const canEditClaim = useAnyPermissionRules(RiPerm.editClaim);
+  const canChangeClaimStatus = useAnyPermissionRules(RiPerm.claimStatusChange);
   const [search, setSearch] = useState('');
   const [cedantFilter, setCedantFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -360,10 +366,13 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
         isLoading={claimsWorklist.isLoading || isLoadingCedants}
         searchPlaceholder="Search claims…"
         searchValue={search}
-        onRowClick={(row) =>
-          router.push(
-            `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}&tab=${tab}`,
-          )
+        onRowClick={
+          canViewClaim
+            ? (row) =>
+                router.push(
+                  `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}&tab=${tab}`,
+                )
+            : undefined
         }
         onSearch={(q) => {
           setSearch(q);
@@ -384,9 +393,9 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
           </div>
         }
         actionButton={
-          tab === 'open'
+          canAddClaim && tab === 'open'
             ? { label: 'Add Claim', onClick: () => setIsAddClaimOpen(true) }
-            : tab === 'notification'
+            : canAddClaim && tab === 'notification'
               ? { label: 'Add Notification', onClick: () => setIsAddNotificationOpen(true) }
               : undefined
         }
@@ -394,29 +403,39 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
           tab === 'closed'
             ? undefined
             : (row) => {
-                const view = {
-                  label: 'View',
-                  onClick: () =>
-                    router.push(
-                      `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}&tab=${tab}`,
-                    ),
-                };
-                const edit = { label: 'Edit Claim', onClick: () => setPanelTarget(row) };
-                if (tab === 'open') return [view, edit];
+                const actions: RowAction[] = [];
+                if (canViewClaim) {
+                  actions.push({
+                    label: 'View',
+                    onClick: () =>
+                      router.push(
+                        `/${tenantSlug}/operations/reinsurance/claims/${row.claim.id}?placementId=${row.placement.id}&tab=${tab}`,
+                      ),
+                  });
+                }
+                if (canEditClaim) {
+                  actions.push({ label: 'Edit Claim', onClick: () => setPanelTarget(row) });
+                }
+                if (tab === 'open') return actions;
 
-                return [
-                  view,
-                  edit,
-                  {
+                if (canEditClaim) {
+                  actions.push({
                     label: 'Move to Open',
                     onClick: () => {
                       setFinalizeTarget(row);
                       setFinalAmount(row.claim.estimatedLossAmount);
                       setFinalAmountError('');
                     },
-                  },
-                  { label: 'Delete', onClick: () => setDeleteTarget(row), danger: true },
-                ];
+                  });
+                }
+                if (canChangeClaimStatus) {
+                  actions.push({
+                    label: 'Delete',
+                    onClick: () => setDeleteTarget(row),
+                    danger: true,
+                  });
+                }
+                return actions;
               }
         }
         emptyMessage="No claims found"

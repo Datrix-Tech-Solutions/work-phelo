@@ -29,14 +29,22 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
-import { PlacementStatus } from '../../prisma/generated/client';
+import {
+  PlacementPaymentDirection,
+  PlacementPaymentType,
+  PlacementStatus,
+} from '../../prisma/generated/client';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../auth/decorators/permissions.decorator';
 import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { assertUserHasAnyPermission } from '../auth/permissions/permission-assertions';
 import {
   ApiErrorResponseDto,
   PaginatedPlacementsResponseDto,
@@ -86,7 +94,11 @@ import { UpdatePlacementParticipantStatusDto } from './dto/update-placement-part
 import { UpdatePlacementParticipantDto } from './dto/update-placement-participant.dto';
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
-import { PlacementPermission } from './placement.permissions';
+import {
+  FacultativeOfferPermission,
+  PlacementPermission,
+  PremiumPermission,
+} from './placement.permissions';
 import { PlacementsService } from './placements.service';
 
 @Controller('placements')
@@ -220,7 +232,10 @@ export class PlacementsController {
 
   @Post()
   @ApiTags('Reinsurance - Placements')
-  @RequirePermissions(PlacementPermission.CREATE)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.CREATE_OFFER,
+    PlacementPermission.CREATE,
+  )
   @ApiOperation({
     summary: 'Create a facultative placement',
     description:
@@ -906,7 +921,11 @@ export class PlacementsController {
 
   @Post(':id/payments')
   @ApiTags('Reinsurance - Payments')
-  @RequirePermissions(PlacementPermission.CREATE)
+  @RequireAnyPermission(
+    PremiumPermission.RECEIVE_FROM_CEDANT,
+    PremiumPermission.DISBURSE_TO_REINSURER,
+    PlacementPermission.CREATE,
+  )
   @ApiOperation({
     summary: 'Record a placement payment',
     description:
@@ -933,6 +952,7 @@ export class PlacementsController {
     @Body() dto: CreatePlacementPaymentDto,
     @Req() request: Request & { user: RequestUser },
   ) {
+    this.assertPaymentCreatePermission(request.user, dto);
     return this.paymentsService.create(request.user, id, dto);
   }
 
@@ -984,7 +1004,10 @@ export class PlacementsController {
 
   @Post(':id/payments/:paymentId/reverse')
   @ApiTags('Reinsurance - Payments')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    PremiumPermission.REVERSE_PAYMENT,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Reverse a placement payment',
     description:
@@ -1216,7 +1239,11 @@ export class PlacementsController {
 
   @Patch(':id')
   @ApiTags('Reinsurance - Placements')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.EDIT_OFFER,
+    FacultativeOfferPermission.PARTIAL_EDIT,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Update an active placement',
     description:
@@ -1250,12 +1277,16 @@ export class PlacementsController {
     @Body() dto: UpdatePlacementDto,
     @Req() request: Request & { user: RequestUser },
   ) {
+    this.assertPlacementUpdatePermission(request.user, dto);
     return this.placementsService.update(request.user, id, dto);
   }
 
   @Patch(':id/status')
   @ApiTags('Reinsurance - Placements')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.REOPEN_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Change placement lifecycle status',
     description:
@@ -1303,7 +1334,10 @@ export class PlacementsController {
 
   @Post(':id/force-close')
   @ApiTags('Reinsurance - Placements')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.FORCE_CLOSE,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Force close placement using actual placed percentage',
     description:
@@ -1331,7 +1365,10 @@ export class PlacementsController {
 
   @Post(':id/participants')
   @ApiTags('Reinsurance - Placement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.EDIT_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Add a participant to a placement',
     description:
@@ -1368,7 +1405,10 @@ export class PlacementsController {
 
   @Patch(':id/participants/:participantId')
   @ApiTags('Reinsurance - Placement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.EDIT_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Update one placement participant',
     description:
@@ -1414,7 +1454,10 @@ export class PlacementsController {
 
   @Post(':id/participants/:participantId/accept-and-confirm')
   @ApiTags('Reinsurance - Placement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.EDIT_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Accept a participant and confirm its closing atomically',
     description:
@@ -1459,7 +1502,10 @@ export class PlacementsController {
 
   @Patch(':id/participants/:participantId/status')
   @ApiTags('Reinsurance - Placement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.EDIT_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Change one placement participant workflow status',
     description:
@@ -1511,7 +1557,10 @@ export class PlacementsController {
 
   @Delete(':id/participants/:participantId')
   @ApiTags('Reinsurance - Placement Participants')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.EDIT_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Remove one placement participant',
     description:
@@ -1550,7 +1599,10 @@ export class PlacementsController {
 
   @Delete(':id')
   @ApiTags('Reinsurance - Placements')
-  @RequirePermissions(PlacementPermission.DELETE)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ARCHIVE_OFFER,
+    PlacementPermission.DELETE,
+  )
   @ApiOperation({
     summary: 'Archive a placement',
     description:
@@ -1601,5 +1653,57 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.placementsService.restore(request.user, id);
+  }
+
+  private assertPaymentCreatePermission(
+    user: RequestUser,
+    dto: CreatePlacementPaymentDto,
+  ): void {
+    if (
+      dto.type === PlacementPaymentType.PREMIUM_RECEIVED &&
+      dto.direction === PlacementPaymentDirection.INBOUND
+    ) {
+      assertUserHasAnyPermission(user, [
+        PremiumPermission.RECEIVE_FROM_CEDANT,
+        PlacementPermission.CREATE,
+      ]);
+      return;
+    }
+
+    if (
+      dto.type === PlacementPaymentType.REINSURER_DISBURSEMENT &&
+      dto.direction === PlacementPaymentDirection.OUTBOUND
+    ) {
+      assertUserHasAnyPermission(user, [
+        PremiumPermission.DISBURSE_TO_REINSURER,
+        PlacementPermission.CREATE,
+      ]);
+      return;
+    }
+
+    assertUserHasAnyPermission(user, [PlacementPermission.CREATE]);
+  }
+
+  private assertPlacementUpdatePermission(
+    user: RequestUser,
+    dto: UpdatePlacementDto,
+  ): void {
+    const suppliedFields = Object.entries(dto)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key);
+    const isPolicyNumberOnly =
+      suppliedFields.length > 0 &&
+      suppliedFields.every((field) => field === 'policyNumber');
+
+    assertUserHasAnyPermission(
+      user,
+      isPolicyNumberOnly
+        ? [
+            FacultativeOfferPermission.PARTIAL_EDIT,
+            FacultativeOfferPermission.EDIT_OFFER,
+            PlacementPermission.EDIT,
+          ]
+        : [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    );
   }
 }
