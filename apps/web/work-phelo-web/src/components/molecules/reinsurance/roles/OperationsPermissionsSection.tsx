@@ -17,7 +17,7 @@ export const OPERATIONS_PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
   {
     group: 'Offer Management',
     tags: [
-      { key: 'create_premium', label: 'Create premium' },
+      { key: 'create_offer', label: 'Create offer' },
       { key: 'edit_offer', label: 'Edit Offer' },
       { key: 'partial_edit', label: 'Partial Edit' },
       { key: 'reopen_offer', label: 'Reopen Offer' },
