@@ -262,13 +262,13 @@ export function MakeClaimFormFields({
           control={control}
           rules={{
             ...(mode === 'actual' && {
-              min: { value: 0.01, message: 'Actual claim amount is required' },
+              min: { value: 0.01, message: '100% Claim amount is required' },
             }),
             validate: (value) => {
               if (!value || Number(value) === 0) return true;
               const amount = parseFloat(value) * conversionRate;
               if (effectiveSumInsured != null && amount > effectiveSumInsured) {
-                return `Actual claim amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
+                return `100%Claim amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
               }
               return true;
             },

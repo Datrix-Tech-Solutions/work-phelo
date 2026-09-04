@@ -124,7 +124,7 @@ export class ReinsuranceWorklistsController {
   @ApiOperation({
     summary: 'Summarize Reinsurance Claims worklist state',
     description:
-      'Returns global Claims KPI counts and currency totals using the same backend bucket classification as the Claims worklist. Optional since/until window every figure by claim occurrence date.',
+      'Returns global Claims KPI counts and currency totals using the same backend bucket classification as the Claims worklist. Optional since/until window every figure by claim entry date (createdAt).',
   })
   @ApiOkResponse({ type: ClaimsSummaryResponseDto })
   summarizeClaims(

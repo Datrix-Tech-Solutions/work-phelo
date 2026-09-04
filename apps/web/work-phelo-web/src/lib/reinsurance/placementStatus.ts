@@ -95,6 +95,16 @@ export function latestConfirmedPremiumPaymentDate(payments: PlacementPayment[]):
   );
 }
 
+/** Earliest premium payment date on the placement — the first time the cedant paid
+ *  premium (non-reversed PREMIUM_RECEIVED), by value date. */
+export function firstPremiumPaymentDate(payments: PlacementPayment[]): string | null {
+  const received = payments.filter((p) => p.type === 'PREMIUM_RECEIVED' && !p.reversalOfPaymentId);
+  return received.reduce<string | null>(
+    (earliest, p) => (!earliest || p.paymentDate < earliest ? p.paymentDate : earliest),
+    null,
+  );
+}
+
 export function displayStatusFor(placement: Facultative): {
   label: string;
   variant: StatusVariant;

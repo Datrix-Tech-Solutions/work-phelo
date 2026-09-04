@@ -352,7 +352,14 @@ export class PlacementClaimsService {
   ): Promise<PlacementClaimAllocationRecord[]> {
     await this.findOne(tenantId, placementId, claimId);
     return this.prisma.placementClaimAllocation.findMany({
-      where: { tenantId, placementId, claimId },
+      where: {
+        tenantId,
+        placementId,
+        claimId,
+        // Exclude allocations voided by a finalize -> pending reversal so a later
+        // re-finalize doesn't appear to double the set.
+        status: { not: PlacementClaimAllocationStatus.VOID },
+      },
       include: claimAllocationInclude,
       orderBy: { createdAt: 'desc' },
     });

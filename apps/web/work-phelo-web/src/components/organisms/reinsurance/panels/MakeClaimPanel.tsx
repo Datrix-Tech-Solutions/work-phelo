@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
@@ -131,6 +132,7 @@ export function MakeClaimPanel({
   const createClaim = useCreatePlacementClaim();
   const updateClaim = useUpdatePlacementClaim(effectivePlacement?.id ?? '', claim?.id ?? '');
   const addToast = useToastStore((s) => s.addToast);
+  const [successModal, setSuccessModal] = useState<{ title: string; message: string } | null>(null);
 
   // An edited claim that has (or had) a final loss amount is an actual claim, so the
   // claim-state selector and final-loss field are shown even when no `mode` was passed.
@@ -240,15 +242,19 @@ export function MakeClaimPanel({
           : claim;
         onSuccess?.(updatedClaim);
 
-        addToast({
-          message:
-            changes.claimState === 'FINALIZED'
-              ? 'Claim finalized — allocations generated'
-              : changes.claimState === 'PENDING'
-                ? 'Claim returned to pending — allocations voided'
-                : 'Claim updated successfully',
-          type: 'success',
-        });
+        if (changes.claimState === 'FINALIZED') {
+          setSuccessModal({
+            title: 'Claim Finalized',
+            message: 'Reinsurer allocations have been finalized for this claim.',
+          });
+        } else if (changes.claimState === 'PENDING') {
+          setSuccessModal({
+            title: 'Claim Moved to Pending',
+            message: 'The finalized allocations have been voided.',
+          });
+        } else {
+          addToast({ message: 'Claim updated successfully', type: 'success' });
+        }
         handleClose();
         return;
       }
@@ -267,13 +273,17 @@ export function MakeClaimPanel({
       });
       onSuccess?.(newClaim);
 
-      addToast({
-        message:
-          formMode === 'actual' && nextState === 'FINALIZED'
-            ? 'Claim submitted — allocations generated'
-            : `Claim ${formMode === 'actual' ? 'added' : 'submitted'} successfully`,
-        type: 'success',
-      });
+      if (formMode === 'actual') {
+        setSuccessModal({
+          title: 'Claim Created',
+          message:
+            nextState === 'FINALIZED'
+              ? 'The open claim has been created and reinsurer allocations have been finalized.'
+              : 'The open claim has been created.',
+        });
+      } else {
+        addToast({ message: 'Claim submitted successfully', type: 'success' });
+      }
       handleClose();
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
@@ -281,73 +291,81 @@ export function MakeClaimPanel({
   };
 
   return (
-    <SidePanel
-      isOpen={isOpen}
-      onClose={handleClose}
-      title={isEditing ? 'Edit Claim' : mode === 'actual' ? 'Add Claim' : 'Add Notification'}
-      description={
-        effectivePlacement
-          ? `Claim for ${displayPolicyNumber(effectivePlacement.policyNumber)}`
-          : 'Submit a claim'
-      }
-      footer={
-        effectivePlacement ? (
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button
-              isLoading={isSubmitting}
-              loadingText={isEditing ? 'Updating…' : 'Submitting…'}
-              onClick={handleSubmit(onSubmit)}
-            >
-              {isEditing ? 'Update Claim' : mode === 'actual' ? 'Add Claim' : 'Submit Claim'}
-            </Button>
-          </div>
-        ) : undefined
-      }
-    >
-      {showPicker && (
-        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
-          <SearchSelect
-            label="Cedant"
-            placeholder="Select cedant…"
-            options={cedantOptions}
-            value={cedantId}
-            onChange={(val) => {
-              setCedantId(val);
-              setBusinessId('');
-              setBusinessQuery('');
-              onPlacementChange?.('');
-              onPlacementResolved?.(null);
-            }}
-          />
-          {cedantId && (
+    <>
+      <SuccessModal
+        isOpen={!!successModal}
+        onClose={() => setSuccessModal(null)}
+        title={successModal?.title ?? ''}
+        message={successModal?.message}
+      />
+      <SidePanel
+        isOpen={isOpen}
+        onClose={handleClose}
+        title={isEditing ? 'Edit Claim' : mode === 'actual' ? 'Add Claim' : 'Add Notification'}
+        description={
+          effectivePlacement
+            ? `Claim for ${displayPolicyNumber(effectivePlacement.policyNumber)}`
+            : 'Submit a claim'
+        }
+        footer={
+          effectivePlacement ? (
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+                Cancel
+              </Button>
+              <Button
+                isLoading={isSubmitting}
+                loadingText={isEditing ? 'Updating…' : 'Submitting…'}
+                onClick={handleSubmit(onSubmit)}
+              >
+                {isEditing ? 'Update Claim' : mode === 'actual' ? 'Add Claim' : 'Submit Claim'}
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {showPicker && (
+          <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
             <SearchSelect
-              label="Business"
-              placeholder="Select business…"
-              options={businessOptions}
-              value={businessId}
+              label="Cedant"
+              placeholder="Select cedant…"
+              options={cedantOptions}
+              value={cedantId}
               onChange={(val) => {
-                setBusinessId(val);
-                onPlacementChange?.(val);
+                setCedantId(val);
+                setBusinessId('');
+                setBusinessQuery('');
+                onPlacementChange?.('');
+                onPlacementResolved?.(null);
               }}
-              onQueryChange={setBusinessQuery}
             />
-          )}
-          {effectivePlacement && <hr className="border-gray-100" />}
-        </div>
-      )}
+            {cedantId && (
+              <SearchSelect
+                label="Business"
+                placeholder="Select business…"
+                options={businessOptions}
+                value={businessId}
+                onChange={(val) => {
+                  setBusinessId(val);
+                  onPlacementChange?.(val);
+                }}
+                onQueryChange={setBusinessQuery}
+              />
+            )}
+            {effectivePlacement && <hr className="border-gray-100" />}
+          </div>
+        )}
 
-      {effectivePlacement && (
-        <MakeClaimFormFields
-          form={form}
-          placement={effectivePlacement}
-          hidePlacementInfo={showPicker}
-          isEditing={isEditing}
-          mode={formMode}
-        />
-      )}
-    </SidePanel>
+        {effectivePlacement && (
+          <MakeClaimFormFields
+            form={form}
+            placement={effectivePlacement}
+            hidePlacementInfo={showPicker}
+            isEditing={isEditing}
+            mode={formMode}
+          />
+        )}
+      </SidePanel>
+    </>
   );
 }
