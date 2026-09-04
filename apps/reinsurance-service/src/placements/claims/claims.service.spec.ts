@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  PlacementClaimAllocationStatus,
   PlacementClaimStatus,
   PlacementClosingStatus,
   PlacementEndorsementStatus,
@@ -991,6 +992,7 @@ describe('PlacementClaimsService', () => {
           tenantId: 'tenant-1',
           placementId: 'placement-1',
           claimId: 'claim-1',
+          status: { not: PlacementClaimAllocationStatus.VOID },
         },
       }),
     );

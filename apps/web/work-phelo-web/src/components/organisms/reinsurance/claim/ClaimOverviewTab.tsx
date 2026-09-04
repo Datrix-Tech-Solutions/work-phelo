@@ -43,6 +43,10 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
   const claimAmount = claim ? parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount) : null;
   const isActualAmount = !!claim?.finalLossAmount;
 
+  // A PENDING claim has no generated allocations: show the allocations table read-only
+  // (no Preview / Send Mail column) and hide the cedant settlement list entirely.
+  const isPending = claim?.claimState === 'PENDING';
+
   // A cash call only ever gets created via "Send Mail" below, so its existence for an
   // allocation means their share has already been sent to them.
   const sentAllocationIds = useMemo(
@@ -125,6 +129,7 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
         currency={claim?.currency ?? placement.currency}
         sentAllocationIds={sentAllocationIds}
         busyIds={sendingIds}
+        showActions={!isPending}
         onMail={handleSendMail}
         onPreview={setDebitNoteTarget}
       />
@@ -138,7 +143,9 @@ export function ClaimOverviewTab({ placement, claim }: ClaimOverviewTabProps) {
         </span>
       </div>
 
-      {claim && <ClaimCedantSettlementPanel placementId={placement.id} claim={claim} />}
+      {claim && !isPending && (
+        <ClaimCedantSettlementPanel placementId={placement.id} claim={claim} />
+      )}
 
       {debitNoteTarget && (
         <ClaimDebitNoteModal

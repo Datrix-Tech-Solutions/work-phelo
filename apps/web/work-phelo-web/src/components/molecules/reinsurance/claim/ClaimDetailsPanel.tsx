@@ -91,12 +91,12 @@ export function ClaimDetailsPanel({
               <DetailField label="Details" value={claim.occurrenceDetails} />
             )}
             <DetailField
-              label="Claim Amount"
+              label="100% Estimated Claim"
               value={fmt(claim.estimatedLossAmount, claim.currency)}
             />
             {claim.finalLossAmount && (
               <DetailField
-                label="Actual Claim"
+                label="100% Claim Amount"
                 value={fmt(claim.finalLossAmount, claim.currency)}
               />
             )}

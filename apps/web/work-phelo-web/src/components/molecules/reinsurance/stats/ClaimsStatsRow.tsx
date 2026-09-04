@@ -21,7 +21,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 
 export function ClaimsStatsRow() {
   // Period filter — same control as the Premiums page. Every card below reads from
-  // `summary`, which is windowed by claim occurrence date to [since, until).
+  // `summary`, which is windowed by claim entry date to [since, until).
   const [period, setPeriod] = useState<PremiumsPeriod>('monthly');
   const [year, setYear] = useState(CURRENT_YEAR);
 
@@ -75,7 +75,7 @@ export function ClaimsStatsRow() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <CurrencyAmountListCard
-          title="Claims Share"
+          title="Total claim amount due to iRisk Reinsurance"
           columnLabel="Claim Share"
           amountsByCode={toAmountMap(summary?.claimsByCurrency ?? [])}
           currencies={currencies}
@@ -84,21 +84,21 @@ export function ClaimsStatsRow() {
           className="h-55"
         />
         <CurrencyAmountListCard
-          title="Recovered Claims"
-          columnLabel="Recovered"
-          amountsByCode={toAmountMap(summary?.recoveredByCurrency ?? [])}
-          currencies={currencies}
-          isLoading={isLoading}
-          emptyMessage="No recoveries yet"
-          className="h-55"
-        />
-        <CurrencyAmountListCard
-          title="Outstanding Recovery"
+          title="Outstanding claim amount due to iRisk Reinsurance"
           columnLabel="Outstanding"
           amountsByCode={toAmountMap(summary?.outstandingRecoveredByCurrency ?? [])}
           currencies={currencies}
           isLoading={isLoading}
           emptyMessage="No outstanding recovery"
+          className="h-55"
+        />
+        <CurrencyAmountListCard
+          title="Total amount recovered"
+          columnLabel="Recovered"
+          amountsByCode={toAmountMap(summary?.recoveredByCurrency ?? [])}
+          currencies={currencies}
+          isLoading={isLoading}
+          emptyMessage="No recoveries yet"
           className="h-55"
         />
       </div>

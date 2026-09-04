@@ -249,13 +249,13 @@ export class ReinsuranceClaimsWorklistService {
     const cedantPredicate = query.cedantId
       ? Prisma.sql`AND p."cedantId" = ${query.cedantId}`
       : Prisma.empty;
-    // Windows every summary figure by claim occurrence date. `since` inclusive,
-    // `until` exclusive — matching premiumsPeriodStart / premiumsPeriodEnd.
+    // Windows every summary figure by claim entry date (createdAt). `since`
+    // inclusive, `until` exclusive — matching premiumsPeriodStart / premiumsPeriodEnd.
     const sincePredicate = query.since
-      ? Prisma.sql`AND pc."occurrenceDate" >= ${new Date(query.since)}`
+      ? Prisma.sql`AND pc."createdAt" >= ${new Date(query.since)}`
       : Prisma.empty;
     const untilPredicate = query.until
-      ? Prisma.sql`AND pc."occurrenceDate" < ${new Date(query.until)}`
+      ? Prisma.sql`AND pc."createdAt" < ${new Date(query.until)}`
       : Prisma.empty;
 
     return Prisma.sql`

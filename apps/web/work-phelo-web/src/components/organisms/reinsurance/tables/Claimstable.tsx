@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { NumberField } from '@/components/atoms/NumberField';
@@ -287,6 +288,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const [deleteTarget, setDeleteTarget] = useState<ClaimTabRow | null>(null);
   const { mutate: deleteClaim, isPending: isDeleting } = useDeletePlacementClaim();
 
+  const [successModal, setSuccessModal] = useState<{ title: string; message: string } | null>(null);
   const [finalizeTarget, setFinalizeTarget] = useState<ClaimTabRow | null>(null);
   const [finalAmount, setFinalAmount] = useState('');
   const [finalAmountError, setFinalAmountError] = useState('');
@@ -338,7 +340,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     if (!finalizeTarget) return;
     const parsed = parseFloat(finalAmount);
     if (isNaN(parsed) || parsed <= 0) {
-      setFinalAmountError('Actual claim amount is required');
+      setFinalAmountError('100% Claim amount is required');
       return;
     }
 
@@ -353,10 +355,16 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
         claimState,
       });
 
-      toast.success(
+      setSuccessModal(
         claimState === 'FINALIZED'
-          ? 'Claim finalized — allocations generated'
-          : 'Claim moved to open',
+          ? {
+              title: 'Claim Finalized',
+              message: 'Reinsurer allocations have been finalized for this claim.',
+            }
+          : {
+              title: 'Claim Moved to Open',
+              message: 'The 100% Claim amount has been recorded.',
+            },
       );
       handleCloseFinalize();
     } catch (error) {
@@ -371,7 +379,10 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
         claimId: row.claim.id,
         claimState: 'PENDING',
       });
-      toast.success('Claim returned to pending — allocations voided');
+      setSuccessModal({
+        title: 'Claim Moved to Pending',
+        message: 'The finanlized allocations have been voided.',
+      });
     } catch (error) {
       toast.error(extractError(error, 'Failed to return claim to pending'));
     }
@@ -533,7 +544,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
         isOpen={!!finalizeTarget}
         onClose={handleCloseFinalize}
         title="Finalize Claim"
-        description={`Enter the actual claim amount for claim "${finalizeTarget?.claim.claimNumber}". This moves it out of Notification.`}
+        description={`Enter the 100% claim amount for claim "${finalizeTarget?.claim.claimNumber}". This moves it out of Notification.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button
@@ -584,6 +595,13 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
           />
         </div>
       </Modal>
+
+      <SuccessModal
+        isOpen={!!successModal}
+        onClose={() => setSuccessModal(null)}
+        title={successModal?.title ?? ''}
+        message={successModal?.message}
+      />
     </>
   );
 }
