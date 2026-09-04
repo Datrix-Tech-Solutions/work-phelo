@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  PlacementClaimState,
   PlacementClaimStatus,
   PlacementStatus,
 } from '../../../prisma/generated/client';
@@ -120,6 +121,9 @@ export class ClaimsWorklistClaimDto {
 
   @ApiProperty({ enum: PlacementClaimStatus })
   status!: PlacementClaimStatus;
+
+  @ApiProperty({ enum: PlacementClaimState })
+  claimState!: PlacementClaimState;
 
   @ApiProperty({ type: String, format: 'date-time' })
   occurrenceDate!: string;
@@ -260,12 +264,37 @@ export class ClaimsSummaryResponseDto {
   @ApiProperty({ example: 10 })
   openClaims!: number;
 
+  @ApiProperty({
+    example: 3,
+    description:
+      'Open-bucket claims still in the PENDING state (no allocations generated).',
+  })
+  openPendingClaims!: number;
+
+  @ApiProperty({
+    example: 7,
+    description:
+      'Open-bucket claims in the FINALIZED state (allocations generated).',
+  })
+  openFinalizedClaims!: number;
+
   @ApiProperty({ example: 4 })
   closedClaims!: number;
 
-  @ApiProperty({ type: [ClaimsCurrencyAmountDto] })
+  @ApiProperty({
+    type: [ClaimsCurrencyAmountDto],
+    description:
+      "Reinsurers' total claim share (summed allocations) for claims in the open bucket, grouped by claim currency.",
+  })
   claimsByCurrency!: ClaimsCurrencyAmountDto[];
 
   @ApiProperty({ type: [ClaimsCurrencyAmountDto] })
   recoveredByCurrency!: ClaimsCurrencyAmountDto[];
+
+  @ApiProperty({
+    type: [ClaimsCurrencyAmountDto],
+    description:
+      'Open-bucket claim share less recoveries received, grouped by claim currency (outstanding recovery still owed by reinsurers).',
+  })
+  outstandingRecoveredByCurrency!: ClaimsCurrencyAmountDto[];
 }

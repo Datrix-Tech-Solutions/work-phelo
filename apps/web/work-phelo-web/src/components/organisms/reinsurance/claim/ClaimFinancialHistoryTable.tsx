@@ -175,6 +175,7 @@ export function ClaimFinancialHistoryTable({ placement, claim }: ClaimFinancialH
           isOpen
           placement={placement}
           payment={recoveryReceiptAsPayment(receiptTarget)}
+          receiptNo={claim.claimNumber}
           onClose={() => setReceiptTarget(null)}
         />
       )}

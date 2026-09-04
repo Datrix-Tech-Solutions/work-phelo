@@ -1358,9 +1358,15 @@ export interface ClaimsWorklistSummary {
   settledClaims: number;
   notificationClaims: number;
   openClaims: number;
+  /** Open-bucket claims still PENDING (no allocations). */
+  openPendingClaims: number;
+  /** Open-bucket claims FINALIZED (allocations generated). */
+  openFinalizedClaims: number;
   closedClaims: number;
   claimsByCurrency: ClaimsCurrencyAmount[];
   recoveredByCurrency: ClaimsCurrencyAmount[];
+  /** Open-bucket claim share minus recoveries received, per currency. */
+  outstandingRecoveredByCurrency: ClaimsCurrencyAmount[];
 }
 
 export interface ApprovePlacementClaimPayablePayload {
@@ -1564,12 +1570,18 @@ export type PlacementClaimAllocationStatus =
 
 export type PlacementClaimCashCallStatus = 'DRAFT' | 'ISSUED' | 'PAID' | 'VOID';
 
+/** Orthogonal to {@link PlacementClaimStatus}. FINALIZED is the point at which
+ *  reinsurer liability allocations are generated and the claim's financial
+ *  inputs (occurrence date, currency, loss amounts) lock. */
+export type ClaimState = 'PENDING' | 'FINALIZED';
+
 export interface PlacementClaim {
   id: string;
   tenantId: string;
   placementId: string;
   claimNumber: string;
   status: PlacementClaimStatus;
+  claimState: ClaimState;
   occurrenceDate: string;
   reportedDate: string;
   claimCause: string;
@@ -1588,8 +1600,8 @@ export interface PlacementClaim {
   voidedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  /** "Claim state" tag (Pending / Finalized) from the claim form. Not yet persisted by the
-   * back-end — optional until the DTO adds it. */
+  /** @deprecated Superseded by {@link claimState}. Kept only for the form's lowercase
+   *  Pending/Finalized selector value. */
   claimTag?: 'pending' | 'finalized' | null;
 }
 
@@ -1602,6 +1614,9 @@ export interface CreatePlacementClaimPayload {
   currency: string;
   estimatedLossAmount: number;
   finalLossAmount?: number;
+  /** FINALIZED generates reinsurer liability allocations server-side and requires
+   *  finalLossAmount. Omit or PENDING to record the claim without allocations. */
+  claimState?: ClaimState;
 }
 
 export type UpdatePlacementClaimPayload = Partial<CreatePlacementClaimPayload>;

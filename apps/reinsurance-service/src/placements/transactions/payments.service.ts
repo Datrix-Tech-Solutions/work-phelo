@@ -18,6 +18,7 @@ import {
   Prisma,
 } from '../../../prisma/generated/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CancelPlacementPaymentDto } from '../dto/cancel-placement-payment.dto';
 import { ConfirmPlacementPaymentBankDto } from '../dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from '../dto/create-placement-payment.dto';
 import { PlacementFinancialPositionService } from '../finance/financial-position.service';
@@ -456,6 +457,43 @@ export class PlacementPaymentsService {
       });
 
       return reversal;
+    });
+  }
+
+  /**
+   * Cancels a payment that was recorded but never bank confirmed. This is the
+   * correction path for RECORDED entries, which cannot be reversed (reverse only
+   * applies once a payment is BANK_CONFIRMED). No reversal row is created because
+   * a RECORDED payment only ever counted towards the pending position. Re-record
+   * the corrected payment through the normal create endpoint.
+   */
+  async cancel(
+    user: RequestUser,
+    placementId: string,
+    paymentId: string,
+    dto: CancelPlacementPaymentDto,
+  ): Promise<PlacementPaymentRecord> {
+    const payment = await this.findOne(user.tenantId, placementId, paymentId);
+
+    if (payment.reversalOfPaymentId) {
+      throw new BadRequestException('Cannot cancel a reversal payment');
+    }
+    if (payment.status !== PlacementPaymentStatus.RECORDED) {
+      throw new BadRequestException(
+        `Cannot cancel a payment from ${payment.status}. Only a RECORDED payment that has not been bank confirmed can be cancelled; reverse it once it is bank confirmed.`,
+      );
+    }
+
+    const reason = this.cleanOptional(dto.reason);
+    return this.prisma.placementPayment.update({
+      where: { id: payment.id },
+      data: {
+        status: PlacementPaymentStatus.CANCELLED,
+        notes: reason
+          ? `${payment.notes ? `${payment.notes}\n` : ''}Cancelled: ${reason}`
+          : payment.notes,
+      },
+      include: paymentInclude,
     });
   }
 

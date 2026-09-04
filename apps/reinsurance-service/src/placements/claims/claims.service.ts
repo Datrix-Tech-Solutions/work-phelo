@@ -7,6 +7,10 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClaimAllocationStatus,
+  PlacementClaimCashCallStatus,
+  PlacementClaimCedantSettlementStatus,
+  PlacementClaimRecoveryReceiptStatus,
+  PlacementClaimState,
   PlacementClaimStatus,
   Prisma,
 } from '../../../prisma/generated/client';
@@ -113,28 +117,46 @@ export class PlacementClaimsService {
     const claimNumber = this.cleanRequired(dto.claimNumber);
     const finalLossAmount =
       dto.finalLossAmount === undefined ? null : dto.finalLossAmount;
+    const claimState = dto.claimState ?? PlacementClaimState.PENDING;
     const now = new Date();
 
+    if (
+      claimState === PlacementClaimState.FINALIZED &&
+      finalLossAmount === null
+    ) {
+      throw new BadRequestException(
+        'A final loss amount is required to create a finalized claim.',
+      );
+    }
+
+    const data: Prisma.PlacementClaimUncheckedCreateInput = {
+      tenantId: user.tenantId,
+      placementId,
+      claimNumber,
+      status: PlacementClaimStatus.DRAFT,
+      claimState,
+      occurrenceDate,
+      reportedDate: new Date(dto.reportedDate),
+      claimCause: this.cleanRequired(dto.claimCause),
+      occurrenceDetails: this.cleanOptional(dto.occurrenceDetails),
+      currency,
+      estimatedLossAmount: dto.estimatedLossAmount,
+      finalLossAmount,
+      finalizedAt: finalLossAmount === null ? null : now,
+      finalizedByUserId: finalLossAmount === null ? null : user.id,
+      createdByUserId: user.id,
+      updatedByUserId: user.id,
+    };
+
     try {
-      return await this.prisma.placementClaim.create({
-        data: {
-          tenantId: user.tenantId,
-          placementId,
-          claimNumber,
-          status: PlacementClaimStatus.DRAFT,
-          occurrenceDate,
-          reportedDate: new Date(dto.reportedDate),
-          claimCause: this.cleanRequired(dto.claimCause),
-          occurrenceDetails: this.cleanOptional(dto.occurrenceDetails),
-          currency,
-          estimatedLossAmount: dto.estimatedLossAmount,
-          finalLossAmount,
-          finalizedAt: finalLossAmount === null ? null : now,
-          finalizedByUserId: finalLossAmount === null ? null : user.id,
-          createdByUserId: user.id,
-          updatedByUserId: user.id,
-        },
-      });
+      if (claimState === PlacementClaimState.FINALIZED) {
+        return await this.prisma.$transaction(async (tx) => {
+          const claim = await tx.placementClaim.create({ data });
+          await this.runAllocationGeneration(tx, user, claim);
+          return claim;
+        });
+      }
+      return await this.prisma.placementClaim.create({ data });
     } catch (error) {
       throw this.mapClaimNumberConflict(error, claimNumber);
     }
@@ -149,6 +171,9 @@ export class PlacementClaimsService {
     const claim = await this.findOne(user.tenantId, placementId, claimId);
     this.assertEditable(claim.status);
     const placement = await this.findPlacement(user.tenantId, placementId);
+
+    const currentState = claim.claimState;
+    const nextState = dto.claimState ?? currentState;
 
     const currency =
       dto.currency === undefined
@@ -169,6 +194,34 @@ export class PlacementClaimsService {
       finalLossAmount === undefined
         ? this.money.toOptionalNumber(claim.finalLossAmount)
         : finalLossAmount;
+
+    // FINALIZED -> PENDING: void the generated allocations so the claim's
+    // financial inputs unlock. Blocked while any downstream cash call, recovery
+    // or cedant settlement still references those allocations.
+    if (
+      currentState === PlacementClaimState.FINALIZED &&
+      nextState === PlacementClaimState.PENDING
+    ) {
+      await this.assertClaimReversible(user.tenantId, placementId, claimId);
+      return this.prisma.$transaction(async (tx) => {
+        await tx.placementClaimAllocation.updateMany({
+          where: {
+            tenantId: user.tenantId,
+            placementId,
+            claimId,
+            status: { not: PlacementClaimAllocationStatus.VOID },
+          },
+          data: { status: PlacementClaimAllocationStatus.VOID },
+        });
+        return tx.placementClaim.update({
+          where: { id: claimId },
+          data: {
+            claimState: PlacementClaimState.PENDING,
+            updatedByUserId: user.id,
+          },
+        });
+      });
+    }
 
     await this.assertNoAllocationSensitiveChanges(
       user.tenantId,
@@ -191,33 +244,69 @@ export class PlacementClaimsService {
         ? undefined
         : this.cleanRequired(dto.claimNumber);
 
+    const fieldData: Prisma.PlacementClaimUpdateInput = {
+      ...(claimNumber === undefined ? {} : { claimNumber }),
+      ...(dto.occurrenceDate === undefined ? {} : { occurrenceDate }),
+      ...(dto.reportedDate === undefined
+        ? {}
+        : { reportedDate: new Date(dto.reportedDate) }),
+      ...(dto.claimCause === undefined
+        ? {}
+        : { claimCause: this.cleanRequired(dto.claimCause) }),
+      ...(dto.occurrenceDetails === undefined
+        ? {}
+        : { occurrenceDetails: this.cleanOptional(dto.occurrenceDetails) }),
+      ...(dto.currency === undefined ? {} : { currency }),
+      ...(dto.estimatedLossAmount === undefined
+        ? {}
+        : { estimatedLossAmount: dto.estimatedLossAmount }),
+      ...(finalLossAmount === undefined
+        ? {}
+        : {
+            finalLossAmount,
+            finalizedAt: now,
+            finalizedByUserId: user.id,
+          }),
+      updatedByUserId: user.id,
+    };
+
+    // PENDING -> FINALIZED: persist the state and generate reinsurer liability
+    // allocations in the same transaction.
+    if (
+      currentState === PlacementClaimState.PENDING &&
+      nextState === PlacementClaimState.FINALIZED
+    ) {
+      if (effectiveFinalLossAmount == null) {
+        throw new BadRequestException(
+          'A final loss amount is required to finalize a claim.',
+        );
+      }
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const updated = await tx.placementClaim.update({
+            where: { id: claimId },
+            data: {
+              ...fieldData,
+              claimState: PlacementClaimState.FINALIZED,
+              ...(finalLossAmount === undefined
+                ? { finalizedAt: now, finalizedByUserId: user.id }
+                : {}),
+            },
+          });
+          await this.runAllocationGeneration(tx, user, updated);
+          return updated;
+        });
+      } catch (error) {
+        throw this.mapClaimNumberConflict(error, claimNumber);
+      }
+    }
+
     try {
       return await this.prisma.placementClaim.update({
         where: { id: claimId },
         data: {
-          ...(claimNumber === undefined ? {} : { claimNumber }),
-          ...(dto.occurrenceDate === undefined ? {} : { occurrenceDate }),
-          ...(dto.reportedDate === undefined
-            ? {}
-            : { reportedDate: new Date(dto.reportedDate) }),
-          ...(dto.claimCause === undefined
-            ? {}
-            : { claimCause: this.cleanRequired(dto.claimCause) }),
-          ...(dto.occurrenceDetails === undefined
-            ? {}
-            : { occurrenceDetails: this.cleanOptional(dto.occurrenceDetails) }),
-          ...(dto.currency === undefined ? {} : { currency }),
-          ...(dto.estimatedLossAmount === undefined
-            ? {}
-            : { estimatedLossAmount: dto.estimatedLossAmount }),
-          ...(finalLossAmount === undefined
-            ? {}
-            : {
-                finalLossAmount,
-                finalizedAt: now,
-                finalizedByUserId: user.id,
-              }),
-          updatedByUserId: user.id,
+          ...fieldData,
+          ...(dto.claimState === undefined ? {} : { claimState: nextState }),
         },
       });
     } catch (error) {
@@ -284,57 +373,80 @@ export class PlacementClaimsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.placementClaimAllocation.findFirst({
-        where: { tenantId: user.tenantId, placementId, claimId },
-        select: { id: true },
-      });
-      if (existing) {
-        throw new ConflictException(
-          'Claim allocations have already been generated',
-        );
-      }
+    return this.prisma.$transaction((tx) =>
+      this.runAllocationGeneration(tx, user, claim),
+    );
+  }
 
-      const effectivePosition =
-        await this.effectivePositionService.getEffectivePositionAtDate(
-          tx,
-          user.tenantId,
+  /**
+   * Generates DRAFT allocation rows for a claim from the confirmed participation
+   * effective on its occurrence date. Shared by the standalone generate endpoint
+   * and the PENDING -> FINALIZED transition. VOID allocations from a prior
+   * finalize/reverse cycle are ignored so the claim can be rebuilt.
+   */
+  private async runAllocationGeneration(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    claim: PlacementClaimRecord,
+  ): Promise<PlacementClaimAllocationRecord[]> {
+    const { tenantId } = user;
+    const { placementId, id: claimId } = claim;
+
+    const existing = await tx.placementClaimAllocation.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        claimId,
+        status: { not: PlacementClaimAllocationStatus.VOID },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'Claim allocations have already been generated',
+      );
+    }
+
+    const effectivePosition =
+      await this.effectivePositionService.getEffectivePositionAtDate(
+        tx,
+        tenantId,
+        placementId,
+        claim.occurrenceDate,
+      );
+    const snapshots = effectivePosition.snapshots;
+
+    const estimatedLossAmount = this.money.toNumber(claim.estimatedLossAmount);
+    const finalLossAmount = this.money.toOptionalNumber(claim.finalLossAmount);
+
+    const data: Prisma.PlacementClaimAllocationCreateManyInput[] =
+      snapshots.map((snapshot) =>
+        this.buildAllocation({
+          tenantId,
           placementId,
-          claim.occurrenceDate,
-        );
-      const snapshots = effectivePosition.snapshots;
-
-      const estimatedLossAmount = this.money.toNumber(
-        claim.estimatedLossAmount,
-      );
-      const finalLossAmount = this.money.toOptionalNumber(
-        claim.finalLossAmount,
+          claimId,
+          snapshot,
+          estimatedLossAmount,
+          finalLossAmount,
+        }),
       );
 
-      const data: Prisma.PlacementClaimAllocationCreateManyInput[] =
-        snapshots.map((snapshot) =>
-          this.buildAllocation({
-            tenantId: user.tenantId,
-            placementId,
-            claimId,
-            snapshot,
-            estimatedLossAmount,
-            finalLossAmount,
-          }),
-        );
+    if (data.length === 0) {
+      throw new BadRequestException(
+        'At least one confirmed closing is required before generating claim allocations',
+      );
+    }
 
-      if (data.length === 0) {
-        throw new BadRequestException(
-          'At least one confirmed closing is required before generating claim allocations',
-        );
-      }
-
-      await tx.placementClaimAllocation.createMany({ data });
-      return tx.placementClaimAllocation.findMany({
-        where: { tenantId: user.tenantId, placementId, claimId },
-        include: claimAllocationInclude,
-        orderBy: { createdAt: 'desc' },
-      });
+    await tx.placementClaimAllocation.createMany({ data });
+    return tx.placementClaimAllocation.findMany({
+      where: {
+        tenantId,
+        placementId,
+        claimId,
+        status: { not: PlacementClaimAllocationStatus.VOID },
+      },
+      include: claimAllocationInclude,
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -532,12 +644,64 @@ export class PlacementClaimsService {
 
     const existingAllocation =
       await this.prisma.placementClaimAllocation.findFirst({
-        where: { tenantId, placementId, claimId },
+        where: {
+          tenantId,
+          placementId,
+          claimId,
+          status: { not: PlacementClaimAllocationStatus.VOID },
+        },
         select: { id: true },
       });
     if (existingAllocation) {
       throw new ConflictException(
-        'Claim occurrence date, currency and loss amounts cannot be changed after allocations have been generated. Void/reallocate through an explicit claims review workflow.',
+        'Claim occurrence date, currency and loss amounts cannot be changed while the claim is finalized. Return it to pending to void the allocations first.',
+      );
+    }
+  }
+
+  /**
+   * Guards the FINALIZED -> PENDING transition. The allocations can only be
+   * voided while nothing downstream still points at them.
+   */
+  private async assertClaimReversible(
+    tenantId: string,
+    placementId: string,
+    claimId: string,
+  ): Promise<void> {
+    const scope = { tenantId, placementId, claimId };
+    const [cashCall, receipt, approval, settlement] = await Promise.all([
+      this.prisma.placementClaimCashCall.findFirst({
+        where: { ...scope, status: { not: PlacementClaimCashCallStatus.VOID } },
+        select: { id: true },
+      }),
+      this.prisma.placementClaimRecoveryReceipt.findFirst({
+        where: {
+          ...scope,
+          status: {
+            in: [
+              PlacementClaimRecoveryReceiptStatus.RECORDED,
+              PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+            ],
+          },
+        },
+        select: { id: true },
+      }),
+      this.prisma.placementClaimRecoveryApproval.findFirst({
+        where: scope,
+        select: { id: true },
+      }),
+      this.prisma.placementClaimCedantSettlement.findFirst({
+        where: {
+          ...scope,
+          status: { not: PlacementClaimCedantSettlementStatus.REVERSED },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (cashCall || receipt || approval || settlement) {
+      throw new ConflictException(
+        'Reverse the recovery approvals, cash calls, recovery receipts and cedant settlements on this claim before returning it to pending.',
       );
     }
   }

@@ -9,19 +9,23 @@ import {
   MakeClaimFormFields,
   MakeClaimFormValues,
   MAKE_CLAIM_DEFAULTS,
+  claimStateToTag,
+  claimTagToState,
 } from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
 import {
   useCreatePlacementClaim,
   useUpdatePlacementClaim,
-  useClaimAllocations,
-  useGenerateClaimAllocations,
-  useGenerateClaimAllocationsMutation,
   useCedants,
   useFacultativeSearch,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { Facultative, PlacementClaim } from '@/types/reinsurance';
+import {
+  ClaimState,
+  Facultative,
+  PlacementClaim,
+  UpdatePlacementClaimPayload,
+} from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
 interface MakeClaimPanelProps {
@@ -64,6 +68,7 @@ export function MakeClaimPanel({
   const { data: placementOptionsPage } = useFacultativeSearch(
     {
       archived: false,
+      status: 'CLOSED',
       cedantId: cedantId || undefined,
       search: debouncedBusinessQuery || undefined,
     },
@@ -125,16 +130,13 @@ export function MakeClaimPanel({
 
   const createClaim = useCreatePlacementClaim();
   const updateClaim = useUpdatePlacementClaim(effectivePlacement?.id ?? '', claim?.id ?? '');
-  const { data: existingAllocations = [] } = useClaimAllocations(
-    effectivePlacement?.id ?? '',
-    claim?.id ?? '',
-  );
-  const generateAllocations = useGenerateClaimAllocations(
-    effectivePlacement?.id ?? '',
-    claim?.id ?? '',
-  );
-  const generateAllocationsForClaim = useGenerateClaimAllocationsMutation();
   const addToast = useToastStore((s) => s.addToast);
+
+  // An edited claim that has (or had) a final loss amount is an actual claim, so the
+  // claim-state selector and final-loss field are shown even when no `mode` was passed.
+  const claimIsActual =
+    !!claim && (claim.claimState === 'FINALIZED' || claim.finalLossAmount != null);
+  const formMode: 'notification' | 'actual' = isEditing && claimIsActual ? 'actual' : mode;
 
   useEffect(() => {
     if (isOpen) {
@@ -142,6 +144,9 @@ export function MakeClaimPanel({
         reset({
           ...MAKE_CLAIM_DEFAULTS,
           claimNumber: claim.claimNumber,
+          claimTag: claimStateToTag(
+            claim.claimState ?? (claim.finalLossAmount != null ? 'FINALIZED' : 'PENDING'),
+          ),
           estimatedLossAmount: claim.estimatedLossAmount,
           finalLossAmount: claim.finalLossAmount ?? '',
           occurrenceDate: claim.occurrenceDate.split('T')[0],
@@ -151,7 +156,11 @@ export function MakeClaimPanel({
           currency: claim.currency,
         });
       } else {
-        reset({ ...MAKE_CLAIM_DEFAULTS, currency: effectivePlacement?.currency ?? '' });
+        reset({
+          ...MAKE_CLAIM_DEFAULTS,
+          currency: effectivePlacement?.currency ?? '',
+          claimTag: mode === 'actual' ? 'finalized' : 'pending',
+        });
       }
     } else {
       reset(MAKE_CLAIM_DEFAULTS);
@@ -171,7 +180,7 @@ export function MakeClaimPanel({
   const onSubmit = async (values: MakeClaimFormValues) => {
     if (!effectivePlacement) return;
 
-    const isActualCreate = mode === 'actual' && !isEditing;
+    const isActualCreate = formMode === 'actual' && !isEditing;
     const amount = isActualCreate ? values.finalLossAmount : values.estimatedLossAmount;
 
     const businessCurrency = effectivePlacement.currency ?? values.currency;
@@ -183,63 +192,86 @@ export function MakeClaimPanel({
       return needsConversion ? Math.round(parsed * rate * 100) / 100 : parsed;
     };
 
-    const payload = {
-      claimNumber: values.claimNumber,
-      occurrenceDate: new Date(values.occurrenceDate).toISOString(),
-      reportedDate: new Date().toISOString(),
-      claimCause: values.claimCause,
-      currency: businessCurrency,
-      estimatedLossAmount: convert(amount),
-    };
+    const nextState = claimTagToState(values.claimTag);
 
     try {
-      let allocationsGenerated = false;
+      if (isEditing && claim) {
+        // Send only the fields the user actually changed. The back-end rejects an
+        // edit that carries occurrenceDate / currency / estimatedLossAmount /
+        // finalLossAmount while the claim is finalized, even when unchanged — and
+        // the claimState transition is what generates or voids allocations.
+        const currentState: ClaimState =
+          claim.claimState ?? (claim.finalLossAmount != null ? 'FINALIZED' : 'PENDING');
+        const nextFinalLoss = values.finalLossAmount ? convert(values.finalLossAmount) : undefined;
+        const currentFinalLoss =
+          claim.finalLossAmount != null ? Number(claim.finalLossAmount) : undefined;
 
-      if (isEditing) {
-        const updatedClaim = await updateClaim.mutateAsync({
-          ...payload,
-          finalLossAmount: values.finalLossAmount ? convert(values.finalLossAmount) : undefined,
-        });
+        const changes: UpdatePlacementClaimPayload = {};
+        if (values.claimNumber !== claim.claimNumber) {
+          changes.claimNumber = values.claimNumber;
+        }
+        if (values.claimCause !== claim.claimCause) {
+          changes.claimCause = values.claimCause;
+        }
+        if (values.occurrenceDetails !== (claim.occurrenceDetails ?? '')) {
+          changes.occurrenceDetails = values.occurrenceDetails;
+        }
+        if (values.reportedDate && values.reportedDate !== claim.reportedDate.split('T')[0]) {
+          changes.reportedDate = new Date(values.reportedDate).toISOString();
+        }
+        if (values.occurrenceDate !== claim.occurrenceDate.split('T')[0]) {
+          changes.occurrenceDate = new Date(values.occurrenceDate).toISOString();
+        }
+        if (businessCurrency !== claim.currency) {
+          changes.currency = businessCurrency;
+        }
+        if (convert(values.estimatedLossAmount) !== Number(claim.estimatedLossAmount)) {
+          changes.estimatedLossAmount = convert(values.estimatedLossAmount);
+        }
+        if (nextFinalLoss !== undefined && nextFinalLoss !== currentFinalLoss) {
+          changes.finalLossAmount = nextFinalLoss;
+        }
+        if (nextState !== currentState) {
+          changes.claimState = nextState;
+        }
+
+        const updatedClaim = Object.keys(changes).length
+          ? await updateClaim.mutateAsync(changes)
+          : claim;
         onSuccess?.(updatedClaim);
 
-        if (values.finalLossAmount && existingAllocations.length === 0) {
-          try {
-            await generateAllocations.mutateAsync();
-            allocationsGenerated = true;
-          } catch (allocationError) {
-            addToast({
-              message: `Claim updated, but allocations could not be generated: ${extractError(allocationError)}`,
-              type: 'error',
-            });
-          }
-        }
-      } else {
-        const newClaim = await createClaim.mutateAsync({
-          placementId: effectivePlacement.id,
-          ...payload,
-          finalLossAmount: isActualCreate ? convert(amount) : undefined,
+        addToast({
+          message:
+            changes.claimState === 'FINALIZED'
+              ? 'Claim finalized — allocations generated'
+              : changes.claimState === 'PENDING'
+                ? 'Claim returned to pending — allocations voided'
+                : 'Claim updated successfully',
+          type: 'success',
         });
-        onSuccess?.(newClaim);
-
-        if (isActualCreate) {
-          try {
-            await generateAllocationsForClaim.mutateAsync({
-              placementId: effectivePlacement.id,
-              claimId: newClaim.id,
-            });
-            allocationsGenerated = true;
-          } catch (allocationError) {
-            addToast({
-              message: `Claim created, but allocations could not be generated: ${extractError(allocationError)}`,
-              type: 'error',
-            });
-          }
-        }
+        handleClose();
+        return;
       }
+
+      const newClaim = await createClaim.mutateAsync({
+        placementId: effectivePlacement.id,
+        claimNumber: values.claimNumber,
+        occurrenceDate: new Date(values.occurrenceDate).toISOString(),
+        reportedDate: new Date().toISOString(),
+        claimCause: values.claimCause,
+        occurrenceDetails: values.occurrenceDetails || undefined,
+        currency: businessCurrency,
+        estimatedLossAmount: convert(amount),
+        finalLossAmount: isActualCreate ? convert(amount) : undefined,
+        claimState: formMode === 'actual' ? nextState : undefined,
+      });
+      onSuccess?.(newClaim);
+
       addToast({
-        message: `Claim ${isEditing ? 'updated' : 'submitted'} successfully${
-          allocationsGenerated ? ' — allocations generated' : ''
-        }`,
+        message:
+          formMode === 'actual' && nextState === 'FINALIZED'
+            ? 'Claim submitted — allocations generated'
+            : `Claim ${formMode === 'actual' ? 'added' : 'submitted'} successfully`,
         type: 'success',
       });
       handleClose();
@@ -313,7 +345,7 @@ export function MakeClaimPanel({
           placement={effectivePlacement}
           hidePlacementInfo={showPicker}
           isEditing={isEditing}
-          mode={mode}
+          mode={formMode}
         />
       )}
     </SidePanel>

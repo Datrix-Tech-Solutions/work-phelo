@@ -49,7 +49,7 @@ export default function ReinsuranceClaimsPage() {
         )}
       </div>
 
-      <div className={cn(pageContent, 'flex flex-col gap-6')}>
+      <div className={cn(pageContent, 'flex flex-col gap-6', 'pt-2')}>
         {!canView ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             You don&apos;t have permission to view claims.

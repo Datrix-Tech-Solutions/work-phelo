@@ -45,7 +45,12 @@ interface ClaimsOverviewCardProps {
 }
 
 export function ClaimsOverviewCard({ period, currency }: ClaimsOverviewCardProps) {
-  const { totalAmount: claimsIncurred, isLoading: loadingStats } = useReinsuranceClaimStats({
+  const {
+    totalAmount: claimsIncurred,
+    recoveriesAmount,
+    outstandingAmount,
+    isLoading: loadingStats,
+  } = useReinsuranceClaimStats({
     period,
     currency,
   });
@@ -112,7 +117,13 @@ export function ClaimsOverviewCard({ period, currency }: ClaimsOverviewCardProps
             />
             Recoveries Received
           </span>
-          <span className="text-sm font-bold text-gray-900 truncate">{fmtAmount(0, sym)}</span>
+          {isLoading ? (
+            <Skeleton className="h-5 w-16" />
+          ) : (
+            <span className="text-sm font-bold text-gray-900 truncate">
+              {fmtAmount(recoveriesAmount, sym)}
+            </span>
+          )}
         </div>
         <div className="flex flex-col gap-1 min-w-0">
           <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
@@ -122,7 +133,13 @@ export function ClaimsOverviewCard({ period, currency }: ClaimsOverviewCardProps
             />
             Outstanding
           </span>
-          <span className="text-sm font-bold text-gray-900 truncate">{fmtAmount(0, sym)}</span>
+          {isLoading ? (
+            <Skeleton className="h-5 w-16" />
+          ) : (
+            <span className="text-sm font-bold text-gray-900 truncate">
+              {fmtAmount(outstandingAmount, sym)}
+            </span>
+          )}
         </div>
       </div>
 

@@ -122,6 +122,8 @@ interface DashboardClaimsResponse {
   estimatedLoss: number;
   finalLoss: number;
   allocatedLiability: number;
+  claimsIncurredByCurrency: DashboardCurrencyBreakdown[];
+  recoveriesByCurrency: DashboardCurrencyBreakdown[];
   cashCallsIssued: number;
   cashCallsPaid: number;
   cashCallsPending: number;
@@ -163,14 +165,26 @@ function useDashboardFinancials() {
   });
 }
 
-function useDashboardClaims() {
+function useDashboardClaims(window: { since?: string; until?: string } = {}) {
+  const { since, until } = window;
   return useQuery({
-    queryKey: dashboardClaimsKey,
+    queryKey: [...dashboardClaimsKey, { since: since ?? null, until: until ?? null }],
     queryFn: async () => {
-      const res = await api.get<DashboardClaimsResponse>(`${DASHBOARD_BASE}/claims`);
+      const res = await api.get<DashboardClaimsResponse>(`${DASHBOARD_BASE}/claims`, {
+        params: {
+          ...(since ? { since } : {}),
+          ...(until ? { until } : {}),
+        },
+      });
       return res.data;
     },
   });
+}
+
+/** ISO window for the dashboard period toggle, matching `periodWindow`. */
+function claimsWindow(period: Period, year?: number): { since: string; until: string } {
+  const { start, end } = periodWindow(period, { year });
+  return { since: start.toISOString(), until: end.toISOString() };
 }
 
 /**
@@ -427,19 +441,36 @@ export function useReinsuranceDashboard({ period, year }: { period: Period; year
   return { data: stats, isLoading: isLoading || loadingOverview };
 }
 
-export function useReinsuranceClaimStats(_options: { period: Period; currency: string }): {
+export function useReinsuranceClaimStats(options: {
+  period: Period;
+  currency: string;
+  year?: number;
+}): {
   totalClaims: number;
   totalAmount: number;
+  recoveriesAmount: number;
+  outstandingAmount: number;
   prevTotalAmount: number;
   trend: number;
   paidPct: number;
   isLoading: boolean;
 } {
-  void _options;
-  const { data, isLoading } = useDashboardClaims();
+  const { currency } = options;
+  const { data, isLoading } = useDashboardClaims(claimsWindow(options.period, options.year));
 
-  const totalAmount =
+  // Per-selected-currency figures; fall back to the global loss totals for the
+  // claims-incurred number when no currency row matches.
+  const incurredForCurrency = data?.claimsIncurredByCurrency?.find(
+    (row) => row.currency === currency,
+  )?.amount;
+  const globalIncurred =
     data?.finalLoss && data.finalLoss > 0 ? data.finalLoss : (data?.estimatedLoss ?? 0);
+  const totalAmount = incurredForCurrency ?? globalIncurred;
+
+  const recoveriesAmount =
+    data?.recoveriesByCurrency?.find((row) => row.currency === currency)?.amount ?? 0;
+  const outstandingAmount = Math.max(totalAmount - recoveriesAmount, 0);
+
   const paidPct =
     data?.cashCallsIssued && data.cashCallsIssued > 0
       ? Math.min((data.cashCallsPaid / data.cashCallsIssued) * 100, 100)
@@ -448,6 +479,8 @@ export function useReinsuranceClaimStats(_options: { period: Period; currency: s
   return {
     totalClaims: data?.claimsCount ?? 0,
     totalAmount,
+    recoveriesAmount,
+    outstandingAmount,
     prevTotalAmount: 0,
     trend: 0,
     paidPct,
@@ -513,7 +546,7 @@ export function useReinsuranceFinancialsByCurrency({
 } {
   const { data: all = [], isLoading: loadingFac } = useFacultatives();
   const { data: financials, isLoading: loadingFinancials } = useDashboardFinancials();
-  const { isLoading: loadingClaims } = useDashboardClaims();
+  const { data: claims, isLoading: loadingClaims } = useDashboardClaims(claimsWindow(period, year));
 
   const data = useMemo(() => {
     const { start, end } = periodBounds(period, new Date(), year);
@@ -546,8 +579,10 @@ export function useReinsuranceFinancialsByCurrency({
       ...maps,
       premium: breakdownToMap(financials?.grossPremiumByCurrency),
       outstandingPremium: breakdownToMap(financials?.outstandingByCurrency),
+      claimsIncurred: breakdownToMap(claims?.claimsIncurredByCurrency),
+      recoveries: breakdownToMap(claims?.recoveriesByCurrency),
     };
-  }, [all, financials, period, year]);
+  }, [all, financials, claims, period, year]);
 
   const isLoading = loadingFac || loadingFinancials || loadingClaims;
 

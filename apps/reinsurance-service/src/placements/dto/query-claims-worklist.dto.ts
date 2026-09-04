@@ -10,6 +10,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PlacementClaimState } from '../../../prisma/generated/client';
 import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
 export const CLAIMS_WORKLIST_TABS = ['notification', 'open', 'closed'] as const;
@@ -61,4 +62,13 @@ export class QueryClaimsWorklistDto {
   @IsOptional()
   @IsUUID()
   cedantId?: string;
+
+  @ApiPropertyOptional({
+    enum: PlacementClaimState,
+    description:
+      'Filter by persisted claim state. Intended for the open tab (PENDING = no allocations, FINALIZED = allocations generated).',
+  })
+  @IsOptional()
+  @IsIn(Object.values(PlacementClaimState))
+  claimState?: PlacementClaimState;
 }
