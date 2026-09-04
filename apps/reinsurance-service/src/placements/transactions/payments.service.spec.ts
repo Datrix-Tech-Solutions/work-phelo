@@ -1547,15 +1547,14 @@ describe('PlacementPaymentsService', () => {
       reason: 'Wrong amount',
     });
 
-    expect(prisma.placementPayment.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'payment-1' },
-        data: expect.objectContaining({
-          status: PlacementPaymentStatus.CANCELLED,
-          notes: 'Cancelled: Wrong amount',
-        }),
-      }),
+    const updateArgs = firstCallArg<Prisma.PlacementPaymentUpdateArgs>(
+      prisma.placementPayment.update,
     );
+    expect(updateArgs.where).toEqual({ id: 'payment-1' });
+    expect(updateArgs.data).toMatchObject({
+      status: PlacementPaymentStatus.CANCELLED,
+      notes: 'Cancelled: Wrong amount',
+    });
     expect(prisma.placementPayment.create).not.toHaveBeenCalled();
   });
 
