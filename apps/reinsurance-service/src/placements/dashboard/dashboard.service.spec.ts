@@ -26,6 +26,7 @@ describe('ReinsuranceDashboardService', () => {
     placementNote: { findMany: PrismaMethod };
     placementClaimAllocation: { findMany: PrismaMethod };
     placementClaimCashCall: { findMany: PrismaMethod };
+    placementClaimRecoveryReceipt: { findMany: PrismaMethod };
   };
   let service: ReinsuranceDashboardService;
 
@@ -58,6 +59,9 @@ describe('ReinsuranceDashboardService', () => {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementClaimCashCall: {
+        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementClaimRecoveryReceipt: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
     };
@@ -244,11 +248,13 @@ describe('ReinsuranceDashboardService', () => {
     prisma.placementClaim.findMany.mockResolvedValue([
       {
         status: PlacementClaimStatus.NOTIFIED,
+        currency: 'GHS',
         estimatedLossAmount: '1000.00',
         finalLossAmount: null,
       },
       {
         status: PlacementClaimStatus.CLOSED,
+        currency: 'GHS',
         estimatedLossAmount: '500.00',
         finalLossAmount: '400.00',
       },
@@ -270,6 +276,11 @@ describe('ReinsuranceDashboardService', () => {
       { status: PlacementClaimCashCallStatus.ISSUED, amount: '250.00' },
       { status: PlacementClaimCashCallStatus.PAID, amount: '100.00' },
     ]);
+    prisma.placementClaimRecoveryReceipt.findMany.mockResolvedValue([
+      { currency: 'GHS', amount: '300.00', reversalOfReceiptId: null },
+      { currency: 'GHS', amount: '50.00', reversalOfReceiptId: 'receipt-1' },
+      { currency: 'USD', amount: '20.00', reversalOfReceiptId: null },
+    ]);
 
     const result = await service.getClaims('tenant-1');
 
@@ -290,6 +301,11 @@ describe('ReinsuranceDashboardService', () => {
       estimatedLoss: 1500,
       finalLoss: 400,
       allocatedLiability: 400,
+      claimsIncurredByCurrency: [{ currency: 'GHS', amount: 1400 }],
+      recoveriesByCurrency: [
+        { currency: 'GHS', amount: 250 },
+        { currency: 'USD', amount: 20 },
+      ],
       cashCallsIssued: 250,
       cashCallsPaid: 100,
       cashCallsPending: 150,

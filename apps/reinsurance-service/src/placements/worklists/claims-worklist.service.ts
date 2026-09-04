@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  PlacementClaimState,
   PlacementClaimStatus,
   PlacementStatus,
   Prisma,
@@ -12,6 +13,7 @@ import {
   ClaimsWorklistResponseDto,
   ClaimsWorklistRowDto,
 } from '../dto/claims-worklist-response.dto';
+import { QueryClaimsSummaryDto } from '../dto/query-claims-summary.dto';
 import { QueryClaimsWorklistDto } from '../dto/query-claims-worklist.dto';
 import { ClaimRowBucket } from '../dto/claim-row-state-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -26,6 +28,7 @@ type ClaimsWorklistRawRow = {
   bucket: ClaimRowBucket;
   claimNumber: string;
   claimStatus: PlacementClaimStatus;
+  claimState: PlacementClaimState;
   occurrenceDate: Date | string;
   reportedDate: Date | string;
   claimCause: string;
@@ -84,9 +87,12 @@ type ClaimsSummaryRawRow = {
   settledClaims: bigint | number | string;
   notificationClaims: bigint | number | string;
   openClaims: bigint | number | string;
+  openPendingClaims: bigint | number | string;
+  openFinalizedClaims: bigint | number | string;
   closedClaims: bigint | number | string;
   claimsByCurrency: unknown;
   recoveredByCurrency: unknown;
+  outstandingRecoveredByCurrency: unknown;
 };
 
 @Injectable()
@@ -104,10 +110,9 @@ export class ReinsuranceClaimsWorklistService {
     const limit = query.limit ?? 10;
     const offset = (page - 1) * limit;
     const tab = query.tab ?? 'notification';
-    const sortExpression =
-      tab === 'closed'
-        ? Prisma.sql`"recoveredAt" DESC NULLS LAST,`
-        : Prisma.sql`"occurrenceDate" DESC,`;
+    const claimStatePredicate = query.claimState
+      ? Prisma.sql`AND "claimState"::text = ${query.claimState}`
+      : Prisma.empty;
 
     const rows = await this.prisma.$queryRaw<ClaimsWorklistRawRow[]>`
       ${this.classifiedClaimsCte(tenantId, query)}
@@ -115,6 +120,7 @@ export class ReinsuranceClaimsWorklistService {
         SELECT *
         FROM classified_claims
         WHERE "bucket" = ${tab}
+        ${claimStatePredicate}
       ),
       counted AS (
         SELECT
@@ -124,7 +130,7 @@ export class ReinsuranceClaimsWorklistService {
       )
       SELECT *
       FROM counted
-      ORDER BY ${sortExpression} "claimCreatedAt" DESC, "claimId" ASC
+      ORDER BY "claimCreatedAt" DESC, "claimId" ASC
       LIMIT ${limit}
       OFFSET ${offset}
     `;
@@ -141,9 +147,12 @@ export class ReinsuranceClaimsWorklistService {
     };
   }
 
-  async summarizeClaims(tenantId: string): Promise<ClaimsSummaryResponseDto> {
+  async summarizeClaims(
+    tenantId: string,
+    query: QueryClaimsSummaryDto = {},
+  ): Promise<ClaimsSummaryResponseDto> {
     const rows = await this.prisma.$queryRaw<ClaimsSummaryRawRow[]>`
-      ${this.classifiedClaimsCte(tenantId, {})}
+      ${this.classifiedClaimsCte(tenantId, query)}
       SELECT
         COUNT(*) FILTER (WHERE "claimStatus"::text <> 'VOID') AS "totalClaims",
         COUNT(*) FILTER (
@@ -152,6 +161,12 @@ export class ReinsuranceClaimsWorklistService {
         ) AS "settledClaims",
         COUNT(*) FILTER (WHERE "bucket" = 'notification') AS "notificationClaims",
         COUNT(*) FILTER (WHERE "bucket" = 'open') AS "openClaims",
+        COUNT(*) FILTER (
+          WHERE "bucket" = 'open' AND "claimState"::text = 'PENDING'
+        ) AS "openPendingClaims",
+        COUNT(*) FILTER (
+          WHERE "bucket" = 'open' AND "claimState"::text = 'FINALIZED'
+        ) AS "openFinalizedClaims",
         COUNT(*) FILTER (WHERE "bucket" = 'closed') AS "closedClaims",
         COALESCE(
           (
@@ -162,9 +177,9 @@ export class ReinsuranceClaimsWorklistService {
             FROM (
               SELECT
                 "claimCurrency" AS "code",
-                SUM(COALESCE("finalLossAmount", 0)) AS "amount"
+                SUM(COALESCE("claimShare", 0)) AS "amount"
               FROM classified_claims
-              WHERE "bucket" IN ('open', 'closed')
+              WHERE "bucket" = 'open'
               GROUP BY "claimCurrency"
             ) totals
           ),
@@ -186,7 +201,25 @@ export class ReinsuranceClaimsWorklistService {
             ) totals
           ),
           '[]'::jsonb
-        ) AS "recoveredByCurrency"
+        ) AS "recoveredByCurrency",
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object('code', totals."code", 'amount', totals."amount")
+              ORDER BY totals."amount" DESC
+            )
+            FROM (
+              SELECT
+                "claimCurrency" AS "code",
+                SUM(COALESCE("claimShare", 0)) - SUM(COALESCE("recoveredAmount", 0))
+                  AS "amount"
+              FROM classified_claims
+              WHERE "bucket" = 'open'
+              GROUP BY "claimCurrency"
+            ) totals
+          ),
+          '[]'::jsonb
+        ) AS "outstandingRecoveredByCurrency"
       FROM classified_claims
     `;
 
@@ -196,19 +229,33 @@ export class ReinsuranceClaimsWorklistService {
       settledClaims: this.toInteger(row?.settledClaims ?? 0),
       notificationClaims: this.toInteger(row?.notificationClaims ?? 0),
       openClaims: this.toInteger(row?.openClaims ?? 0),
+      openPendingClaims: this.toInteger(row?.openPendingClaims ?? 0),
+      openFinalizedClaims: this.toInteger(row?.openFinalizedClaims ?? 0),
       closedClaims: this.toInteger(row?.closedClaims ?? 0),
       claimsByCurrency: this.toCurrencyAmounts(row?.claimsByCurrency),
       recoveredByCurrency: this.toCurrencyAmounts(row?.recoveredByCurrency),
+      outstandingRecoveredByCurrency: this.toCurrencyAmounts(
+        row?.outstandingRecoveredByCurrency,
+      ),
     };
   }
 
   private classifiedClaimsCte(
     tenantId: string,
-    query: Pick<QueryClaimsWorklistDto, 'search' | 'cedantId'>,
+    query: Pick<QueryClaimsWorklistDto, 'search' | 'cedantId'> &
+      Partial<QueryClaimsSummaryDto>,
   ) {
     const searchPredicate = this.searchPredicate(query.search);
     const cedantPredicate = query.cedantId
       ? Prisma.sql`AND p."cedantId" = ${query.cedantId}`
+      : Prisma.empty;
+    // Windows every summary figure by claim occurrence date. `since` inclusive,
+    // `until` exclusive — matching premiumsPeriodStart / premiumsPeriodEnd.
+    const sincePredicate = query.since
+      ? Prisma.sql`AND pc."occurrenceDate" >= ${new Date(query.since)}`
+      : Prisma.empty;
+    const untilPredicate = query.until
+      ? Prisma.sql`AND pc."occurrenceDate" < ${new Date(query.until)}`
       : Prisma.empty;
 
     return Prisma.sql`
@@ -219,6 +266,7 @@ export class ReinsuranceClaimsWorklistService {
           pc."placementId",
           pc."claimNumber",
           pc."status" AS "claimStatus",
+          pc."claimState",
           pc."occurrenceDate",
           pc."reportedDate",
           pc."claimCause",
@@ -283,6 +331,8 @@ export class ReinsuranceClaimsWorklistService {
           )
           ${cedantPredicate}
           ${searchPredicate}
+          ${sincePredicate}
+          ${untilPredicate}
       ),
       allocation_totals AS (
         SELECT
@@ -478,6 +528,7 @@ export class ReinsuranceClaimsWorklistService {
       placementId: row.placementId,
       claimNumber: row.claimNumber,
       status: row.claimStatus,
+      claimState: row.claimState,
       occurrenceDate: this.toIso(row.occurrenceDate),
       reportedDate: this.toIso(row.reportedDate),
       claimCause: row.claimCause,

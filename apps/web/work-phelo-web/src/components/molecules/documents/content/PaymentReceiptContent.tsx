@@ -39,11 +39,18 @@ const groupLabelStyle = {
 export interface PaymentReceiptContentProps {
   placement: Facultative;
   payment: PlacementPayment;
+  /** Overrides the "Receipt No." shown in the header. Claim recovery receipts pass
+   *  the claim number here. */
+  receiptNo?: string;
 }
 
 /** The payment receipt — content only, rendered with the shared document type
  *  system. The signatory block is supplied by the page template. */
-export function PaymentReceiptContent({ placement, payment }: PaymentReceiptContentProps) {
+export function PaymentReceiptContent({
+  placement,
+  payment,
+  receiptNo,
+}: PaymentReceiptContentProps) {
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
 
@@ -155,7 +162,7 @@ export function PaymentReceiptContent({ placement, payment }: PaymentReceiptCont
     <DocumentContentFrame title="Payment Receipt">
       <DocumentIssueHeader
         referenceLabel="Receipt No."
-        reference={payment.reference ?? displayPolicyNumber(policyNumber)}
+        reference={receiptNo ?? payment.reference ?? displayPolicyNumber(policyNumber)}
         date={fmtDate(payment.paymentDate)}
         partyLabel="Receipt To"
         partyName={partyName}

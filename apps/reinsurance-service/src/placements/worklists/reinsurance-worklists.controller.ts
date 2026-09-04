@@ -25,6 +25,7 @@ import { ClaimRowStateResponseDto } from '../dto/claim-row-state-response.dto';
 import { PaymentWorklistResponseDto } from '../dto/payment-worklist-response.dto';
 import { FacultativeRowStateResponseDto } from '../dto/facultative-row-state-response.dto';
 import { QueryClaimRowStateDto } from '../dto/query-claim-row-state.dto';
+import { QueryClaimsSummaryDto } from '../dto/query-claims-summary.dto';
 import { QueryClaimsWorklistDto } from '../dto/query-claims-worklist.dto';
 import { QueryFacultativeRowStateDto } from '../dto/query-facultative-row-state.dto';
 import { QueryPaymentWorklistDto } from '../dto/query-payment-worklist.dto';
@@ -123,10 +124,13 @@ export class ReinsuranceWorklistsController {
   @ApiOperation({
     summary: 'Summarize Reinsurance Claims worklist state',
     description:
-      'Returns global Claims KPI counts and currency totals using the same backend bucket classification as the Claims worklist.',
+      'Returns global Claims KPI counts and currency totals using the same backend bucket classification as the Claims worklist. Optional since/until window every figure by claim occurrence date.',
   })
   @ApiOkResponse({ type: ClaimsSummaryResponseDto })
-  summarizeClaims(@Req() request: Request & { user: RequestUser }) {
-    return this.claimsWorklist.summarizeClaims(request.user.tenantId);
+  summarizeClaims(
+    @Query() query: QueryClaimsSummaryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimsWorklist.summarizeClaims(request.user.tenantId, query);
   }
 }

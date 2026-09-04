@@ -14,6 +14,8 @@ interface KpiCardProps {
   trend?: number;
   trendTooltip?: string;
   periodLabel?: string;
+  /** Optional breakdown shown under the value, e.g. Pending / Finalized splits. */
+  sub?: { label: string; value: string | number }[];
   isLoading?: boolean;
 }
 
@@ -25,6 +27,7 @@ export function KpiCard({
   trend,
   trendTooltip,
   periodLabel,
+  sub,
   isLoading,
 }: KpiCardProps) {
   return (
@@ -48,7 +51,18 @@ export function KpiCard({
           </>
         ) : (
           <>
-            <span className="text-lg font-bold text-gray-900">{value}</span>
+            <div className="flex items-baseline gap-2 min-w-0">
+              <span className="text-lg font-bold text-gray-900">{value}</span>
+              {sub && sub.length > 0 && (
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[10px] text-gray-500">
+                  {sub.map((s) => (
+                    <span key={s.label}>
+                      {s.label} <span className="font-semibold text-gray-700">{s.value}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
             {trend !== undefined && (
               <div className="flex items-center gap-1">
                 <TrendBadge change={trend} tooltip={trendTooltip} />

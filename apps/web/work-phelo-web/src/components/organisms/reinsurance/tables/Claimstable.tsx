@@ -13,8 +13,6 @@ import {
   ClaimTabRow,
   useDeletePlacementClaim,
   useUpdatePlacementClaimUnbound,
-  useClaimAllocations,
-  useGenerateClaimAllocationsMutation,
   useClaimsWorklist,
   useCedants,
 } from '@/hooks';
@@ -29,17 +27,28 @@ import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
 import {
   ClaimTag,
   CLAIM_TAG_OPTIONS,
+  claimTagToState,
 } from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
+import { ClaimState } from '@/types/reinsurance';
 
-// "Claim state" = the Pending/Finalized selector on the claim form. Front-end only for now;
-// the column stays blank until the back-end persists it on the claim.
-const CLAIM_STATE_CHIP_COLOR: Record<ClaimTag, TypeChipColor> = {
-  pending: 'amber',
-  finalized: 'green',
+// "Claim state" (Pending / Finalized) is orthogonal to the claim lifecycle status.
+// FINALIZED is when reinsurer allocations exist and the financial inputs are locked.
+const CLAIM_STATE_META: Record<ClaimState, { label: string; color: TypeChipColor }> = {
+  PENDING: { label: 'Pending', color: 'amber' },
+  FINALIZED: { label: 'Finalized', color: 'green' },
 };
 
-const claimStateLabel = (tag: ClaimTag) =>
-  CLAIM_TAG_OPTIONS.find((o) => o.value === tag)?.label ?? tag;
+const CLAIM_STATE_FILTER_OPTIONS = (Object.keys(CLAIM_STATE_META) as ClaimState[]).map((value) => ({
+  value,
+  label: CLAIM_STATE_META[value].label,
+}));
+
+/** Effective state for display: trust the persisted enum, but treat legacy rows that
+ *  predate it (no claimState, final loss set) as Finalized. */
+const effectiveClaimState = (claim: {
+  claimState?: ClaimState | null;
+  finalLossAmount: string | null;
+}): ClaimState => claim.claimState ?? (claim.finalLossAmount != null ? 'FINALIZED' : 'PENDING');
 
 const PAGE_SIZE = 10;
 
@@ -79,7 +88,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
   const insuredRiskType: Column<ClaimTabRow> = {
     key: 'title',
     label: 'Insured / Risk Type',
-    width: 'minmax(150px, 1fr)',
+    width: 'minmax(150px, 0.8fr)',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900 leading-tight">{row.placement.title}</span>
@@ -91,21 +100,21 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
   const claimNumber: Column<ClaimTabRow> = {
     key: 'claimNumber',
     label: 'Claim Number',
-    width: '120px',
+    width: '110px',
     render: (row) => <span className="font-medium text-gray-900">{row.claim.claimNumber}</span>,
   };
 
   const cedant: Column<ClaimTabRow> = {
     key: 'cedant',
     label: 'Cedant',
-    width: 'minmax(100px, 1fr)',
+    width: 'minmax(100px, 0.8fr)',
     render: (row) => <span className="font-bold text-gray-700">{row.placement.cedant.name}</span>,
   };
 
   const offerPercent: Column<ClaimTabRow> = {
     key: 'offerPercent',
     label: 'Offer %',
-    width: '60px',
+    width: '55px',
     className: 'text-right',
     render: (row) => (
       <span className="font-bold text-gray-900 whitespace-nowrap">
@@ -118,8 +127,8 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
 
   const actualClaim: Column<ClaimTabRow> = {
     key: 'finalLossAmount',
-    label: '100% Actual Claim',
-    width: '130px',
+    label: '100% Claim Amount',
+    width: '140px',
     className: 'text-right',
     render: (row) => (
       <span className="font-bold text-gray-900 whitespace-nowrap">
@@ -160,21 +169,25 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
   const claimState: Column<ClaimTabRow> = {
     key: 'claimState',
     label: 'Claim State',
-    width: '110px',
+    width: '80px',
     render: (row) => {
-      const tag = row.claim.claimTag;
-      return tag ? (
-        <TypeChip label={claimStateLabel(tag)} color={CLAIM_STATE_CHIP_COLOR[tag]} />
-      ) : (
-        <span className="text-gray-400">—</span>
-      );
+      const meta = CLAIM_STATE_META[effectiveClaimState(row.claim)];
+      return <TypeChip label={meta.label} color={meta.color} />;
     },
   };
 
   const claimEntryDate: Column<ClaimTabRow> = {
     key: 'createdAt',
     label: 'Claim entry date',
-    width: '130px',
+    width: '120px',
+    render: (row) => (
+      <span className="font-semibold text-gray-600">{fmtDate(row.claim.createdAt)}</span>
+    ),
+  };
+  const dateOfLoss: Column<ClaimTabRow> = {
+    key: 'dateOfLoss',
+    label: 'Date of Loss',
+    width: '100px',
     render: (row) => (
       <span className="font-semibold text-gray-600">{fmtDate(row.claim.occurrenceDate)}</span>
     ),
@@ -191,6 +204,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       offerPercent,
       claimShare,
       totalRecovered,
+      dateOfLoss,
       claimEntryDate,
     ];
   }
@@ -204,6 +218,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       actualClaim,
       offerPercent,
       claimShare,
+      dateOfLoss,
       {
         key: 'recoveredAt',
         label: 'Recovered Date',
@@ -223,7 +238,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
     cedant,
     {
       key: 'estimatedLossAmount',
-      label: '100% Claim Amount',
+      label: '100% Estimated Claim',
       width: '150px',
       className: 'text-right',
       render: (row) => (
@@ -237,7 +252,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       // Reinsurer's share of the estimated claim = 100% estimate × fac offer %. Matches the
       // Total Allocated Claim figure once the claim is finalized and allocations are generated.
       key: 'notificationPayable',
-      label: 'Payable Amount',
+      label: 'Your Share',
       width: '120px',
       className: 'text-right',
       render: (row) => (
@@ -264,6 +279,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const canChangeClaimStatus = useAnyPermissionRules(RiPerm.claimStatusChange);
   const [search, setSearch] = useState('');
   const [cedantFilter, setCedantFilter] = useState('');
+  const [claimStateFilter, setClaimStateFilter] = useState('');
   const [page, setPage] = useState(1);
   const [panelTarget, setPanelTarget] = useState<ClaimTabRow | null>(null);
   const [isAddClaimOpen, setIsAddClaimOpen] = useState(false);
@@ -276,13 +292,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const [finalAmountError, setFinalAmountError] = useState('');
   const [finalClaimTag, setFinalClaimTag] = useState<ClaimTag>('pending');
   const updateClaim = useUpdatePlacementClaimUnbound();
-  const generateAllocationsForClaim = useGenerateClaimAllocationsMutation();
   const { data: cedants = [], isLoading: isLoadingCedants } = useCedants();
-
-  const { data: finalizeAllocations = [] } = useClaimAllocations(
-    finalizeTarget?.placement.id ?? '',
-    finalizeTarget?.claim.id ?? '',
-  );
 
   const claimsWorklist = useClaimsWorklist({
     tab,
@@ -290,6 +300,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     limit: PAGE_SIZE,
     search,
     cedantId: cedantFilter || undefined,
+    claimState: tab === 'open' && claimStateFilter ? (claimStateFilter as ClaimState) : undefined,
   });
   const claimRows = claimsWorklist.data?.items ?? [];
 
@@ -331,30 +342,38 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
       return;
     }
 
+    const claimState = claimTagToState(finalClaimTag);
     try {
+      // FINALIZED here makes the back-end generate reinsurer allocations in the
+      // same request; PENDING just records the actual amount.
       await updateClaim.mutateAsync({
         placementId: finalizeTarget.placement.id,
         claimId: finalizeTarget.claim.id,
         finalLossAmount: parsed,
+        claimState,
       });
 
-      if (finalizeAllocations.length === 0) {
-        try {
-          await generateAllocationsForClaim.mutateAsync({
-            placementId: finalizeTarget.placement.id,
-            claimId: finalizeTarget.claim.id,
-          });
-        } catch (allocationError) {
-          toast.error(
-            `Claim finalized, but allocations could not be generated: ${extractError(allocationError)}`,
-          );
-        }
-      }
-
-      toast.success('Claim finalized successfully');
+      toast.success(
+        claimState === 'FINALIZED'
+          ? 'Claim finalized — allocations generated'
+          : 'Claim moved to open',
+      );
       handleCloseFinalize();
     } catch (error) {
       toast.error(extractError(error, 'Failed to finalize claim'));
+    }
+  };
+
+  const handleReverseToPending = async (row: ClaimTabRow) => {
+    try {
+      await updateClaim.mutateAsync({
+        placementId: row.placement.id,
+        claimId: row.claim.id,
+        claimState: 'PENDING',
+      });
+      toast.success('Claim returned to pending — allocations voided');
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to return claim to pending'));
     }
   };
 
@@ -379,7 +398,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
           setPage(1);
         }}
         extraFilters={
-          <div>
+          <div className="flex gap-2">
             <SearchSelect
               size="sm"
               placeholder="Cedants"
@@ -390,6 +409,18 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
                 setPage(1);
               }}
             />
+            {tab === 'open' && (
+              <SearchSelect
+                size="sm"
+                placeholder="Claim state"
+                options={CLAIM_STATE_FILTER_OPTIONS}
+                value={claimStateFilter}
+                onChange={(v) => {
+                  setClaimStateFilter(v);
+                  setPage(1);
+                }}
+              />
+            )}
           </div>
         }
         actionButton={
@@ -416,7 +447,15 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
                 if (canEditClaim) {
                   actions.push({ label: 'Edit Claim', onClick: () => setPanelTarget(row) });
                 }
-                if (tab === 'open') return actions;
+                if (tab === 'open') {
+                  if (canEditClaim && effectiveClaimState(row.claim) === 'FINALIZED') {
+                    actions.push({
+                      label: 'Move to Pending',
+                      onClick: () => handleReverseToPending(row),
+                    });
+                  }
+                  return actions;
+                }
 
                 if (canEditClaim) {
                   actions.push({

@@ -1,21 +1,44 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { CurrencyAmountListCard } from '@/components/molecules/reinsurance/stats/CurrencyAmountListCard';
 import { Icons } from '@/components/atoms/icons';
+import {
+  PremiumsPeriod,
+  PremiumsPeriodToggle,
+  premiumsPeriodStart,
+  premiumsPeriodEnd,
+} from '@/components/atoms/PremiumsPeriodToggle';
+import { YearSelect } from '@/components/atoms/YearSelect';
 import { useClaimsWorklistSummary, useCurrencies } from '@/hooks';
 import type { ClaimsCurrencyAmount } from '@/types/reinsurance';
 
 const toAmountMap = (rows: ClaimsCurrencyAmount[]) =>
   new Map(rows.map((row) => [row.code, row.amount]));
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 export function ClaimsStatsRow() {
-  const { data: summary, isLoading } = useClaimsWorklistSummary();
+  // Period filter — same control as the Premiums page. Every card below reads from
+  // `summary`, which is windowed by claim occurrence date to [since, until).
+  const [period, setPeriod] = useState<PremiumsPeriod>('monthly');
+  const [year, setYear] = useState(CURRENT_YEAR);
+
+  const since = useMemo(() => premiumsPeriodStart(period, { year }).toISOString(), [period, year]);
+  const until = useMemo(() => premiumsPeriodEnd(period, { year })?.toISOString(), [period, year]);
+
+  const { data: summary, isLoading } = useClaimsWorklistSummary({ since, until });
   const { data: currencies = [] } = useCurrencies();
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="flex justify-end items-center gap-2">
+        {period === 'yearly' && <YearSelect value={year} onChange={setYear} />}
+        <PremiumsPeriodToggle value={period} onChange={setPeriod} />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <KpiCard
           label="Total Claims"
           value={summary?.totalClaims ?? 0}
@@ -28,6 +51,10 @@ export function ClaimsStatsRow() {
           value={summary?.openClaims ?? 0}
           icon={Icons.Clock}
           iconColor="#4a3aa7"
+          sub={[
+            { label: 'Pending', value: summary?.openPendingClaims ?? 0 },
+            { label: 'Finalized', value: summary?.openFinalizedClaims ?? 0 },
+          ]}
           isLoading={isLoading}
         />
         <KpiCard
@@ -46,24 +73,33 @@ export function ClaimsStatsRow() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <CurrencyAmountListCard
-          title="Claims Amount by Currency"
-          columnLabel="Claim Amount"
+          title="Claims Share"
+          columnLabel="Claim Share"
           amountsByCode={toAmountMap(summary?.claimsByCurrency ?? [])}
           currencies={currencies}
           isLoading={isLoading}
-          emptyMessage="No claims yet"
-          className="h-64"
+          emptyMessage="No open claims yet"
+          className="h-55"
         />
         <CurrencyAmountListCard
-          title="Recovered by Currency"
+          title="Recovered Claims"
           columnLabel="Recovered"
           amountsByCode={toAmountMap(summary?.recoveredByCurrency ?? [])}
           currencies={currencies}
           isLoading={isLoading}
           emptyMessage="No recoveries yet"
-          className="h-64"
+          className="h-55"
+        />
+        <CurrencyAmountListCard
+          title="Outstanding Recovery"
+          columnLabel="Outstanding"
+          amountsByCode={toAmountMap(summary?.outstandingRecoveredByCurrency ?? [])}
+          currencies={currencies}
+          isLoading={isLoading}
+          emptyMessage="No outstanding recovery"
+          className="h-55"
         />
       </div>
     </div>

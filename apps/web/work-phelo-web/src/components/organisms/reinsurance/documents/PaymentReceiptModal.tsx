@@ -19,7 +19,12 @@ interface PaymentReceiptModalProps extends PaymentReceiptContentProps {
  * print the closing-style disbursement advice; every other payment type keeps
  * the plain payment receipt.
  */
-export function PaymentReceiptModal({ isOpen, onClose, ...content }: PaymentReceiptModalProps) {
+export function PaymentReceiptModal({
+  isOpen,
+  onClose,
+  receiptNo,
+  ...content
+}: PaymentReceiptModalProps) {
   const isDisbursement = content.payment.type === 'REINSURER_DISBURSEMENT';
   const label = isDisbursement ? 'Disbursement Advice' : 'Payment Receipt';
   const fileName = useDocumentFileName({
@@ -39,7 +44,7 @@ export function PaymentReceiptModal({ isOpen, onClose, ...content }: PaymentRece
       {isDisbursement ? (
         <DisbursementAdviceContent {...content} />
       ) : (
-        <PaymentReceiptContent {...content} />
+        <PaymentReceiptContent {...content} receiptNo={receiptNo} />
       )}
     </DocumentPreviewShell>
   );

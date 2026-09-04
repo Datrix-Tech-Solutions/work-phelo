@@ -1534,4 +1534,52 @@ describe('PlacementPaymentsService', () => {
       service.reverse(user, 'placement-1', 'payment-1'),
     ).rejects.toThrow(ConflictException);
   });
+
+  it('cancels a recorded payment and appends the reason to notes', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementPayment.findFirst.mockResolvedValue({ ...payment });
+    prisma.placementPayment.update.mockResolvedValue({
+      ...payment,
+      status: PlacementPaymentStatus.CANCELLED,
+    });
+
+    await service.cancel(user, 'placement-1', 'payment-1', {
+      reason: 'Wrong amount',
+    });
+
+    const updateArgs = firstCallArg<Prisma.PlacementPaymentUpdateArgs>(
+      prisma.placementPayment.update,
+    );
+    expect(updateArgs.where).toEqual({ id: 'payment-1' });
+    expect(updateArgs.data).toMatchObject({
+      status: PlacementPaymentStatus.CANCELLED,
+      notes: 'Cancelled: Wrong amount',
+    });
+    expect(prisma.placementPayment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects cancelling a bank-confirmed payment', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementPayment.findFirst.mockResolvedValue({
+      ...payment,
+      status: PlacementPaymentStatus.BANK_CONFIRMED,
+    });
+
+    await expect(
+      service.cancel(user, 'placement-1', 'payment-1', {}),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placementPayment.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects cancelling a reversal payment', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementPayment.findFirst.mockResolvedValue({
+      ...payment,
+      reversalOfPaymentId: 'payment-0',
+    });
+
+    await expect(
+      service.cancel(user, 'placement-1', 'payment-1', {}),
+    ).rejects.toThrow(BadRequestException);
+  });
 });

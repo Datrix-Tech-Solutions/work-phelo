@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiCookieAuth,
@@ -24,6 +24,7 @@ import {
   ReinsuranceDashboardPlacementsResponseDto,
 } from './dashboard-response.dto';
 import { ReinsuranceDashboardService } from './dashboard.service';
+import { QueryDashboardClaimsDto } from './query-dashboard-claims.dto';
 
 @Controller('dashboard')
 @ApiTags('Reinsurance - Dashboard')
@@ -81,7 +82,10 @@ export class ReinsuranceDashboardController {
       'Uses claim records, claim allocation snapshots and claim cash call snapshots for loss and liability figures.',
   })
   @ApiOkResponse({ type: ReinsuranceDashboardClaimsResponseDto })
-  getClaims(@Req() request: Request & { user: RequestUser }) {
-    return this.dashboardService.getClaims(request.user.tenantId);
+  getClaims(
+    @Query() query: QueryDashboardClaimsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.dashboardService.getClaims(request.user.tenantId, query);
   }
 }
