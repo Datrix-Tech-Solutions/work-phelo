@@ -179,7 +179,7 @@ export class ReinsuranceClaimsWorklistService {
                 "claimCurrency" AS "code",
                 SUM(COALESCE("claimShare", 0)) AS "amount"
               FROM classified_claims
-              WHERE "bucket" = 'open'
+              WHERE "claimState"::text = 'FINALIZED'
               GROUP BY "claimCurrency"
             ) totals
           ),
@@ -196,7 +196,7 @@ export class ReinsuranceClaimsWorklistService {
                 "claimCurrency" AS "code",
                 SUM(COALESCE("recoveredAmount", 0)) AS "amount"
               FROM classified_claims
-              WHERE "bucket" IN ('open', 'closed')
+              WHERE "bucket" = 'open'
               GROUP BY "claimCurrency"
             ) totals
           ),
@@ -214,7 +214,7 @@ export class ReinsuranceClaimsWorklistService {
                 SUM(COALESCE("claimShare", 0)) - SUM(COALESCE("recoveredAmount", 0))
                   AS "amount"
               FROM classified_claims
-              WHERE "bucket" = 'open'
+              WHERE "claimState"::text = 'FINALIZED'
               GROUP BY "claimCurrency"
             ) totals
           ),
@@ -341,6 +341,7 @@ export class ReinsuranceClaimsWorklistService {
         FROM "reinsurance"."PlacementClaimAllocation" a
         JOIN base_claims bc ON bc."claimId" = a."claimId"
         WHERE a."tenantId" = ${tenantId}
+          AND a."status"::text <> 'VOID'
         GROUP BY a."claimId"
       ),
       receipt_totals AS (

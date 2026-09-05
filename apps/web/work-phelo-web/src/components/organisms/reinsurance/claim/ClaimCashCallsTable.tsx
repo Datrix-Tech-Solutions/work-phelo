@@ -134,10 +134,6 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
 
           const perCashCall = perCashCallFor(row);
 
-          const hasOffsetReceipt = (perCashCall?.receipts ?? []).some(
-            (receipt) => receipt.settlementMethod === 'INTERNAL_OFFSET',
-          );
-
           const recoveryStatus = perCashCall?.recoveryStatus;
           const statusBadge =
             recoveryStatus === 'FULLY_RECOVERED' ? (
@@ -148,12 +144,7 @@ export function ClaimCashCallsTable({ placement, claim }: ClaimCashCallsTablePro
               <Badge label="Outstanding" variant="neutral" />
             );
 
-          return (
-            <div className="flex flex-col items-start gap-1">
-              {statusBadge}
-              {hasOffsetReceipt && <span className="text-xs font-bold text-blue-900">Offset</span>}
-            </div>
-          );
+          return <div className="flex flex-col items-start gap-1">{statusBadge}</div>;
         },
       },
       {

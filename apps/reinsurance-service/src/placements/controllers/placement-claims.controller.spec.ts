@@ -86,7 +86,6 @@ describe('PlacementClaimsController', () => {
     ['getClaimRecoveryPosition', PlacementPermission.VIEW],
     ['findClaimRecoveryApprovals', PlacementPermission.VIEW],
     ['findClaimRecoveryReceipts', PlacementPermission.VIEW],
-    ['updateClaim', PlacementPermission.EDIT],
     ['generateClaimAllocations', PlacementPermission.EDIT],
     ['createClaimCashCall', PlacementPermission.EDIT],
     ['changeClaimCashCallStatus', PlacementPermission.EDIT],
@@ -112,7 +111,19 @@ describe('PlacementClaimsController', () => {
   it.each([
     [
       'createClaim',
-      [ClaimWorkflowPermission.ADD_CLAIM, PlacementPermission.CREATE],
+      [
+        ClaimWorkflowPermission.ADD_CLAIM,
+        ClaimWorkflowPermission.CREATE_NOTIFICATION,
+        PlacementPermission.CREATE,
+      ],
+    ],
+    [
+      'updateClaim',
+      [
+        ClaimWorkflowPermission.ADD_CLAIM,
+        ClaimWorkflowPermission.CREATE_NOTIFICATION,
+        PlacementPermission.EDIT,
+      ],
     ],
     [
       'changeClaimStatus',

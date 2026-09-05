@@ -144,10 +144,6 @@ describe('PlacementsController', () => {
     ['changeClosingStatus', PlacementPermission.EDIT],
     ['createDebitNote', PlacementPermission.EDIT],
     ['createCreditNote', PlacementPermission.EDIT],
-    ['createEndorsementDebitNote', PlacementPermission.EDIT],
-    ['createEndorsementCreditNote', PlacementPermission.EDIT],
-    ['issueEndorsementNote', PlacementPermission.EDIT],
-    ['voidEndorsementNote', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],
     ['voidNote', PlacementPermission.EDIT],
     ['restore', PlacementPermission.DELETE],
@@ -216,6 +212,22 @@ describe('PlacementsController', () => {
     [
       'archive',
       [FacultativeOfferPermission.ARCHIVE_OFFER, PlacementPermission.DELETE],
+    ],
+    [
+      'createEndorsementDebitNote',
+      [FacultativeOfferPermission.ENDORSE_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'createEndorsementCreditNote',
+      [FacultativeOfferPermission.ENDORSE_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'issueEndorsementNote',
+      [FacultativeOfferPermission.ENDORSE_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'voidEndorsementNote',
+      [FacultativeOfferPermission.ENDORSE_OFFER, PlacementPermission.EDIT],
     ],
   ])(
     'allows any permitted workflow permission on %s',

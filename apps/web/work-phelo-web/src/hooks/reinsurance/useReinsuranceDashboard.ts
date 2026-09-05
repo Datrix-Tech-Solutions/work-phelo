@@ -188,6 +188,17 @@ function claimsWindow(period: Period, year?: number): { since: string; until: st
 }
 
 /**
+ * Memoised {@link claimsWindow}. `periodWindow` derives `end` from `new Date()` for every
+ * running period, so calling `claimsWindow` inline in a render produces a fresh `until`
+ * timestamp each time — which lands in the React Query key and makes `useDashboardClaims`
+ * re-mount on every render (permanent `isLoading`, endless refetches). Recompute only when
+ * `period` / `year` actually change.
+ */
+function useClaimsWindow(period: Period, year?: number): { since: string; until: string } {
+  return useMemo(() => claimsWindow(period, year), [period, year]);
+}
+
+/**
  * `start` / `end` / `prevStart` for the selected period. `year` applies only when
  * `period` is `'yearly'` (from the dashboard year dropdown); for every other case, and for
  * the running year, `end` is "now" so behaviour is unchanged.
@@ -456,7 +467,7 @@ export function useReinsuranceClaimStats(options: {
   isLoading: boolean;
 } {
   const { currency } = options;
-  const { data, isLoading } = useDashboardClaims(claimsWindow(options.period, options.year));
+  const { data, isLoading } = useDashboardClaims(useClaimsWindow(options.period, options.year));
 
   // Per-selected-currency figures; fall back to the global loss totals for the
   // claims-incurred number when no currency row matches.
@@ -546,7 +557,9 @@ export function useReinsuranceFinancialsByCurrency({
 } {
   const { data: all = [], isLoading: loadingFac } = useFacultatives();
   const { data: financials, isLoading: loadingFinancials } = useDashboardFinancials();
-  const { data: claims, isLoading: loadingClaims } = useDashboardClaims(claimsWindow(period, year));
+  const { data: claims, isLoading: loadingClaims } = useDashboardClaims(
+    useClaimsWindow(period, year),
+  );
 
   const data = useMemo(() => {
     const { start, end } = periodBounds(period, new Date(), year);

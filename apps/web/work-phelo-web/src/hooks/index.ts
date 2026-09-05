@@ -42,6 +42,7 @@ export * from './reinsurance/useCedantsReport';
 export * from './reinsurance/useReinsurersReport';
 export * from './reinsurance/useFacultativeReport';
 export * from './reinsurance/usePremiumsReport';
+export * from './reinsurance/useBrokerageReport';
 export * from './reinsurance/useClaimsReport';
 export * from './reinsurance/useMailboxes';
 export * from './reinsurance/useEmailThreads';
