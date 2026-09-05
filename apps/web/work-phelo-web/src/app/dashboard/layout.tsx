@@ -2,26 +2,19 @@
 
 'use client';
 
-import { useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'Admin';
-  const initials = firstName.slice(0, 2).toUpperCase();
-
-  const [activeTab, setActiveTab] = useState('portal');
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
-      <TopNav
-        userInitials={initials}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        notificationCount={0}
-      />
-      {children}
-    </div>
+    <AppBackground className="h-dvh overflow-hidden flex flex-col">
+      <TopNav userInitials={initials} logoVariant="image" />
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
+    </AppBackground>
   );
 }

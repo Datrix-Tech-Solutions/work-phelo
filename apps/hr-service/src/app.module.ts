@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_PIPE } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
@@ -17,17 +17,26 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { AssetsModule } from './assets/assets.module';
+import { CompanyPoliciesModule } from './company-policies/company-policies.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 import { HealthModule } from './health/health.module';
 import { SettingsModule } from './settings/settings.module';
+import { ProjectsModule } from './projects/projects.module';
+import { HrImportsModule } from './imports/hr-imports.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    BullModule.forRoot({
-      connection: { url: process.env.REDIS_URL as string },
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          url: configService.getOrThrow<string>('REDIS_URL'),
+        },
+      }),
     }),
     PrismaModule,
     DepartmentsModule,
@@ -39,12 +48,15 @@ import { SettingsModule } from './settings/settings.module';
     AppraisalsModule,
     DashboardModule,
     AssetsModule,
+    CompanyPoliciesModule,
     RabbitMQModule,
     AnnouncementsModule,
     NotificationsModule,
     SchedulingModule,
     HealthModule,
     SettingsModule,
+    ProjectsModule,
+    HrImportsModule,
   ],
   providers: [
     RabbitMQSetupService,

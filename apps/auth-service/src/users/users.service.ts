@@ -17,6 +17,7 @@ import * as bcrypt from 'bcrypt';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { AuditService } from '../audit/audit.service';
 import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
+import { normalizeEmail } from '../common/email.helper';
 
 @Injectable()
 export class UsersService {
@@ -29,7 +30,36 @@ export class UsersService {
     private readonly audit: AuditService,
   ) {}
 
-  async invite(tenantId: string, dto: InviteUserDto) {
+  private async validateInvitedEmployeePermissionSets(
+    tenantId: string,
+    permissionSetIds: string[],
+  ) {
+    if (permissionSetIds.length === 0) {
+      return [];
+    }
+
+    const uniquePermissionSetIds = Array.from(new Set(permissionSetIds));
+    const permissionSets = await this.prisma.permissionSet.findMany({
+      where: {
+        id: { in: uniquePermissionSetIds },
+        tenantId,
+        isActive: true,
+        isSystem: false,
+      },
+      select: { id: true, name: true },
+    });
+
+    if (permissionSets.length !== uniquePermissionSetIds.length) {
+      throw new BadRequestException(
+        'One or more selected permission sets are invalid for this tenant.',
+      );
+    }
+
+    return permissionSets;
+  }
+
+  async invite(tenantId: string, dto: InviteUserDto, invitedBy?: string) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
     });
@@ -38,43 +68,52 @@ export class UsersService {
     // Block superadmin email
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
     if (!superAdminEmail) throw new Error('SUPER_ADMIN_EMAIL is required');
-    if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
+    if (normalizedEmail === normalizeEmail(superAdminEmail)) {
       throw new ForbiddenException(
         'This email is reserved for the platform owner.',
       );
     }
 
-    const existing = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email: dto.email } },
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
     if (existing)
       throw new ConflictException('A user with this email already exists.');
 
     const userRole = dto.role ?? UserSystemRole.EMPLOYEE;
+    const permissionSetIds = dto.permissionSetIds ?? [];
 
-    // One Company Admin per tenant
+    // One Company Admin per tenant. Admin reassignment must go through the
+    // dedicated tenant-admin flow so we do not silently demote the current admin.
     if (userRole === UserSystemRole.TENANT_ADMIN) {
+      if (permissionSetIds.length > 0) {
+        throw new BadRequestException(
+          'Permission sets can only be selected for employee invites.',
+        );
+      }
+
       const existingAdmin = await this.prisma.user.findFirst({
         where: { tenantId, role: 'TENANT_ADMIN' },
+        select: { id: true },
       });
-      // Demote existing admin to EMPLOYEE before assigning new one
+
       if (existingAdmin) {
-        await this.prisma.user.update({
-          where: { id: existingAdmin.id },
-          data: { role: 'EMPLOYEE' },
-        });
-        await syncUserSystemPermissionSet(
-          this.prisma,
-          {
-            tenantId,
-            userId: existingAdmin.id,
-            role: 'EMPLOYEE',
-            grantedBy: existingAdmin.id,
-          },
-          this.logger,
+        throw new ConflictException(
+          'This company already has an administrator. Use the tenant admin update flow instead.',
         );
       }
     }
+
+    const selectedPermissionSets =
+      userRole === UserSystemRole.EMPLOYEE
+        ? await this.validateInvitedEmployeePermissionSets(
+            tenantId,
+            permissionSetIds,
+          )
+        : [];
 
     const inviteToken = generateSecureToken();
     const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
@@ -82,7 +121,7 @@ export class UsersService {
     const user = await this.prisma.user.create({
       data: {
         tenantId,
-        email: dto.email,
+        email: normalizedEmail,
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
@@ -104,6 +143,17 @@ export class UsersService {
       },
       this.logger,
     );
+
+    if (selectedPermissionSets.length > 0) {
+      await this.prisma.userPermissionSet.createMany({
+        data: selectedPermissionSets.map((permissionSet) => ({
+          userId: user.id,
+          permissionSetId: permissionSet.id,
+          grantedBy: invitedBy ?? user.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
@@ -137,12 +187,20 @@ export class UsersService {
           lastName: user.lastName,
           role: user.role,
           status: 'PENDING_VERIFICATION',
+          permissionSetIds: selectedPermissionSets.map(
+            (permissionSet) => permissionSet.id,
+          ),
         },
       },
       status: 'SUCCESS',
     });
 
-    const { password, mfaSecret, inviteToken: token, ...safeUser } = user;
+    const {
+      password: _password,
+      mfaSecret: _mfaSecret,
+      inviteToken: _token,
+      ...safeUser
+    } = user;
     return { user: safeUser, message: 'Invitation sent successfully' };
   }
 
@@ -176,7 +234,12 @@ export class UsersService {
           where: { id: dto.userId, tenantId },
         })
       : await this.prisma.user.findUnique({
-          where: { tenantId_email: { tenantId, email: dto.email } },
+          where: {
+            tenantId_email: {
+              tenantId,
+              email: normalizeEmail(dto.email),
+            },
+          },
         });
 
     if (!user) {
@@ -197,6 +260,20 @@ export class UsersService {
 
     await this.prisma.user.delete({ where: { id: user.id } });
     return { deleted: true };
+  }
+
+  async getUserStatuses(tenantId: string, userIds: string[]) {
+    if (userIds.length === 0) {
+      return [];
+    }
+
+    const uniqueUserIds = Array.from(new Set(userIds));
+    const users = await this.prisma.user.findMany({
+      where: { tenantId, id: { in: uniqueUserIds } },
+      select: { id: true, status: true },
+    });
+
+    return users.map((user) => ({ userId: user.id, status: user.status }));
   }
 
   async acceptInvite(dto: AcceptInviteDto) {
@@ -222,6 +299,8 @@ export class UsersService {
         tenantId: user.tenantId,
         adminEmail: user.tenant.email,
         adminUserId: user.id,
+        country: user.tenant.country,
+        currency: user.tenant.currency,
       });
     } else {
       await this.rabbitmq.hrLinkEmployeeIdentity({
@@ -254,12 +333,6 @@ export class UsersService {
       });
     }
 
-    const permissions = await this.resolveEffectivePermissions(
-      updated.id,
-      updated.tenantId,
-      updated.role,
-    );
-
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {
       sub: updated.id,
@@ -269,7 +342,7 @@ export class UsersService {
       tenantSlug: updated.tenant.slug,
       tenantName: updated.tenant.name,
       firstName: updated.firstName,
-      permissions,
+      // Permissions omitted — JwtStrategy.validate() fetches them from DB on each request.
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
@@ -302,54 +375,13 @@ export class UsersService {
     };
   }
 
-  private async resolveEffectivePermissions(
-    userId: string,
-    tenantId: string,
-    role: string,
-  ): Promise<string[]> {
-    if (role !== 'EMPLOYEE') return [];
-
-    const [allDirectPerms, setAssignments] = await Promise.all([
-      this.prisma.userPermission.findMany({
-        where: { tenantId, userId },
-        include: { resource: true },
-      }),
-      this.prisma.userPermissionSet.findMany({
-        where: { userId },
-        include: {
-          permissionSet: {
-            include: { resources: { include: { resource: true } } },
-          },
-        },
-      }),
-    ]);
-
-    const direct = allDirectPerms
-      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-      .map((p) => `${p.resource.name}:${p.action}`);
-
-    const explicitlyRevoked = new Set(
-      allDirectPerms
-        .filter((p) => !p.isActive)
-        .map((p) => `${p.resource.name}:${p.action}`),
-    );
-
-    const fromSets = setAssignments.flatMap((a) =>
-      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-    );
-
-    return [...new Set([...direct, ...fromSets])].filter(
-      (perm) => !explicitlyRevoked.has(perm),
-    );
-  }
-
   async resendInvite(tenantId: string, userId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
       include: { tenant: true },
     });
     if (!user) throw new NotFoundException('User not found');
-    if (user.status === 'ACTIVE' && !user.inviteToken) {
+    if (user.status !== 'PENDING_VERIFICATION') {
       throw new ForbiddenException('User has already accepted the invitation.');
     }
 
@@ -368,22 +400,51 @@ export class UsersService {
 
     void this.rabbitmq
       .notificationInviteUser({
+        userId: user.id,
+        tenantId,
         email: user.email,
         firstName: user.firstName,
+        inviteToken,
         tenantName: user.tenant.name,
         acceptInviteUrl,
         inviteKind: user.role === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : 'EMPLOYEE',
+        isResend: true,
       })
       .catch((err) =>
         this.logger.error(`Failed to resend invite for ${user.email}`, err),
       );
 
+    await this.audit.log({
+      tenantId,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: 'UPDATE',
+      resource: 'users',
+      resourceId: user.id,
+      changes: {
+        before: {
+          inviteExpiresAt: user.inviteExpiresAt?.toISOString(),
+          status: user.status,
+        },
+        after: {
+          resendInvite: true,
+          inviteExpiresAt: inviteExpiresAt.toISOString(),
+          status: user.status,
+        },
+      },
+      status: 'SUCCESS',
+    });
+
     return { message: 'Invitation resent successfully' };
   }
 
   async findByEmail(tenantId: string, email: string) {
-    return this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email } },
+    return this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        email: { equals: normalizeEmail(email), mode: 'insensitive' },
+      },
     });
   }
 

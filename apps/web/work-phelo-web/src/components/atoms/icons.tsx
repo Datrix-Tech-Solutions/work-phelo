@@ -33,6 +33,7 @@ import {
   // Business / HR
   Building2,
   TrendingUp,
+  TrendingDown,
   CircleDollarSign,
 
   // Devices / Assets
@@ -68,6 +69,18 @@ import {
   GripVertical,
   Pencil,
   Check,
+  SendHorizonal,
+  RotateCcw,
+  UserPlus,
+  Save,
+  FileCheck2,
+  FileWarning,
+  CircleCheckBig,
+  MapPin,
+  Receipt,
+  FileText,
+  FileX2,
+  Bell,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -93,21 +106,29 @@ export const Icons = {
   EllipsisVertical,
   CircleX,
   CircleCheck,
+  CircleCheckBig,
   Eye,
   EyeOff,
   GripVertical,
   Pencil,
   Check,
+  RotateCcw,
+  Save,
+  Receipt,
+  FileText,
+  FileX2,
 
   // Time & Status
   Clock,
   PartyPopper,
+  Bell,
 
   // Business / HR
   Building2,
   User,
   Users,
   TrendingUp,
+  TrendingDown,
   CircleDollarSign,
 
   // Devices / Assets
@@ -128,11 +149,15 @@ export const Icons = {
   // Contact
   Phone,
   Mail,
+  SendHorizonal,
 
   // Other modules
   Activity,
   DollarSign,
   Handshake,
+  FileCheck2,
+  FileWarning,
+  MapPin,
 } as const;
 
 export type IconName = keyof typeof Icons;
@@ -149,6 +174,7 @@ export const ModuleIcons = {
   marketing: Activity,
   accounting: DollarSign,
   operations: Handshake,
+  recruitment: UserPlus,
 
   // ── HR features (mirror hr-nav.tsx exactly) ───────────────────────────
   dashboard: LayoutDashboard,

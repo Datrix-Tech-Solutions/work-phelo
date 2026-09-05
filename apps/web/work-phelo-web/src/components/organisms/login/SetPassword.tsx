@@ -6,7 +6,7 @@ import { AppLogo } from '@/components/atoms/AppLogo';
 import { useAcceptInvite } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { cn } from '@/lib/utils';
+import { cardClass, cn } from '@/lib/utils';
 import { extractError } from '@/lib/errors';
 
 interface SetPasswordForm {
@@ -46,7 +46,7 @@ export default function SetPassword() {
       { inviteToken: token, password: data.password },
       {
         onSuccess: () => {
-          router.push(`/${tenantSlug}/dashboard`);
+          router.push(`/${tenantSlug}/modules`);
         },
         onError: (err) => {
           setError('root', { message: extractError(err) });
@@ -57,7 +57,7 @@ export default function SetPassword() {
 
   if (!token) {
     return (
-      <div className="w-full max-w-sm px-8 py-10 text-center">
+      <div className={cardClass('w-full max-w-sm px-8 py-10 text-center')}>
         <div className="flex justify-center mb-6">
           <AppLogo />
         </div>
@@ -70,7 +70,7 @@ export default function SetPassword() {
   }
 
   return (
-    <div className="w-full max-w-sm px-8 py-10">
+    <div className={cardClass('w-full max-w-sm px-8 py-10')}>
       <div className="flex justify-center mb-6">
         <AppLogo />
       </div>
@@ -80,7 +80,10 @@ export default function SetPassword() {
         Create a password to access your WorkPhelo account.
       </p>
 
-      <form onSubmit={handleSubmit(handleSetPassword)} className="flex flex-col gap-4">
+      <form
+        onSubmit={handleSubmit(handleSetPassword)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <div>
           <FormField
             label="Password"

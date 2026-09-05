@@ -5,7 +5,6 @@ export const ERP_MODULES = {
   CLOCKING: 'clocking',
   SCHEDULING: 'scheduling',
   APPRAISAL: 'appraisal',
-  PROJECTS: 'projects',
   ASSETS: 'assets',
   MARKETING: 'marketing',
   ACCOUNTING: 'accounting',

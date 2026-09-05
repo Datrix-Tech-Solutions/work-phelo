@@ -7,7 +7,7 @@ import {
   IsEnum,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { EmploymentType } from '../../../prisma/generated/client';
+import { EmploymentType, Gender } from '../../../prisma/generated/client';
 
 export class CreateLeaveTypeDto {
   @ApiProperty({
@@ -39,12 +39,22 @@ export class CreateLeaveTypeDto {
   maxCarryOverDays?: number;
 
   @ApiPropertyOptional({
-    description: 'Requires manager approval before grant',
+    description:
+      'Deprecated operational flag. Leave requests are now always reviewed before approval.',
     example: true,
   })
   @IsOptional()
   @IsBoolean()
   requiresApproval?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether a supporting document must be attached before this leave can be approved',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requiresSupportingDocument?: boolean;
 
   @ApiPropertyOptional({
     description: 'Whether this leave type is paid',
@@ -64,4 +74,15 @@ export class CreateLeaveTypeDto {
   @IsOptional()
   @IsEnum(EmploymentType, { each: true })
   applicableTo?: EmploymentType[];
+
+  @ApiPropertyOptional({
+    description:
+      'Genders eligible for this leave. Empty array means all genders are eligible.',
+    enum: Gender,
+    isArray: true,
+    example: ['FEMALE'],
+  })
+  @IsOptional()
+  @IsEnum(Gender, { each: true })
+  applicableGenders?: Gender[];
 }

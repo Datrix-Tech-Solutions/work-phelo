@@ -6,20 +6,20 @@
 */
 -- AlterEnum
 BEGIN;
-CREATE TYPE "auth"."UserRole_new" AS ENUM ('SUPER_ADMIN', 'TENANT_ADMIN', 'EMPLOYEE');
-ALTER TABLE "auth"."User" ALTER COLUMN "role" DROP DEFAULT;
-ALTER TABLE "auth"."User" ALTER COLUMN "role" TYPE "auth"."UserRole_new" USING ("role"::text::"auth"."UserRole_new");
-ALTER TYPE "auth"."UserRole" RENAME TO "UserRole_old";
-ALTER TYPE "auth"."UserRole_new" RENAME TO "UserRole";
-DROP TYPE "auth"."UserRole_old";
-ALTER TABLE "auth"."User" ALTER COLUMN "role" SET DEFAULT 'EMPLOYEE';
+CREATE TYPE "w_auth"."UserRole_new" AS ENUM ('SUPER_ADMIN', 'TENANT_ADMIN', 'EMPLOYEE');
+ALTER TABLE "w_auth"."User" ALTER COLUMN "role" DROP DEFAULT;
+ALTER TABLE "w_auth"."User" ALTER COLUMN "role" TYPE "w_auth"."UserRole_new" USING ("role"::text::"w_auth"."UserRole_new");
+ALTER TYPE "w_auth"."UserRole" RENAME TO "UserRole_old";
+ALTER TYPE "w_auth"."UserRole_new" RENAME TO "UserRole";
+DROP TYPE "w_auth"."UserRole_old";
+ALTER TABLE "w_auth"."User" ALTER COLUMN "role" SET DEFAULT 'EMPLOYEE';
 COMMIT;
 
 -- AlterTable
-ALTER TABLE "auth"."User" ADD COLUMN     "companyRoleId" TEXT;
+ALTER TABLE "w_auth"."User" ADD COLUMN     "companyRoleId" TEXT;
 
 -- CreateTable
-CREATE TABLE "auth"."CompanyRole" (
+CREATE TABLE "w_auth"."CompanyRole" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE "auth"."CompanyRole" (
 );
 
 -- CreateTable
-CREATE TABLE "auth"."CompanyRolePermission" (
+CREATE TABLE "w_auth"."CompanyRolePermission" (
     "id" TEXT NOT NULL,
     "companyRoleId" TEXT NOT NULL,
     "permission" TEXT NOT NULL,
@@ -43,16 +43,16 @@ CREATE TABLE "auth"."CompanyRolePermission" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CompanyRole_tenantId_name_key" ON "auth"."CompanyRole"("tenantId", "name");
+CREATE UNIQUE INDEX "CompanyRole_tenantId_name_key" ON "w_auth"."CompanyRole"("tenantId", "name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CompanyRolePermission_companyRoleId_permission_key" ON "auth"."CompanyRolePermission"("companyRoleId", "permission");
+CREATE UNIQUE INDEX "CompanyRolePermission_companyRoleId_permission_key" ON "w_auth"."CompanyRolePermission"("companyRoleId", "permission");
 
 -- AddForeignKey
-ALTER TABLE "auth"."CompanyRole" ADD CONSTRAINT "CompanyRole_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "auth"."Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."CompanyRole" ADD CONSTRAINT "CompanyRole_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "w_auth"."Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."CompanyRolePermission" ADD CONSTRAINT "CompanyRolePermission_companyRoleId_fkey" FOREIGN KEY ("companyRoleId") REFERENCES "auth"."CompanyRole"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."CompanyRolePermission" ADD CONSTRAINT "CompanyRolePermission_companyRoleId_fkey" FOREIGN KEY ("companyRoleId") REFERENCES "w_auth"."CompanyRole"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."User" ADD CONSTRAINT "User_companyRoleId_fkey" FOREIGN KEY ("companyRoleId") REFERENCES "auth"."CompanyRole"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."User" ADD CONSTRAINT "User_companyRoleId_fkey" FOREIGN KEY ("companyRoleId") REFERENCES "w_auth"."CompanyRole"("id") ON DELETE SET NULL ON UPDATE CASCADE;

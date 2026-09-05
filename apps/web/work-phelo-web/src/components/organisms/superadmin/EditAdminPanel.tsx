@@ -14,6 +14,7 @@ interface EditAdminPanelProps {
   onClose: () => void;
   tenantId: string;
   admin?: { name: string; email: string };
+  onSuccess?: () => void;
 }
 
 interface FormValues {
@@ -22,7 +23,13 @@ interface FormValues {
   email: string;
 }
 
-export function EditAdminPanel({ isOpen, onClose, tenantId, admin }: EditAdminPanelProps) {
+export function EditAdminPanel({
+  isOpen,
+  onClose,
+  tenantId,
+  admin,
+  onSuccess,
+}: EditAdminPanelProps) {
   const toast = useToast();
   const { mutate: updateAdmin, isPending } = useUpdateTenantAdmin(tenantId);
 
@@ -46,6 +53,7 @@ export function EditAdminPanel({ isOpen, onClose, tenantId, admin }: EditAdminPa
     updateAdmin(data, {
       onSuccess: () => {
         toast.success('Administrator updated successfully');
+        onSuccess?.();
         onClose();
       },
       onError: () => toast.error('Failed to update administrator'),

@@ -3,59 +3,53 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useMyProfile, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useMyProfile, useUpdateMyProfile, useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { TopNav } from '@/components/organisms/shared/TopNav';
-import { EditMyProfilePanel } from '@/components/organisms/employee/EditMyProfilePanel';
-import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
-import { EmploymentDetailsSection } from '@/components/molecules/employees/employeeDetailsSection';
-import { AccountDetailsSection } from '@/components/molecules/employees/accountDetailSection';
-import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
+import { EditMyProfilePanel } from '@/components/organisms/hr/employee/EditMyProfilePanel';
+import { EmployeeProfileCard } from '@/components/molecules/hr/employees/employeeProfileCard';
+import { EmploymentDetailsSection } from '@/components/molecules/hr/employees/employeeDetailsSection';
+import { AccountDetailsSection } from '@/components/molecules/hr/employees/accountDetailSection';
+import { EmployeeDetailSkeleton } from '@/components/molecules/hr/employees/employeeDetailSkeleton';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
+import { AppBackground } from '@/components/atoms/AppBackground';
 import type { UpdateEmployeePayload } from '@/types/hr';
 
 export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: employee, isLoading } = useMyProfile();
-  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { mutate: updateMyProfile, isPending: isUpdating } = useUpdateMyProfile();
+  const { data: allEmployees = [] } = useEmployeeOptions();
   const toast = useToast();
 
   const handleSave = (data: UpdateEmployeePayload) => {
     if (!employee) return;
-    updateEmployee(
-      { id: employee.id, ...data },
-      {
-        onSuccess: () => {
-          toast.success('Profile updated successfully');
-          setEditOpen(false);
-        },
-        onError: () => toast.error('Failed to update profile'),
+    updateMyProfile(data, {
+      onSuccess: () => {
+        toast.success('Profile updated successfully');
+        setEditOpen(false);
       },
-    );
+      onError: () => toast.error('Failed to update profile'),
+    });
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
-      <TopNav
-        userInitials={initials}
-        notificationCount={0}
-        activeTab="portal"
-        onTabChange={() => {}}
-      />
+    <AppBackground className="h-dvh overflow-hidden flex flex-col">
+      <TopNav userInitials={initials} />
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         {isLoading || !employee ? (
           <EmployeeDetailSkeleton />
         ) : (
-          <div className="p-8 flex flex-col gap-6">
+          <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
             {/* Page header */}
             <div className="flex items-center justify-between">
               <div>
@@ -75,7 +69,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
 
               {/* Right sections */}
               <div className="flex-1 min-w-0 flex flex-col gap-4">
-                <EmploymentDetailsSection employee={employee} allHrEmployees={[]} />
+                <EmploymentDetailsSection employee={employee} allHrEmployees={allEmployees} />
                 <AccountDetailsSection employee={employee} />
               </div>
             </div>
@@ -83,13 +77,15 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
         )}
       </main>
 
-      <EditMyProfilePanel
-        isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        employee={employee!}
-        onSave={handleSave}
-        isUpdating={isUpdating}
-      />
-    </div>
+      {employee && (
+        <EditMyProfilePanel
+          isOpen={editOpen}
+          onClose={() => setEditOpen(false)}
+          employee={employee}
+          onSave={handleSave}
+          isUpdating={isUpdating}
+        />
+      )}
+    </AppBackground>
   );
 }

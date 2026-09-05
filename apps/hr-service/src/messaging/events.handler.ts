@@ -1,4 +1,9 @@
-import { Controller, HttpException, Logger } from '@nestjs/common';
+import {
+  Controller,
+  HttpException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   Ctx,
   EventPattern,
@@ -9,6 +14,10 @@ import {
 } from '@nestjs/microservices';
 import { LeaveService } from '../leave/leave.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  normalizePayrollCountry,
+  normalizePayrollCurrency,
+} from '../common/payroll-calculator.helper';
 import {
   EventPatterns,
   WithMeta,
@@ -28,7 +37,8 @@ export class EventsHandler {
   ) {}
 
   private ack(context: RmqContext) {
-    context.getChannelRef().ack(context.getMessage());
+    const channel = context.getChannelRef() as { ack: (msg: unknown) => void };
+    channel.ack(context.getMessage());
   }
 
   private formatError(error: unknown) {
@@ -57,7 +67,10 @@ export class EventsHandler {
     error: unknown,
     details: string,
   ) {
-    const channel = context.getChannelRef();
+    const channel = context.getChannelRef() as {
+      ack: (msg: unknown) => void;
+      nack: (msg: unknown, allUpTo: boolean, requeue: boolean) => void;
+    };
     const message = context.getMessage();
 
     if (this.shouldRequeue(error)) {
@@ -131,13 +144,30 @@ export class EventsHandler {
     tenantId: string,
     adminEmail: string,
     adminUserId?: string,
+    country?: string,
+    currency?: string,
   ) {
+    const payrollCountry = normalizePayrollCountry(country);
+    const payrollCurrency = normalizePayrollCurrency(currency, payrollCountry);
+
     await Promise.all([
       this.leaveService.seedDefaultLeaveTypes(tenantId),
+      this.leaveService.seedPublicHolidaysForTenant(tenantId, country),
       this.prisma.tenantConfig.upsert({
         where: { tenantId },
-        create: { tenantId, adminEmail, adminUserId },
-        update: { adminEmail, adminUserId },
+        create: {
+          tenantId,
+          adminEmail,
+          adminUserId,
+          payrollCountry,
+          payrollCurrency,
+        },
+        update: {
+          adminEmail,
+          adminUserId,
+          payrollCountry,
+          payrollCurrency,
+        },
       }),
     ]);
 
@@ -154,7 +184,7 @@ export class EventsHandler {
       select: { id: true },
     });
     if (!employee) {
-      throw new Error(`No employee record found for ${email}`);
+      throw new NotFoundException(`No employee record found for ${email}`);
     }
 
     await this.prisma.employee.update({
@@ -170,12 +200,19 @@ export class EventsHandler {
     @Payload() data: WithMeta<TenantApprovedEvent>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, adminEmail, adminUserId, _meta } = data;
+    const { tenantId, adminEmail, adminUserId, country, currency, _meta } =
+      data;
     this.logger.log(
       `[hr.tenant_approved] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
     );
     try {
-      await this.provisionTenantWorkspace(tenantId, adminEmail, adminUserId);
+      await this.provisionTenantWorkspace(
+        tenantId,
+        adminEmail,
+        adminUserId,
+        country,
+        currency,
+      );
       this.logger.log(
         `[hr.tenant_approved] Tenant workspace provisioned | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
       );
@@ -213,7 +250,7 @@ export class EventsHandler {
         `[hr.employee_activated] Leave balances initialised | email=${email} | corrId=${_meta?.correlationId}`,
       );
       this.ack(context);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.settleEventFailure(
         context,
         'hr.employee_activated',
@@ -228,7 +265,8 @@ export class EventsHandler {
     @Payload() data: WithMeta<ProvisionTenantWorkspaceCommand>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, adminEmail, adminUserId, _meta } = data;
+    const { tenantId, adminEmail, adminUserId, country, currency, _meta } =
+      data;
     this.logger.log(
       `[hr.provision_tenant_workspace] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
     );
@@ -237,6 +275,8 @@ export class EventsHandler {
         tenantId,
         adminEmail,
         adminUserId,
+        country,
+        currency,
       );
       this.ack(context);
       return result;

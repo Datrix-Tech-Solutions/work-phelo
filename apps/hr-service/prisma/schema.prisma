@@ -48,6 +48,26 @@ enum MaritalStatus {
   @@schema("hr")
 }
 
+enum HrImportEntityType {
+  EMPLOYEE
+
+  @@schema("hr")
+}
+
+enum HrImportJobStatus {
+  DRY_RUN_COMPLETED
+  DRY_RUN_FAILED
+
+  @@schema("hr")
+}
+
+enum HrImportRowStatus {
+  VALID
+  INVALID
+
+  @@schema("hr")
+}
+
 enum LeaveRequestStatus {
   PENDING
   APPROVED
@@ -74,9 +94,34 @@ enum PayrollStatus {
   @@schema("hr")
 }
 
+enum PayrollCountry {
+  GH
+  NG
+  KE
+
+  @@schema("hr")
+}
+
+enum EmployeeCompensationType {
+  SALARY
+  COMMISSION
+  SALARY_PLUS_COMMISSION
+
+  @@schema("hr")
+}
+
+enum PayrollTaxPolicy {
+  STANDARD_PAYE
+  FIXED_AMOUNT
+  EXEMPT
+
+  @@schema("hr")
+}
+
 enum AppraisalStatus {
   DRAFT
   IN_PROGRESS
+  PENDING_FINALIZATION
   COMPLETED
   CANCELLED
 
@@ -88,6 +133,16 @@ enum AppraisalCycleStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+
+  @@schema("hr")
+}
+
+enum AppraisalCycleRecipientGroup {
+  ALL
+  PERMANENT
+  CONTRACTUAL
+  PROBATION
+  INTERNS
 
   @@schema("hr")
 }
@@ -166,6 +221,7 @@ enum AllowanceType {
   TRANSPORT
   HOUSING
   MEDICAL
+  CLOTHING
   OTHER
 
   @@schema("hr")
@@ -203,26 +259,131 @@ enum AssetCondition {
   @@schema("hr")
 }
 
+enum CompanyAgreementType {
+  NDA
+  EMPLOYMENT_CONTRACT
+  CONFIDENTIALITY
+  NON_COMPETE
+  CODE_OF_CONDUCT
+  IP_ASSIGNMENT
+  PROBATION_AGREEMENT
+  OTHER
+
+  @@schema("hr")
+}
+
+enum CompanyAgreementState {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@schema("hr")
+}
+
+enum CompanyAgreementSignatureStatus {
+  SIGNED
+  DECLINED
+  REVOKED
+
+  @@schema("hr")
+}
+
+enum CompanyAgreementSignatureType {
+  ACKNOWLEDGEMENT
+  TYPED
+
+  @@schema("hr")
+}
+
+enum AnnouncementAudienceType {
+  ALL
+  DEPARTMENTS
+  BRANCHES
+  EMPLOYEES
+
+  @@schema("hr")
+}
+
+enum AnnouncementDeliveryChannel {
+  IN_APP
+  EMAIL
+  SMS
+
+  @@schema("hr")
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+
+  @@schema("hr")
+}
+
+enum ProjectMemberRole {
+  OWNER
+  MANAGER
+  MEMBER
+
+  @@schema("hr")
+}
+
+enum ProjectTaskStatus {
+  TODO
+  IN_PROGRESS
+  ON_HOLD
+  DONE
+
+  @@schema("hr")
+}
+
+enum ProjectTaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@schema("hr")
+}
+
+enum ProjectActivityType {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_CANCELLED
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_STATUS_CHANGED
+  TASK_ASSIGNED
+  TASK_DELETED
+
+  @@schema("hr")
+}
+
 // ── Branch ───────────────────────────────────────────────────────────────
 
 model Branch {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  code        String?
-  address     String?
-  city        String?
-  region      String?
-  country     String?
-  phone       String?
-  email       String?
-  managerId   String?
-  isActive    Boolean  @default(true)
-  isHeadOffice Boolean @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  code         String?
+  address      String?
+  city         String?
+  region       String?
+  country      String?
+  phone        String?
+  email        String?
+  managerId    String?
+  isActive     Boolean  @default(true)
+  isHeadOffice Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  employees   Employee[]
+  employees Employee[]
+  assets    Asset[]
 
   @@unique([tenantId, name])
   @@schema("hr")
@@ -241,9 +402,9 @@ model Department {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
-  children    Department[] @relation("DepartmentHierarchy")
-  employees   Employee[]
+  parent    Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children  Department[] @relation("DepartmentHierarchy")
+  employees Employee[]
 
   @@unique([tenantId, name])
   @@schema("hr")
@@ -252,74 +413,178 @@ model Department {
 // ── Employee ──────────────────────────────────────────────────────────────
 
 model Employee {
-  id                String           @id @default(uuid())
-  tenantId          String
-  userId            String?          @unique
-  employeeNumber    String
-  firstName         String
-  lastName          String
-  email             String
-  phone             String?
-  gender            Gender?
-  dateOfBirth       DateTime?
-  maritalStatus     MaritalStatus?
-  nationality       String?
-  address           String?
-  city              String?
-  region            String?
-  emergencyName     String?
-  emergencyPhone    String?
-  emergencyRelation String?
-  departmentId      String?
-  branchId          String?
-  managerId         String?
-  jobTitle          String
-  employmentType    EmploymentType   @default(FULL_TIME)
-  employmentStatus      EmploymentStatus @default(PROBATION)
-  statusChangedAt       DateTime?
-  statusChangedById     String?
-  statusChangedByEmail  String?
-  hireDate          DateTime
-  probationEndsAt   DateTime?
-  contractEndDate   DateTime?
-  offboardedAt      DateTime?
-  offboardReason    String?
-  bankName          String?
-  bankAccountNumber String?
-  bankBranch        String?
-  nationalId        String?
-  ssnit             String?
-  tinNumber         String?
-  basicSalary       Decimal          @db.Decimal(15, 2)
-  avatarUrl         String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  id                   String                   @id @default(uuid())
+  tenantId             String
+  userId               String?                  @unique
+  employeeNumber       String
+  firstName            String
+  lastName             String
+  email                String
+  phone                String?
+  gender               Gender?
+  dateOfBirth          DateTime?
+  maritalStatus        MaritalStatus?
+  nationality          String?
+  address              String?
+  city                 String?
+  region               String?
+  emergencyName        String?
+  emergencyPhone       String?
+  emergencyRelation    String?
+  departmentId         String?
+  branchId             String?
+  managerId            String?
+  jobTitle             String
+  employmentType       EmploymentType           @default(FULL_TIME)
+  employmentStatus     EmploymentStatus         @default(PROBATION)
+  statusChangedAt      DateTime?
+  statusChangedById    String?
+  statusChangedByEmail String?
+  hireDate             DateTime
+  probationEndsAt      DateTime?
+  contractEndDate      DateTime?
+  offboardedAt         DateTime?
+  offboardReason       String?
+  bankName             String?
+  bankAccountNumber    String?
+  bankBranch           String?
+  nationalId           String?
+  ssnit                String?
+  tinNumber            String?
+  basicSalary          Decimal                  @db.Decimal(15, 2)
+  compensationType     EmployeeCompensationType @default(SALARY)
+  taxPolicy            PayrollTaxPolicy         @default(STANDARD_PAYE)
+  fixedTaxAmount       Decimal?                 @db.Decimal(15, 2)
+  commissionTaxable    Boolean                  @default(true)
+  emailHash            String?
+  avatarUrl            String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
 
-  department        Department?       @relation(fields: [departmentId], references: [id])
-  branch            Branch?           @relation(fields: [branchId], references: [id])
-  leaveBalances     LeaveBalance[]
-  leaveRequests     LeaveRequest[]
-  clockRecords      ClockRecord[]
-  timesheets        Timesheet[]
-  timeCorrections   TimeCorrection[]
-  schedules         ShiftSchedule[]
-  requestedShiftSwaps ShiftSwapRequest[] @relation("ShiftSwapRequester")
-  targetShiftSwaps    ShiftSwapRequest[] @relation("ShiftSwapTarget")
-  managedShiftSwaps   ShiftSwapRequest[] @relation("ShiftSwapManager")
-  shiftSwapActionLogs ShiftSwapActionLog[]
-  shiftOverrides      ShiftAssignmentOverride[]
-  payrollItems      PayrollItem[]
-  appraisals        Appraisal[]       @relation("AppraisalEmployee")
-  managedAppraisals Appraisal[]       @relation("AppraisalManager")
-  documents         EmployeeDocument[]
-  allowances        EmployeeAllowance[]
-  assignedAssets    Asset[]           @relation("AssignedAssets")
-  assetAssignments  AssetAssignment[] @relation("EmployeeAssetAssignments")
-  offboarding       OffboardingRecord?
-  resignation       ResignationRecord?
+  department            Department?                 @relation(fields: [departmentId], references: [id])
+  branch                Branch?                     @relation(fields: [branchId], references: [id])
+  leaveBalances         LeaveBalance[]
+  leaveRequests         LeaveRequest[]
+  coveringLeaveRequests LeaveRequest[]              @relation("LeaveCoverageEmployee")
+  clockRecords          ClockRecord[]
+  timesheets            Timesheet[]
+  timeCorrections       TimeCorrection[]
+  schedules             ShiftSchedule[]
+  requestedShiftSwaps   ShiftSwapRequest[]          @relation("ShiftSwapRequester")
+  targetShiftSwaps      ShiftSwapRequest[]          @relation("ShiftSwapTarget")
+  managedShiftSwaps     ShiftSwapRequest[]          @relation("ShiftSwapManager")
+  shiftSwapActionLogs   ShiftSwapActionLog[]
+  shiftOverrides        ShiftAssignmentOverride[]
+  payrollItems          PayrollItem[]
+  appraisals            Appraisal[]                 @relation("AppraisalEmployee")
+  managedAppraisals     Appraisal[]                 @relation("AppraisalManager")
+  documents             EmployeeDocument[]
+  agreementSignatures   CompanyAgreementSignature[]
+  allowances            EmployeeAllowance[]
+  deductions            EmployeeDeduction[]
+  assignedAssets        Asset[]                     @relation("AssignedAssets")
+  assetAssignments      AssetAssignment[]           @relation("EmployeeAssetAssignments")
+  managedProjects       Project[]                   @relation("ManagedProjects")
+  projectMemberships    ProjectMember[]
+  assignedProjectTasks  ProjectTask[]               @relation("AssignedProjectTasks")
+  offboarding           OffboardingRecord?
+  resignation           ResignationRecord?
 
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, email])
+  @@schema("hr")
+}
+
+// ── Projects & Tasks ─────────────────────────────────────────────────────
+
+model Project {
+  id              String        @id @default(uuid())
+  tenantId        String
+  name            String
+  description     String?
+  status          ProjectStatus @default(PLANNING)
+  startDate       DateTime
+  endDate         DateTime?
+  budget          Decimal?      @db.Decimal(15, 2)
+  managerId       String?
+  createdByUserId String?
+  isArchived      Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  manager    Employee?         @relation("ManagedProjects", fields: [managerId], references: [id])
+  members    ProjectMember[]
+  tasks      ProjectTask[]
+  activities ProjectActivity[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, managerId])
+  @@index([tenantId, createdAt])
+  @@schema("hr")
+}
+
+model ProjectMember {
+  id         String            @id @default(uuid())
+  tenantId   String
+  projectId  String
+  employeeId String
+  role       ProjectMemberRole @default(MEMBER)
+  joinedAt   DateTime          @default(now())
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, employeeId])
+  @@index([tenantId, employeeId])
+  @@index([tenantId, projectId])
+  @@schema("hr")
+}
+
+model ProjectTask {
+  id                 String              @id @default(uuid())
+  tenantId           String
+  projectId          String
+  name               String
+  description        String?
+  status             ProjectTaskStatus   @default(TODO)
+  priority           ProjectTaskPriority @default(MEDIUM)
+  dueDate            DateTime?
+  assignedEmployeeId String?
+  createdByUserId    String?
+  completedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedEmployee Employee?         @relation("AssignedProjectTasks", fields: [assignedEmployeeId], references: [id])
+  activities       ProjectActivity[]
+
+  @@index([tenantId, projectId])
+  @@index([tenantId, assignedEmployeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@schema("hr")
+}
+
+model ProjectActivity {
+  id              String              @id @default(uuid())
+  tenantId        String
+  projectId       String
+  taskId          String?
+  actorUserId     String?
+  actorEmployeeId String?
+  type            ProjectActivityType
+  message         String
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    ProjectTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, projectId, createdAt])
+  @@index([tenantId, taskId])
   @@schema("hr")
 }
 
@@ -331,6 +596,7 @@ model Asset {
   assetNumber        String
   name               String
   type               AssetType
+  customType         String?
   serialNumber       String?
   purchaseDate       DateTime?
   purchaseCost       Decimal?        @db.Decimal(15, 2)
@@ -340,30 +606,33 @@ model Asset {
   status             AssetStatus     @default(AVAILABLE)
   assignedEmployeeId String?
   assignedAt         DateTime?
+  branchId           String?
   isActive           Boolean         @default(true)
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  assignedEmployee   Employee?        @relation("AssignedAssets", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
-  assignments        AssetAssignment[]
+  assignedEmployee Employee?         @relation("AssignedAssets", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  branch           Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  assignments      AssetAssignment[]
 
   @@unique([tenantId, assetNumber])
   @@index([tenantId, status])
   @@index([tenantId, assignedEmployeeId])
+  @@index([tenantId, branchId])
   @@schema("hr")
 }
 
 model AssetAssignment {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   tenantId   String
   assetId    String
   employeeId String
-  assignedAt DateTime @default(now())
+  assignedAt DateTime  @default(now())
   returnedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
-  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  employee   Employee @relation("EmployeeAssetAssignments", fields: [employeeId], references: [id], onDelete: Cascade)
+  asset    Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employee Employee @relation("EmployeeAssetAssignments", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, employeeId, returnedAt])
   @@index([tenantId, assetId, returnedAt])
@@ -427,43 +696,43 @@ model ResignationRecord {
 }
 
 model OffboardingRecord {
-  id            String          @id @default(uuid())
-  tenantId      String
-  employeeId    String          @unique
-  reason        OffboardReason
-  otherReason   String?
-  lastWorkingDate DateTime
-  exitNotes     String?
-  isDraft       Boolean         @default(true)
-  completedAt   DateTime?
-  completedById String?
+  id               String         @id @default(uuid())
+  tenantId         String
+  employeeId       String         @unique
+  reason           OffboardReason
+  otherReason      String?
+  lastWorkingDate  DateTime
+  exitNotes        String?
+  isDraft          Boolean        @default(true)
+  completedAt      DateTime?
+  completedById    String?
   completedByEmail String?
 
   // Clearance checklist — each item records who ticked it and when
-  assetReturnDone       Boolean   @default(false)
-  assetReturnDoneById   String?
+  assetReturnDone        Boolean   @default(false)
+  assetReturnDoneById    String?
   assetReturnDoneByEmail String?
-  assetReturnDoneAt     DateTime?
+  assetReturnDoneAt      DateTime?
 
-  hrClearanceDone       Boolean   @default(false)
-  hrClearanceDoneById   String?
+  hrClearanceDone        Boolean   @default(false)
+  hrClearanceDoneById    String?
   hrClearanceDoneByEmail String?
-  hrClearanceDoneAt     DateTime?
+  hrClearanceDoneAt      DateTime?
 
-  financeClearanceDone  Boolean   @default(false)
-  financeClearanceDoneById String?
+  financeClearanceDone        Boolean   @default(false)
+  financeClearanceDoneById    String?
   financeClearanceDoneByEmail String?
-  financeClearanceDoneAt DateTime?
+  financeClearanceDoneAt      DateTime?
 
-  managerApprovalDone   Boolean   @default(false)
-  managerApprovalDoneById String?
+  managerApprovalDone        Boolean   @default(false)
+  managerApprovalDoneById    String?
   managerApprovalDoneByEmail String?
-  managerApprovalDoneAt DateTime?
+  managerApprovalDoneAt      DateTime?
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@schema("hr")
 }
@@ -471,17 +740,17 @@ model OffboardingRecord {
 // ── Employee Document ─────────────────────────────────────────────────────
 
 model EmployeeDocument {
-  id           String       @id @default(uuid())
-  tenantId     String
-  employeeId   String
-  type         DocumentType
-  name         String
-  url          String
-  uploadedBy   String
-  expiresAt    DateTime?
-  createdAt    DateTime     @default(now())
+  id         String       @id @default(uuid())
+  tenantId   String
+  employeeId String
+  type       DocumentType
+  name       String
+  url        String
+  uploadedBy String
+  expiresAt  DateTime?
+  createdAt  DateTime     @default(now())
 
-  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@schema("hr")
 }
@@ -489,85 +758,110 @@ model EmployeeDocument {
 // ── Allowance ─────────────────────────────────────────────────────────────
 
 model EmployeeAllowance {
-  id           String        @id @default(uuid())
-  tenantId     String
-  employeeId   String
-  type         AllowanceType
-  name         String
-  amount       Decimal       @db.Decimal(15, 2)
-  isRecurring  Boolean       @default(true)
+  id            String        @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  type          AllowanceType
+  name          String
+  amount        Decimal       @db.Decimal(15, 2)
+  isRecurring   Boolean       @default(true)
   effectiveFrom DateTime
-  effectiveTo  DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  effectiveTo   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
+  @@schema("hr")
+}
+
+model EmployeeDeduction {
+  id          String   @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  name        String
+  totalAmount Decimal  @db.Decimal(15, 2)
+  monthlyRate Decimal  @db.Decimal(15, 2)
+  amountPaid  Decimal  @default(0) @db.Decimal(15, 2)
+  startDate   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
   @@schema("hr")
 }
 
 // ── Leave ─────────────────────────────────────────────────────────────────
 
 model LeaveType {
-  id               String           @id @default(uuid())
-  tenantId         String
-  name             String
-  daysAllowed      Int
-  isCarryOver      Boolean          @default(false)
-  maxCarryOverDays Int?
-  requiresApproval Boolean          @default(true)
-  isPaid           Boolean          @default(true)
-  isActive         Boolean          @default(true)
-  isDefault        Boolean          @default(false)
-  applicableTo     EmploymentType[] @default([])
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                         String           @id @default(uuid())
+  tenantId                   String
+  name                       String
+  daysAllowed                Int
+  isCarryOver                Boolean          @default(false)
+  maxCarryOverDays           Int?
+  requiresApproval           Boolean          @default(true)
+  requiresSupportingDocument Boolean          @default(false)
+  isPaid                     Boolean          @default(true)
+  isActive                   Boolean          @default(true)
+  isDefault                  Boolean          @default(false)
+  applicableTo               EmploymentType[] @default([])
+  applicableGenders          Gender[]         @default([])
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
 
-  balances         LeaveBalance[]
-  requests         LeaveRequest[]
+  balances LeaveBalance[]
+  requests LeaveRequest[]
 
   @@unique([tenantId, name])
   @@schema("hr")
 }
 
 model LeaveBalance {
-  id           String    @id @default(uuid())
-  tenantId     String
-  employeeId   String
-  leaveTypeId  String
-  year         Int
-  totalDays    Int
-  usedDays     Int       @default(0)
-  pendingDays  Int       @default(0)
+  id            String @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  leaveTypeId   String
+  year          Int
+  totalDays     Int
+  usedDays      Int    @default(0)
+  pendingDays   Int    @default(0)
   remainingDays Int
 
-  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id])
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
 
   @@unique([employeeId, leaveTypeId, year])
   @@schema("hr")
 }
 
 model LeaveRequest {
-  id           String             @id @default(uuid())
-  tenantId     String
-  employeeId   String
-  leaveTypeId  String
-  startDate    DateTime
-  endDate      DateTime
-  totalDays    Int
-  reason       String?
-  status       LeaveRequestStatus @default(PENDING)
-  approvedBy   String?
-  approvedAt   DateTime?
-  rejectedBy   String?
-  rejectedAt   DateTime?
-  rejectionNote String?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id                     String             @id @default(uuid())
+  tenantId               String
+  employeeId             String
+  leaveTypeId            String
+  coverageEmployeeId     String?
+  startDate              DateTime
+  endDate                DateTime
+  totalDays              Int
+  reason                 String?
+  coverageNote           String?
+  supportingDocumentName String?
+  supportingDocumentUrl  String?
+  status                 LeaveRequestStatus @default(PENDING)
+  approvedBy             String?
+  approvedAt             DateTime?
+  rejectedBy             String?
+  rejectedAt             DateTime?
+  rejectionNote          String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
-  employee     Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveType    LeaveType          @relation(fields: [leaveTypeId], references: [id])
+  employee         Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  coverageEmployee Employee? @relation("LeaveCoverageEmployee", fields: [coverageEmployeeId], references: [id], onDelete: SetNull)
+  leaveType        LeaveType @relation(fields: [leaveTypeId], references: [id])
 
   @@schema("hr")
 }
@@ -577,117 +871,117 @@ model LeaveRequest {
 /// Manual SQL migration adds a partial unique index so only one open
 /// clock record can exist per employee per day.
 model ClockRecord {
-  id          String    @id @default(uuid())
-  tenantId    String
-  employeeId  String
-  clockIn     DateTime
-  clockOut    DateTime?
-  date        DateTime
-  hoursWorked Decimal?  @db.Decimal(5, 2)
-  isLate      Boolean   @default(false)
-  isOutsideSchedule Boolean @default(false)
-  workMode    WorkMode?
-  ipAddress   String?
-  location    String?
-  note        String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String    @id @default(uuid())
+  tenantId          String
+  employeeId        String
+  clockIn           DateTime
+  clockOut          DateTime?
+  date              DateTime
+  hoursWorked       Decimal?  @db.Decimal(5, 2)
+  isLate            Boolean   @default(false)
+  isOutsideSchedule Boolean   @default(false)
+  workMode          WorkMode?
+  ipAddress         String?
+  location          String?
+  note              String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@schema("hr")
 }
 
 model Timesheet {
-  id           String   @id @default(uuid())
-  tenantId     String
-  employeeId   String
-  weekStart    DateTime
-  weekEnd      DateTime
-  totalHours   Decimal  @db.Decimal(6, 2)
-  regularHours Decimal  @db.Decimal(6, 2)
-  overtimeHours Decimal @db.Decimal(6, 2) @default(0)
-  isApproved   Boolean  @default(false)
-  approvedBy   String?
-  approvedAt   DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  weekStart     DateTime
+  weekEnd       DateTime
+  totalHours    Decimal   @db.Decimal(6, 2)
+  regularHours  Decimal   @db.Decimal(6, 2)
+  overtimeHours Decimal   @default(0) @db.Decimal(6, 2)
+  isApproved    Boolean   @default(false)
+  approvedBy    String?
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, weekStart])
   @@schema("hr")
 }
 
 model TimeCorrection {
-  id            String               @id @default(uuid())
-  tenantId      String
-  employeeId    String
-  date          DateTime
-  originalIn    DateTime?
-  originalOut   DateTime?
-  requestedIn   DateTime?
-  requestedOut  DateTime?
-  reason        String
-  status        TimeCorrectionStatus @default(PENDING)
-  reviewedBy    String?
-  reviewedAt    DateTime?
-  reviewNote    String?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  id           String               @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  date         DateTime
+  originalIn   DateTime?
+  originalOut  DateTime?
+  requestedIn  DateTime?
+  requestedOut DateTime?
+  reason       String
+  status       TimeCorrectionStatus @default(PENDING)
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
-  employee      Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@schema("hr")
 }
 
 model ShiftSchedule {
-  id          String    @id @default(uuid())
-  tenantId    String
-  employeeId  String
-  shiftType   ShiftType
-  workMode    WorkMode  @default(ONSITE)
-  startTime   String
-  endTime     String
-  dayOfWeek   Int[]
+  id            String    @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  shiftType     ShiftType
+  workMode      WorkMode  @default(ONSITE)
+  startTime     String
+  endTime       String
+  dayOfWeek     Int[]
   effectiveFrom DateTime
-  effectiveTo DateTime?
-  createdBy   String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  effectiveTo   DateTime?
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  requestedShiftSwaps ShiftSwapRequest[] @relation("SwapRequesterSchedule")
-  targetShiftSwaps    ShiftSwapRequest[] @relation("SwapTargetSchedule")
+  employee            Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  requestedShiftSwaps ShiftSwapRequest[]        @relation("SwapRequesterSchedule")
+  targetShiftSwaps    ShiftSwapRequest[]        @relation("SwapTargetSchedule")
   assignmentOverrides ShiftAssignmentOverride[]
 
   @@schema("hr")
 }
 
 model ShiftSwapRequest {
-  id                    String          @id @default(uuid())
-  tenantId              String
-  requesterEmployeeId   String
-  requesterScheduleId   String
-  requesterShiftDate    DateTime
-  targetEmployeeId      String
-  targetScheduleId      String
-  targetShiftDate       DateTime
-  managerEmployeeId     String?
-  reason                String?
-  status                ShiftSwapStatus @default(PENDING_COLLEAGUE)
-  expiresAt             DateTime
-  colleagueRespondedAt  DateTime?
-  managerDecisionAt     DateTime?
+  id                     String          @id @default(uuid())
+  tenantId               String
+  requesterEmployeeId    String
+  requesterScheduleId    String
+  requesterShiftDate     DateTime
+  targetEmployeeId       String
+  targetScheduleId       String
+  targetShiftDate        DateTime
+  managerEmployeeId      String?
+  reason                 String?
+  status                 ShiftSwapStatus @default(PENDING_COLLEAGUE)
+  expiresAt              DateTime
+  colleagueRespondedAt   DateTime?
+  managerDecisionAt      DateTime?
   managerRejectionReason String?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
-  requesterEmployee Employee      @relation("ShiftSwapRequester", fields: [requesterEmployeeId], references: [id], onDelete: Cascade)
-  requesterSchedule ShiftSchedule @relation("SwapRequesterSchedule", fields: [requesterScheduleId], references: [id], onDelete: Cascade)
-  targetEmployee    Employee      @relation("ShiftSwapTarget", fields: [targetEmployeeId], references: [id], onDelete: Cascade)
-  targetSchedule    ShiftSchedule @relation("SwapTargetSchedule", fields: [targetScheduleId], references: [id], onDelete: Cascade)
-  managerEmployee   Employee?     @relation("ShiftSwapManager", fields: [managerEmployeeId], references: [id], onDelete: SetNull)
+  requesterEmployee Employee                  @relation("ShiftSwapRequester", fields: [requesterEmployeeId], references: [id], onDelete: Cascade)
+  requesterSchedule ShiftSchedule             @relation("SwapRequesterSchedule", fields: [requesterScheduleId], references: [id], onDelete: Cascade)
+  targetEmployee    Employee                  @relation("ShiftSwapTarget", fields: [targetEmployeeId], references: [id], onDelete: Cascade)
+  targetSchedule    ShiftSchedule             @relation("SwapTargetSchedule", fields: [targetScheduleId], references: [id], onDelete: Cascade)
+  managerEmployee   Employee?                 @relation("ShiftSwapManager", fields: [managerEmployeeId], references: [id], onDelete: SetNull)
   overrides         ShiftAssignmentOverride[]
   actionLogs        ShiftSwapActionLog[]
 
@@ -698,34 +992,34 @@ model ShiftSwapRequest {
 }
 
 model ShiftSwapActionLog {
-  id                 String             @id @default(uuid())
+  id                 String              @id @default(uuid())
   tenantId           String
   shiftSwapRequestId String
   action             ShiftSwapActionType
   actorEmployeeId    String?
   actorUserId        String?
   note               String?
-  createdAt          DateTime           @default(now())
+  createdAt          DateTime            @default(now())
 
-  shiftSwapRequest   ShiftSwapRequest   @relation(fields: [shiftSwapRequestId], references: [id], onDelete: Cascade)
-  actorEmployee      Employee?          @relation(fields: [actorEmployeeId], references: [id], onDelete: SetNull)
+  shiftSwapRequest ShiftSwapRequest @relation(fields: [shiftSwapRequestId], references: [id], onDelete: Cascade)
+  actorEmployee    Employee?        @relation(fields: [actorEmployeeId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, shiftSwapRequestId, createdAt])
   @@schema("hr")
 }
 
 model ShiftAssignmentOverride {
-  id                String   @id @default(uuid())
-  tenantId          String
-  scheduleId        String
-  shiftDate         DateTime
+  id                 String   @id @default(uuid())
+  tenantId           String
+  scheduleId         String
+  shiftDate          DateTime
   assignedEmployeeId String
-  swapRequestId     String?
-  createdAt         DateTime @default(now())
+  swapRequestId      String?
+  createdAt          DateTime @default(now())
 
-  schedule          ShiftSchedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  assignedEmployee  Employee          @relation(fields: [assignedEmployeeId], references: [id], onDelete: Cascade)
-  swapRequest       ShiftSwapRequest? @relation(fields: [swapRequestId], references: [id], onDelete: SetNull)
+  schedule         ShiftSchedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  assignedEmployee Employee          @relation(fields: [assignedEmployeeId], references: [id], onDelete: Cascade)
+  swapRequest      ShiftSwapRequest? @relation(fields: [swapRequestId], references: [id], onDelete: SetNull)
 
   @@unique([scheduleId, shiftDate])
   @@index([tenantId, assignedEmployeeId, shiftDate])
@@ -735,52 +1029,108 @@ model ShiftAssignmentOverride {
 // ── Payroll ───────────────────────────────────────────────────────────────
 
 model PayrollRun {
-  id           String        @id @default(uuid())
-  tenantId     String
-  month        Int
-  year         Int
-  status       PayrollStatus @default(DRAFT)
-  totalGross   Decimal       @db.Decimal(15, 2)
-  totalNet     Decimal       @db.Decimal(15, 2)
-  totalSSNIT   Decimal       @db.Decimal(15, 2)
-  totalPAYE    Decimal       @db.Decimal(15, 2)
-  runBy        String
-  approvedBy   String?
-  approvedAt   DateTime?
-  paidAt       DateTime?
-  notes        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                String         @id @default(uuid())
+  tenantId          String
+  month             Int
+  year              Int
+  status            PayrollStatus  @default(DRAFT)
+  totalGross        Decimal        @db.Decimal(15, 2)
+  totalNet          Decimal        @db.Decimal(15, 2)
+  totalSSNIT        Decimal        @db.Decimal(15, 2)
+  totalTier1        Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier2        Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier3        Decimal        @default(0) @db.Decimal(15, 2)
+  totalPAYE         Decimal        @db.Decimal(15, 2)
+  totalEmployerCost Decimal        @default(0) @db.Decimal(15, 2)
+  runBy             String
+  submittedBy       String?
+  submittedAt       DateTime?
+  approvedBy        String?
+  approvedAt        DateTime?
+  approvalNote      String?
+  returnToDraftNote String?
+  paidAt            DateTime?
+  notes             String?
+  payrollCountry    PayrollCountry @default(GH)
+  payrollCurrency   String         @default("GHS")
+  tier3Enabled      Boolean        @default(false)
+  tier3Rate         Decimal?       @db.Decimal(5, 2)
+  tier3SchemeName   String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
-  items        PayrollItem[]
+  items PayrollItem[]
 
   @@unique([tenantId, month, year])
   @@schema("hr")
 }
 
 model PayrollItem {
-  id              String     @id @default(uuid())
-  tenantId        String
-  payrollRunId    String
-  employeeId      String
-  basicSalary     Decimal    @db.Decimal(15, 2)
-  totalAllowances Decimal    @db.Decimal(15, 2) @default(0)
-  overtimePay     Decimal    @db.Decimal(15, 2) @default(0)
-  bonus           Decimal    @db.Decimal(15, 2) @default(0)
-  thirteenthMonth Decimal    @db.Decimal(15, 2) @default(0)
-  grossSalary     Decimal    @db.Decimal(15, 2)
-  employeeSSNIT   Decimal    @db.Decimal(15, 2)
-  employerSSNIT   Decimal    @db.Decimal(15, 2)
-  payeTax         Decimal    @db.Decimal(15, 2)
-  totalDeductions Decimal    @db.Decimal(15, 2)
-  netSalary       Decimal    @db.Decimal(15, 2)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id                        String                   @id @default(uuid())
+  tenantId                  String
+  payrollRunId              String
+  employeeId                String
+  basicSalary               Decimal                  @db.Decimal(15, 2)
+  commissionAmount          Decimal                  @default(0) @db.Decimal(15, 2)
+  totalAllowances           Decimal                  @default(0) @db.Decimal(15, 2)
+  transportAmount           Decimal                  @default(0) @db.Decimal(15, 2)
+  otherDeductions           Decimal                  @default(0) @db.Decimal(15, 2)
+  overtimePay               Decimal                  @default(0) @db.Decimal(15, 2)
+  bonus                     Decimal                  @default(0) @db.Decimal(15, 2)
+  thirteenthMonth           Decimal                  @default(0) @db.Decimal(15, 2)
+  grossSalary               Decimal                  @db.Decimal(15, 2)
+  employeeSSNIT             Decimal                  @db.Decimal(15, 2)
+  employerSSNIT             Decimal                  @db.Decimal(15, 2)
+  tier1Contribution         Decimal                  @default(0) @db.Decimal(15, 2)
+  tier2Contribution         Decimal                  @default(0) @db.Decimal(15, 2)
+  tier3Employee             Decimal                  @default(0) @db.Decimal(15, 2)
+  taxableIncome             Decimal                  @default(0) @db.Decimal(15, 2)
+  payeTax                   Decimal                  @db.Decimal(15, 2)
+  fixedTaxAmount            Decimal?                 @db.Decimal(15, 2)
+  taxPolicySnapshot         PayrollTaxPolicy         @default(STANDARD_PAYE)
+  compensationTypeSnapshot  EmployeeCompensationType @default(SALARY)
+  commissionTaxableSnapshot Boolean                  @default(true)
+  totalDeductions           Decimal                  @db.Decimal(15, 2)
+  netSalary                 Decimal                  @db.Decimal(15, 2)
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
 
-  payrollRun      PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  employee        Employee   @relation(fields: [employeeId], references: [id])
+  payrollRun     PayrollRun             @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee       Employee               @relation(fields: [employeeId], references: [id])
+  allowanceItems PayrollItemAllowance[]
+  deductionItems PayrollItemDeduction[]
 
   @@unique([payrollRunId, employeeId])
+  @@schema("hr")
+}
+
+model PayrollItemAllowance {
+  id            String   @id @default(uuid())
+  tenantId      String
+  payrollItemId String
+  name          String
+  type          String?
+  amount        Decimal  @db.Decimal(15, 2)
+  createdAt     DateTime @default(now())
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, payrollItemId])
+  @@schema("hr")
+}
+
+model PayrollItemDeduction {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  payrollItemId       String
+  employeeDeductionId String?
+  name                String
+  amount              Decimal  @db.Decimal(15, 2)
+  createdAt           DateTime @default(now())
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, payrollItemId])
   @@schema("hr")
 }
 
@@ -804,21 +1154,21 @@ model AppraisalTemplate {
 }
 
 model AppraisalTemplateKpi {
-  id          String            @id @default(uuid())
+  id          String   @id @default(uuid())
   templateId  String
   title       String
   weight      Int
-  maxScore    Int               @default(5)
+  maxScore    Int      @default(5)
   description String?
-  createdAt   DateTime          @default(now())
+  createdAt   DateTime @default(now())
 
-  template    AppraisalTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template AppraisalTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@schema("hr")
 }
 
 model AppraisalCycle {
-  id                      String    @id @default(uuid())
+  id                      String               @id @default(uuid())
   tenantId                String
   title                   String
   description             String?
@@ -827,135 +1177,255 @@ model AppraisalCycle {
   selfAssessmentDeadline  DateTime?
   managerReviewDeadline   DateTime?
   frequency               String?
-  departmentIds           String[]  @default([])
-  employmentTypes         String[]  @default([])
-  employmentStatuses      EmploymentStatus[] @default([])
-  employeeIds             String[]  @default([])
+  departmentIds           String[]             @default([])
+  employmentTypes         String[]             @default([])
+  employmentStatuses      EmploymentStatus[]   @default([])
+  employeeIds             String[]             @default([])
   templateId              String?
-  selfAssessmentWeight    Int       @default(40)
-  managerAssessmentWeight Int       @default(60)
+  selfAssessmentWeight    Int                  @default(40)
+  managerAssessmentWeight Int                  @default(60)
   status                  AppraisalCycleStatus @default(UPCOMING)
-  isActive                Boolean   @default(false)
+  isActive                Boolean              @default(false)
   activatedAt             DateTime?
   cancelledAt             DateTime?
   cancelledReason         String?
   createdBy               String
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 
-  appraisals  Appraisal[]
-  kpis        AppraisalKpi[]
-  template    AppraisalTemplate? @relation(fields: [templateId], references: [id])
+  appraisals Appraisal[]
+  kpis       AppraisalKpi[]
+  template   AppraisalTemplate? @relation(fields: [templateId], references: [id])
 
   @@unique([tenantId, title])
   @@schema("hr")
 }
 
 model AppraisalKpi {
-  id            String         @id @default(uuid())
+  id            String   @id @default(uuid())
   tenantId      String
   cycleId       String
   title         String
   description   String?
   weight        Int
-  maxScore      Int            @default(5)
-  selfWeight    Int            @default(50)
-  managerWeight Int            @default(50)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  maxScore      Int      @default(5)
+  selfWeight    Int      @default(50)
+  managerWeight Int      @default(50)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  cycle         AppraisalCycle     @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  scores        AppraisalKpiScore[]
+  cycle  AppraisalCycle      @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  scores AppraisalKpiScore[]
 
   @@schema("hr")
 }
 
 model Appraisal {
-  id          String          @id @default(uuid())
-  tenantId    String
-  cycleId     String
-  employeeId  String
-  managerId   String?
-  status      AppraisalStatus @default(DRAFT)
+  id         String          @id @default(uuid())
+  tenantId   String
+  cycleId    String
+  employeeId String
+  managerId  String?
+  status     AppraisalStatus @default(DRAFT)
 
-  selfScore   Float?
-  selfComment String?
-  selfStatus  ReviewStatus    @default(PENDING)
+  selfScore       Float?
+  selfComment     String?
+  selfStatus      ReviewStatus @default(PENDING)
   selfSubmittedAt DateTime?
 
-  managerScore   Float?
-  managerComment String?
-  managerStatus  ReviewStatus @default(PENDING)
+  managerScore       Float?
+  managerComment     String?
+  managerStatus      ReviewStatus @default(PENDING)
   managerSubmittedAt DateTime?
 
-  finalScore  Float?
-  finalComment String?
-  completedAt DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  finalScore       Float?
+  finalComment     String?
+  completedAt      DateTime?
+  finalizedBy      String?
+  finalizedAt      DateTime?
+  finalizationNote String?
+  reopenedAt       DateTime?
+  reopenedBy       String?
+  reopenReason     String?
+  revisionNumber   Int       @default(1)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  cycle       AppraisalCycle     @relation(fields: [cycleId], references: [id])
-  employee    Employee           @relation("AppraisalEmployee", fields: [employeeId], references: [id])
-  manager     Employee?          @relation("AppraisalManager", fields: [managerId], references: [id])
-  kpiScores   AppraisalKpiScore[]
+  cycle        AppraisalCycle             @relation(fields: [cycleId], references: [id])
+  employee     Employee                   @relation("AppraisalEmployee", fields: [employeeId], references: [id])
+  manager      Employee?                  @relation("AppraisalManager", fields: [managerId], references: [id])
+  kpiScores    AppraisalKpiScore[]
   reminderLogs AppraisalReminderLog[]
+  revisionLogs AppraisalRevisionHistory[]
 
   @@unique([cycleId, employeeId])
   @@schema("hr")
 }
 
+model AppraisalRevisionHistory {
+  id                    String           @id @default(uuid())
+  tenantId              String
+  appraisalId           String
+  revisionNumber        Int
+  action                String
+  target                String?
+  actorId               String
+  note                  String?
+  previousStatus        AppraisalStatus?
+  previousSelfStatus    ReviewStatus?
+  previousManagerStatus ReviewStatus?
+  previousSelfScore     Float?
+  previousManagerScore  Float?
+  previousFinalScore    Float?
+  createdAt             DateTime         @default(now())
+
+  appraisal Appraisal @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, appraisalId])
+  @@schema("hr")
+}
+
 model AppraisalKpiScore {
-  id          String       @id @default(uuid())
+  id          String   @id @default(uuid())
   tenantId    String
   appraisalId String
   kpiId       String
   reviewType  String
   score       Int
   comment     String?
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime @default(now())
 
-  appraisal   Appraisal    @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
-  kpi         AppraisalKpi @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+  appraisal Appraisal    @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+  kpi       AppraisalKpi @relation(fields: [kpiId], references: [id], onDelete: Cascade)
 
   @@unique([appraisalId, kpiId, reviewType])
   @@schema("hr")
 }
 
 model AppraisalReminderLog {
-  id           String               @id @default(uuid())
+  id           String                @id @default(uuid())
   tenantId     String
   appraisalId  String
   reminderType AppraisalReminderType
-  createdAt    DateTime             @default(now())
+  createdAt    DateTime              @default(now())
 
-  appraisal    Appraisal            @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+  appraisal Appraisal @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
 
   @@unique([appraisalId, reminderType])
   @@schema("hr")
 }
 
 model Announcement {
-  id          String   @id @default(uuid())
-  tenantId    String
-  title       String
-  body        String
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String                        @id @default(uuid())
+  tenantId            String
+  title               String
+  body                String
+  audienceType        AnnouncementAudienceType      @default(ALL)
+  targetDepartmentIds String[]                      @default([])
+  targetBranchIds     String[]                      @default([])
+  targetEmployeeIds   String[]                      @default([])
+  sendEmail           Boolean                       @default(false)
+  deliveryChannels    AnnouncementDeliveryChannel[] @default([IN_APP])
+  publishedAt         DateTime                      @default(now())
+  expiresAt           DateTime?
+  createdById         String?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
 
+  readReceipts AnnouncementReadReceipt[]
+
+  @@index([tenantId, publishedAt])
+  @@index([tenantId, expiresAt])
+  @@index([tenantId, audienceType])
+  @@schema("hr")
+}
+
+model AnnouncementReadReceipt {
+  id             String   @id @default(uuid())
+  tenantId       String
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, announcementId, userId])
+  @@index([tenantId, userId, readAt])
+  @@index([tenantId, userId, announcementId])
+  @@schema("hr")
+}
+
+model EmployeeInviteRollbackTask {
+  id            String    @id @default(uuid())
+  tenantId      String
+  userId        String?
+  email         String
+  attemptCount  Int       @default(0)
+  lastError     String?
+  lastAttemptAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId, createdAt])
+  @@schema("hr")
+}
+
+model HrImportJob {
+  id              String             @id @default(uuid())
+  tenantId        String
+  entityType      HrImportEntityType
+  status          HrImportJobStatus
+  fileName        String
+  fileHash        String
+  idempotencyKey  String?
+  totalRows       Int                @default(0)
+  validRows       Int                @default(0)
+  invalidRows     Int                @default(0)
+  createdByUserId String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  rows HrImportRow[]
+
+  @@unique([tenantId, entityType, idempotencyKey])
+  @@index([tenantId, entityType, createdAt])
+  @@index([tenantId, fileHash])
+  @@schema("hr")
+}
+
+model HrImportRow {
+  id             String            @id @default(uuid())
+  tenantId       String
+  jobId          String
+  rowNumber      Int
+  status         HrImportRowStatus
+  rawData        Json
+  normalizedData Json?
+  errors         Json
+  warnings       Json
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  job HrImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, rowNumber])
+  @@index([tenantId, jobId])
+  @@index([tenantId, status])
   @@schema("hr")
 }
 
 model Notification {
-  id         String    @id @default(uuid())
-  tenantId   String
-  userId     String
-  type       String
-  message    String
-  link       String?
-  isRead     Boolean   @default(false)
-  readAt     DateTime?
-  createdAt  DateTime  @default(now())
+  id        String    @id @default(uuid())
+  tenantId  String
+  userId    String
+  type      String
+  message   String
+  link      String?
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId, isRead])
   @@index([tenantId, userId])
@@ -963,30 +1433,121 @@ model Notification {
 }
 
 model PublicHoliday {
-  id        String   @id @default(uuid())
-  tenantId  String
-  name      String
-  date      DateTime
-  createdAt DateTime @default(now())
+  id                String   @id @default(uuid())
+  tenantId          String
+  name              String
+  date              DateTime
+  observedDate      DateTime
+  countryScope      String   @default("")
+  regionScope       String   @default("")
+  isObservedShifted Boolean  @default(false)
+  source            String   @default("MANUAL")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  @@unique([tenantId, date])
+  @@unique([tenantId, name, date, countryScope, regionScope])
+  @@index([tenantId, observedDate])
   @@schema("hr")
 }
 
 model TenantConfig {
-  id                          String   @id @default(uuid())
-  tenantId                    String   @unique
-  adminEmail                  String
-  adminUserId                 String?
-  resignationNoticePeriodDays Int      @default(30)
-  lateArrivalThresholdMinutes Int      @default(0)
-  appraisalEligibleStatuses   EmploymentStatus[] @default([ACTIVE, PROBATION])
-  outstandingThreshold        Int      @default(90)
-  veryGoodThreshold           Int      @default(80)
-  goodThreshold               Int      @default(70)
-  satisfactoryThreshold       Int      @default(60)
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  id                           String                         @id @default(uuid())
+  tenantId                     String                         @unique
+  adminEmail                   String
+  adminUserId                  String?
+  defaultProbationPeriodMonths Int?
+  resignationNoticePeriodDays  Int                            @default(30)
+  lateArrivalThresholdMinutes  Int                            @default(0)
+  payrollCountry               PayrollCountry                 @default(GH)
+  payrollCurrency              String                         @default("GHS")
+  payrollTier2FundName         String?
+  payrollTier3Enabled          Boolean                        @default(false)
+  payrollTier3Rate             Decimal?                       @db.Decimal(5, 2)
+  payrollTier3SchemeName       String?
+  appraisalCycleRecipients     AppraisalCycleRecipientGroup[] @default([ALL])
+  appraisalEligibleStatuses    EmploymentStatus[]             @default([ACTIVE, PROBATION])
+  outstandingThreshold         Int                            @default(90)
+  veryGoodThreshold            Int                            @default(80)
+  goodThreshold                Int                            @default(70)
+  satisfactoryThreshold        Int                            @default(60)
+  createdAt                    DateTime                       @default(now())
+  updatedAt                    DateTime                       @updatedAt
 
+  @@schema("hr")
+}
+
+model CompanyAgreement {
+  id              String                @id @default(uuid())
+  tenantId        String
+  type            CompanyAgreementType
+  title           String
+  details         String
+  documentUrl     String?
+  isRequired      Boolean               @default(true)
+  state           CompanyAgreementState @default(DRAFT)
+  activeVersionId String?
+  createdBy       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  versions   CompanyAgreementVersion[]
+  signatures CompanyAgreementSignature[]
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, state])
+  @@index([tenantId, activeVersionId])
+  @@schema("hr")
+}
+
+model CompanyAgreementVersion {
+  id            String    @id @default(uuid())
+  tenantId      String
+  agreementId   String
+  version       Int
+  title         String
+  details       String
+  documentUrl   String?
+  agreementHash String
+  publishedBy   String?
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  agreement  CompanyAgreement            @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  signatures CompanyAgreementSignature[]
+
+  @@unique([tenantId, agreementId, version])
+  @@unique([tenantId, agreementHash])
+  @@index([tenantId, agreementId])
+  @@schema("hr")
+}
+
+model CompanyAgreementSignature {
+  id            String                          @id @default(uuid())
+  tenantId      String
+  agreementId   String
+  versionId     String
+  employeeId    String
+  userId        String?
+  status        CompanyAgreementSignatureStatus
+  signatureType CompanyAgreementSignatureType
+  typedName     String?
+  consentText   String
+  agreementHash String
+  ipAddress     String?
+  userAgent     String?
+  signedAt      DateTime?
+  declinedAt    DateTime?
+  declineReason String?
+  revokedAt     DateTime?
+  createdAt     DateTime                        @default(now())
+
+  agreement CompanyAgreement        @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  version   CompanyAgreementVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  employee  Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, versionId, employeeId])
+  @@index([tenantId, employeeId, status])
+  @@index([tenantId, agreementId, status])
+  @@index([tenantId, versionId, status])
   @@schema("hr")
 }

@@ -44,11 +44,6 @@ export const DEFAULT_MODULES: Module[] = [
         description: 'Shift and workforce scheduling',
       },
       {
-        key: 'projects',
-        label: 'Project & Tasks',
-        description: 'Projects and task tracking',
-      },
-      {
         key: 'payroll',
         label: 'Payroll',
         description: 'Process and manage payroll',
@@ -57,6 +52,16 @@ export const DEFAULT_MODULES: Module[] = [
         key: 'assets',
         label: 'Asset Management',
         description: 'Company asset tracking',
+      },
+      {
+        key: 'projects',
+        label: 'Projects',
+        description: 'Project and task management',
+      },
+      {
+        key: 'smsAnnouncement',
+        label: 'SMS Announcement',
+        description: 'Allow announcements to be sent via SMS to employee phone numbers',
       },
     ],
   },
@@ -96,23 +101,13 @@ export const DEFAULT_MODULES: Module[] = [
     id: 'operations',
     key: 'operations',
     name: 'Operation Module',
-    description: 'Manage operations',
+    description: 'Manage industry-specific operational workflows',
     enabled: false,
     options: [
       {
-        key: 'leads',
-        label: 'Lead Management',
-        description: 'Manage leads and conversions',
-      },
-      {
-        key: 'pipeline',
-        label: 'Sales Pipeline',
-        description: 'Track deals through pipeline stages',
-      },
-      {
-        key: 'contacts',
-        label: 'Contact Management',
-        description: 'Manage customer contacts',
+        key: 'reinsurance',
+        label: 'Reinsurance Operations',
+        description: 'Broker placements, counterparties and correspondence',
       },
     ],
   },

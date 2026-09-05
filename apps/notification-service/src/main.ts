@@ -2,16 +2,26 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { join } from 'path';
+import { isSwaggerEnabled } from '@work-phelo/config';
 import { GlobalExceptionFilter } from './common/prisma-exception.filter';
 import { assertNotificationRuntimeEnv } from './config/runtime-env';
+import { setupSwagger } from './swagger.config';
+
+const ORDINARY_BODY_LIMIT = process.env.HTTP_BODY_LIMIT ?? '1mb';
 
 async function bootstrap() {
   assertNotificationRuntimeEnv();
   const rabbitMqUrl = process.env.RABBITMQ_URL as string;
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
+  app.enableShutdownHooks();
+  app.use(json({ limit: ORDINARY_BODY_LIMIT }));
+  app.use(urlencoded({ extended: true, limit: ORDINARY_BODY_LIMIT }));
   app.useStaticAssets(join(__dirname, 'public'), { prefix: '/public' });
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalPipes(
@@ -37,6 +47,9 @@ async function bootstrap() {
     },
   });
   app.setGlobalPrefix('api');
+  if (isSwaggerEnabled()) {
+    setupSwagger(app);
+  }
   const port = process.env.PORT || 4004;
   await app.listen(port);
   console.log(`Notification service running on port ${port}`);

@@ -6,15 +6,25 @@ import { useApproveTenant, useDeactivateTenant, useDeleteTenant } from '@/hooks/
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
+import { cardClass } from '@/lib/utils';
 
 interface CompanyHeaderProps {
   id: string;
   name: string;
   slug: string;
   status: string;
+  onResendInvite?: () => void;
+  isResendingInvite?: boolean;
 }
 
-export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
+export function CompanyHeader({
+  id,
+  name,
+  slug,
+  status,
+  onResendInvite,
+  isResendingInvite,
+}: CompanyHeaderProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -25,10 +35,10 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
   const invalidateTenant = () => queryClient.invalidateQueries({ queryKey: ['tenant', id] });
 
   const isSuspended = status === 'SUSPENDED';
-  const workspaceUrl = `workphelo.com/${slug}/`;
+  const workspaceUrl = `app.workphelo.com/${slug}/login`;
 
   return (
-    <div className="flex items-center justify-between px-5 py-4 bg-white border border-gray-200 rounded-card">
+    <div className={cardClass('flex items-center justify-between px-5 py-4')}>
       {/* Left — name, status, url */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-3">
@@ -40,6 +50,17 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
 
       {/* Right — actions */}
       <div className="flex items-center gap-3">
+        {onResendInvite && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onResendInvite}
+            isLoading={isResendingInvite}
+            loadingText="Sending..."
+          >
+            Resend Invite
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"

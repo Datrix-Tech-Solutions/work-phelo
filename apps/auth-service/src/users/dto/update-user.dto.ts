@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsUrl,
+  MaxLength,
+} from 'class-validator';
 
 export enum UserSystemRole {
   TENANT_ADMIN = 'TENANT_ADMIN',
@@ -15,14 +21,17 @@ export enum UserStatus {
 export class UpdateUserDto {
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   firstName?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   lastName?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   phone?: string;
 
   @IsOptional()
@@ -34,6 +43,7 @@ export class UpdateUserDto {
   status?: UserStatus;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({ require_protocol: true })
+  @MaxLength(2048)
   avatarUrl?: string;
 }

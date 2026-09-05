@@ -8,28 +8,30 @@ import {
   RpcException,
 } from '@nestjs/microservices';
 import { UsersService } from './users.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { InviteUserDto } from './dto/invite-user.dto';
 import {
   EventPatterns,
   WithMeta,
   InviteEmployeeEvent,
+  DeactivateEmployeeAccessCommand,
+  DeactivateEmployeeAccessResult,
   EmployeeOffboardedEvent,
   ResendEmployeeInviteEvent,
   ProvisionEmployeeInviteCommand,
   DeletePendingEmployeeInviteCommand,
+  GetUserStatusesCommand,
+  UserStatusSnapshot,
 } from '@work-phelo/types';
 
 @Controller()
 export class UsersHandler {
   private readonly logger = new Logger(UsersHandler.name);
 
-  constructor(
-    private readonly usersService: UsersService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   private ack(context: RmqContext) {
-    context.getChannelRef().ack(context.getMessage());
+    const channel = context.getChannelRef() as { ack: (msg: unknown) => void };
+    channel.ack(context.getMessage());
   }
 
   private formatError(error: unknown) {
@@ -58,7 +60,10 @@ export class UsersHandler {
     error: unknown,
     details: string,
   ) {
-    const channel = context.getChannelRef();
+    const channel = context.getChannelRef() as {
+      ack: (msg: unknown) => void;
+      nack: (msg: unknown, allUpTo: boolean, requeue: boolean) => void;
+    };
     const message = context.getMessage();
 
     if (this.shouldRequeue(error)) {
@@ -142,13 +147,13 @@ export class UsersHandler {
         email,
         firstName,
         lastName,
-        role: 'EMPLOYEE' as any,
+        role: 'EMPLOYEE' as InviteUserDto['role'],
       });
       this.logger.log(
         `[auth.invite_employee] Invite sent | email=${email} | corrId=${_meta?.correlationId}`,
       );
       this.ack(context);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.settleEventFailure(
         context,
         'auth.invite_employee',
@@ -217,29 +222,70 @@ export class UsersHandler {
     }
   }
 
+  @MessagePattern(EventPatterns.AUTH_GET_USER_STATUSES)
+  async handleGetUserStatuses(
+    @Payload() data: WithMeta<GetUserStatusesCommand>,
+    @Ctx() context: RmqContext,
+  ): Promise<UserStatusSnapshot[]> {
+    const { tenantId, userIds, _meta } = data;
+    this.logger.log(
+      `[auth.get_user_statuses] Received | count=${userIds.length} | corrId=${_meta?.correlationId}`,
+    );
+    try {
+      const result = await this.usersService.getUserStatuses(tenantId, userIds);
+      this.ack(context);
+      return result;
+    } catch (error) {
+      this.settleRpcFailure(
+        context,
+        'auth.get_user_statuses',
+        error,
+        `count=${userIds.length} | corrId=${_meta?.correlationId}`,
+      );
+      throw new RpcException(this.toRpcErrorPayload(error));
+    }
+  }
+
+  @MessagePattern(EventPatterns.AUTH_DEACTIVATE_EMPLOYEE_ACCESS)
+  async handleDeactivateEmployeeAccess(
+    @Payload() data: WithMeta<DeactivateEmployeeAccessCommand>,
+    @Ctx() context: RmqContext,
+  ): Promise<DeactivateEmployeeAccessResult> {
+    const { tenantId, userId, email, _meta } = data;
+    this.logger.log(
+      `[auth.deactivate_employee_access] Received | email=${email} | corrId=${_meta?.correlationId}`,
+    );
+    try {
+      await this.usersService.deactivate(tenantId, userId);
+      this.ack(context);
+      return { deactivated: true };
+    } catch (error) {
+      this.settleRpcFailure(
+        context,
+        'auth.deactivate_employee_access',
+        error,
+        `email=${email} | corrId=${_meta?.correlationId}`,
+      );
+      throw new RpcException(this.toRpcErrorPayload(error));
+    }
+  }
+
   @EventPattern('hr.employee_offboarded')
   async handleEmployeeOffboarded(
     @Payload() data: WithMeta<EmployeeOffboardedEvent>,
     @Ctx() context: RmqContext,
   ) {
-    const { userId, email, _meta } = data;
+    const { tenantId, userId, email, _meta } = data;
     this.logger.log(
       `[hr.employee_offboarded] Received | email=${email} | corrId=${_meta?.correlationId}`,
     );
     try {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { status: 'INACTIVE' },
-      });
-      await this.prisma.refreshToken.updateMany({
-        where: { userId, isRevoked: false },
-        data: { isRevoked: true },
-      });
+      await this.usersService.deactivate(tenantId, userId);
       this.logger.log(
         `[hr.employee_offboarded] Account deactivated and tokens revoked | email=${email} | corrId=${_meta?.correlationId}`,
       );
       this.ack(context);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.settleEventFailure(
         context,
         'hr.employee_offboarded',
@@ -268,7 +314,7 @@ export class UsersHandler {
           email,
           firstName,
           lastName: lastName ?? '',
-          role: 'EMPLOYEE' as any,
+          role: 'EMPLOYEE' as InviteUserDto['role'],
         });
         this.logger.log(
           `[auth.resend_employee_invite] Fresh invite sent | email=${email} | corrId=${_meta?.correlationId}`,
@@ -281,7 +327,7 @@ export class UsersHandler {
         `[auth.resend_employee_invite] Invite resent | email=${email} | corrId=${_meta?.correlationId}`,
       );
       this.ack(context);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.settleEventFailure(
         context,
         'auth.resend_employee_invite',

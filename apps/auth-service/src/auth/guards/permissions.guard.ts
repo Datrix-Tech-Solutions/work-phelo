@@ -54,7 +54,7 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'users', actions: [PermissionAction.DELETE] },
   ],
   [Permission.FORCE_RESET_USER]: [
-    { resource: 'users', actions: [PermissionAction.EDIT] },
+    { resource: 'user-security', actions: [PermissionAction.EDIT] },
   ],
   [Permission.VIEW_PERMISSION_SETS]: [
     { resource: 'permission-sets', actions: [PermissionAction.VIEW] },
@@ -69,12 +69,6 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
         PermissionAction.ASSIGN,
       ],
     },
-  ],
-  [Permission.ASSIGN_ROLE]: [
-    { resource: 'permission-sets', actions: [PermissionAction.ASSIGN] },
-  ],
-  [Permission.MANAGE_ROLES]: [
-    { resource: 'permission-sets', actions: [PermissionAction.EDIT] },
   ],
   [Permission.APPROVE_SHIFT_SWAP]: [
     { resource: 'schedules', actions: [PermissionAction.APPROVE] },

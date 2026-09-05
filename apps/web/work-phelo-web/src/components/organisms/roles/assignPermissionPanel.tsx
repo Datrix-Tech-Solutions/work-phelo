@@ -4,19 +4,20 @@ import { useState, useMemo } from 'react';
 import { X, ShieldOff } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { cn } from '@/lib/utils';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { cn, inputClass } from '@/lib/utils';
 import {
-  PERMISSION_ACTION_LABELS,
-  RESOURCE_ACTIONS,
-  isPermissionUiVisibleResource,
-} from '@/lib/permissionMap';
+  PERMISSION_TAG_GROUPS,
+  PERMISSION_TAG_MAPPING,
+  buildPermissionResources,
+  inferTagsFromResources,
+} from '@/components/molecules/roles/PermissionTagSelector';
 import {
   usePermissionResources,
   useGrantPermission,
   useRevokePermission,
   useUserPermissions,
-} from '@/hooks/useRoles';
+} from '@/hooks/hr/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import type { PermissionAction } from '@/types/roles';
@@ -28,7 +29,6 @@ interface AssignPermissionPanelProps {
   userId: string;
 }
 
-// Backend serialises directPermissions with a flat resourceName field (not nested resource object)
 type DirectPerm = {
   id: string;
   resourceId: string;
@@ -38,121 +38,88 @@ type DirectPerm = {
   expiresAt?: string | null;
 };
 
-const ACTION_COLORS: Record<string, string> = {
-  VIEW: 'bg-blue-50 text-blue-600',
-  CREATE: 'bg-green-50 text-green-600',
-  EDIT: 'bg-purple-50 text-purple-600',
-  DELETE: 'bg-red-50 text-red-600',
-  APPROVE: 'bg-amber-50 text-amber-600',
-  RUN: 'bg-teal-50 text-teal-600',
-  EXPORT: 'bg-gray-100 text-gray-600',
-  ASSIGN: 'bg-indigo-50 text-indigo-600',
-};
-
-function formatResourceName(name: string) {
-  return name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 function AssignPermissionPanelInner({
+  isOpen,
   onClose,
   employeeName,
   userId,
-}: Omit<AssignPermissionPanelProps, 'isOpen'>) {
+}: AssignPermissionPanelProps) {
   const toast = useToast();
-  const [selectedResourceId, setSelectedResourceId] = useState('');
-  const [selectedActions, setSelectedActions] = useState<Set<PermissionAction>>(new Set());
-  const [expiresAt, setExpiresAt] = useState('');
-  const [resourceError, setResourceError] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const { data: resources = [] } = usePermissionResources();
   const { data: userPerms, isLoading: isLoadingPerms } = useUserPermissions(userId);
   const { mutateAsync: grantPermission, isPending: isSaving } = useGrantPermission();
   const { mutate: revokePermission, isPending: isRevoking } = useRevokePermission();
 
-  const directPermissions = (userPerms?.directPermissions ?? []) as unknown as DirectPerm[];
-
-  const resourceOptions = useMemo(() => {
-    return resources
-      .filter(
-        (resource) =>
-          resource.isActive &&
-          isPermissionUiVisibleResource(resource.name) &&
-          (RESOURCE_ACTIONS[resource.name] ?? []).length > 0,
-      )
-      .sort((a, b) => a.module.localeCompare(b.module) || a.name.localeCompare(b.name))
-      .map((resource) => ({
-        value: resource.id,
-        label: formatResourceName(resource.name),
-        sublabel: `${resource.module}${resource.description ? ` - ${resource.description}` : ''}`,
-      }));
+  const resourceIdMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of resources) m.set(r.name, r.id);
+    return m;
   }, [resources]);
 
-  const selectedResource = resources.find((resource) => resource.id === selectedResourceId);
-  const availableActions = (
-    selectedResource ? (RESOURCE_ACTIONS[selectedResource.name] ?? []) : []
-  ) as PermissionAction[];
-
-  const toggleAction = (action: PermissionAction) => {
-    setSelectedActions((prev) => {
-      const next = new Set(prev);
-      if (next.has(action)) next.delete(action);
-      else next.add(action);
-      return next;
-    });
-  };
-
-  const handleResourceChange = (value: string) => {
-    setSelectedResourceId(value);
-    setSelectedActions(new Set());
-    setResourceError('');
-  };
-
-  const handleRevoke = (perm: DirectPerm) => {
-    revokePermission(
-      { userId, resourceId: perm.resourceId, action: perm.action },
-      {
-        onSuccess: () =>
-          toast.success(`${formatResourceName(perm.resourceName)} — ${perm.action} revoked`),
-        onError: (err) => toast.error(extractError(err, 'Failed to revoke permission')),
-      },
+  const { activeTagsByGroup, grantedTagKeys } = useMemo(() => {
+    const directPermissions = (userPerms?.directPermissions ?? []) as unknown as DirectPerm[];
+    if (directPermissions.length === 0)
+      return { activeTagsByGroup: [], grantedTagKeys: new Set<string>() };
+    const inferred = inferTagsFromResources(
+      directPermissions.map((p) => ({ resource: { name: p.resourceName }, action: p.action })),
     );
+    const tagSet = new Set(inferred);
+    return {
+      grantedTagKeys: tagSet,
+      activeTagsByGroup: PERMISSION_TAG_GROUPS.filter((g) => g.group !== 'Administration')
+        .map((g) => ({ ...g, tags: g.tags.filter((t) => tagSet.has(t.key)) }))
+        .filter((g) => g.tags.length > 0),
+    };
+  }, [userPerms?.directPermissions]);
+
+  const handleRevokeTag = (tagKey: string) => {
+    const perms = PERMISSION_TAG_MAPPING[tagKey];
+    if (!perms) return;
+
+    // Collect permissions still needed by other active tags so we don't revoke shared ones
+    const keepPermissions = new Set<string>();
+    for (const otherKey of grantedTagKeys) {
+      if (otherKey === tagKey) continue;
+      const otherPerms = PERMISSION_TAG_MAPPING[otherKey];
+      if (!otherPerms) continue;
+      for (const { resource, action } of otherPerms) keepPermissions.add(`${resource}:${action}`);
+    }
+
+    for (const { resource, action } of perms) {
+      if (keepPermissions.has(`${resource}:${action}`)) continue;
+      const resourceId = resourceIdMap.get(resource);
+      if (!resourceId) continue;
+      revokePermission(
+        { userId, resourceId, action: action as PermissionAction },
+        { onError: (err) => toast.error(extractError(err, 'Failed to revoke permission')) },
+      );
+    }
+    toast.success('Permission revoked');
   };
 
-  const handleSave = async () => {
-    if (!selectedResourceId || !selectedResource) {
-      setResourceError('Please select a resource');
+  const handleGrant = async () => {
+    if (selectedTags.length === 0) {
+      toast.error('Select at least one permission');
       return;
     }
-    if (selectedActions.size === 0) {
-      setResourceError('Please select at least one action');
+
+    const toGrant = buildPermissionResources(selectedTags, resourceIdMap);
+
+    if (toGrant.length === 0) {
+      toast.error('Selected permissions have no backend mapping yet');
       return;
     }
 
     try {
       await Promise.all(
-        Array.from(selectedActions).map((action) =>
-          grantPermission({
-            userId,
-            resourceId: selectedResourceId,
-            action,
-            expiresAt: expiresAt || undefined,
-          }),
-        ),
+        toGrant.map(({ resourceId, action }) => grantPermission({ userId, resourceId, action })),
       );
-      toast.success(
-        `${selectedActions.size} ${formatResourceName(selectedResource.name)} permission${selectedActions.size !== 1 ? 's' : ''} granted to ${employeeName}`,
-      );
-      setSelectedResourceId('');
-      setSelectedActions(new Set());
-      setExpiresAt('');
+      toast.success(`Permissions granted to ${employeeName}`);
+      setSelectedTags([]);
+      setSelectedGroup('');
     } catch (err) {
       toast.error(extractError(err, 'Failed to grant permissions'));
     }
@@ -160,23 +127,23 @@ function AssignPermissionPanelInner({
 
   return (
     <SidePanel
-      isOpen
+      isOpen={isOpen}
       onClose={onClose}
       title="Grant Direct Permissions"
-      description={`Use one-off direct permission overrides for ${employeeName}. These are exceptions on top of the base role and any assigned permission sets.`}
+      description={`One-off permission overrides for ${employeeName}. These are exceptions on top of their base role and assigned permission sets.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
             Done
           </Button>
-          <Button isLoading={isSaving} loadingText="Saving..." onClick={handleSave}>
+          <Button isLoading={isSaving} loadingText="Granting..." onClick={handleGrant}>
             Grant
           </Button>
         </div>
       }
     >
-      {/* ── Active direct permissions ─────────────────────────── */}
-      <div className="flex flex-col gap-2">
+      {/* Active direct permissions */}
+      <div className="flex flex-col gap-3">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
           Active direct permissions
         </p>
@@ -184,133 +151,106 @@ function AssignPermissionPanelInner({
         {isLoadingPerms ? (
           <div className="flex flex-col gap-2">
             {[1, 2].map((i) => (
-              <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
+              <div key={i} className="h-8 bg-gray-100 rounded-full animate-pulse" />
             ))}
           </div>
-        ) : directPermissions.length === 0 ? (
+        ) : activeTagsByGroup.length === 0 ? (
           <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-gray-200 px-4 py-3">
-            <ShieldOff className="w-4 h-4 text-gray-300 shrink-0" />
+            <ShieldOff className="w-4 h-4 text-gray-400 shrink-0" />
             <p className="text-sm text-gray-400 italic">No direct permissions granted yet.</p>
           </div>
         ) : (
-          directPermissions.map((perm) => (
-            <div
-              key={`${perm.resourceId}-${perm.action}`}
-              className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span
-                  className={cn(
-                    'text-xs font-semibold px-2 py-0.5 rounded-md shrink-0',
-                    ACTION_COLORS[perm.action] ?? 'bg-gray-100 text-gray-600',
-                  )}
-                >
-                  {perm.action}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {formatResourceName(perm.resourceName)}
-                  </p>
-                  {perm.expiresAt && (
-                    <p className="text-xs text-amber-500">Expires {formatDate(perm.expiresAt)}</p>
-                  )}
-                </div>
+          activeTagsByGroup.map((group) => (
+            <div key={group.group} className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-gray-400">{group.group}</p>
+              <div className="flex flex-wrap gap-2">
+                {group.tags.map((tag) => (
+                  <div
+                    key={tag.key}
+                    className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-sm font-medium bg-brand/10 text-brand border border-brand/20"
+                  >
+                    {tag.label}
+                    <button
+                      type="button"
+                      onClick={() => handleRevokeTag(tag.key)}
+                      disabled={isRevoking}
+                      className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-brand/20 transition-colors disabled:opacity-40"
+                      aria-label="Revoke"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
               </div>
-              <button
-                type="button"
-                onClick={() => handleRevoke(perm)}
-                disabled={isRevoking}
-                className="w-7 h-7 rounded-md flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 shrink-0 ml-2"
-                aria-label="Revoke"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
           ))
         )}
       </div>
 
-      {/* Divider */}
       <div className="border-t border-gray-100" />
 
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        Changes appear in this panel immediately. The affected user may need to refresh or sign in
-        again before their live session reflects the new access.
+        Changes appear immediately. The affected user may need to refresh or sign in again before
+        their live session reflects the new access.
       </div>
 
-      {/* ── Grant new permission ──────────────────────────────── */}
+      {/* Grant new permissions */}
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-        Grant new permission
+        Grant new permissions
       </p>
 
       <SearchSelect
-        label="Resource"
-        placeholder="Select a resource..."
-        options={resourceOptions}
-        value={selectedResourceId}
-        onChange={handleResourceChange}
-        error={resourceError}
+        label="Category"
+        placeholder="Select a category..."
+        options={PERMISSION_TAG_GROUPS.filter((g) => g.group !== 'Administration').map((g) => ({
+          value: g.group,
+          label: g.group,
+        }))}
+        value={selectedGroup}
+        onChange={setSelectedGroup}
       />
 
-      {selectedResource && (
-        <div className="flex flex-col gap-2.5">
-          <p className="text-sm font-semibold text-gray-800">
-            {formatResourceName(selectedResource.name)}
-          </p>
-          <div className="flex flex-col gap-2">
-            {availableActions.map((action) => (
-              <label
-                key={action}
-                className="flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedActions.has(action)}
-                  onChange={() => toggleAction(action)}
-                  className="w-4 h-4 accent-brand cursor-pointer rounded"
-                />
-                <span
-                  className={cn(
-                    'text-sm',
-                    selectedActions.has(action) ? 'font-semibold text-gray-900' : 'text-gray-600',
-                  )}
-                >
-                  {PERMISSION_ACTION_LABELS[action] ?? action}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-bold text-gray-900">
-          Expires At <span className="text-gray-400 font-normal">(optional)</span>
-        </label>
-        <input
-          type="date"
-          value={expiresAt}
-          onChange={(e) => setExpiresAt(e.target.value)}
-          min={new Date().toISOString().split('T')[0]}
-          className={inputClass()}
-        />
-        {expiresAt && (
-          <p className="text-xs text-gray-400">
-            Permission will automatically expire on {formatDate(expiresAt)}
-          </p>
-        )}
-      </div>
+      {selectedGroup &&
+        (() => {
+          const group = PERMISSION_TAG_GROUPS.find((g) => g.group === selectedGroup);
+          if (!group) return null;
+          const pendingSet = new Set(selectedTags);
+          return (
+            <div className="flex flex-wrap gap-2">
+              {group.tags.map((tag) => {
+                const isGranted = grantedTagKeys.has(tag.key);
+                const isPending = pendingSet.has(tag.key);
+                const isActive = isGranted || isPending;
+                return (
+                  <button
+                    key={tag.key}
+                    type="button"
+                    onClick={() => {
+                      if (isGranted) return; // already granted — managed via revoke in the top section
+                      const next = new Set(pendingSet);
+                      if (next.has(tag.key)) next.delete(tag.key);
+                      else next.add(tag.key);
+                      setSelectedTags(Array.from(next));
+                    }}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full text-sm font-medium border transition-colors',
+                      isActive
+                        ? 'bg-brand text-white border-brand'
+                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700',
+                      isGranted && 'cursor-default',
+                    )}
+                  >
+                    {tag.label}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
     </SidePanel>
   );
 }
 
 export function AssignPermissionPanel({ isOpen, ...props }: AssignPermissionPanelProps) {
-  if (!isOpen) {
-    return (
-      <SidePanel isOpen={false} onClose={props.onClose} title="">
-        {null}
-      </SidePanel>
-    );
-  }
-  return <AssignPermissionPanelInner key={props.userId} {...props} />;
+  return <AssignPermissionPanelInner key={props.userId} isOpen={isOpen} {...props} />;
 }

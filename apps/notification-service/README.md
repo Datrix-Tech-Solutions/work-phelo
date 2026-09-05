@@ -1,98 +1,153 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# WorkPhelo Notification Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The notification-service owns outbound notification delivery for WorkPhelo. It handles email, SMS, in-app notification support, delivery logging, and provider integrations behind RabbitMQ events published by platform services.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Current environment URLs are listed in the root repository README.
 
-## Description
+## Gateway Prefix
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ npm install
+```text
+/api/v1/notification/*
 ```
 
-## Compile and run the project
+## Local Development
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm run dev --workspace=apps/notification-service
 ```
 
-## Run tests
+Default local port: `4004`
+
+Local Swagger: `http://localhost:4004/api/docs`
+
+## SMS Providers
+
+SMS delivery is routed through the public `SmsService` API:
+
+```ts
+sendMessage(to, message);
+sendOtp(to, otp, context);
+```
+
+The implementation uses a provider abstraction so callers do not depend on a vendor directly. Configure the active provider with:
+
+```env
+SMS_PROVIDER=termii
+```
+
+Supported values:
+
+- `termii`
+- `pilosms`
+
+If `SMS_PROVIDER` is omitted, the service defaults to `termii` for backward compatibility.
+
+## Environment
+
+Common notification-service variables:
+
+```env
+DATABASE_URL=
+RABBITMQ_URL=
+JWT_SECRET=
+FRONTEND_BASE_URL=
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+```
+
+Termii provider:
+
+```env
+SMS_PROVIDER=termii
+TERMII_API_KEY=
+TERMII_SENDER_ID=WorkPhelo
+```
+
+PiloSMS provider:
+
+```env
+SMS_PROVIDER=pilosms
+PILOSMS_API_KEY=
+PILOSMS_SENDER_ID=WorkPhelo
+```
+
+Runtime validation requires the API key and sender ID only for the selected SMS provider. Unsupported provider values fail fast during startup.
+
+Development deployment wiring can map GitHub environment values into the runtime
+names above:
+
+```env
+NOTIFY_SMS_PROVIDER=pilosms
+NOTIFY_PILOSMS_API_KEY=
+NOTIFY_PILOSMS_SENDER_ID=WorkPhelo
+```
+
+The deploy script writes `SMS_PROVIDER`, `PILOSMS_API_KEY`, and
+`PILOSMS_SENDER_ID` into the notification-service runtime env file when those
+values are configured. Production activation should be treated as an explicit
+environment/secrets rollout.
+
+## PiloSMS Notes
+
+PiloSMS expects recipients in international format without the leading plus sign. WorkPhelo keeps internal phone numbers in E.164 format, for example `+233244000001`, and the PiloSMS adapter converts that value to `233244000001` at the provider boundary.
+
+The PiloSMS adapter intentionally rejects local numbers such as `0244000001`; it does not infer country codes.
+
+PiloSMS response mapping:
+
+- `1001`: `SENT`
+- `1002`: `FAILED`
+- `1003`: `FAILED`
+- `1004`: `FAILED`
+- `1005`: `FAILED`
+- `1006`: `SKIPPED`
+- `1007`: `FAILED`
+
+Provider status/detail metadata is stored in `NotificationLog.metadata` for SMS deliveries.
+
+## Announcement SMS Format
+
+HR announcement SMS messages are intentionally short to reduce multi-segment SMS costs. The notification-service formats announcement SMS with the tenant/company name, title, and a body preview:
+
+```text
+{CompanyName}: {AnnouncementTitle} - {AnnouncementPreview}
+```
+
+Example:
+
+```text
+Acme: Test Announcement - First announcement test.
+```
+
+The SMS formatter removes URLs and workspace links from SMS content. Email templates may still include workspace links, but SMS messages must not include internal URLs, tenant IDs, workspace identifiers, or `View in WorkPhelo` copy.
+
+The formatter targets a single SMS segment by default:
+
+- Maximum length: `160` characters
+- Company name and title are preserved whenever possible
+- Long body previews are truncated and suffixed with `...`
+
+Before:
+
+```text
+WorkPhelo announcement: Test Announcement. Acme First Announcement test from WorkPhelo ERP
+
+View in WorkPhelo: https://app.workphelo.com/acme/login
+```
+
+After:
+
+```text
+Acme: Test Announcement - First Announcement test from WorkPhelo ERP
+```
+
+## Validation
+
+Useful local checks:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run lint --workspace=apps/notification-service
+npm run check-types --workspace=apps/notification-service
+npm run test --workspace=apps/notification-service
+npm run build --workspace=apps/notification-service
 ```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).

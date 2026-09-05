@@ -4,9 +4,9 @@
 
 import { useState, useMemo } from 'react';
 import { useTenants, useDeleteTenant } from '@/hooks/useTenants';
-import { useRouter } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { WelcomeBanner } from '@/components/molecules/shared/WelcomeBanner';
-import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { StatCard } from '@/components/molecules/shared/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -27,7 +27,17 @@ const CalendarIcon = () => <CalendarPlus />;
 const PAGE_SIZE = 7;
 
 const COLUMNS: Column<Company>[] = [
-  { key: 'name', label: 'Company name', width: '2.5fr' },
+  {
+    key: 'name',
+    label: 'Company name',
+    width: '2.5fr',
+    render: (row) => (
+      <div className="flex flex-col">
+        <span className="text-sm font-medium text-gray-900">{row.name}</span>
+        {row.email && <span className="text-xs text-gray-400">{row.email}</span>}
+      </div>
+    ),
+  },
   { key: 'dateCreated', label: 'Date Created', width: '1.2fr' },
   { key: 'contact', label: 'Contact Number', width: '1.2fr' },
   { key: 'industry', label: 'Industry', width: '1fr' },
@@ -74,6 +84,7 @@ export default function AdminDashboardPage() {
         _id?: string;
         name?: string;
         companyName?: string;
+        email?: string;
         dateCreated?: string;
         createdAt?: string;
         phone?: string;
@@ -86,6 +97,7 @@ export default function AdminDashboardPage() {
       }) => ({
         id: c.id ?? c._id ?? '',
         name: c.name ?? c.companyName ?? '',
+        email: c.email ?? '',
         dateCreated:
           (c.dateCreated ?? c.createdAt)
             ? new Date(String(c.dateCreated ?? c.createdAt)).toLocaleDateString('en-US', {
@@ -166,39 +178,38 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Companies table */}
-        <div className="flex flex-col gap-4 flex-1 min-h-0">
-          <h2 className="text-xl font-bold text-gray-900">Companies</h2>
-          <DataTable
-            columns={COLUMNS}
-            data={pageData}
-            isLoading={isLoading}
-            searchPlaceholder="Search company name, phone, or industry..."
-            onSearch={(q) => {
-              setSearch(q);
-              setPage(1);
-            }}
-            filterOptions={[
-              { value: 'ACTIVE', label: 'Active' },
-              { value: 'INACTIVE', label: 'Inactive' },
-              { value: 'SUSPENDED', label: 'Suspended' },
-              { value: 'PENDING', label: 'Pending' },
-            ]}
-            onFilter={(v) => {
-              setFilter(v);
-              setPage(1);
-            }}
-            onExport={() => console.log('export')}
-            actionButton={{ label: 'New Company', onClick: () => setPanelOpen(true) }}
-            rowActions={(row) => [
-              { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
-              { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
-            ]}
-            emptyMessage="No companies onboarded"
-            currentPage={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-          />
-        </div>
+        {/* <h2 className="text-xl font-bold text-gray-900">Companies</h2> */}
+        <DataTable
+          columns={COLUMNS}
+          data={pageData}
+          isLoading={isLoading}
+          searchPlaceholder="Search company name, phone, or industry..."
+          onSearch={(q) => {
+            setSearch(q);
+            setPage(1);
+          }}
+          onRowClick={(row) => router.push(`/dashboard/${row.id}`)}
+          filterOptions={[
+            { value: 'ACTIVE', label: 'Active' },
+            { value: 'INACTIVE', label: 'Inactive' },
+            { value: 'SUSPENDED', label: 'Suspended' },
+            { value: 'PENDING', label: 'Pending' },
+          ]}
+          onFilter={(v) => {
+            setFilter(v);
+            setPage(1);
+          }}
+          onExport={() => console.log('export')}
+          actionButton={{ label: 'New Company', onClick: () => setPanelOpen(true) }}
+          rowActions={(row) => [
+            { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
+            { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
+          ]}
+          emptyMessage="No companies onboarded"
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
       </main>
 
       {/* Add Company side panel */}

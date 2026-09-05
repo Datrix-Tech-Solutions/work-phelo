@@ -1,38 +1,57 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Megaphone } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { cardClass } from '@/lib/utils';
+import {
+  useMarkAnnouncementRead,
+  useMarkAllAnnouncementsRead,
+  useAnnouncementsUnreadCount,
+} from '@/hooks';
 
 interface Announcement {
   id: string;
   title: string;
   body: string;
   date: string;
+  isRead?: boolean;
 }
 
 interface AnnouncementCardProps {
   announcements: Announcement[];
-  currentIndex: number;
-  onPrev: () => void;
-  onNext: () => void;
 }
 
-export function AnnouncementCard({
-  announcements,
-  currentIndex,
-  onPrev,
-  onNext,
-}: AnnouncementCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
+  const [pendingReadIds, setPendingReadIds] = useState<Set<string>>(new Set());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { mutate: markRead } = useMarkAnnouncementRead();
+  const { mutate: markAllRead } = useMarkAllAnnouncementsRead();
+  const { data: unreadData } = useAnnouncementsUnreadCount();
+
+  const unreadCount =
+    unreadData?.count ?? announcements.filter((a) => !a.isRead && !pendingReadIds.has(a.id)).length;
+  const selected = announcements.find((a) => a.id === selectedId) ?? null;
+
+  const handleSelect = (id: string) => {
+    setPendingReadIds((prev) => new Set([...prev, id]));
+    markRead(id);
+    setSelectedId(id);
+  };
+
+  const handleMarkAllRead = () => {
+    setPendingReadIds(new Set(announcements.map((a) => a.id)));
+    markAllRead();
+  };
 
   if (announcements.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col gap-3 flex-1 min-h-0">
-        <div className="flex items-center justify-between shrink-0">
+      <div className={cardClass('p-5 flex flex-col gap-3 min-h-60 flex-1 border-gray-200')}>
+        <div className="flex items-center gap-2 shrink-0">
           <h2 className="text-base font-bold text-gray-900">General Announcements</h2>
         </div>
         <div className="h-px bg-gray-100 -mx-5" />
-        <div className="flex flex-col items-center justify-center flex-1 gap-2 text-center">
+        <div className="flex flex-col items-center justify-center flex-1 gap-2 text-center py-8">
           <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
             <Megaphone className="w-5 h-5 text-gray-400" />
           </div>
@@ -42,64 +61,86 @@ export function AnnouncementCard({
     );
   }
 
-  const announcement = announcements[currentIndex];
-  const BODY_LIMIT = 220;
-  const isTruncatable = announcement.body.length > BODY_LIMIT;
-  const displayBody =
-    !expanded && isTruncatable ? announcement.body.slice(0, BODY_LIMIT) + '…' : announcement.body;
-
   return (
-    <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col flex-1 min-h-0">
-      {/* Header */}
-      <div className="flex items-center justify-between shrink-0">
-        <h2 className="text-base font-bold text-gray-900">General Announcements</h2>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 font-medium tabular-nums">
-            {currentIndex + 1} / {announcements.length}
-          </span>
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={onPrev}
-              disabled={currentIndex === 0}
-              className="p-1.5 rounded-full hover:bg-gray-100 disabled:opacity-30 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4 text-gray-600" />
-            </button>
-            <button
-              onClick={onNext}
-              disabled={currentIndex === announcements.length - 1}
-              className="p-1.5 rounded-full hover:bg-gray-100 disabled:opacity-30 transition-colors"
-            >
-              <ChevronRight className="w-4 h-4 text-gray-600" />
-            </button>
+    <>
+      <div className={cardClass('p-5 flex flex-col min-h-100 flex-1 border-gray-200')}>
+        {/* Header */}
+        <div className="flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-gray-900">General Announcements</h2>
+            {unreadCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </div>
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div className="h-px bg-gray-100 -mx-5 mt-4 mb-4 shrink-0" />
-
-      {/* Content */}
-      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto gap-2">
-        <div className="flex items-start justify-between gap-4 shrink-0">
-          <p className="text-sm font-bold text-gray-900 leading-snug">{announcement.title}</p>
-          <span className="text-xs text-gray-400 shrink-0 whitespace-nowrap mt-0.5">
-            {announcement.date}
-          </span>
-        </div>
-
-        <p className="text-sm text-gray-600 leading-relaxed">
-          {displayBody}
-          {isTruncatable && (
+          {unreadCount > 0 && (
             <button
-              onClick={() => setExpanded((e) => !e)}
-              className="ml-1 text-xs font-semibold text-brand hover:underline"
+              onClick={handleMarkAllRead}
+              className="text-xs text-gray-400 hover:text-orange-500 transition-colors"
             >
-              {expanded ? 'Show less' : 'Read more'}
+              Mark all read
             </button>
           )}
-        </p>
+        </div>
+
+        {/* Divider */}
+        <div className="h-px bg-gray-100 -mx-5 mt-4 shrink-0" />
+
+        {/* List */}
+        <div className="flex flex-col divide-y divide-gray-100 overflow-y-auto max-h-225">
+          {announcements.map((a) => {
+            const isRead = (a.isRead ?? false) || pendingReadIds.has(a.id);
+            return (
+              <button
+                key={a.id}
+                onClick={() => handleSelect(a.id)}
+                className="flex items-start gap-3 py-3 text-left hover:bg-gray-50 -mx-5 px-5 transition-colors"
+              >
+                <span
+                  className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${isRead ? 'invisible' : 'bg-orange-500'}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p
+                      className={`text-sm leading-snug ${isRead ? 'font-normal text-gray-500' : 'font-extrabold text-gray-900'}`}
+                    >
+                      {a.title}
+                    </p>
+                    <span
+                      className={`text-xs leading-snug ${isRead ? 'font-normal text-gray-400' : 'font-bold text-gray-800'} shrink-0 whitespace-nowrap mt-0.5`}
+                    >
+                      {a.date}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-xs leading-snug ${isRead ? 'font-normal text-gray-500' : 'font-extrabold text-gray-900'} leading-relaxed line-clamp-2 mt-0.5`}
+                  >
+                    {a.body}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      <Modal
+        isOpen={!!selected}
+        onClose={() => setSelectedId(null)}
+        title={selected?.title ?? ''}
+        width="max-w-lg"
+      >
+        {selected && (
+          <div className="flex flex-col gap-3 pt-1">
+            <p className="text-xs text-gray-400">{selected.date}</p>
+            <div className="h-px bg-gray-100" />
+            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+              {selected.body}
+            </p>
+          </div>
+        )}
+      </Modal>
+    </>
   );
 }

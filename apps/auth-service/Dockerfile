@@ -15,11 +15,17 @@ RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
 RUN npm run build --workspace=packages/config
 RUN npm run build --workspace=apps/auth-service
-# Compile seed for deploy pipeline
-RUN cd apps/auth-service && npx tsc prisma/seed.ts prisma/seed-resources.ts \
-    --outDir prisma --module commonjs --target ES2021 \
-    --esModuleInterop --skipLibCheck --resolveJsonModule \
-    && echo "Seed compiled OK" || echo "Seed compile failed"
+# Compile seed.ts and seed-resources.ts to JavaScript
+# Use --rootDir . so that relative imports (../src/...) resolve correctly:
+# src/permissions/... → dist/permissions/...
+# prisma/seed.ts → dist/prisma/seed.js
+RUN cd apps/auth-service && npx tsc \
+  --rootDir . \
+  --outDir dist \
+  --module commonjs \
+  --target es2020 \
+  --skipLibCheck \
+  prisma/seed.ts prisma/seed-resources.ts
 
 FROM node:20-alpine AS runner
 RUN apk add --no-cache openssl
@@ -42,10 +48,14 @@ COPY --from=builder /app/packages/config/dist ./packages/config/dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/auth-service/node_modules ./apps/auth-service/node_modules
 RUN npm rebuild bcrypt --update-binary
-# Copy built service
+# Copy built service (dist includes compiled seed.js and seed-resources.js)
 COPY --from=builder /app/apps/auth-service/dist ./apps/auth-service/dist
-COPY --from=builder /app/apps/auth-service/prisma ./apps/auth-service/prisma
-# seed.js and seed-resources.js are already in prisma/ alongside schema
+# Runtime app code expects the generated client under apps/auth-service/prisma/generated/client.
+# The compiled seed expects the same client under dist/prisma/generated/client.
+COPY --from=builder /app/apps/auth-service/prisma/generated/client ./apps/auth-service/prisma/generated/client
+COPY --from=builder /app/apps/auth-service/prisma/generated/client ./apps/auth-service/dist/prisma/generated/client
+COPY --from=builder /app/apps/auth-service/prisma/schema.prisma ./apps/auth-service/prisma/schema.prisma
+COPY --from=builder /app/apps/auth-service/prisma/migrations ./apps/auth-service/prisma/migrations
 WORKDIR /app/apps/auth-service
 EXPOSE 4001
 CMD ["node", "dist/main"]

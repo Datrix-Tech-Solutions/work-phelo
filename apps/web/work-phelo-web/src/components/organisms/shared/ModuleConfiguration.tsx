@@ -132,9 +132,9 @@ export function ModuleConfiguration({
 
   return (
     <>
-      <div className="border border-gray-200 rounded-card flex flex-col h-full overflow-hidden">
+      <div className="border border-gray-200 rounded-card bg-white flex flex-col h-full overflow-hidden">
         {/* Header */}
-        <div className="px-6 pt-6 pb-4 shrink-0">
+        <div className="px-5 py-4 border-b border-gray-100 shrink-0">
           <h3 className="text-sm font-semibold text-gray-900">Module Configuration</h3>
           <p className="text-sm text-gray-400 mt-1">
             Enable or disable modules available to this company.
@@ -142,7 +142,7 @@ export function ModuleConfiguration({
         </div>
 
         {/* Module List */}
-        <div className="flex-1 overflow-y-auto px-6 flex flex-col divide-y divide-gray-100 min-h-0">
+        <div className="flex-1 overflow-y-auto px-5 flex flex-col divide-y divide-gray-100 min-h-0">
           {modules.map((mod) => (
             <div key={mod.id}>
               <div
@@ -151,10 +151,9 @@ export function ModuleConfiguration({
                   'flex items-center gap-4 py-4',
                   mod.options &&
                     mod.options.length > 0 &&
-                    'cursor-pointer hover:bg-gray-50 -mx-6 px-6 transition-colors',
+                    'cursor-pointer hover:bg-gray-50 -mx-5 px-5 transition-colors',
                 )}
               >
-                {/* Unique Icon per Module */}
                 {mod.icon || <ModuleIcon moduleKey={mod.key} />}
 
                 <div className="flex-1 min-w-0">
@@ -173,7 +172,7 @@ export function ModuleConfiguration({
         </div>
 
         {/* Save Button */}
-        <div className="px-6 py-4 border-t border-gray-100 shrink-0 flex justify-end">
+        <div className="px-5 py-4 border-t border-gray-100 shrink-0 flex justify-end">
           <button
             onClick={handleSave}
             disabled={isSaving}

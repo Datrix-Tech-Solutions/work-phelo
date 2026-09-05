@@ -1,7 +1,7 @@
 'use client';
 
 import { LucideIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, cardClass, waterIconStyle } from '@/lib/utils';
 
 interface MetricCardProps {
   title?: string;
@@ -10,12 +10,22 @@ interface MetricCardProps {
   sub?: string;
   unit?: string;
   icon?: LucideIcon;
+  /** Hex color seed for the icon's water-glass circle. Defaults to a color matching `variant`. */
+  iconColor?: string;
   actionLabel?: string;
   onAction?: () => void;
   variant?: 'default' | 'highlight' | 'success' | 'warning' | 'danger';
   highlight?: 'green' | 'red';
   className?: string;
 }
+
+const VARIANT_ICON_COLORS: Record<string, string> = {
+  default: 'var(--module-btn-bg, var(--brand))',
+  highlight: 'var(--module-btn-bg, var(--brand))',
+  success: '#10b981',
+  warning: '#f59e0b',
+  danger: '#ef4444',
+};
 
 export function MetricCard({
   title,
@@ -24,6 +34,7 @@ export function MetricCard({
   sub,
   unit,
   icon: Icon,
+  iconColor,
   actionLabel,
   onAction,
   variant = 'default',
@@ -47,16 +58,25 @@ export function MetricCard({
         ? 'text-red-500'
         : variantStyles[variant];
 
+  const resolvedIconColor = iconColor ?? VARIANT_ICON_COLORS[variant];
+
   return (
-    <div
-      className={cn(
-        'bg-white border border-gray-200 rounded-card px-5 py-5 flex flex-col shadow-sm',
-        className,
-      )}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-gray-500 font-medium">{heading}</span>
-        {Icon && <Icon className="w-5 h-5 text-gray-400" />}
+    <div className={cardClass(cn('px-5 py-5 flex flex-col', className), 'glass')}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <span className="text-sm text-gray-500 font-medium leading-snug line-clamp-2 min-w-0">
+          {heading}
+        </span>
+        {Icon && (
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+            style={waterIconStyle(resolvedIconColor)}
+          >
+            <Icon
+              className="w-4.5 h-4.5"
+              style={{ color: `color-mix(in oklab, ${resolvedIconColor} 65%, black)` }}
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-end justify-between flex-1">
