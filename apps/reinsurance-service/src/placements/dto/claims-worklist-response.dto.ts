@@ -284,17 +284,21 @@ export class ClaimsSummaryResponseDto {
   @ApiProperty({
     type: [ClaimsCurrencyAmountDto],
     description:
-      "Reinsurers' total claim share (summed allocations) for claims in the open bucket, grouped by claim currency.",
+      "Reinsurers' total claim share (summed allocations) for FINALIZED claims (open or closed), grouped by claim currency.",
   })
   claimsByCurrency!: ClaimsCurrencyAmountDto[];
 
-  @ApiProperty({ type: [ClaimsCurrencyAmountDto] })
+  @ApiProperty({
+    type: [ClaimsCurrencyAmountDto],
+    description:
+      'Recoveries received on claims still in the open bucket, grouped by claim currency. Drops out once a claim closes (fully recovered).',
+  })
   recoveredByCurrency!: ClaimsCurrencyAmountDto[];
 
   @ApiProperty({
     type: [ClaimsCurrencyAmountDto],
     description:
-      'Open-bucket claim share less recoveries received, grouped by claim currency (outstanding recovery still owed by reinsurers).',
+      'FINALIZED claim share less recoveries received, grouped by claim currency (outstanding recovery still owed by reinsurers). Nets to ~0 for closed claims.',
   })
   outstandingRecoveredByCurrency!: ClaimsCurrencyAmountDto[];
 }

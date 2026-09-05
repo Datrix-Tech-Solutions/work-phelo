@@ -80,7 +80,7 @@ export function ClaimsStatsRow() {
           amountsByCode={toAmountMap(summary?.claimsByCurrency ?? [])}
           currencies={currencies}
           isLoading={isLoading}
-          emptyMessage="No open claims yet"
+          emptyMessage="No finalized claims yet"
           className="h-55"
         />
         <CurrencyAmountListCard

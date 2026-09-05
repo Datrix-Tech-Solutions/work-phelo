@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   BanknoteArrowDown,
   BanknoteArrowUp,
+  HandCoins,
 } from 'lucide-react';
 import { ReportCard } from '@/components/molecules/shared/ReportCard';
 
@@ -76,6 +77,14 @@ export default function ReinsuranceReportsPage() {
           title="Claims"
           description="Claims activity and settlement history."
           onClick={() => router.push(`${base}/claims`)}
+        />
+
+        <ReportCard
+          icon={<HandCoins className="w-6 h-6" />}
+          iconClassName="bg-indigo-600 text-indigo-100"
+          title="Brokerage"
+          description="Brokerage earned and withholding across placements."
+          onClick={() => router.push(`${base}/brokerage`)}
         />
       </div>
     </div>

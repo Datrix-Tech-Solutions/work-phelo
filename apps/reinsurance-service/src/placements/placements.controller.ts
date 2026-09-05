@@ -376,7 +376,10 @@ export class PlacementsController {
 
   @Post(':id/endorsements/:endorsementId/notes/debit')
   @ApiTags('Reinsurance - Endorsement Notes')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Create endorsement debit note',
     description:
@@ -414,7 +417,10 @@ export class PlacementsController {
 
   @Post(':id/endorsements/:endorsementId/closings/:closingId/notes/credit')
   @ApiTags('Reinsurance - Endorsement Notes')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Create endorsement closing credit note',
     description:
@@ -459,7 +465,10 @@ export class PlacementsController {
 
   @Patch(':id/endorsements/:endorsementId/notes/:noteId/status')
   @ApiTags('Reinsurance - Endorsement Notes')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Issue a draft endorsement note',
     description:
@@ -499,7 +508,10 @@ export class PlacementsController {
 
   @Post(':id/endorsements/:endorsementId/notes/:noteId/void')
   @ApiTags('Reinsurance - Endorsement Notes')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Void a draft or issued endorsement note',
     description:

@@ -140,7 +140,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
 
   const claimShare: Column<ClaimTabRow> = {
     key: 'claimShare',
-    label: 'Claim Share',
+    label: 'iRisk Share',
     width: '120px',
     className: 'text-right',
     render: (row) => (
@@ -253,7 +253,7 @@ function buildColumns(tab: ClaimsTableTab): Column<ClaimTabRow>[] {
       // Reinsurer's share of the estimated claim = 100% estimate × fac offer %. Matches the
       // Total Allocated Claim figure once the claim is finalized and allocations are generated.
       key: 'notificationPayable',
-      label: 'Your Share',
+      label: 'iRisk Share',
       width: '120px',
       className: 'text-right',
       render: (row) => (
@@ -276,6 +276,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const canViewClaim = useAnyPermissionRules(RiPerm.viewClaim);
   const canAddClaim = useAnyPermissionRules(RiPerm.addClaim);
+  const canAddNotification = useAnyPermissionRules(RiPerm.addNotification);
   const canEditClaim = useAnyPermissionRules(RiPerm.editClaim);
   const canChangeClaimStatus = useAnyPermissionRules(RiPerm.claimStatusChange);
   const [search, setSearch] = useState('');
@@ -388,6 +389,22 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
     }
   };
 
+  const handleMoveToFinalized = async (row: ClaimTabRow) => {
+    try {
+      await updateClaim.mutateAsync({
+        placementId: row.placement.id,
+        claimId: row.claim.id,
+        claimState: 'FINALIZED',
+      });
+      setSuccessModal({
+        title: 'Claim Finalized',
+        message: 'Reinsurer allocations have been generated for this claim.',
+      });
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to finalize claim'));
+    }
+  };
+
   return (
     <>
       <DataTable
@@ -437,7 +454,7 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
         actionButton={
           canAddClaim && tab === 'open'
             ? { label: 'Add Claim', onClick: () => setIsAddClaimOpen(true) }
-            : canAddClaim && tab === 'notification'
+            : canAddNotification && tab === 'notification'
               ? { label: 'Add Notification', onClick: () => setIsAddNotificationOpen(true) }
               : undefined
         }
@@ -459,11 +476,19 @@ export function ClaimsTable({ tab = 'notification' }: ClaimsTableProps) {
                   actions.push({ label: 'Edit Claim', onClick: () => setPanelTarget(row) });
                 }
                 if (tab === 'open') {
-                  if (canEditClaim && effectiveClaimState(row.claim) === 'FINALIZED') {
-                    actions.push({
-                      label: 'Move to Pending',
-                      onClick: () => handleReverseToPending(row),
-                    });
+                  if (canEditClaim) {
+                    const state = effectiveClaimState(row.claim);
+                    if (state === 'FINALIZED') {
+                      actions.push({
+                        label: 'Move to Pending',
+                        onClick: () => handleReverseToPending(row),
+                      });
+                    } else {
+                      actions.push({
+                        label: 'Move to Finalized',
+                        onClick: () => handleMoveToFinalized(row),
+                      });
+                    }
                   }
                   return actions;
                 }
