@@ -179,7 +179,8 @@ export class ReinsuranceClaimsWorklistService {
                 "claimCurrency" AS "code",
                 SUM(COALESCE("claimShare", 0)) AS "amount"
               FROM classified_claims
-              WHERE "claimState"::text = 'FINALIZED'
+              WHERE "bucket" = 'open'
+                AND "claimState"::text = 'FINALIZED'
               GROUP BY "claimCurrency"
             ) totals
           ),
@@ -214,7 +215,8 @@ export class ReinsuranceClaimsWorklistService {
                 SUM(COALESCE("claimShare", 0)) - SUM(COALESCE("recoveredAmount", 0))
                   AS "amount"
               FROM classified_claims
-              WHERE "claimState"::text = 'FINALIZED'
+              WHERE "bucket" = 'open'
+                AND "claimState"::text = 'FINALIZED'
               GROUP BY "claimCurrency"
             ) totals
           ),
