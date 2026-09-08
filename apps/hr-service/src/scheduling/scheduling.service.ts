@@ -1,12 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { SYSTEM_ACTOR_EMAIL, SYSTEM_ACTOR_ID } from '../common/system-actor';
 
 @Injectable()
 export class SchedulingService {
   private readonly logger = new Logger(SchedulingService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private addMonths(date: Date, months: number) {
+    const value = new Date(date);
+    value.setHours(0, 0, 0, 0);
+    value.setMonth(value.getMonth() + months);
+    return value;
+  }
 
   /**
    * Runs every day at 01:00 UTC.
@@ -96,6 +104,7 @@ export class SchedulingService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    await this.backfillMissingProbationEndDates();
     await Promise.all([
       this.promoteFromProbation(today),
       this.flagExpiredContracts(today),
@@ -103,6 +112,81 @@ export class SchedulingService {
   }
 
   // ── Probation → Active ────────────────────────────────────────────────────
+
+  private async backfillMissingProbationEndDates() {
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        employmentStatus: 'PROBATION',
+        probationEndsAt: null,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        hireDate: true,
+      },
+    });
+
+    if (employees.length === 0) {
+      return;
+    }
+
+    const tenantIds = Array.from(new Set(employees.map((emp) => emp.tenantId)));
+    const configs = await this.prisma.tenantConfig.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        defaultProbationPeriodMonths: { not: null },
+      },
+      select: {
+        tenantId: true,
+        defaultProbationPeriodMonths: true,
+      },
+    });
+
+    const configByTenantId = new Map(
+      configs.map((config) => [
+        config.tenantId,
+        config.defaultProbationPeriodMonths ?? null,
+      ]),
+    );
+
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    for (const employee of employees) {
+      const defaultProbationPeriodMonths = configByTenantId.get(
+        employee.tenantId,
+      );
+      if (!defaultProbationPeriodMonths) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const probationEndsAt = this.addMonths(
+        employee.hireDate,
+        defaultProbationPeriodMonths,
+      );
+
+      await this.prisma.employee.update({
+        where: { id: employee.id },
+        data: {
+          probationEndsAt,
+        },
+      });
+      updatedCount += 1;
+    }
+
+    if (updatedCount > 0) {
+      this.logger.log(
+        `[scheduler] Backfilled probation end dates for ${updatedCount} employee(s) before status transition checks.`,
+      );
+    }
+
+    if (skippedCount > 0) {
+      this.logger.warn(
+        `[scheduler] ${skippedCount} probationary employee(s) still have no probation end date because their tenant has no default probation period configured.`,
+      );
+    }
+  }
 
   private async promoteFromProbation(today: Date) {
     const expired = await this.prisma.employee.findMany({
@@ -123,8 +207,8 @@ export class SchedulingService {
       data: {
         employmentStatus: 'ACTIVE',
         statusChangedAt: now,
-        statusChangedById: 'system',
-        statusChangedByEmail: 'system',
+        statusChangedById: SYSTEM_ACTOR_ID,
+        statusChangedByEmail: SYSTEM_ACTOR_EMAIL,
       },
     });
 
@@ -156,8 +240,8 @@ export class SchedulingService {
         employmentStatus: 'SUSPENDED',
         offboardReason: 'CONTRACT_ENDED',
         statusChangedAt: now,
-        statusChangedById: 'system',
-        statusChangedByEmail: 'system',
+        statusChangedById: SYSTEM_ACTOR_ID,
+        statusChangedByEmail: SYSTEM_ACTOR_EMAIL,
       },
     });
 

@@ -1,8 +1,9 @@
 'use client';
 
-import { forwardRef, useState } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 const COUNTRY_CODES = [
   { code: '+233', flag: 'GH' },
@@ -15,12 +16,15 @@ const COUNTRY_CODES = [
 
 const ALL_CODES = COUNTRY_CODES.map((c) => c.code);
 
-function parsePhone(raw: string | null | undefined): { code: string; number: string } {
-  if (!raw) return { code: '+233', number: '' };
+function parsePhone(
+  raw: string | null | undefined,
+  fallback: string,
+): { code: string; number: string } {
+  if (!raw) return { code: fallback, number: '' };
   const matched = ALL_CODES.find((c) => raw.startsWith(c));
   return matched
     ? { code: matched, number: raw.slice(matched.length).replace(/\D/g, '') }
-    : { code: '+233', number: raw.replace(/\D/g, '') };
+    : { code: fallback, number: raw.replace(/\D/g, '') };
 }
 
 interface PhoneInputProps {
@@ -35,39 +39,48 @@ interface PhoneInputProps {
 
 export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
   (
-    {
-      label,
-      error,
-      placeholder = '00 000 0000',
-      value,
-      onChange,
-      defaultCountryCode = '+233',
-      className,
-    },
+    { label, error, placeholder = '00 000 0000', value, onChange, defaultCountryCode, className },
     ref,
   ) => {
-    const isControlled = value != null;
-    const parsed = isControlled ? parsePhone(value) : { code: defaultCountryCode, number: '' };
+    const { dialCode: tenantDialCode } = useTenantConfig();
+    const resolvedDefault = defaultCountryCode ?? tenantDialCode;
 
-    const [internalCode, setInternalCode] = useState(defaultCountryCode);
+    const isControlled = value != null;
+    const parsed = isControlled
+      ? parsePhone(value, resolvedDefault)
+      : { code: resolvedDefault, number: '' };
+
+    const [internalCode, setInternalCode] = useState(resolvedDefault);
     const [internalNumber, setInternalNumber] = useState('');
+
+    // Sync dial code when tenant data loads, as long as no number has been typed yet
+    useEffect(() => {
+      if (!isControlled && !internalNumber) {
+        setInternalCode(resolvedDefault);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resolvedDefault]);
 
     const countryCode = isControlled ? parsed.code : internalCode;
     const localValue = isControlled ? parsed.number : internalNumber;
 
     return (
-      <div className="flex flex-col gap-1.5">
-        {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+        {label && (
+          <label className="block truncate text-sm font-bold text-gray-900" title={label}>
+            {label}
+          </label>
+        )}
         <div
           className={cn(
-            'flex border rounded-input overflow-hidden bg-white transition-colors',
-            'focus-within:ring-1 focus-within:ring-gray-400 focus-within:border-gray-400',
-            error ? 'border-red-500' : 'border-gray-300',
+            'flex border rounded-input overflow-hidden bg-transparent transition-colors',
+            'focus-within:ring-2 focus-within:ring-(--module-btn-bg,var(--color-brand))/30 focus-within:border-(--module-btn-bg,var(--color-brand))',
+            error ? 'border-red-500' : 'border-(--input-border,var(--color-gray-400))',
             className,
           )}
         >
           {/* Country code selector */}
-          <div className="relative flex items-center border-r border-gray-300 px-3 bg-white shrink-0">
+          <div className="relative flex items-center border-r border-gray-300 px-3 bg-transparent shrink-0">
             <select
               value={countryCode}
               onChange={(e) => {
@@ -98,7 +111,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
               onChange?.(countryCode + numeric);
             }}
             placeholder={placeholder}
-            className="flex-1 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 bg-transparent focus:outline-none"
+            className="flex-1 px-4 py-2 text-sm text-gray-800 placeholder:text-gray-400 bg-transparent focus:outline-none"
           />
         </div>
         {error && <p className="text-xs text-red-500">{error}</p>}

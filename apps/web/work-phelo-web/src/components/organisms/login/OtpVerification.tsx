@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/atoms/AppLogo';
 import { useVerifyOtp, useResendOtp, useForgotPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
-import { cn } from '@/lib/utils';
+import { cardClass, cn } from '@/lib/utils';
 import { extractError } from '@/lib/extractError';
 import { useToast } from '@/hooks/useToast';
 
@@ -99,7 +99,7 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
   };
 
   return (
-    <div className="w-full max-w-sm px-8 py-10">
+    <div className={cardClass('w-full max-w-sm px-8 py-10')}>
       <div className="flex justify-center mb-6">
         <AppLogo />
       </div>

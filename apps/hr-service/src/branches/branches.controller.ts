@@ -24,6 +24,8 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { Permission } from '@work-phelo/config';
 import {
   assertHrAccess,
@@ -44,7 +46,10 @@ export class BranchesController {
   @ApiOperation({ summary: 'Create a new branch' })
   @ApiResponse({ status: 201, description: 'Branch created successfully' })
   @ApiResponse({ status: 409, description: 'Branch name already exists' })
-  create(@Body() dto: CreateBranchDto, @Req() req: any) {
+  create(
+    @Body() dto: CreateBranchDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.branchesService.create(req.user.tenantId, dto);
   }
 
@@ -52,7 +57,7 @@ export class BranchesController {
   @RequirePermissions(Permission.READ_BRANCHES)
   @ApiOperation({ summary: 'List all branches for the current tenant' })
   @ApiResponse({ status: 200, description: 'Branches retrieved successfully' })
-  findAll(@Req() req: any) {
+  findAll(@Req() req: Request & { user: RequestUser }) {
     return this.branchesService.findAll(req.user.tenantId);
   }
 
@@ -65,7 +70,7 @@ export class BranchesController {
     status: 200,
     description: 'Branch options retrieved successfully',
   })
-  findOptions(@Req() req: any) {
+  findOptions(@Req() req: Request & { user: RequestUser }) {
     const user = req.user;
 
     assertHrAccess(
@@ -84,7 +89,10 @@ export class BranchesController {
   @ApiParam({ name: 'id', description: 'Branch UUID' })
   @ApiResponse({ status: 200, description: 'Branch retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Branch not found' })
-  findOne(@Param('id') id: string, @Req() req: any) {
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.branchesService.findById(req.user.tenantId, id);
   }
 
@@ -97,7 +105,7 @@ export class BranchesController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateBranchDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.branchesService.update(req.user.tenantId, id, dto);
   }
@@ -108,7 +116,7 @@ export class BranchesController {
   @ApiParam({ name: 'id', description: 'Branch UUID' })
   @ApiResponse({ status: 200, description: 'Branch deleted successfully' })
   @ApiResponse({ status: 409, description: 'Branch has employees assigned' })
-  remove(@Param('id') id: string, @Req() req: any) {
+  remove(@Param('id') id: string, @Req() req: Request & { user: RequestUser }) {
     return this.branchesService.remove(req.user.tenantId, id);
   }
 }

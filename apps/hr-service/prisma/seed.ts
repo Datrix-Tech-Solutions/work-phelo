@@ -1,3 +1,4 @@
+import process from 'process';
 import { PrismaClient } from '../prisma/generated/client';
 
 const prisma = new PrismaClient();
@@ -11,17 +12,17 @@ async function main() {
   const authPrisma = new PrismaClient({
     datasources: {
       db: {
-        url: process.env.DATABASE_URL!.replace('schema=hr', 'schema=auth'),
+        url: process.env.DATABASE_URL!.replace('schema=hr', 'schema=w_auth'),
       },
     },
   });
 
   const acmeTenant: any[] = await (authPrisma as any).$queryRawUnsafe(
-    `SELECT id, name FROM auth."Tenant" WHERE slug = 'acme-ghana' LIMIT 1`,
+    `SELECT id, name FROM w_auth."Tenant" WHERE slug = 'acme-ghana' LIMIT 1`,
   );
 
   const stellarTenant: any[] = await (authPrisma as any).$queryRawUnsafe(
-    `SELECT id, name FROM auth."Tenant" WHERE slug = 'stellar-tech' LIMIT 1`,
+    `SELECT id, name FROM w_auth."Tenant" WHERE slug = 'stellar-tech' LIMIT 1`,
   );
 
   if (!acmeTenant.length || !stellarTenant.length) {
@@ -33,12 +34,12 @@ async function main() {
   const stellarId: string = stellarTenant[0].id;
 
   const acmeUsers: any[] = await (authPrisma as any).$queryRawUnsafe(
-    `SELECT id, email, "firstName", "lastName" FROM auth."User"
+    `SELECT id, email, "firstName", "lastName" FROM w_auth."User"
      WHERE "tenantId" = '${acmeId}' AND role = 'EMPLOYEE'`,
   );
 
   const stellarUsers: any[] = await (authPrisma as any).$queryRawUnsafe(
-    `SELECT id, email, "firstName", "lastName" FROM auth."User"
+    `SELECT id, email, "firstName", "lastName" FROM w_auth."User"
      WHERE "tenantId" = '${stellarId}' AND role = 'EMPLOYEE'`,
   );
 
@@ -157,7 +158,6 @@ async function main() {
         employmentStatus: 'ACTIVE',
         gender: 'MALE',
         nationality: 'Ghanaian',
-        phone: '+233244000001',
       },
     });
 
@@ -233,7 +233,6 @@ async function main() {
         employmentType: 'FULL_TIME',
         employmentStatus: 'ACTIVE',
         nationality: 'Ghanaian',
-        phone: '+233244000002',
       },
     });
 

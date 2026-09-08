@@ -36,7 +36,9 @@ export type EmploymentStatus =
   | 'SUSPENDED'
   | 'TERMINATED'
   | 'OFFBOARDED';
-export type AllowanceType = 'TRANSPORT' | 'HOUSING' | 'MEDICAL' | 'OTHER';
+export type EmployeeCompensationType = 'SALARY' | 'COMMISSION' | 'SALARY_PLUS_COMMISSION';
+export type PayrollTaxPolicy = 'STANDARD_PAYE' | 'FIXED_AMOUNT' | 'EXEMPT';
+export type AllowanceType = 'TRANSPORT' | 'HOUSING' | 'MEDICAL' | 'CLOTHING' | 'OTHER';
 export type DocumentType =
   | 'CONTRACT'
   | 'ID_CARD'
@@ -47,6 +49,17 @@ export type DocumentType =
   | 'OTHER';
 
 // ── Employee ─────────────────────────────────────────────
+export interface EmployeeOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  jobTitle: string;
+  employmentStatus: EmploymentStatus;
+  department?: { id: string; name: string };
+  branch?: { id: string; name: string };
+}
+
 export interface Employee {
   id: string;
   employeeNumber: string;
@@ -68,12 +81,17 @@ export interface Employee {
   probationEndsAt?: string;
   contractEndDate?: string;
   basicSalary?: number;
+  compensationType?: EmployeeCompensationType;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number | null;
+  commissionTaxable?: boolean;
   departmentId?: string;
   department?: Department;
   branchId?: string;
   branch?: Branch;
   managerId?: string;
   userId?: string;
+  userStatus?: 'PENDING_VERIFICATION' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   avatarUrl?: string;
   bankName?: string;
   bankAccountNumber?: string;
@@ -90,6 +108,7 @@ export interface Employee {
   createdAt?: string;
   assets?: import('@/types/asset').EmployeeAsset[];
   allowances?: EmployeeAllowance[];
+  deductions?: EmployeeDeduction[];
   offboarding?: OffboardingRecord;
 }
 
@@ -97,10 +116,37 @@ export interface EmployeeAllowance {
   id: string;
   employeeId: string;
   type: AllowanceType;
+  name: string;
   amount: number;
-  description?: string;
   effectiveFrom: string;
+  effectiveTo?: string | null;
   createdAt: string;
+}
+
+export interface EmployeeDeduction {
+  id: string;
+  employeeId: string;
+  name: string;
+  totalAmount: number;
+  monthlyRate: number;
+  amountPaid: number;
+  startDate: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateDeductionPayload {
+  name: string;
+  totalAmount: number;
+  monthlyRate: number;
+  startDate: string;
+}
+
+export interface UpdateDeductionPayload {
+  name?: string;
+  totalAmount?: number;
+  monthlyRate?: number;
+  startDate?: string;
 }
 
 export interface EmployeeDocument {
@@ -115,8 +161,13 @@ export interface EmployeeDocument {
 export interface AddAllowancePayload {
   type: AllowanceType;
   amount: number;
-  description?: string;
-  effectiveFrom: string;
+  name?: string;
+}
+
+export interface UpdateAllowancePayload {
+  type?: AllowanceType;
+  amount?: number;
+  name?: string;
 }
 
 export interface UploadDocumentPayload {
@@ -141,11 +192,16 @@ export interface UpdateEmployeePayload {
   departmentId?: string;
   branchId?: string;
   managerId?: string;
+  hireDate?: string;
   probationEndsAt?: string;
   contractEndDate?: string;
   employmentType?: EmploymentType;
   employmentStatus?: EmploymentStatus;
   basicSalary?: number;
+  compensationType?: EmployeeCompensationType;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number | null;
+  commissionTaxable?: boolean;
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;
@@ -163,7 +219,7 @@ export interface CreateEmployeePayload {
   email: string;
   phone?: string;
   gender?: Gender;
-  dateOfBirth?: string;
+  dateOfBirth: string;
   maritalStatus?: MaritalStatus;
   nationality?: string;
   address?: string;
@@ -173,6 +229,10 @@ export interface CreateEmployeePayload {
   employmentType: EmploymentType;
   hireDate: string;
   basicSalary?: number;
+  compensationType?: EmployeeCompensationType;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number | null;
+  commissionTaxable?: boolean;
   departmentId: string;
   branchId?: string;
   managerId?: string;
@@ -230,13 +290,75 @@ export interface PublicHoliday {
   tenantId: string;
   name: string;
   date: string;
+  observedDate: string;
+  countryScope: string;
+  regionScope: string;
+  isObservedShifted: boolean;
   createdAt: string;
 }
 
 export interface CreatePublicHolidayDto {
   name: string;
   date: string;
+  countryScope?: string;
 }
+
+// ── Announcements ───────────────────────────────────────
+export type AnnouncementAudienceType = 'ALL' | 'DEPARTMENTS' | 'BRANCHES' | 'EMPLOYEES';
+export type AnnouncementDeliveryChannel = 'IN_APP' | 'EMAIL' | 'SMS';
+
+export interface Announcement {
+  id: string;
+  tenantId: string;
+  title: string;
+  body: string;
+  audienceType: AnnouncementAudienceType;
+  targetDepartmentIds: string[];
+  targetBranchIds: string[];
+  targetEmployeeIds: string[];
+  sendEmail: boolean;
+  deliveryChannels?: AnnouncementDeliveryChannel[];
+  publishedAt: string;
+  expiresAt?: string | null;
+  createdById?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isRead?: boolean;
+}
+
+export interface QueryAnnouncementsParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  audienceType?: AnnouncementAudienceType;
+  sendEmail?: boolean;
+  includeExpired?: boolean;
+  view?: 'visible' | 'all';
+}
+
+export interface PaginatedAnnouncementsResponse {
+  items: Announcement[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface CreateAnnouncementPayload {
+  title: string;
+  body: string;
+  audienceType?: AnnouncementAudienceType;
+  departmentIds?: string[];
+  branchIds?: string[];
+  employeeIds?: string[];
+  deliveryChannels?: AnnouncementDeliveryChannel[];
+  sendEmail?: boolean;
+  expiresAt?: string;
+}
+
+export type UpdateAnnouncementPayload = Partial<CreateAnnouncementPayload>;
 
 export type UpdatePublicHolidayDto = Partial<CreatePublicHolidayDto>;
 
@@ -248,6 +370,7 @@ export interface LeaveRequest {
   tenantSlug: string;
   employeeId: string;
   employeeName: string;
+  employeeAvatarUrl?: string;
   leaveTypeId: string;
   leaveTypeName: string;
   isPaid: boolean;
@@ -262,6 +385,7 @@ export interface LeaveRequest {
   reviewNote?: string;
   createdAt: string;
   updatedAt?: string;
+  coverageEmployee?: { id: string; firstName: string; lastName: string };
 }
 
 export interface CreateLeaveRequestDto {
@@ -269,6 +393,7 @@ export interface CreateLeaveRequestDto {
   startDate: string;
   endDate: string;
   reason?: string;
+  coverageEmployeeId?: string;
   documentationUrl?: string;
 }
 
@@ -289,22 +414,28 @@ export interface LeaveBalance {
 }
 
 // ── Payroll ───────────────────────────────────────────────
-export interface PayrollRun {
-  id: string;
-  month: number;
-  year: number;
-  status: 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
-  notes?: string;
-  totalGross: string;
-  totalNet: string;
-  totalSSNIT: string;
-  totalPAYE: string;
-  runBy: string;
-  approvedBy?: string;
-  approvedAt?: string;
-  paidAt?: string;
-  createdAt: string;
-}
+// All payroll types live in src/types/payroll.ts — re-exported here for backward compatibility.
+export type {
+  PayrollRunStatus,
+  PayrollCountry,
+  PayrollRun,
+  PayrollRunEmployeeSummary,
+  PayrollItemAllowance,
+  PayrollItemDeduction,
+  PayrollItem,
+  PayrollRunDetail,
+  PayrollDecisionDto,
+  RunPayrollDto,
+  UpdatePayrollItemDto,
+  PayrollSettings,
+  UpdatePayrollSettingsDto,
+  PayslipCompanyInfo,
+  PayslipEmployeeInfo,
+  PayslipYTD,
+  EmployeeOverride,
+  DeductionLineItem,
+  DraftLoadData,
+} from './payroll';
 
 // ── Project ───────────────────────────────────────────────
 export type ProjectStatus = 'PLANNING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
@@ -320,6 +451,7 @@ export interface Project {
   managerId?: string;
   managerName?: string;
   assignedCount: number;
+  progress?: number;
   createdAt: string;
 }
 
@@ -330,6 +462,78 @@ export interface CreateProjectDto {
   endDate?: string;
   budget?: number;
   managerId?: string;
+}
+
+export type UpdateProjectDto = Partial<CreateProjectDto> & { status?: ProjectStatus };
+
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE';
+export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type ProjectMemberRole = 'OWNER' | 'MANAGER' | 'MEMBER';
+
+export interface ProjectTask {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  name: string;
+  description?: string | null;
+  status: TaskStatus;
+  priority?: TaskPriority | null;
+  dueDate?: string | null;
+  assignedEmployeeId?: string | null;
+  assignedEmployeeName?: string;
+  completedAt?: string | null;
+  createdByUserId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  employeeId: string;
+  role: ProjectMemberRole;
+  joinedAt: string;
+  name: string;
+  email: string;
+  jobTitle: string;
+  department: string | null;
+  avatarUrl?: string;
+}
+
+export interface ProjectDetail extends Project {
+  tasks: ProjectTask[];
+  members: ProjectMember[];
+}
+
+export interface MyTask extends ProjectTask {
+  project: { id: string; name: string; status: ProjectStatus };
+}
+
+export interface ProjectActivity {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  taskId?: string | null;
+  actorUserId: string;
+  actorEmployeeId?: string | null;
+  type: string;
+  message: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface CreateProjectTaskDto {
+  name: string;
+  description?: string;
+  dueDate?: string;
+  priority?: TaskPriority;
+  assignedEmployeeId?: string;
+}
+
+export type UpdateProjectTaskDto = Partial<CreateProjectTaskDto> & { status?: TaskStatus };
+
+export interface AddProjectMemberDto {
+  employeeId: string;
+  role?: ProjectMemberRole;
 }
 
 // ── Dashboard ─────────────────────────────────────────────
@@ -709,6 +913,122 @@ export interface AppraisalSettings {
   veryGoodThreshold: number;
   goodThreshold: number;
   satisfactoryThreshold: number;
+}
+
+export interface UpdateAppraisalSettingsDto {
+  appraisalEligibleStatuses?: AppraisalEligibleEmploymentStatus[];
+  outstandingThreshold?: number;
+  veryGoodThreshold?: number;
+  goodThreshold?: number;
+  satisfactoryThreshold?: number;
+}
+
+export type CompanyPolicyProbationPeriod = '3' | '4' | '5' | '6' | 'undefined';
+
+export type CompanyPolicyResignationWindow = '1w' | '2w' | '1m' | '2m' | '3m' | '6m' | '1y' | '2y';
+
+export type CompanyPolicyCycleRecipient =
+  | 'all'
+  | 'permanent'
+  | 'contractual'
+  | 'probation'
+  | 'interns';
+
+export interface CompanyPoliciesSettings {
+  probationPeriod: CompanyPolicyProbationPeriod;
+  resignationWindow: CompanyPolicyResignationWindow;
+  cycleRecipients: CompanyPolicyCycleRecipient[];
+  defaultProbationPeriodMonths: number | null;
+  resignationNoticePeriodDays: number;
+}
+
+export interface UpdateCompanyPoliciesDto {
+  probationPeriod?: CompanyPolicyProbationPeriod;
+  resignationWindow?: CompanyPolicyResignationWindow;
+  cycleRecipients?: CompanyPolicyCycleRecipient[];
+}
+
+export type CompanyAgreementType =
+  | 'NDA'
+  | 'EMPLOYMENT_CONTRACT'
+  | 'CONFIDENTIALITY'
+  | 'NON_COMPETE'
+  | 'CODE_OF_CONDUCT'
+  | 'IP_ASSIGNMENT'
+  | 'PROBATION_AGREEMENT'
+  | 'OTHER';
+
+export type CompanyAgreementState = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type CompanyAgreementSignatureStatus = 'SIGNED' | 'DECLINED' | 'REVOKED';
+
+export interface CompanyAgreement {
+  id: string;
+  tenantId: string;
+  type: CompanyAgreementType;
+  title: string;
+  details: string;
+  documentUrl?: string | null;
+  isRequired: boolean;
+  state: CompanyAgreementState;
+  activeVersionId?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanyAgreementSignatureRow {
+  employee: {
+    id: string;
+    employeeNumber: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    department: { id: string; name: string } | null;
+  };
+  signature: {
+    id: string;
+    status: CompanyAgreementSignatureStatus;
+    typedName?: string | null;
+    signedAt?: string | null;
+    declinedAt?: string | null;
+    declineReason?: string | null;
+  } | null;
+  status: CompanyAgreementSignatureStatus | 'PENDING';
+}
+
+export interface CompanyAgreementSignaturesResponse {
+  agreement: CompanyAgreement;
+  version: { id: string; version: number; title: string } | null;
+  summary: { signed: number; declined: number; pending: number; total: number };
+  rows: CompanyAgreementSignatureRow[];
+}
+
+export interface MyCompanyAgreementVersion {
+  id: string;
+  version: number;
+  title: string;
+  details: string;
+  documentUrl?: string | null;
+  publishedAt?: string | null;
+}
+
+export interface MyCompanyAgreement {
+  agreement: CompanyAgreement;
+  version: MyCompanyAgreementVersion;
+  signature: { id: string; status: CompanyAgreementSignatureStatus } | null;
+  status: CompanyAgreementSignatureStatus | 'PENDING';
+}
+
+export interface CreateCompanyAgreementDto {
+  type: CompanyAgreementType;
+  title: string;
+  details: string;
+}
+
+export interface UpdateCompanyAgreementDto {
+  type?: CompanyAgreementType;
+  title?: string;
+  details?: string;
 }
 
 export interface CreateAppraisalKpiDto {

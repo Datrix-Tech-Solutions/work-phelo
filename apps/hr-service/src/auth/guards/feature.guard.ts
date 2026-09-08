@@ -5,6 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 
 export const FEATURE_KEY = 'feature';
 
@@ -19,10 +21,10 @@ export class FeatureGuard implements CanActivate {
     );
     if (!required) return true;
 
-    const request = context.switchToHttp().getRequest();
-    const featureConfig = request.user?.featureConfig as
-      | Record<string, Record<string, boolean>>
-      | undefined;
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: RequestUser }>();
+    const featureConfig = request.user?.featureConfig;
 
     if (
       !featureConfig ||

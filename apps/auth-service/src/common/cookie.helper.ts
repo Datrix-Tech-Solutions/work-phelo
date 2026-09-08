@@ -19,8 +19,10 @@ export function setAuthCookies(
     httpOnly: true,
     secure: COOKIE_SECURE,
     sameSite: SAME_SITE,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: '/api/v1/auth/refresh', // scoped — not sent on every request
+    maxAge: 8 * 60 * 60 * 1000, // 8 hours
+    // Keep the cookie available on page requests so frontend middleware can
+    // distinguish "fully signed out" from "access token expired but refreshable".
+    path: '/',
   });
 }
 
@@ -36,5 +38,5 @@ export function setAccessTokenCookie(res: Response, accessToken: string) {
 
 export function clearAuthCookies(res: Response) {
   res.clearCookie('access_token', { path: '/' });
-  res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh' });
+  res.clearCookie('refresh_token', { path: '/' });
 }

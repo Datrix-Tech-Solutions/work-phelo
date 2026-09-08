@@ -10,6 +10,9 @@ interface FormFieldProps {
   placeholder?: string;
   readOnly?: boolean;
   rows?: number;
+  step?: string | number;
+  /** Rendered inside the input's own box, overlaid on the right edge. */
+  rightElement?: React.ReactNode;
 }
 
 export function FormField({
@@ -20,6 +23,8 @@ export function FormField({
   placeholder,
   readOnly,
   rows,
+  step,
+  rightElement,
 }: FormFieldProps) {
   if (type === 'password') {
     return (
@@ -33,6 +38,24 @@ export function FormField({
     );
   }
 
+  if (type === 'email') {
+    const { onChange, ...rest } = registration;
+    return (
+      <Input
+        label={label}
+        type="email"
+        placeholder={placeholder}
+        readOnly={readOnly}
+        error={error?.message}
+        onChange={(e) => {
+          e.target.value = e.target.value.toLowerCase();
+          onChange(e);
+        }}
+        {...rest}
+      />
+    );
+  }
+
   return (
     <Input
       label={label}
@@ -41,6 +64,8 @@ export function FormField({
       readOnly={readOnly}
       error={error?.message}
       rows={rows}
+      step={step}
+      rightElement={rightElement}
       {...registration}
     />
   );

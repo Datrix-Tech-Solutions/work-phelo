@@ -5,7 +5,7 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import { RequestUser } from '@work-phelo/types';
+import { PermissionRecipient, RequestUser } from '@work-phelo/types';
 import { EmploymentStatus, Prisma } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
@@ -13,6 +13,11 @@ import { UpdateAppraisalCycleDto } from './dto/update-cycle.dto';
 import { SubmitReviewDto, KpiScoreDto } from './dto/submit-review.dto';
 import { CreateAppraisalTemplateDto } from './dto/create-template.dto';
 import { CreateAppraisalKpiDto } from './dto/create-kpi.dto';
+import { FinalizeAppraisalDto } from './dto/finalize-appraisal.dto';
+import {
+  ReopenAppraisalDto,
+  ReopenAppraisalTarget,
+} from './dto/reopen-appraisal.dto';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -33,6 +38,14 @@ type PerformanceBandConfig = {
   veryGoodThreshold: number;
   goodThreshold: number;
   satisfactoryThreshold: number;
+};
+
+type AppraisalFinalizerRecipient = {
+  userId: string | null;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  source: 'FINALIZER' | 'TENANT_ADMIN_ESCALATION';
 };
 
 const DEFAULT_APPRAISAL_ELIGIBLE_STATUSES = [
@@ -75,10 +88,12 @@ function scoreToRating(
 }
 
 function deriveOverallStatus(appraisal: {
+  status?: string;
   selfStatus: string;
   managerStatus: string;
   finalScore: number | null;
 }): string {
+  if (appraisal.status === 'PENDING_FINALIZATION') return 'PendingFinalization';
   if (appraisal.managerStatus === 'SUBMITTED' && appraisal.finalScore !== null)
     return 'Finalized';
   if (appraisal.managerStatus === 'SUBMITTED') return 'ManagerSubmitted';
@@ -118,6 +133,13 @@ function calcFinalScore(
   );
 }
 
+function buildPersonName(person: {
+  firstName?: string | null;
+  lastName?: string | null;
+}) {
+  return [person.firstName, person.lastName].filter(Boolean).join(' ').trim();
+}
+
 function validateTemplatePayload(
   dto: Pick<
     CreateAppraisalTemplateDto,
@@ -153,6 +175,111 @@ export class AppraisalsService {
     private readonly publisher: RabbitMQPublisher,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  private buildAppraisalSelfAssessmentLink(
+    tenantSlug: string,
+    cycleId: string,
+    appraisalId: string,
+  ) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/appraisal/cycles/${encodeURIComponent(cycleId)}/self-assessment/${encodeURIComponent(appraisalId)}`;
+  }
+
+  private buildAppraisalManagerReviewLink(
+    tenantSlug: string,
+    cycleId: string,
+    appraisalId: string,
+  ) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/appraisal/cycles/${encodeURIComponent(cycleId)}/manager-review/${encodeURIComponent(appraisalId)}`;
+  }
+
+  private buildAppraisalResultLink(
+    tenantSlug: string,
+    cycleId: string,
+    appraisalId: string,
+  ) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/appraisal/cycles/${encodeURIComponent(cycleId)}/results/${encodeURIComponent(appraisalId)}`;
+  }
+
+  private buildAppraisalFinalizationLink(
+    tenantSlug: string,
+    cycleId: string,
+    appraisalId: string,
+  ) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/appraisal/cycles/${encodeURIComponent(cycleId)}/employee/${encodeURIComponent(appraisalId)}`;
+  }
+
+  private emitNotificationEvent(promise: Promise<void>, context: string) {
+    void promise.catch((error) =>
+      this.logger.error(
+        `[appraisal] Failed to publish ${context} notification event`,
+        error,
+      ),
+    );
+  }
+
+  private dedupeAppraisalFinalizers(
+    recipients: AppraisalFinalizerRecipient[],
+  ): AppraisalFinalizerRecipient[] {
+    const seen = new Set<string>();
+    return recipients.filter((recipient) => {
+      const key = recipient.userId || recipient.email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private async resolveAppraisalFinalizers(
+    tenantId: string,
+    excludingUserIds: string[] = [],
+  ): Promise<AppraisalFinalizerRecipient[]> {
+    const mapRecipient = (
+      recipient: PermissionRecipient,
+      source: AppraisalFinalizerRecipient['source'],
+    ): AppraisalFinalizerRecipient => ({
+      userId: recipient.userId,
+      email: recipient.email,
+      firstName: recipient.firstName,
+      lastName: recipient.lastName,
+      source,
+    });
+
+    const finalizers = await this.publisher.authResolvePermissionRecipients({
+      tenantId,
+      resource: 'appraisals',
+      action: 'APPROVE',
+      activeOnly: true,
+    });
+
+    const explicit = this.dedupeAppraisalFinalizers(
+      finalizers
+        .filter((recipient) => recipient.email)
+        .filter((recipient) => !excludingUserIds.includes(recipient.userId))
+        .map((recipient) => mapRecipient(recipient, 'FINALIZER')),
+    );
+
+    if (explicit.length > 0) return explicit;
+
+    const escalated = await this.publisher.authResolvePermissionRecipients({
+      tenantId,
+      resource: 'appraisals',
+      action: 'APPROVE',
+      includeTenantAdmins: true,
+      activeOnly: true,
+    });
+
+    return this.dedupeAppraisalFinalizers(
+      escalated
+        .filter((recipient) => recipient.email)
+        .filter((recipient) => recipient.role === 'TENANT_ADMIN')
+        .filter((recipient) => !excludingUserIds.includes(recipient.userId))
+        .map((recipient) => mapRecipient(recipient, 'TENANT_ADMIN_ESCALATION')),
+    );
+  }
 
   private normalizeAppraisalEligibleStatuses(
     statuses?: string[] | null,
@@ -409,6 +536,7 @@ export class AppraisalsService {
       select: {
         id: true,
         userId: true,
+        email: true,
         managerId: true,
         firstName: true,
         lastName: true,
@@ -418,7 +546,11 @@ export class AppraisalsService {
     return { cycle, employees, eligibleEmploymentStatuses };
   }
 
-  private async activateCycle(tenantId: string, cycleId: string) {
+  private async activateCycle(
+    tenantId: string,
+    cycleId: string,
+    actor?: RequestUser,
+  ) {
     const { cycle, employees, eligibleEmploymentStatuses } =
       await this.resolveCycleEmployees(tenantId, cycleId);
 
@@ -448,8 +580,18 @@ export class AppraisalsService {
       }
     }
 
+    const appraisalLinks: {
+      appraisalId: string;
+      employeeId: string;
+      userId: string | null;
+      email: string | null;
+      firstName: string;
+      lastName: string;
+      selfAssessmentLink: string;
+    }[] = [];
+
     for (const emp of employees) {
-      await this.prisma.appraisal.upsert({
+      const appraisal = await this.prisma.appraisal.upsert({
         where: { cycleId_employeeId: { cycleId, employeeId: emp.id } },
         update: {
           status: 'IN_PROGRESS',
@@ -462,6 +604,24 @@ export class AppraisalsService {
           managerId: emp.managerId,
           status: 'IN_PROGRESS',
         },
+      });
+
+      const selfAssessmentLink = actor?.tenantSlug
+        ? this.buildAppraisalSelfAssessmentLink(
+            actor.tenantSlug,
+            cycleId,
+            appraisal.id,
+          )
+        : `/hr/appraisal/cycles/${cycleId}/self-assessment/${appraisal.id}`;
+
+      appraisalLinks.push({
+        appraisalId: appraisal.id,
+        employeeId: emp.id,
+        userId: emp.userId,
+        email: emp.email,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        selfAssessmentLink,
       });
     }
 
@@ -488,14 +648,14 @@ export class AppraisalsService {
         })
       : [];
 
-    const notifications = employees
+    const notifications = appraisalLinks
       .filter((emp) => emp.userId)
       .map((emp) => ({
         tenantId,
         userId: emp.userId as string,
         type: 'APPRAISAL_CYCLE_STARTED',
         message: `Your appraisal cycle "${cycle.title}" is now active.`,
-        link: `/hr/appraisal/cycles/${cycleId}`,
+        link: `/hr/appraisal/cycles/${cycleId}/self-assessment/${emp.appraisalId}`,
       }))
       .concat(
         managers
@@ -511,6 +671,23 @@ export class AppraisalsService {
 
     if (notifications.length) {
       await this.notificationsService.createMany(notifications);
+    }
+
+    for (const appraisal of appraisalLinks) {
+      if (!appraisal.email || !actor?.tenantSlug) continue;
+
+      this.emitNotificationEvent(
+        this.publisher.notificationAppraisalCycleStarted({
+          tenantId,
+          appraisalId: appraisal.appraisalId,
+          cycleId,
+          cycleTitle: cycle.title,
+          employeeEmail: appraisal.email,
+          employeeFirstName: appraisal.firstName,
+          selfAssessmentLink: appraisal.selfAssessmentLink,
+        }),
+        `appraisal-cycle-started for ${appraisal.appraisalId}`,
+      );
     }
 
     return {
@@ -727,8 +904,8 @@ export class AppraisalsService {
     return { message: 'Cycle deleted' };
   }
 
-  async startCycle(tenantId: string, cycleId: string) {
-    return this.activateCycle(tenantId, cycleId);
+  async startCycle(tenantId: string, cycleId: string, actor: RequestUser) {
+    return this.activateCycle(tenantId, cycleId, actor);
   }
 
   async cancelCycle(tenantId: string, cycleId: string, reason: string) {
@@ -861,27 +1038,34 @@ export class AppraisalsService {
             (log) => log.reminderType === reminderType,
           )
         ) {
-          await this.prisma.$transaction([
-            this.prisma.appraisalReminderLog.create({
-              data: {
-                tenantId: appraisal.tenantId,
-                appraisalId: appraisal.id,
-                reminderType,
-              },
-            }),
-            this.prisma.notification.create({
-              data: {
-                tenantId: appraisal.tenantId,
-                userId: appraisal.employee.userId,
-                type: 'APPRAISAL_SELF_REMINDER',
-                message:
-                  daysUntil === 0
-                    ? `Your self assessment for "${appraisal.cycle.title}" is due today.`
-                    : `Your self assessment for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
-                link: `/hr/appraisal/cycles/${appraisal.cycleId}/self-assessment/${appraisal.id}`,
-              },
-            }),
-          ]);
+          await this.prisma.appraisalReminderLog.create({
+            data: {
+              tenantId: appraisal.tenantId,
+              appraisalId: appraisal.id,
+              reminderType,
+            },
+          });
+          void this.publisher
+            .notificationInAppCreate({
+              tenantId: appraisal.tenantId,
+              recipientUserId: appraisal.employee.userId,
+              type: 'APPRAISAL_SELF_REMINDER',
+              title: 'Appraisal Reminder',
+              message:
+                daysUntil === 0
+                  ? `Your self assessment for "${appraisal.cycle.title}" is due today.`
+                  : `Your self assessment for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
+              link: `/hr/appraisal/cycles/${appraisal.cycleId}/self-assessment/${appraisal.id}`,
+              entityType: 'appraisal',
+              entityId: appraisal.id,
+              sourceService: 'hr-service',
+            })
+            .catch((error) =>
+              this.logger.error(
+                `Failed to publish self appraisal reminder for appraisal ${appraisal.id}`,
+                error instanceof Error ? error.stack : String(error),
+              ),
+            );
 
           if (appraisal.employee.email) {
             this.publisher
@@ -932,27 +1116,34 @@ export class AppraisalsService {
             (log) => log.reminderType === reminderType,
           )
         ) {
-          await this.prisma.$transaction([
-            this.prisma.appraisalReminderLog.create({
-              data: {
-                tenantId: appraisal.tenantId,
-                appraisalId: appraisal.id,
-                reminderType,
-              },
-            }),
-            this.prisma.notification.create({
-              data: {
-                tenantId: appraisal.tenantId,
-                userId: appraisal.manager.userId,
-                type: 'APPRAISAL_MANAGER_REMINDER',
-                message:
-                  daysUntil === 0
-                    ? `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due today.`
-                    : `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
-                link: `/hr/appraisal/cycles/${appraisal.cycleId}/manager-review/${appraisal.id}`,
-              },
-            }),
-          ]);
+          await this.prisma.appraisalReminderLog.create({
+            data: {
+              tenantId: appraisal.tenantId,
+              appraisalId: appraisal.id,
+              reminderType,
+            },
+          });
+          void this.publisher
+            .notificationInAppCreate({
+              tenantId: appraisal.tenantId,
+              recipientUserId: appraisal.manager.userId,
+              type: 'APPRAISAL_MANAGER_REMINDER',
+              title: 'Manager Review Reminder',
+              message:
+                daysUntil === 0
+                  ? `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due today.`
+                  : `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
+              link: `/hr/appraisal/cycles/${appraisal.cycleId}/manager-review/${appraisal.id}`,
+              entityType: 'appraisal',
+              entityId: appraisal.id,
+              sourceService: 'hr-service',
+            })
+            .catch((error) =>
+              this.logger.error(
+                `Failed to publish manager appraisal reminder for appraisal ${appraisal.id}`,
+                error instanceof Error ? error.stack : String(error),
+              ),
+            );
 
           if (appraisal.manager.email) {
             this.publisher
@@ -1071,7 +1262,8 @@ export class AppraisalsService {
     dto: CreateAppraisalKpiDto,
   ) {
     assertHrAccess(
-      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'appraisals:EDIT'),
+      isCompanyAdminUser(actor) ||
+        hasPermissionRule(actor, 'appraisal-settings:EDIT'),
     );
 
     const cycle = await this.prisma.appraisalCycle.findFirst({
@@ -1102,7 +1294,8 @@ export class AppraisalsService {
     dto: Partial<CreateAppraisalKpiDto>,
   ) {
     assertHrAccess(
-      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'appraisals:EDIT'),
+      isCompanyAdminUser(actor) ||
+        hasPermissionRule(actor, 'appraisal-settings:EDIT'),
     );
 
     const kpi = await this.prisma.appraisalKpi.findFirst({
@@ -1160,10 +1353,12 @@ export class AppraisalsService {
   async getTemplates(tenantId: string, page = 1, search?: string) {
     const pageSize = 20;
     const skip = (page - 1) * pageSize;
-    const where: any = { tenantId };
-    if (search?.trim()) {
-      where.name = { contains: search.trim(), mode: 'insensitive' };
-    }
+    const where: Prisma.AppraisalTemplateWhereInput = {
+      tenantId,
+      ...(search?.trim()
+        ? { name: { contains: search.trim(), mode: 'insensitive' } }
+        : {}),
+    };
 
     const [total, data] = await this.prisma.$transaction([
       this.prisma.appraisalTemplate.count({ where }),
@@ -1290,13 +1485,17 @@ export class AppraisalsService {
   // ── Appraisals ─────────────────────────────────────────────────────────────
 
   async getAppraisals(tenantId: string, actor: RequestUser, cycleId: string) {
-    const where: any = { tenantId, cycleId };
+    const where: Prisma.AppraisalWhereInput = { tenantId, cycleId };
 
     if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(hasPermissionRule(actor, 'appraisals:VIEW'));
+      assertHrAccess(
+        hasPermissionRule(actor, 'appraisals:VIEW') ||
+          hasPermissionRule(actor, 'appraisals:CREATE') ||
+          hasPermissionRule(actor, 'appraisal-settings:EDIT'),
+      );
     }
 
-    return this.prisma.appraisal.findMany({
+    const appraisals = await this.prisma.appraisal.findMany({
       where,
       include: {
         employee: {
@@ -1307,18 +1506,39 @@ export class AppraisalsService {
             avatarUrl: true,
           },
         },
+        manager: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
         cycle: { select: { title: true } },
       },
     });
+
+    return appraisals.map((a) => ({
+      ...a,
+      employeeName: buildPersonName(a.employee),
+      managerName: a.manager ? buildPersonName(a.manager) : null,
+    }));
   }
 
-  async getAppraisal(tenantId: string, appraisalId: string) {
+  async getAppraisal(
+    tenantId: string,
+    appraisalId: string,
+    actor: RequestUser,
+  ) {
     const bands = await this.loadPerformanceBands(tenantId);
     const appraisal = await this.prisma.appraisal.findFirst({
       where: { id: appraisalId, tenantId },
       include: {
         employee: {
-          select: { firstName: true, lastName: true, jobTitle: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            jobTitle: true,
+            userId: true,
+          },
         },
         cycle: {
           select: {
@@ -1333,10 +1553,32 @@ export class AppraisalsService {
             kpi: { select: { title: true, weight: true, maxScore: true } },
           },
         },
+        revisionLogs: { orderBy: { createdAt: 'desc' } },
       },
     });
 
     if (!appraisal) throw new NotFoundException('Appraisal not found');
+
+    if (!isCompanyAdminUser(actor)) {
+      const canViewAll =
+        hasPermissionRule(actor, 'appraisals:VIEW') ||
+        hasPermissionRule(actor, 'appraisals:CREATE') ||
+        hasPermissionRule(actor, 'appraisal-settings:EDIT');
+      const canViewOwn =
+        hasPermissionRule(actor, 'self-appraisals:VIEW') &&
+        appraisal.employee.userId === actor.id;
+
+      let canReviewAsManager = false;
+      if (hasPermissionRule(actor, 'appraisal-reviews:EDIT')) {
+        const actorEmployee = await this.prisma.employee.findFirst({
+          where: { tenantId, userId: actor.id },
+          select: { id: true },
+        });
+        canReviewAsManager = actorEmployee?.id === appraisal.managerId;
+      }
+
+      assertHrAccess(canViewAll || canViewOwn || canReviewAsManager);
+    }
 
     const overallStatus = deriveOverallStatus(appraisal);
 
@@ -1380,12 +1622,19 @@ export class AppraisalsService {
             overallScore: appraisal.finalScore,
             finalRating: scoreToRating(appraisal.finalScore, bands),
             finalComment: appraisal.finalComment,
+            finalizedBy: appraisal.finalizedBy,
             finalizedAt: appraisal.completedAt?.toISOString(),
           }
         : null;
+    const employee = {
+      firstName: appraisal.employee.firstName,
+      lastName: appraisal.employee.lastName,
+      jobTitle: appraisal.employee.jobTitle,
+    };
 
     return {
       ...appraisal,
+      employee,
       overallStatus,
       selfResponse,
       managerResponse,
@@ -1462,7 +1711,7 @@ export class AppraisalsService {
   async submitSelfAssessment(
     tenantId: string,
     appraisalId: string,
-    userId: string,
+    actor: RequestUser,
     dto: SubmitReviewDto,
   ) {
     const appraisal = await this.prisma.appraisal.findFirst({
@@ -1487,7 +1736,7 @@ export class AppraisalsService {
     });
 
     if (!appraisal) throw new NotFoundException('Appraisal not found');
-    if (appraisal.employee.userId !== userId)
+    if (appraisal.employee.userId !== actor.id)
       throw new BadRequestException(
         'You can only submit your own self-assessment',
       );
@@ -1500,7 +1749,8 @@ export class AppraisalsService {
     }
     if (
       appraisal.cycle.selfAssessmentDeadline &&
-      new Date() > appraisal.cycle.selfAssessmentDeadline
+      new Date() > appraisal.cycle.selfAssessmentDeadline &&
+      !appraisal.reopenedAt
     ) {
       throw new BadRequestException('The self assessment deadline has passed');
     }
@@ -1531,25 +1781,48 @@ export class AppraisalsService {
     if (appraisal.managerId) {
       const manager = await this.prisma.employee.findFirst({
         where: { id: appraisal.managerId, tenantId },
-        select: { email: true, firstName: true },
+        select: { userId: true, email: true, firstName: true },
       });
+      const managerReviewLink = this.buildAppraisalManagerReviewLink(
+        actor.tenantSlug,
+        appraisal.cycleId,
+        appraisalId,
+      );
+      if (manager?.userId) {
+        void this.publisher
+          .notificationInAppCreate({
+            tenantId,
+            recipientUserId: manager.userId,
+            type: 'APPRAISAL_SELF_SUBMITTED',
+            title: 'Self Assessment Submitted',
+            message: `${appraisal.employee.firstName} ${appraisal.employee.lastName} submitted their self-assessment for "${appraisal.cycle.title}".`,
+            link: `/hr/appraisal/cycles/${appraisal.cycleId}/manager-review/${appraisalId}`,
+            entityType: 'appraisal',
+            entityId: appraisalId,
+            sourceService: 'hr-service',
+          })
+          .catch((error) =>
+            this.logger.error(
+              `Failed to publish self submitted notification for appraisal ${appraisalId}`,
+              error instanceof Error ? error.stack : String(error),
+            ),
+          );
+      }
       if (manager?.email) {
-        this.publisher
-          .notificationAppraisalSelfSubmitted({
+        this.emitNotificationEvent(
+          this.publisher.notificationAppraisalSelfSubmitted({
             tenantId,
             appraisalId,
+            cycleId: appraisal.cycleId,
             cycleTitle: appraisal.cycle.title,
             employeeFirstName: appraisal.employee.firstName,
             employeeLastName: appraisal.employee.lastName,
             managerEmail: manager.email,
             managerFirstName: manager.firstName,
-          })
-          .catch((err) =>
-            this.logger.error(
-              `[appraisal] Failed to publish self-submitted event for ${appraisalId}`,
-              err,
-            ),
-          );
+            managerReviewLink,
+          }),
+          `appraisal-self-submitted for ${appraisalId}`,
+        );
       }
     }
 
@@ -1566,7 +1839,12 @@ export class AppraisalsService {
       where: { id: appraisalId, tenantId },
       include: {
         employee: {
-          select: { email: true, firstName: true, lastName: true },
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
         },
         cycle: {
           select: {
@@ -1594,17 +1872,25 @@ export class AppraisalsService {
     }
     if (
       appraisal.cycle.managerReviewDeadline &&
-      new Date() > appraisal.cycle.managerReviewDeadline
+      new Date() > appraisal.cycle.managerReviewDeadline &&
+      !appraisal.reopenedAt
     ) {
       throw new BadRequestException('The manager review deadline has passed');
     }
     if (!dto.score && (!dto.kpiScores || !dto.kpiScores.length))
       throw new BadRequestException('Provide either a score or kpiScores');
 
-    assertHrAccess(
+    const reviewerEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: reviewer.id },
+      select: { id: true },
+    });
+    const canReviewThisAppraisal =
       isCompanyAdminUser(reviewer) ||
-        hasPermissionRule(reviewer, 'appraisals:EDIT'),
-    );
+      hasPermissionRule(reviewer, 'appraisals:APPROVE') ||
+      (hasPermissionRule(reviewer, 'appraisal-reviews:EDIT') &&
+        reviewerEmployee?.id === appraisal.managerId);
+
+    assertHrAccess(canReviewThisAppraisal);
 
     let managerScore = dto.score ?? 0;
 
@@ -1626,7 +1912,6 @@ export class AppraisalsService {
       managerWeight,
     );
     const bands = await this.loadPerformanceBands(tenantId);
-    const finalRating = scoreToRating(finalScore, bands);
 
     const updated = await this.prisma.appraisal.update({
       where: { id: appraisalId },
@@ -1635,29 +1920,318 @@ export class AppraisalsService {
         managerComment: dto.comment,
         managerStatus: 'SUBMITTED',
         managerSubmittedAt: new Date(),
-        finalScore,
-        status: 'COMPLETED',
-        completedAt: new Date(),
+        status: 'PENDING_FINALIZATION',
       },
     });
 
-    if (appraisal.employee.email) {
-      this.publisher
-        .notificationAppraisalManagerReviewed({
+    const finalizers = await this.resolveAppraisalFinalizers(tenantId, [
+      reviewer.id,
+    ]);
+    const employeeName = buildPersonName(appraisal.employee);
+    const finalizationLink = this.buildAppraisalFinalizationLink(
+      reviewer.tenantSlug,
+      appraisal.cycleId,
+      appraisalId,
+    );
+
+    const finalizerNotifications = finalizers
+      .filter((recipient) => recipient.userId)
+      .map((recipient) => ({
+        tenantId,
+        userId: recipient.userId as string,
+        type: 'APPRAISAL_PENDING_FINALIZATION',
+        message: `${employeeName}'s appraisal for "${appraisal.cycle.title}" is ready for finalization.`,
+        link: `/hr/appraisal/cycles/${appraisal.cycleId}/employee/${appraisalId}`,
+      }));
+
+    if (finalizerNotifications.length) {
+      await this.notificationsService.createMany(finalizerNotifications);
+    }
+
+    return {
+      ...updated,
+      provisionalFinalScore: finalScore,
+      provisionalFinalRating: scoreToRating(finalScore, bands),
+      finalizationLink,
+    };
+  }
+
+  async finalizeAppraisal(
+    tenantId: string,
+    appraisalId: string,
+    actor: RequestUser,
+    dto: FinalizeAppraisalDto,
+  ) {
+    assertHrAccess(
+      isCompanyAdminUser(actor) ||
+        hasPermissionRule(actor, 'appraisals:APPROVE'),
+    );
+
+    const appraisal = await this.prisma.appraisal.findFirst({
+      where: { id: appraisalId, tenantId },
+      include: {
+        employee: {
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        cycle: {
+          select: {
+            title: true,
+            selfAssessmentWeight: true,
+            managerAssessmentWeight: true,
+          },
+        },
+      },
+    });
+
+    if (!appraisal) throw new NotFoundException('Appraisal not found');
+    if (appraisal.status === 'COMPLETED') {
+      throw new BadRequestException(
+        'This appraisal has already been finalized',
+      );
+    }
+    if (appraisal.status === 'CANCELLED') {
+      throw new BadRequestException('Cancelled appraisals cannot be finalized');
+    }
+    if (appraisal.selfStatus !== 'SUBMITTED') {
+      throw new BadRequestException('Self-assessment must be submitted first');
+    }
+    if (appraisal.managerStatus !== 'SUBMITTED') {
+      throw new BadRequestException('Manager review must be submitted first');
+    }
+    if (appraisal.managerScore === null) {
+      throw new BadRequestException('Manager score is required to finalize');
+    }
+
+    const selfWeight = appraisal.cycle.selfAssessmentWeight ?? 40;
+    const managerWeight = appraisal.cycle.managerAssessmentWeight ?? 60;
+    const computedFinalScore = calcFinalScore(
+      appraisal.selfScore,
+      appraisal.managerScore,
+      selfWeight,
+      managerWeight,
+    );
+    const finalScore = dto.finalScore ?? computedFinalScore;
+    const finalizationNote = dto.note ?? appraisal.finalizationNote;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.appraisal.update({
+        where: { id: appraisalId },
+        data: {
+          finalScore,
+          finalComment: finalizationNote,
+          finalizationNote,
+          finalizedBy: actor.id,
+          finalizedAt: new Date(),
+          completedAt: new Date(),
+          status: 'COMPLETED',
+        },
+      });
+
+      await tx.appraisalRevisionHistory.create({
+        data: {
           tenantId,
           appraisalId,
+          revisionNumber: appraisal.revisionNumber,
+          actorId: actor.id,
+          action:
+            dto.finalScore === undefined ? 'FINALIZED' : 'FINAL_SCORE_OVERRIDE',
+          target: 'FINAL',
+          note: finalizationNote,
+          previousStatus: appraisal.status,
+          previousSelfStatus: appraisal.selfStatus,
+          previousManagerStatus: appraisal.managerStatus,
+          previousSelfScore: appraisal.selfScore,
+          previousManagerScore: appraisal.managerScore,
+          previousFinalScore: appraisal.finalScore,
+        },
+      });
+
+      return next;
+    });
+
+    const bands = await this.loadPerformanceBands(tenantId);
+    const finalRating = scoreToRating(finalScore, bands);
+    const resultLink = this.buildAppraisalResultLink(
+      actor.tenantSlug,
+      appraisal.cycleId,
+      appraisalId,
+    );
+
+    if (appraisal.employee.userId) {
+      void this.publisher
+        .notificationInAppCreate({
+          tenantId,
+          recipientUserId: appraisal.employee.userId,
+          type: 'APPRAISAL_FINALIZED',
+          title: 'Appraisal Finalized',
+          message: `Your appraisal for "${appraisal.cycle.title}" has been finalized.`,
+          link: `/hr/appraisal/cycles/${appraisal.cycleId}/results/${appraisalId}`,
+          entityType: 'appraisal',
+          entityId: appraisalId,
+          sourceService: 'hr-service',
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Failed to publish finalized notification for appraisal ${appraisalId}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
+    }
+
+    if (appraisal.employee.email) {
+      this.emitNotificationEvent(
+        this.publisher.notificationAppraisalManagerReviewed({
+          tenantId,
+          appraisalId,
+          cycleId: appraisal.cycleId,
           cycleTitle: appraisal.cycle.title,
           employeeEmail: appraisal.employee.email,
           employeeFirstName: appraisal.employee.firstName,
           finalScore,
           finalRating,
-        })
-        .catch((err) =>
-          this.logger.error(
-            `[appraisal] Failed to publish manager-reviewed event for ${appraisalId}`,
-            err,
-          ),
-        );
+          platformLink: resultLink,
+        }),
+        `appraisal-finalized for ${appraisalId}`,
+      );
+    }
+
+    return {
+      ...updated,
+      finalRating,
+    };
+  }
+
+  async reopenAppraisal(
+    tenantId: string,
+    appraisalId: string,
+    actor: RequestUser,
+    dto: ReopenAppraisalDto,
+  ) {
+    const target: ReopenAppraisalTarget = dto.target ?? 'SELF';
+    const appraisal = await this.prisma.appraisal.findFirst({
+      where: { id: appraisalId, tenantId },
+      include: {
+        employee: {
+          select: {
+            userId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        manager: { select: { userId: true } },
+        cycle: { select: { title: true, status: true } },
+      },
+    });
+
+    if (!appraisal) throw new NotFoundException('Appraisal not found');
+    if (appraisal.status === 'CANCELLED') {
+      throw new BadRequestException('Cancelled appraisals cannot be reopened');
+    }
+    if (appraisal.cycle.status === 'CANCELLED') {
+      throw new BadRequestException('Cancelled cycles cannot be reopened');
+    }
+
+    const actorEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: actor.id },
+      select: { id: true },
+    });
+    const canForceRedo =
+      isCompanyAdminUser(actor) ||
+      hasPermissionRule(actor, 'appraisals:APPROVE');
+    const canManagerRequestRedo =
+      hasPermissionRule(actor, 'appraisal-reviews:EDIT') &&
+      actorEmployee?.id === appraisal.managerId &&
+      target === 'SELF';
+
+    assertHrAccess(canForceRedo || canManagerRequestRedo);
+
+    const nextRevisionNumber = appraisal.revisionNumber + 1;
+    const resetSelf = target === 'SELF' || target === 'FULL';
+    const resetManager = resetSelf || target === 'MANAGER' || target === 'FULL';
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.appraisalRevisionHistory.create({
+        data: {
+          tenantId,
+          appraisalId,
+          revisionNumber: appraisal.revisionNumber,
+          action: canForceRedo ? 'FORCE_REDO' : 'MANAGER_REDO_REQUEST',
+          target,
+          actorId: actor.id,
+          note: dto.reason,
+          previousStatus: appraisal.status,
+          previousSelfStatus: appraisal.selfStatus,
+          previousManagerStatus: appraisal.managerStatus,
+          previousSelfScore: appraisal.selfScore,
+          previousManagerScore: appraisal.managerScore,
+          previousFinalScore: appraisal.finalScore,
+        },
+      });
+
+      return tx.appraisal.update({
+        where: { id: appraisalId },
+        data: {
+          status: 'IN_PROGRESS',
+          ...(resetSelf && {
+            selfStatus: 'PENDING',
+            selfSubmittedAt: null,
+            selfScore: null,
+            selfComment: null,
+          }),
+          ...(resetManager && {
+            managerStatus: 'PENDING',
+            managerSubmittedAt: null,
+            managerScore: null,
+            managerComment: null,
+          }),
+          finalScore: null,
+          finalComment: null,
+          completedAt: null,
+          finalizedBy: null,
+          finalizedAt: null,
+          finalizationNote: null,
+          reopenedAt: new Date(),
+          reopenedBy: actor.id,
+          reopenReason: dto.reason,
+          revisionNumber: nextRevisionNumber,
+        },
+      });
+    });
+
+    const employeeLink = `/hr/appraisal/cycles/${appraisal.cycleId}/self-assessment/${appraisalId}`;
+    const managerLink = `/hr/appraisal/cycles/${appraisal.cycleId}/manager-review/${appraisalId}`;
+    const notifications = [
+      ...(resetSelf && appraisal.employee.userId
+        ? [
+            {
+              tenantId,
+              userId: appraisal.employee.userId,
+              type: 'APPRAISAL_REOPENED',
+              message: `Your appraisal for "${appraisal.cycle.title}" was reopened for redo.`,
+              link: employeeLink,
+            },
+          ]
+        : []),
+      ...(resetManager && appraisal.manager?.userId
+        ? [
+            {
+              tenantId,
+              userId: appraisal.manager.userId,
+              type: 'APPRAISAL_REOPENED',
+              message: `${buildPersonName(appraisal.employee)}'s appraisal for "${appraisal.cycle.title}" was reopened for manager review redo.`,
+              link: managerLink,
+            },
+          ]
+        : []),
+    ];
+
+    if (notifications.length) {
+      await this.notificationsService.createMany(notifications);
     }
 
     return updated;

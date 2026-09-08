@@ -28,6 +28,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       const status = this.prismaStatus(exception.code);
+      if (status >= 500) {
+        this.logger.error(
+          `Prisma error on ${request.method} ${request.url}: ${exception.code}`,
+          JSON.stringify(exception.meta ?? {}),
+        );
+      }
       return response.status(status).json({
         statusCode: status,
         message: this.prismaMessage(exception),
@@ -83,6 +89,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         return typeof e.meta?.cause === 'string'
           ? e.meta.cause
           : 'Record not found';
+      case 'P2021':
+      case 'P2022':
+        return 'Database schema is not up to date. Run the latest Auth migrations and retry.';
       default:
         return 'Database error';
     }

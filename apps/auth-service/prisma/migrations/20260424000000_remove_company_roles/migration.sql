@@ -1,5 +1,5 @@
 -- Drop FK from User to CompanyRole
-ALTER TABLE auth."User" DROP COLUMN IF EXISTS "companyRoleId";
+ALTER TABLE w_auth."User" DROP COLUMN IF EXISTS "companyRoleId";
 
 -- Drop CompanyRole table
-DROP TABLE IF EXISTS auth."CompanyRole";
+DROP TABLE IF EXISTS w_auth."CompanyRole";

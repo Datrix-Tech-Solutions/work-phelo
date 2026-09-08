@@ -1,37 +1,46 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RabbitMQPublisher } from './rabbitmq.publisher';
 
 @Module({
   imports: [
-    ClientsModule.register([
+    ClientsModule.registerAsync([
       {
         name: 'NOTIFICATION_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: [process.env.RABBITMQ_URL as string],
-          queue: 'notification_queue',
-          queueOptions: {
-            durable: true,
-            arguments: {
-              'x-message-ttl': 3600000,
+        imports: [ConfigModule],
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.getOrThrow<string>('RABBITMQ_URL')],
+            queue: 'notification_queue',
+            queueOptions: {
+              durable: true,
+              arguments: {
+                'x-message-ttl': 3600000,
+              },
             },
           },
-        },
+        }),
       },
       {
         name: 'HR_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: [process.env.RABBITMQ_URL as string],
-          queue: 'hr_queue',
-          queueOptions: {
-            durable: true,
-            arguments: {
-              'x-message-ttl': 3600000,
+        imports: [ConfigModule],
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.getOrThrow<string>('RABBITMQ_URL')],
+            queue: 'hr_queue',
+            queueOptions: {
+              durable: true,
+              arguments: {
+                'x-message-ttl': 3600000,
+              },
             },
           },
-        },
+        }),
       },
     ]),
   ],

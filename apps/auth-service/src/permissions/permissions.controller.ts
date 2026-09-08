@@ -30,10 +30,15 @@ import {
   UpdatePermissionSetDto,
   PermissionAction,
 } from './dto/grant-permission.dto';
+import { QueryPermissionRecipientsDto } from './dto/query-permission-recipients.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & { user: RequestUser };
 
 @ApiTags('Permissions')
 @Controller('permissions')
@@ -44,11 +49,18 @@ export class PermissionsController {
 
   @Get('resources')
   @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
-  @ApiOperation({ summary: 'List all platform resources' })
+  @ApiOperation({
+    summary:
+      'List resources grantable for the current tenant enabled modules and features',
+  })
   @ApiResponse({ status: 200, description: 'Resources list retrieved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  getAllResources() {
-    return this.permissionsService.getAllResources();
+  getAllResources(@Req() req: AuthenticatedRequest) {
+    return this.permissionsService.getAllResources(
+      req.user.tenantId,
+      req.user.role === 'SUPER_ADMIN',
+      { userId: req.user.id, role: req.user.role },
+    );
   }
 
   @Get('users/:userId')
@@ -63,7 +75,10 @@ export class PermissionsController {
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  getUserPermissions(@Param('userId') userId: string, @Req() req: any) {
+  getUserPermissions(
+    @Param('userId') userId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.getUserPermissions(
       req.user.tenantId,
       userId,
@@ -95,20 +110,25 @@ export class PermissionsController {
     type: Boolean,
     example: true,
   })
+  @ApiResponse({
+    status: 200,
+    description: 'Matching permission holders returned',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Missing required query parameters',
+  })
   getPermissionRecipients(
-    @Query('resource') resource: string,
-    @Query('action') action: PermissionAction,
-    @Query('includeTenantAdmins') includeTenantAdmins: string,
-    @Query('activeOnly') activeOnly: string,
-    @Req() req: any,
+    @Query() query: QueryPermissionRecipientsDto,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.permissionsService.getPermissionRecipients(
       req.user.tenantId,
-      resource,
-      action,
+      query.resource,
+      query.action,
       {
-        includeTenantAdmins: includeTenantAdmins === 'true',
-        activeOnly: activeOnly !== 'false',
+        includeTenantAdmins: query.includeTenantAdmins ?? false,
+        activeOnly: query.activeOnly ?? true,
       },
     );
   }
@@ -121,7 +141,10 @@ export class PermissionsController {
   @ApiParam({ name: 'userId', description: 'User UUID' })
   @ApiResponse({ status: 200, description: 'Permission history retrieved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  getPermissionHistory(@Param('userId') userId: string, @Req() req: any) {
+  getPermissionHistory(
+    @Param('userId') userId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.getPermissionHistory(
       req.user.tenantId,
       userId,
@@ -149,8 +172,11 @@ export class PermissionsController {
       },
     },
   })
-  grant(@Body() dto: GrantPermissionDto, @Req() req: any) {
-    return this.permissionsService.grant(req.user.id, req.user.tenantId, dto);
+  grant(@Body() dto: GrantPermissionDto, @Req() req: AuthenticatedRequest) {
+    return this.permissionsService.grant(req.user.id, req.user.tenantId, dto, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Patch('revoke')
@@ -170,16 +196,22 @@ export class PermissionsController {
       },
     },
   })
-  revoke(@Body() dto: RevokePermissionDto, @Req() req: any) {
-    return this.permissionsService.revoke(req.user.id, req.user.tenantId, dto);
+  revoke(@Body() dto: RevokePermissionDto, @Req() req: AuthenticatedRequest) {
+    return this.permissionsService.revoke(req.user.id, req.user.tenantId, dto, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Get('sets')
   @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({ summary: 'List all permission sets in tenant' })
   @ApiResponse({ status: 200, description: 'Permission sets retrieved' })
-  getPermissionSets(@Req() req: any) {
-    return this.permissionsService.getPermissionSets(req.user.tenantId);
+  getPermissionSets(@Req() req: AuthenticatedRequest) {
+    return this.permissionsService.getPermissionSets(req.user.tenantId, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Get('sets/:id/members')
@@ -188,10 +220,14 @@ export class PermissionsController {
   @ApiParam({ name: 'id', description: 'Permission set UUID' })
   @ApiResponse({ status: 200, description: 'Permission set members retrieved' })
   @ApiResponse({ status: 404, description: 'Permission set not found' })
-  getPermissionSetMembers(@Param('id') id: string, @Req() req: any) {
+  getPermissionSetMembers(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.getPermissionSetMembers(
       req.user.tenantId,
       id,
+      { userId: req.user.id, role: req.user.role },
     );
   }
 
@@ -220,8 +256,14 @@ export class PermissionsController {
     description: 'Set name already exists or invalid resources',
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  createSet(@Body() dto: CreatePermissionSetDto, @Req() req: any) {
-    return this.permissionsService.createPermissionSet(req.user.tenantId, dto);
+  createSet(
+    @Body() dto: CreatePermissionSetDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.permissionsService.createPermissionSet(req.user.tenantId, dto, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Patch('sets/:id')
@@ -249,12 +291,13 @@ export class PermissionsController {
   updateSet(
     @Param('id') id: string,
     @Body() dto: UpdatePermissionSetDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.permissionsService.updatePermissionSet(
       req.user.tenantId,
       id,
       dto,
+      { userId: req.user.id, role: req.user.role },
     );
   }
 
@@ -265,8 +308,11 @@ export class PermissionsController {
   @ApiResponse({ status: 200, description: 'Permission set deleted' })
   @ApiResponse({ status: 403, description: 'System sets cannot be deleted' })
   @ApiResponse({ status: 404, description: 'Permission set not found' })
-  deleteSet(@Param('id') id: string, @Req() req: any) {
-    return this.permissionsService.deletePermissionSet(req.user.tenantId, id);
+  deleteSet(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.permissionsService.deletePermissionSet(req.user.tenantId, id, {
+      userId: req.user.id,
+      role: req.user.role,
+    });
   }
 
   @Post('sets/assign')
@@ -282,11 +328,15 @@ export class PermissionsController {
     },
   })
   @ApiResponse({ status: 200, description: 'Permission set assigned' })
-  assignSet(@Body() dto: AssignPermissionSetDto, @Req() req: any) {
+  assignSet(
+    @Body() dto: AssignPermissionSetDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.assignPermissionSet(
       req.user.id,
       req.user.tenantId,
       dto,
+      { userId: req.user.id, role: req.user.role },
     );
   }
 
@@ -301,12 +351,13 @@ export class PermissionsController {
   removeSet(
     @Param('userId') userId: string,
     @Param('permissionSetId') permissionSetId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.permissionsService.removePermissionSet(
       req.user.tenantId,
       userId,
       permissionSetId,
+      { userId: req.user.id, role: req.user.role },
     );
   }
 }

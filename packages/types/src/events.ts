@@ -31,7 +31,9 @@ export const EventPatterns = {
   AUTH_RESEND_EMPLOYEE_INVITE: 'auth.resend_employee_invite',
   AUTH_PROVISION_EMPLOYEE_INVITE: 'auth.provision_employee_invite',
   AUTH_DELETE_PENDING_EMPLOYEE_INVITE: 'auth.delete_pending_employee_invite',
+  AUTH_DEACTIVATE_EMPLOYEE_ACCESS: 'auth.deactivate_employee_access',
   AUTH_RESOLVE_PERMISSION_RECIPIENTS: 'auth.resolve_permission_recipients',
+  AUTH_GET_USER_STATUSES: 'auth.get_user_statuses',
 
   // Auth → Notification
   NOTIFICATION_EMAIL_VERIFICATION: 'notification.email_verification',
@@ -39,6 +41,25 @@ export const EventPatterns = {
   NOTIFICATION_PASSWORD_RESET_LINK: 'notification.password_reset_link',
   NOTIFICATION_PASSWORD_RESET_OTP: 'notification.password_reset_otp',
   NOTIFICATION_SMS_OTP: 'notification.sms_otp',
+  NOTIFICATION_IN_APP_CREATE: 'notification.in_app.create',
+
+  // Reinsurance Operations domain events
+  REINSURANCE_COUNTERPARTY_CREATED: 'reinsurance.counterparty.created',
+  REINSURANCE_COUNTERPARTY_UPDATED: 'reinsurance.counterparty.updated',
+  REINSURANCE_COUNTERPARTY_DELETED: 'reinsurance.counterparty.deleted',
+  REINSURANCE_PLACEMENT_CREATED: 'reinsurance.placement.created',
+  REINSURANCE_PLACEMENT_UPDATED: 'reinsurance.placement.updated',
+  REINSURANCE_PLACEMENT_DELETED: 'reinsurance.placement.deleted',
+  REINSURANCE_PLACEMENT_STATUS_CHANGED: 'reinsurance.placement.status_changed',
+  REINSURANCE_MAILBOX_CONNECTED: 'reinsurance.mailbox.connected',
+  REINSURANCE_MAILBOX_SYNCED: 'reinsurance.mailbox.synced',
+  REINSURANCE_MAILBOX_ARCHIVED: 'reinsurance.mailbox.archived',
+  REINSURANCE_EMAIL_RECEIVED: 'reinsurance.email.received',
+  REINSURANCE_EMAIL_SENT: 'reinsurance.email.sent',
+  REINSURANCE_EMAIL_LINKED: 'reinsurance.email.linked',
+  REINSURANCE_CLAIM_CREATED: 'reinsurance.claim.created',
+  REINSURANCE_ACCOUNTING_OPERATION_EXECUTED:
+    'reinsurance.accounting-operation.executed',
 
   // HR → Notification
   NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
@@ -47,6 +68,7 @@ export const EventPatterns = {
   NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
   NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
   NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
+  NOTIFY_APPRAISAL_CYCLE_STARTED: 'notify.appraisal_cycle_started',
   NOTIFY_APPRAISAL_SELF_SUBMITTED: 'notify.appraisal_self_submitted',
   NOTIFY_APPRAISAL_MANAGER_REVIEWED: 'notify.appraisal_manager_reviewed',
   NOTIFY_APPRAISAL_SELF_REMINDER: 'notify.appraisal_self_reminder',
@@ -58,6 +80,9 @@ export const EventPatterns = {
   NOTIFY_SHIFT_SWAP_APPROVED: 'notify.shift_swap_approved',
   NOTIFY_SHIFT_SWAP_REJECTED: 'notify.shift_swap_rejected',
   NOTIFY_SHIFT_SWAP_EXPIRED: 'notify.shift_swap_expired',
+  NOTIFY_ANNOUNCEMENT_PUBLISHED: 'notify.announcement_published',
+  NOTIFY_PAYROLL_APPROVAL_REQUESTED: 'notify.payroll_approval_requested',
+  NOTIFY_PAYROLL_DECISION: 'notify.payroll_decision',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -68,6 +93,8 @@ export interface TenantApprovedEvent {
   tenantId: string;
   adminEmail: string;
   adminUserId?: string;
+  country?: string;
+  currency?: string;
 }
 
 export interface EmployeeActivatedEvent {
@@ -80,6 +107,8 @@ export interface ProvisionTenantWorkspaceCommand {
   tenantId: string;
   adminEmail: string;
   adminUserId?: string;
+  country?: string;
+  currency?: string;
 }
 
 export interface ProvisionTenantWorkspaceResult {
@@ -147,12 +176,33 @@ export interface DeletePendingEmployeeInviteResult {
   deleted: boolean;
 }
 
+export interface DeactivateEmployeeAccessCommand {
+  tenantId: string;
+  userId: string;
+  email: string;
+  reason: string;
+}
+
+export interface DeactivateEmployeeAccessResult {
+  deactivated: boolean;
+}
+
 export interface ResolvePermissionRecipientsCommand {
   tenantId: string;
   resource: string;
   action: string;
   includeTenantAdmins?: boolean;
   activeOnly?: boolean;
+}
+
+export interface GetUserStatusesCommand {
+  tenantId: string;
+  userIds: string[];
+}
+
+export interface UserStatusSnapshot {
+  userId: string;
+  status: string;
 }
 
 export interface PermissionRecipient {
@@ -186,6 +236,7 @@ export interface InviteUserEvent {
   acceptInviteUrl: string;
   tenantName: string;
   inviteKind?: InviteUserKind;
+  isResend?: boolean;
 }
 
 export interface PasswordResetLinkEvent {
@@ -214,6 +265,119 @@ export interface SmsOtpEvent {
   context: string;
 }
 
+export type InAppNotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export interface InAppNotificationCreateEvent {
+  eventId?: string;
+  tenantId: string;
+  recipientUserId: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string;
+  metadata?: Record<string, unknown>;
+  entityType?: string;
+  entityId?: string;
+  sourceService?: string;
+  priority?: InAppNotificationPriority;
+}
+
+// ── Reinsurance → Core Audit Events ───────────────────────────────────────
+
+export type ReinsuranceCounterpartyType = 'CEDANT' | 'REINSURER' | 'BROKER';
+
+export interface ReinsuranceCounterpartyAuditEvent {
+  tenantId: string;
+  counterpartyId: string;
+  counterpartyType: ReinsuranceCounterpartyType;
+  counterpartyName: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export type ReinsurancePlacementStatus =
+  | 'DRAFT'
+  | 'MARKETING'
+  | 'PARTIALLY_PLACED'
+  | 'PLACED'
+  | 'CLOSING'
+  | 'CLOSED'
+  | 'DECLINED'
+  | 'CANCELLED';
+
+export interface ReinsurancePlacementAuditEvent {
+  tenantId: string;
+  placementId: string;
+  reference: string;
+  title: string;
+  status: ReinsurancePlacementStatus;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export interface ReinsurancePlacementStatusAuditEvent extends ReinsurancePlacementAuditEvent {
+  previousStatus: ReinsurancePlacementStatus;
+  nextStatus: ReinsurancePlacementStatus;
+  note?: string;
+}
+
+export type ReinsuranceMailboxProvider = 'MICROSOFT_GRAPH' | 'GOOGLE_GMAIL';
+
+export interface ReinsuranceMailboxAuditEvent {
+  tenantId: string;
+  mailboxConnectionId: string;
+  provider: ReinsuranceMailboxProvider;
+  emailAddress: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export interface ReinsuranceMailboxSyncAuditEvent extends ReinsuranceMailboxAuditEvent {
+  threadsSynced: number;
+  messagesSynced: number;
+  lastSyncedAt: string;
+}
+
+export interface ReinsuranceEmailLinkAuditEvent {
+  tenantId: string;
+  linkId: string;
+  placementId: string;
+  threadId: string;
+  messageId?: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export interface ReinsuranceAccountingOperationAuditEvent {
+  tenantId: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  operation: string;
+  resourceId?: string;
+  changes?: Record<string, unknown>;
+}
+
 // ── HR → Notification Events ───────────────────────────────────────────────
 
 export interface EmployeeTerminationEvent {
@@ -224,6 +388,7 @@ export interface EmployeeTerminationEvent {
   lastName: string;
   reason: string;
   lastWorkingDate: string;
+  platformLink?: string;
 }
 
 export interface ResignationSubmittedEvent {
@@ -252,6 +417,8 @@ export interface LeaveRequestedEvent {
   totalDays: number;
   reason?: string;
   detailLink?: string;
+  platformLink?: string;
+  autoApproved?: boolean;
 }
 
 export interface LeaveReviewedEvent {
@@ -265,6 +432,7 @@ export interface LeaveReviewedEvent {
   endDate: string;
   totalDays: number;
   note?: string;
+  platformLink?: string;
 }
 
 export interface LeaveCancelledEvent {
@@ -278,27 +446,42 @@ export interface LeaveCancelledEvent {
   startDate: string;
   endDate: string;
   totalDays: number;
+  platformLink?: string;
 }
 
 export interface AppraisalSelfSubmittedEvent {
   tenantId: string;
   appraisalId: string;
+  cycleId?: string;
   cycleTitle: string;
   employeeFirstName: string;
   employeeLastName: string;
   /** Manager's email — null if employee has no manager */
   managerEmail: string | null;
   managerFirstName: string | null;
+  managerReviewLink?: string;
 }
 
 export interface AppraisalManagerReviewedEvent {
   tenantId: string;
   appraisalId: string;
+  cycleId?: string;
   cycleTitle: string;
   employeeEmail: string;
   employeeFirstName: string;
   finalScore: number;
   finalRating: string;
+  platformLink?: string;
+}
+
+export interface AppraisalCycleStartedEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleId: string;
+  cycleTitle: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  selfAssessmentLink: string;
 }
 
 export interface AppraisalSelfReminderEvent {
@@ -310,6 +493,7 @@ export interface AppraisalSelfReminderEvent {
   employeeFirstName: string;
   deadline: string;
   daysRemaining: number;
+  selfAssessmentLink?: string;
 }
 
 export interface AppraisalManagerReminderEvent {
@@ -323,6 +507,7 @@ export interface AppraisalManagerReminderEvent {
   employeeLastName: string;
   deadline: string;
   daysRemaining: number;
+  managerReviewLink?: string;
 }
 
 export interface TimeCorrectionSubmittedEvent {
@@ -425,4 +610,69 @@ export interface ShiftSwapExpiredEvent {
   requesterShiftLabel: string;
   targetShiftLabel: string;
   scheduleLink?: string;
+}
+
+export interface AnnouncementRecipientEvent {
+  employeeId: string;
+  userId: string;
+  email: string;
+  phone?: string;
+  firstName: string;
+  lastName: string;
+}
+
+export type AnnouncementDeliveryChannel = 'IN_APP' | 'EMAIL' | 'SMS';
+
+export interface PayrollApprovalRequestedRecipientEvent {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  source: 'APPROVER' | 'TENANT_ADMIN_ESCALATION';
+}
+
+export interface PayrollApprovalRequestedEvent {
+  tenantId: string;
+  payrollRunId: string;
+  month: number;
+  year: number;
+  submittedByName: string;
+  totalGross: string;
+  totalNet: string;
+  notes?: string;
+  reviewLink?: string;
+  recipients: PayrollApprovalRequestedRecipientEvent[];
+}
+
+export interface PayrollDecisionRecipientEvent {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface PayrollDecisionEvent {
+  tenantId: string;
+  payrollRunId: string;
+  month: number;
+  year: number;
+  decision: 'APPROVED' | 'RETURNED_TO_DRAFT';
+  reviewerName: string;
+  decisionNote: string;
+  totalGross: string;
+  totalNet: string;
+  detailLink?: string;
+  recipients: PayrollDecisionRecipientEvent[];
+}
+
+export interface AnnouncementPublishedEvent {
+  tenantId: string;
+  announcementId: string;
+  tenantName?: string;
+  title: string;
+  body: string;
+  publishedAt: string;
+  deliveryChannels?: AnnouncementDeliveryChannel[];
+  platformLink?: string;
+  recipients: AnnouncementRecipientEvent[];
 }

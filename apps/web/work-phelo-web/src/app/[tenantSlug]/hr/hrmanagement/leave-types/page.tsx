@@ -3,8 +3,8 @@
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { LeaveTypesList } from '@/components/organisms/leave/LeaveTypesList';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
+import { LeaveTypesList } from '@/components/organisms/hr/leave/LeaveTypesList';
+import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 
 export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
@@ -23,7 +23,7 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
   }
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-0 flex flex-col gap-6">
       <div className="shrink-0">
         <h2 className="text-base font-semibold text-gray-900">Leave Types</h2>
         <p className="text-sm text-gray-500 mt-0.5">

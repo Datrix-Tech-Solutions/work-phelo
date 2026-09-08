@@ -20,7 +20,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { InviteUserDto } from './dto/invite-user.dto';
+import { InviteUserDto, UserSystemRole } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -29,7 +29,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { setAuthCookies } from '../common/cookie.helper';
 
 @ApiTags('Users')
@@ -54,6 +55,7 @@ export class UsersController {
         lastName: 'Hire',
         phone: '+233244555100',
         role: 'EMPLOYEE',
+        permissionSetIds: ['9f45a607-5d5d-4d8d-bd8d-0caaf6bb13d2'],
       },
     },
   })
@@ -61,8 +63,11 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 409, description: 'User already exists in tenant' })
-  invite(@Body() dto: InviteUserDto, @Req() req: any) {
-    return this.usersService.invite(req.user.tenantId, dto);
+  invite(
+    @Body() dto: InviteUserDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.usersService.invite(req.user.tenantId, dto, req.user.id);
   }
 
   @Post('assign-admin')
@@ -92,14 +97,22 @@ export class UsersController {
   })
   assignAdmin(
     @Body() dto: InviteUserDto & { tenantId: string },
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     const tenantId = dto.tenantId;
-    const { tenantId: _, ...inviteDto } = dto;
-    return this.usersService.invite(tenantId, {
-      ...inviteDto,
-      role: 'TENANT_ADMIN',
-    } as any);
+    const { tenantId: _tenantId, ...inviteDto } = dto;
+    return this.usersService.invite(
+      tenantId,
+      {
+        email: inviteDto.email,
+        firstName: inviteDto.firstName,
+        lastName: inviteDto.lastName,
+        phone: inviteDto.phone,
+        permissionSetIds: inviteDto.permissionSetIds,
+        role: UserSystemRole.TENANT_ADMIN,
+      },
+      req.user.id,
+    );
   }
 
   @Post('set-password')
@@ -137,7 +150,11 @@ export class UsersController {
   ) {
     const result = await this.usersService.acceptInvite(dto);
     setAuthCookies(res, result.accessToken, result.refreshToken);
-    const { accessToken, refreshToken, ...safeResult } = result;
+    const {
+      accessToken: _accessToken,
+      refreshToken: _refreshToken,
+      ...safeResult
+    } = result;
     return res.json(safeResult);
   }
 
@@ -147,9 +164,21 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend invite email for a user in current tenant' })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, description: 'Invitation resent successfully' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Invitation resent successfully. Only PENDING_VERIFICATION users can be resent; previous invite links are invalidated.',
+    schema: { example: { message: 'Invitation resent successfully' } },
+  })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  async resendInvite(@Req() req: any, @Param('id') userId: string) {
+  @ApiResponse({
+    status: 404,
+    description: 'User not found in the current tenant',
+  })
+  async resendInvite(
+    @Req() req: Request & { user: RequestUser },
+    @Param('id') userId: string,
+  ) {
     return this.usersService.resendInvite(req.user.tenantId, userId);
   }
 
@@ -160,7 +189,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  findAll(@Req() req: any) {
+  findAll(@Req() req: Request & { user: RequestUser }) {
     return this.usersService.findAll(req.user.tenantId);
   }
 
@@ -173,7 +202,10 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  findOne(@Param('id') id: string, @Req() req: any) {
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.usersService.findById(req.user.tenantId, id);
   }
 
@@ -197,7 +229,11 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto, @Req() req: any) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.usersService.update(req.user.tenantId, id, dto);
   }
 
@@ -210,7 +246,10 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  deactivate(@Param('id') id: string, @Req() req: any) {
+  deactivate(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.usersService.deactivate(req.user.tenantId, id);
   }
 
@@ -226,7 +265,10 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  forcePasswordReset(@Param('id') id: string, @Req() req: any) {
+  forcePasswordReset(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.usersService.forcePasswordReset(req.user.tenantId, id);
   }
 }

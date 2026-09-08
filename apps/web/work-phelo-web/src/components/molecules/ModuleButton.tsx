@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, glassStrongClass } from '@/lib/utils';
 
 interface ModuleButtonProps {
   name: string;
@@ -35,14 +35,19 @@ export function ModuleButton({
   iconBg,
   onClick,
 }: ModuleButtonProps) {
+  const accent = iconBg ?? 'var(--brand)';
+
   return (
     <button
       onClick={enabled ? onClick : undefined}
       disabled={!enabled}
+      style={enabled ? ({ '--card-accent': accent } as React.CSSProperties) : undefined}
       className={cn(
-        'relative w-full flex flex-col items-center text-center gap-4 p-6 rounded-card border transition-all duration-200',
+        'group relative w-full flex flex-col items-center text-center gap-4 p-6 rounded-card border transition-all duration-200',
         enabled
-          ? 'bg-white border-gray-200 cursor-pointer hover:shadow-md hover:border-gray-300 hover:-translate-y-0.5'
+          ? glassStrongClass(
+              'shadow-lg cursor-pointer hover:-translate-y-1.5 hover:border-(--card-accent,var(--color-gray-300)) hover:shadow-[0_16px_32px_-12px_color-mix(in_oklab,var(--card-accent)_45%,transparent)]',
+            )
           : 'bg-gray-50 border-gray-200 cursor-not-allowed',
       )}
     >
@@ -58,6 +63,7 @@ export function ModuleButton({
         className={cn(
           'w-14 h-14 rounded-card flex items-center justify-center',
           !enabled && 'bg-gray-200',
+          enabled && 'module-icon-shake',
         )}
         style={
           enabled && iconBg

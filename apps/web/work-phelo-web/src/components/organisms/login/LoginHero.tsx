@@ -10,6 +10,11 @@ const slides = [
       'WorkPhelo HR helps organizations manage employees, streamline HR processes, and build productive teams — all from one unified platform.',
   },
   {
+    heading: 'Complete business Visibility',
+    subtext:
+      'Everything your business needs in one place for better decision-making and improved efficiency.',
+  },
+  {
     heading: 'STREAMLINE YOUR HR PROCESSES.',
     subtext:
       'From onboarding to payroll, WorkPhelo gives your team the tools they need to work smarter and move faster.',

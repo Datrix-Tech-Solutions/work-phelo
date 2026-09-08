@@ -87,6 +87,15 @@ export class CreateTenantDto {
   phone?: string;
 
   @ApiPropertyOptional({
+    description: 'Company address',
+    example: '12 Independence Avenue, Accra',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  address?: string;
+
+  @ApiPropertyOptional({
     description: 'Country code (ISO 3166-1 alpha-2). Defaults to GH.',
     example: 'GH',
     default: 'GH',
@@ -94,6 +103,16 @@ export class CreateTenantDto {
   @IsOptional()
   @IsString()
   country?: string;
+
+  @ApiPropertyOptional({
+    description: 'Primary tenant currency code. Defaults to GHS.',
+    example: 'GHS',
+    default: 'GHS',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  currency?: string;
 
   @ApiPropertyOptional({
     description: 'Industry sector',

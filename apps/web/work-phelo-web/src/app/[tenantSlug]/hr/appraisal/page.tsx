@@ -5,13 +5,15 @@
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useTeamAppraisals } from '@/hooks';
-import { AppraisalTabs } from '@/components/molecules/appraisal/AppraisalTabs';
-import { MyAppraisalsTable } from '@/components/organisms/appraisal/MyAppraisalTable';
-import { TeamReviewTable } from '@/components/organisms/appraisal/TeamReviewTable';
-import { HRAppraisalsTable } from '@/components/organisms/appraisal/HRAppraisalTable';
+import { cn } from '@/lib/utils';
+import { pageHeader, pagePx, pageContent } from '@/lib/layout';
+import { AppraisalTabs } from '@/components/molecules/hr/appraisal/AppraisalTabs';
+import { MyAppraisalsTable } from '@/components/organisms/hr/appraisal/MyAppraisalTable';
+import { TeamReviewTable } from '@/components/organisms/hr/appraisal/TeamReviewTable';
+import { HRAppraisalsTable } from '@/components/organisms/hr/appraisal/HRAppraisalTable';
 
 export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
@@ -24,7 +26,11 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
     }
   }, [user, tenantSlug, router]);
   const hasHRProfile = user?.role === 'EMPLOYEE';
-  const canViewAppraisals = usePermission(Permission.APPROVE_APPRAISAL);
+
+  const canCreateAppraisal = usePermission(Permission.CREATE_APPRAISAL);
+  const canConfigureAppraisal = usePermission(Permission.CONFIGURE_APPRAISAL);
+  const canApproveAppraisal = usePermission(Permission.FINALIZE_APPRAISAL);
+  const canViewAppraisals = canCreateAppraisal || canConfigureAppraisal || canApproveAppraisal;
 
   const { data: teamData } = useTeamAppraisals();
   const isManager = (teamData?.length ?? 0) > 0;
@@ -44,45 +50,50 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   const [hrPage, setHrPage] = useState(1);
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       <div className="shrink-0">
-        <h1 className="text-xl font-bold text-gray-900">Appraisal Management</h1>
+        <div className={pageHeader}>
+          <h1 className="text-xl font-bold text-gray-900">Appraisal Management</h1>
+        </div>
+        <AppraisalTabs
+          activeTab={activeTab}
+          isEmployee={hasHRProfile}
+          canReviewTeam={isManager}
+          canViewAppraisals={canViewAppraisals}
+          teamUnreviewedCount={teamUnreviewedCount}
+          onTabChange={setActiveTab}
+          className={pagePx}
+        />
       </div>
-      <AppraisalTabs
-        activeTab={activeTab}
-        isEmployee={hasHRProfile}
-        canReviewTeam={isManager}
-        canViewAppraisals={canViewAppraisals}
-        teamUnreviewedCount={teamUnreviewedCount}
-        onTabChange={setActiveTab}
-      />
 
-      {activeTab === 'my' && hasHRProfile && (
-        <MyAppraisalsTable
-          search={mySearch}
-          onSearch={setMySearch}
-          page={myPage}
-          onPageChange={setMyPage}
-        />
-      )}
+      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}>
+        {activeTab === 'my' && hasHRProfile && (
+          <MyAppraisalsTable
+            search={mySearch}
+            onSearch={setMySearch}
+            page={myPage}
+            onPageChange={setMyPage}
+          />
+        )}
 
-      {activeTab === 'team' && isManager && (
-        <TeamReviewTable
-          search={teamSearch}
-          onSearch={setTeamSearch}
-          page={teamPage}
-          onPageChange={setTeamPage}
-        />
-      )}
+        {activeTab === 'team' && isManager && (
+          <TeamReviewTable
+            search={teamSearch}
+            onSearch={setTeamSearch}
+            page={teamPage}
+            onPageChange={setTeamPage}
+          />
+        )}
 
-      {activeTab === 'hr' && canViewAppraisals && (
-        <HRAppraisalsTable
-          search={hrSearch}
-          onSearch={setHrSearch}
-          page={hrPage}
-          onPageChange={setHrPage}
-        />
-      )}
+        {activeTab === 'hr' && canViewAppraisals && (
+          <HRAppraisalsTable
+            search={hrSearch}
+            onSearch={setHrSearch}
+            page={hrPage}
+            onPageChange={setHrPage}
+          />
+        )}
+      </div>
     </div>
   );
 }

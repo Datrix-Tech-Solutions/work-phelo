@@ -31,6 +31,7 @@ import {
   Prisma,
   ShiftSchedule,
   ShiftSwapStatus,
+  TimeCorrectionStatus,
 } from '../../prisma/generated/client';
 
 type TimeApprovalRecipient = {
@@ -128,8 +129,9 @@ export class TimeService {
     }
   }
 
-  private buildTimeCorrectionAppLink(correctionId: string) {
-    return `/hr/time-clock?tab=corrections&correctionId=${encodeURIComponent(correctionId)}`;
+  private buildTimeCorrectionAppLink(tenantSlug: string, correctionId: string) {
+    const base = process.env.FRONTEND_BASE_URL as string;
+    return `${base}/${tenantSlug}/hr/time-clock?tab=corrections&correctionId=${encodeURIComponent(correctionId)}`;
   }
 
   private toTimeApprovalRecipient(
@@ -348,6 +350,7 @@ export class TimeService {
 
   private async notifyStakeholdersOfTimeCorrectionSubmission(
     tenantId: string,
+    tenantSlug: string,
     correction: {
       id: string;
       employeeId: string;
@@ -378,7 +381,10 @@ export class TimeService {
     }
 
     const attendanceDate = correction.date.toISOString().split('T')[0];
-    const detailLink = this.buildTimeCorrectionAppLink(correction.id);
+    const detailLink = this.buildTimeCorrectionAppLink(
+      tenantSlug,
+      correction.id,
+    );
     const employeeFullName = `${employee.firstName} ${employee.lastName}`;
     const inAppMessage = `${employeeFullName} submitted a time correction request for ${attendanceDate}`;
 
@@ -1031,6 +1037,34 @@ export class TimeService {
     return this.transformRecord(updated);
   }
 
+  private static readonly AUTO_CLOCK_OUT_HOURS = 20;
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoClockOutStaleSessions() {
+    const cutoff = new Date(
+      Date.now() - TimeService.AUTO_CLOCK_OUT_HOURS * 3600000,
+    );
+
+    const staleRecords = await this.prisma.clockRecord.findMany({
+      where: { clockOut: null, clockIn: { lt: cutoff } },
+      select: { id: true, clockIn: true },
+    });
+
+    for (const record of staleRecords) {
+      const clockOut = new Date(
+        record.clockIn.getTime() + TimeService.AUTO_CLOCK_OUT_HOURS * 3600000,
+      );
+      await this.prisma.clockRecord.update({
+        where: { id: record.id },
+        data: {
+          clockOut,
+          hoursWorked: TimeService.AUTO_CLOCK_OUT_HOURS.toFixed(2),
+          note: 'Auto-closed after 20 hours of inactivity',
+        },
+      });
+    }
+  }
+
   async getTodayStatus(tenantId: string, userId: string) {
     const employee = await this.getEmployeeByUserId(tenantId, userId);
     const today = new Date();
@@ -1077,7 +1111,7 @@ export class TimeService {
       mine?: boolean;
     },
   ) {
-    const where: any = { tenantId };
+    const where: Prisma.ClockRecordWhereInput = { tenantId };
 
     if (filters.mine) {
       const actorEmployee = await getActorEmployee(
@@ -1089,36 +1123,48 @@ export class TimeService {
     } else if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
     } else if (isEmployeeSelfServiceUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      where.employeeId = actorEmployee.id;
+      if (hasPermissionRule(actor, 'attendance:VIEW')) {
+        if (filters.employeeId) where.employeeId = filters.employeeId;
+      } else {
+        const actorEmployee = await getActorEmployee(
+          this.prisma,
+          tenantId,
+          actor.id,
+        );
+        where.employeeId = actorEmployee.id;
+      }
     } else {
       assertHrAccess(hasPermissionRule(actor, 'attendance:VIEW'));
       if (filters.employeeId) where.employeeId = filters.employeeId;
     }
 
     if (filters.from || filters.to) {
-      where.date = {};
-      if (filters.from) where.date.gte = new Date(filters.from);
-      if (filters.to) where.date.lte = new Date(filters.to);
+      where.date = {
+        ...(filters.from ? { gte: new Date(filters.from) } : {}),
+        ...(filters.to ? { lte: new Date(filters.to) } : {}),
+      };
     }
-
-    const employeeWhere: any = {};
-    if (filters.departmentId) employeeWhere.departmentId = filters.departmentId;
 
     const trimmedSearch = filters.search?.trim();
-    if (trimmedSearch) {
-      employeeWhere.OR = [
-        { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
-        { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
-        { employeeNumber: { contains: trimmedSearch, mode: 'insensitive' } },
-      ];
-    }
+    const employeeWhere: Prisma.EmployeeWhereInput = {
+      ...(filters.departmentId ? { departmentId: filters.departmentId } : {}),
+      ...(trimmedSearch
+        ? {
+            OR: [
+              { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
+              { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
+              {
+                employeeNumber: {
+                  contains: trimmedSearch,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
-    if (Object.keys(employeeWhere).length > 0) {
+    if (filters.departmentId || trimmedSearch) {
       where.employee = { is: employeeWhere };
     }
 
@@ -1164,6 +1210,7 @@ export class TimeService {
   async submitTimeCorrection(
     tenantId: string,
     userId: string,
+    tenantSlug: string,
     dto: TimeCorrectionDto,
   ) {
     const employee = await this.prisma.employee.findFirst({
@@ -1195,6 +1242,7 @@ export class TimeService {
 
     void this.notifyStakeholdersOfTimeCorrectionSubmission(
       tenantId,
+      tenantSlug,
       correction,
       employee,
     );
@@ -1210,23 +1258,10 @@ export class TimeService {
       status?: string;
     },
   ) {
-    const where: any = { tenantId };
+    const where: Prisma.TimeCorrectionWhereInput = { tenantId };
 
-    if (isCompanyAdminUser(actor)) {
-      if (filters.employeeId) where.employeeId = filters.employeeId;
-    } else if (isEmployeeSelfServiceUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      where.employeeId = actorEmployee.id;
-    } else {
-      assertHrAccess(hasPermissionRule(actor, 'time-corrections:VIEW'));
-      if (filters.employeeId) where.employeeId = filters.employeeId;
-    }
-
-    if (filters.status) where.status = filters.status;
+    if (filters.employeeId) where.employeeId = filters.employeeId;
+    if (filters.status) where.status = filters.status as TimeCorrectionStatus;
 
     return this.prisma.timeCorrection.findMany({
       where,
@@ -1266,6 +1301,10 @@ export class TimeService {
         hasPermissionRule(reviewer, 'time-corrections:APPROVE'),
     );
 
+    if (dto.action === 'APPROVED') {
+      await this.applyApprovedCorrection(tenantId, correction);
+    }
+
     return this.prisma.timeCorrection.update({
       where: { id },
       data: {
@@ -1273,6 +1312,83 @@ export class TimeService {
         reviewedBy: reviewer.id,
         reviewedAt: new Date(),
         reviewNote: dto.note,
+      },
+    });
+  }
+
+  private async applyApprovedCorrection(
+    tenantId: string,
+    correction: {
+      employeeId: string;
+      date: Date;
+      requestedIn: Date | null;
+      requestedOut: Date | null;
+    },
+  ) {
+    const { start, end } = this.getDayBounds(correction.date);
+
+    const existing = await this.prisma.clockRecord.findFirst({
+      where: {
+        tenantId,
+        employeeId: correction.employeeId,
+        date: { gte: start, lte: end },
+      },
+      orderBy: { clockIn: 'desc' },
+    });
+
+    const clockIn = correction.requestedIn ?? existing?.clockIn ?? null;
+    const clockOut = correction.requestedOut ?? existing?.clockOut ?? null;
+
+    if (!clockIn) {
+      throw new BadRequestException(
+        'Cannot approve: no existing clock-in for this date and the request did not include a clock-in time.',
+      );
+    }
+
+    if (clockOut && clockOut <= clockIn) {
+      throw new BadRequestException(
+        'Cannot approve: requested clock-out must be after clock-in.',
+      );
+    }
+
+    const hoursWorked = clockOut
+      ? new Decimal(clockOut.getTime() - clockIn.getTime())
+          .div(3600000)
+          .toDecimalPlaces(2)
+          .toString()
+      : null;
+
+    if (existing) {
+      await this.prisma.clockRecord.update({
+        where: { id: existing.id },
+        data: { clockIn, clockOut, hoursWorked },
+      });
+      return;
+    }
+
+    const activeSchedule = await this.getActiveSchedule(
+      tenantId,
+      correction.employeeId,
+      clockIn,
+    );
+    const isLate = await this.resolveIsLate(
+      tenantId,
+      correction.employeeId,
+      clockIn,
+    );
+
+    await this.prisma.clockRecord.create({
+      data: {
+        tenantId,
+        employeeId: correction.employeeId,
+        clockIn,
+        clockOut,
+        date: start,
+        hoursWorked,
+        isLate,
+        isOutsideSchedule: !activeSchedule,
+        workMode: activeSchedule?.workMode ?? null,
+        note: 'Created from an approved time correction request',
       },
     });
   }
@@ -1329,37 +1445,28 @@ export class TimeService {
 
     // In-app notification to the employee
     if (employee.userId) {
-      await this.prisma.notification.create({
-        data: {
+      void this.publisher
+        .notificationInAppCreate({
           tenantId,
-          userId: employee.userId,
+          recipientUserId: employee.userId,
           type: 'SCHEDULE_PUBLISHED',
+          title: 'Schedule Published',
           message: `A new shift schedule has been published for you, effective ${formattedDate}. Check your schedule.`,
           link: scheduleLink,
-        },
-      });
+          entityType: 'shiftSchedule',
+          entityId: schedule.id,
+          sourceService: 'hr-service',
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Failed to publish schedule notification for employee ${employee.id}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
     }
 
-    // Email notification via RabbitMQ (fire-and-forget)
-    void this.publisher
-      .notificationSchedulePublished({
-        tenantId,
-        employeeId: employee.id,
-        employeeEmail: employee.email,
-        employeeFirstName: employee.firstName,
-        employeeLastName: employee.lastName,
-        effectiveFrom: dto.effectiveFrom,
-        shiftType: dto.shiftType,
-        startTime: dto.startTime,
-        endTime: dto.endTime,
-        scheduleLink,
-      })
-      .catch((err) =>
-        this.logger.error(
-          `Failed to emit schedule_published notification for employee ${employee.id}`,
-          err,
-        ),
-      );
+    // Schedule activity emails are intentionally disabled to control
+    // notification spend; the in-app notification above remains active.
 
     return schedule;
   }
@@ -1412,15 +1519,24 @@ export class TimeService {
     });
 
     if (schedule.employee.userId) {
-      await this.prisma.notification.create({
-        data: {
+      void this.publisher
+        .notificationInAppCreate({
           tenantId,
-          userId: schedule.employee.userId,
+          recipientUserId: schedule.employee.userId,
           type: 'SCHEDULE_UPDATED',
+          title: 'Schedule Updated',
           message: `Your shift on ${formattedDate} has been updated. Please check your schedule.`,
           link: this.buildScheduleLink(actor.tenantSlug),
-        },
-      });
+          entityType: 'shiftSchedule',
+          entityId: schedule.id,
+          sourceService: 'hr-service',
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Failed to publish schedule update notification for schedule ${schedule.id}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
     }
 
     return updated;
@@ -1454,15 +1570,24 @@ export class TimeService {
     });
 
     if (schedule.employee.userId) {
-      await this.prisma.notification.create({
-        data: {
+      void this.publisher
+        .notificationInAppCreate({
           tenantId,
-          userId: schedule.employee.userId,
+          recipientUserId: schedule.employee.userId,
           type: 'SCHEDULE_REMOVED',
+          title: 'Schedule Removed',
           message: `Your shift on ${formattedDate} has been removed from the schedule.`,
           link: this.buildScheduleLink(actor.tenantSlug),
-        },
-      });
+          entityType: 'shiftSchedule',
+          entityId: schedule.id,
+          sourceService: 'hr-service',
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Failed to publish schedule removal notification for schedule ${schedule.id}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
     }
 
     return { message: 'Schedule deleted successfully' };
@@ -2601,10 +2726,22 @@ export class TimeService {
       this.prisma.publicHoliday.findMany({
         where: {
           tenantId,
-          ...(fromDate && { date: { gte: fromDate } }),
-          ...(toDate && { date: { lte: toDate } }),
+          OR: [
+            {
+              date: {
+                ...(fromDate && { gte: fromDate }),
+                ...(toDate && { lte: toDate }),
+              },
+            },
+            {
+              observedDate: {
+                ...(fromDate && { gte: fromDate }),
+                ...(toDate && { lte: toDate }),
+              },
+            },
+          ],
         },
-        orderBy: { date: 'asc' },
+        orderBy: { observedDate: 'asc' },
       }),
       this.prisma.shiftAssignmentOverride.findMany({
         where: {
@@ -2686,7 +2823,7 @@ export class TimeService {
       publicHolidays: publicHolidays.map((h) => ({
         id: h.id,
         name: h.name,
-        date: h.date.toISOString().slice(0, 10),
+        date: h.observedDate.toISOString().slice(0, 10),
       })),
       assignmentOverrides: assignmentOverrides.map((override) => ({
         id: override.id,
@@ -2718,18 +2855,20 @@ export class TimeService {
     actor: RequestUser,
     employeeId?: string,
   ) {
-    let where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
+    const where: Prisma.ShiftScheduleWhereInput = {
+      tenantId,
+      ...(employeeId ? { employeeId } : {}),
+    };
 
-    if (isEmployeeSelfServiceUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      where = { tenantId, employeeId: actorEmployee.id };
-    } else if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(hasPermissionRule(actor, 'schedules:VIEW'));
-    }
+    const canViewSchedules =
+      isCompanyAdminUser(actor) ||
+      isEmployeeSelfServiceUser(actor) ||
+      hasPermissionRule(actor, 'schedules:VIEW') ||
+      hasPermissionRule(actor, 'schedules:CREATE') ||
+      hasPermissionRule(actor, 'schedules:EDIT') ||
+      hasPermissionRule(actor, 'schedules:APPROVE') ||
+      hasPermissionRule(actor, 'attendance:CREATE');
+    assertHrAccess(canViewSchedules);
 
     return this.prisma.shiftSchedule.findMany({
       where,
@@ -2782,6 +2921,7 @@ export class TimeService {
       isLate: r.isLate,
       isOutsideSchedule: r.isOutsideSchedule,
       workMode: r.workMode,
+      location: r.location ?? undefined,
     }));
   }
 

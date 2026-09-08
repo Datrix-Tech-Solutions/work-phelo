@@ -6,7 +6,8 @@ import { User, LoginPayload } from '@/types/auth';
 async function fetchMeWithProfileDetails(setPermissions: (p: string[]) => void): Promise<User> {
   const res = await api.get<{ user: User; permissions: string[] }>('/auth/me');
   const authUser = res.data.user;
-  if (authUser.role === 'EMPLOYEE') {
+  const needsPermissions = authUser.role !== 'SUPER_ADMIN' && authUser.role !== 'TENANT_ADMIN';
+  if (needsPermissions) {
     setPermissions(res.data.permissions ?? []);
 
     await Promise.all([
@@ -48,6 +49,7 @@ export function useLogin() {
     onSuccess: async () => {
       sessionStorage.removeItem('appraisal_reminder_shown');
       sessionStorage.removeItem('leave_reminder_shown');
+      sessionStorage.removeItem('mood_selector_shown');
       const user = await fetchMeWithProfileDetails(setPermissions);
       setUser(user);
       queryClient.invalidateQueries({ queryKey: ['me'] });
@@ -82,6 +84,7 @@ export function useLogout() {
     onSuccess: () => {
       sessionStorage.removeItem('appraisal_reminder_shown');
       sessionStorage.removeItem('leave_reminder_shown');
+      sessionStorage.removeItem('mood_selector_shown');
       logout();
       queryClient.clear();
     },

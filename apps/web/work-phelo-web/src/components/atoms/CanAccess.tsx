@@ -1,6 +1,6 @@
 'use client';
 
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 
 interface CanAccessProps {
   permission: string;

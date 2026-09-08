@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { RolesContent } from '@/components/organisms/roles/RolesContent';
 import { useAuthStore } from '@/store/auth.store';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
+import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 
 export default function RolesPage() {
   const router = useRouter();

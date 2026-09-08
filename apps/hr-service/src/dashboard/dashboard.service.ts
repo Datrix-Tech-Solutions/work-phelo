@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
+import { AnnouncementsService } from '../announcements/announcements.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly announcementsService: AnnouncementsService,
+  ) {}
 
   async getSummary(
     tenantId: string,
@@ -50,10 +55,10 @@ export class DashboardService {
     };
   }
 
-  async getEmployeeDashboard(tenantId: string, userId: string) {
+  async getEmployeeDashboard(tenantId: string, actor: RequestUser) {
     // Get employee profile
     const employee = await this.prisma.employee.findFirst({
-      where: { userId, tenantId },
+      where: { userId: actor.id, tenantId },
       include: { department: true },
     });
 
@@ -106,17 +111,8 @@ export class DashboardService {
       : 0;
 
     // Get last 3 announcements
-    const announcements = await this.prisma.announcement.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: 3,
-      select: {
-        id: true,
-        title: true,
-        body: true,
-        createdAt: true,
-      },
-    });
+    const announcements =
+      await this.announcementsService.findVisibleForDashboard(tenantId, actor);
 
     const isProfileIncomplete =
       employee && (!employee.jobTitle || !employee.departmentId);
@@ -161,7 +157,9 @@ export class DashboardService {
         title: a.title,
         preview: a.body.substring(0, 100),
         body: a.body,
-        publishedAt: a.createdAt,
+        publishedAt: a.publishedAt,
+        isRead: a.isRead,
+        readAt: a.readAt,
       })),
     };
   }
@@ -239,9 +237,6 @@ export class DashboardService {
         avatarUrl: true,
       },
     });
-
-    const todayMonth = today.getMonth();
-    const todayDay = today.getDate();
 
     const upcoming = employees
       .filter((e) => {

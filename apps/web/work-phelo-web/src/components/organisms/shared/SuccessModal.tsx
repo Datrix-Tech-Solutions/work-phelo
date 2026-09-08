@@ -1,6 +1,6 @@
 'use client';
 
-import { Icons } from '@/components/atoms/icons';
+import { CheckmarkAnimation } from '@/components/atoms/CheckmarkAnimation';
 import { useEffect } from 'react';
 
 interface SuccessModalProps {
@@ -43,9 +43,7 @@ export function SuccessModal({
       {/* Dialog */}
       <div className="relative z-10 w-full max-w-sm bg-white rounded-card shadow-2xl p-8 flex flex-col items-center text-center gap-5">
         {/* Success icon */}
-        <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center shrink-0">
-          <Icons.CircleCheck className="w-16 h-16 rounded-full bg-green-400" />
-        </div>
+        <CheckmarkAnimation size={72} />
 
         {/* Text */}
         <div className="flex flex-col gap-1.5">

@@ -8,6 +8,8 @@ export const gatewayRequiredEnvVars = [
 export const gatewayOptionalServiceEnvVars = [
   'SUBSCRIPTION_SERVICE_URL',
   'MARKETING_SERVICE_URL',
+  'REINSURANCE_SERVICE_URL',
+  'ACCOUNTING_SERVICE_URL',
 ] as const;
 
 const allGatewayEnvVars = [
@@ -20,7 +22,9 @@ export type GatewayServiceName =
   | 'hr'
   | 'notification'
   | 'subscription'
-  | 'marketing';
+  | 'marketing'
+  | 'reinsurance'
+  | 'accounting';
 
 export const gatewayRequiredServices: GatewayServiceName[] = [
   'auth',
@@ -31,23 +35,45 @@ export const gatewayRequiredServices: GatewayServiceName[] = [
 export const gatewayOptionalServices: GatewayServiceName[] = [
   'subscription',
   'marketing',
+  'reinsurance',
+  'accounting',
 ];
 
 export const gatewayServiceConfig: Record<
   GatewayServiceName,
-  { envVar: (typeof allGatewayEnvVars)[number]; healthPath: string }
+  {
+    envVar: (typeof allGatewayEnvVars)[number];
+    healthPath: string;
+    downstreamPrefix?: string;
+  }
 > = {
   auth: { envVar: 'AUTH_SERVICE_URL', healthPath: '/health' },
   hr: { envVar: 'HR_SERVICE_URL', healthPath: '/health' },
   notification: {
     envVar: 'NOTIFICATION_SERVICE_URL',
     healthPath: '/api/health',
+    downstreamPrefix: '/api',
   },
   subscription: {
     envVar: 'SUBSCRIPTION_SERVICE_URL',
     healthPath: '/api/health',
+    downstreamPrefix: '/api',
   },
-  marketing: { envVar: 'MARKETING_SERVICE_URL', healthPath: '/api/health' },
+  marketing: {
+    envVar: 'MARKETING_SERVICE_URL',
+    healthPath: '/api/health',
+    downstreamPrefix: '/api',
+  },
+  reinsurance: {
+    envVar: 'REINSURANCE_SERVICE_URL',
+    healthPath: '/api/health',
+    downstreamPrefix: '/api',
+  },
+  accounting: {
+    envVar: 'ACCOUNTING_SERVICE_URL',
+    healthPath: '/api/health',
+    downstreamPrefix: '/api',
+  },
 };
 
 export function assertGatewayRuntimeEnv(): void {

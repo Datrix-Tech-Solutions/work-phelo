@@ -7,7 +7,7 @@ export function DashboardSkeleton() {
       <Skeleton className="h-20 rounded-card shrink-0" />
 
       {/* Stat cards row */}
-      <div className="grid grid-cols-3 gap-4 shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0">
         {[0, 1, 2].map((i) => (
           <div
             key={i}
@@ -24,7 +24,7 @@ export function DashboardSkeleton() {
       </div>
 
       {/* Main grid */}
-      <div className="grid grid-cols-[3fr_2fr] gap-4 flex-1 min-h-0 overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Left column */}
         <div className="flex flex-col gap-4 min-h-0">
           <Skeleton className="flex-1 rounded-card" />

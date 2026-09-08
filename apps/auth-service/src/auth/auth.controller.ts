@@ -17,7 +17,9 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
@@ -37,12 +39,28 @@ import {
   setAccessTokenCookie,
 } from '../common/cookie.helper';
 
+interface OAuthCallbackUser {
+  profile: Record<string, unknown>;
+  tenantSlug: string;
+}
+
+const SENSITIVE_AUTH_THROTTLE = {
+  short: { limit: 5, ttl: 60_000 },
+  medium: { limit: 20, ttl: 60_000 },
+};
+
+const OTP_SEND_THROTTLE = {
+  short: { limit: 3, ttl: 60_000 },
+  medium: { limit: 10, ttl: 60_000 },
+};
+
 @ApiTags('Auth')
 @Controller()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({
@@ -77,11 +95,16 @@ export class AuthController {
     if ('requiresMfa' in result || 'requiresPasswordReset' in result)
       return result;
     setAuthCookies(res, result.accessToken, result.refreshToken);
-    const { accessToken, refreshToken, ...safeResult } = result;
+    const {
+      accessToken: _accessToken,
+      refreshToken: _refreshToken,
+      ...safeResult
+    } = result;
     return safeResult;
   }
 
   @Post('admin/login')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'SuperAdmin login (platform owner only)' })
   @ApiBody({
@@ -106,11 +129,16 @@ export class AuthController {
       req.headers['user-agent'],
     );
     setAuthCookies(res, result.accessToken, result.refreshToken);
-    const { accessToken, refreshToken, ...safeResult } = result;
+    const {
+      accessToken: _accessToken2,
+      refreshToken: _refreshToken2,
+      ...safeResult
+    } = result;
     return safeResult;
   }
 
   @Post('verify-email')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email with OTP sent on registration' })
   @ApiResponse({ status: 200, description: 'Email verified' })
@@ -120,6 +148,7 @@ export class AuthController {
   }
 
   @Post('resend-verification')
+  @Throttle(OTP_SEND_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification OTP' })
   @ApiBody({
@@ -145,7 +174,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.refresh_token;
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const refreshToken = cookies?.refresh_token;
     if (!refreshToken) {
       res.status(HttpStatus.UNAUTHORIZED);
       return { message: 'No refresh token provided' };
@@ -163,7 +193,8 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies?.refresh_token;
+    const logoutCookies = req.cookies as Record<string, string> | undefined;
+    const refreshToken = logoutCookies?.refresh_token;
     if (refreshToken) await this.authService.logout(refreshToken);
     clearAuthCookies(res);
     return { message: 'Logged out successfully' };
@@ -176,7 +207,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout all devices — revokes all refresh tokens' })
   @ApiResponse({ status: 200, description: 'Logged out from all devices' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  async logoutAll(@Req() req: any, @Res({ passthrough: true }) res: Response) {
+  async logoutAll(
+    @Req() req: Request & { user: RequestUser },
+    @Res({ passthrough: true }) res: Response,
+  ) {
     await this.authService.logoutAll(req.user.id);
     clearAuthCookies(res);
     return { message: 'Logged out from all devices' };
@@ -187,7 +221,10 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current authenticated user' })
   @ApiResponse({ status: 200, description: 'Current user returned' })
-  me(@Req() req: any, @Res({ passthrough: true }) res: Response) {
+  me(
+    @Req() req: Request & { user: RequestUser },
+    @Res({ passthrough: true }) res: Response,
+  ) {
     setAccessTokenCookie(res, this.authService.signAccessToken(req.user));
 
     return {
@@ -207,6 +244,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @Throttle(OTP_SEND_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset via email link or SMS OTP' })
   @ApiResponse({ status: 200, description: 'Reset instructions sent' })
@@ -216,6 +254,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password using email link token or SMS OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
@@ -235,11 +274,15 @@ export class AuthController {
     status: 401,
     description: 'Missing/invalid token or password',
   })
-  changePassword(@Body() dto: ChangePasswordDto, @Req() req: any) {
+  changePassword(
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.authService.changePassword(req.user.id, dto);
   }
 
   @Post('force-reset-password')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
@@ -268,7 +311,11 @@ export class AuthController {
   ) {
     const result = await this.authService.forceResetPassword(dto);
     setAuthCookies(res, result.accessToken, result.refreshToken);
-    const { accessToken, refreshToken, ...safeResult } = result;
+    const {
+      accessToken: _accessToken3,
+      refreshToken: _refreshToken3,
+      ...safeResult
+    } = result;
     return safeResult;
   }
 
@@ -279,11 +326,12 @@ export class AuthController {
   @ApiOperation({ summary: 'Setup TOTP MFA — returns QR code and secret' })
   @ApiResponse({ status: 200, description: 'TOTP setup data generated' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  setupTotp(@Req() req: any) {
+  setupTotp(@Req() req: Request & { user: RequestUser }) {
     return this.authService.setupTotp(req.user.id);
   }
 
   @Post('mfa/verify-totp')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify TOTP code and enable MFA' })
   @ApiBody({
@@ -301,6 +349,7 @@ export class AuthController {
   }
 
   @Post('mfa/send-sms')
+  @Throttle(OTP_SEND_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send SMS OTP to registered phone number' })
   @ApiBody({
@@ -317,6 +366,7 @@ export class AuthController {
   }
 
   @Post('mfa/verify-sms')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
@@ -330,7 +380,10 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'SMS MFA enabled successfully' })
   @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
-  verifySmsOtp(@Body('otpCode') otpCode: string, @Req() req: any) {
+  verifySmsOtp(
+    @Body('otpCode') otpCode: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.authService.verifySmsMfaAndEnable(req.user.id, otpCode);
   }
 
@@ -348,7 +401,10 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'MFA disabled successfully' })
   @ApiResponse({ status: 401, description: 'Invalid TOTP code' })
-  disableMfa(@Body('totpCode') totpCode: string, @Req() req: any) {
+  disableMfa(
+    @Body('totpCode') totpCode: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.authService.disableMfa(req.user.id, totpCode);
   }
 
@@ -359,7 +415,7 @@ export class AuthController {
     status: 302,
     description: 'Redirects to Google consent screen',
   })
-  googleAuth(@Query('tenantSlug') tenantSlug: string) {}
+  googleAuth(@Query('tenantSlug') _tenantSlug: string) {}
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
@@ -368,7 +424,10 @@ export class AuthController {
     status: 302,
     description: 'Redirects to frontend callback URL',
   })
-  async googleCallback(@Req() req: any, @Res() res: Response) {
+  async googleCallback(
+    @Req() req: Request & { user: OAuthCallbackUser },
+    @Res() res: Response,
+  ) {
     const { profile, tenantSlug } = req.user;
     const result = await this.authService.handleSocialLogin(
       profile,
@@ -390,7 +449,7 @@ export class AuthController {
     status: 302,
     description: 'Redirects to Microsoft consent screen',
   })
-  microsoftAuth(@Query('tenantSlug') tenantSlug: string) {}
+  microsoftAuth(@Query('tenantSlug') _tenantSlug: string) {}
 
   @Get('microsoft/callback')
   @UseGuards(MicrosoftAuthGuard)
@@ -399,7 +458,10 @@ export class AuthController {
     status: 302,
     description: 'Redirects to frontend callback URL',
   })
-  async microsoftCallback(@Req() req: any, @Res() res: Response) {
+  async microsoftCallback(
+    @Req() req: Request & { user: OAuthCallbackUser },
+    @Res() res: Response,
+  ) {
     const { profile, tenantSlug } = req.user;
     const result = await this.authService.handleSocialLogin(
       profile,

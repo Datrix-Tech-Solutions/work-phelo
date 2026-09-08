@@ -7,11 +7,14 @@ import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission, usePermissionRule } from '@/hooks/hr/usePermission';
+import { useModuleThemeScope } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
-import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
-import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';
+import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
+import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
+import { LeaveReminderModal } from '@/components/organisms/hr/leave/LeaveReminderModal';
+import { TimeCorrectionReminderModal } from '@/components/organisms/hr/time-clock/TimeCorrectionReminderModal';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function HRLayout({
   children,
@@ -21,16 +24,15 @@ export default function HRLayout({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  useModuleThemeScope('hr');
   const user = useAuthStore((s) => s.user);
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN';
   const firstName = user?.firstName ?? 'User';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
-  const [collapsed, setCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState('portal');
-
-  const { hasAnyManagementAccess } = useHrManagementAccess();
-  const canReadDepartments = usePermission(Permission.READ_DEPARTMENTS);
-  const canReadBranches = usePermission(Permission.READ_BRANCHES);
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 768,
+  );
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
@@ -46,13 +48,9 @@ export default function HRLayout({
   const canReadAttendance = usePermission(Permission.READ_ATTENDANCE);
   const canSubmitTimeCorrection = usePermission(Permission.SUBMIT_TIME_CORRECTION);
   const canApproveTimeCorrection = usePermission(Permission.APPROVE_TIME_CORRECTION);
-  const canReadSchedules = usePermission(Permission.READ_SCHEDULES);
+  const canReadSchedules = usePermissionRule('schedules:VIEW');
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
   const canApproveShiftSwap = usePermission(Permission.APPROVE_SHIFT_SWAP);
-  const canReadProjects = usePermission(Permission.READ_PROJECTS);
-  const canCreateProject = usePermission(Permission.CREATE_PROJECT);
-  const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
-  const canAssignProject = usePermission(Permission.ASSIGN_PROJECT);
   const canReadOwnPayslip = usePermission(Permission.READ_OWN_PAYSLIP);
   const canReadPayroll = usePermission(Permission.READ_PAYROLL);
   const canRunPayroll = usePermission(Permission.RUN_PAYROLL);
@@ -61,6 +59,7 @@ export default function HRLayout({
   const canReadAssets = usePermission(Permission.READ_ASSETS);
   const canManageAssets = usePermission(Permission.MANAGE_ASSETS);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canManageAnnouncements = usePermission(Permission.MANAGE_ANNOUNCEMENTS);
   const canAccessLeave = canReadOwnLeave || canReadAllLeaves || canRequestLeave || canApproveLeave;
   const canAccessAppraisal =
     canReadOwnReview ||
@@ -71,34 +70,33 @@ export default function HRLayout({
   const canAccessTimeClock =
     canClockInOut || canReadAttendance || canSubmitTimeCorrection || canApproveTimeCorrection;
   const canAccessScheduling = canReadSchedules || canManageSchedules || canApproveShiftSwap;
-  const canAccessProjects =
-    canReadProjects || canCreateProject || canUpdateProject || canAssignProject;
   const canAccessPayroll =
     canReadOwnPayslip ||
     canReadPayroll ||
     canRunPayroll ||
     canApprovePayroll ||
     canManagePayrollSettings;
-  const canAccessAssets = canReadAssets || canManageAssets || canAssignAsset;
-
   // Feature toggles from the user's tenant config
   const hrFeatures = user?.featureConfig?.hr ?? {};
 
   // Only dashboard and management are always active (no toggle exists for them)
-  const coreKeys = new Set(['dashboard', 'management']);
+  // announcements is also core — it is permission-gated, not feature-toggled
+  const coreKeys = new Set(['dashboard', 'management', 'announcements']);
   const navAccess: Record<string, boolean> = {
-    dashboard: true,
-    departments: canReadDepartments,
-    branches: canReadBranches,
+    // The dashboard is a self-service "my" view (my leave, my payslips, clock in/out) —
+    // not relevant for a tenant admin, so it's hidden for that role.
+    dashboard: !isTenantAdmin,
+
     employees: canReadEmployees || canReadOwnProfile,
     leave: canAccessLeave,
     appraisal: canAccessAppraisal,
     timeclock: canAccessTimeClock,
     scheduling: canAccessScheduling,
-    projects: canAccessProjects,
     payroll: canAccessPayroll,
-    assets: canAccessAssets,
-    management: hasAnyManagementAccess,
+    assets: canReadAssets || canManageAssets || canAssignAsset,
+    projects: true,
+    management: true,
+    announcements: canManageAnnouncements,
   };
 
   const groups = HR_NAV_GROUPS.map((group) => ({
@@ -128,22 +126,36 @@ export default function HRLayout({
   // }));
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
-      <TopNav
-        showMenuButton
-        onMenuClick={() => setCollapsed((v) => !v)}
-        userInitials={initials}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        notificationCount={0}
-      />
-      <div className="flex flex-1 min-h-0">
-        <Sidebar groups={groups} collapsed={collapsed} />
-        <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
+    <AppBackground className="h-dvh overflow-hidden flex layout-hr">
+      <Sidebar groups={groups} collapsed={collapsed} />
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col relative">
+        <TopNav
+          showMenuButton
+          onMenuClick={() => setCollapsed((v) => !v)}
+          userInitials={initials}
+          logoVariant="image"
+        />
+        {/* Mobile backdrop: closes sidebar when tapping outside */}
+        {!collapsed && (
+          <div
+            className="absolute inset-0 bg-black/40 z-30 md:hidden"
+            onClick={() => setCollapsed(true)}
+          />
+        )}
+        <main
+          className="flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col"
+          onClick={() => {
+            if (!collapsed) setCollapsed(true);
+          }}
+        >
+          {children}
+        </main>
       </div>
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
-    </div>
+      {canApproveTimeCorrection && <TimeCorrectionReminderModal tenantSlug={tenantSlug} />}
+      {canReadOwnProfile && <AgreementGate />}
+    </AppBackground>
   );
 }

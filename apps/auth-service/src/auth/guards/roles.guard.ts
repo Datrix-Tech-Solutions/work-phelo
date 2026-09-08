@@ -5,6 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 @Injectable()
@@ -19,7 +21,10 @@ export class RolesGuard implements CanActivate {
 
     if (!requiredRoles) return true;
 
-    const { user } = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: RequestUser }>();
+    const { user } = request;
     if (!user) throw new ForbiddenException('Access denied');
 
     if (!requiredRoles.includes(user.role)) {

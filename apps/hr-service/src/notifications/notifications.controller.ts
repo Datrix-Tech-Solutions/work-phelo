@@ -20,6 +20,11 @@ import {
 } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { QueryNotificationsDto } from './dto/query-notifications.dto';
+import { RequestUser } from '@work-phelo/types';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & { user: RequestUser };
 
 @ApiTags('Notifications')
 @Controller('notifications')
@@ -33,14 +38,14 @@ export class NotificationsController {
     summary: 'Get 50 most recent notifications for the current user',
   })
   @ApiResponse({ status: 200, description: 'Notifications retrieved' })
-  getRecent(@Req() req: any) {
+  getRecent(@Req() req: AuthenticatedRequest) {
     return this.notificationsService.getRecent(req.user.id, req.user.tenantId);
   }
 
   @Get('unread-count')
   @ApiOperation({ summary: 'Get unread notification count' })
   @ApiResponse({ status: 200, description: 'Unread count returned' })
-  getUnreadCount(@Req() req: any) {
+  getUnreadCount(@Req() req: AuthenticatedRequest) {
     return this.notificationsService.getUnreadCount(
       req.user.id,
       req.user.tenantId,
@@ -56,17 +61,15 @@ export class NotificationsController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiResponse({ status: 200, description: 'All notifications retrieved' })
   getAll(
-    @Req() req: any,
-    @Query('filter') filter?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Req() req: AuthenticatedRequest,
+    @Query() query: QueryNotificationsDto,
   ) {
     return this.notificationsService.getAll(
       req.user.id,
       req.user.tenantId,
-      filter,
-      page ? parseInt(page) : 1,
-      limit ? parseInt(limit) : 25,
+      query.filter,
+      query.page,
+      query.limit,
     );
   }
 
@@ -74,7 +77,7 @@ export class NotificationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark all notifications as read' })
   @ApiResponse({ status: 200, description: 'All notifications marked as read' })
-  markAllRead(@Req() req: any) {
+  markAllRead(@Req() req: AuthenticatedRequest) {
     return this.notificationsService.markAllRead(
       req.user.id,
       req.user.tenantId,
@@ -85,7 +88,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark a single notification as read' })
   @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({ status: 200, description: 'Notification marked as read' })
-  markRead(@Param('id') id: string, @Req() req: any) {
+  markRead(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.notificationsService.markRead(
       req.user.id,
       req.user.tenantId,
@@ -97,7 +100,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Delete a notification' })
   @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({ status: 200, description: 'Notification deleted' })
-  delete(@Param('id') id: string, @Req() req: any) {
+  delete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.notificationsService.delete(req.user.id, req.user.tenantId, id);
   }
 }
