@@ -38,6 +38,7 @@ export function YearSelect({
         value={String(value)}
         onChange={(v) => onChange(Number(v))}
         size="sm"
+        clearable={false}
       />
     </div>
   );

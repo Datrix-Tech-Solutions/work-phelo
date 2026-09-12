@@ -215,11 +215,14 @@ export type UpdateTransactionTypeRulePayload = Partial<
   Omit<CreateTransactionTypeRulePayload, 'transactionTypeId'>
 >;
 
-export type FiscalPeriodStatus = 'OPEN' | 'CLOSED' | 'LOCKED';
+export type FiscalPeriodStatus = 'OPEN' | 'SOFT_CLOSED' | 'CLOSED';
 
 export interface FiscalPeriod {
   id: string;
+  /** Human label for the monthly period, e.g. "January 2026". */
   name: string;
+  /** Calendar year the period belongs to; groups the 12 monthly rows. */
+  year: number;
   startDate: string;
   endDate: string;
   status: FiscalPeriodStatus;
@@ -229,6 +232,14 @@ export interface CreateFiscalPeriodPayload {
   name: string;
   startDate: string;
   endDate: string;
+}
+
+/**
+ * Payload for the (not-yet-built) backend endpoint that generates the twelve
+ * monthly periods for a fiscal year in one call.
+ */
+export interface GenerateFiscalYearPayload {
+  year: number;
 }
 
 export interface QueryFiscalPeriodsParams {
@@ -1187,15 +1198,64 @@ export interface CashBankAccount {
   lastReconciled: string | null;
 }
 
-export interface BudgetForecast {
-  id: string;
-  budgetName: string;
-  department: string;
-  fiscalYear: string;
-  version: string;
+export type BudgetPeriod = 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+
+export type BudgetStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED';
+
+/**
+ * Which side of the chart of accounts a budget targets. Drives which leaf accounts are
+ * offered as budget lines: EXPENSE → expense-classification accounts, INCOME →
+ * revenue-classification accounts, BOTH → both.
+ */
+export type BudgetScope = 'EXPENSE' | 'INCOME' | 'BOTH';
+
+export interface BudgetLineInput {
+  accountId: string;
   amount: number;
-  actualSpend: number;
+}
+
+export interface CreateBudgetPayload {
+  name: string;
+  period: BudgetPeriod;
+  /** ISO YYYY-MM-DD — first day the budget takes effect. */
+  startDate: string;
+  scope: BudgetScope;
+  lines: BudgetLineInput[];
+}
+
+/** A single account's target within a budget, with actuals rolled up from posted GL activity. */
+export interface BudgetLine {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  category: GLAccountCategory;
+  budgeted: number;
+  /** Posted actual for the account over the budget window; null until the period has activity. */
+  actual: number | null;
+}
+
+/** One row in the budgets list. */
+export interface Budget {
+  id: string;
+  name: string;
+  period: BudgetPeriod;
+  scope: BudgetScope;
+  /** ISO YYYY-MM-DD — inclusive window derived from period + start. */
+  startDate: string;
+  endDate: string;
   currency: string;
+  incomeBudgeted: number;
+  expenseBudgeted: number;
+  /** incomeBudgeted − expenseBudgeted. */
+  netAmount: number;
+  status: BudgetStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Budget row plus its per-account lines — the details-page payload. */
+export interface BudgetDetail extends Budget {
+  lines: BudgetLine[];
 }
 
 export interface AccountingCustomer {

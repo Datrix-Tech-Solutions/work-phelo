@@ -15,6 +15,7 @@ import {
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { SETTLEMENT_METHOD_OPTIONS } from '@/lib/accounting/settlementMethod';
 
 interface AddTradeSettlementPanelProps {
   isOpen: boolean;
@@ -43,16 +44,6 @@ const DEFAULTS: FormValues = {
   reference: '',
   description: '',
 };
-
-const SETTLEMENT_METHOD_OPTIONS: SearchSelectOption[] = [
-  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
-  { value: 'CHEQUE', label: 'Cheque' },
-  { value: 'CASH', label: 'Cash' },
-  { value: 'MOBILE_MONEY', label: 'Mobile Money' },
-  { value: 'INTERNAL_TRANSFER', label: 'Internal Transfer' },
-  { value: 'JOURNAL', label: 'Journal' },
-  { value: 'OTHER', label: 'Other' },
-];
 
 export function AddTradeSettlementPanel({ isOpen, onClose, side }: AddTradeSettlementPanelProps) {
   const toast = useToast();

@@ -4,8 +4,14 @@ import { useMemo, useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip } from '@/components/atoms/TypeChip';
+import { TableButton } from '@/components/atoms/TableButton';
+import { Icons } from '@/components/atoms/icons';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { AccountingTradeDocument, AccountingTradeDocumentStatus } from '@/types/accounting';
+import {
+  AccountingTradeDocument,
+  AccountingTradeDocumentStatus,
+  TransactionTypeDefinition,
+} from '@/types/accounting';
 import {
   usePayableBills,
   usePayableCreditNotes,
@@ -14,6 +20,8 @@ import {
   useTransactionTypes,
 } from '@/hooks';
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
+import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
+import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
 import {
   TRANSACTION_TYPE_CATEGORY_CHIP_COLOR,
   TRANSACTION_TYPE_CATEGORY_LABEL,
@@ -45,7 +53,11 @@ export function TransactionsTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<AccountingTradeDocument | null>(null);
   const [newTransactionOpen, setNewTransactionOpen] = useState(false);
+  const [selectedType, setSelectedType] = useState<TransactionTypeDefinition | null | undefined>(
+    undefined,
+  );
 
   const { data: transactionTypes = [], isLoading: isLoadingTransactionTypes } =
     useTransactionTypes();
@@ -161,6 +173,21 @@ export function TransactionsTable() {
         width: '110px',
         render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
       },
+      {
+        key: 'actions',
+        label: '',
+        width: '150px',
+        render: (row) => (
+          <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+            <TableButton variant="green" onClick={() => setPaymentTarget(row)}>
+              {row.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
+            </TableButton>
+            <TableButton variant="blue" tooltip="View Documents" onClick={() => setDetailTarget(row)}>
+              <Icons.FileText className="w-3.5 h-3.5" />
+            </TableButton>
+          </div>
+        ),
+      },
     ],
     [],
   );
@@ -204,9 +231,11 @@ export function TransactionsTable() {
               <button
                 key={type.id}
                 type="button"
-                // TODO: route to the matching new-transaction form once it exists
-                onClick={() => setNewTransactionOpen(false)}
-                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left transition-colors hover:border-orange-500 hover:bg-orange-50"
+                onClick={() => {
+                  setNewTransactionOpen(false);
+                  setSelectedType(type);
+                }}
+                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md"
               >
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-semibold text-gray-900">{type.name}</span>
@@ -224,12 +253,19 @@ export function TransactionsTable() {
         )}
       </Modal>
 
+      <NewTransactionPanel
+        transactionType={selectedType}
+        onClose={() => setSelectedType(undefined)}
+      />
+
       <TradeDocumentDetailPanel
         side={detailTarget?.side ?? 'RECEIVABLE'}
         document={detailTarget}
         documentKind={detailTarget?.documentType === 'CREDIT_NOTE' ? 'creditNote' : 'invoice'}
         onClose={() => setDetailTarget(null)}
       />
+
+      <MakePaymentPanel document={paymentTarget} onClose={() => setPaymentTarget(null)} />
     </>
   );
 }
