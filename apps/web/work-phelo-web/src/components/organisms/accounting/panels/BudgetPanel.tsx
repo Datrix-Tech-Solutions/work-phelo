@@ -89,7 +89,6 @@ export function BudgetPanel({ isOpen, budget, onClose, onSaved }: BudgetPanelPro
     } else {
       blank();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, budget]);
 
   // Leaf accounts are the postable ones — parent/header accounts don't allow posting. Narrow
