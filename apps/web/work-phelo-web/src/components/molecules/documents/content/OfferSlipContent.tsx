@@ -68,6 +68,7 @@ export function OfferSlipContent({
     commission,
     rate,
     classOfBusiness,
+    cedant,
     title,
     policyNumber,
     inceptionDate,
@@ -120,6 +121,7 @@ export function OfferSlipContent({
     <DocumentContentFrame title="Facultative Reinsurance Slip">
       <DocumentField label="Date" value={today()} />
       <DocumentField label="Cover Type" value={classOfBusiness} />
+      <DocumentField label="Reinsured" value={cedant.name} />
       <DocumentField label="Original Insured" value={title} />
       <DocumentField label="Policy Number" value={displayPolicyNumber(policyNumber)} />
       <DocumentField label="Currency" value={currency} />

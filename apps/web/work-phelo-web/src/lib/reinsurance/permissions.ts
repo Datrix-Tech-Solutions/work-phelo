@@ -6,14 +6,13 @@
  * — holding either the granular RUN permission or the coarse placements action
  * passes, so the UI gates the same way.
  *
- * CLAIM and PREMIUM lists deliberately DROP the coarse `placements:*` fallback
- * the backend still accepts. Every operations role holds `placements:VIEW` (via
- * OPERATIONS_BASE_RESOURCES) and offer roles hold `placements:CREATE/EDIT`, so
- * mirroring the backend would show every claim/premium control to any
- * offer-only role. These lists require a claims-domain / premiums-domain
- * permission instead. NOTE: this makes the UI stricter than the API — the
- * backend still accepts `placements:*` on those routes, so the complete fix is
- * to drop `PlacementPermission.*` from the claim/payment controller decorators.
+ * CLAIM and PREMIUM lists mirror the controllers, EXCEPT the pure "add" /
+ * "reverse" entry points (addClaim, addNotification, addPayment, reversePayment)
+ * which drop the coarse `placements:CREATE/EDIT` fallback the backend still
+ * accepts: every offer role holds those, so mirroring would leak claim/premium
+ * entry to any offer-creator. Those few lists are intentionally stricter than
+ * the API. editClaim / claimStatusChange / recordRecovery DO keep the coarse
+ * `placements:EDIT` so the UI matches the (now @RequireAnyPermission) backend.
  *
  * Keep in sync with:
  *  - apps/reinsurance-service/src/placements/placements.controller.ts
@@ -43,8 +42,9 @@ export const RiPerm = {
   endorseOffer: [`${FO}.endorse-offer:RUN`, `${P}:CREATE`],
   /**
    * Every endorsement mutation after creation — edit endorsement / status,
-   * closings (create / validate-and-confirm / force-close / status), and
-   * participants (add / edit / status / reinvite / remove). All guarded with
+   * closings (create / validate-and-confirm / force-close / status),
+   * participants (add / edit / status / reinvite / remove), and endorsement
+   * notes (debit / credit / issue / void). All guarded with
    * @RequireAnyPermission(endorse-offer:RUN, placements:EDIT). The single
    * `endorse_offer` role pill grants endorse-offer:RUN, which satisfies this.
    */
@@ -73,16 +73,33 @@ export const RiPerm = {
    * has), so the UI gates on the claims-domain view permission instead.
    */
   viewClaim: [`${C}:VIEW`],
-  /** POST /:id/claims — add a claim loss event / notification. */
+  /**
+   * POST /:id/claims (mode="actual") — register an actual claim loss event.
+   * Backend: @RequireAnyPermission(add-claim:RUN, create-notification:RUN,
+   * placements:CREATE). UI drops create-notification:RUN so a notification-only
+   * role doesn't see the "Add Claim" (actual loss) button.
+   */
   addClaim: [`${C}.add-claim:RUN`, `${C}:CREATE`],
   /**
-   * PATCH /:id/claims/:claimId — edit claim details / finalize ("Move to Open").
-   * Backend checks placements:EDIT; the UI requires a claims-workflow permission
-   * (create a claim ⇒ amend it; run the notification workflow ⇒ finalize it).
+   * POST /:id/claims (mode="notification") — log a first notification of loss.
+   * Same endpoint as addClaim; also satisfied by the notification-workflow
+   * permission so the "Create notifications" pill can log an FNOL.
    */
-  editClaim: [`${C}.add-claim:RUN`, `${C}.create-notification:RUN`, `${C}:EDIT`],
-  /** PATCH /:id/claims/:claimId/status — notify / void a claim. */
-  claimStatusChange: [`${C}.create-notification:RUN`, `${C}.void-claim:RUN`, `${C}:EDIT`],
-  /** POST /:id/claims/:claimId/cash-calls/:cashCallId/recovery-receipts. */
-  recordRecovery: [`${C}.record-recovery:RUN`, `${C}:EDIT`],
+  addNotification: [`${C}.create-notification:RUN`, `${C}.add-claim:RUN`, `${C}:CREATE`],
+  /**
+   * PATCH /:id/claims/:claimId — edit claim details / finalize ("Move to Open").
+   * @RequireAnyPermission(add-claim:RUN, create-notification:RUN, placements:EDIT)
+   * — create a claim ⇒ amend it; run the notification workflow ⇒ finalize it.
+   */
+  editClaim: [`${C}.add-claim:RUN`, `${C}.create-notification:RUN`, `${P}:EDIT`],
+  /**
+   * PATCH /:id/claims/:claimId/status — notify / void a claim.
+   * @RequireAnyPermission(create-notification:RUN, void-claim:RUN, placements:EDIT).
+   */
+  claimStatusChange: [`${C}.create-notification:RUN`, `${C}.void-claim:RUN`, `${P}:EDIT`],
+  /**
+   * POST /:id/claims/:claimId/cash-calls/:cashCallId/recovery-receipts.
+   * @RequireAnyPermission(record-recovery:RUN, placements:EDIT).
+   */
+  recordRecovery: [`${C}.record-recovery:RUN`, `${P}:EDIT`],
 } satisfies Record<string, string[]>;

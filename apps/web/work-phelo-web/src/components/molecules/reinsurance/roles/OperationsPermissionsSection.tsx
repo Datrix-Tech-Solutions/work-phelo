@@ -83,7 +83,7 @@ export const OPERATIONS_PERMISSION_TAG_MAPPING: Record<
   // Offer Management — each pill grants its granular facultative-offers workflow
   // resource (RUN action). create/renew share the create-offer resource because
   // a renewal is a new offer on the backend.
-  create_premium: [{ resource: `${FAC}.create-offer`, action: 'RUN' }],
+  create_offer: [{ resource: `${FAC}.create-offer`, action: 'RUN' }],
   edit_offer: [{ resource: `${FAC}.edit-offer`, action: 'RUN' }],
   partial_edit: [{ resource: `${FAC}.partial-edit`, action: 'RUN' }],
   reopen_offer: [{ resource: `${FAC}.reopen-offer`, action: 'RUN' }],

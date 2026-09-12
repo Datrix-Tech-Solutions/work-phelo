@@ -148,8 +148,9 @@ export function RecordRecoveryReceiptModal({
 
         settlementMethod = values.mode === 'cedant' ? 'OTHER' : 'INTERNAL_OFFSET';
         // OTHER settlement (direct-to-cedant) needs a reference or confirmation notes —
-        // there's no reference in this branch, so the user's notes carry it.
-        confirmNotes = values.mode === 'cedant' ? notes : undefined;
+        // there's no reference in this branch. Notes are optional in the form, so fall
+        // back to a default note when left blank to satisfy that backend requirement.
+        confirmNotes = values.mode === 'cedant' ? (notes ?? 'Direct to cedant') : undefined;
       } else {
         const resolvedDate =
           values.paymentType === 'cheque' ? values.valueDate : values.paymentDate;
@@ -459,14 +460,9 @@ export function RecordRecoveryReceiptModal({
 
       {mode && (
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-          <label className="text-sm font-bold text-gray-900">
-            Notes{mode === 'cedant' ? '' : ' (optional)'}
-          </label>
+          <label className="text-sm font-bold text-gray-900">Notes (optional)</label>
           <textarea
-            {...register('notes', {
-              required:
-                mode === 'cedant' ? 'Notes are required for a direct-to-cedant recovery' : false,
-            })}
+            {...register('notes')}
             placeholder="Add any notes about this recovery…"
             rows={3}
             className={cn(inputClass(), 'resize-none')}

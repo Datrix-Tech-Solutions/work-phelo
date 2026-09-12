@@ -2,6 +2,7 @@
 
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import { useDocumentFileName } from '@/lib/reinsurance/useDocumentFileName';
+import { disbursementAdviceFileName } from '@/lib/reinsurance/disbursementAdviceFileName';
 import { DocumentPreviewShell } from '@/components/molecules/documents/DocumentPreviewShell';
 import {
   PaymentReceiptContent,
@@ -19,14 +20,27 @@ interface PaymentReceiptModalProps extends PaymentReceiptContentProps {
  * print the closing-style disbursement advice; every other payment type keeps
  * the plain payment receipt.
  */
-export function PaymentReceiptModal({ isOpen, onClose, ...content }: PaymentReceiptModalProps) {
+export function PaymentReceiptModal({
+  isOpen,
+  onClose,
+  receiptNo,
+  ...content
+}: PaymentReceiptModalProps) {
   const isDisbursement = content.payment.type === 'REINSURER_DISBURSEMENT';
   const label = isDisbursement ? 'Disbursement Advice' : 'Payment Receipt';
-  const fileName = useDocumentFileName({
+  // Disbursement advices use the same `advice_<reinsurer>_<insured>` naming as the bulk
+  // "Download all receipts" zip so a single download matches its counterpart inside the zip.
+  const genericFileName = useDocumentFileName({
     documentName: label,
     placement: content.placement,
     recipientName: content.payment.counterparty?.name ?? null,
   });
+  const fileName = isDisbursement
+    ? disbursementAdviceFileName(
+        content.payment.counterparty?.name ?? '',
+        content.placement.title ?? '',
+      )
+    : genericFileName;
 
   return (
     <DocumentPreviewShell
@@ -39,7 +53,7 @@ export function PaymentReceiptModal({ isOpen, onClose, ...content }: PaymentRece
       {isDisbursement ? (
         <DisbursementAdviceContent {...content} />
       ) : (
-        <PaymentReceiptContent {...content} />
+        <PaymentReceiptContent {...content} receiptNo={receiptNo} />
       )}
     </DocumentPreviewShell>
   );

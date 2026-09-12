@@ -460,14 +460,15 @@ export function usePlacementClosings(placementId: string) {
   });
 }
 
+export async function fetchPlacementNotes(placementId: string): Promise<PlacementNote[]> {
+  const res = await api.get(`${BASE}/${placementId}/notes`);
+  return (res.data?.items ?? res.data ?? []) as PlacementNote[];
+}
+
 export function usePlacementNotes(placementId: string) {
   return useQuery({
     queryKey: placementNotesKey(placementId),
-    queryFn: async () => {
-      const res = await api.get(`${BASE}/${placementId}/notes`);
-      const raw = res.data?.items ?? res.data ?? [];
-      return raw as PlacementNote[];
-    },
+    queryFn: () => fetchPlacementNotes(placementId),
     enabled: !!placementId,
   });
 }

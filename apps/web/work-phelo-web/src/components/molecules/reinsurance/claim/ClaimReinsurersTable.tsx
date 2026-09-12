@@ -15,8 +15,10 @@ interface ClaimReinsurersTableProps {
 
   sentAllocationIds: Set<string>;
   busyIds?: Set<string>;
-  onMail: (participant: PlacementParticipant) => void;
-  onPreview: (participant: PlacementParticipant) => void;
+  onMail?: (participant: PlacementParticipant) => void;
+  onPreview?: (participant: PlacementParticipant) => void;
+  /** Hide the Preview / Send Mail column entirely (read-only allocations view). */
+  showActions?: boolean;
 }
 
 type ClaimReinsurerRow = {
@@ -39,6 +41,7 @@ export function ClaimReinsurersTable({
   busyIds,
   onMail,
   onPreview,
+  showActions = true,
 }: ClaimReinsurersTableProps) {
   const rows = useMemo<ClaimReinsurerRow[]>(() => {
     if (allocations.length > 0) {
@@ -74,8 +77,8 @@ export function ClaimReinsurersTable({
       }));
   }, [allocations, claimAmount, participants]);
 
-  const columns: Column<ClaimReinsurerRow>[] = useMemo(
-    () => [
+  const columns: Column<ClaimReinsurerRow>[] = useMemo(() => {
+    const cols: Column<ClaimReinsurerRow>[] = [
       {
         key: 'reinsurerName',
         label: 'Reinsurer',
@@ -95,7 +98,7 @@ export function ClaimReinsurersTable({
       },
       {
         key: 'allocatedAmount',
-        label: isActualAmount ? 'Actual Claim' : 'Est. Claim',
+        label: isActualAmount ? 'Claim Amount' : 'Estimated Claim',
         width: '150px',
         className: 'text-right pr-8',
         render: (row) => (
@@ -110,7 +113,10 @@ export function ClaimReinsurersTable({
         width: '130px',
         render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
       },
-      {
+    ];
+
+    if (showActions) {
+      cols.push({
         key: 'actions',
         label: 'Actions',
         width: '210px',
@@ -122,14 +128,14 @@ export function ClaimReinsurersTable({
           }
           if (!isActualAmount) {
             return (
-              <TableButton variant="blue" onClick={() => onPreview(participant)}>
+              <TableButton variant="blue" onClick={() => onPreview?.(participant)}>
                 Preview
               </TableButton>
             );
           }
           return (
             <div className="flex items-center gap-2">
-              <TableButton variant="blue" onClick={() => onPreview(participant)}>
+              <TableButton variant="blue" onClick={() => onPreview?.(participant)}>
                 Preview
               </TableButton>
               {sentAllocationIds.has(row.id) ? (
@@ -138,7 +144,7 @@ export function ClaimReinsurersTable({
                 <TableButton
                   variant="green"
                   isLoading={busyIds?.has(row.id) ?? false}
-                  onClick={() => onMail(participant)}
+                  onClick={() => onMail?.(participant)}
                 >
                   Send Mail
                 </TableButton>
@@ -146,10 +152,20 @@ export function ClaimReinsurersTable({
             </div>
           );
         },
-      },
-    ],
-    [isActualAmount, currency, onMail, onPreview, participants, sentAllocationIds, busyIds],
-  );
+      });
+    }
+
+    return cols;
+  }, [
+    showActions,
+    isActualAmount,
+    currency,
+    onMail,
+    onPreview,
+    participants,
+    sentAllocationIds,
+    busyIds,
+  ]);
 
   return (
     <DataTable
@@ -162,7 +178,7 @@ export function ClaimReinsurersTable({
           </span>
           {allocations.length === 0 && claimAmount != null && (
             <p className="text-xs text-gray-400">
-              Estimated claims for participants until actual claims are made.
+              Estimated claims for participants until claim amounts are made.
             </p>
           )}
         </div>

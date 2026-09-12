@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   PlacementClaimCashCallStatus,
   PlacementClaimAllocationStatus,
+  PlacementClaimRecoveryReceiptStatus,
   PlacementClaimStatus,
   PlacementClosingStatus,
   PlacementEndorsementStatus,
@@ -22,6 +23,7 @@ import {
   ReinsuranceDashboardPlacementsResponseDto,
 } from './dashboard-response.dto';
 import { ReinsuranceMoneyHelper } from '../reinsurance-money.helper';
+import { QueryDashboardClaimsDto } from './query-dashboard-claims.dto';
 
 type CurrencyAmountMap = Map<string, number>;
 
@@ -310,40 +312,69 @@ export class ReinsuranceDashboardService {
 
   async getClaims(
     tenantId: string,
+    query: QueryDashboardClaimsDto = {},
   ): Promise<ReinsuranceDashboardClaimsResponseDto> {
-    const [claims, allocations, cashCalls] = await Promise.all([
-      this.prisma.placementClaim.findMany({
-        where: {
-          tenantId,
-          placement: { archivedAt: null },
-          status: { not: PlacementClaimStatus.VOID },
-        },
-        select: {
-          status: true,
-          estimatedLossAmount: true,
-          finalLossAmount: true,
-        },
-      }),
-      this.prisma.placementClaimAllocation.findMany({
-        where: {
-          tenantId,
-          placement: { archivedAt: null },
-          status: { not: PlacementClaimAllocationStatus.VOID },
-        },
-        select: {
-          allocatedEstimatedLossAmount: true,
-          allocatedFinalLossAmount: true,
-        },
-      }),
-      this.prisma.placementClaimCashCall.findMany({
-        where: {
-          tenantId,
-          placement: { archivedAt: null },
-          status: { not: PlacementClaimCashCallStatus.VOID },
-        },
-        select: { status: true, amount: true },
-      }),
-    ]);
+    const range = this.dateRange(query.since, query.until);
+    const [claims, allocations, cashCalls, windowedClaims, recoveryReceipts] =
+      await Promise.all([
+        this.prisma.placementClaim.findMany({
+          where: {
+            tenantId,
+            placement: { archivedAt: null },
+            status: { not: PlacementClaimStatus.VOID },
+          },
+          select: {
+            status: true,
+            currency: true,
+            estimatedLossAmount: true,
+            finalLossAmount: true,
+          },
+        }),
+        this.prisma.placementClaimAllocation.findMany({
+          where: {
+            tenantId,
+            placement: { archivedAt: null },
+            status: { not: PlacementClaimAllocationStatus.VOID },
+          },
+          select: {
+            allocatedEstimatedLossAmount: true,
+            allocatedFinalLossAmount: true,
+          },
+        }),
+        this.prisma.placementClaimCashCall.findMany({
+          where: {
+            tenantId,
+            placement: { archivedAt: null },
+            status: { not: PlacementClaimCashCallStatus.VOID },
+          },
+          select: { status: true, amount: true },
+        }),
+        // Claims incurred, windowed by loss occurrence date.
+        this.prisma.placementClaim.findMany({
+          where: {
+            tenantId,
+            placement: { archivedAt: null },
+            status: { not: PlacementClaimStatus.VOID },
+            ...(range ? { occurrenceDate: range } : {}),
+          },
+          select: {
+            currency: true,
+            estimatedLossAmount: true,
+            finalLossAmount: true,
+          },
+        }),
+        // Recoveries received, windowed by bank-confirmation date.
+        this.prisma.placementClaimRecoveryReceipt.findMany({
+          where: {
+            tenantId,
+            placement: { archivedAt: null },
+            claim: { status: { not: PlacementClaimStatus.VOID } },
+            status: PlacementClaimRecoveryReceiptStatus.BANK_CONFIRMED,
+            ...(range ? { bankConfirmedAt: range } : {}),
+          },
+          select: { currency: true, amount: true, reversalOfReceiptId: true },
+        }),
+      ]);
 
     const estimatedLoss = claims.reduce(
       (sum, claim) => sum + this.money.toNumber(claim.estimatedLossAmount),
@@ -359,6 +390,28 @@ export class ReinsuranceDashboardService {
         allocation.allocatedEstimatedLossAmount;
       return sum + this.money.toNumber(amount);
     }, 0);
+
+    const claimsIncurredByCurrency = new Map<string, number>();
+    for (const claim of windowedClaims) {
+      this.addCurrencyAmount(
+        claimsIncurredByCurrency,
+        claim.currency,
+        claim.finalLossAmount ?? claim.estimatedLossAmount,
+      );
+    }
+
+    const recoveriesByCurrency = new Map<string, number>();
+    for (const receipt of recoveryReceipts) {
+      // Reversal rows carry positive amounts; subtract them, add originals.
+      const signedAmount =
+        this.money.toNumber(receipt.amount) *
+        (receipt.reversalOfReceiptId ? -1 : 1);
+      this.addCurrencyAmount(
+        recoveriesByCurrency,
+        receipt.currency,
+        signedAmount,
+      );
+    }
 
     const cashCallCounts: ReinsuranceDashboardCashCallCountsDto = {
       draft: 0,
@@ -397,6 +450,10 @@ export class ReinsuranceDashboardService {
       estimatedLoss: this.money.roundMoney(estimatedLoss),
       finalLoss: this.money.roundMoney(finalLoss),
       allocatedLiability: this.money.roundMoney(allocatedLiability),
+      claimsIncurredByCurrency: this.toCurrencyBreakdown(
+        claimsIncurredByCurrency,
+      ),
+      recoveriesByCurrency: this.toCurrencyBreakdown(recoveriesByCurrency),
       cashCallsIssued: this.money.roundMoney(cashCallsIssued),
       cashCallsPaid: this.money.roundMoney(cashCallsPaid),
       cashCallsPending: this.money.roundMoney(cashCallsIssued - cashCallsPaid),
@@ -420,6 +477,17 @@ export class ReinsuranceDashboardService {
       },
       { draft: 0, issued: 0, void: 0 },
     );
+  }
+
+  private dateRange(
+    since?: string,
+    until?: string,
+  ): { gte?: Date; lte?: Date } | undefined {
+    if (!since && !until) return undefined;
+    return {
+      ...(since ? { gte: new Date(since) } : {}),
+      ...(until ? { lte: new Date(until) } : {}),
+    };
   }
 
   private addCurrencyAmount(

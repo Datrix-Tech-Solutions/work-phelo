@@ -2,12 +2,13 @@
 
 import { useRouter, useParams } from 'next/navigation';
 import {
-  Landmark,
-  Handshake,
+  // Landmark,
+  // Handshake,
   // ScrollText,
   ShieldCheck,
   BanknoteArrowDown,
   BanknoteArrowUp,
+  HandCoins,
 } from 'lucide-react';
 import { ReportCard } from '@/components/molecules/shared/ReportCard';
 
@@ -26,7 +27,7 @@ export default function ReinsuranceReportsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <ReportCard
           icon={<ShieldCheck className="w-6 h-6" />}
           iconClassName="bg-amber-600 text-amber-100"
@@ -34,7 +35,7 @@ export default function ReinsuranceReportsPage() {
           description="Facultative placement activity and closings."
           onClick={() => router.push(`${base}/facultative`)}
         />
-        <ReportCard
+        {/* <ReportCard
           icon={<Landmark className="w-6 h-6" />}
           iconClassName="bg-blue-600 text-blue-100"
           title="Cedants"
@@ -48,7 +49,7 @@ export default function ReinsuranceReportsPage() {
           title="Reinsurers"
           description="Participation and revenue breakdown by reinsurer."
           onClick={() => router.push(`${base}/reinsurers`)}
-        />
+        /> */}
 
         {/* <ReportCard
           icon={<ScrollText className="w-6 h-6" />}
@@ -76,6 +77,14 @@ export default function ReinsuranceReportsPage() {
           title="Claims"
           description="Claims activity and settlement history."
           onClick={() => router.push(`${base}/claims`)}
+        />
+
+        <ReportCard
+          icon={<HandCoins className="w-6 h-6" />}
+          iconClassName="bg-indigo-600 text-indigo-100"
+          title="Brokerage"
+          description="Brokerage earned and withholding across placements."
+          onClick={() => router.push(`${base}/brokerage`)}
         />
       </div>
     </div>

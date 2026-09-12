@@ -137,6 +137,20 @@ export class ReinsuranceDashboardClaimsResponseDto {
   @ApiProperty({ example: 220000 })
   allocatedLiability!: number;
 
+  @ApiProperty({
+    type: [ReinsuranceDashboardCurrencyBreakdownDto],
+    description:
+      'Claims incurred per claim currency: finalLossAmount when set, otherwise estimatedLossAmount.',
+  })
+  claimsIncurredByCurrency!: ReinsuranceDashboardCurrencyBreakdownDto[];
+
+  @ApiProperty({
+    type: [ReinsuranceDashboardCurrencyBreakdownDto],
+    description:
+      'Net recoveries received per currency: bank-confirmed recovery receipts less their reversals.',
+  })
+  recoveriesByCurrency!: ReinsuranceDashboardCurrencyBreakdownDto[];
+
   @ApiProperty({ example: 120000 })
   cashCallsIssued!: number;
 

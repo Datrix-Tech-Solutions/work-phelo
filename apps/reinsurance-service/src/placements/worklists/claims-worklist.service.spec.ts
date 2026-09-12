@@ -209,12 +209,15 @@ describe('ReinsuranceClaimsWorklistService', () => {
         settledClaims: 3n,
         notificationClaims: 4n,
         openClaims: 6n,
+        openPendingClaims: 2n,
+        openFinalizedClaims: 4n,
         closedClaims: 2n,
         claimsByCurrency: [
           { code: 'GHS', amount: '10000.00' },
           { code: 'USD', amount: '250.50' },
         ],
         recoveredByCurrency: [{ code: 'GHS', amount: '9000.00' }],
+        outstandingRecoveredByCurrency: [{ code: 'GHS', amount: '1000.00' }],
       },
     ]);
 
@@ -226,12 +229,15 @@ describe('ReinsuranceClaimsWorklistService', () => {
       settledClaims: 3,
       notificationClaims: 4,
       openClaims: 6,
+      openPendingClaims: 2,
+      openFinalizedClaims: 4,
       closedClaims: 2,
       claimsByCurrency: [
         { code: 'GHS', amount: 10000 },
         { code: 'USD', amount: 250.5 },
       ],
       recoveredByCurrency: [{ code: 'GHS', amount: 9000 }],
+      outstandingRecoveredByCurrency: [{ code: 'GHS', amount: 1000 }],
     });
   });
 
@@ -263,7 +269,10 @@ describe('ReinsuranceClaimsWorklistService', () => {
     const query = renderedSql(firstRawQuery(prisma.$queryRaw));
     expect(cte).toContain('classified_claims AS');
     expect(query).toContain('COUNT(*) FILTER (WHERE "bucket" =');
-    expect(query).toContain('WHERE "bucket" IN');
+    expect(query).toContain(
+      `WHERE "bucket" = 'open'\n                AND "claimState"::text = 'FINALIZED'`,
+    );
+    expect(query).toContain(`WHERE "bucket" = 'open'`);
   });
 });
 

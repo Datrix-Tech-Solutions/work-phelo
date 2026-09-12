@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import {
   ApprovePlacementClaimPayablePayload,
   ApprovePlacementClaimRecoveryPayload,
+  ClaimState,
   ClaimRowState,
   ClaimRowStateResponse,
   ClaimsWorklistPlacement,
@@ -71,6 +72,8 @@ export interface ClaimsWorklistParams {
   limit?: number;
   search?: string;
   cedantId?: string;
+  /** Open-tab only: filter by persisted claim state. */
+  claimState?: ClaimState;
 }
 
 function normalizeClaimsWorklistParams(params: ClaimsWorklistParams = {}) {
@@ -80,6 +83,7 @@ function normalizeClaimsWorklistParams(params: ClaimsWorklistParams = {}) {
     limit: params.limit ?? 10,
     ...(params.search?.trim() ? { search: params.search.trim() } : {}),
     ...(params.cedantId ? { cedantId: params.cedantId } : {}),
+    ...(params.claimState ? { claimState: params.claimState } : {}),
   };
 }
 
@@ -757,11 +761,17 @@ export function useClaimsWorklist(params: ClaimsWorklistParams = {}) {
   });
 }
 
-export function useClaimsWorklistSummary() {
+export function useClaimsWorklistSummary(window: { since?: string; until?: string } = {}) {
+  const { since, until } = window;
   return useQuery({
-    queryKey: claimsWorklistSummaryKey(),
+    queryKey: [...claimsWorklistSummaryKey(), { since: since ?? null, until: until ?? null }],
     queryFn: async () => {
-      const res = await api.get<ClaimsWorklistSummary>(`${WORKLIST_BASE}/claims-summary`);
+      const res = await api.get<ClaimsWorklistSummary>(`${WORKLIST_BASE}/claims-summary`, {
+        params: {
+          ...(since ? { since } : {}),
+          ...(until ? { until } : {}),
+        },
+      });
       return res.data;
     },
   });

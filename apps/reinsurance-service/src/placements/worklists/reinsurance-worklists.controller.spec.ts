@@ -170,9 +170,35 @@ describe('ReinsuranceWorklistsController', () => {
       recoveredByCurrency: [],
     });
 
-    await controller.summarizeClaims({ user } as never);
+    await controller.summarizeClaims({}, { user } as never);
 
-    expect(claimsWorklist.summarizeClaims).toHaveBeenCalledWith('tenant-1');
+    expect(claimsWorklist.summarizeClaims).toHaveBeenCalledWith('tenant-1', {});
+  });
+
+  it('forwards the occurrence-date window to the claims summary', async () => {
+    const controller = createController();
+    claimsWorklist.summarizeClaims.mockResolvedValue({
+      totalClaims: 0,
+      settledClaims: 0,
+      notificationClaims: 0,
+      openClaims: 0,
+      openPendingClaims: 0,
+      openFinalizedClaims: 0,
+      closedClaims: 0,
+      claimsByCurrency: [],
+      recoveredByCurrency: [],
+    });
+
+    const window = {
+      since: '2026-09-01T00:00:00.000Z',
+      until: '2026-10-01T00:00:00.000Z',
+    };
+    await controller.summarizeClaims(window, { user } as never);
+
+    expect(claimsWorklist.summarizeClaims).toHaveBeenCalledWith(
+      'tenant-1',
+      window,
+    );
   });
 
   it('requires placement view permission for the claims summary', () => {

@@ -76,6 +76,7 @@ import {
   PlacementPaymentResponseDto,
 } from './dto/placement-payment-response.dto';
 import { PlacementFinancialPositionResponseDto } from './dto/placement-financial-position-response.dto';
+import { CancelPlacementPaymentDto } from './dto/cancel-placement-payment.dto';
 import { ConfirmPlacementPaymentBankDto } from './dto/confirm-placement-payment-bank.dto';
 import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
 import { PlacementFinancialPositionService } from './finance/financial-position.service';
@@ -375,7 +376,10 @@ export class PlacementsController {
 
   @Post(':id/endorsements/:endorsementId/notes/debit')
   @ApiTags('Reinsurance - Endorsement Notes')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Create endorsement debit note',
     description:
@@ -413,7 +417,10 @@ export class PlacementsController {
 
   @Post(':id/endorsements/:endorsementId/closings/:closingId/notes/credit')
   @ApiTags('Reinsurance - Endorsement Notes')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Create endorsement closing credit note',
     description:
@@ -458,7 +465,10 @@ export class PlacementsController {
 
   @Patch(':id/endorsements/:endorsementId/notes/:noteId/status')
   @ApiTags('Reinsurance - Endorsement Notes')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Issue a draft endorsement note',
     description:
@@ -498,7 +508,10 @@ export class PlacementsController {
 
   @Post(':id/endorsements/:endorsementId/notes/:noteId/void')
   @ApiTags('Reinsurance - Endorsement Notes')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    FacultativeOfferPermission.ENDORSE_OFFER,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Void a draft or issued endorsement note',
     description:
@@ -1040,6 +1053,43 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.paymentsService.reverse(request.user, id, paymentId);
+  }
+
+  @Post(':id/payments/:paymentId/cancel')
+  @ApiTags('Reinsurance - Payments')
+  @RequireAnyPermission(
+    PremiumPermission.REVERSE_PAYMENT,
+    PlacementPermission.EDIT,
+  )
+  @ApiOperation({
+    summary: 'Cancel a recorded placement payment',
+    description:
+      'Marks a RECORDED payment CANCELLED. This is the correction path for entries that have not been bank confirmed and therefore cannot be reversed. No reversal record is created; re-record the corrected payment through the create endpoint.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'paymentId',
+    format: 'uuid',
+    description: 'Placement payment ID.',
+  })
+  @ApiOkResponse({ type: PlacementPaymentResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The payment is a reversal, or is not RECORDED (bank-confirmed payments must be reversed instead).',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or payment is archived, missing or belongs to another tenant.',
+  })
+  cancelPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: CancelPlacementPaymentDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.paymentsService.cancel(request.user, id, paymentId, dto);
   }
 
   @Get(':id/slips/offer-preview')

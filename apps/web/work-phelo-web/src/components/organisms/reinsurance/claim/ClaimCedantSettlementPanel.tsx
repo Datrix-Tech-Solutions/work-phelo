@@ -33,7 +33,7 @@ export function ClaimCedantSettlementPanel({
   if (!finalLossAmount) {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-        Actual claim not recorded, edit claim to add the actual claim.
+        100% Claim Amount not recorded, edit claim to add the claim amount.
       </div>
     );
   }
@@ -48,7 +48,7 @@ export function ClaimCedantSettlementPanel({
   return (
     <div className={cardClass('p-6 w-full flex flex-col gap-2')}>
       <span className="text-sm font-bold text-gray-900">Cedant Claim Settlement</span>
-      <DetailField horizontal label="100% Actual Claim" value={fmt(actualClaim, claim.currency)} />
+      <DetailField horizontal label="100% Claim Amount" value={fmt(actualClaim, claim.currency)} />
       <DetailField horizontal label="Claim Share" value={fmt(payableClaim, claim.currency)} />
       <DetailField
         horizontal

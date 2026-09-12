@@ -171,6 +171,35 @@ export function useReversePayment() {
   });
 }
 
+/** Correction path for a RECORDED payment that has not been bank confirmed and so
+ *  cannot be reversed. Marks it CANCELLED; re-record the corrected payment with
+ *  {@link useCreatePlacementPayment}. */
+export function useCancelPlacementPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      placementId,
+      paymentId,
+      reason,
+    }: {
+      placementId: string;
+      paymentId: string;
+      reason?: string;
+    }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/payments/${paymentId}/cancel`,
+        reason ? { reason } : {},
+      );
+      return res.data as PlacementPayment;
+    },
+    onSuccess: (_, { placementId }) => {
+      queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementFinancialPositionKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentsWorklistsKey });
+    },
+  });
+}
+
 export const CLOSING_STATUSES: FacultativeStatus[] = [
   'PARTIALLY_PLACED',
   'PLACED',

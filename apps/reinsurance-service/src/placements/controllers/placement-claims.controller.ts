@@ -151,6 +151,7 @@ export class PlacementClaimsController {
   @ApiTags('Reinsurance - Claims')
   @RequireAnyPermission(
     ClaimWorkflowPermission.ADD_CLAIM,
+    ClaimWorkflowPermission.CREATE_NOTIFICATION,
     PlacementPermission.CREATE,
   )
   @ApiOperation({
@@ -175,7 +176,11 @@ export class PlacementClaimsController {
 
   @Patch(':id/claims/:claimId')
   @ApiTags('Reinsurance - Claims')
-  @RequirePermissions(PlacementPermission.EDIT)
+  @RequireAnyPermission(
+    ClaimWorkflowPermission.ADD_CLAIM,
+    ClaimWorkflowPermission.CREATE_NOTIFICATION,
+    PlacementPermission.EDIT,
+  )
   @ApiOperation({
     summary: 'Update editable placement claim',
     description:

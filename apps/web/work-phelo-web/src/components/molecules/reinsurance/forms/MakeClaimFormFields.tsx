@@ -8,18 +8,23 @@ import { Input } from '@/components/atoms/Input';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCurrencyOptions, usePlacementEffectiveView, usePremiumPaymentContext } from '@/hooks';
-import { Facultative } from '@/types/reinsurance';
+import { ClaimState, Facultative } from '@/types/reinsurance';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 
-/** Free-form classification tag. Front-end only for now — the back-end doesn't accept or
- * persist it yet, so it's not sent in the create/update payload. Wire it into the claim
- * DTO + payload once the field exists server-side. */
+/** Lowercase form value for the claim-state selector. Maps to the backend
+ *  `claimState` enum via {@link claimTagToState} / {@link claimStateToTag}. */
 export type ClaimTag = 'pending' | 'finalized';
 
 export const CLAIM_TAG_OPTIONS: { value: ClaimTag; label: string }[] = [
   { value: 'pending', label: 'Pending' },
   { value: 'finalized', label: 'Finalized' },
 ];
+
+export const claimTagToState = (tag: ClaimTag): ClaimState =>
+  tag === 'finalized' ? 'FINALIZED' : 'PENDING';
+
+export const claimStateToTag = (state: ClaimState | null | undefined): ClaimTag =>
+  state === 'FINALIZED' ? 'finalized' : 'pending';
 
 export interface MakeClaimFormValues {
   claimNumber: string;
@@ -141,9 +146,11 @@ export function MakeClaimFormFields({
         {...register('claimNumber', { required: 'Claim number is required' })}
         error={errors.claimNumber?.message}
       />
-      {/* Claim state (Pending / Finalized) — only on the Add Claim form, not Add Notification
-          or Edit. The "Move to Open" modal has its own copy of this field. */}
-      {mode === 'actual' && !isEditing && (
+      {/* Claim state (Pending / Finalized) — shown on the actual-claim form for both
+          create and edit. Finalized generates reinsurer allocations server-side;
+          returning an edited claim to Pending voids them. Never shown for Add
+          Notification. The "Move to Open" modal has its own copy of this field. */}
+      {mode === 'actual' && (
         <Controller
           name="claimTag"
           control={control}
@@ -255,13 +262,13 @@ export function MakeClaimFormFields({
           control={control}
           rules={{
             ...(mode === 'actual' && {
-              min: { value: 0.01, message: 'Actual claim amount is required' },
+              min: { value: 0.01, message: '100% Claim amount is required' },
             }),
             validate: (value) => {
               if (!value || Number(value) === 0) return true;
               const amount = parseFloat(value) * conversionRate;
               if (effectiveSumInsured != null && amount > effectiveSumInsured) {
-                return `Actual claim amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
+                return `100%Claim amount cannot exceed the effective sum insured (${effectiveSumInsured.toLocaleString()})`;
               }
               return true;
             },

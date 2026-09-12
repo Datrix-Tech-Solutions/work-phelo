@@ -150,6 +150,15 @@ enum PlacementClaimStatus {
   @@schema("reinsurance")
 }
 
+// Orthogonal to PlacementClaimStatus. FINALIZED is the point at which reinsurer
+// liability allocations are generated and the claim's financial inputs lock.
+enum PlacementClaimState {
+  PENDING
+  FINALIZED
+
+  @@schema("reinsurance")
+}
+
 enum PlacementClaimAllocationStatus {
   DRAFT
   NOTIFIED
@@ -696,6 +705,7 @@ model PlacementClaim {
   placementId           String
   claimNumber           String
   status                PlacementClaimStatus             @default(DRAFT)
+  claimState            PlacementClaimState              @default(PENDING)
   occurrenceDate        DateTime
   reportedDate          DateTime
   claimCause            String
