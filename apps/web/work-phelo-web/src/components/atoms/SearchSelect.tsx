@@ -26,6 +26,9 @@ interface SearchSelectProps {
   /** Rendered inside the control's own box, alongside the clear/chevron icons (e.g. a
    *  visibility toggle). Not a native <button> internally, so it nests safely here. */
   rightSlot?: React.ReactNode;
+  /** Show the clear (X) button when a value is selected. Defaults to `true`; set `false`
+   *  for fields that must always hold a value (e.g. a year picker). */
+  clearable?: boolean;
   /** For filter bars: prepends a selectable "All" option (value `''`) — makes the already-implicit
    *  "nothing selected = no filter" state a visible, explicit choice instead of just an empty field. */
   showAllOption?: boolean;
@@ -54,6 +57,7 @@ export function SearchSelect({
   size = 'sm',
   onQueryChange,
   rightSlot,
+  clearable = true,
   showAllOption = false,
   allLabel,
   emptyState,
@@ -268,7 +272,7 @@ export function SearchSelect({
         <div className="flex items-center gap-1 shrink-0 ml-2">
           {rightSlot}
           {/* Clear button — only when something is selected */}
-          {value && !open && (
+          {clearable && value && !open && (
             <button
               type="button"
               onClick={handleClear}

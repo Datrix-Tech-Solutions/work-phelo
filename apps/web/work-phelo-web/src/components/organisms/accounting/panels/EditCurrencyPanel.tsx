@@ -1,17 +1,12 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { AccountingCurrency, ExchangeRate } from '@/types/accounting';
-import {
-  useCreateExchangeRate,
-  useUpdateAccountingConfig,
-  useUpdateAccountingCurrency,
-  useUpdateExchangeRate,
-} from '@/hooks';
+import { AccountingCurrency } from '@/types/accounting';
+import { useUpdateAccountingConfig, useUpdateAccountingCurrency } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { inputClass } from '@/lib/utils';
@@ -19,7 +14,6 @@ import { inputClass } from '@/lib/utils';
 interface EditCurrencyPanelProps {
   currency: AccountingCurrency | null;
   baseCurrency: string | null | undefined;
-  existingRate: ExchangeRate | undefined;
   onClose: () => void;
 }
 
@@ -27,42 +21,20 @@ interface FormValues {
   name: string;
   symbol: string;
   isBaseCurrency: boolean;
-  rate: number | '';
 }
 
 const DEFAULTS: FormValues = {
   name: '',
   symbol: '',
   isBaseCurrency: false,
-  rate: '',
 };
 
-function toFormValues(
-  currency: AccountingCurrency,
-  isBase: boolean,
-  rate: ExchangeRate | undefined,
-): FormValues {
-  return {
-    name: currency.name,
-    symbol: currency.symbol ?? '',
-    isBaseCurrency: isBase,
-    rate: rate ? parseFloat(rate.rate) : '',
-  };
-}
-
-export function EditCurrencyPanel({
-  currency,
-  baseCurrency,
-  existingRate,
-  onClose,
-}: EditCurrencyPanelProps) {
+export function EditCurrencyPanel({ currency, baseCurrency, onClose }: EditCurrencyPanelProps) {
   const toast = useToast();
   const { mutateAsync: updateCurrency, isPending: isSavingCurrency } =
     useUpdateAccountingCurrency();
   const { mutateAsync: updateConfig, isPending: isSettingBase } = useUpdateAccountingConfig();
-  const { mutateAsync: createExchangeRate, isPending: isCreatingRate } = useCreateExchangeRate();
-  const { mutateAsync: updateExchangeRate, isPending: isUpdatingRate } = useUpdateExchangeRate();
-  const isPending = isSavingCurrency || isSettingBase || isCreatingRate || isUpdatingRate;
+  const isPending = isSavingCurrency || isSettingBase;
 
   const isCurrentBase = !!currency && currency.code === baseCurrency;
 
@@ -70,14 +42,11 @@ export function EditCurrencyPanel({
     register,
     handleSubmit,
     reset,
-    control,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
-  const isBaseCurrency = useWatch({ control, name: 'isBaseCurrency' });
-
   useEffect(() => {
-    if (currency) reset(toFormValues(currency, isCurrentBase, existingRate));
+    if (currency) reset({ name: currency.name, symbol: currency.symbol ?? '', isBaseCurrency: isCurrentBase });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency]);
 
@@ -95,20 +64,8 @@ export function EditCurrencyPanel({
         symbol: data.symbol || undefined,
       });
 
-      if (data.isBaseCurrency) {
-        if (!isCurrentBase) await updateConfig({ baseCurrency: currency.code });
-      } else if (baseCurrency) {
-        const rate = Number(data.rate);
-        if (existingRate) {
-          await updateExchangeRate({ id: existingRate.id, rate });
-        } else {
-          await createExchangeRate({
-            fromCurrency: currency.code,
-            toCurrency: baseCurrency,
-            rate,
-            effectiveAt: new Date().toISOString(),
-          });
-        }
+      if (data.isBaseCurrency && !isCurrentBase) {
+        await updateConfig({ baseCurrency: currency.code });
       }
 
       toast.success('Currency updated successfully');
@@ -176,20 +133,6 @@ export function EditCurrencyPanel({
           <p className="-mt-3 text-xs text-gray-400">
             This is the current base currency. Set another currency as base to change it.
           </p>
-        )}
-
-        {!isBaseCurrency && (
-          <FormField
-            label={`Exchange Rate to ${baseCurrency ?? 'Base Currency'}`}
-            type="number"
-            registration={register('rate', {
-              required: 'Exchange rate is required',
-              min: { value: 0.000001, message: 'Rate must be greater than 0' },
-              valueAsNumber: true,
-            })}
-            error={errors.rate}
-            placeholder="e.g. 16.5"
-          />
         )}
       </div>
     </SidePanel>

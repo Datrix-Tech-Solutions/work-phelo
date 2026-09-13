@@ -1,11 +1,9 @@
 'use client';
 
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { ENTITY_ACCOUNTING_RELATION_LABELS, EntityAccountingRelation } from '@/types/accounting';
 import { useCreateEntityType } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -17,14 +15,9 @@ interface AddEntityTypePanelProps {
 
 type FormValues = {
   name: string;
-  accountingRelation: EntityAccountingRelation | '';
 };
 
-const DEFAULTS: FormValues = { name: '', accountingRelation: '' };
-
-const RELATION_OPTIONS: SearchSelectOption[] = (
-  Object.entries(ENTITY_ACCOUNTING_RELATION_LABELS) as [EntityAccountingRelation, string][]
-).map(([value, label]) => ({ value, label }));
+const DEFAULTS: FormValues = { name: '' };
 
 export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps) {
   const toast = useToast();
@@ -33,7 +26,6 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
   const {
     register,
     handleSubmit,
-    control,
     reset,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
@@ -45,10 +37,9 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
 
   const onSubmit = async (values: FormValues) => {
     try {
-      await createEntityType({
-        name: values.name,
-        accountingRelation: values.accountingRelation as EntityAccountingRelation,
-      });
+      // Accounting relation isn't captured here — new types default to NONE until it's set
+      // some other way (there's no edit flow for entity types yet).
+      await createEntityType({ name: values.name, accountingRelation: 'NONE' });
       toast.success('Type created successfully');
       handleClose();
     } catch (error) {
@@ -61,7 +52,7 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
       isOpen={isOpen}
       onClose={handleClose}
       title="Add Type"
-      description="Define a new entity type and the accounting relation it maps to."
+      description="Define a new entity type available in the Type field."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -79,22 +70,6 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
           registration={register('name', { required: 'Name is required' })}
           error={errors.name}
           placeholder="e.g. Landlord"
-        />
-
-        <Controller
-          name="accountingRelation"
-          control={control}
-          rules={{ required: 'Accounting relation is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Accounting Relation"
-              placeholder="Select relation…"
-              options={RELATION_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.accountingRelation?.message}
-            />
-          )}
         />
       </div>
     </SidePanel>

@@ -21,6 +21,10 @@ interface CurrencyInputProps {
   currency?: string;
   onValueChange?: (value: string) => void;
   onCurrencyChange?: (currency: string) => void;
+  /** Renders the currency as a plain badge instead of a select — for forms where the
+   *  currency is already fixed by context (e.g. paying down a specific document) and
+   *  shouldn't look editable. */
+  lockCurrency?: boolean;
 }
 
 export function CurrencyInput({
@@ -31,6 +35,7 @@ export function CurrencyInput({
   currency = 'GHS',
   onValueChange,
   onCurrencyChange,
+  lockCurrency = false,
 }: CurrencyInputProps) {
   const [local, setLocal] = useState(() => (value == null || value === '' ? '' : String(value)));
   const [focused, setFocused] = useState(false);
@@ -65,22 +70,28 @@ export function CurrencyInput({
         )}
       >
         {/* Currency selector */}
-        <div className="relative flex items-center border-r border-gray-300 px-3 bg-transparent shrink-0">
-          <select
-            value={currency}
-            onChange={(e) => onCurrencyChange?.(e.target.value)}
-            className="appearance-none bg-transparent text-sm text-gray-800 pr-5 focus:outline-none cursor-pointer"
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.code}
-              </option>
-            ))}
-          </select>
-          <div className="pointer-events-none absolute right-2 text-gray-400">
-            <Icons.ChevronDown className="w-5 h-5" />
+        {lockCurrency ? (
+          <div className="flex items-center border-r border-gray-300 px-3 bg-transparent shrink-0">
+            <span className="text-sm text-gray-800">{currency}</span>
           </div>
-        </div>
+        ) : (
+          <div className="relative flex items-center border-r border-gray-300 px-3 bg-transparent shrink-0">
+            <select
+              value={currency}
+              onChange={(e) => onCurrencyChange?.(e.target.value)}
+              className="appearance-none bg-transparent text-sm text-gray-800 pr-5 focus:outline-none cursor-pointer"
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-2 text-gray-400">
+              <Icons.ChevronDown className="w-5 h-5" />
+            </div>
+          </div>
+        )}
 
         {/* Amount input */}
         <input

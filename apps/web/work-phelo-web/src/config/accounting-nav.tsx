@@ -1,30 +1,34 @@
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 
 import {
-  BanknoteArrowDown,
-  BanknoteArrowUp,
+  // BanknoteArrowDown,
+  // BanknoteArrowUp,
   BookOpenText,
   ChartLine,
   LayoutDashboard,
-  LibraryBig,
+  // LibraryBig,
   NotebookTabsIcon,
   ReceiptText,
   Settings,
+  Target,
   Users,
-  Wallet,
+  // Wallet,
+  WalletCards,
 } from 'lucide-react';
 
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
 const ChartOfAccountsIcon = () => <BookOpenText className="w-5 h-5" />;
-const GeneralLedgerIcon = () => <LibraryBig className="w-5 h-5" />;
+// const GeneralLedgerIcon = () => <LibraryBig className="w-5 h-5" />;
 const JournalEntriesIcon = () => <NotebookTabsIcon className="w-5 h-5" />;
-const AccountsPayableIcon = () => <BanknoteArrowUp className="w-5 h-5" />;
-const AccountsReceivableIcon = () => <BanknoteArrowDown className="w-5 h-5" />;
-const CashAndBankIcon = () => <Wallet className="w-5 h-5" />;
+// const AccountsPayableIcon = () => <BanknoteArrowUp className="w-5 h-5" />;
+// const AccountsReceivableIcon = () => <BanknoteArrowDown className="w-5 h-5" />;
+// const CashAndBankIcon = () => <Wallet className="w-5 h-5" />;
 const FinancialReportsIcon = () => <ChartLine className="w-5 h-5" />;
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
+const BudgetIcon = () => <Target className="w-5 h-5" />;
+const FiscalYearIcon = () => <WalletCards className="w-5 h-5" />;
 const EntitiesIcon = () => <Users className="w-5 h-5" />;
-const BillsIcon = () => <ReceiptText className="w-5 h-5" />;
+// const BillsIcon = () => <ReceiptText className="w-5 h-5" />;
 
 export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
   {
@@ -41,7 +45,46 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Transactions',
+    items: [
+      {
+        key: 'transactions',
+        label: 'Transactions',
+        icon: <ReceiptText />,
+        href: 'transactions',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
     label: 'Sales & Revenue',
+    items: [
+      // {
+      //   key: 'ar-invoices',
+      //   label: 'Receivable',
+      //   icon: <AccountsReceivableIcon />,
+      //   href: 'accountsreceivable/invoices',
+      //   enabled: true,
+      //   active: true,
+      // },
+    ],
+  },
+  // {
+  //   label: 'Expenses & Purchases',
+  //   items: [
+  //     {
+  //       key: 'bills',
+  //       label: 'Payable',
+  //       icon: <BillsIcon />,
+  //       href: 'expensesandpurchases/bills',
+  //       enabled: true,
+  //       active: true,
+  //     },
+  //   ],
+  // },
+  {
+    label: 'Accounting',
     items: [
       {
         key: 'ap-entities',
@@ -52,32 +95,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         active: true,
       },
       {
-        key: 'ar-invoices',
-        label: 'Invoices',
-        icon: <AccountsReceivableIcon />,
-        href: 'accountsreceivable/invoices',
-        enabled: true,
-        active: true,
-      },
-    ],
-  },
-  {
-    label: 'Expenses & Purchases',
-    items: [
-      {
-        key: 'bills',
-        label: 'Bills',
-        icon: <BillsIcon />,
-        href: 'expensesandpurchases/bills',
-        enabled: true,
-        active: true,
-      },
-    ],
-  },
-  {
-    label: 'Accounting',
-    items: [
-      {
         key: 'chart-of-accounts',
         label: 'Chart of Accounts',
         icon: <ChartOfAccountsIcon />,
@@ -85,7 +102,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
-
       {
         key: 'journal-entries',
         label: 'Journal Entries',
@@ -94,60 +110,9 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
-      
     ],
   },
-  {
-    label: 'Finance',
-    items: [
-      
-      {
-        key: 'general-ledger',
-        label: 'General Ledger',
-        icon: <GeneralLedgerIcon />,
-        href: 'general-ledger',
-        enabled: true,
-        active: true,
-        exact: true,
-      },
-      
-      {
-        key: 'source-events',
-        label: 'Posting Inbox',
-        icon: <JournalEntriesIcon />,
-        href: 'source-events',
-        enabled: true,
-        active: true,
-      },
-      {
-        key: 'accounts-payable',
-        label: 'Accounts Payable',
-        icon: <AccountsPayableIcon />,
-        href: 'accountspayable',
-        enabled: true,
-        active: true,
-        exact: true,
-      },
-      {
-        key: 'accounts-receivable',
-        label: 'Accounts Receivable',
-        icon: <AccountsReceivableIcon />,
-        href: 'accountsreceivable',
-        enabled: true,
-        active: true,
-        exact: true,
-      },
-      {
-        key: 'cash-and-bank',
-        label: 'Cash and Bank',
-        icon: <CashAndBankIcon />,
-        href: 'cashandbank',
-        enabled: true,
-        active: true,
-      },
-    ],
-  },
-  
+
   {
     label: 'Reports',
     items: [
@@ -156,6 +121,27 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         label: 'Financial Reports',
         icon: <FinancialReportsIcon />,
         href: 'financial-reports',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
+    label: 'Planning',
+    items: [
+      {
+        key: 'budget',
+        label: 'Budgets & Forecasts',
+        icon: <BudgetIcon />,
+        href: 'budget-forecast',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'fiscal-year',
+        label: 'Fiscal Year',
+        icon: <FiscalYearIcon />,
+        href: 'fiscal-year',
         enabled: true,
         active: true,
       },
@@ -174,4 +160,53 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
+  // {
+  //   label: 'Finance',
+  //   items: [
+  //     {
+  //       key: 'general-ledger',
+  //       label: 'General Ledger',
+  //       icon: <GeneralLedgerIcon />,
+  //       href: 'general-ledger',
+  //       enabled: true,
+  //       active: true,
+  //       exact: true,
+  //     },
+
+  //     {
+  //       key: 'source-events',
+  //       label: 'Posting Inbox',
+  //       icon: <JournalEntriesIcon />,
+  //       href: 'source-events',
+  //       enabled: true,
+  //       active: true,
+  //     },
+  //     {
+  //       key: 'accounts-payable',
+  //       label: 'Accounts Payable',
+  //       icon: <AccountsPayableIcon />,
+  //       href: 'accountspayable',
+  //       enabled: true,
+  //       active: true,
+  //       exact: true,
+  //     },
+  //     {
+  //       key: 'accounts-receivable',
+  //       label: 'Accounts Receivable',
+  //       icon: <AccountsReceivableIcon />,
+  //       href: 'accountsreceivable',
+  //       enabled: true,
+  //       active: true,
+  //       exact: true,
+  //     },
+  //     {
+  //       key: 'cash-and-bank',
+  //       label: 'Cash and Bank',
+  //       icon: <CashAndBankIcon />,
+  //       href: 'cashandbank',
+  //       enabled: true,
+  //       active: true,
+  //     },
+  //   ],
+  // },
 ];
