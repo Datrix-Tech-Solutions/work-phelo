@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -30,10 +33,12 @@ import {
   CreateAccountingCurrencyDto,
   CreateExchangeRateDto,
   CreateFiscalPeriodDto,
+  CreateTransactionTypeDto,
   QueryFiscalPeriodsDto,
   UpdateAccountingCurrencyDto,
   UpdateAccountingTenantConfigDto,
   UpdateExchangeRateDto,
+  UpdateTransactionTypeDto,
 } from './dto/accounting.dto';
 
 @Controller()
@@ -189,6 +194,56 @@ export class AccountingSettingsController {
       request.user,
       periodId,
       FiscalPeriodStatus.LOCKED,
+    );
+  }
+
+  @Get('transaction-types')
+  @ApiTags('Accounting - Transaction Types')
+  @ApiOperation({ summary: 'List tenant transaction types' })
+  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  listTransactionTypes(@Req() request: Request & { user: RequestUser }) {
+    return this.service.listTransactionTypes(request.user.tenantId);
+  }
+
+  @Post('transaction-types')
+  @ApiTags('Accounting - Transaction Types')
+  @ApiOperation({ summary: 'Create a transaction type' })
+  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  createTransactionType(
+    @Body() dto: CreateTransactionTypeDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.createTransactionType(request.user, dto);
+  }
+
+  @Patch('transaction-types/:transactionTypeId')
+  @ApiTags('Accounting - Transaction Types')
+  @ApiOperation({ summary: 'Update a transaction type' })
+  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  updateTransactionType(
+    @Param('transactionTypeId', ParseUUIDPipe) transactionTypeId: string,
+    @Body() dto: UpdateTransactionTypeDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.updateTransactionType(
+      request.user,
+      transactionTypeId,
+      dto,
+    );
+  }
+
+  @Delete('transaction-types/:transactionTypeId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiTags('Accounting - Transaction Types')
+  @ApiOperation({ summary: 'Delete a transaction type' })
+  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  deleteTransactionType(
+    @Param('transactionTypeId', ParseUUIDPipe) transactionTypeId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteTransactionType(
+      request.user,
+      transactionTypeId,
     );
   }
 

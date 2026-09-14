@@ -27,6 +27,7 @@ import {
   NormalBalance,
   RecordStatus,
   SubledgerType,
+  TransactionTypeCategory,
 } from '../../../prisma/generated/client';
 
 const uppercase = ({ value }: { value: unknown }) =>
@@ -187,6 +188,49 @@ export class QueryFiscalPeriodsDto {
   @IsEnum(FiscalPeriodStatus)
   status?: FiscalPeriodStatus;
 }
+
+export class CreateTransactionTypeDto {
+  @ApiProperty({ example: 'Customer Receipt' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ example: 'CUST-RCPT' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ enum: TransactionTypeCategory })
+  @IsEnum(TransactionTypeCategory)
+  category!: TransactionTypeCategory;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  allowedDocument?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  source?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+}
+
+export class UpdateTransactionTypeDto extends PartialType(
+  CreateTransactionTypeDto,
+) {}
 
 export class CreateGLAccountDto {
   @ApiProperty({ example: '1100' })
