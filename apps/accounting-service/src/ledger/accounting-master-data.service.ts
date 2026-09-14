@@ -1207,10 +1207,15 @@ export class AccountingMasterDataService {
       where: { tenantId },
       orderBy: { name: 'asc' },
     });
-    return transactionTypes.map((type) => this.toTransactionTypeDefinition(type));
+    return transactionTypes.map((type) =>
+      this.toTransactionTypeDefinition(type),
+    );
   }
 
-  async createTransactionType(user: RequestUser, dto: CreateTransactionTypeDto) {
+  async createTransactionType(
+    user: RequestUser,
+    dto: CreateTransactionTypeDto,
+  ) {
     try {
       const transactionType = await this.prisma.transactionType.create({
         data: {

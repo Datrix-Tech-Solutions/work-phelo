@@ -241,10 +241,7 @@ export class AccountingSettingsController {
     @Param('transactionTypeId', ParseUUIDPipe) transactionTypeId: string,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.deleteTransactionType(
-      request.user,
-      transactionTypeId,
-    );
+    return this.service.deleteTransactionType(request.user, transactionTypeId);
   }
 
   @Post('transaction-types/seed-standard')
