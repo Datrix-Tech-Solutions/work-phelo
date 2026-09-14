@@ -191,4 +191,16 @@ export class AccountingSettingsController {
       FiscalPeriodStatus.LOCKED,
     );
   }
+
+  @Post('transaction-types/seed-standard')
+  @ApiTags('Accounting - Transaction Types')
+  @ApiOperation({
+    summary: 'Seed the standard cashbook transaction types for the tenant',
+  })
+  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  seedStandardTransactionTypes(
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.seedStandardTransactionTypes(request.user);
+  }
 }

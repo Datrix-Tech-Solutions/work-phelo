@@ -150,9 +150,6 @@ export function ProjectsContent({ tenantSlug }: Props) {
 
   return (
     <>
-      {/* Header */}
-      <h1 className="text-xl font-bold text-gray-900 shrink-0">Projects & Tasks</h1>
-
       <ProjectStatsRow isLoading={isLoading} {...metrics} />
 
       <DataCardGrid

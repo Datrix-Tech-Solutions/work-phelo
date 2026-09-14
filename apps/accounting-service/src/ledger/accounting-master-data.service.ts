@@ -14,6 +14,7 @@ import {
   Prisma,
   RecordStatus,
   SubledgerType,
+  TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -241,6 +242,41 @@ const STANDARD_ACCOUNT_HIERARCHY = [
         displayOrder: 50,
       },
     ],
+  },
+] as const;
+
+/** The cashbook transaction types every tenant starts with — mirrors the codes still
+ *  hardcoded into CashbookService's dedicated posting paths, so `code` must not change. */
+const STANDARD_TRANSACTION_TYPES = [
+  {
+    code: 'RECEIPT',
+    name: 'Receipt',
+    category: TransactionTypeCategory.RECEIVABLE,
+    description: 'Money received into a cash/bank account.',
+  },
+  {
+    code: 'PAYMENT',
+    name: 'Payment',
+    category: TransactionTypeCategory.PAYABLE,
+    description: 'Money paid out of a cash/bank account.',
+  },
+  {
+    code: 'TRANSFER',
+    name: 'Transfer',
+    category: TransactionTypeCategory.NEUTRAL,
+    description: 'Move funds between two cash/bank accounts.',
+  },
+  {
+    code: 'CHARGE',
+    name: 'Bank Charge',
+    category: TransactionTypeCategory.NEUTRAL,
+    description: 'A bank fee against a cash/bank account.',
+  },
+  {
+    code: 'ADJUSTMENT',
+    name: 'Adjustment',
+    category: TransactionTypeCategory.NONE,
+    description: 'Manual correction to a cash/bank account.',
   },
 ] as const;
 
@@ -1162,6 +1198,74 @@ export class AccountingMasterDataService {
       groupsCreated,
       groupsSkipped,
     };
+  }
+
+  async seedStandardTransactionTypes(user: RequestUser) {
+    let created = 0;
+    let skipped = 0;
+
+    for (const template of STANDARD_TRANSACTION_TYPES) {
+      const result = await this.findOrCreateSeedTransactionType(user, template);
+      if (result.created) {
+        created += 1;
+        await this.recordAudit(
+          user,
+          'TRANSACTION_TYPE_SEED',
+          'TransactionType',
+          result.transactionType.id,
+          {
+            code: result.transactionType.code,
+            category: result.transactionType.category,
+          },
+        );
+      } else {
+        skipped += 1;
+      }
+    }
+
+    return { created, skipped };
+  }
+
+  private async findOrCreateSeedTransactionType(
+    user: RequestUser,
+    template: (typeof STANDARD_TRANSACTION_TYPES)[number],
+  ) {
+    const existing = await this.prisma.transactionType.findUnique({
+      where: {
+        tenantId_code: { tenantId: user.tenantId, code: template.code },
+      },
+    });
+    if (existing) return { transactionType: existing, created: false };
+
+    try {
+      const transactionType = await this.prisma.transactionType.create({
+        data: {
+          tenantId: user.tenantId,
+          code: template.code,
+          name: template.name,
+          category: template.category,
+          description: template.description,
+          isSystemDefault: true,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
+      return { transactionType, created: true };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const transactionType =
+          await this.prisma.transactionType.findUniqueOrThrow({
+            where: {
+              tenantId_code: { tenantId: user.tenantId, code: template.code },
+            },
+          });
+        return { transactionType, created: false };
+      }
+      throw error;
+    }
   }
 
   private async setAccountClassificationActive(
