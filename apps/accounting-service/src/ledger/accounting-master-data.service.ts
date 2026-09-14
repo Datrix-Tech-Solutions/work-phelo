@@ -28,6 +28,7 @@ import {
   CreateFiscalPeriodDto,
   CreateGLAccountDto,
   CreateSubledgerAccountDto,
+  CreateTransactionTypeDto,
   EnsureInternalSubledgerDto,
   QueryAccountingPartiesDto,
   QueryAccountGroupsDto,
@@ -45,6 +46,7 @@ import {
   UpdateExchangeRateDto,
   UpdateGLAccountDto,
   UpdateSubledgerAccountDto,
+  UpdateTransactionTypeDto,
 } from './dto/accounting.dto';
 
 export enum FinancialStatement {
@@ -1197,6 +1199,154 @@ export class AccountingMasterDataService {
       classificationsSkipped,
       groupsCreated,
       groupsSkipped,
+    };
+  }
+
+  async listTransactionTypes(tenantId: string) {
+    const transactionTypes = await this.prisma.transactionType.findMany({
+      where: { tenantId },
+      orderBy: { name: 'asc' },
+    });
+    return transactionTypes.map((type) =>
+      this.toTransactionTypeDefinition(type),
+    );
+  }
+
+  async createTransactionType(
+    user: RequestUser,
+    dto: CreateTransactionTypeDto,
+  ) {
+    try {
+      const transactionType = await this.prisma.transactionType.create({
+        data: {
+          tenantId: user.tenantId,
+          code: dto.code,
+          name: dto.name,
+          category: dto.category,
+          allowedDocument: this.optional(dto.allowedDocument),
+          source: this.optional(dto.source),
+          description: this.optional(dto.description),
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
+      await this.recordAudit(
+        user,
+        'TRANSACTION_TYPE_CREATE',
+        'TransactionType',
+        transactionType.id,
+        { code: transactionType.code, category: transactionType.category },
+      );
+      return this.toTransactionTypeDefinition(transactionType);
+    } catch (error) {
+      this.rethrowUnique(error, 'Transaction type code already exists');
+    }
+  }
+
+  async updateTransactionType(
+    user: RequestUser,
+    transactionTypeId: string,
+    dto: UpdateTransactionTypeDto,
+  ) {
+    const transactionType = await this.findTransactionType(
+      user.tenantId,
+      transactionTypeId,
+    );
+    // System-default codes still back CashbookService's dedicated posting paths
+    // (see the TransactionType schema comment), so they must stay immutable.
+    if (transactionType.isSystemDefault && dto.code !== undefined) {
+      throw new BadRequestException(
+        'Cannot change the code of a system default transaction type',
+      );
+    }
+    try {
+      const updated = await this.prisma.transactionType.update({
+        where: {
+          id_tenantId: { id: transactionType.id, tenantId: user.tenantId },
+        },
+        data: {
+          ...(dto.code ? { code: dto.code } : {}),
+          ...(dto.name ? { name: dto.name } : {}),
+          ...(dto.category ? { category: dto.category } : {}),
+          ...(dto.allowedDocument !== undefined
+            ? { allowedDocument: this.optional(dto.allowedDocument) }
+            : {}),
+          ...(dto.source !== undefined
+            ? { source: this.optional(dto.source) }
+            : {}),
+          ...(dto.description !== undefined
+            ? { description: this.optional(dto.description) }
+            : {}),
+          updatedByUserId: user.id,
+        },
+      });
+      await this.recordAudit(
+        user,
+        'TRANSACTION_TYPE_UPDATE',
+        'TransactionType',
+        updated.id,
+        { code: updated.code, category: updated.category },
+      );
+      return this.toTransactionTypeDefinition(updated);
+    } catch (error) {
+      this.rethrowUnique(error, 'Transaction type code already exists');
+    }
+  }
+
+  async deleteTransactionType(user: RequestUser, transactionTypeId: string) {
+    const transactionType = await this.findTransactionType(
+      user.tenantId,
+      transactionTypeId,
+    );
+    if (transactionType.isSystemDefault) {
+      throw new BadRequestException(
+        'System default transaction types cannot be deleted',
+      );
+    }
+    await this.prisma.transactionType.delete({
+      where: {
+        id_tenantId: { id: transactionType.id, tenantId: user.tenantId },
+      },
+    });
+    await this.recordAudit(
+      user,
+      'TRANSACTION_TYPE_DELETE',
+      'TransactionType',
+      transactionType.id,
+      { code: transactionType.code },
+    );
+  }
+
+  private async findTransactionType(tenantId: string, id: string) {
+    const transactionType = await this.prisma.transactionType.findFirst({
+      where: { id, tenantId },
+    });
+    if (!transactionType)
+      throw new NotFoundException('Transaction type not found');
+    return transactionType;
+  }
+
+  private toTransactionTypeDefinition(transactionType: {
+    id: string;
+    name: string;
+    code: string;
+    category: TransactionTypeCategory;
+    businessRoles: string[];
+    allowedDocument: string | null;
+    source: string | null;
+    description: string | null;
+  }) {
+    return {
+      id: transactionType.id,
+      name: transactionType.name,
+      code: transactionType.code,
+      category: transactionType.category,
+      businessRoles: transactionType.businessRoles,
+      allowedDocument: transactionType.allowedDocument,
+      source: transactionType.source,
+      description: transactionType.description,
+      // TransactionTypeRule doesn't exist yet — wired up once posting rules land.
+      rulesCount: 0,
     };
   }
 
