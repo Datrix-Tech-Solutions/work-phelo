@@ -15,23 +15,7 @@ import { formatDate } from '@/lib/formatters';
 const PAGE_SIZE = 10;
 
 // TODO: replace with useBudgets() hook once the budgets API is ready.
-const MOCK_DATA: Budget[] = [
-  {
-    id: 'demo-budget-1',
-    name: 'Q1 2026 Operating Budget',
-    period: 'QUARTERLY',
-    scope: 'BOTH',
-    startDate: '2026-01-01',
-    endDate: '2026-03-31',
-    currency: 'GHS',
-    incomeBudgeted: 580000,
-    expenseBudgeted: 340000,
-    netAmount: 240000,
-    status: 'ACTIVE',
-    createdAt: '2025-12-18T09:12:00.000Z',
-    updatedAt: '2026-01-04T14:30:00.000Z',
-  },
-];
+const MOCK_DATA: Budget[] = [];
 
 const STATUS_VARIANT: Record<BudgetStatus, 'neutral' | 'success' | 'info'> = {
   DRAFT: 'neutral',
