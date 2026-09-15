@@ -197,16 +197,20 @@ export type UpdateSourceTypePayload = Partial<CreateSourceTypePayload>;
 
 export interface TaxType {
   id: string;
+  code: string;
   name: string;
   rate: number;
-  description: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
   isActive: boolean;
 }
 
 export interface CreateTaxTypePayload {
+  code: string;
   name: string;
   rate: number;
-  description?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
 }
 
 export type UpdateTaxTypePayload = Partial<CreateTaxTypePayload> & { isActive?: boolean };

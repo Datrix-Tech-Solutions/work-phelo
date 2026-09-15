@@ -56,20 +56,22 @@ export class TransactionTypeRulesService {
       const taxType = await this.prisma.taxType.create({
         data: {
           tenantId: user.tenantId,
+          code: dto.code,
           name: dto.name,
           rate: dto.rate,
-          description: this.optional(dto.description),
+          effectiveFrom: new Date(dto.effectiveFrom),
+          effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
       });
       await this.recordAudit(user, 'TAX_TYPE_CREATE', 'TaxType', taxType.id, {
-        name: taxType.name,
+        code: taxType.code,
         rate: dto.rate,
       });
       return this.toTaxTypeDto(taxType);
     } catch (error) {
-      this.rethrowUnique(error, 'Tax type name already exists');
+      this.rethrowUnique(error, 'Tax type code already exists');
     }
   }
 
@@ -83,21 +85,27 @@ export class TransactionTypeRulesService {
       const updated = await this.prisma.taxType.update({
         where: { id_tenantId: { id: taxType.id, tenantId: user.tenantId } },
         data: {
+          ...(dto.code ? { code: dto.code } : {}),
           ...(dto.name ? { name: dto.name } : {}),
           ...(dto.rate !== undefined ? { rate: dto.rate } : {}),
-          ...(dto.description !== undefined
-            ? { description: this.optional(dto.description) }
+          ...(dto.effectiveFrom !== undefined
+            ? { effectiveFrom: new Date(dto.effectiveFrom) }
+            : {}),
+          ...(dto.effectiveTo !== undefined
+            ? {
+                effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+              }
             : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
           updatedByUserId: user.id,
         },
       });
       await this.recordAudit(user, 'TAX_TYPE_UPDATE', 'TaxType', updated.id, {
-        name: updated.name,
+        code: updated.code,
       });
       return this.toTaxTypeDto(updated);
     } catch (error) {
-      this.rethrowUnique(error, 'Tax type name already exists');
+      this.rethrowUnique(error, 'Tax type code already exists');
     }
   }
 
@@ -119,7 +127,7 @@ export class TransactionTypeRulesService {
       throw error;
     }
     await this.recordAudit(user, 'TAX_TYPE_DELETE', 'TaxType', taxType.id, {
-      name: taxType.name,
+      code: taxType.code,
     });
   }
 
@@ -133,16 +141,22 @@ export class TransactionTypeRulesService {
 
   private toTaxTypeDto(taxType: {
     id: string;
+    code: string;
     name: string;
     rate: Prisma.Decimal;
-    description: string | null;
+    effectiveFrom: Date;
+    effectiveTo: Date | null;
     isActive: boolean;
   }) {
     return {
       id: taxType.id,
+      code: taxType.code,
       name: taxType.name,
       rate: Number(taxType.rate.toString()),
-      description: taxType.description,
+      effectiveFrom: taxType.effectiveFrom.toISOString(),
+      effectiveTo: taxType.effectiveTo
+        ? taxType.effectiveTo.toISOString()
+        : null,
       isActive: taxType.isActive,
     };
   }
@@ -178,7 +192,7 @@ export class TransactionTypeRulesService {
           description: this.optional(dto.description),
           createdByUserId: user.id,
           updatedByUserId: user.id,
-          lines: { create: this.lineWrites(user.tenantId, dto.lines) },
+          lines: { create: this.lineWrites(dto.lines) },
         },
         include: ruleInclude,
       });
@@ -233,7 +247,7 @@ export class TransactionTypeRulesService {
             : {}),
           updatedByUserId: user.id,
           ...(dto.lines
-            ? { lines: { create: this.lineWrites(user.tenantId, dto.lines) } }
+            ? { lines: { create: this.lineWrites(dto.lines) } }
             : {}),
         },
         include: ruleInclude,
@@ -263,9 +277,11 @@ export class TransactionTypeRulesService {
     );
   }
 
-  private lineWrites(tenantId: string, lines: TransactionTypeRuleLineDto[]) {
+  // Nested under `rule: { lines: { create: [...] } }` — tenantId is part of the
+  // composite FK back to the parent rule ([ruleId, tenantId]), so Prisma derives it
+  // from the parent automatically and rejects it if passed explicitly here.
+  private lineWrites(lines: TransactionTypeRuleLineDto[]) {
     return lines.map((line, index) => ({
-      tenantId,
       sequence: index + 1,
       direction: line.direction,
       accountId: line.accountId,
