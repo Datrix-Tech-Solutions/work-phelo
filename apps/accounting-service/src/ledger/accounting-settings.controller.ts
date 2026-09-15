@@ -202,7 +202,7 @@ export class AccountingSettingsController {
   @ApiOperation({ summary: 'List tenant transaction types' })
   @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
   listTransactionTypes(@Req() request: Request & { user: RequestUser }) {
-    return this.service.listTransactionTypes(request.user.tenantId);
+    return this.service.listTransactionTypes(request.user);
   }
 
   @Post('transaction-types')

@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { DEFAULT_TRANSACTION_TYPES } from '@/lib/accounting/defaultTransactionTypes';
 import {
   TransactionTypeDefinition,
   CreateTransactionTypePayload,
@@ -13,10 +12,10 @@ export const TRANSACTION_TYPES_KEY = ['accounting', 'transaction-types'] as cons
 export function useTransactionTypes() {
   return useQuery({
     queryKey: TRANSACTION_TYPES_KEY,
+    // The backend auto-seeds the standard set (Receipt/Payment/Transfer/Charge/
+    // Adjustment) for a tenant on first read, so this never comes back empty for
+    // long — no need for a hardcoded client-side placeholder.
     queryFn: async () => (await api.get<TransactionTypeDefinition[]>(BASE)).data,
-    // Seeds the table with the system defaults (the types that used to be hardcoded
-    // in the cashbook chooser) — replaced automatically once a real fetch succeeds.
-    initialData: DEFAULT_TRANSACTION_TYPES,
   });
 }
 

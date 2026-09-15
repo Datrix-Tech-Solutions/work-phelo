@@ -1202,11 +1202,21 @@ export class AccountingMasterDataService {
     };
   }
 
-  async listTransactionTypes(tenantId: string) {
-    const transactionTypes = await this.prisma.transactionType.findMany({
-      where: { tenantId },
+  async listTransactionTypes(user: RequestUser) {
+    let transactionTypes = await this.prisma.transactionType.findMany({
+      where: { tenantId: user.tenantId },
       orderBy: { name: 'asc' },
     });
+    // A brand-new tenant has no rows yet — seed the standard set once so the
+    // Transaction Types page is never blank on first visit. Fully editable/
+    // deletable afterwards, same as any user-created type.
+    if (transactionTypes.length === 0) {
+      await this.seedStandardTransactionTypes(user);
+      transactionTypes = await this.prisma.transactionType.findMany({
+        where: { tenantId: user.tenantId },
+        orderBy: { name: 'asc' },
+      });
+    }
     return transactionTypes.map((type) =>
       this.toTransactionTypeDefinition(type),
     );
@@ -1252,13 +1262,6 @@ export class AccountingMasterDataService {
       user.tenantId,
       transactionTypeId,
     );
-    // System-default codes still back CashbookService's dedicated posting paths
-    // (see the TransactionType schema comment), so they must stay immutable.
-    if (transactionType.isSystemDefault && dto.code !== undefined) {
-      throw new BadRequestException(
-        'Cannot change the code of a system default transaction type',
-      );
-    }
     try {
       const updated = await this.prisma.transactionType.update({
         where: {
@@ -1298,11 +1301,6 @@ export class AccountingMasterDataService {
       user.tenantId,
       transactionTypeId,
     );
-    if (transactionType.isSystemDefault) {
-      throw new BadRequestException(
-        'System default transaction types cannot be deleted',
-      );
-    }
     await this.prisma.transactionType.delete({
       where: {
         id_tenantId: { id: transactionType.id, tenantId: user.tenantId },
