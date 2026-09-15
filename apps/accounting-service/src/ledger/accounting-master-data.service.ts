@@ -1702,7 +1702,11 @@ export class AccountingMasterDataService {
     user: RequestUser,
     dto: CreateSubledgerAccountDto,
   ) {
-    await this.assertControlAccount(user.tenantId, dto.controlAccountId);
+    const controlAccountId = await this.resolveSubledgerControlAccount(
+      user.tenantId,
+      dto.type,
+      dto.controlAccountId,
+    );
     if (dto.currency) {
       await this.assertActiveCurrency(user.tenantId, dto.currency);
     }
@@ -1714,7 +1718,7 @@ export class AccountingMasterDataService {
           name: dto.name,
           type: dto.type,
           externalRef: this.optional(dto.externalRef),
-          controlAccountId: dto.controlAccountId,
+          controlAccountId,
           currency: dto.currency,
           createdByUserId: user.id,
           updatedByUserId: user.id,
@@ -1723,6 +1727,41 @@ export class AccountingMasterDataService {
     } catch (error) {
       this.rethrowUnique(error, 'Subledger account already exists');
     }
+  }
+
+  /** Customer/Vendor/Cedant/Reinsurer always roll up into the tenant's one shared AR or AP
+   *  control account — never a per-entity choice (see AddEntityPanel's dropped Control
+   *  Account picker for those types). Types with no defined AR/AP relation (Employee,
+   *  Statutory, Other) have no default, so they still require an explicit account. */
+  private async resolveSubledgerControlAccount(
+    tenantId: string,
+    type: SubledgerType,
+    explicitControlAccountId?: string,
+  ): Promise<string> {
+    if (explicitControlAccountId) {
+      await this.assertControlAccount(tenantId, explicitControlAccountId);
+      return explicitControlAccountId;
+    }
+
+    const isReceivableRole =
+      type === SubledgerType.CUSTOMER || type === SubledgerType.CEDANT;
+    const isPayableRole =
+      type === SubledgerType.VENDOR || type === SubledgerType.REINSURER;
+    if (isReceivableRole || isPayableRole) {
+      const config = await this.getConfiguredControlAccounts(tenantId);
+      const controlAccountId = isReceivableRole
+        ? config.accountsReceivableControlAccountId
+        : config.accountsPayableControlAccountId;
+      if (controlAccountId) return controlAccountId;
+      throw new BadRequestException(
+        `Configure an accounts ${isReceivableRole ? 'receivable' : 'payable'} ` +
+          `control account before creating ${type.toLowerCase()} entities`,
+      );
+    }
+
+    throw new BadRequestException(
+      'A control account is required for this entity type',
+    );
   }
 
   async updateSubledgerAccount(

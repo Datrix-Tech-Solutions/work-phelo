@@ -506,9 +506,14 @@ export class CreateSubledgerAccountDto {
   @MaxLength(100)
   externalRef?: string;
 
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only meaningful for types with no default control account (Employee, Statutory, Other) — Customer/Vendor/Cedant/Reinsurer always resolve to the tenant’s configured AR/AP account automatically.',
+  })
+  @IsOptional()
   @IsUUID()
-  controlAccountId!: string;
+  controlAccountId?: string;
 
   @ApiPropertyOptional({ example: 'GHS' })
   @IsOptional()

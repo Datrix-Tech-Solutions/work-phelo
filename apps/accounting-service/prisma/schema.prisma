@@ -1155,3 +1155,34 @@ model SourceEventInbox {
   @@index([tenantId, postingRuleId])
   @@schema("accounting")
 }
+
+enum EntityAccountingRelation {
+  RECEIVABLE
+  PAYABLE
+  BOTH
+  NONE
+
+  @@schema("accounting")
+}
+
+/// The tenant-facing "Type" list on the Entities page (Customer, Vendor, and anything a
+/// tenant adds). Customer/Vendor come pre-seeded as system defaults (isSystem: true,
+/// non-deletable). accountingRelation is stored as-is but not read by any posting logic —
+/// it's descriptive only for now. Deliberately separate from the SubledgerType enum
+/// (SubledgerAccount.type) — a custom type added here doesn't yet back a real, postable
+/// subledger; only names matching a SubledgerType member (Customer, Vendor, ...) do.
+model EntityType {
+  id                String                   @id @default(uuid())
+  tenantId          String
+  name              String
+  accountingRelation EntityAccountingRelation @default(NONE)
+  isSystem          Boolean                  @default(false)
+  createdByUserId   String
+  updatedByUserId   String
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, name])
+  @@schema("accounting")
+}

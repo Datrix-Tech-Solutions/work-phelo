@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
@@ -60,6 +60,16 @@ const DEFAULTS: FormValues = {
   currency: '',
 };
 
+// These always roll up into the tenant's one shared AR or AP control account
+// automatically — no per-entity choice. Only types with no defined AR/AP relation
+// (Employee, Statutory, Other) still need one picked manually.
+const AUTO_RESOLVED_CONTROL_ACCOUNT_TYPES: SubledgerType[] = [
+  'CUSTOMER',
+  'VENDOR',
+  'CEDANT',
+  'REINSURER',
+];
+
 export function AddEntityPanel({
   isOpen,
   onClose,
@@ -87,6 +97,10 @@ export function AddEntityPanel({
     setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
+  const selectedType = useWatch({ control, name: 'type' });
+  const needsControlAccountPicker =
+    !initialControlAccountId &&
+    !AUTO_RESOLVED_CONTROL_ACCOUNT_TYPES.includes(selectedType as SubledgerType);
 
   // Seed the name and (when the caller already knows it) the control account each time the
   // panel opens.
@@ -133,7 +147,7 @@ export function AddEntityPanel({
         code: data.code.trim(),
         name: data.name.trim(),
         type: data.type as SubledgerType,
-        controlAccountId: data.controlAccountId,
+        controlAccountId: data.controlAccountId || undefined,
         currency: data.currency || undefined,
       });
       toast.success('Entity created successfully');
@@ -194,7 +208,7 @@ export function AddEntityPanel({
 
         {initialControlAccountId ? (
           <Input label="Control Account" value={initialControlAccountLabel ?? ''} readOnly />
-        ) : (
+        ) : needsControlAccountPicker ? (
           <Controller
             name="controlAccountId"
             control={control}
@@ -210,7 +224,7 @@ export function AddEntityPanel({
               />
             )}
           />
-        )}
+        ) : null}
 
         <Controller
           name="currency"

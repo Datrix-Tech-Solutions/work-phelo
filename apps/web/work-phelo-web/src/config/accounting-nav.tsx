@@ -90,7 +90,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         key: 'ap-entities',
         label: 'Entities',
         icon: <EntitiesIcon />,
-        href: 'accountspayable/entities',
+        href: 'entities',
         enabled: true,
         active: true,
       },
