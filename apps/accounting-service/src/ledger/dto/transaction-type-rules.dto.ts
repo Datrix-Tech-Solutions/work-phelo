@@ -85,7 +85,7 @@ export class TransactionTypeRuleLineDto {
   @ApiPropertyOptional({
     example: 'CUSTOMER',
     description:
-      'Set only when this line also posts to a party subledger (one of the tenant\'s Entity Types) under this account, rather than the account alone.',
+      "Set only when this line also posts to a party subledger (one of the tenant's Entity Types) under this account, rather than the account alone.",
   })
   @IsOptional()
   @IsString()

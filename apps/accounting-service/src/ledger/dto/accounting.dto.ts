@@ -209,7 +209,7 @@ export class CreateTransactionTypeDto {
   @ApiPropertyOptional({
     type: [String],
     description:
-      'Party types (from the tenant\'s Entity Types list) this transaction type can post against.',
+      "Party types (from the tenant's Entity Types list) this transaction type can post against.",
   })
   @IsOptional()
   @IsArray()
@@ -497,7 +497,7 @@ export class CreateSubledgerAccountDto {
   @ApiProperty({
     example: 'CUSTOMER',
     description:
-      'One of the tenant\'s own Entity Types (Settings > Entities > Types) — validated against that list, not a fixed enum.',
+      "One of the tenant's own Entity Types (Settings > Entities > Types) — validated against that list, not a fixed enum.",
   })
   @Transform(uppercase)
   @IsString()
