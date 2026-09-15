@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { CreateEntityTypePayload, EntityType } from '@/types/accounting';
+import { CreateEntityTypePayload, EntityType, UpdateEntityTypePayload } from '@/types/accounting';
 
 const BASE = '/accounting/entity-types';
 const ENTITY_TYPES_KEY = ['accounting', 'entity-types'] as const;
@@ -20,6 +20,19 @@ export function useCreateEntityType() {
   return useMutation({
     mutationFn: async (payload: CreateEntityTypePayload) => {
       const res = await api.post<EntityType>(BASE, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ENTITY_TYPES_KEY });
+    },
+  });
+}
+
+export function useUpdateEntityType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: UpdateEntityTypePayload & { id: string }) => {
+      const res = await api.patch<EntityType>(`${BASE}/${id}`, payload);
       return res.data;
     },
     onSuccess: () => {

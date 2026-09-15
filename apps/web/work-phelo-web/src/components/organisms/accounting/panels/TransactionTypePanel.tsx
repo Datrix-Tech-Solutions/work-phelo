@@ -7,7 +7,12 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { useCreateTransactionType, useSourceTypes, useUpdateTransactionType } from '@/hooks';
+import {
+  useCreateTransactionType,
+  useEntityTypes,
+  useSourceTypes,
+  useUpdateTransactionType,
+} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import {
@@ -22,13 +27,6 @@ const CATEGORY_OPTIONS: SearchSelectOption[] = [
   { value: 'PAYABLE', label: 'Payable' },
   { value: 'NONE', label: 'None' },
 ];
-
-// Which party types (Customer, Vendor, Cedant…) can be posted against this transaction
-// type — not to be confused with the GL posting roles used in TransactionTypeRulePanel.
-const BUSINESS_ROLE_OPTIONS = Object.entries(SUBLEDGER_TYPE_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}));
 
 const ALLOWED_DOCUMENT_OPTIONS: SearchSelectOption[] = [];
 
@@ -68,6 +66,16 @@ export function TransactionTypePanel({
     () => sourceTypes.map((s) => ({ value: s.name, label: s.name })),
     [sourceTypes],
   );
+  const { data: entityTypesData = [] } = useEntityTypes();
+  // Sourced from the tenant's own Entity Types list (Settings > Entities > Types) — not a
+  // hardcoded set, same as AddEntityPanel. Only names that map to a real SubledgerType (the
+  // enum businessRoles actually validates against) are offered.
+  const businessRoleOptions = useMemo<SearchSelectOption[]>(() => {
+    const validValues = new Set(Object.keys(SUBLEDGER_TYPE_LABELS));
+    return entityTypesData
+      .map((t) => ({ label: t.name, value: t.name.trim().toUpperCase() }))
+      .filter((t) => validValues.has(t.value));
+  }, [entityTypesData]);
   const {
     register,
     control,
@@ -184,7 +192,7 @@ export function TransactionTypePanel({
             <MultiSelect
               label="Business Roles"
               placeholder="Select applicable party types…"
-              options={BUSINESS_ROLE_OPTIONS}
+              options={businessRoleOptions}
               value={field.value}
               onChange={field.onChange}
             />

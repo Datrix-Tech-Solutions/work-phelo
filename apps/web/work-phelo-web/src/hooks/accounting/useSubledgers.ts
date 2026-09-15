@@ -46,13 +46,24 @@ export function useUpdateSubledger() {
   });
 }
 
-/** Backend has no activate route for subledger accounts (unlike vendors/customers) —
- *  deactivating a subledger here is currently one-way. */
 export function useDeactivateSubledger() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
       const res = await api.post<SubledgerAccount>(`${BASE}/${id}/deactivate`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SUBLEDGERS_KEY });
+    },
+  });
+}
+
+export function useActivateSubledger() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<SubledgerAccount>(`${BASE}/${id}/activate`);
       return res.data;
     },
     onSuccess: () => {

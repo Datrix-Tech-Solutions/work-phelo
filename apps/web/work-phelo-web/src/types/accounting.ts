@@ -963,6 +963,8 @@ export interface CreateEntityTypePayload {
   accountingRelation: EntityAccountingRelation;
 }
 
+export type UpdateEntityTypePayload = Partial<CreateEntityTypePayload>;
+
 export interface SubledgerAccount {
   id: string;
   code: string;
@@ -978,6 +980,8 @@ export interface SubledgerAccount {
     normalBalance: NormalBalance;
   };
   currency: string | null;
+  contactName: string | null;
+  address: string | null;
   status: GLAccountStatus;
   balance: AccountingSubledgerBalance;
   createdAt: string;
@@ -994,6 +998,8 @@ export interface CreateSubledgerAccountPayload {
    *  account automatically. */
   controlAccountId?: string;
   currency?: string;
+  contactName?: string;
+  address?: string;
 }
 
 export type UpdateSubledgerAccountPayload = Partial<CreateSubledgerAccountPayload>;

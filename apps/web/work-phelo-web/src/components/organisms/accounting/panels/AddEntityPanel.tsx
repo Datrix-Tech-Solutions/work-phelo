@@ -1,24 +1,14 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { useForm, Controller, useWatch } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import {
-  MANUAL_SUBLEDGER_TYPES,
-  SUBLEDGER_TYPE_LABELS,
-  SubledgerAccount,
-  SubledgerType,
-} from '@/types/accounting';
-import {
-  useAccountingConfig,
-  useAccountingCurrencies,
-  useCreateSubledger,
-  useGLAccounts,
-} from '@/hooks';
+import { SUBLEDGER_TYPE_LABELS, SubledgerAccount, SubledgerType } from '@/types/accounting';
+import { useCreateSubledger, useEntityTypes, useUpdateSubledger } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -42,6 +32,8 @@ interface AddEntityPanelProps {
    *  closes — lets a caller (e.g. a journal line picker) select it immediately instead of
    *  making the user reopen the dropdown and search again. */
   onCreated?: (subledger: SubledgerAccount) => void;
+  /** Editing an existing entity instead of creating one. */
+  entity?: SubledgerAccount | null;
 }
 
 type FormValues = {
@@ -49,7 +41,8 @@ type FormValues = {
   name: string;
   type: SubledgerType | '';
   controlAccountId: string;
-  currency: string;
+  contactName: string;
+  address: string;
 };
 
 const DEFAULTS: FormValues = {
@@ -57,18 +50,9 @@ const DEFAULTS: FormValues = {
   name: '',
   type: '',
   controlAccountId: '',
-  currency: '',
+  contactName: '',
+  address: '',
 };
-
-// These always roll up into the tenant's one shared AR or AP control account
-// automatically — no per-entity choice. Only types with no defined AR/AP relation
-// (Employee, Statutory, Other) still need one picked manually.
-const AUTO_RESOLVED_CONTROL_ACCOUNT_TYPES: SubledgerType[] = [
-  'CUSTOMER',
-  'VENDOR',
-  'CEDANT',
-  'REINSURER',
-];
 
 export function AddEntityPanel({
   isOpen,
@@ -78,63 +62,59 @@ export function AddEntityPanel({
   initialControlAccountLabel,
   allowedTypes,
   onCreated,
+  entity,
 }: AddEntityPanelProps) {
+  const isEditing = !!entity;
   const toast = useToast();
-  const { mutateAsync: createSubledger, isPending } = useCreateSubledger();
-  const { data: glAccounts, isLoading: isLoadingAccounts } = useGLAccounts({ status: 'ACTIVE' });
-  const { data: currencies, isLoading: isLoadingCurrencies } = useAccountingCurrencies();
-  const { data: config } = useAccountingConfig();
+  const { mutateAsync: createSubledger, isPending: isCreating } = useCreateSubledger();
+  const { mutateAsync: updateSubledger, isPending: isUpdating } = useUpdateSubledger();
+  const isPending = isCreating || isUpdating;
+  const { data: entityTypesData = [] } = useEntityTypes();
 
-  const typeOptions: SearchSelectOption[] = (allowedTypes ?? MANUAL_SUBLEDGER_TYPES).map(
-    (type) => ({ value: type, label: SUBLEDGER_TYPE_LABELS[type] }),
-  );
+  // Sourced from the tenant's own Entity Types list (Settings > Entities > Types), not a
+  // hardcoded set — Customer/Vendor come pre-seeded there; anything else must be created
+  // there first. Only names that map to a real SubledgerType (the enum this ultimately
+  // posts against) are offered — a custom type not yet backed by one can't be submitted.
+  const typeOptions: SearchSelectOption[] = useMemo(() => {
+    const validValues = new Set(Object.keys(SUBLEDGER_TYPE_LABELS));
+    return entityTypesData
+      .map((t) => ({ label: t.name, value: t.name.trim().toUpperCase() }))
+      .filter(
+        (t) =>
+          validValues.has(t.value) &&
+          (!allowedTypes || allowedTypes.includes(t.value as SubledgerType)),
+      );
+  }, [entityTypesData, allowedTypes]);
 
   const {
     register,
     handleSubmit,
     control,
     reset,
-    setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
-  const selectedType = useWatch({ control, name: 'type' });
-  const needsControlAccountPicker =
-    !initialControlAccountId &&
-    !AUTO_RESOLVED_CONTROL_ACCOUNT_TYPES.includes(selectedType as SubledgerType);
 
   // Seed the name and (when the caller already knows it) the control account each time the
-  // panel opens.
+  // panel opens — or, when editing, the existing entity's own values.
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    if (entity) {
+      reset({
+        code: entity.code,
+        name: entity.name,
+        type: entity.type,
+        controlAccountId: entity.controlAccountId,
+        contactName: entity.contactName ?? '',
+        address: entity.address ?? '',
+      });
+    } else {
       reset({
         ...DEFAULTS,
         name: initialName ?? '',
         controlAccountId: initialControlAccountId ?? '',
       });
     }
-  }, [isOpen, initialName, initialControlAccountId, reset]);
-
-  // Control account picker mirrors the backend's own validation: active, posting-enabled,
-  // and a leaf account (no children) — anything else gets rejected on submit anyway.
-  const controlAccountOptions = useMemo<SearchSelectOption[]>(() => {
-    const accounts = glAccounts ?? [];
-    const parentIds = new Set(accounts.map((a) => a.parentAccountId).filter(Boolean));
-    return accounts
-      .filter((a) => a.allowPosting && !parentIds.has(a.id))
-      .map((a) => ({ value: a.id, label: `${a.code} — ${a.name}`, sublabel: a.category }));
-  }, [glAccounts]);
-
-  const currencyOptions: SearchSelectOption[] = useMemo(
-    () =>
-      (currencies ?? [])
-        .filter((c) => c.isActive)
-        .map((c) => ({ value: c.code, label: `${c.code} — ${c.name}` })),
-    [currencies],
-  );
-
-  useEffect(() => {
-    if (config?.baseCurrency) setValue('currency', config.baseCurrency);
-  }, [config?.baseCurrency, setValue]);
+  }, [isOpen, entity, initialName, initialControlAccountId, reset]);
 
   const handleClose = () => {
     reset(DEFAULTS);
@@ -143,18 +123,22 @@ export function AddEntityPanel({
 
   const onSubmit = async (data: FormValues) => {
     try {
-      const subledger = await createSubledger({
+      const payload = {
         code: data.code.trim(),
         name: data.name.trim(),
         type: data.type as SubledgerType,
         controlAccountId: data.controlAccountId || undefined,
-        currency: data.currency || undefined,
-      });
-      toast.success('Entity created successfully');
+        contactName: data.contactName.trim() || undefined,
+        address: data.address.trim() || undefined,
+      };
+      const subledger = entity
+        ? await updateSubledger({ id: entity.id, ...payload })
+        : await createSubledger(payload);
+      toast.success(isEditing ? 'Entity updated successfully' : 'Entity created successfully');
       onCreated?.(subledger);
       handleClose();
     } catch (err) {
-      toast.error(extractError(err, 'Failed to create entity'));
+      toast.error(extractError(err, `Failed to ${isEditing ? 'update' : 'create'} entity`));
     }
   };
 
@@ -162,7 +146,7 @@ export function AddEntityPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Add Entity"
+      title={isEditing ? 'Update Entity' : 'Add Entity'}
       description="Register a new subledger entity in your accounting records."
       footer={
         <div className="flex justify-end gap-3">
@@ -170,7 +154,7 @@ export function AddEntityPanel({
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
-            Add Entity
+            {isEditing ? 'Save Changes' : 'Add Entity'}
           </Button>
         </div>
       }
@@ -206,39 +190,24 @@ export function AddEntityPanel({
           )}
         />
 
-        {initialControlAccountId ? (
+        {initialControlAccountId && (
           <Input label="Control Account" value={initialControlAccountLabel ?? ''} readOnly />
-        ) : needsControlAccountPicker ? (
-          <Controller
-            name="controlAccountId"
-            control={control}
-            rules={{ required: 'Control account is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Control Account"
-                placeholder={isLoadingAccounts ? 'Loading…' : 'Select control account…'}
-                options={controlAccountOptions}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.controlAccountId?.message}
-              />
-            )}
-          />
-        ) : null}
+        )}
 
-        <Controller
-          name="currency"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Currency"
-              placeholder={isLoadingCurrencies ? 'Loading…' : 'Select currency…'}
-              options={currencyOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.currency?.message}
-            />
-          )}
+        <FormField
+          label="Contact"
+          registration={register('contactName')}
+          error={errors.contactName}
+          placeholder="e.g. Jane Doe"
+        />
+
+        <FormField
+          label="Address"
+          type="textarea"
+          rows={3}
+          registration={register('address')}
+          error={errors.address}
+          placeholder="Optional address"
         />
       </div>
     </SidePanel>

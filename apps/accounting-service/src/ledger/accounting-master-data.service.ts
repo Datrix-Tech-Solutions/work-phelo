@@ -1720,6 +1720,8 @@ export class AccountingMasterDataService {
           externalRef: this.optional(dto.externalRef),
           controlAccountId,
           currency: dto.currency,
+          contactName: this.optional(dto.contactName),
+          address: this.optional(dto.address),
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -1794,6 +1796,12 @@ export class AccountingMasterDataService {
           ...(dto.currency !== undefined
             ? { currency: dto.currency || null }
             : {}),
+          ...(dto.contactName !== undefined
+            ? { contactName: this.optional(dto.contactName) }
+            : {}),
+          ...(dto.address !== undefined
+            ? { address: this.optional(dto.address) }
+            : {}),
           updatedByUserId: user.id,
         },
       });
@@ -1809,6 +1817,16 @@ export class AccountingMasterDataService {
         id_tenantId: { id: subledger.id, tenantId: user.tenantId },
       },
       data: { status: RecordStatus.INACTIVE, updatedByUserId: user.id },
+    });
+  }
+
+  async activateSubledgerAccount(user: RequestUser, subledgerId: string) {
+    const subledger = await this.findSubledger(user.tenantId, subledgerId);
+    return this.prisma.subledgerAccount.update({
+      where: {
+        id_tenantId: { id: subledger.id, tenantId: user.tenantId },
+      },
+      data: { status: RecordStatus.ACTIVE, updatedByUserId: user.id },
     });
   }
 

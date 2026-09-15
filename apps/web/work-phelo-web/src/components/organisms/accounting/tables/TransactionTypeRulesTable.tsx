@@ -7,7 +7,7 @@ import { Icons } from '@/components/atoms/icons';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { TransactionTypeRulePanel } from '@/components/organisms/accounting/panels/TransactionTypeRulePanel';
 import { TypeChip } from '@/components/atoms/TypeChip';
-import { cardClass, cn, inputClass } from '@/lib/utils';
+import { cardClass, inputClass } from '@/lib/utils';
 import {
   TRANSACTION_TYPE_CATEGORY_CHIP_COLOR,
   TRANSACTION_TYPE_CATEGORY_LABEL,

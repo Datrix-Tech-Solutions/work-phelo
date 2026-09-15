@@ -19,7 +19,7 @@ const PAGE_SIZE = 10;
 export function EntityTypesTable() {
   const toast = useToast();
   const [page, setPage] = useState(1);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTarget, setPanelTarget] = useState<EntityType | null | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<EntityType | null>(null);
 
   const { data, isLoading } = useEntityTypes();
@@ -73,9 +73,10 @@ export function EntityTypesTable() {
     {
       key: 'actions',
       label: '',
-      width: '90px',
+      width: '160px',
       render: (row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <TableButton onClick={() => setPanelTarget(row)}>Update</TableButton>
           <TableButton
             variant="red"
             disabled={row.isSystem || row.entityCount > 0}
@@ -102,14 +103,18 @@ export function EntityTypesTable() {
         data={paged}
         isLoading={isLoading}
         emptyMessage="No types defined yet"
-        actionButton={{ label: 'Add Type', onClick: () => setPanelOpen(true) }}
+        actionButton={{ label: 'Add Type', onClick: () => setPanelTarget(null) }}
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
       />
 
-      <AddEntityTypePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+      <AddEntityTypePanel
+        isOpen={panelTarget !== undefined}
+        entityType={panelTarget}
+        onClose={() => setPanelTarget(undefined)}
+      />
 
       <Modal
         isOpen={!!deleteTarget}

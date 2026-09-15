@@ -7,7 +7,10 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import { Prisma, SubledgerType } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateEntityTypeDto } from './dto/entity-types.dto';
+import {
+  CreateEntityTypeDto,
+  UpdateEntityTypeDto,
+} from './dto/entity-types.dto';
 
 // The two the Entities page always starts with — matches the two-only default we settled
 // on (everything else must be created here first before it's usable elsewhere).
@@ -30,12 +33,7 @@ export class EntityTypesService {
       });
     }
 
-    const counts = await this.prisma.subledgerAccount.groupBy({
-      by: ['type'],
-      where: { tenantId: user.tenantId },
-      _count: { _all: true },
-    });
-    const countByType = new Map(counts.map((c) => [c.type, c._count._all]));
+    const countByType = await this.countsByType(user.tenantId);
     return entityTypes.map((t) => this.toEntityTypeDto(t, countByType));
   }
 
@@ -55,6 +53,34 @@ export class EntityTypesService {
         name: entityType.name,
       });
       return this.toEntityTypeDto(entityType, new Map());
+    } catch (error) {
+      this.rethrowUnique(error, 'Entity type name already exists');
+    }
+  }
+
+  async updateEntityType(
+    user: RequestUser,
+    entityTypeId: string,
+    dto: UpdateEntityTypeDto,
+  ) {
+    const entityType = await this.findEntityType(user.tenantId, entityTypeId);
+
+    try {
+      const updated = await this.prisma.entityType.update({
+        where: { id_tenantId: { id: entityType.id, tenantId: user.tenantId } },
+        data: {
+          ...(dto.name ? { name: dto.name } : {}),
+          ...(dto.accountingRelation
+            ? { accountingRelation: dto.accountingRelation }
+            : {}),
+          updatedByUserId: user.id,
+        },
+      });
+      await this.recordAudit(user, 'ENTITY_TYPE_UPDATE', updated.id, {
+        name: updated.name,
+      });
+      const countByType = await this.countsByType(user.tenantId);
+      return this.toEntityTypeDto(updated, countByType);
     } catch (error) {
       this.rethrowUnique(error, 'Entity type name already exists');
     }
@@ -110,6 +136,17 @@ export class EntityTypesService {
         }
       }
     }
+  }
+
+  private async countsByType(
+    tenantId: string,
+  ): Promise<Map<SubledgerType, number>> {
+    const counts = await this.prisma.subledgerAccount.groupBy({
+      by: ['type'],
+      where: { tenantId },
+      _count: { _all: true },
+    });
+    return new Map(counts.map((c) => [c.type, c._count._all]));
   }
 
   private async findEntityType(tenantId: string, id: string) {
