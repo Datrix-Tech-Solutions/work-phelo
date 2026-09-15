@@ -69,7 +69,7 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
           label="Name"
           registration={register('name', { required: 'Name is required' })}
           error={errors.name}
-          placeholder="e.g. Landlord"
+          placeholder="e.g. Customer"
         />
       </div>
     </SidePanel>

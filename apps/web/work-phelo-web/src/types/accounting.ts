@@ -989,7 +989,10 @@ export interface CreateSubledgerAccountPayload {
   name: string;
   type: SubledgerType;
   externalRef?: string;
-  controlAccountId: string;
+  /** Only needed for types with no default control account (Employee, Statutory, Other) —
+   *  Customer/Vendor/Cedant/Reinsurer always resolve to the tenant's configured AR/AP
+   *  account automatically. */
+  controlAccountId?: string;
   currency?: string;
 }
 
