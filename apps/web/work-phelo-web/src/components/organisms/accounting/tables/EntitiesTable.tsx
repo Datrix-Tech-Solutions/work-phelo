@@ -13,7 +13,12 @@ import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelec
 import { AddEntityPanel } from '@/components/organisms/accounting/panels/AddEntityPanel';
 import { SUBLEDGER_TYPE_LABELS, SubledgerAccount, SubledgerType } from '@/types/accounting';
 import { SUBLEDGER_TYPE_CHIP_COLOR } from '@/lib/accounting/subledgerType';
-import { useAccountingConfig, useDeactivateSubledger, useSubledgers } from '@/hooks';
+import {
+  useAccountingConfig,
+  useActivateSubledger,
+  useDeactivateSubledger,
+  useSubledgers,
+} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -33,13 +38,14 @@ export function EntitiesTable() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<SubledgerType | ''>('');
   const [page, setPage] = useState(1);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTarget, setPanelTarget] = useState<SubledgerAccount | null | undefined>(undefined);
   const [deactivateTarget, setDeactivateTarget] = useState<SubledgerAccount | null>(null);
   const toast = useToast();
 
   const { data, isLoading } = useSubledgers(typeFilter ? { type: typeFilter } : {});
   const { data: config } = useAccountingConfig();
   const deactivateSubledger = useDeactivateSubledger();
+  const activateSubledger = useActivateSubledger();
 
   const entities = useMemo(() => data ?? [], [data]);
   const baseCurrency = config?.baseCurrency;
@@ -74,16 +80,6 @@ export function EntitiesTable() {
         ),
       },
       {
-        key: 'controlAccount',
-        label: 'Control Account',
-        width: 'minmax(120px, 1fr)',
-        render: (row) => (
-          <span className="text-gray-700 text-sm">
-            {row.controlAccount.code} — {row.controlAccount.name}
-          </span>
-        ),
-      },
-      {
         key: 'balance',
         label: 'Outstanding Balance',
         width: '150px',
@@ -108,18 +104,31 @@ export function EntitiesTable() {
       {
         key: 'actions',
         label: '',
-        width: '120px',
-        render: (row) =>
-          row.status === 'ACTIVE' ? (
-            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        width: '180px',
+        render: (row) => (
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <TableButton variant="blue" onClick={() => setPanelTarget(row)}>Update</TableButton>
+            {row.status === 'ACTIVE' ? (
               <TableButton variant="red" onClick={() => setDeactivateTarget(row)}>
                 Deactivate
               </TableButton>
-            </div>
-          ) : null,
+            ) : (
+              <TableButton
+                onClick={() =>
+                  activateSubledger.mutate(row.id, {
+                    onError: (error) =>
+                      toast.error(extractError(error, 'Unable to activate entity')),
+                  })
+                }
+              >
+                Activate
+              </TableButton>
+            )}
+          </div>
+        ),
       },
     ],
-    [baseCurrency],
+    [baseCurrency, activateSubledger, toast],
   );
 
   const filtered = useMemo(() => {
@@ -171,7 +180,7 @@ export function EntitiesTable() {
         }}
         extraFilters={extraFilters}
         // onRowClick={(row) => router.push(`/${tenantSlug}/accounting/accountspayable/entities/${row.id}`)}
-        actionButton={{ label: 'Add Entity', onClick: () => setPanelOpen(true) }}
+        actionButton={{ label: 'Add Entity', onClick: () => setPanelTarget(null) }}
         emptyMessage="No entities found"
         currentPage={page}
         totalPages={totalPages}
@@ -179,13 +188,17 @@ export function EntitiesTable() {
         noInternalScroll
       />
 
-      <AddEntityPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+      <AddEntityPanel
+        isOpen={panelTarget !== undefined}
+        entity={panelTarget}
+        onClose={() => setPanelTarget(undefined)}
+      />
 
       <Modal
         isOpen={!!deactivateTarget}
         onClose={() => setDeactivateTarget(null)}
         title="Deactivate Entity"
-        description={`Are you sure you want to deactivate "${deactivateTarget?.name}"? It will no longer be available for new journal lines, and cannot currently be reactivated.`}
+        description={`Are you sure you want to deactivate "${deactivateTarget?.name}"? It will no longer be available for new journal lines until reactivated.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setDeactivateTarget(null)}>

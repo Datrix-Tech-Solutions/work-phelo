@@ -9,13 +9,6 @@ export interface ZipReceiptTarget {
   title: string;
 }
 
-/**
- * Renders each target's hidden print root to a PDF, bundles them all into a
- * single zip and triggers a browser download. Fully client-side — no backend.
- *
- * `onProgress` is called after every document (including the final zip step is
- * left to the caller) so a progress bar can track it.
- */
 export async function downloadReceiptsZip(
   targets: ZipReceiptTarget[],
   zipFileName: string,

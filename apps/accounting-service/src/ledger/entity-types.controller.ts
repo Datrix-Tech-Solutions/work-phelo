@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -25,7 +26,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
-import { CreateEntityTypeDto } from './dto/entity-types.dto';
+import {
+  CreateEntityTypeDto,
+  UpdateEntityTypeDto,
+} from './dto/entity-types.dto';
 import { EntityTypesService } from './entity-types.service';
 
 @Controller('entity-types')
@@ -52,6 +56,17 @@ export class EntityTypesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.createEntityType(request.user, dto);
+  }
+
+  @Patch(':entityTypeId')
+  @ApiOperation({ summary: 'Update an entity type' })
+  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  update(
+    @Param('entityTypeId', ParseUUIDPipe) entityTypeId: string,
+    @Body() dto: UpdateEntityTypeDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.updateEntityType(request.user, entityTypeId, dto);
   }
 
   @Delete(':entityTypeId')

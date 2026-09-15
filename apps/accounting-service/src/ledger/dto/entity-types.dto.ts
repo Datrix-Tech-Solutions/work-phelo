@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsEnum, IsString, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { EntityAccountingRelation } from '../../../prisma/generated/client';
 
 const trimmed = ({ value }: { value: unknown }) =>
@@ -18,3 +18,5 @@ export class CreateEntityTypeDto {
   @IsEnum(EntityAccountingRelation)
   accountingRelation!: EntityAccountingRelation;
 }
+
+export class UpdateEntityTypeDto extends PartialType(CreateEntityTypeDto) {}

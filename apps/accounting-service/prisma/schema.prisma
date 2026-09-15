@@ -398,6 +398,8 @@ model SubledgerAccount {
   externalRef      String?
   controlAccountId String
   currency         String?
+  contactName      String?
+  address          String?
   status           RecordStatus          @default(ACTIVE)
   createdByUserId  String
   updatedByUserId  String

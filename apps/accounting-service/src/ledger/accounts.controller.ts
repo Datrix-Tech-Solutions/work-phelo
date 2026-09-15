@@ -387,6 +387,17 @@ export class AccountsController {
     );
   }
 
+  @Post('subledger-accounts/:subledgerId/activate')
+  @ApiTags('Accounting - Subledgers')
+  @ApiOperation({ summary: 'Reactivate a subledger account' })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_EDIT)
+  activateSubledger(
+    @Param('subledgerId', ParseUUIDPipe) subledgerId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.activateSubledgerAccount(request.user, subledgerId);
+  }
+
   @Get('customers')
   @ApiTags('Accounting - Customers')
   @ApiOperation({ summary: 'List tenant accounting customers' })

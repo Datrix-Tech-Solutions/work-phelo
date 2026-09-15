@@ -1,16 +1,20 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { useCreateEntityType } from '@/hooks';
+import { useCreateEntityType, useUpdateEntityType } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import type { EntityType } from '@/types/accounting';
 
 interface AddEntityTypePanelProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Editing an existing type instead of creating one. */
+  entityType?: EntityType | null;
 }
 
 type FormValues = {
@@ -19,9 +23,12 @@ type FormValues = {
 
 const DEFAULTS: FormValues = { name: '' };
 
-export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps) {
+export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTypePanelProps) {
+  const isEditing = !!entityType;
   const toast = useToast();
-  const { mutateAsync: createEntityType, isPending } = useCreateEntityType();
+  const { mutateAsync: createEntityType, isPending: isCreating } = useCreateEntityType();
+  const { mutateAsync: updateEntityType, isPending: isUpdating } = useUpdateEntityType();
+  const isPending = isCreating || isUpdating;
 
   const {
     register,
@@ -30,6 +37,11 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
+  useEffect(() => {
+    if (!isOpen) return;
+    reset(entityType ? { name: entityType.name } : DEFAULTS);
+  }, [isOpen, entityType, reset]);
+
   const handleClose = () => {
     reset(DEFAULTS);
     onClose();
@@ -37,13 +49,18 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
 
   const onSubmit = async (values: FormValues) => {
     try {
-      // Accounting relation isn't captured here — new types default to NONE until it's set
-      // some other way (there's no edit flow for entity types yet).
-      await createEntityType({ name: values.name, accountingRelation: 'NONE' });
-      toast.success('Type created successfully');
+      if (entityType) {
+        await updateEntityType({ id: entityType.id, name: values.name });
+        toast.success('Type updated successfully');
+      } else {
+        // Accounting relation isn't captured here — new types default to NONE until it's set
+        // some other way (there's no field for it in this form yet).
+        await createEntityType({ name: values.name, accountingRelation: 'NONE' });
+        toast.success('Type created successfully');
+      }
       handleClose();
     } catch (error) {
-      toast.error(extractError(error, 'Failed to create type'));
+      toast.error(extractError(error, `Failed to ${isEditing ? 'update' : 'create'} type`));
     }
   };
 
@@ -51,15 +68,15 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Add Type"
+      title={isEditing ? 'Update Type' : 'Add Type'}
       description="Define a new entity type available in the Type field."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
-          <Button isLoading={isPending} loadingText="Adding…" onClick={handleSubmit(onSubmit)}>
-            Add Type
+          <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
+            {isEditing ? 'Save Changes' : 'Add Type'}
           </Button>
         </div>
       }
@@ -69,7 +86,7 @@ export function AddEntityTypePanel({ isOpen, onClose }: AddEntityTypePanelProps)
           label="Name"
           registration={register('name', { required: 'Name is required' })}
           error={errors.name}
-          placeholder="e.g. Customer"
+          placeholder="e.g. Landlord"
         />
       </div>
     </SidePanel>
