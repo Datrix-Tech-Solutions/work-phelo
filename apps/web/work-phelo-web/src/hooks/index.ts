@@ -58,6 +58,7 @@ export * from './accounting/useCostCentres';
 export * from './accounting/useTransactionTypes';
 export * from './accounting/useSourceTypes';
 export * from './accounting/useTransactionTypeRules';
+export * from './accounting/useTaxTypes';
 export * from './accounting/useCashAccounts';
 export * from './accounting/useCashbook';
 export * from './accounting/useTradeDocuments';

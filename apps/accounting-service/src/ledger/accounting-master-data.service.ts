@@ -249,6 +249,10 @@ const STANDARD_ACCOUNT_HIERARCHY = [
 
 /** The cashbook transaction types every tenant starts with — mirrors the codes still
  *  hardcoded into CashbookService's dedicated posting paths, so `code` must not change. */
+const transactionTypeRuleCountInclude = {
+  rule: { include: { lines: { select: { id: true } } } },
+} satisfies Prisma.TransactionTypeInclude;
+
 const STANDARD_TRANSACTION_TYPES = [
   {
     code: 'RECEIPT',
@@ -1206,6 +1210,7 @@ export class AccountingMasterDataService {
     let transactionTypes = await this.prisma.transactionType.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { name: 'asc' },
+      include: transactionTypeRuleCountInclude,
     });
     // Seed the standard set the first time a tenant has none of them yet —
     // checked by isSystemDefault, not by an empty table, so a tenant that
@@ -1216,6 +1221,7 @@ export class AccountingMasterDataService {
       transactionTypes = await this.prisma.transactionType.findMany({
         where: { tenantId: user.tenantId },
         orderBy: { name: 'asc' },
+        include: transactionTypeRuleCountInclude,
       });
     }
     return transactionTypes.map((type) =>
@@ -1234,6 +1240,7 @@ export class AccountingMasterDataService {
           code: dto.code,
           name: dto.name,
           category: dto.category,
+          businessRoles: dto.businessRoles ?? [],
           allowedDocument: this.optional(dto.allowedDocument),
           source: this.optional(dto.source),
           description: this.optional(dto.description),
@@ -1272,6 +1279,9 @@ export class AccountingMasterDataService {
           ...(dto.code ? { code: dto.code } : {}),
           ...(dto.name ? { name: dto.name } : {}),
           ...(dto.category ? { category: dto.category } : {}),
+          ...(dto.businessRoles !== undefined
+            ? { businessRoles: dto.businessRoles }
+            : {}),
           ...(dto.allowedDocument !== undefined
             ? { allowedDocument: this.optional(dto.allowedDocument) }
             : {}),
@@ -1334,6 +1344,7 @@ export class AccountingMasterDataService {
     allowedDocument: string | null;
     source: string | null;
     description: string | null;
+    rule?: { lines: unknown[] } | null;
   }) {
     return {
       id: transactionType.id,
@@ -1344,8 +1355,7 @@ export class AccountingMasterDataService {
       allowedDocument: transactionType.allowedDocument,
       source: transactionType.source,
       description: transactionType.description,
-      // TransactionTypeRule doesn't exist yet — wired up once posting rules land.
-      rulesCount: 0,
+      rulesCount: transactionType.rule?.lines.length ?? 0,
     };
   }
 

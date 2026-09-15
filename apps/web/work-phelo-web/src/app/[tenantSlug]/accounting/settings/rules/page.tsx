@@ -8,7 +8,8 @@ export default function RulesPage() {
       <div>
         <h2 className="text-base font-semibold text-gray-900">Rules</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Define how each transaction type posts to the general ledger, by source and role.
+          Define how each transaction type posts — one debit line, one credit line, and any tax
+          lines it needs.
         </p>
       </div>
       <TransactionTypeRulesTable />

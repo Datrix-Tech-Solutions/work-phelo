@@ -294,6 +294,7 @@ model GLAccount {
   childAccounts     GLAccount[]                    @relation("GLAccountHierarchy")
   journalLines      JournalLine[]
   postingRuleLines  PostingRuleLine[]
+  transactionRuleLines TransactionTypeRuleLine[]
   subledgers        SubledgerAccount[]
   arTenantConfigs   AccountingTenantConfig[]       @relation("AccountingConfigARControl")
   apTenantConfigs   AccountingTenantConfig[]       @relation("AccountingConfigAPControl")
@@ -721,10 +722,76 @@ model TransactionType {
   updatedByUserId String
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
+  rule            TransactionTypeRule?
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
   @@index([tenantId, category])
+  @@schema("accounting")
+}
+
+/// A tenant-wide tax rate (e.g. VAT 12.5%, Withholding Tax 5%) referenced by
+/// TransactionTypeRuleLine — a rule's tax lines pick one of these rather than storing
+/// their own rate, so a rate change applies to every rule that uses it.
+model TaxType {
+  id              String                    @id @default(uuid())
+  tenantId        String
+  name            String
+  rate            Decimal                   @db.Decimal(6, 3)
+  description     String?
+  isActive        Boolean                   @default(true)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  ruleLines       TransactionTypeRuleLine[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, name])
+  @@schema("accounting")
+}
+
+/// The posting recipe for one TransactionType — one rule per type, made up of lines.
+/// Exactly one line sits on the side TransactionType.category designates as the
+/// auto-balancing side (Debit for RECEIVABLE, Credit for PAYABLE); that line's amount
+/// is derived (sum of the other side) rather than entered, so it absorbs however many
+/// tax lines the other side carries. See AccountingMasterDataService for the posting math.
+model TransactionTypeRule {
+  id                String                    @id @default(uuid())
+  tenantId          String
+  transactionTypeId String
+  description       String?
+  createdByUserId   String
+  updatedByUserId   String
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  transactionType   TransactionType           @relation(fields: [transactionTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  lines             TransactionTypeRuleLine[]
+
+  @@unique([id, tenantId])
+  @@unique([transactionTypeId, tenantId])
+  @@schema("accounting")
+}
+
+model TransactionTypeRuleLine {
+  id            String              @id @default(uuid())
+  tenantId      String
+  ruleId        String
+  sequence      Int
+  direction     PostingDirection
+  accountId     String
+  taxTypeId     String?
+  subledgerType SubledgerType?
+  description   String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  rule          TransactionTypeRule @relation(fields: [ruleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  account       GLAccount           @relation(fields: [accountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  taxType       TaxType?            @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, ruleId, sequence])
+  @@index([tenantId, accountId])
   @@schema("accounting")
 }
 
