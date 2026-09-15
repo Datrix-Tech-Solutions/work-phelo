@@ -703,9 +703,9 @@ model CashbookTransaction {
 
 /// User-defined transaction types offered when creating a cashbook entry (e.g. Receipt,
 /// Payment). The five system defaults (RECEIPT/PAYMENT/TRANSFER/CHARGE/ADJUSTMENT) are
-/// seeded per tenant via AccountingMasterDataService.seedStandardTransactionTypes() and
-/// still back CashbookTransaction.transactionType's dedicated posting logic, so their
-/// `code` must stay immutable — see isSystemDefault.
+/// auto-seeded per tenant on first read via AccountingMasterDataService.listTransactionTypes()
+/// (backed by seedStandardTransactionTypes()) and flagged isSystemDefault, but are otherwise
+/// ordinary rows — freely editable and deletable like any tenant-created type.
 model TransactionType {
   id              String                   @id @default(uuid())
   tenantId        String
