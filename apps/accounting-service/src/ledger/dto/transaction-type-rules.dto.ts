@@ -14,7 +14,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { PostingDirection, SubledgerType } from '../../../prisma/generated/client';
+import {
+  PostingDirection,
+  SubledgerType,
+} from '../../../prisma/generated/client';
 
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -26,7 +29,10 @@ export class CreateTaxTypeDto {
   @MaxLength(80)
   name!: string;
 
-  @ApiProperty({ example: 12.5, description: 'Percentage rate, e.g. 12.5 for 12.5%.' })
+  @ApiProperty({
+    example: 12.5,
+    description: 'Percentage rate, e.g. 12.5 for 12.5%.',
+  })
   @IsNumber()
   @Min(0)
   @Max(100)
@@ -58,7 +64,8 @@ export class TransactionTypeRuleLineDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Set only on a tax line — the TaxType this line computes its amount from.',
+    description:
+      'Set only on a tax line — the TaxType this line computes its amount from.',
   })
   @IsOptional()
   @IsUUID()

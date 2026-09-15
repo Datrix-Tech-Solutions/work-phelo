@@ -73,7 +73,11 @@ export class TransactionTypeRulesService {
     }
   }
 
-  async updateTaxType(user: RequestUser, taxTypeId: string, dto: UpdateTaxTypeDto) {
+  async updateTaxType(
+    user: RequestUser,
+    taxTypeId: string,
+    dto: UpdateTaxTypeDto,
+  ) {
     const taxType = await this.findTaxType(user.tenantId, taxTypeId);
     try {
       const updated = await this.prisma.taxType.update({
@@ -120,7 +124,9 @@ export class TransactionTypeRulesService {
   }
 
   private async findTaxType(tenantId: string, id: string) {
-    const taxType = await this.prisma.taxType.findFirst({ where: { id, tenantId } });
+    const taxType = await this.prisma.taxType.findFirst({
+      where: { id, tenantId },
+    });
     if (!taxType) throw new NotFoundException('Tax type not found');
     return taxType;
   }
@@ -158,7 +164,11 @@ export class TransactionTypeRulesService {
       dto.transactionTypeId,
     );
     this.validateLines(transactionType.category, dto.lines);
-    await this.validateLineReferences(user.tenantId, transactionType, dto.lines);
+    await this.validateLineReferences(
+      user.tenantId,
+      transactionType,
+      dto.lines,
+    );
 
     try {
       const rule = await this.prisma.transactionTypeRule.create({
@@ -177,7 +187,10 @@ export class TransactionTypeRulesService {
         'TRANSACTION_TYPE_RULE_CREATE',
         'TransactionTypeRule',
         rule.id,
-        { transactionTypeId: rule.transactionTypeId, lineCount: rule.lines.length },
+        {
+          transactionTypeId: rule.transactionTypeId,
+          lineCount: rule.lines.length,
+        },
       );
       return this.toRuleDto(rule);
     } catch (error) {
@@ -199,7 +212,11 @@ export class TransactionTypeRulesService {
     const rule = await this.findRule(user.tenantId, ruleId);
     if (dto.lines) {
       this.validateLines(rule.transactionType.category, dto.lines);
-      await this.validateLineReferences(user.tenantId, rule.transactionType, dto.lines);
+      await this.validateLineReferences(
+        user.tenantId,
+        rule.transactionType,
+        dto.lines,
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -264,8 +281,12 @@ export class TransactionTypeRulesService {
   private autoBalanceDirection(
     category: TransactionTypeCategory,
   ): PostingDirection | null {
-    if (category === TransactionTypeCategory.RECEIVABLE) return PostingDirection.DR;
-    if (category === TransactionTypeCategory.PAYABLE) return PostingDirection.CR;
+    if (category === TransactionTypeCategory.RECEIVABLE) {
+      return PostingDirection.DR;
+    }
+    if (category === TransactionTypeCategory.PAYABLE) {
+      return PostingDirection.CR;
+    }
     return null;
   }
 
@@ -274,7 +295,9 @@ export class TransactionTypeRulesService {
     lines: TransactionTypeRuleLineDto[],
   ) {
     const debitLines = lines.filter((l) => l.direction === PostingDirection.DR);
-    const creditLines = lines.filter((l) => l.direction === PostingDirection.CR);
+    const creditLines = lines.filter(
+      (l) => l.direction === PostingDirection.CR,
+    );
     if (debitLines.length === 0 || creditLines.length === 0) {
       throw new BadRequestException(
         'A rule needs at least one debit line and one credit line.',
@@ -284,7 +307,9 @@ export class TransactionTypeRulesService {
     const autoBalanceDirection = this.autoBalanceDirection(category);
     if (!autoBalanceDirection) return;
 
-    const balancingLines = lines.filter((l) => l.direction === autoBalanceDirection);
+    const balancingLines = lines.filter(
+      (l) => l.direction === autoBalanceDirection,
+    );
     if (balancingLines.length !== 1) {
       throw new BadRequestException(
         `Exactly one ${autoBalanceDirection === PostingDirection.DR ? 'debit' : 'credit'} ` +
@@ -324,7 +349,9 @@ export class TransactionTypeRulesService {
     const transactionType = await this.prisma.transactionType.findFirst({
       where: { id, tenantId },
     });
-    if (!transactionType) throw new NotFoundException('Transaction type not found');
+    if (!transactionType) {
+      throw new NotFoundException('Transaction type not found');
+    }
     return transactionType;
   }
 

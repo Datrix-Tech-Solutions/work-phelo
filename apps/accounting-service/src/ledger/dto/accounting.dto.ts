@@ -209,7 +209,8 @@ export class CreateTransactionTypeDto {
   @ApiPropertyOptional({
     enum: SubledgerType,
     isArray: true,
-    description: 'Party types (Customer, Vendor, etc.) this transaction type can post against.',
+    description:
+      'Party types (Customer, Vendor, etc.) this transaction type can post against.',
   })
   @IsOptional()
   @IsArray()
