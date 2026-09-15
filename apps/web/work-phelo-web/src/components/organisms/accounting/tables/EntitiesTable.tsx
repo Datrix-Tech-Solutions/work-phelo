@@ -11,12 +11,13 @@ import { TypeChip } from '@/components/atoms/TypeChip';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { AddEntityPanel } from '@/components/organisms/accounting/panels/AddEntityPanel';
-import { SUBLEDGER_TYPE_LABELS, SubledgerAccount, SubledgerType } from '@/types/accounting';
-import { SUBLEDGER_TYPE_CHIP_COLOR } from '@/lib/accounting/subledgerType';
+import { SUBLEDGER_TYPE_LABELS, SubledgerAccount } from '@/types/accounting';
+import { SUBLEDGER_TYPE_CHIP_COLOR, type SubledgerTypeChipColor } from '@/lib/accounting/subledgerType';
 import {
   useAccountingConfig,
   useActivateSubledger,
   useDeactivateSubledger,
+  useEntityTypes,
   useSubledgers,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
@@ -24,9 +25,7 @@ import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
 
-const TYPE_FILTER_OPTIONS: SearchSelectOption[] = (
-  Object.entries(SUBLEDGER_TYPE_LABELS) as [SubledgerType, string][]
-).map(([value, label]) => ({ value, label }));
+const FALLBACK_CHIP_COLOR: SubledgerTypeChipColor = 'gray';
 
 function fmtBalance(amount: number, currency: string) {
   return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -36,7 +35,7 @@ export function EntitiesTable() {
   // const router = useRouter();
   // const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<SubledgerType | ''>('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
   const [panelTarget, setPanelTarget] = useState<SubledgerAccount | null | undefined>(undefined);
   const [deactivateTarget, setDeactivateTarget] = useState<SubledgerAccount | null>(null);
@@ -44,11 +43,18 @@ export function EntitiesTable() {
 
   const { data, isLoading } = useSubledgers(typeFilter ? { type: typeFilter } : {});
   const { data: config } = useAccountingConfig();
+  const { data: entityTypesData = [] } = useEntityTypes();
   const deactivateSubledger = useDeactivateSubledger();
   const activateSubledger = useActivateSubledger();
 
   const entities = useMemo(() => data ?? [], [data]);
   const baseCurrency = config?.baseCurrency;
+  // Sourced from the tenant's own Entity Types list, not the fixed SubledgerType set —
+  // matches AddEntityPanel/TransactionTypePanel.
+  const typeFilterOptions: SearchSelectOption[] = useMemo(
+    () => entityTypesData.map((t) => ({ label: t.name, value: t.name.trim().toUpperCase() })),
+    [entityTypesData],
+  );
 
   const columns = useMemo<Column<SubledgerAccount>[]>(
     () => [
@@ -74,8 +80,11 @@ export function EntitiesTable() {
         width: '120px',
         render: (row) => (
           <TypeChip
-            label={SUBLEDGER_TYPE_LABELS[row.type]}
-            color={SUBLEDGER_TYPE_CHIP_COLOR[row.type]}
+            label={(SUBLEDGER_TYPE_LABELS as Record<string, string>)[row.type] ?? row.type}
+            color={
+              (SUBLEDGER_TYPE_CHIP_COLOR as Record<string, SubledgerTypeChipColor>)[row.type] ??
+              FALLBACK_CHIP_COLOR
+            }
           />
         ),
       },
@@ -155,11 +164,11 @@ export function EntitiesTable() {
       <SearchSelect
         size="sm"
         placeholder="Type"
-        options={TYPE_FILTER_OPTIONS}
+        options={typeFilterOptions}
         value={typeFilter}
         showAllOption
         onChange={(v) => {
-          setTypeFilter(v as SubledgerType | '');
+          setTypeFilter(v);
           setPage(1);
         }}
       />

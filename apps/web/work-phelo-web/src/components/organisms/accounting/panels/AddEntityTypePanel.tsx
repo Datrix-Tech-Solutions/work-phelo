@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { useCreateEntityType, useUpdateEntityType } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { EntityType } from '@/types/accounting';
+import { ENTITY_ACCOUNTING_RELATION_LABELS } from '@/types/accounting';
+import type { EntityAccountingRelation, EntityType } from '@/types/accounting';
 
 interface AddEntityTypePanelProps {
   isOpen: boolean;
@@ -19,9 +21,14 @@ interface AddEntityTypePanelProps {
 
 type FormValues = {
   name: string;
+  accountingRelation: EntityAccountingRelation | '';
 };
 
-const DEFAULTS: FormValues = { name: '' };
+const DEFAULTS: FormValues = { name: '', accountingRelation: 'NONE' };
+
+const ACCOUNTING_RELATION_OPTIONS: SearchSelectOption[] = Object.entries(
+  ENTITY_ACCOUNTING_RELATION_LABELS,
+).map(([value, label]) => ({ value, label }));
 
 export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTypePanelProps) {
   const isEditing = !!entityType;
@@ -32,6 +39,7 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -39,7 +47,11 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
 
   useEffect(() => {
     if (!isOpen) return;
-    reset(entityType ? { name: entityType.name } : DEFAULTS);
+    reset(
+      entityType
+        ? { name: entityType.name, accountingRelation: entityType.accountingRelation }
+        : DEFAULTS,
+    );
   }, [isOpen, entityType, reset]);
 
   const handleClose = () => {
@@ -49,13 +61,12 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
 
   const onSubmit = async (values: FormValues) => {
     try {
+      const accountingRelation = values.accountingRelation as EntityAccountingRelation;
       if (entityType) {
-        await updateEntityType({ id: entityType.id, name: values.name });
+        await updateEntityType({ id: entityType.id, name: values.name, accountingRelation });
         toast.success('Type updated successfully');
       } else {
-        // Accounting relation isn't captured here — new types default to NONE until it's set
-        // some other way (there's no field for it in this form yet).
-        await createEntityType({ name: values.name, accountingRelation: 'NONE' });
+        await createEntityType({ name: values.name, accountingRelation });
         toast.success('Type created successfully');
       }
       handleClose();
@@ -69,7 +80,7 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
       isOpen={isOpen}
       onClose={handleClose}
       title={isEditing ? 'Update Type' : 'Add Type'}
-      description="Define a new entity type available in the Type field."
+      description="Define a new entity type available in the Type field. Its accounting relation decides which control account (Receivable or Payable) entities of this type post against automatically."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -87,6 +98,21 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
           registration={register('name', { required: 'Name is required' })}
           error={errors.name}
           placeholder="e.g. Landlord"
+        />
+        <Controller
+          name="accountingRelation"
+          control={control}
+          rules={{ required: 'Accounting relation is required' }}
+          render={({ field }) => (
+            <SearchSelect
+              label="Accounting Relation"
+              placeholder="Select…"
+              options={ACCOUNTING_RELATION_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.accountingRelation?.message}
+            />
+          )}
         />
       </div>
     </SidePanel>

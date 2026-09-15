@@ -969,7 +969,8 @@ export interface SubledgerAccount {
   id: string;
   code: string;
   name: string;
-  type: SubledgerType;
+  /** Any name from the tenant's own Entity Types list — not the fixed SubledgerType enum. */
+  type: string;
   externalRef: string | null;
   controlAccountId: string;
   controlAccount: {
@@ -991,10 +992,11 @@ export interface SubledgerAccount {
 export interface CreateSubledgerAccountPayload {
   code: string;
   name: string;
-  type: SubledgerType;
+  /** Any name from the tenant's own Entity Types list — not the fixed SubledgerType enum. */
+  type: string;
   externalRef?: string;
-  /** Only needed for types with no default control account (Employee, Statutory, Other) —
-   *  Customer/Vendor/Cedant/Reinsurer always resolve to the tenant's configured AR/AP
+  /** Only needed for a type with no accounting relation set (accountingRelation: NONE) —
+   *  a type marked Receivable/Payable/Both always resolves to the tenant's configured AR/AP
    *  account automatically. */
   controlAccountId?: string;
   currency?: string;
@@ -1005,7 +1007,7 @@ export interface CreateSubledgerAccountPayload {
 export type UpdateSubledgerAccountPayload = Partial<CreateSubledgerAccountPayload>;
 
 export interface QuerySubledgerAccountsParams {
-  type?: SubledgerType;
+  type?: string;
   externalRef?: string;
   controlAccountId?: string;
   status?: GLAccountStatus;

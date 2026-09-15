@@ -42,16 +42,16 @@ export function TransactionTypesTable() {
 
   const columns: Column<TransactionTypeDefinition>[] = [
     {
+      key: 'code',
+      label: 'Code',
+      width: '100px',
+      render: (row) => <span className="text-sm text-gray-700">{row.code}</span>,
+    },
+    {
       key: 'name',
       label: 'Name',
       width: 'minmax(120px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-    },
-    {
-      key: 'code',
-      label: 'Code',
-      width: '140px',
-      render: (row) => <span className="text-sm text-gray-700">{row.code}</span>,
     },
     {
       key: 'category',
@@ -70,22 +70,22 @@ export function TransactionTypesTable() {
       width: 'minmax(120px, 1fr)',
       render: (row) => (
         <span className="text-sm text-gray-700">
-          {row.businessRoles.length ? row.businessRoles.join(', ') : '—'}
+          {row.businessRoles.length ? row.businessRoles.join(', ') : 'Open'}
         </span>
       ),
     },
     {
       key: 'source',
       label: 'Source',
-      width: 'minmax(120px, 1fr)',
-      render: (row) => <span className="text-sm text-gray-700">{row.source ?? '—'}</span>,
+      width: '120px',
+      render: (row) => <span className="text-sm text-gray-700">{row.source ?? 'Manual'}</span>,
     },
     {
       key: 'rules',
       label: 'Rules',
-      width: '100px',
+      width: '90px',
       render: (row) => (
-        <span className="text-sm text-gray-700">{row.rulesCount > 0 ? row.rulesCount : '—'}</span>
+        <span className="text-sm text-gray-700">{row.rulesCount > 0 ? row.rulesCount : 'None'}</span>
       ),
     },
   ];

@@ -1,9 +1,7 @@
 import {
   AccountingTradeSide,
-  DEFAULT_ENTITY_ACCOUNTING_RELATION,
   EntityAccountingRelation,
   EntityType,
-  SUBLEDGER_TYPE_LABELS,
   SubledgerAccount,
 } from '@/types/accounting';
 
@@ -26,13 +24,17 @@ export const ENTITY_ACCOUNTING_RELATION_CHIP_COLOR: Record<
   NONE: 'gray',
 };
 
+// entity.type is the tenant's own Entity Type name, uppercased — match directly rather
+// than translating through the old fixed SubledgerType label set, so a custom type (not
+// just Customer/Vendor/etc.) resolves correctly too.
 export function resolveEntityAccountingRelation(
   entity: Pick<SubledgerAccount, 'type'>,
   entityTypes: EntityType[] | undefined,
 ): EntityAccountingRelation {
-  const label = SUBLEDGER_TYPE_LABELS[entity.type];
-  const match = entityTypes?.find((t) => t.name === label);
-  return match?.accountingRelation ?? DEFAULT_ENTITY_ACCOUNTING_RELATION[entity.type];
+  const match = entityTypes?.find(
+    (t) => t.name.trim().toUpperCase() === entity.type.trim().toUpperCase(),
+  );
+  return match?.accountingRelation ?? 'NONE';
 }
 
 export function matchesTradeSide(

@@ -207,14 +207,13 @@ export class CreateTransactionTypeDto {
   category!: TransactionTypeCategory;
 
   @ApiPropertyOptional({
-    enum: SubledgerType,
-    isArray: true,
+    type: [String],
     description:
-      'Party types (Customer, Vendor, etc.) this transaction type can post against.',
+      'Party types (from the tenant\'s Entity Types list) this transaction type can post against.',
   })
   @IsOptional()
   @IsArray()
-  @IsEnum(SubledgerType, { each: true })
+  @IsString({ each: true })
   businessRoles?: string[];
 
   @ApiPropertyOptional()
@@ -495,9 +494,15 @@ export class CreateSubledgerAccountDto {
   @MaxLength(160)
   name!: string;
 
-  @ApiProperty({ enum: SubledgerType })
-  @IsEnum(SubledgerType)
-  type!: SubledgerType;
+  @ApiProperty({
+    example: 'CUSTOMER',
+    description:
+      'One of the tenant\'s own Entity Types (Settings > Entities > Types) — validated against that list, not a fixed enum.',
+  })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(40)
+  type!: string;
 
   @ApiPropertyOptional({ description: 'Tenant-owned source record ID.' })
   @IsOptional()
@@ -509,7 +514,7 @@ export class CreateSubledgerAccountDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Only meaningful for types with no default control account (Employee, Statutory, Other) — Customer/Vendor/Cedant/Reinsurer always resolve to the tenant’s configured AR/AP account automatically.',
+      'Only meaningful for a type with no accounting relation set (accountingRelation: NONE) — types marked Receivable/Payable/Both always resolve to the tenant’s configured AR/AP account automatically.',
   })
   @IsOptional()
   @IsUUID()
@@ -542,10 +547,11 @@ export class UpdateSubledgerAccountDto extends PartialType(
 ) {}
 
 export class QuerySubledgerAccountsDto {
-  @ApiPropertyOptional({ enum: SubledgerType })
+  @ApiPropertyOptional({ example: 'CUSTOMER' })
   @IsOptional()
-  @IsEnum(SubledgerType)
-  type?: SubledgerType;
+  @Transform(uppercase)
+  @IsString()
+  type?: string;
 
   @ApiPropertyOptional({ example: 'reinsurance-counterparty-id' })
   @IsOptional()

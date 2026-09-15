@@ -7,7 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { SUBLEDGER_TYPE_LABELS, SubledgerAccount, SubledgerType } from '@/types/accounting';
+import { SubledgerAccount, SubledgerType } from '@/types/accounting';
 import { useCreateSubledger, useEntityTypes, useUpdateSubledger } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -39,7 +39,7 @@ interface AddEntityPanelProps {
 type FormValues = {
   code: string;
   name: string;
-  type: SubledgerType | '';
+  type: string;
   controlAccountId: string;
   contactName: string;
   address: string;
@@ -73,17 +73,12 @@ export function AddEntityPanel({
 
   // Sourced from the tenant's own Entity Types list (Settings > Entities > Types), not a
   // hardcoded set — Customer/Vendor come pre-seeded there; anything else must be created
-  // there first. Only names that map to a real SubledgerType (the enum this ultimately
-  // posts against) are offered — a custom type not yet backed by one can't be submitted.
+  // there first. Any type in that list works now — the backend resolves its control
+  // account from the type's own accountingRelation, not a fixed enum.
   const typeOptions: SearchSelectOption[] = useMemo(() => {
-    const validValues = new Set(Object.keys(SUBLEDGER_TYPE_LABELS));
     return entityTypesData
       .map((t) => ({ label: t.name, value: t.name.trim().toUpperCase() }))
-      .filter(
-        (t) =>
-          validValues.has(t.value) &&
-          (!allowedTypes || allowedTypes.includes(t.value as SubledgerType)),
-      );
+      .filter((t) => !allowedTypes || allowedTypes.includes(t.value as SubledgerType));
   }, [entityTypesData, allowedTypes]);
 
   const {
@@ -126,7 +121,7 @@ export function AddEntityPanel({
       const payload = {
         code: data.code.trim(),
         name: data.name.trim(),
-        type: data.type as SubledgerType,
+        type: data.type,
         controlAccountId: data.controlAccountId || undefined,
         contactName: data.contactName.trim() || undefined,
         address: data.address.trim() || undefined,
