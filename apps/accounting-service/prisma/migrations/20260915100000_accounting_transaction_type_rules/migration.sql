@@ -2,9 +2,11 @@
 CREATE TABLE "accounting"."TaxType" (
   "id" TEXT NOT NULL,
   "tenantId" TEXT NOT NULL,
+  "code" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "rate" DECIMAL(6,3) NOT NULL,
-  "description" TEXT,
+  "effectiveFrom" TIMESTAMP(3) NOT NULL,
+  "effectiveTo" TIMESTAMP(3),
   "isActive" BOOLEAN NOT NULL DEFAULT true,
   "createdByUserId" TEXT NOT NULL,
   "updatedByUserId" TEXT NOT NULL,
@@ -49,7 +51,7 @@ CREATE TABLE "accounting"."TransactionTypeRuleLine" (
 CREATE UNIQUE INDEX "TaxType_id_tenantId_key" ON "accounting"."TaxType"("id", "tenantId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "TaxType_tenantId_name_key" ON "accounting"."TaxType"("tenantId", "name");
+CREATE UNIQUE INDEX "TaxType_tenantId_code_key" ON "accounting"."TaxType"("tenantId", "code");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "TransactionTypeRule_id_tenantId_key" ON "accounting"."TransactionTypeRule"("id", "tenantId");

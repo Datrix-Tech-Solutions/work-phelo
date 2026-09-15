@@ -12,6 +12,11 @@ import type { TaxType } from '@/types/accounting';
 
 const PAGE_SIZE = 10;
 
+function fmtDate(value: string | null) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString();
+}
+
 export function TaxTypesTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -23,12 +28,23 @@ export function TaxTypesTable() {
 
   const filtered = useMemo(() => {
     const query = search.toLowerCase();
-    return !query ? data : data.filter((item) => item.name.toLowerCase().includes(query));
+    return !query
+      ? data
+      : data.filter(
+          (item) =>
+            item.code.toLowerCase().includes(query) || item.name.toLowerCase().includes(query),
+        );
   }, [data, search]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const columns: Column<TaxType>[] = [
+    {
+      key: 'code',
+      label: 'Code',
+      width: '100px',
+      render: (row) => <span className="text-sm text-gray-700">{row.code}</span>,
+    },
     {
       key: 'name',
       label: 'Name',
@@ -42,10 +58,16 @@ export function TaxTypesTable() {
       render: (row) => <span className="text-sm text-gray-700">{row.rate}%</span>,
     },
     {
-      key: 'description',
-      label: 'Description',
-      width: 'minmax(160px, 1.5fr)',
-      render: (row) => <span className="text-sm text-gray-700">{row.description ?? '—'}</span>,
+      key: 'effectiveFrom',
+      label: 'Effective From',
+      width: '130px',
+      render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.effectiveFrom)}</span>,
+    },
+    {
+      key: 'effectiveTo',
+      label: 'Effective To',
+      width: '130px',
+      render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.effectiveTo)}</span>,
     },
   ];
 

@@ -736,9 +736,11 @@ model TransactionType {
 model TaxType {
   id              String                    @id @default(uuid())
   tenantId        String
+  code            String
   name            String
   rate            Decimal                   @db.Decimal(6, 3)
-  description     String?
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
   isActive        Boolean                   @default(true)
   createdByUserId String
   updatedByUserId String
@@ -747,7 +749,7 @@ model TaxType {
   ruleLines       TransactionTypeRuleLine[]
 
   @@unique([id, tenantId])
-  @@unique([tenantId, name])
+  @@unique([tenantId, code])
   @@schema("accounting")
 }
 

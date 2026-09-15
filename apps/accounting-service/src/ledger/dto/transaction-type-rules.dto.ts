@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -22,8 +23,17 @@ import {
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
+const uppercase = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim().toUpperCase() : value;
+
 export class CreateTaxTypeDto {
   @ApiProperty({ example: 'VAT' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ example: 'Value Added Tax' })
   @Transform(trimmed)
   @IsString()
   @MaxLength(80)
@@ -38,12 +48,16 @@ export class CreateTaxTypeDto {
   @Max(100)
   rate!: number;
 
-  @ApiPropertyOptional()
+  @ApiProperty()
+  @IsDateString()
+  effectiveFrom!: string;
+
+  @ApiPropertyOptional({
+    description: 'Open-ended if omitted.',
+  })
   @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(500)
-  description?: string;
+  @IsDateString()
+  effectiveTo?: string;
 }
 
 export class UpdateTaxTypeDto extends PartialType(CreateTaxTypeDto) {
