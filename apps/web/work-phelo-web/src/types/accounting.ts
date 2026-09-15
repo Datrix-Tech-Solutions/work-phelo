@@ -174,6 +174,7 @@ export interface CreateTransactionTypePayload {
   name: string;
   code: string;
   category: TransactionTypeCategory;
+  businessRoles?: string[];
   allowedDocument?: string;
   source?: string;
   description?: string;
@@ -194,26 +195,62 @@ export interface CreateSourceTypePayload {
 
 export type UpdateSourceTypePayload = Partial<CreateSourceTypePayload>;
 
+export interface TaxType {
+  id: string;
+  name: string;
+  rate: number;
+  description: string | null;
+  isActive: boolean;
+}
+
+export interface CreateTaxTypePayload {
+  name: string;
+  rate: number;
+  description?: string;
+}
+
+export type UpdateTaxTypePayload = Partial<CreateTaxTypePayload> & { isActive?: boolean };
+
+export type PostingLineDirection = 'DR' | 'CR';
+
+export interface TransactionTypeRuleLine {
+  id: string;
+  sequence: number;
+  direction: PostingLineDirection;
+  account: { id: string; code: string; name: string };
+  /** Set only on a tax line — which TaxType drives this line's computed amount. */
+  taxType: { id: string; name: string; rate: number } | null;
+  /** Set only when this line also posts to a party's subledger account under the
+   *  (fixed) account above, rather than the account alone. */
+  subledgerType: SubledgerType | null;
+  description: string | null;
+}
+
 export interface TransactionTypeRule {
   id: string;
   transactionTypeId: string;
-  sourceType: string | null;
-  role: string | null;
-  account: { id: string; code: string; name: string };
   description: string | null;
+  lines: TransactionTypeRuleLine[];
+}
+
+export interface TransactionTypeRuleLineInput {
+  direction: PostingLineDirection;
+  accountId: string;
+  taxTypeId?: string;
+  subledgerType?: SubledgerType;
+  description?: string;
 }
 
 export interface CreateTransactionTypeRulePayload {
   transactionTypeId: string;
-  sourceType?: string;
-  role?: string;
-  accountId: string;
   description?: string;
+  lines: TransactionTypeRuleLineInput[];
 }
 
-export type UpdateTransactionTypeRulePayload = Partial<
-  Omit<CreateTransactionTypeRulePayload, 'transactionTypeId'>
->;
+export interface UpdateTransactionTypeRulePayload {
+  description?: string;
+  lines?: TransactionTypeRuleLineInput[];
+}
 
 export type FiscalPeriodStatus = 'OPEN' | 'SOFT_CLOSED' | 'CLOSED';
 

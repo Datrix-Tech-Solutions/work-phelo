@@ -18,6 +18,8 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { ReceivablesController } from './receivables.controller';
 import { ReceivablesService } from './receivables.service';
+import { TransactionTypeRulesController } from './transaction-type-rules.controller';
+import { TransactionTypeRulesService } from './transaction-type-rules.service';
 
 @Module({
   imports: [PrismaModule, AuthModule],
@@ -31,6 +33,7 @@ import { ReceivablesService } from './receivables.service';
     PayablesController,
     ReceivablesController,
     ReportsController,
+    TransactionTypeRulesController,
   ],
   providers: [
     AccountingMasterDataService,
@@ -41,6 +44,7 @@ import { ReceivablesService } from './receivables.service';
     PayablesService,
     ReceivablesService,
     ReportsService,
+    TransactionTypeRulesService,
   ],
   exports: [
     AccountingMasterDataService,
@@ -49,6 +53,7 @@ import { ReceivablesService } from './receivables.service';
     PayablesService,
     ReceivablesService,
     ReportsService,
+    TransactionTypeRulesService,
   ],
 })
 export class LedgerModule {}

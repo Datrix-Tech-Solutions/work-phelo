@@ -4,12 +4,17 @@ import { useEffect, useMemo } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { useCreateTransactionType, useSourceTypes, useUpdateTransactionType } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { TransactionTypeCategory, TransactionTypeDefinition } from '@/types/accounting';
+import {
+  SUBLEDGER_TYPE_LABELS,
+  type TransactionTypeCategory,
+  type TransactionTypeDefinition,
+} from '@/types/accounting';
 
 const CATEGORY_OPTIONS: SearchSelectOption[] = [
   { value: 'NEUTRAL', label: 'Neutral' },
@@ -18,12 +23,20 @@ const CATEGORY_OPTIONS: SearchSelectOption[] = [
   { value: 'NONE', label: 'None' },
 ];
 
+// Which party types (Customer, Vendor, Cedant…) can be posted against this transaction
+// type — not to be confused with the GL posting roles used in TransactionTypeRulePanel.
+const BUSINESS_ROLE_OPTIONS = Object.entries(SUBLEDGER_TYPE_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}));
+
 const ALLOWED_DOCUMENT_OPTIONS: SearchSelectOption[] = [];
 
 type FormValues = {
   name: string;
   code: string;
   category: TransactionTypeCategory | '';
+  businessRoles: string[];
   allowedDocument: string;
   source: string;
   description: string;
@@ -33,6 +46,7 @@ const DEFAULTS: FormValues = {
   name: '',
   code: '',
   category: '',
+  businessRoles: [],
   allowedDocument: '',
   source: '',
   description: '',
@@ -68,6 +82,7 @@ export function TransactionTypePanel({
         name: transactionType.name,
         code: transactionType.code,
         category: transactionType.category,
+        businessRoles: transactionType.businessRoles,
         allowedDocument: transactionType.allowedDocument ?? '',
         source: transactionType.source ?? '',
         description: transactionType.description ?? '',
@@ -86,6 +101,7 @@ export function TransactionTypePanel({
         name: values.name,
         code: values.code,
         category: values.category as TransactionTypeCategory,
+        businessRoles: values.businessRoles,
         allowedDocument: values.allowedDocument || undefined,
         source: values.source || undefined,
         description: values.description || undefined,
@@ -158,6 +174,19 @@ export function TransactionTypePanel({
               value={field.value}
               onChange={field.onChange}
               error={errors.category?.message}
+            />
+          )}
+        />
+        <Controller
+          name="businessRoles"
+          control={control}
+          render={({ field }) => (
+            <MultiSelect
+              label="Business Roles"
+              placeholder="Select applicable party types…"
+              options={BUSINESS_ROLE_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
             />
           )}
         />

@@ -34,36 +34,27 @@ export function TransactionTypeRulesTable() {
   const toast = useToast();
   const isLoading = isLoadingTypes || isLoadingRules;
 
-  const rulesByType = useMemo(() => {
-    const map = new Map<string, TransactionTypeRule[]>();
-    for (const rule of rules) {
-      const list = map.get(rule.transactionTypeId) ?? [];
-      list.push(rule);
-      map.set(rule.transactionTypeId, list);
-    }
+  // One rule per transaction type, so this is a straight lookup, not a grouping.
+  const ruleByType = useMemo(() => {
+    const map = new Map<string, TransactionTypeRule>();
+    for (const rule of rules) map.set(rule.transactionTypeId, rule);
     return map;
   }, [rules]);
 
   const query = search.trim().toLowerCase();
   const groups = useMemo(() => {
     return transactionTypes
-      .map((type) => {
-        const typeRules = rulesByType.get(type.id) ?? [];
-        const typeMatches = `${type.name} ${type.code}`.toLowerCase().includes(query);
-        const matchedRules = typeMatches
-          ? typeRules
-          : typeRules.filter((rule) =>
-              `${rule.sourceType ?? ''} ${rule.role ?? ''} ${rule.account.code} ${rule.account.name} ${rule.description ?? ''}`
-                .toLowerCase()
-                .includes(query),
-            );
-        return { type, rules: matchedRules };
-      })
-      .filter(
-        (group) =>
-          !query || group.rules.length > 0 || group.type.name.toLowerCase().includes(query),
-      );
-  }, [transactionTypes, rulesByType, query]);
+      .map((type) => ({ type, rule: ruleByType.get(type.id) ?? null }))
+      .filter(({ type, rule }) => {
+        if (!query) return true;
+        if (`${type.name} ${type.code}`.toLowerCase().includes(query)) return true;
+        return !!rule?.lines.some((line) =>
+          `${line.account.code} ${line.account.name} ${line.description ?? ''}`
+            .toLowerCase()
+            .includes(query),
+        );
+      });
+  }, [transactionTypes, ruleByType, query]);
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -119,19 +110,19 @@ export function TransactionTypeRulesTable() {
             </p>
             <p className="text-sm text-gray-400">
               {transactionTypes.length === 0
-                ? 'Add a transaction type first, then define its posting rules here.'
+                ? 'Add a transaction type first, then define its posting rule here.'
                 : 'Try adjusting your search.'}
             </p>
           </div>
         ) : (
-          groups.map(({ type, rules: groupRules }) => (
-            <RuleGroup
+          groups.map(({ type, rule }) => (
+            <RuleCard
               key={type.id}
               type={type}
-              rules={groupRules}
-              onAddRule={() => setPanel({ rule: null, transactionTypeId: type.id })}
-              onUpdateRule={(rule) => setPanel({ rule })}
-              onDeleteRule={(rule) => setDeleteTarget(rule)}
+              rule={rule}
+              onAdd={() => setPanel({ rule: null, transactionTypeId: type.id })}
+              onUpdate={() => setPanel({ rule })}
+              onDelete={() => rule && setDeleteTarget(rule)}
             />
           ))
         )}
@@ -164,21 +155,20 @@ export function TransactionTypeRulesTable() {
   );
 }
 
-function RuleGroup({
+function RuleCard({
   type,
-  rules,
-  onAddRule,
-  onUpdateRule,
-  onDeleteRule,
+  rule,
+  onAdd,
+  onUpdate,
+  onDelete,
 }: {
   type: TransactionTypeDefinition;
-  rules: TransactionTypeRule[];
-  onAddRule: () => void;
-  onUpdateRule: (rule: TransactionTypeRule) => void;
-  onDeleteRule: (rule: TransactionTypeRule) => void;
+  rule: TransactionTypeRule | null;
+  onAdd: () => void;
+  onUpdate: () => void;
+  onDelete: () => void;
 }) {
-  const columns =
-    'minmax(140px, 1fr) minmax(120px, 1fr) minmax(160px, 1.2fr) minmax(180px, 1.5fr) 140px';
+  const columns = 'minmax(160px, 1.3fr) minmax(160px, 1.5fr) 90px 160px';
 
   return (
     <div className={cardClass('overflow-hidden shrink-0')}>
@@ -191,58 +181,66 @@ function RuleGroup({
             color={TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[type.category]}
           />
         </div>
-        <button
-          type="button"
-          onClick={onAddRule}
-          className="shrink-0 text-sm font-medium text-brand hover:bg-brand/5 px-2 py-1 rounded-lg transition-colors"
-        >
-          + Add Rule
-        </button>
+        {rule ? (
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={onUpdate}
+              className="text-sm font-medium text-brand hover:bg-brand/5 px-2 py-1 rounded-lg transition-colors"
+            >
+              Update
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="text-sm font-medium text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
+            >
+              Delete
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="shrink-0 text-sm font-medium text-brand hover:bg-brand/5 px-2 py-1 rounded-lg transition-colors"
+          >
+            + Add Rule
+          </button>
+        )}
       </div>
 
-      {rules.length === 0 ? (
-        <p className="px-6 py-4 text-sm text-gray-400">No rules yet for this transaction type.</p>
+      {!rule ? (
+        <p className="px-6 py-4 text-sm text-gray-400">No rule yet for this transaction type.</p>
       ) : (
         <div className="min-w-full">
           <div
             className="grid gap-x-4 px-6 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50"
             style={{ gridTemplateColumns: columns }}
           >
-            <span>Source Type</span>
-            <span>Role</span>
             <span>Account</span>
             <span>Description</span>
-            <span />
+            <span>Dir</span>
+            <span>Tax / Subledger</span>
           </div>
-          {rules.map((rule) => (
+          {rule.lines.map((line) => (
             <div
-              key={rule.id}
+              key={line.id}
               className="grid gap-x-4 px-6 py-3 items-center text-sm text-gray-800 border-t border-gray-100"
               style={{ gridTemplateColumns: columns }}
             >
-              <span className="min-w-0 truncate">{rule.sourceType ?? '—'}</span>
-              <span className="min-w-0 truncate">{rule.role ?? '—'}</span>
               <span className="min-w-0 truncate">
-                {rule.account.code} – {rule.account.name}
+                {line.account.code} – {line.account.name}
               </span>
-              <span className="min-w-0 truncate text-gray-600">{rule.description ?? '—'}</span>
-              <span className="flex justify-end gap-1">
-                <button
-                  type="button"
-                  onClick={() => onUpdateRule(rule)}
-                  className="text-sm font-medium text-brand hover:bg-brand/5 px-2 py-1 rounded-lg transition-colors"
-                >
-                  Update
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDeleteRule(rule)}
-                  className={cn(
-                    'text-sm font-medium text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors',
-                  )}
-                >
-                  Delete
-                </button>
+              <span className="min-w-0 truncate text-gray-600">{line.description ?? '—'}</span>
+              <TypeChip
+                label={line.direction}
+                color={line.direction === 'DR' ? 'blue' : 'green'}
+              />
+              <span className="min-w-0 truncate text-gray-600">
+                {line.taxType ? `${line.taxType.name} (${line.taxType.rate}%)` : ''}
+                {line.taxType && line.subledgerType ? ' · ' : ''}
+                {line.subledgerType ?? ''}
+                {!line.taxType && !line.subledgerType ? '—' : ''}
               </span>
             </div>
           ))}

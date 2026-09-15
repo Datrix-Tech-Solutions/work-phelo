@@ -16,6 +16,7 @@ export default function AccountingSettingsLayout({ children }: { children: React
         { key: 'transaction-types', label: 'Transaction Types', href: `${base}/transaction-types` },
         { key: 'source-types', label: 'Source Types', href: `${base}/source-types` },
         { key: 'rules', label: 'Rules', href: `${base}/rules` },
+        { key: 'tax-types', label: 'Tax Types', href: `${base}/tax-types` },
       ],
     },
     {
