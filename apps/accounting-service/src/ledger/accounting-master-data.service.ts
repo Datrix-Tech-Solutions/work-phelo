@@ -1207,10 +1207,11 @@ export class AccountingMasterDataService {
       where: { tenantId: user.tenantId },
       orderBy: { name: 'asc' },
     });
-    // A brand-new tenant has no rows yet — seed the standard set once so the
-    // Transaction Types page is never blank on first visit. Fully editable/
-    // deletable afterwards, same as any user-created type.
-    if (transactionTypes.length === 0) {
+    // Seed the standard set the first time a tenant has none of them yet —
+    // checked by isSystemDefault, not by an empty table, so a tenant that
+    // already created their own custom type still gets the defaults too.
+    // Fully editable/deletable afterwards, same as any user-created type.
+    if (!transactionTypes.some((type) => type.isSystemDefault)) {
       await this.seedStandardTransactionTypes(user);
       transactionTypes = await this.prisma.transactionType.findMany({
         where: { tenantId: user.tenantId },
