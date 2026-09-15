@@ -395,10 +395,7 @@ export class AccountsController {
     @Param('subledgerId', ParseUUIDPipe) subledgerId: string,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.masterData.activateSubledgerAccount(
-      request.user,
-      subledgerId,
-    );
+    return this.masterData.activateSubledgerAccount(request.user, subledgerId);
   }
 
   @Get('customers')
