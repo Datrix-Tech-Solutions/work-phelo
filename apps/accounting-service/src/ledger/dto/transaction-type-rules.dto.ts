@@ -15,10 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import {
-  PostingDirection,
-  SubledgerType,
-} from '../../../prisma/generated/client';
+import { PostingDirection } from '../../../prisma/generated/client';
 
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -86,13 +83,13 @@ export class TransactionTypeRuleLineDto {
   taxTypeId?: string;
 
   @ApiPropertyOptional({
-    enum: SubledgerType,
+    example: 'CUSTOMER',
     description:
-      'Set only when this line also posts to a party subledger (Customer/Vendor/etc.) under this account, rather than the account alone.',
+      "Set only when this line also posts to a party subledger (one of the tenant's Entity Types) under this account, rather than the account alone.",
   })
   @IsOptional()
-  @IsEnum(SubledgerType)
-  subledgerType?: SubledgerType;
+  @IsString()
+  subledgerType?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

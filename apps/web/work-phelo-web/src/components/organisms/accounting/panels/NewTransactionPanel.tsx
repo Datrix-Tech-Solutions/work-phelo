@@ -9,25 +9,18 @@ import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelec
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Toggle } from '@/components/atoms/Toggle';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import {
-  SUBLEDGER_TYPE_LABELS,
-  SubledgerType,
-  TransactionTypeDefinition,
-} from '@/types/accounting';
+import { TransactionTypeDefinition } from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
   useCreatePayableBill,
   useCreateReceivableInvoice,
+  useEntityTypes,
   usePostPayableBill,
   usePostReceivableInvoice,
   useSubledgers,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-
-const BUSINESS_ROLE_OPTIONS: SearchSelectOption[] = (
-  Object.entries(SUBLEDGER_TYPE_LABELS) as [SubledgerType, string][]
-).map(([value, label]) => ({ value, label }));
 
 interface TaxTypeOption extends SearchSelectOption {
   /** Percentage rate applied to the subtotal — drives the breakdown below the field. */
@@ -46,7 +39,7 @@ function fmtAmount(value: number, currency: string) {
 }
 
 type FormValues = {
-  businessRole: SubledgerType | '';
+  businessRole: string;
   businessEntity: string;
   description: string;
   amount: string;
@@ -104,6 +97,17 @@ export function NewTransactionPanel({
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
+  const { data: entityTypesData = [] } = useEntityTypes();
+  // Only the roles actually configured on this transaction type — not the tenant's full
+  // Entity Types list — and any of them works now, not just the old fixed enum names.
+  const businessRoleOptions = useMemo<SearchSelectOption[]>(() => {
+    const configured = transactionType?.businessRoles ?? [];
+    return configured.map((role) => ({
+      value: role,
+      label: entityTypesData.find((t) => t.name.trim().toUpperCase() === role)?.name ?? role,
+    }));
+  }, [transactionType, entityTypesData]);
+
   const businessRole = useWatch({ control, name: 'businessRole' });
   const applyTax = useWatch({ control, name: 'applyTax' });
   const taxType = useWatch({ control, name: 'taxType' });
@@ -119,12 +123,10 @@ export function NewTransactionPanel({
   useEffect(() => {
     if (!isOpen) return;
 
-    const restrictedRoles = (transactionType?.businessRoles ?? []).filter(
-      (r): r is SubledgerType => r in SUBLEDGER_TYPE_LABELS,
-    );
+    const configuredRoles = transactionType?.businessRoles ?? [];
     reset({
       ...DEFAULTS,
-      businessRole: restrictedRoles.length === 1 ? restrictedRoles[0] : '',
+      businessRole: configuredRoles.length === 1 ? configuredRoles[0] : '',
       entryDate: today(),
     });
   }, [isOpen, transactionType, reset]);
@@ -242,7 +244,7 @@ export function NewTransactionPanel({
               <SearchSelect
                 label="Business Role"
                 placeholder="Select a business role…"
-                options={BUSINESS_ROLE_OPTIONS}
+                options={businessRoleOptions}
                 value={field.value}
                 onChange={(value) => {
                   field.onChange(value);

@@ -7,6 +7,7 @@ import {
 import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
+  EntityAccountingRelation,
   FiscalPeriodStatus,
   GLAccountCategory,
   JournalStatus,
@@ -1731,38 +1732,50 @@ export class AccountingMasterDataService {
     }
   }
 
-  /** Customer/Vendor/Cedant/Reinsurer always roll up into the tenant's one shared AR or AP
-   *  control account — never a per-entity choice (see AddEntityPanel's dropped Control
-   *  Account picker for those types). Types with no defined AR/AP relation (Employee,
-   *  Statutory, Other) have no default, so they still require an explicit account. */
+  /** `type` is validated against the tenant's own Entity Types list (Settings > Entities >
+   *  Types), not a fixed enum — any type a tenant creates there works here. A type marked
+   *  Receivable/Payable/Both rolls up into the tenant's one shared AR or AP control account
+   *  automatically (Both prefers the AR account); one marked None has no default, so it
+   *  still requires an explicit account. */
   private async resolveSubledgerControlAccount(
     tenantId: string,
-    type: SubledgerType,
+    type: string,
     explicitControlAccountId?: string,
   ): Promise<string> {
+    const entityType = await this.prisma.entityType.findFirst({
+      where: { tenantId, name: { equals: type, mode: 'insensitive' } },
+    });
+    if (!entityType) {
+      throw new BadRequestException(
+        `"${type}" is not a configured Entity Type — create it first under Entities > Types`,
+      );
+    }
+
     if (explicitControlAccountId) {
       await this.assertControlAccount(tenantId, explicitControlAccountId);
       return explicitControlAccountId;
     }
 
-    const isReceivableRole =
-      type === SubledgerType.CUSTOMER || type === SubledgerType.CEDANT;
-    const isPayableRole =
-      type === SubledgerType.VENDOR || type === SubledgerType.REINSURER;
-    if (isReceivableRole || isPayableRole) {
+    const isReceivable =
+      entityType.accountingRelation === EntityAccountingRelation.RECEIVABLE ||
+      entityType.accountingRelation === EntityAccountingRelation.BOTH;
+    const isPayable =
+      entityType.accountingRelation === EntityAccountingRelation.PAYABLE;
+    if (isReceivable || isPayable) {
       const config = await this.getConfiguredControlAccounts(tenantId);
-      const controlAccountId = isReceivableRole
+      const controlAccountId = isReceivable
         ? config.accountsReceivableControlAccountId
         : config.accountsPayableControlAccountId;
       if (controlAccountId) return controlAccountId;
       throw new BadRequestException(
-        `Configure an accounts ${isReceivableRole ? 'receivable' : 'payable'} ` +
-          `control account before creating ${type.toLowerCase()} entities`,
+        `Configure an accounts ${isReceivable ? 'receivable' : 'payable'} ` +
+          `control account before creating "${type}" entities`,
       );
     }
 
     throw new BadRequestException(
-      'A control account is required for this entity type',
+      `"${type}" has no accounting relation set — edit it under Entities > Types, ` +
+        'or provide a control account manually',
     );
   }
 

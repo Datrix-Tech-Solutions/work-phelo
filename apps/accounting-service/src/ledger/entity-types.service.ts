@@ -5,7 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
-import { Prisma, SubledgerType } from '../../prisma/generated/client';
+import {
+  EntityAccountingRelation,
+  Prisma,
+} from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateEntityTypeDto,
@@ -13,8 +16,13 @@ import {
 } from './dto/entity-types.dto';
 
 // The two the Entities page always starts with — matches the two-only default we settled
-// on (everything else must be created here first before it's usable elsewhere).
-const DEFAULT_ENTITY_TYPES = ['Customer', 'Vendor'] as const;
+// on (everything else must be created here first before it's usable elsewhere). Their
+// accountingRelation is what makes them actually work as Receivable/Payable roles — see
+// AccountingMasterDataService.resolveSubledgerControlAccount.
+const DEFAULT_ENTITY_TYPES = [
+  { name: 'Customer', accountingRelation: EntityAccountingRelation.RECEIVABLE },
+  { name: 'Vendor', accountingRelation: EntityAccountingRelation.PAYABLE },
+] as const;
 
 @Injectable()
 export class EntityTypesService {
@@ -92,17 +100,17 @@ export class EntityTypesService {
       throw new BadRequestException('System types cannot be deleted');
     }
 
-    const matched = this.matchingSubledgerType(entityType.name);
-    if (matched) {
-      const inUse = await this.prisma.subledgerAccount.count({
-        where: { tenantId: user.tenantId, type: matched },
-      });
-      if (inUse > 0) {
-        throw new ConflictException(
-          `${inUse} ${inUse === 1 ? 'entity uses' : 'entities use'} this type ` +
-            'and it cannot be deleted',
-        );
-      }
+    const inUse = await this.prisma.subledgerAccount.count({
+      where: {
+        tenantId: user.tenantId,
+        type: entityType.name.trim().toUpperCase(),
+      },
+    });
+    if (inUse > 0) {
+      throw new ConflictException(
+        `${inUse} ${inUse === 1 ? 'entity uses' : 'entities use'} this type ` +
+          'and it cannot be deleted',
+      );
     }
 
     await this.prisma.entityType.delete({
@@ -114,12 +122,13 @@ export class EntityTypesService {
   }
 
   private async seedDefaultEntityTypes(user: RequestUser) {
-    for (const name of DEFAULT_ENTITY_TYPES) {
+    for (const template of DEFAULT_ENTITY_TYPES) {
       try {
         await this.prisma.entityType.create({
           data: {
             tenantId: user.tenantId,
-            name,
+            name: template.name,
+            accountingRelation: template.accountingRelation,
             isSystem: true,
             createdByUserId: user.id,
             updatedByUserId: user.id,
@@ -138,9 +147,9 @@ export class EntityTypesService {
     }
   }
 
-  private async countsByType(
-    tenantId: string,
-  ): Promise<Map<SubledgerType, number>> {
+  // type is a free string (see AccountingMasterDataService's SubledgerAccount note) — any
+  // Entity Type name (uppercased) can appear here, not just a fixed set.
+  private async countsByType(tenantId: string): Promise<Map<string, number>> {
     const counts = await this.prisma.subledgerAccount.groupBy({
       by: ['type'],
       where: { tenantId },
@@ -157,16 +166,6 @@ export class EntityTypesService {
     return entityType;
   }
 
-  // Entity Types is deliberately a broader, tenant-editable list than the fixed
-  // SubledgerType enum SubledgerAccount.type actually stores — only a name matching one
-  // of its members (Customer, Vendor, ...) corresponds to real, postable entities today.
-  private matchingSubledgerType(name: string): SubledgerType | null {
-    const candidate = name.trim().toUpperCase();
-    return (Object.values(SubledgerType) as string[]).includes(candidate)
-      ? (candidate as SubledgerType)
-      : null;
-  }
-
   private toEntityTypeDto(
     entityType: {
       id: string;
@@ -176,15 +175,14 @@ export class EntityTypesService {
       createdAt: Date;
       updatedAt: Date;
     },
-    countByType: Map<SubledgerType, number>,
+    countByType: Map<string, number>,
   ) {
-    const matched = this.matchingSubledgerType(entityType.name);
     return {
       id: entityType.id,
       name: entityType.name,
       accountingRelation: entityType.accountingRelation,
       isSystem: entityType.isSystem,
-      entityCount: matched ? (countByType.get(matched) ?? 0) : 0,
+      entityCount: countByType.get(entityType.name.trim().toUpperCase()) ?? 0,
       createdAt: entityType.createdAt.toISOString(),
       updatedAt: entityType.updatedAt.toISOString(),
     };

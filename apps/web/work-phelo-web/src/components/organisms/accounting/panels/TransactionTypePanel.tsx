@@ -15,11 +15,7 @@ import {
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import {
-  SUBLEDGER_TYPE_LABELS,
-  type TransactionTypeCategory,
-  type TransactionTypeDefinition,
-} from '@/types/accounting';
+import type { TransactionTypeCategory, TransactionTypeDefinition } from '@/types/accounting';
 
 const CATEGORY_OPTIONS: SearchSelectOption[] = [
   { value: 'NEUTRAL', label: 'Neutral' },
@@ -68,14 +64,11 @@ export function TransactionTypePanel({
   );
   const { data: entityTypesData = [] } = useEntityTypes();
   // Sourced from the tenant's own Entity Types list (Settings > Entities > Types) — not a
-  // hardcoded set, same as AddEntityPanel. Only names that map to a real SubledgerType (the
-  // enum businessRoles actually validates against) are offered.
-  const businessRoleOptions = useMemo<SearchSelectOption[]>(() => {
-    const validValues = new Set(Object.keys(SUBLEDGER_TYPE_LABELS));
-    return entityTypesData
-      .map((t) => ({ label: t.name, value: t.name.trim().toUpperCase() }))
-      .filter((t) => validValues.has(t.value));
-  }, [entityTypesData]);
+  // hardcoded set, same as AddEntityPanel. Any type in that list is offered now.
+  const businessRoleOptions = useMemo<SearchSelectOption[]>(
+    () => entityTypesData.map((t) => ({ label: t.name, value: t.name.trim().toUpperCase() })),
+    [entityTypesData],
+  );
   const {
     register,
     control,

@@ -389,12 +389,17 @@ model CostCentre {
   @@schema("accounting")
 }
 
+/// `type` is a free string (the tenant's EntityType.name, uppercased), not the fixed
+/// SubledgerType enum — validated in AccountingMasterDataService against the tenant's own
+/// Entity Types list, so any type a tenant creates there can actually back a real entity.
+/// PostingRuleLine.subledgerType stays on the SubledgerType enum deliberately — that's a
+/// separate, unrelated mechanism (automated cross-module posting for Cedant/Reinsurer).
 model SubledgerAccount {
   id               String                @id @default(uuid())
   tenantId         String
   code             String
   name             String
-  type             SubledgerType
+  type             String
   externalRef      String?
   controlAccountId String
   currency         String?
@@ -785,7 +790,7 @@ model TransactionTypeRuleLine {
   direction     PostingDirection
   accountId     String
   taxTypeId     String?
-  subledgerType SubledgerType?
+  subledgerType String?
   description   String?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
