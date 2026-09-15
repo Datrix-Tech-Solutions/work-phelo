@@ -769,7 +769,7 @@ model TransactionTypeRule {
   lines             TransactionTypeRuleLine[]
 
   @@unique([id, tenantId])
-  @@unique([tenantId, transactionTypeId])
+  @@unique([transactionTypeId, tenantId])
   @@schema("accounting")
 }
 

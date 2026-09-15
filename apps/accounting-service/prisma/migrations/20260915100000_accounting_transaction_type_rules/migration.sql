@@ -55,7 +55,7 @@ CREATE UNIQUE INDEX "TaxType_tenantId_name_key" ON "accounting"."TaxType"("tenan
 CREATE UNIQUE INDEX "TransactionTypeRule_id_tenantId_key" ON "accounting"."TransactionTypeRule"("id", "tenantId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "TransactionTypeRule_tenantId_transactionTypeId_key" ON "accounting"."TransactionTypeRule"("tenantId", "transactionTypeId");
+CREATE UNIQUE INDEX "TransactionTypeRule_transactionTypeId_tenantId_key" ON "accounting"."TransactionTypeRule"("transactionTypeId", "tenantId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "TransactionTypeRuleLine_id_tenantId_key" ON "accounting"."TransactionTypeRuleLine"("id", "tenantId");
