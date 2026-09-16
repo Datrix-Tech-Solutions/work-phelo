@@ -1751,6 +1751,35 @@ export class AccountingMasterDataService {
     }));
   }
 
+  async getSubledgerAccount(tenantId: string, subledgerId: string) {
+    const item = await this.prisma.subledgerAccount.findFirst({
+      where: { id: subledgerId, tenantId },
+      include: {
+        controlAccount: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            category: true,
+            normalBalance: true,
+          },
+        },
+      },
+    });
+    if (!item) throw new NotFoundException('Subledger account not found');
+    const balances =
+      item.controlAccountId && item.controlAccount
+        ? await this.calculateSubledgerDimensionBalances(tenantId, [
+            {
+              subledgerAccountId: item.id,
+              controlAccountId: item.controlAccountId,
+              normalBalance: item.controlAccount.normalBalance,
+            },
+          ])
+        : new Map<string, ReturnType<typeof this.emptyBalance>>();
+    return { ...item, balance: balances.get(item.id) ?? this.emptyBalance() };
+  }
+
   async createSubledgerAccount(
     user: RequestUser,
     dto: CreateSubledgerAccountDto,
