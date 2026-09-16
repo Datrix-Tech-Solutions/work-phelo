@@ -5,7 +5,9 @@ import {
   AccountingReceivableDocumentType,
   AccountingReceivableStatus,
   AccountingSettlementMethod,
+  PostingDirection,
   Prisma,
+  TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { CashbookService } from './cashbook.service';
 import { JournalsService } from './journals.service';
@@ -18,6 +20,7 @@ const actor = {
 const arControlAccountId = 'ar-control';
 const offsetAccountId = 'revenue-account';
 const subledgerAccountId = 'customer-subledger';
+const transactionTypeId = 'txn-type-1';
 
 const customer = {
   id: 'customer-1',
@@ -120,6 +123,29 @@ const setup = () => {
     },
     accountingCustomer: {
       findFirst: jest.fn().mockResolvedValue(customer),
+    },
+    transactionType: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: transactionTypeId,
+        tenantId: actor.tenantId,
+        category: TransactionTypeCategory.RECEIVABLE,
+      }),
+    },
+    transactionTypeRule: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'rule-1',
+        tenantId: actor.tenantId,
+        transactionTypeId,
+        lines: [
+          {
+            id: 'line-1',
+            direction: PostingDirection.CR,
+            accountId: offsetAccountId,
+            taxTypeId: null,
+            taxType: null,
+          },
+        ],
+      }),
     },
     gLAccount: {
       findFirst: jest.fn().mockResolvedValue({
@@ -229,7 +255,7 @@ describe('ReceivablesService', () => {
       documentDate: '2026-08-10',
       currency: 'GHS',
       amount: 1000,
-      offsetGlAccountId: offsetAccountId,
+      transactionTypeId,
       description: 'Invoice',
     });
 
