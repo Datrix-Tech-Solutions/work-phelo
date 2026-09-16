@@ -392,5 +392,4 @@ export class AccountsController {
   ) {
     return this.masterData.activateSubledgerAccount(request.user, subledgerId);
   }
-
 }
