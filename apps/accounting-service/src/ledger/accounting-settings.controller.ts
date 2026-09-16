@@ -143,7 +143,10 @@ export class AccountingSettingsController {
 
   @Post('fiscal-periods')
   @ApiTags('Accounting - Fiscal Periods')
-  @ApiOperation({ summary: 'Create a non-overlapping fiscal period' })
+  @ApiOperation({
+    summary:
+      'Create a single non-overlapping fiscal period, or (with generateYear) the 12 monthly periods of a fiscal year',
+  })
   @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
   createFiscalPeriod(
     @Body() dto: CreateFiscalPeriodDto,

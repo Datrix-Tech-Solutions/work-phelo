@@ -100,6 +100,8 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     reversalOfDocumentId: raw.reversalOfDocumentId ?? null,
     party: raw[config.partyKey],
     offsetGlAccount: raw.offsetGlAccount,
+    controlAccount: raw.arAccount ?? raw.apAccount,
+    taxBreakdown: raw.taxBreakdown ?? [],
     postedJournalEntry: raw.postedJournalEntry ?? null,
     reversalJournalEntry: raw.reversalJournalEntry ?? null,
     originalDocument: original

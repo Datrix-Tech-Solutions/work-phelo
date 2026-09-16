@@ -33,6 +33,21 @@ export function useCreateFiscalPeriod() {
   });
 }
 
+/** Same endpoint as useCreateFiscalPeriod, in generateYear mode — returns the 12
+ *  created periods rather than a single one. */
+export function useGenerateFiscalYear() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (year: number) => {
+      const res = await api.post<FiscalPeriod[]>(BASE, { generateYear: year });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FISCAL_PERIODS_KEY });
+    },
+  });
+}
+
 function useFiscalPeriodStatusMutation(action: 'open' | 'close' | 'lock') {
   const queryClient = useQueryClient();
   return useMutation({

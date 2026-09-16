@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ChangeEvent } from 'react';
+import { Fragment, useState, ChangeEvent } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -13,6 +13,7 @@ import {
   AccountingTradeSide,
 } from '@/types/accounting';
 import {
+  useGLAccounts,
   usePayableBillBalance,
   usePostPayableBill,
   usePostPayableCreditNote,
@@ -23,6 +24,7 @@ import {
   useReversePayableCreditNote,
   useReverseReceivableCreditNote,
   useReverseReceivableInvoice,
+  useTaxTypes,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -36,6 +38,9 @@ interface TradeDocumentDetailPanelProps {
    * balance endpoint. Credit notes don't have a balance endpoint, so that fetch
    * and display are skipped for 'creditNote'. */
   documentKind?: 'invoice' | 'creditNote';
+  /** Called after "Post and Pay" successfully posts the document — the caller opens
+   * its own Make/Receive Payment panel with the now-posted document. */
+  onPostedForPayment?: (document: AccountingTradeDocument) => void;
 }
 
 const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral' | 'danger'> = {
@@ -53,6 +58,14 @@ const PAYMENT_STATE_VARIANT: Record<
   PAID: 'success',
   PARTIALLY_PAID: 'warning',
   OPEN: 'info',
+};
+
+const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
+  DRAFT: 'Draft',
+  REVERSED: 'Reversed',
+  PAID: 'Paid',
+  PARTIALLY_PAID: 'Partially Paid',
+  OPEN: 'Unpaid',
 };
 
 function fmtAmount(amount: string, currency: string) {
@@ -79,6 +92,7 @@ export function TradeDocumentDetailPanel({
   document,
   onClose,
   documentKind = 'invoice',
+  onPostedForPayment,
 }: TradeDocumentDetailPanelProps) {
   const toast = useToast();
   const [reverseOpen, setReverseOpen] = useState(false);
@@ -115,6 +129,32 @@ export function TradeDocumentDetailPanel({
   const isPosting = isReceivable ? postReceivable.isPending : postPayable.isPending;
   const isReversing = isReceivable ? reverseReceivable.isPending : reversePayable.isPending;
 
+  const { data: glAccounts = [] } = useGLAccounts();
+  const { data: taxTypes = [] } = useTaxTypes();
+
+  // A non-credit-note document (invoice/bill) debits AR / credits AP on its control
+  // account; a credit note reverses that — see documentJournalDto on the backend.
+  const controlAccountLabel = isReceivable ? 'Receivable (AR) Account' : 'Payable (AP) Account';
+  const controlAccountDirection = isReceivable
+    ? isCreditNote
+      ? 'Credit'
+      : 'Debit'
+    : isCreditNote
+      ? 'Debit'
+      : 'Credit';
+  const offsetDirection = controlAccountDirection === 'Debit' ? 'Credit' : 'Debit';
+
+  const taxLines = (document?.taxBreakdown ?? []).map((line) => {
+    const account = glAccounts.find((a) => a.id === line.glAccountId);
+    const taxType = taxTypes.find((t) => t.id === line.taxTypeId);
+    return {
+      key: line.glAccountId + line.taxTypeId,
+      accountLabel: account ? `${account.code} – ${account.name}` : line.glAccountId,
+      taxTypeLabel: taxType?.name ?? null,
+      amount: line.amount,
+    };
+  });
+
   const handleClose = () => {
     setReverseOpen(false);
     setReason('');
@@ -132,6 +172,25 @@ export function TradeDocumentDetailPanel({
       toast.success(isCreditNote ? 'Credit note posted.' : 'Invoice posted.');
     } catch (err) {
       toast.error(extractError(err, 'Failed to post document'));
+    }
+  };
+
+  const [isPostingForPayment, setIsPostingForPayment] = useState(false);
+
+  const handlePostAndPay = async () => {
+    if (!document) return;
+    setIsPostingForPayment(true);
+    try {
+      const posted = isReceivable
+        ? await postReceivable.mutateAsync(document.id)
+        : await postPayable.mutateAsync(document.id);
+      toast.success(isCreditNote ? 'Credit note posted.' : 'Invoice posted.');
+      onPostedForPayment?.(posted);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to post document'));
+    } finally {
+      setIsPostingForPayment(false);
     }
   };
 
@@ -177,6 +236,16 @@ export function TradeDocumentDetailPanel({
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {onPostedForPayment && (
+                <Button
+                  variant="outline"
+                  isLoading={isPostingForPayment}
+                  loadingText="Posting…"
+                  onClick={handlePostAndPay}
+                >
+                  Post and {isReceivable ? 'Receive Payment' : 'Pay'}
+                </Button>
+              )}
               <Button isLoading={isPosting} loadingText="Posting…" onClick={handlePost}>
                 Post
               </Button>
@@ -203,9 +272,9 @@ export function TradeDocumentDetailPanel({
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <Badge label={document.status} variant={STATUS_VARIANT[document.status]} />
-              {balance && (
+              {balance && balance.paymentState !== 'DRAFT' && (
                 <Badge
-                  label={balance.paymentState.replaceAll('_', ' ')}
+                  label={PAYMENT_STATE_LABEL[balance.paymentState]}
                   variant={PAYMENT_STATE_VARIANT[balance.paymentState]}
                 />
               )}
@@ -226,16 +295,52 @@ export function TradeDocumentDetailPanel({
                 label="Subtotal / Tax"
                 value={`${fmtAmount(document.subtotalAmount, document.currency)} / ${fmtAmount(document.taxAmount, document.currency)}`}
               />
-              <Field
-                label="Offset GL Account"
-                value={`${document.offsetGlAccount.code} – ${document.offsetGlAccount.name}`}
-              />
               {document.externalReference && (
                 <Field label="External Reference" value={document.externalReference} />
               )}
               {document.originalDocument && (
                 <Field label="Applied To" value={document.originalDocument.documentNumber} />
               )}
+            </div>
+
+            <div className="rounded-xl border border-gray-200 p-3 flex flex-col gap-2">
+              <span className="text-xs font-semibold text-gray-500">
+                Posting ({controlAccountLabel} — {controlAccountDirection})
+              </span>
+              <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-1.5 text-sm">
+                <span className="text-gray-500 text-xs font-medium">Account</span>
+                <span className="text-gray-500 text-xs font-medium">Side</span>
+                <span className="text-gray-500 text-xs font-medium text-right">Amount</span>
+
+                <span className="text-gray-900">
+                  {document.controlAccount.code} – {document.controlAccount.name}
+                </span>
+                <span className="text-gray-700">{controlAccountDirection}</span>
+                <span className="text-right text-gray-900">
+                  {fmtAmount(document.totalAmount, document.currency)}
+                </span>
+
+                <span className="text-gray-900">
+                  {document.offsetGlAccount.code} – {document.offsetGlAccount.name}
+                </span>
+                <span className="text-gray-700">{offsetDirection}</span>
+                <span className="text-right text-gray-900">
+                  {fmtAmount(document.subtotalAmount, document.currency)}
+                </span>
+
+                {taxLines.map((line) => (
+                  <Fragment key={line.key}>
+                    <span className="text-gray-900">
+                      {line.accountLabel}
+                      {line.taxTypeLabel ? ` (${line.taxTypeLabel})` : ''}
+                    </span>
+                    <span className="text-gray-700">{offsetDirection}</span>
+                    <span className="text-right text-gray-900">
+                      {fmtAmount(line.amount, document.currency)}
+                    </span>
+                  </Fragment>
+                ))}
+              </div>
             </div>
 
             {balance && document.status === 'POSTED' && (

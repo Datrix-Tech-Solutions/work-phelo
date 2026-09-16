@@ -29,9 +29,7 @@ export default function AccountingSettingsLayout({ children }: { children: React
         // { key: 'posting-rules', label: 'Posting Rules', href: `${base}/posting-rules` },
       ],
     },
-    {
-      tabs: [{ key: 'fiscal-year', label: 'Fiscal Year', href: `${base}/fiscal-year` }],
-    },
+    
   ];
 
   return (
