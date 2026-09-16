@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { useForm, useWatch, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -10,16 +9,11 @@ import { AccountingTradeSide } from '@/types/accounting';
 import {
   useCreatePayableCreditNote,
   useCreateReceivableCreditNote,
-  useEntityTypes,
   useGLAccountOptions,
   usePayableBills,
   useReceivableInvoices,
   useSubledgers,
 } from '@/hooks';
-import {
-  matchesTradeSide,
-  resolveEntityAccountingRelation,
-} from '@/lib/accounting/entityAccountingRelation';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -35,6 +29,7 @@ type FormValues = {
   currency: string;
   amount: number | '';
   offsetGlAccountId: string;
+  controlAccountId: string;
   originalDocumentId: string;
   description: string;
   externalReference: string;
@@ -46,6 +41,7 @@ const DEFAULTS: FormValues = {
   currency: '',
   amount: '',
   offsetGlAccountId: '',
+  controlAccountId: '',
   originalDocumentId: '',
   description: '',
   externalReference: '',
@@ -57,16 +53,10 @@ export function AddTradeCreditNotePanel({ isOpen, onClose, side }: AddTradeCredi
   const partyLabel = isReceivable ? 'Customer' : 'Vendor';
   const documentLabel = isReceivable ? 'invoice' : 'bill';
 
-  const { data: entities, isLoading: isLoadingEntities } = useSubledgers({ status: 'ACTIVE' });
-  const { data: entityTypes, isLoading: isLoadingEntityTypes } = useEntityTypes();
-  const isLoadingParties = isLoadingEntities || isLoadingEntityTypes;
-  const parties = useMemo(
-    () =>
-      (entities ?? []).filter((entity) =>
-        matchesTradeSide(resolveEntityAccountingRelation(entity, entityTypes), side),
-      ),
-    [entities, entityTypes, side],
-  );
+  // Any active entity can be picked here — the Transaction Type decides whether the
+  // resulting document is Receivable or Payable, not the entity itself.
+  const { data: entities, isLoading: isLoadingParties } = useSubledgers({ status: 'ACTIVE' });
+  const parties = entities ?? [];
   const partyOptions: SearchSelectOption[] = parties.map((p) => ({
     value: p.id,
     label: `${p.code} — ${p.name}`,
@@ -117,6 +107,7 @@ export function AddTradeCreditNotePanel({ isOpen, onClose, side }: AddTradeCredi
       currency: data.currency,
       amount: Number(data.amount),
       offsetGlAccountId: data.offsetGlAccountId,
+      controlAccountId: data.controlAccountId,
       originalDocumentId: data.originalDocumentId || undefined,
       description: data.description || undefined,
       externalReference: data.externalReference || undefined,

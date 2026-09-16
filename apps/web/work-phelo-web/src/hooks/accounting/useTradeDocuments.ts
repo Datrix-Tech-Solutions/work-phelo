@@ -34,6 +34,8 @@ interface SideConfig {
   invoiceSegment: 'invoices' | 'bills';
   /** Field name a credit-note allocation payload uses for the invoice/bill it applies to. */
   documentIdField: 'invoiceId' | 'billId';
+  /** Field name the backend expects for a credit note's manually-picked control account. */
+  controlAccountIdField: 'arAccountId' | 'apAccountId';
 }
 
 const SIDE_CONFIG: Record<AccountingTradeSide, SideConfig> = {
@@ -46,6 +48,7 @@ const SIDE_CONFIG: Record<AccountingTradeSide, SideConfig> = {
     appliedSettlementsField: 'appliedReceipts',
     invoiceSegment: 'invoices',
     documentIdField: 'invoiceId',
+    controlAccountIdField: 'arAccountId',
   },
   PAYABLE: {
     base: '/accounting/payables',
@@ -56,6 +59,7 @@ const SIDE_CONFIG: Record<AccountingTradeSide, SideConfig> = {
     appliedSettlementsField: 'appliedPayments',
     invoiceSegment: 'bills',
     documentIdField: 'billId',
+    controlAccountIdField: 'apAccountId',
   },
 };
 
@@ -206,11 +210,12 @@ function useCreateCreditNote(side: AccountingTradeSide) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: CreateTradeCreditNotePayload) => {
-      const { partyId, originalDocumentId, ...rest } = payload;
+      const { partyId, originalDocumentId, controlAccountId, ...rest } = payload;
       const body = {
         ...rest,
         [config.partyIdField]: partyId,
         [config.originalIdField]: originalDocumentId,
+        [config.controlAccountIdField]: controlAccountId,
       };
       const res = await api.post<RawTradeDocument>(`${config.base}/${CREDIT_NOTE_SEGMENT}`, body);
       return mapDocument(res.data, side);

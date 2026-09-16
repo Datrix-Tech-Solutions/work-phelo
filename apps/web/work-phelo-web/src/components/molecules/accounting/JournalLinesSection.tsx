@@ -57,9 +57,14 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
   const { options: accountOptions, isLoading: isLoadingAccounts } = useGLAccountOptions();
 
   const { data: subledgers = [] } = useSubledgers();
-  const controlAccountIds = new Set(subledgers.map((s) => s.controlAccountId));
+  // Most entities carry no control account at all now (see the SubledgerAccount schema
+  // note) — only those with one can be auto-suggested when a control account is targeted.
+  const controlAccountIds = new Set(
+    subledgers.flatMap((s) => (s.controlAccountId ? [s.controlAccountId] : [])),
+  );
   const subledgerOptionsByControlAccount = new Map<string, { value: string; label: string }[]>();
   for (const s of subledgers) {
+    if (!s.controlAccountId) continue;
     const list = subledgerOptionsByControlAccount.get(s.controlAccountId) ?? [];
     list.push({ value: s.id, label: `${s.code} – ${s.name}` });
     subledgerOptionsByControlAccount.set(s.controlAccountId, list);

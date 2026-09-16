@@ -50,6 +50,7 @@ const invoice = (overrides: Record<string, unknown> = {}) => ({
   sourceModule: null,
   sourceRecordId: null,
   offsetGlAccountId: offsetAccountId,
+  arAccountId: arControlAccountId,
   originalInvoiceId: null,
   status: AccountingReceivableStatus.DRAFT,
   createdByUserId: actor.id,
@@ -96,6 +97,7 @@ const receipt = (overrides: Record<string, unknown> = {}) => ({
   postedAt: new Date('2026-08-10'),
   reversedAt: null,
   reversalOfReceiptId: null,
+  arAccountId: arControlAccountId,
   customer,
   cashbookTransaction: {
     id: 'cashbook-1',
@@ -109,13 +111,6 @@ const receipt = (overrides: Record<string, unknown> = {}) => ({
 
 const setup = () => {
   const prisma = {
-    accountingTenantConfig: {
-      findUnique: jest.fn().mockResolvedValue({
-        tenantId: actor.tenantId,
-        baseCurrency: 'GHS',
-        accountsReceivableControlAccountId: arControlAccountId,
-      }),
-    },
     accountingCurrency: {
       findUnique: jest.fn().mockResolvedValue({ code: 'GHS', isActive: true }),
     },
@@ -147,6 +142,13 @@ const setup = () => {
             id: 'line-1',
             direction: PostingDirection.CR,
             accountId: offsetAccountId,
+            taxTypeId: null,
+            taxType: null,
+          },
+          {
+            id: 'line-2',
+            direction: PostingDirection.DR,
+            accountId: arControlAccountId,
             taxTypeId: null,
             taxType: null,
           },
@@ -253,7 +255,7 @@ const setup = () => {
 };
 
 describe('ReceivablesService', () => {
-  it('creates a draft standalone invoice using tenant AR configuration', async () => {
+  it('creates a draft standalone invoice using the rule-resolved AR account', async () => {
     const { prisma, service } = setup();
 
     const result = await service.createInvoice(actor, {
@@ -266,15 +268,13 @@ describe('ReceivablesService', () => {
     });
 
     expect(result.documentType).toBe(AccountingReceivableDocumentType.INVOICE);
-    expect(prisma.accountingTenantConfig.findUnique).toHaveBeenCalledWith({
-      where: { tenantId: actor.tenantId },
-    });
     expect(prisma.accountingReceivableDocument.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           customerId: customer.id,
           totalAmount: new Prisma.Decimal(1000),
           offsetGlAccountId: offsetAccountId,
+          arAccountId: arControlAccountId,
         }) as unknown,
       }),
     );
@@ -315,6 +315,7 @@ describe('ReceivablesService', () => {
 
     await service.createReceipt(actor, {
       customerId: customer.id,
+      invoiceId: 'invoice-1',
       cashAccountId: 'cash-account-1',
       amount: 600,
       currency: 'GHS',

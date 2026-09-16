@@ -5,12 +5,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import {
-  useAccountingConfig,
-  useAccountingCurrencyOptions,
-  useGLAccountOptions,
-  useUpdateAccountingConfig,
-} from '@/hooks';
+import { useAccountingConfig, useAccountingCurrencyOptions, useUpdateAccountingConfig } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToast } from '@/hooks/useToast';
 
@@ -18,16 +13,12 @@ interface FormValues {
   baseCurrency: string;
   fiscalYearStartMonth: number;
   decimalPlaces: number;
-  accountsReceivableControlAccountId: string;
-  accountsPayableControlAccountId: string;
 }
 
 const DEFAULTS: FormValues = {
   baseCurrency: '',
   fiscalYearStartMonth: 1,
   decimalPlaces: 2,
-  accountsReceivableControlAccountId: '',
-  accountsPayableControlAccountId: '',
 };
 
 export function AccountingConfigurationForm() {
@@ -35,10 +26,6 @@ export function AccountingConfigurationForm() {
   const { data: config, isLoading } = useAccountingConfig();
   const { options: currencyOptions, isLoading: isLoadingCurrencies } =
     useAccountingCurrencyOptions();
-  const { options: receivableAccountOptions, isLoading: isLoadingReceivableAccounts } =
-    useGLAccountOptions({ category: 'ASSET' });
-  const { options: payableAccountOptions, isLoading: isLoadingPayableAccounts } =
-    useGLAccountOptions({ category: 'LIABILITY' });
   const { mutateAsync: updateConfig, isPending } = useUpdateAccountingConfig();
   const {
     control,
@@ -54,8 +41,6 @@ export function AccountingConfigurationForm() {
       baseCurrency: config.baseCurrency ?? '',
       fiscalYearStartMonth: config.fiscalYearStartMonth,
       decimalPlaces: config.decimalPlaces,
-      accountsReceivableControlAccountId: config.accountsReceivableControlAccountId ?? '',
-      accountsPayableControlAccountId: config.accountsPayableControlAccountId ?? '',
     });
   }, [config, reset]);
 
@@ -65,12 +50,6 @@ export function AccountingConfigurationForm() {
         baseCurrency: values.baseCurrency,
         fiscalYearStartMonth: Number(values.fiscalYearStartMonth),
         decimalPlaces: Number(values.decimalPlaces),
-        ...(values.accountsReceivableControlAccountId
-          ? { accountsReceivableControlAccountId: values.accountsReceivableControlAccountId }
-          : {}),
-        ...(values.accountsPayableControlAccountId
-          ? { accountsPayableControlAccountId: values.accountsPayableControlAccountId }
-          : {}),
       });
       toast.success('Accounting configuration saved');
     } catch (error) {
@@ -83,7 +62,9 @@ export function AccountingConfigurationForm() {
       <div>
         <h2 className="text-base font-semibold text-gray-900">Accounting Configuration</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Set the tenant defaults used for fiscal periods, currency precision, and standalone AR/AP.
+          Set the tenant defaults used for fiscal periods and currency precision. Which accounts
+          get affected by a transaction is decided by its Transaction Type&apos;s Rule, not fixed
+          here.
         </p>
       </div>
 
@@ -125,47 +106,6 @@ export function AccountingConfigurationForm() {
           })}
           error={errors.decimalPlaces}
         />
-      </div>
-
-      <div className="border-t border-gray-200 pt-6">
-        <h3 className="text-sm font-semibold text-gray-900">Standalone control accounts</h3>
-        <p className="mt-1 text-sm text-gray-600">
-          These accounts are used for standalone customer and vendor documents.
-        </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Controller
-            name="accountsReceivableControlAccountId"
-            control={control}
-            render={({ field }) => (
-              <SearchSelect
-                label="Accounts Receivable Control Account"
-                placeholder={
-                  isLoadingReceivableAccounts ? 'Loading asset accounts…' : 'Select asset account'
-                }
-                options={receivableAccountOptions}
-                value={field.value}
-                onChange={field.onChange}
-              />
-            )}
-          />
-          <Controller
-            name="accountsPayableControlAccountId"
-            control={control}
-            render={({ field }) => (
-              <SearchSelect
-                label="Accounts Payable Control Account"
-                placeholder={
-                  isLoadingPayableAccounts
-                    ? 'Loading liability accounts…'
-                    : 'Select liability account'
-                }
-                options={payableAccountOptions}
-                value={field.value}
-                onChange={field.onChange}
-              />
-            )}
-          />
-        </div>
       </div>
 
       <div className="flex justify-end">

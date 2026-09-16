@@ -196,18 +196,14 @@ enum TransactionTypeCategory {
 }
 
 model AccountingTenantConfig {
-  tenantId                           String     @id
-  baseCurrency                       String
-  fiscalYearStartMonth               Int        @default(1)
-  decimalPlaces                      Int        @default(2)
-  accountsReceivableControlAccountId String?
-  accountsPayableControlAccountId    String?
-  createdByUserId                    String
-  updatedByUserId                    String
-  createdAt                          DateTime   @default(now())
-  updatedAt                          DateTime   @updatedAt
-  accountsReceivableControlAccount   GLAccount? @relation("AccountingConfigARControl", fields: [accountsReceivableControlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  accountsPayableControlAccount      GLAccount? @relation("AccountingConfigAPControl", fields: [accountsPayableControlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  tenantId              String   @id
+  baseCurrency          String
+  fiscalYearStartMonth  Int      @default(1)
+  decimalPlaces         Int      @default(2)
+  createdByUserId       String
+  updatedByUserId       String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@schema("accounting")
 }
@@ -296,12 +292,14 @@ model GLAccount {
   postingRuleLines  PostingRuleLine[]
   transactionRuleLines TransactionTypeRuleLine[]
   subledgers        SubledgerAccount[]
-  arTenantConfigs   AccountingTenantConfig[]       @relation("AccountingConfigARControl")
-  apTenantConfigs   AccountingTenantConfig[]       @relation("AccountingConfigAPControl")
   cashAccounts      AccountingCashAccount[]
   cashbookOffsets   CashbookTransaction[]          @relation("CashbookOffsetAccount")
   receivableOffsets AccountingReceivableDocument[] @relation("ReceivableOffsetAccount")
+  receivableArAccounts AccountingReceivableDocument[] @relation("ReceivableArAccount")
+  receivableReceiptArAccounts AccountingReceivableReceipt[] @relation("ReceivableReceiptArAccount")
   payableOffsets    AccountingPayableDocument[]    @relation("PayableOffsetAccount")
+  payableApAccounts AccountingPayableDocument[]    @relation("PayableApAccount")
+  payablePaymentApAccounts AccountingPayablePayment[] @relation("PayablePaymentApAccount")
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -393,6 +391,11 @@ model CostCentre {
 /// Entity Types list, so any type a tenant creates there can actually back a real entity.
 /// PostingRuleLine.subledgerType stays on the SubledgerType enum deliberately — that's a
 /// separate, unrelated mechanism (automated cross-module posting for Cedant/Reinsurer).
+/// An Entity (Customer, Vendor, Cedant, or any tenant-created type). controlAccountId is
+/// deliberately optional — which GL account a document affects is now decided entirely by
+/// the Transaction Type's Rule used to create it, not by a fixed account tied to the entity.
+/// A control account here is only ever an optional, explicit override for a specific entity
+/// (e.g. a manual Journal Entry quick-add), never something posting logic depends on.
 model SubledgerAccount {
   id               String                @id @default(uuid())
   tenantId         String
@@ -400,7 +403,7 @@ model SubledgerAccount {
   name             String
   type             String
   externalRef      String?
-  controlAccountId String
+  controlAccountId String?
   currency         String?
   contactName      String?
   address          String?
@@ -409,7 +412,7 @@ model SubledgerAccount {
   updatedByUserId  String
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
-  controlAccount        GLAccount                        @relation(fields: [controlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  controlAccount        GLAccount?                       @relation(fields: [controlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   journalLines          JournalLine[]
   cashbookOffsets       CashbookTransaction[]            @relation("CashbookOffsetSubledger")
   receivableDocuments   AccountingReceivableDocument[]
@@ -421,7 +424,7 @@ model SubledgerAccount {
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
-  @@unique([tenantId, type, externalRef, controlAccountId])
+  @@unique([tenantId, type, externalRef])
   @@index([tenantId, type, externalRef])
   @@index([tenantId, type, status])
   @@index([tenantId, controlAccountId])
@@ -745,9 +748,15 @@ model AccountingReceivableDocument {
   sourceModule           String?
   sourceRecordId         String?
   offsetGlAccountId      String
-  /// Which TransactionTypeRule drove the resolved offsetGlAccountId/taxBreakdown below —
-  /// not a live FK (a plain audit trail), null for documents created before this existed
-  /// or for credit notes (still manually posted, out of scope for now).
+  /// The Receivable-side GL account this document actually posts to — resolved once, at
+  /// creation, from the driving TransactionTypeRule's auto-balancing line (never re-derived
+  /// from any tenant-wide setting). A Receipt paying this document inherits this same
+  /// account, and can only be allocated against documents sharing it.
+  arAccountId            String
+  /// Which TransactionTypeRule drove the resolved offsetGlAccountId/arAccountId/taxBreakdown
+  /// below — not a live FK (a plain audit trail), null for documents created before this
+  /// existed. Credit notes resolve arAccountId manually (see CreateReceivableCreditNoteDto),
+  /// so this stays null for them.
   transactionTypeId      String?
   /// [{ glAccountId, taxTypeId, amount }] — the rule's resolved Deduction lines, each
   /// posted to its own account instead of being lumped into offsetGlAccountId.
@@ -767,6 +776,7 @@ model AccountingReceivableDocument {
   reversalOfDocumentId   String?
   customer               SubledgerAccount                 @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
   offsetGlAccount        GLAccount                        @relation("ReceivableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  arAccount              GLAccount                        @relation("ReceivableArAccount", fields: [arAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   postedJournalEntry     JournalEntry?                    @relation("ReceivablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalJournalEntry   JournalEntry?                    @relation("ReceivableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   originalInvoice        AccountingReceivableDocument?    @relation("ReceivableCreditSource", fields: [originalInvoiceId, tenantId], references: [id, tenantId], onDelete: Restrict)
@@ -805,6 +815,10 @@ model AccountingReceivableReceipt {
   externalReference     String?
   sourceModule          String?
   sourceRecordId        String?
+  /// Inherited from the invoice this receipt was created to pay (see CreateReceivableReceiptDto.invoiceId)
+  /// — never re-derived from a tenant-wide setting. Allocation is only allowed against
+  /// invoices sharing this same account.
+  arAccountId           String
   status                AccountingReceivableStatus       @default(DRAFT)
   createdByUserId       String
   updatedByUserId       String
@@ -816,6 +830,7 @@ model AccountingReceivableReceipt {
   reversedAt            DateTime?
   reversalOfReceiptId   String?
   customer              SubledgerAccount                 @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  arAccount             GLAccount                        @relation("ReceivableReceiptArAccount", fields: [arAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   cashbookTransaction   CashbookTransaction              @relation("ReceivableCashbookTransaction", fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalOfReceipt     AccountingReceivableReceipt?     @relation("ReceivableReceiptReversal", fields: [reversalOfReceiptId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalReceipt       AccountingReceivableReceipt?     @relation("ReceivableReceiptReversal")
@@ -880,6 +895,7 @@ model AccountingPayableDocument {
   sourceRecordId         String?
   offsetGlAccountId      String
   /// See AccountingReceivableDocument's matching fields — same purpose, Payable side.
+  apAccountId            String
   transactionTypeId      String?
   taxBreakdown           Json?
   originalBillId         String?
@@ -897,6 +913,7 @@ model AccountingPayableDocument {
   reversalOfDocumentId   String?
   vendor                 SubledgerAccount              @relation(fields: [vendorId, tenantId], references: [id, tenantId], onDelete: Restrict)
   offsetGlAccount        GLAccount                     @relation("PayableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  apAccount              GLAccount                     @relation("PayableApAccount", fields: [apAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   postedJournalEntry     JournalEntry?                 @relation("PayablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalJournalEntry   JournalEntry?                 @relation("PayableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   originalBill           AccountingPayableDocument?    @relation("PayableCreditSource", fields: [originalBillId, tenantId], references: [id, tenantId], onDelete: Restrict)
@@ -935,6 +952,10 @@ model AccountingPayablePayment {
   externalReference     String?
   sourceModule          String?
   sourceRecordId        String?
+  /// Inherited from the bill this payment was created to pay (see
+  /// CreatePayablePaymentDto.billId) — never re-derived from a tenant-wide setting.
+  /// Allocation is only allowed against bills sharing this same account.
+  apAccountId           String
   status                AccountingPayableStatus       @default(DRAFT)
   createdByUserId       String
   updatedByUserId       String
@@ -946,6 +967,7 @@ model AccountingPayablePayment {
   reversedAt            DateTime?
   reversalOfPaymentId   String?
   vendor                SubledgerAccount              @relation(fields: [vendorId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  apAccount             GLAccount                     @relation("PayablePaymentApAccount", fields: [apAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   cashbookTransaction   CashbookTransaction           @relation("PayableCashbookTransaction", fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalOfPayment     AccountingPayablePayment?     @relation("PayablePaymentReversal", fields: [reversalOfPaymentId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalPayment       AccountingPayablePayment?     @relation("PayablePaymentReversal")
@@ -1096,31 +1118,20 @@ model SourceEventInbox {
   @@schema("accounting")
 }
 
-enum EntityAccountingRelation {
-  RECEIVABLE
-  PAYABLE
-  BOTH
-  NONE
-
-  @@schema("accounting")
-}
-
 /// The tenant-facing "Type" list on the Entities page (Customer, Vendor, and anything a
 /// tenant adds). Customer/Vendor come pre-seeded as system defaults (isSystem: true,
-/// non-deletable). accountingRelation is stored as-is but not read by any posting logic —
-/// it's descriptive only for now. Deliberately separate from the SubledgerType enum
-/// (SubledgerAccount.type) — a custom type added here doesn't yet back a real, postable
-/// subledger; only names matching a SubledgerType member (Customer, Vendor, ...) do.
+/// non-deletable). Whether a document affecting an entity of this type is Receivable or
+/// Payable is decided entirely by the Transaction Type used to create it — a type here is
+/// just a name/category for entities, nothing about it drives GL posting directly.
 model EntityType {
-  id                String                   @id @default(uuid())
+  id                String   @id @default(uuid())
   tenantId          String
   name              String
-  accountingRelation EntityAccountingRelation @default(NONE)
-  isSystem          Boolean                  @default(false)
+  isSystem          Boolean  @default(false)
   createdByUserId   String
   updatedByUserId   String
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])

@@ -125,6 +125,7 @@ export function MakePaymentPanel({
     try {
       const settlement = await createSettlement.mutateAsync({
         partyId: document.party.id,
+        documentId: document.id,
         cashAccountId: defaultCashAccountId,
         amount: Number(values.amount),
         currency: document.currency,

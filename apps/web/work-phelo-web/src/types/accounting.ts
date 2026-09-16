@@ -621,6 +621,9 @@ export interface CreateTradeCreditNotePayload {
   currency: string;
   amount: number;
   offsetGlAccountId: string;
+  /** Posts to the AR (Receivable) or AP (Payable) account, whichever this side is —
+   *  manually picked here since credit notes are not yet Rule-driven. */
+  controlAccountId: string;
   originalDocumentId?: string;
   description?: string;
   externalReference?: string;
@@ -669,6 +672,9 @@ export interface QueryTradeSettlementsParams {
 
 export interface CreateTradeSettlementPayload {
   partyId: string;
+  /** The posted invoice/bill this settlement is being recorded to pay. The settlement
+   *  inherits that document's own resolved AR/AP account. */
+  documentId: string;
   cashAccountId: string;
   amount: number;
   currency: string;
@@ -921,30 +927,9 @@ export const SUBLEDGER_TYPE_LABELS: Record<SubledgerType, string> = {
   OTHER: 'Other',
 };
 
-export type EntityAccountingRelation = 'RECEIVABLE' | 'PAYABLE' | 'BOTH' | 'NONE';
-
-export const ENTITY_ACCOUNTING_RELATION_LABELS: Record<EntityAccountingRelation, string> = {
-  RECEIVABLE: 'Receivable',
-  PAYABLE: 'Payable',
-  BOTH: 'Both',
-  NONE: 'None',
-};
-
-
-export const DEFAULT_ENTITY_ACCOUNTING_RELATION: Record<SubledgerType, EntityAccountingRelation> = {
-  CUSTOMER: 'RECEIVABLE',
-  VENDOR: 'PAYABLE',
-  CEDANT: 'BOTH',
-  REINSURER: 'BOTH',
-  EMPLOYEE: 'NONE',
-  STATUTORY: 'NONE',
-  OTHER: 'NONE',
-};
-
 export interface EntityType {
   id: string;
   name: string;
-  accountingRelation: EntityAccountingRelation;
   isSystem: boolean;
   entityCount: number;
   createdAt: string;
@@ -953,7 +938,6 @@ export interface EntityType {
 
 export interface CreateEntityTypePayload {
   name: string;
-  accountingRelation: EntityAccountingRelation;
 }
 
 export type UpdateEntityTypePayload = Partial<CreateEntityTypePayload>;
@@ -965,14 +949,17 @@ export interface SubledgerAccount {
   /** Any name from the tenant's own Entity Types list — not the fixed SubledgerType enum. */
   type: string;
   externalRef: string | null;
-  controlAccountId: string;
+  /** No entity needs one — which GL account a document affects is decided by the
+   *  Transaction Type Rule used to create it, not anything fixed on the entity. Only ever
+   *  set as an explicit, optional override. */
+  controlAccountId: string | null;
   controlAccount: {
     id: string;
     code: string;
     name: string;
     category: GLAccountCategory;
     normalBalance: NormalBalance;
-  };
+  } | null;
   currency: string | null;
   contactName: string | null;
   address: string | null;
@@ -988,9 +975,7 @@ export interface CreateSubledgerAccountPayload {
   /** Any name from the tenant's own Entity Types list — not the fixed SubledgerType enum. */
   type: string;
   externalRef?: string;
-  /** Only needed for a type with no accounting relation set (accountingRelation: NONE) —
-   *  a type marked Receivable/Payable/Both always resolves to the tenant's configured AR/AP
-   *  account automatically. */
+  /** Optional, explicit override only — not needed for normal use. */
   controlAccountId?: string;
   currency?: string;
   contactName?: string;
@@ -1034,20 +1019,6 @@ export interface AccountingTenantConfig {
   baseCurrency: string | null;
   fiscalYearStartMonth: number;
   decimalPlaces: number;
-  accountsReceivableControlAccountId: string | null;
-  accountsPayableControlAccountId: string | null;
-  accountsReceivableControlAccount?: {
-    id: string;
-    code: string;
-    name: string;
-    category: GLAccountCategory;
-  } | null;
-  accountsPayableControlAccount?: {
-    id: string;
-    code: string;
-    name: string;
-    category: GLAccountCategory;
-  } | null;
   isConfigured?: boolean;
 }
 
@@ -1055,8 +1026,6 @@ export interface UpdateAccountingTenantConfigPayload {
   baseCurrency?: string;
   fiscalYearStartMonth?: number;
   decimalPlaces?: number;
-  accountsReceivableControlAccountId?: string;
-  accountsPayableControlAccountId?: string;
 }
 
 export interface ExchangeRate {

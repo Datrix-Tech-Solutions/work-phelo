@@ -258,7 +258,7 @@ export function NewTransactionPanel({
                 disabled={isSaving}
                 onClick={handleSubmit(submit('postAndPay'))}
               >
-                Post and Make Payment
+                Post and Pay
               </Button>
             </>
           )}
@@ -318,7 +318,11 @@ export function NewTransactionPanel({
                 }
                 options={entityOptions}
                 value={field.value}
-                onChange={field.onChange}
+                onChange={(value) => {
+                  field.onChange(value);
+                  const entity = entities.find((e) => e.id === value);
+                  if (entity?.currency) setValue('currency', entity.currency);
+                }}
                 error={errors.businessEntity?.message}
               />
             )}

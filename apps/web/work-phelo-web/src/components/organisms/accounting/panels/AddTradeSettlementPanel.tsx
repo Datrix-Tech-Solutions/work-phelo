@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -11,13 +10,8 @@ import {
   useCashAccountOptions,
   useCreatePayablePayment,
   useCreateReceivableReceipt,
-  useEntityTypes,
   useSubledgers,
 } from '@/hooks';
-import {
-  matchesTradeSide,
-  resolveEntityAccountingRelation,
-} from '@/lib/accounting/entityAccountingRelation';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { SETTLEMENT_METHOD_OPTIONS } from '@/lib/accounting/settlementMethod';
@@ -56,16 +50,10 @@ export function AddTradeSettlementPanel({ isOpen, onClose, side }: AddTradeSettl
   const partyLabel = isReceivable ? 'Customer' : 'Vendor';
   const documentLabel = isReceivable ? 'Receipt' : 'Payment';
 
-  const { data: entities, isLoading: isLoadingEntities } = useSubledgers({ status: 'ACTIVE' });
-  const { data: entityTypes, isLoading: isLoadingEntityTypes } = useEntityTypes();
-  const isLoadingParties = isLoadingEntities || isLoadingEntityTypes;
-  const parties = useMemo(
-    () =>
-      (entities ?? []).filter((entity) =>
-        matchesTradeSide(resolveEntityAccountingRelation(entity, entityTypes), side),
-      ),
-    [entities, entityTypes, side],
-  );
+  // Any active entity can be picked here — the Transaction Type decides whether the
+  // resulting document is Receivable or Payable, not the entity itself.
+  const { data: entities, isLoading: isLoadingParties } = useSubledgers({ status: 'ACTIVE' });
+  const parties = entities ?? [];
   const partyOptions: SearchSelectOption[] = parties.map((p) => ({
     value: p.id,
     label: `${p.code} — ${p.name}`,
@@ -94,6 +82,9 @@ export function AddTradeSettlementPanel({ isOpen, onClose, side }: AddTradeSettl
   const onSubmit = async (data: FormValues) => {
     const payload = {
       partyId: data.partyId,
+      // This standalone form has no specific invoice/bill to inherit an account from —
+      // out of scope for now (see the "which account does a receipt use" design note).
+      documentId: '',
       cashAccountId: data.cashAccountId,
       amount: Number(data.amount),
       currency: data.currency,

@@ -73,8 +73,8 @@ export function AddEntityPanel({
 
   // Sourced from the tenant's own Entity Types list (Settings > Entities > Types), not a
   // hardcoded set — Customer/Vendor come pre-seeded there; anything else must be created
-  // there first. Any type in that list works now — the backend resolves its control
-  // account from the type's own accountingRelation, not a fixed enum.
+  // there first. Entities of any type here post through whichever account the Transaction
+  // Type Rule resolves at document creation — no control account is fixed on the entity.
   const typeOptions: SearchSelectOption[] = useMemo(() => {
     return entityTypesData
       .map((t) => ({ label: t.name, value: t.name.trim().toUpperCase() }))
@@ -98,7 +98,7 @@ export function AddEntityPanel({
         code: entity.code,
         name: entity.name,
         type: entity.type,
-        controlAccountId: entity.controlAccountId,
+        controlAccountId: entity.controlAccountId ?? '',
         contactName: entity.contactName ?? '',
         address: entity.address ?? '',
       });

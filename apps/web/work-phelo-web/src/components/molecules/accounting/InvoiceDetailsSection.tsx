@@ -6,7 +6,11 @@ import { FormSection } from '@/components/atoms/FormSection';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { AccountingTradeSide, InvoiceFormValues } from '@/types/accounting';
+import {
+  AccountingTradeSide,
+  InvoiceFormValues,
+  SubledgerAccount,
+} from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
   useTransactionTypeRules,
@@ -18,6 +22,7 @@ interface InvoiceDetailsSectionProps {
   vendorLabel?: string;
   /** Real customer/vendor records to pick from — the backend keys invoices/bills
    * to a party id, not a free-text name. */
+  parties: SubledgerAccount[];
   partyOptions: SearchSelectOption[];
   isLoadingParties?: boolean;
   side: AccountingTradeSide;
@@ -26,6 +31,7 @@ interface InvoiceDetailsSectionProps {
 export function InvoiceDetailsSection({
   form,
   vendorLabel = 'Vendor',
+  parties,
   partyOptions,
   isLoadingParties,
   side,
@@ -82,7 +88,11 @@ export function InvoiceDetailsSection({
               placeholder={isLoadingParties ? 'Loading…' : `Select ${vendorLabel.toLowerCase()}…`}
               options={partyOptions}
               value={field.value}
-              onChange={field.onChange}
+              onChange={(value) => {
+                field.onChange(value);
+                const party = parties.find((p) => p.id === value);
+                if (party?.currency) setValue('currency', party.currency);
+              }}
               error={errors.vendor?.message}
             />
           )}
