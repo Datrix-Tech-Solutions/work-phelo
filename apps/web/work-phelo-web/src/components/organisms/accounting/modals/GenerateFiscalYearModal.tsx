@@ -9,12 +9,14 @@ interface GenerateFiscalYearModalProps {
   isOpen: boolean;
   onClose: () => void;
   onGenerate: (year: number) => void;
+  isGenerating?: boolean;
 }
 
 export function GenerateFiscalYearModal({
   isOpen,
   onClose,
   onGenerate,
+  isGenerating,
 }: GenerateFiscalYearModalProps) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
@@ -24,14 +26,20 @@ export function GenerateFiscalYearModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Generate Fiscal Year"
-      description="Pick a year. Twelve monthly periods (January–December) are created, each running from the first to the last day of the month."
+      description="Pick the calendar year the fiscal year starts in. Twelve monthly periods are created from the tenant's configured fiscal year start month."
       width="max-w-sm"
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={isGenerating}>
             Cancel
           </Button>
-          <Button onClick={() => onGenerate(year)}>Generate</Button>
+          <Button
+            isLoading={isGenerating}
+            loadingText="Generating…"
+            onClick={() => onGenerate(year)}
+          >
+            Generate
+          </Button>
         </>
       }
     >

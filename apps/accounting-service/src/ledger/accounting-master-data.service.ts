@@ -48,6 +48,21 @@ export enum FinancialStatement {
   INCOME_STATEMENT = 'INCOME_STATEMENT',
 }
 
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
 const ACCOUNT_CATEGORIES = [
   {
     code: GLAccountCategory.ASSET,
@@ -504,6 +519,14 @@ export class AccountingMasterDataService {
   }
 
   async createFiscalPeriod(user: RequestUser, dto: CreateFiscalPeriodDto) {
+    if (dto.generateYear !== undefined) {
+      return this.generateFiscalYear(user, dto.generateYear);
+    }
+    if (!dto.name || !dto.startDate || !dto.endDate) {
+      throw new BadRequestException(
+        'name, startDate and endDate are required unless generateYear is set',
+      );
+    }
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
     if (startDate > endDate) {
@@ -535,7 +558,7 @@ export class AccountingMasterDataService {
         return await tx.fiscalPeriod.create({
           data: {
             tenantId: user.tenantId,
-            name: dto.name,
+            name: dto.name!,
             startDate,
             endDate,
             createdByUserId: user.id,
@@ -545,6 +568,74 @@ export class AccountingMasterDataService {
       } catch (error) {
         this.rethrowUnique(error, 'Fiscal period name already exists');
       }
+    });
+  }
+
+  /** Generates the 12 monthly periods of a fiscal year starting in `calendarYear`, using
+   *  the tenant's configured fiscalYearStartMonth (e.g. a July start makes generateYear
+   *  2026 produce Jul 2026 – Jun 2027). Same overlap-check/advisory-lock transaction as a
+   *  single createFiscalPeriod, just inserting all 12 rows together. */
+  private async generateFiscalYear(user: RequestUser, calendarYear: number) {
+    const config = await this.getConfig(user.tenantId);
+    const startMonth = config.fiscalYearStartMonth ?? 1;
+
+    const periods = Array.from({ length: 12 }, (_, i) => {
+      const monthOffset = startMonth - 1 + i;
+      const year = calendarYear + Math.floor(monthOffset / 12);
+      const month = monthOffset % 12;
+      const startDate = new Date(Date.UTC(year, month, 1));
+      const endDate = new Date(Date.UTC(year, month + 1, 0));
+      return { name: `${MONTH_NAMES[month]} ${year}`, startDate, endDate };
+    });
+    const rangeStart = periods[0].startDate;
+    const rangeEnd = periods[periods.length - 1].endDate;
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${'accounting-period:' + user.tenantId})
+        )
+      `;
+      const overlap = await tx.fiscalPeriod.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          startDate: { lte: rangeEnd },
+          endDate: { gte: rangeStart },
+        },
+        select: { id: true, name: true },
+      });
+      if (overlap) {
+        throw new ConflictException(
+          `Fiscal year overlaps with existing period ${overlap.name}`,
+        );
+      }
+
+      try {
+        await tx.fiscalPeriod.createMany({
+          data: periods.map((period) => ({
+            tenantId: user.tenantId,
+            name: period.name,
+            startDate: period.startDate,
+            endDate: period.endDate,
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          })),
+        });
+      } catch (error) {
+        this.rethrowUnique(
+          error,
+          'A fiscal period with a generated name already exists',
+        );
+      }
+
+      return tx.fiscalPeriod.findMany({
+        where: {
+          tenantId: user.tenantId,
+          startDate: { gte: rangeStart },
+          endDate: { lte: rangeEnd },
+        },
+        orderBy: { startDate: 'asc' },
+      });
     });
   }
 

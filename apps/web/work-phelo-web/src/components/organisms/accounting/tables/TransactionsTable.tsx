@@ -79,7 +79,7 @@ export function TransactionsTable() {
       ...(payableCreditNotes.data?.items ?? []),
     ];
     return all.sort(
-      (a, b) => new Date(b.documentDate).getTime() - new Date(a.documentDate).getTime(),
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }, [invoices.data, bills.data, receivableCreditNotes.data, payableCreditNotes.data]);
 
@@ -112,7 +112,7 @@ export function TransactionsTable() {
       {
         key: 'documentDate',
         label: 'Date',
-        width: '100px',
+        width: '80px',
         render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.documentDate)}</span>,
       },
       {
@@ -126,7 +126,7 @@ export function TransactionsTable() {
       {
         key: 'subtotalAmount',
         label: 'Subtotal',
-        width: '140px',
+        width: '130px',
         className: 'text-right pr-6',
         render: (row) => (
           <span className="block text-right text-sm text-gray-700">
@@ -148,7 +148,7 @@ export function TransactionsTable() {
       {
         key: 'totalAmount',
         label: 'Total',
-        width: '140px',
+        width: '130px',
         className: 'text-right pr-6',
         render: (row) => (
           <span className="block text-right text-sm font-medium text-gray-900">
@@ -159,7 +159,7 @@ export function TransactionsTable() {
       {
         key: 'side',
         label: 'Type',
-        width: '120px',
+        width: '90px',
         render: (row) => (
           <TypeChip
             label={TRANSACTION_TYPE_CATEGORY_LABEL[row.side]}
@@ -170,7 +170,7 @@ export function TransactionsTable() {
       {
         key: 'status',
         label: 'Status',
-        width: '90px',
+        width: '70px',
         render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
       },
       {
@@ -179,9 +179,15 @@ export function TransactionsTable() {
         width: '170px',
         render: (row) => (
           <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-            <TableButton variant="green" onClick={() => setPaymentTarget(row)}>
-              {row.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
-            </TableButton>
+            {row.status === 'DRAFT' ? (
+              <TableButton variant="green" onClick={() => setDetailTarget(row)}>
+                Post
+              </TableButton>
+            ) : row.status === 'POSTED' ? (
+              <TableButton variant="green" onClick={() => setPaymentTarget(row)}>
+                {row.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
+              </TableButton>
+            ) : null}
             <TableButton variant="blue" tooltip="View Documents" onClick={() => setDetailTarget(row)}>
               <Icons.FileText className="w-3.5 h-3.5" />
             </TableButton>
@@ -271,6 +277,10 @@ export function TransactionsTable() {
         document={detailTarget}
         documentKind={detailTarget?.documentType === 'CREDIT_NOTE' ? 'creditNote' : 'invoice'}
         onClose={() => setDetailTarget(null)}
+        onPostedForPayment={(document) => {
+          setDetailTarget(null);
+          setPaymentTarget(document);
+        }}
       />
 
       <MakePaymentPanel document={paymentTarget} onClose={() => setPaymentTarget(null)} />

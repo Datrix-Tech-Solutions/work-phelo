@@ -16,6 +16,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
@@ -148,19 +149,35 @@ export class UpdateExchangeRateDto {
 }
 
 export class CreateFiscalPeriodDto {
-  @ApiProperty({ example: '2026-07' })
+  /** Single-period mode only — omit both this and startDate/endDate when generateYear
+   *  is set, since the 12 monthly periods are named and dated automatically. */
+  @ApiPropertyOptional({ example: '2026-07' })
+  @ValidateIf((dto: CreateFiscalPeriodDto) => !dto.generateYear)
   @Transform(trimmed)
   @IsString()
   @MaxLength(80)
-  name!: string;
+  name?: string;
 
-  @ApiProperty({ type: String, format: 'date' })
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @ValidateIf((dto: CreateFiscalPeriodDto) => !dto.generateYear)
   @IsDateString()
-  startDate!: string;
+  startDate?: string;
 
-  @ApiProperty({ type: String, format: 'date' })
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @ValidateIf((dto: CreateFiscalPeriodDto) => !dto.generateYear)
   @IsDateString()
-  endDate!: string;
+  endDate?: string;
+
+  /** Bulk mode: the calendar year the fiscal year starts in. The 12 monthly periods
+   *  are generated from the tenant's configured fiscalYearStartMonth, e.g. generateYear
+   *  2026 with a July start produces Jul 2026 – Jun 2027. Mutually exclusive with the
+   *  single-period fields above. */
+  @ApiPropertyOptional({ example: 2026 })
+  @IsOptional()
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  generateYear?: number;
 }
 
 export class QueryFiscalPeriodsDto {

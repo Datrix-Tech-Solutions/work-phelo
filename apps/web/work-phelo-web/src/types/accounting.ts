@@ -256,31 +256,26 @@ export interface UpdateTransactionTypeRulePayload {
   lines?: TransactionTypeRuleLineInput[];
 }
 
-export type FiscalPeriodStatus = 'OPEN' | 'SOFT_CLOSED' | 'CLOSED';
+export type FiscalPeriodStatus = 'OPEN' | 'CLOSED' | 'LOCKED';
 
 export interface FiscalPeriod {
   id: string;
-  /** Human label for the monthly period, e.g. "January 2026". */
   name: string;
-  /** Calendar year the period belongs to; groups the 12 monthly rows. */
-  year: number;
   startDate: string;
   endDate: string;
   status: FiscalPeriodStatus;
+  closedAt: string | null;
+  lockedAt: string | null;
 }
 
 export interface CreateFiscalPeriodPayload {
-  name: string;
-  startDate: string;
-  endDate: string;
-}
-
-/**
- * Payload for the (not-yet-built) backend endpoint that generates the twelve
- * monthly periods for a fiscal year in one call.
- */
-export interface GenerateFiscalYearPayload {
-  year: number;
+  /** Single-period mode: all three required. Omit together with generateYear set. */
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  /** Bulk mode: the calendar year the fiscal year starts in — the backend generates
+   *  its 12 monthly periods from the tenant's configured fiscalYearStartMonth. */
+  generateYear?: number;
 }
 
 export interface QueryFiscalPeriodsParams {
@@ -546,6 +541,13 @@ export interface AccountingTradeDocument {
   reversalOfDocumentId: string | null;
   party: AccountingTradePartyRef;
   offsetGlAccount: AccountingTradeGLAccountRef;
+  /** The Receivable (AR) or Payable (AP) account this document actually posts to —
+   *  resolved once from the Transaction Type Rule at creation, not a fixed setting. */
+  controlAccount: AccountingTradeGLAccountRef;
+  /** Present only when the document's Rule split tax onto its own account(s); each
+   *  entry's account isn't enriched server-side, so the panel resolves it against the
+   *  GL account list. */
+  taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
   postedJournalEntry: AccountingTradeJournalRef | null;
   reversalJournalEntry: AccountingTradeJournalRef | null;
   originalDocument: AccountingTradeOriginalDocumentRef | null;
