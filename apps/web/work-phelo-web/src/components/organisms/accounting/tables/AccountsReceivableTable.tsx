@@ -46,7 +46,7 @@ export function AccountsReceivableTable() {
     return invoices.filter(
       (r) =>
         r.documentNumber.toLowerCase().includes(q) ||
-        r.party.legalName.toLowerCase().includes(q) ||
+        r.party.name.toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q),
     );
   }, [search, invoices]);
@@ -71,7 +71,7 @@ export function AccountsReceivableTable() {
         label: 'Customer',
         width: 'minmax(150px, 1fr)',
         render: (row) => (
-          <span className="text-sm text-gray-800 font-medium">{row.party.legalName}</span>
+          <span className="text-sm text-gray-800 font-medium">{row.party.name}</span>
         ),
       },
       {

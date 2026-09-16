@@ -23,15 +23,13 @@ const subledgerAccountId = 'customer-subledger';
 const transactionTypeId = 'txn-type-1';
 
 const customer = {
-  id: 'customer-1',
+  id: subledgerAccountId,
   tenantId: actor.tenantId,
   code: 'CUST-001',
-  legalName: 'Acme Ghana',
+  name: 'Acme Ghana',
+  type: 'CUSTOMER',
   currency: 'GHS',
-  paymentTermsDays: 30,
-  isActive: true,
-  subledgerAccountId,
-  subledgerAccount: { id: subledgerAccountId, status: 'ACTIVE' },
+  status: 'ACTIVE',
 };
 
 const invoice = (overrides: Record<string, unknown> = {}) => ({
@@ -121,8 +119,16 @@ const setup = () => {
     accountingCurrency: {
       findUnique: jest.fn().mockResolvedValue({ code: 'GHS', isActive: true }),
     },
-    accountingCustomer: {
+    subledgerAccount: {
       findFirst: jest.fn().mockResolvedValue(customer),
+    },
+    entityType: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'entity-type-customer',
+        tenantId: actor.tenantId,
+        name: 'Customer',
+        accountingRelation: 'RECEIVABLE',
+      }),
     },
     transactionType: {
       findFirst: jest.fn().mockResolvedValue({

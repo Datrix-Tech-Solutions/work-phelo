@@ -24,7 +24,10 @@ type FormValues = {
   accountingRelation: EntityAccountingRelation | '';
 };
 
-const DEFAULTS: FormValues = { name: '', accountingRelation: 'NONE' };
+// No default relation — NONE is a real, selectable option, but a type left at NONE has
+// no way to resolve a control account for its entities (entity creation has no manual
+// control-account picker), so we don't want that to be the silent default.
+const DEFAULTS: FormValues = { name: '', accountingRelation: '' };
 
 const ACCOUNTING_RELATION_OPTIONS: SearchSelectOption[] = Object.entries(
   ENTITY_ACCOUNTING_RELATION_LABELS,
@@ -97,7 +100,7 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
           label="Name"
           registration={register('name', { required: 'Name is required' })}
           error={errors.name}
-          placeholder="e.g. Landlord"
+          placeholder="e.g. Supplier"
         />
         <Controller
           name="accountingRelation"

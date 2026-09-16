@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useForm, useWatch, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -9,12 +10,16 @@ import { AccountingTradeSide } from '@/types/accounting';
 import {
   useCreatePayableCreditNote,
   useCreateReceivableCreditNote,
-  useCustomers,
+  useEntityTypes,
   useGLAccountOptions,
   usePayableBills,
   useReceivableInvoices,
-  useVendors,
+  useSubledgers,
 } from '@/hooks';
+import {
+  matchesTradeSide,
+  resolveEntityAccountingRelation,
+} from '@/lib/accounting/entityAccountingRelation';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -52,12 +57,19 @@ export function AddTradeCreditNotePanel({ isOpen, onClose, side }: AddTradeCredi
   const partyLabel = isReceivable ? 'Customer' : 'Vendor';
   const documentLabel = isReceivable ? 'invoice' : 'bill';
 
-  const { data: customersData, isLoading: isLoadingCustomers } = useCustomers();
-  const { data: vendorsData, isLoading: isLoadingVendors } = useVendors();
-  const parties = isReceivable ? (customersData?.items ?? []) : (vendorsData?.items ?? []);
+  const { data: entities, isLoading: isLoadingEntities } = useSubledgers({ status: 'ACTIVE' });
+  const { data: entityTypes, isLoading: isLoadingEntityTypes } = useEntityTypes();
+  const isLoadingParties = isLoadingEntities || isLoadingEntityTypes;
+  const parties = useMemo(
+    () =>
+      (entities ?? []).filter((entity) =>
+        matchesTradeSide(resolveEntityAccountingRelation(entity, entityTypes), side),
+      ),
+    [entities, entityTypes, side],
+  );
   const partyOptions: SearchSelectOption[] = parties.map((p) => ({
     value: p.id,
-    label: `${p.code} — ${p.legalName}`,
+    label: `${p.code} — ${p.name}`,
   }));
 
   const { options: glAccountOptions, isLoading: isLoadingGLAccounts } = useGLAccountOptions();
@@ -148,18 +160,14 @@ export function AddTradeCreditNotePanel({ isOpen, onClose, side }: AddTradeCredi
           render={({ field }) => (
             <SearchSelect
               label={partyLabel}
-              placeholder={
-                (isReceivable ? isLoadingCustomers : isLoadingVendors)
-                  ? 'Loading…'
-                  : `Select ${partyLabel.toLowerCase()}…`
-              }
+              placeholder={isLoadingParties ? 'Loading…' : `Select ${partyLabel.toLowerCase()}…`}
               options={partyOptions}
               value={field.value}
               onChange={(value) => {
                 field.onChange(value);
                 setValue('originalDocumentId', '');
                 const party = parties.find((p) => p.id === value);
-                if (party) setValue('currency', party.currency);
+                if (party?.currency) setValue('currency', party.currency);
               }}
               error={errors.partyId?.message}
             />

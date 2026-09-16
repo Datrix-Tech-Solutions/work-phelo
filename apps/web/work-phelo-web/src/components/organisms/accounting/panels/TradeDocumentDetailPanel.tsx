@@ -214,7 +214,7 @@ export function TradeDocumentDetailPanel({
             <div className="grid grid-cols-2 gap-4">
               <Field
                 label={partyLabel}
-                value={`${document.party.legalName} (${document.party.code})`}
+                value={`${document.party.name} (${document.party.code})`}
               />
               <Field label="Document Date" value={fmtDate(document.documentDate)} />
               <Field label="Due Date" value={fmtDate(document.dueDate)} />

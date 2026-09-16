@@ -4,7 +4,6 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
-  IsEmail,
   IsEnum,
   IsIn,
   IsInt,
@@ -26,7 +25,6 @@ import {
   JournalStatus,
   NormalBalance,
   RecordStatus,
-  SubledgerType,
   TransactionTypeCategory,
 } from '../../../prisma/generated/client';
 
@@ -580,9 +578,18 @@ export class EnsureInternalSubledgerDto {
   @IsUUID()
   tenantId!: string;
 
-  @ApiProperty({ enum: [SubledgerType.CEDANT, SubledgerType.REINSURER] })
-  @IsIn([SubledgerType.CEDANT, SubledgerType.REINSURER])
-  type!: SubledgerType;
+  @ApiProperty({
+    example: 'Cedant',
+    description:
+      'The name of a tenant-configured Entity Type (Settings > Entities > Types) — ' +
+      'not a fixed value. The tenant must have created it first, same as any other ' +
+      'entity type, with the accounting relation (Receivable/Payable) that decides ' +
+      'which control account it rolls up to.',
+  })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(80)
+  type!: string;
 
   @ApiProperty({ example: 'reinsurance-counterparty-id' })
   @Transform(trimmed)
@@ -610,295 +617,6 @@ export class EnsureInternalSubledgerDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
-}
-
-export class QueryAccountingPartiesDto {
-  @ApiPropertyOptional({ example: 'Acme' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(120)
-  search?: string;
-
-  @ApiPropertyOptional({ example: true })
-  @IsOptional()
-  @Transform(optionalBoolean)
-  @IsBoolean()
-  isActive?: boolean;
-
-  @ApiPropertyOptional({ example: 'GHS', minLength: 3, maxLength: 3 })
-  @IsOptional()
-  @Transform(uppercase)
-  @IsString()
-  @Length(3, 3)
-  currency?: string;
-
-  @ApiPropertyOptional({ example: 'REINSURANCE' })
-  @IsOptional()
-  @Transform(uppercase)
-  @IsString()
-  @MaxLength(80)
-  sourceModule?: string;
-
-  @ApiPropertyOptional({ example: 'cedant-123' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(100)
-  externalRef?: string;
-
-  @ApiPropertyOptional({ example: 1, minimum: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number;
-
-  @ApiPropertyOptional({ example: 25, minimum: 1, maximum: 100 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number;
-
-  @ApiPropertyOptional({
-    enum: ['code', 'legalName', 'createdAt', 'updatedAt'],
-  })
-  @IsOptional()
-  @IsIn(['code', 'legalName', 'createdAt', 'updatedAt'])
-  sortBy?: 'code' | 'legalName' | 'createdAt' | 'updatedAt';
-
-  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
-  @IsOptional()
-  @IsIn(['asc', 'desc'])
-  sortOrder?: 'asc' | 'desc';
-}
-
-export class CreateAccountingCustomerDto {
-  @ApiProperty({ example: 'CUS-0001' })
-  @Transform(uppercase)
-  @IsString()
-  @MaxLength(40)
-  code!: string;
-
-  @ApiProperty({ example: 'Acme Insurance Company Limited' })
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(180)
-  legalName!: string;
-
-  @ApiPropertyOptional({ example: 'Acme Insurance' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(180)
-  tradingName?: string;
-
-  @ApiPropertyOptional({ example: 'Ama Mensah' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(160)
-  primaryContactName?: string;
-
-  @ApiPropertyOptional({ example: 'billing@example.com' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsEmail()
-  @MaxLength(160)
-  email?: string;
-
-  @ApiPropertyOptional({ example: '+233 20 000 0000' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(40)
-  phone?: string;
-
-  @ApiPropertyOptional({ example: 'No. 1 Independence Avenue, Accra' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(500)
-  billingAddress?: string;
-
-  @ApiPropertyOptional({ example: 'GH', minLength: 2, maxLength: 2 })
-  @IsOptional()
-  @Transform(uppercase)
-  @IsString()
-  @Length(2, 2)
-  countryCode?: string;
-
-  @ApiProperty({ example: 'GHS', minLength: 3, maxLength: 3 })
-  @Transform(uppercase)
-  @IsString()
-  @Length(3, 3)
-  currency!: string;
-
-  @ApiPropertyOptional({ example: 30, minimum: 0, maximum: 365 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(365)
-  paymentTermsDays?: number;
-
-  @ApiPropertyOptional({ example: 100000, minimum: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 4 })
-  @Min(0)
-  creditLimit?: number;
-
-  @ApiPropertyOptional({ example: 'TIN-123456' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(80)
-  taxNumber?: string;
-
-  @ApiPropertyOptional({ example: 'cedant-123' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(100)
-  externalRef?: string;
-
-  @ApiPropertyOptional({ example: 'REINSURANCE' })
-  @IsOptional()
-  @Transform(uppercase)
-  @IsString()
-  @MaxLength(80)
-  sourceModule?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(1000)
-  notes?: string;
-}
-
-export class UpdateAccountingCustomerDto extends PartialType(
-  CreateAccountingCustomerDto,
-) {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
-}
-
-export class CreateAccountingVendorDto {
-  @ApiProperty({ example: 'VEN-0001' })
-  @Transform(uppercase)
-  @IsString()
-  @MaxLength(40)
-  code!: string;
-
-  @ApiProperty({ example: 'Office Supplies Limited' })
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(180)
-  legalName!: string;
-
-  @ApiPropertyOptional({ example: 'Office Supplies' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(180)
-  tradingName?: string;
-
-  @ApiPropertyOptional({ example: 'Kojo Boateng' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(160)
-  primaryContactName?: string;
-
-  @ApiPropertyOptional({ example: 'accounts@supplier.example' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsEmail()
-  @MaxLength(160)
-  email?: string;
-
-  @ApiPropertyOptional({ example: '+233 24 000 0000' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(40)
-  phone?: string;
-
-  @ApiPropertyOptional({ example: 'North Industrial Area, Accra' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(500)
-  billingAddress?: string;
-
-  @ApiPropertyOptional({ example: 'GH', minLength: 2, maxLength: 2 })
-  @IsOptional()
-  @Transform(uppercase)
-  @IsString()
-  @Length(2, 2)
-  countryCode?: string;
-
-  @ApiProperty({ example: 'GHS', minLength: 3, maxLength: 3 })
-  @Transform(uppercase)
-  @IsString()
-  @Length(3, 3)
-  currency!: string;
-
-  @ApiPropertyOptional({ example: 30, minimum: 0, maximum: 365 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(365)
-  paymentTermsDays?: number;
-
-  @ApiPropertyOptional({ example: 'TIN-654321' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(80)
-  taxNumber?: string;
-
-  @ApiPropertyOptional({ example: 'supplier-123' })
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(100)
-  externalRef?: string;
-
-  @ApiPropertyOptional({ example: 'HR' })
-  @IsOptional()
-  @Transform(uppercase)
-  @IsString()
-  @MaxLength(80)
-  sourceModule?: string;
-
-  @ApiPropertyOptional({ format: 'uuid' })
-  @IsOptional()
-  @IsUUID()
-  defaultExpenseAccountId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform(trimmed)
-  @IsString()
-  @MaxLength(1000)
-  notes?: string;
-}
-
-export class UpdateAccountingVendorDto extends PartialType(
-  CreateAccountingVendorDto,
-) {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
 }
 
 export class JournalLineDto {

@@ -491,7 +491,7 @@ export type AccountingTradeDocumentPaymentState =
 export interface AccountingTradePartyRef {
   id: string;
   code: string;
-  legalName: string;
+  name: string;
   currency: string;
 }
 
@@ -720,13 +720,6 @@ export interface AccountingSubledgerBalance {
   transactionCurrencies: string[];
 }
 
-export interface AccountingSubledgerRef {
-  id: string;
-  code: string;
-  name: string;
-  status: string;
-}
-
 export type AccountingCashAccountKind = 'BANK' | 'CASH' | 'MOBILE_MONEY' | 'OTHER';
 
 export interface AccountingCashAccount {
@@ -899,18 +892,6 @@ export interface ReverseCashbookTransactionPayload {
   reason: string;
 }
 
-export interface QueryAccountingPartiesParams {
-  search?: string;
-  isActive?: boolean;
-  currency?: string;
-  sourceModule?: string;
-  externalRef?: string;
-  page?: number;
-  limit?: number;
-  sortBy?: 'code' | 'legalName' | 'createdAt' | 'updatedAt';
-  sortOrder?: 'asc' | 'desc';
-}
-
 export interface PaginatedResult<T> {
   items: T[];
   total: number;
@@ -1024,53 +1005,6 @@ export interface QuerySubledgerAccountsParams {
   controlAccountId?: string;
   status?: GLAccountStatus;
 }
-
-export interface AccountingVendor {
-  id: string;
-  code: string;
-  legalName: string;
-  tradingName: string | null;
-  primaryContactName: string | null;
-  email: string | null;
-  phone: string | null;
-  billingAddress: string | null;
-  countryCode: string | null;
-  currency: string;
-  paymentTermsDays: number;
-  taxNumber: string | null;
-  externalRef: string | null;
-  sourceModule: string | null;
-  defaultExpenseAccountId: string | null;
-  notes: string | null;
-  isActive: boolean;
-  subledgerAccountId: string;
-  subledgerAccount: AccountingSubledgerRef;
-  balance: AccountingSubledgerBalance;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateAccountingVendorPayload {
-  code: string;
-  legalName: string;
-  tradingName?: string;
-  primaryContactName?: string;
-  email?: string;
-  phone?: string;
-  billingAddress?: string;
-  countryCode?: string;
-  currency: string;
-  paymentTermsDays?: number;
-  taxNumber?: string;
-  externalRef?: string;
-  sourceModule?: string;
-  defaultExpenseAccountId?: string;
-  notes?: string;
-}
-
-export type UpdateAccountingVendorPayload = Partial<CreateAccountingVendorPayload> & {
-  isActive?: boolean;
-};
 
 export interface AccountingCurrency {
   id: string;
@@ -1321,53 +1255,6 @@ export interface Budget {
 export interface BudgetDetail extends Budget {
   lines: BudgetLine[];
 }
-
-export interface AccountingCustomer {
-  id: string;
-  code: string;
-  legalName: string;
-  tradingName: string | null;
-  primaryContactName: string | null;
-  email: string | null;
-  phone: string | null;
-  billingAddress: string | null;
-  countryCode: string | null;
-  currency: string;
-  paymentTermsDays: number;
-  creditLimit: number | null;
-  taxNumber: string | null;
-  externalRef: string | null;
-  sourceModule: string | null;
-  notes: string | null;
-  isActive: boolean;
-  subledgerAccountId: string;
-  subledgerAccount: AccountingSubledgerRef;
-  balance: AccountingSubledgerBalance;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateAccountingCustomerPayload {
-  code: string;
-  legalName: string;
-  tradingName?: string;
-  primaryContactName?: string;
-  email?: string;
-  phone?: string;
-  billingAddress?: string;
-  countryCode?: string;
-  currency: string;
-  paymentTermsDays?: number;
-  creditLimit?: number;
-  taxNumber?: string;
-  externalRef?: string;
-  sourceModule?: string;
-  notes?: string;
-}
-
-export type UpdateAccountingCustomerPayload = Partial<CreateAccountingCustomerPayload> & {
-  isActive?: boolean;
-};
 
 export type PostingRuleDirection = 'DR' | 'CR';
 export type PostingRuleSubledgerType = SubledgerType;

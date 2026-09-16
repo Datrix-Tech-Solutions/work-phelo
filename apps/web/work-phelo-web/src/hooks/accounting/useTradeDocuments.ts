@@ -22,8 +22,7 @@ import type {
  * and a `documentSegment` ('invoices' | 'bills' | 'credit-notes'), and both
  * public APIs are thin wrappers over it, matching how callers already expect
  * useReceivableInvoice(s)/useReceivableCreditNote(s) and usePayableBill(s)/
- * usePayableCreditNote(s) naming (mirroring useVendors/useCustomers as separate,
- * familiar entry points). */
+ * usePayableCreditNote(s) naming as separate, familiar entry points. */
 
 interface SideConfig {
   base: string;

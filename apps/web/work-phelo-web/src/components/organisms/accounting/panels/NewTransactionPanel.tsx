@@ -6,7 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { CurrencyInput } from '@/components/atoms/CurrencyInput';
+import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { AccountingTradeDocument, TransactionTypeDefinition } from '@/types/accounting';
@@ -342,11 +342,10 @@ export function NewTransactionPanel({
                 min: { value: 0.01, message: 'Amount must be greater than 0' },
               }}
               render={({ field }) => (
-                <CurrencyInput
+                <NumberField
                   label="Amount"
-                  value={field.value}
-                  currency={currency}
-                  onValueChange={field.onChange}
+                  value={Number(field.value) || 0}
+                  onChange={(value) => field.onChange(String(value))}
                   error={errors.amount?.message}
                 />
               )}

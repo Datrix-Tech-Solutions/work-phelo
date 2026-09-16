@@ -24,9 +24,11 @@ export class InternalSubledgersController {
 
   @Post('ensure')
   @ApiOperation({
-    summary: 'Ensure an insurance-specific subledger for a trusted service',
+    summary: 'Ensure a subledger for a trusted service, by tenant Entity Type',
     description:
-      'Idempotently creates or refreshes a tenant CEDANT/REINSURER subledger using Accounting-owned control accounts. This does not create journals.',
+      'Idempotently creates or refreshes a subledger of a tenant-configured Entity Type ' +
+      '(the tenant must have created it, e.g. "Cedant"/"Reinsurer"), using Accounting-owned ' +
+      'control accounts. This does not create journals.',
   })
   @ApiHeader({
     name: INTERNAL_SERVICE_AUTH_HEADERS.service,

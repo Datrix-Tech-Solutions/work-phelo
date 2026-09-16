@@ -9,6 +9,7 @@ import {
   AccountingPayableAllocationSource,
   AccountingPayableDocumentType,
   AccountingPayableStatus,
+  EntityAccountingRelation,
   FiscalPeriodStatus,
   JournalStatus,
   PostingDirection,
@@ -35,16 +36,14 @@ import {
 import { JournalsService } from './journals.service';
 
 const zero = new Prisma.Decimal(0);
+// SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
+// payment-terms field the way the old AccountingVendor master record did — fall back to
+// the same 30-day default that record always used unless the bill sets an explicit due date.
+const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
 const payableDocumentInclude = {
   vendor: {
-    select: {
-      id: true,
-      code: true,
-      legalName: true,
-      currency: true,
-      subledgerAccountId: true,
-    },
+    select: { id: true, code: true, name: true, currency: true },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
   postedJournalEntry: {
@@ -65,13 +64,7 @@ const payableDocumentInclude = {
 
 const payablePaymentInclude = {
   vendor: {
-    select: {
-      id: true,
-      code: true,
-      legalName: true,
-      currency: true,
-      subledgerAccountId: true,
-    },
+    select: { id: true, code: true, name: true, currency: true },
   },
   cashbookTransaction: {
     select: {
@@ -185,7 +178,7 @@ export class PayablesService {
     const rows = await this.openItems(tenantId, asOfDate, vendorId);
     return {
       asOfDate,
-      vendor: { id: vendor.id, code: vendor.code, legalName: vendor.legalName },
+      vendor: { id: vendor.id, code: vendor.code, name: vendor.name },
       ...this.agingResult(asOfDate, rows),
       documents: rows,
     };
@@ -208,7 +201,7 @@ export class PayablesService {
           dueDate: true,
           currency: true,
           totalAmount: true,
-          vendor: { select: { id: true, code: true, legalName: true } },
+          vendor: { select: { id: true, code: true, name: true } },
         },
         orderBy: [{ dueDate: 'asc' }, { documentDate: 'asc' }],
       }),
@@ -322,7 +315,7 @@ export class PayablesService {
         documentDate: new Date(dto.documentDate),
         dueDate: new Date(
           dto.dueDate ??
-            this.addDays(dto.documentDate, vendor.paymentTermsDays),
+            this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
         ),
         currency: dto.currency,
         exchangeRate: dto.exchangeRate,
@@ -521,9 +514,9 @@ export class PayablesService {
       counterpartyType: 'VENDOR',
       counterpartyId: vendor.id,
       externalReference: dto.externalReference,
-      description: dto.description ?? `Payment to ${vendor.legalName}`,
+      description: dto.description ?? `Payment to ${vendor.name}`,
       offsetGlAccountId: config.accountsPayableControlAccountId,
-      offsetSubledgerAccountId: vendor.subledgerAccountId,
+      offsetSubledgerAccountId: vendor.id,
       sourceModule: dto.sourceModule ?? 'ACCOUNTING',
       sourceRecordId: dto.sourceRecordId ?? 'AP_PAYMENT_PENDING',
       exchangeRate: dto.exchangeRate,
@@ -831,7 +824,7 @@ export class PayablesService {
   }
 
   async vendorBalance(tenantId: string, vendorId: string) {
-    const vendor = await this.prisma.accountingVendor.findFirst({
+    const vendor = await this.prisma.subledgerAccount.findFirst({
       where: { id: vendorId, tenantId },
     });
     if (!vendor) throw new NotFoundException('Vendor not found');
@@ -1234,7 +1227,7 @@ export class PayablesService {
 
     const apLine = {
       glAccountId: apControlAccountId,
-      subledgerAccountId: document.vendor.subledgerAccountId,
+      subledgerAccountId: document.vendor.id,
       description,
     };
     // A resolved rule splits tax onto its own account(s), leaving the offset line at just
@@ -1482,18 +1475,23 @@ export class PayablesService {
   }
 
   private async resolveVendor(tenantId: string, vendorId: string) {
-    const vendor = await this.prisma.accountingVendor.findFirst({
+    const vendor = await this.prisma.subledgerAccount.findFirst({
       where: { id: vendorId, tenantId },
-      include: { subledgerAccount: true },
     });
     if (!vendor) throw new NotFoundException('Vendor not found');
-    if (!vendor.isActive) {
-      throw new ConflictException(
-        'Inactive vendors cannot receive AP activity',
-      );
-    }
-    if (vendor.subledgerAccount.status !== RecordStatus.ACTIVE) {
+    if (vendor.status !== RecordStatus.ACTIVE) {
       throw new ConflictException('Vendor subledger account is inactive');
+    }
+    const entityType = await this.prisma.entityType.findFirst({
+      where: { tenantId, name: { equals: vendor.type, mode: 'insensitive' } },
+    });
+    const isPayable =
+      entityType?.accountingRelation === EntityAccountingRelation.PAYABLE ||
+      entityType?.accountingRelation === EntityAccountingRelation.BOTH;
+    if (!isPayable) {
+      throw new BadRequestException(
+        `"${vendor.type}" is not a Payable-marked Entity Type — it cannot be used as an AP vendor`,
+      );
     }
     return vendor;
   }
@@ -1633,8 +1631,11 @@ export class PayablesService {
     });
   }
 
-  private assertVendorCurrency(vendorCurrency: string, currency: string) {
-    if (vendorCurrency !== currency) {
+  private assertVendorCurrency(
+    vendorCurrency: string | null,
+    currency: string,
+  ) {
+    if (vendorCurrency && vendorCurrency !== currency) {
       throw new BadRequestException(
         'Standalone AP Phase 1 requires vendor currency to match the document or payment currency',
       );
