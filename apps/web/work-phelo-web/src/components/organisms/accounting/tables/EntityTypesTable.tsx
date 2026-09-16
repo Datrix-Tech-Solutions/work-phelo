@@ -6,10 +6,8 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
-import { TypeChip } from '@/components/atoms/TypeChip';
 import { AddEntityTypePanel } from '@/components/organisms/accounting/panels/AddEntityTypePanel';
-import { ENTITY_ACCOUNTING_RELATION_LABELS, EntityType } from '@/types/accounting';
-import { ENTITY_ACCOUNTING_RELATION_CHIP_COLOR } from '@/lib/accounting/entityAccountingRelation';
+import { EntityType } from '@/types/accounting';
 import { useDeleteEntityType, useEntityTypes } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -50,17 +48,6 @@ export function EntityTypesTable() {
           <span className="font-medium text-gray-900">{row.name}</span>
           {row.isSystem && <Badge label="System" variant="neutral" />}
         </span>
-      ),
-    },
-    {
-      key: 'accountingRelation',
-      label: 'Accounting Relation',
-      width: '160px',
-      render: (row) => (
-        <TypeChip
-          label={ENTITY_ACCOUNTING_RELATION_LABELS[row.accountingRelation]}
-          color={ENTITY_ACCOUNTING_RELATION_CHIP_COLOR[row.accountingRelation]}
-        />
       ),
     },
     {

@@ -158,10 +158,11 @@ function useCreateSettlement(side: AccountingTradeSide) {
   const invalidate = useInvalidateSettlement(side);
   return useMutation({
     mutationFn: async (payload: CreateTradeSettlementPayload) => {
-      const { partyId, settlementDate, ...rest } = payload;
+      const { partyId, documentId, settlementDate, ...rest } = payload;
       const body = {
         ...rest,
         [config.partyIdField]: partyId,
+        [config.documentIdField]: documentId,
         [config.dateField]: settlementDate,
       };
       const res = await api.post<RawSettlement>(`${config.base}/${config.segment}`, body);

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  GLAccountCategory,
   Prisma,
   PostingDirection,
   TransactionTypeCategory,
@@ -342,11 +343,37 @@ export class TransactionTypeRulesService {
 
   private async validateLineReferences(
     tenantId: string,
-    transactionType: { businessRoles: string[] },
+    transactionType: {
+      businessRoles: string[];
+      category: TransactionTypeCategory;
+    },
     lines: TransactionTypeRuleLineDto[],
   ) {
+    const autoBalanceDirection = this.autoBalanceDirection(
+      transactionType.category,
+    );
+    const requiredCategory =
+      transactionType.category === TransactionTypeCategory.RECEIVABLE
+        ? GLAccountCategory.ASSET
+        : transactionType.category === TransactionTypeCategory.PAYABLE
+          ? GLAccountCategory.LIABILITY
+          : null;
     for (const line of lines) {
-      await this.masterData.findGLAccount(tenantId, line.accountId);
+      const account = await this.masterData.findGLAccount(
+        tenantId,
+        line.accountId,
+      );
+      if (
+        requiredCategory &&
+        line.direction === autoBalanceDirection &&
+        account.category !== requiredCategory
+      ) {
+        throw new BadRequestException(
+          `The ${transactionType.category === TransactionTypeCategory.RECEIVABLE ? 'Receivable' : 'Payable'} ` +
+            `line's account must be a ${requiredCategory} account — this is what the ` +
+            'document actually posts to, resolved once here rather than from a fixed setting.',
+        );
+      }
       if (line.taxTypeId) {
         await this.findTaxType(tenantId, line.taxTypeId);
       }

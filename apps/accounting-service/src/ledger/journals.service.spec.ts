@@ -276,43 +276,6 @@ describe('JournalsService', () => {
     ).rejects.toThrow('active leaf posting-enabled GL accounts');
   });
 
-  it('requires a subledger when posting to an active control account', async () => {
-    const { prisma, service } = setup();
-    prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
-    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
-      tenantId: actor.tenantId,
-      baseCurrency: 'GHS',
-      fiscalYearStartMonth: 1,
-      decimalPlaces: 2,
-    });
-    prisma.accountingCurrency.findUnique.mockResolvedValue({
-      code: 'GHS',
-      decimalPlaces: 2,
-      isActive: true,
-    });
-    prisma.gLAccount.findMany.mockResolvedValue([
-      account('cash'),
-      account('income'),
-    ]);
-    prisma.subledgerAccount.findMany
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ controlAccountId: 'cash' }]);
-    prisma.costCentre.findMany.mockResolvedValue([]);
-
-    await expect(
-      service.create(actor, {
-        transactionDate: '2026-07-10',
-        fiscalPeriodId: period.id,
-        transactionCurrency: 'GHS',
-        description: 'Direct control posting',
-        lines: [
-          { glAccountId: 'cash', debit: 100 },
-          { glAccountId: 'income', credit: 100 },
-        ],
-      }),
-    ).rejects.toThrow('require a matching subledger account');
-  });
-
   it('stores base-currency amounts at exchange rate one', async () => {
     const { prisma, service } = setup();
     prisma.fiscalPeriod.findFirst.mockResolvedValue(period);

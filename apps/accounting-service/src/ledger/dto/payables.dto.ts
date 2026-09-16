@@ -148,6 +148,15 @@ export class CreatePayableCreditNoteDto extends PartialType(
   @IsUUID()
   offsetGlAccountId!: string;
 
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Posting-enabled liability account debited when the vendor credit is posted — ' +
+      'picked manually here since credit notes are not yet Rule-driven.',
+  })
+  @IsUUID()
+  apAccountId!: string;
+
   @ApiPropertyOptional({
     format: 'uuid',
     description:
@@ -162,6 +171,16 @@ export class CreatePayablePaymentDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   vendorId!: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The posted bill this payment is being recorded to pay. The payment inherits that ' +
+      "bill's own resolved AP account, and can only ever be allocated against bills " +
+      'sharing that same account.',
+  })
+  @IsUUID()
+  billId!: string;
 
   @ApiProperty({ format: 'uuid' })
   @IsUUID()

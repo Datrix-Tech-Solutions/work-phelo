@@ -148,6 +148,15 @@ export class CreateReceivableCreditNoteDto extends PartialType(
   @IsUUID()
   offsetGlAccountId!: string;
 
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Posting-enabled asset account credited when the credit note is posted — picked ' +
+      'manually here since credit notes are not yet Rule-driven.',
+  })
+  @IsUUID()
+  arAccountId!: string;
+
   @ApiPropertyOptional({
     format: 'uuid',
     description:
@@ -162,6 +171,16 @@ export class CreateReceivableReceiptDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   customerId!: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The posted invoice this receipt is being recorded to pay. The receipt inherits ' +
+      "that invoice's own resolved AR account, and can only ever be allocated against " +
+      'invoices sharing that same account.',
+  })
+  @IsUUID()
+  invoiceId!: string;
 
   @ApiProperty({ format: 'uuid' })
   @IsUUID()

@@ -5,10 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
-import {
-  EntityAccountingRelation,
-  Prisma,
-} from '../../prisma/generated/client';
+import { Prisma } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateEntityTypeDto,
@@ -16,13 +13,8 @@ import {
 } from './dto/entity-types.dto';
 
 // The two the Entities page always starts with — matches the two-only default we settled
-// on (everything else must be created here first before it's usable elsewhere). Their
-// accountingRelation is what makes them actually work as Receivable/Payable roles — see
-// AccountingMasterDataService.resolveSubledgerControlAccount.
-const DEFAULT_ENTITY_TYPES = [
-  { name: 'Customer', accountingRelation: EntityAccountingRelation.RECEIVABLE },
-  { name: 'Vendor', accountingRelation: EntityAccountingRelation.PAYABLE },
-] as const;
+// on (everything else must be created here first before it's usable elsewhere).
+const DEFAULT_ENTITY_TYPES = ['Customer', 'Vendor'] as const;
 
 @Injectable()
 export class EntityTypesService {
@@ -51,7 +43,6 @@ export class EntityTypesService {
         data: {
           tenantId: user.tenantId,
           name: dto.name,
-          accountingRelation: dto.accountingRelation,
           isSystem: false,
           createdByUserId: user.id,
           updatedByUserId: user.id,
@@ -78,9 +69,6 @@ export class EntityTypesService {
         where: { id_tenantId: { id: entityType.id, tenantId: user.tenantId } },
         data: {
           ...(dto.name ? { name: dto.name } : {}),
-          ...(dto.accountingRelation
-            ? { accountingRelation: dto.accountingRelation }
-            : {}),
           updatedByUserId: user.id,
         },
       });
@@ -122,13 +110,12 @@ export class EntityTypesService {
   }
 
   private async seedDefaultEntityTypes(user: RequestUser) {
-    for (const template of DEFAULT_ENTITY_TYPES) {
+    for (const name of DEFAULT_ENTITY_TYPES) {
       try {
         await this.prisma.entityType.create({
           data: {
             tenantId: user.tenantId,
-            name: template.name,
-            accountingRelation: template.accountingRelation,
+            name,
             isSystem: true,
             createdByUserId: user.id,
             updatedByUserId: user.id,
@@ -170,7 +157,6 @@ export class EntityTypesService {
     entityType: {
       id: string;
       name: string;
-      accountingRelation: string;
       isSystem: boolean;
       createdAt: Date;
       updatedAt: Date;
@@ -180,7 +166,6 @@ export class EntityTypesService {
     return {
       id: entityType.id,
       name: entityType.name,
-      accountingRelation: entityType.accountingRelation,
       isSystem: entityType.isSystem,
       entityCount: countByType.get(entityType.name.trim().toUpperCase()) ?? 0,
       createdAt: entityType.createdAt.toISOString(),

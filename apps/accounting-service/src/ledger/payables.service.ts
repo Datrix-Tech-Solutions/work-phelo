@@ -9,8 +9,8 @@ import {
   AccountingPayableAllocationSource,
   AccountingPayableDocumentType,
   AccountingPayableStatus,
-  EntityAccountingRelation,
   FiscalPeriodStatus,
+  GLAccountCategory,
   JournalStatus,
   PostingDirection,
   Prisma,
@@ -46,6 +46,7 @@ const payableDocumentInclude = {
     select: { id: true, code: true, name: true, currency: true },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
+  apAccount: { select: { id: true, code: true, name: true } },
   postedJournalEntry: {
     select: { id: true, journalNumber: true, status: true, postedAt: true },
   },
@@ -282,20 +283,14 @@ export class PayablesService {
   }
 
   async createBill(user: RequestUser, dto: CreatePayableBillDto) {
-    const [vendor, config] = await Promise.all([
+    const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
-      this.resolveConfig(user.tenantId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
     ]);
     this.assertVendorCurrency(vendor.currency, dto.currency);
-    if (!config.accountsPayableControlAccountId) {
-      throw new ConflictException(
-        'Configure an accounts payable control account before creating AP bills',
-      );
-    }
 
     const subtotalAmount = new Prisma.Decimal(dto.amount);
-    const { offsetGlAccountId, taxAmount, taxBreakdown } =
+    const { apAccountId, offsetGlAccountId, taxAmount, taxBreakdown } =
       await this.resolveRulePosting(
         user.tenantId,
         dto.transactionTypeId,
@@ -327,6 +322,7 @@ export class PayablesService {
         sourceModule: this.optional(dto.sourceModule),
         sourceRecordId: this.optional(dto.sourceRecordId),
         offsetGlAccountId,
+        apAccountId,
         transactionTypeId: dto.transactionTypeId,
         taxBreakdown,
         createdByUserId: user.id,
@@ -345,18 +341,13 @@ export class PayablesService {
   }
 
   async createCreditNote(user: RequestUser, dto: CreatePayableCreditNoteDto) {
-    const [vendor, config] = await Promise.all([
+    const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
-      this.resolveConfig(user.tenantId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
       this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
+      this.assertApAccount(user.tenantId, dto.apAccountId),
     ]);
     this.assertVendorCurrency(vendor.currency, dto.currency);
-    if (!config.accountsPayableControlAccountId) {
-      throw new ConflictException(
-        'Configure an accounts payable control account before creating AP vendor credits',
-      );
-    }
     if (dto.originalBillId) {
       const bill = await this.getDocumentForTenant(
         user.tenantId,
@@ -406,6 +397,7 @@ export class PayablesService {
         sourceModule: this.optional(dto.sourceModule),
         sourceRecordId: this.optional(dto.sourceRecordId),
         offsetGlAccountId: dto.offsetGlAccountId,
+        apAccountId: dto.apAccountId,
         originalBillId: this.optional(dto.originalBillId),
         createdByUserId: user.id,
         updatedByUserId: user.id,
@@ -492,16 +484,17 @@ export class PayablesService {
   }
 
   async createPayment(user: RequestUser, dto: CreatePayablePaymentDto) {
-    const [vendor, config] = await Promise.all([
+    const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
-      this.resolveConfig(user.tenantId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
     ]);
     this.assertVendorCurrency(vendor.currency, dto.currency);
-    if (!config.accountsPayableControlAccountId) {
-      throw new ConflictException(
-        'Configure an accounts payable control account before creating AP payments',
-      );
+    const bill = await this.getDocumentForTenant(user.tenantId, dto.billId);
+    if (bill.vendorId !== vendor.id) {
+      throw new BadRequestException('The bill does not belong to this vendor');
+    }
+    if (bill.status !== AccountingPayableStatus.POSTED) {
+      throw new BadRequestException('The bill must be posted');
     }
 
     const cashbookDto: CreateCashbookPaymentDto = {
@@ -515,7 +508,7 @@ export class PayablesService {
       counterpartyId: vendor.id,
       externalReference: dto.externalReference,
       description: dto.description ?? `Payment to ${vendor.name}`,
-      offsetGlAccountId: config.accountsPayableControlAccountId,
+      offsetGlAccountId: bill.apAccountId,
       offsetSubledgerAccountId: vendor.id,
       sourceModule: dto.sourceModule ?? 'ACCOUNTING',
       sourceRecordId: dto.sourceRecordId ?? 'AP_PAYMENT_PENDING',
@@ -529,6 +522,7 @@ export class PayablesService {
       data: {
         tenantId: user.tenantId,
         vendorId: vendor.id,
+        apAccountId: bill.apAccountId,
         cashbookTransactionId: cashbookTransaction.id,
         paymentNumber: await this.nextPaymentNumber(user.tenantId),
         paymentDate: new Date(dto.paymentDate),
@@ -737,6 +731,7 @@ export class PayablesService {
         sourceType: AccountingPayableAllocationSource.PAYMENT,
         amount: new Prisma.Decimal(dto.amount),
         currency: payment.currency,
+        expectedApAccountId: payment.apAccountId,
       });
     });
   }
@@ -768,6 +763,7 @@ export class PayablesService {
         sourceType: AccountingPayableAllocationSource.CREDIT_NOTE,
         amount: new Prisma.Decimal(dto.amount),
         currency: creditNote.currency,
+        expectedApAccountId: creditNote.apAccountId,
       });
     });
   }
@@ -906,12 +902,6 @@ export class PayablesService {
           'Only draft payable documents can be posted',
         );
       }
-      const config = await this.resolveConfig(user.tenantId, tx);
-      if (!config.accountsPayableControlAccountId) {
-        throw new ConflictException(
-          'Configure an accounts payable control account before posting payables',
-        );
-      }
       if (
         document.documentType === AccountingPayableDocumentType.CREDIT_NOTE &&
         document.originalBillId
@@ -935,11 +925,7 @@ export class PayablesService {
       const journal = await this.journals.createPostedInTransaction(
         tx,
         user,
-        this.documentJournalDto(
-          document,
-          config.accountsPayableControlAccountId,
-          period.id,
-        ),
+        this.documentJournalDto(document, period.id),
       );
       const claimed = await tx.accountingPayableDocument.updateMany({
         where: {
@@ -971,6 +957,7 @@ export class PayablesService {
           sourceType: AccountingPayableAllocationSource.CREDIT_NOTE,
           amount: document.totalAmount,
           currency: document.currency,
+          expectedApAccountId: document.apAccountId,
         });
       }
       await tx.accountingAuditLog.create({
@@ -1125,6 +1112,10 @@ export class PayablesService {
       sourceType: AccountingPayableAllocationSource;
       amount: Prisma.Decimal;
       currency: string;
+      /** The payment's/credit note's own resolved AP account — a bill can only be
+       *  allocated against a source that shares this same account (see the "which AP
+       *  account does a payment use" design note on CreatePayablePaymentDto). */
+      expectedApAccountId?: string;
     },
   ) {
     if (input.amount.lte(0)) {
@@ -1148,6 +1139,14 @@ export class PayablesService {
     if (bill.currency !== input.currency) {
       throw new BadRequestException(
         'Cross-currency payable allocations are not supported in Phase 1',
+      );
+    }
+    if (
+      input.expectedApAccountId &&
+      bill.apAccountId !== input.expectedApAccountId
+    ) {
+      throw new BadRequestException(
+        'This bill uses a different payable account — record it as a separate payment',
       );
     }
     const billOutstanding = await this.billOutstandingAmount(
@@ -1217,7 +1216,6 @@ export class PayablesService {
 
   private documentJournalDto(
     document: PayableDocument,
-    apControlAccountId: string,
     fiscalPeriodId: string,
   ): CreateJournalDto {
     const totalAmount = Number(document.totalAmount.toString());
@@ -1226,7 +1224,7 @@ export class PayablesService {
     const taxBreakdown = this.parseTaxBreakdown(document.taxBreakdown);
 
     const apLine = {
-      glAccountId: apControlAccountId,
+      glAccountId: document.apAccountId,
       subledgerAccountId: document.vendor.id,
       description,
     };
@@ -1482,29 +1480,7 @@ export class PayablesService {
     if (vendor.status !== RecordStatus.ACTIVE) {
       throw new ConflictException('Vendor subledger account is inactive');
     }
-    const entityType = await this.prisma.entityType.findFirst({
-      where: { tenantId, name: { equals: vendor.type, mode: 'insensitive' } },
-    });
-    const isPayable =
-      entityType?.accountingRelation === EntityAccountingRelation.PAYABLE ||
-      entityType?.accountingRelation === EntityAccountingRelation.BOTH;
-    if (!isPayable) {
-      throw new BadRequestException(
-        `"${vendor.type}" is not a Payable-marked Entity Type — it cannot be used as an AP vendor`,
-      );
-    }
     return vendor;
-  }
-
-  private async resolveConfig(
-    tenantId: string,
-    client: PrismaService | TransactionClient = this.prisma,
-  ) {
-    const config = await client.accountingTenantConfig.findUnique({
-      where: { tenantId },
-    });
-    if (!config) throw new ConflictException('Accounting is not configured');
-    return config;
   }
 
   private async assertActiveCurrency(tenantId: string, code: string) {
@@ -1536,10 +1512,31 @@ export class PayablesService {
     }
   }
 
-  /** Resolves the offset account and any tax lines from the transaction type's Rule —
-   *  requires one to exist, so a Rule is mandatory before a type can be used to post an
-   *  Invoice/Bill. The AP side itself is untouched — still the tenant's configured control
-   *  account, exactly as before; only the non-auto-balancing side comes from here. */
+  /** For a credit note's manually-picked AP account — a Rule-driven bill never needs this,
+   *  since its Rule's auto-balancing line was already validated as LIABILITY category when
+   *  the Rule itself was saved. */
+  private async assertApAccount(tenantId: string, glAccountId: string) {
+    const account = await this.prisma.gLAccount.findFirst({
+      where: { id: glAccountId, tenantId },
+      include: { _count: { select: { childAccounts: true } } },
+    });
+    if (!account) throw new BadRequestException('AP account not found');
+    if (
+      account.status !== RecordStatus.ACTIVE ||
+      !account.allowPosting ||
+      account._count.childAccounts > 0 ||
+      account.category !== GLAccountCategory.LIABILITY
+    ) {
+      throw new BadRequestException(
+        'AP account must be active, leaf, posting-enabled and a liability account',
+      );
+    }
+  }
+
+  /** Resolves both sides of the journal from the transaction type's Rule — requires one to
+   *  exist, so a Rule is mandatory before a type can be used to post a Bill. Both the AP
+   *  account and the offset account come from here now; neither is re-derived from any
+   *  tenant-wide setting. */
   private async resolveRulePosting(
     tenantId: string,
     transactionTypeId: string,
@@ -1547,6 +1544,7 @@ export class PayablesService {
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
   ): Promise<{
+    apAccountId: string;
     offsetGlAccountId: string;
     taxAmount: Prisma.Decimal;
     taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
@@ -1577,6 +1575,14 @@ export class PayablesService {
       expectedCategory === TransactionTypeCategory.RECEIVABLE
         ? PostingDirection.DR
         : PostingDirection.CR;
+    const apLine = rule.lines.find(
+      (l) => l.direction === autoBalanceDirection,
+    );
+    if (!apLine) {
+      throw new ConflictException(
+        "This transaction type's rule has no Payable line configured",
+      );
+    }
     const explicitLines = rule.lines.filter(
       (l) => l.direction !== autoBalanceDirection,
     );
@@ -1604,7 +1610,12 @@ export class PayablesService {
       new Prisma.Decimal(0),
     );
 
-    return { offsetGlAccountId: mainLine.accountId, taxAmount, taxBreakdown };
+    return {
+      apAccountId: apLine.accountId,
+      offsetGlAccountId: mainLine.accountId,
+      taxAmount,
+      taxBreakdown,
+    };
   }
 
   private parseTaxBreakdown(

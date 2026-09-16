@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -8,16 +8,7 @@ import { InvoiceDetailsSection } from '@/components/molecules/accounting/Invoice
 import { InvoiceLineDetailsSection } from '@/components/molecules/accounting/InvoiceLineDetailsSection';
 import { SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { AccountingTradeSide, InvoiceFormValues, INVOICE_DEFAULTS } from '@/types/accounting';
-import {
-  useCreatePayableBill,
-  useCreateReceivableInvoice,
-  useEntityTypes,
-  useSubledgers,
-} from '@/hooks';
-import {
-  matchesTradeSide,
-  resolveEntityAccountingRelation,
-} from '@/lib/accounting/entityAccountingRelation';
+import { useCreatePayableBill, useCreateReceivableInvoice, useSubledgers } from '@/hooks';
 import { Icons } from '@/components/atoms/icons';
 import { cardClass } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -38,17 +29,10 @@ export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewIn
   const form = useForm<InvoiceFormValues>({ defaultValues: INVOICE_DEFAULTS });
   const [showCancelModal, setShowCancelModal] = useState(false);
 
-  const { data: entities, isLoading: isLoadingEntities } = useSubledgers({ status: 'ACTIVE' });
-  const { data: entityTypes, isLoading: isLoadingEntityTypes } = useEntityTypes();
-  const isLoadingParties = isLoadingEntities || isLoadingEntityTypes;
-
-  const parties = useMemo(
-    () =>
-      (entities ?? []).filter((entity) =>
-        matchesTradeSide(resolveEntityAccountingRelation(entity, entityTypes), side),
-      ),
-    [entities, entityTypes, side],
-  );
+  // Any active entity can be picked here — the Transaction Type decides whether the
+  // resulting document is Receivable or Payable, not the entity itself.
+  const { data: entities, isLoading: isLoadingParties } = useSubledgers({ status: 'ACTIVE' });
+  const parties = entities ?? [];
   const partyOptions: SearchSelectOption[] = parties.map((p) => ({
     value: p.id,
     label: `${p.code} — ${p.name}`,
@@ -105,6 +89,7 @@ export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewIn
           <InvoiceDetailsSection
             form={form}
             vendorLabel={partyLabel}
+            parties={parties}
             partyOptions={partyOptions}
             isLoadingParties={isLoadingParties}
             side={side}

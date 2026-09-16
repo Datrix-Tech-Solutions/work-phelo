@@ -9,7 +9,6 @@ import {
   AccountingReceivableAllocationSource,
   AccountingReceivableDocumentType,
   AccountingReceivableStatus,
-  EntityAccountingRelation,
   FiscalPeriodStatus,
   GLAccountCategory,
   JournalStatus,
@@ -47,6 +46,7 @@ const receivableDocumentInclude = {
     select: { id: true, code: true, name: true, currency: true },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
+  arAccount: { select: { id: true, code: true, name: true } },
   postedJournalEntry: {
     select: { id: true, journalNumber: true, status: true, postedAt: true },
   },
@@ -289,20 +289,14 @@ export class ReceivablesService {
   }
 
   async createInvoice(user: RequestUser, dto: CreateReceivableInvoiceDto) {
-    const [customer, config] = await Promise.all([
+    const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
-      this.resolveConfig(user.tenantId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
-    if (!config.accountsReceivableControlAccountId) {
-      throw new ConflictException(
-        'Configure an accounts receivable control account before creating AR invoices',
-      );
-    }
 
     const subtotalAmount = new Prisma.Decimal(dto.amount);
-    const { offsetGlAccountId, taxAmount, taxBreakdown } =
+    const { arAccountId, offsetGlAccountId, taxAmount, taxBreakdown } =
       await this.resolveRulePosting(
         user.tenantId,
         dto.transactionTypeId,
@@ -334,6 +328,7 @@ export class ReceivablesService {
         sourceModule: this.optional(dto.sourceModule),
         sourceRecordId: this.optional(dto.sourceRecordId),
         offsetGlAccountId,
+        arAccountId,
         transactionTypeId: dto.transactionTypeId,
         taxBreakdown,
         createdByUserId: user.id,
@@ -355,18 +350,13 @@ export class ReceivablesService {
     user: RequestUser,
     dto: CreateReceivableCreditNoteDto,
   ) {
-    const [customer, config] = await Promise.all([
+    const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
-      this.resolveConfig(user.tenantId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
       this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
+      this.assertArAccount(user.tenantId, dto.arAccountId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
-    if (!config.accountsReceivableControlAccountId) {
-      throw new ConflictException(
-        'Configure an accounts receivable control account before creating AR credit notes',
-      );
-    }
     if (dto.originalInvoiceId) {
       const invoice = await this.getDocumentForTenant(
         user.tenantId,
@@ -416,6 +406,7 @@ export class ReceivablesService {
         sourceModule: this.optional(dto.sourceModule),
         sourceRecordId: this.optional(dto.sourceRecordId),
         offsetGlAccountId: dto.offsetGlAccountId,
+        arAccountId: dto.arAccountId,
         originalInvoiceId: this.optional(dto.originalInvoiceId),
         createdByUserId: user.id,
         updatedByUserId: user.id,
@@ -512,16 +503,22 @@ export class ReceivablesService {
   }
 
   async createReceipt(user: RequestUser, dto: CreateReceivableReceiptDto) {
-    const [customer, config] = await Promise.all([
+    const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
-      this.resolveConfig(user.tenantId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
-    if (!config.accountsReceivableControlAccountId) {
-      throw new ConflictException(
-        'Configure an accounts receivable control account before creating AR receipts',
+    const invoice = await this.getDocumentForTenant(
+      user.tenantId,
+      dto.invoiceId,
+    );
+    if (invoice.customerId !== customer.id) {
+      throw new BadRequestException(
+        'The invoice does not belong to this customer',
       );
+    }
+    if (invoice.status !== AccountingReceivableStatus.POSTED) {
+      throw new BadRequestException('The invoice must be posted');
     }
 
     const cashbookDto: CreateCashbookReceiptDto = {
@@ -535,7 +532,7 @@ export class ReceivablesService {
       counterpartyId: customer.id,
       externalReference: dto.externalReference,
       description: dto.description ?? `Receipt from ${customer.name}`,
-      offsetGlAccountId: config.accountsReceivableControlAccountId,
+      offsetGlAccountId: invoice.arAccountId,
       offsetSubledgerAccountId: customer.id,
       sourceModule: dto.sourceModule ?? 'ACCOUNTING',
       sourceRecordId: dto.sourceRecordId ?? 'AR_RECEIPT_PENDING',
@@ -549,6 +546,7 @@ export class ReceivablesService {
       data: {
         tenantId: user.tenantId,
         customerId: customer.id,
+        arAccountId: invoice.arAccountId,
         cashbookTransactionId: cashbookTransaction.id,
         receiptNumber: await this.nextReceiptNumber(user.tenantId),
         receiptDate: new Date(dto.receiptDate),
@@ -757,6 +755,7 @@ export class ReceivablesService {
         sourceType: AccountingReceivableAllocationSource.RECEIPT,
         amount: new Prisma.Decimal(dto.amount),
         currency: receipt.currency,
+        expectedArAccountId: receipt.arAccountId,
       });
     });
   }
@@ -787,6 +786,7 @@ export class ReceivablesService {
         sourceType: AccountingReceivableAllocationSource.CREDIT_NOTE,
         amount: new Prisma.Decimal(dto.amount),
         currency: creditNote.currency,
+        expectedArAccountId: creditNote.arAccountId,
       });
     });
   }
@@ -933,12 +933,6 @@ export class ReceivablesService {
           'Only draft receivable documents can be posted',
         );
       }
-      const config = await this.resolveConfig(user.tenantId, tx);
-      if (!config.accountsReceivableControlAccountId) {
-        throw new ConflictException(
-          'Configure an accounts receivable control account before posting receivables',
-        );
-      }
       if (
         document.documentType ===
           AccountingReceivableDocumentType.CREDIT_NOTE &&
@@ -963,11 +957,7 @@ export class ReceivablesService {
       const journal = await this.journals.createPostedInTransaction(
         tx,
         user,
-        this.documentJournalDto(
-          document,
-          config.accountsReceivableControlAccountId,
-          period.id,
-        ),
+        this.documentJournalDto(document, period.id),
       );
       const claimed = await tx.accountingReceivableDocument.updateMany({
         where: {
@@ -1000,6 +990,7 @@ export class ReceivablesService {
           sourceType: AccountingReceivableAllocationSource.CREDIT_NOTE,
           amount: document.totalAmount,
           currency: document.currency,
+          expectedArAccountId: document.arAccountId,
         });
       }
       await tx.accountingAuditLog.create({
@@ -1155,6 +1146,10 @@ export class ReceivablesService {
       sourceType: AccountingReceivableAllocationSource;
       amount: Prisma.Decimal;
       currency: string;
+      /** The receipt's/credit note's own resolved AR account — an invoice can only be
+       *  allocated against a source that shares this same account (see the "which AR
+       *  account does a receipt use" design note on CreateReceivableReceiptDto). */
+      expectedArAccountId?: string;
     },
   ) {
     if (input.amount.lte(0)) {
@@ -1180,6 +1175,14 @@ export class ReceivablesService {
     if (invoice.currency !== input.currency) {
       throw new BadRequestException(
         'Cross-currency receivable allocations are not supported in Phase 1',
+      );
+    }
+    if (
+      input.expectedArAccountId &&
+      invoice.arAccountId !== input.expectedArAccountId
+    ) {
+      throw new BadRequestException(
+        'This invoice uses a different receivable account — record it as a separate payment',
       );
     }
     const invoiceOutstanding = await this.invoiceOutstandingAmount(
@@ -1249,7 +1252,6 @@ export class ReceivablesService {
 
   private documentJournalDto(
     document: ReceivableDocument,
-    arControlAccountId: string,
     fiscalPeriodId: string,
   ): CreateJournalDto {
     const totalAmount = Number(document.totalAmount.toString());
@@ -1258,7 +1260,7 @@ export class ReceivablesService {
     const taxBreakdown = this.parseTaxBreakdown(document.taxBreakdown);
 
     const arLine = {
-      glAccountId: arControlAccountId,
+      glAccountId: document.arAccountId,
       subledgerAccountId: document.customer.id,
       description,
     };
@@ -1513,29 +1515,7 @@ export class ReceivablesService {
     if (customer.status !== RecordStatus.ACTIVE) {
       throw new ConflictException('Customer subledger account is inactive');
     }
-    const entityType = await this.prisma.entityType.findFirst({
-      where: { tenantId, name: { equals: customer.type, mode: 'insensitive' } },
-    });
-    const isReceivable =
-      entityType?.accountingRelation === EntityAccountingRelation.RECEIVABLE ||
-      entityType?.accountingRelation === EntityAccountingRelation.BOTH;
-    if (!isReceivable) {
-      throw new BadRequestException(
-        `"${customer.type}" is not a Receivable-marked Entity Type — it cannot be used as an AR customer`,
-      );
-    }
     return customer;
-  }
-
-  private async resolveConfig(
-    tenantId: string,
-    client: PrismaService | TransactionClient = this.prisma,
-  ) {
-    const config = await client.accountingTenantConfig.findUnique({
-      where: { tenantId },
-    });
-    if (!config) throw new ConflictException('Accounting is not configured');
-    return config;
   }
 
   private async assertActiveCurrency(tenantId: string, code: string) {
@@ -1568,10 +1548,31 @@ export class ReceivablesService {
     }
   }
 
-  /** Resolves the offset account and any tax lines from the transaction type's Rule —
-   *  requires one to exist, so a Rule is mandatory before a type can be used to post an
-   *  Invoice/Bill. The AR/AP side itself is untouched — still the tenant's configured
-   *  control account, exactly as before; only the non-auto-balancing side comes from here. */
+  /** For a credit note's manually-picked AR account — a Rule-driven invoice never needs
+   *  this, since its Rule's auto-balancing line was already validated as ASSET category
+   *  when the Rule itself was saved. */
+  private async assertArAccount(tenantId: string, glAccountId: string) {
+    const account = await this.prisma.gLAccount.findFirst({
+      where: { id: glAccountId, tenantId },
+      include: { _count: { select: { childAccounts: true } } },
+    });
+    if (!account) throw new BadRequestException('AR account not found');
+    if (
+      account.status !== RecordStatus.ACTIVE ||
+      !account.allowPosting ||
+      account._count.childAccounts > 0 ||
+      account.category !== GLAccountCategory.ASSET
+    ) {
+      throw new BadRequestException(
+        'AR account must be active, leaf, posting-enabled and an asset account',
+      );
+    }
+  }
+
+  /** Resolves both sides of the journal from the transaction type's Rule — requires one to
+   *  exist, so a Rule is mandatory before a type can be used to post an Invoice. Both the
+   *  AR account and the offset account come from here now; neither is re-derived from any
+   *  tenant-wide setting. */
   private async resolveRulePosting(
     tenantId: string,
     transactionTypeId: string,
@@ -1579,6 +1580,7 @@ export class ReceivablesService {
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
   ): Promise<{
+    arAccountId: string;
     offsetGlAccountId: string;
     taxAmount: Prisma.Decimal;
     taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
@@ -1609,6 +1611,14 @@ export class ReceivablesService {
       expectedCategory === TransactionTypeCategory.RECEIVABLE
         ? PostingDirection.DR
         : PostingDirection.CR;
+    const arLine = rule.lines.find(
+      (l) => l.direction === autoBalanceDirection,
+    );
+    if (!arLine) {
+      throw new ConflictException(
+        "This transaction type's rule has no Receivable line configured",
+      );
+    }
     const explicitLines = rule.lines.filter(
       (l) => l.direction !== autoBalanceDirection,
     );
@@ -1636,7 +1646,12 @@ export class ReceivablesService {
       new Prisma.Decimal(0),
     );
 
-    return { offsetGlAccountId: mainLine.accountId, taxAmount, taxBreakdown };
+    return {
+      arAccountId: arLine.accountId,
+      offsetGlAccountId: mainLine.accountId,
+      taxAmount,
+      taxBreakdown,
+    };
   }
 
   private parseTaxBreakdown(

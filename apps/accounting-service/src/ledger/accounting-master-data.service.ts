@@ -7,7 +7,6 @@ import {
 import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
-  EntityAccountingRelation,
   FiscalPeriodStatus,
   GLAccountCategory,
   JournalStatus,
@@ -292,14 +291,6 @@ export class AccountingMasterDataService {
   async getConfig(tenantId: string) {
     const config = await this.prisma.accountingTenantConfig.findUnique({
       where: { tenantId },
-      include: {
-        accountsReceivableControlAccount: {
-          select: { id: true, code: true, name: true, category: true },
-        },
-        accountsPayableControlAccount: {
-          select: { id: true, code: true, name: true, category: true },
-        },
-      },
     });
     return (
       config ?? {
@@ -307,10 +298,6 @@ export class AccountingMasterDataService {
         baseCurrency: null,
         fiscalYearStartMonth: 1,
         decimalPlaces: 2,
-        accountsReceivableControlAccountId: null,
-        accountsPayableControlAccountId: null,
-        accountsReceivableControlAccount: null,
-        accountsPayableControlAccount: null,
         isConfigured: false,
         createdAt: null,
         updatedAt: null,
@@ -321,22 +308,6 @@ export class AccountingMasterDataService {
   async updateConfig(user: RequestUser, dto: UpdateAccountingTenantConfigDto) {
     if (dto.baseCurrency) {
       await this.assertActiveCurrency(user.tenantId, dto.baseCurrency);
-    }
-    if (dto.accountsReceivableControlAccountId) {
-      await this.assertControlAccount(
-        user.tenantId,
-        dto.accountsReceivableControlAccountId,
-        GLAccountCategory.ASSET,
-        'Accounts receivable control account',
-      );
-    }
-    if (dto.accountsPayableControlAccountId) {
-      await this.assertControlAccount(
-        user.tenantId,
-        dto.accountsPayableControlAccountId,
-        GLAccountCategory.LIABILITY,
-        'Accounts payable control account',
-      );
     }
 
     const existing = await this.prisma.accountingTenantConfig.findUnique({
@@ -380,18 +351,6 @@ export class AccountingMasterDataService {
           : {}),
         ...(dto.decimalPlaces !== undefined
           ? { decimalPlaces: dto.decimalPlaces }
-          : {}),
-        ...(dto.accountsReceivableControlAccountId !== undefined
-          ? {
-              accountsReceivableControlAccountId:
-                dto.accountsReceivableControlAccountId,
-            }
-          : {}),
-        ...(dto.accountsPayableControlAccountId !== undefined
-          ? {
-              accountsPayableControlAccountId:
-                dto.accountsPayableControlAccountId,
-            }
           : {}),
         updatedByUserId: user.id,
       },
@@ -1679,13 +1638,21 @@ export class AccountingMasterDataService {
       },
       orderBy: { code: 'asc' },
     });
+    // Entities with no control account (the norm now — see the SubledgerAccount schema
+    // note) have nothing to compute a control-account balance against.
     const balances = await this.calculateSubledgerDimensionBalances(
       tenantId,
-      items.map((item) => ({
-        subledgerAccountId: item.id,
-        controlAccountId: item.controlAccountId,
-        normalBalance: item.controlAccount.normalBalance,
-      })),
+      items.flatMap((item) =>
+        item.controlAccountId && item.controlAccount
+          ? [
+              {
+                subledgerAccountId: item.id,
+                controlAccountId: item.controlAccountId,
+                normalBalance: item.controlAccount.normalBalance,
+              },
+            ]
+          : [],
+      ),
     );
     return items.map((item) => ({
       ...item,
@@ -1697,11 +1664,10 @@ export class AccountingMasterDataService {
     user: RequestUser,
     dto: CreateSubledgerAccountDto,
   ) {
-    const controlAccountId = await this.resolveSubledgerControlAccount(
-      user.tenantId,
-      dto.type,
-      dto.controlAccountId,
-    );
+    await this.assertEntityType(user.tenantId, dto.type);
+    if (dto.controlAccountId) {
+      await this.assertControlAccount(user.tenantId, dto.controlAccountId);
+    }
     if (dto.currency) {
       await this.assertActiveCurrency(user.tenantId, dto.currency);
     }
@@ -1713,7 +1679,7 @@ export class AccountingMasterDataService {
           name: dto.name,
           type: dto.type,
           externalRef: this.optional(dto.externalRef),
-          controlAccountId,
+          controlAccountId: dto.controlAccountId,
           currency: dto.currency,
           contactName: this.optional(dto.contactName),
           address: this.optional(dto.address),
@@ -1727,15 +1693,10 @@ export class AccountingMasterDataService {
   }
 
   /** `type` is validated against the tenant's own Entity Types list (Settings > Entities >
-   *  Types), not a fixed enum — any type a tenant creates there works here. A type marked
-   *  Receivable/Payable/Both rolls up into the tenant's one shared AR or AP control account
-   *  automatically (Both prefers the AR account); one marked None has no default, so it
-   *  still requires an explicit account. */
-  private async resolveSubledgerControlAccount(
-    tenantId: string,
-    type: string,
-    explicitControlAccountId?: string,
-  ): Promise<string> {
+   *  Types), not a fixed enum — any type a tenant creates there works here. Entities carry
+   *  no control account by default: which GL account a document affects is decided by the
+   *  Transaction Type Rule used to create it, not by anything fixed on the entity. */
+  private async assertEntityType(tenantId: string, type: string) {
     const entityType = await this.prisma.entityType.findFirst({
       where: { tenantId, name: { equals: type, mode: 'insensitive' } },
     });
@@ -1744,33 +1705,7 @@ export class AccountingMasterDataService {
         `"${type}" is not a configured Entity Type — create it first under Entities > Types`,
       );
     }
-
-    if (explicitControlAccountId) {
-      await this.assertControlAccount(tenantId, explicitControlAccountId);
-      return explicitControlAccountId;
-    }
-
-    const isReceivable =
-      entityType.accountingRelation === EntityAccountingRelation.RECEIVABLE ||
-      entityType.accountingRelation === EntityAccountingRelation.BOTH;
-    const isPayable =
-      entityType.accountingRelation === EntityAccountingRelation.PAYABLE;
-    if (isReceivable || isPayable) {
-      const config = await this.getConfiguredControlAccounts(tenantId);
-      const controlAccountId = isReceivable
-        ? config.accountsReceivableControlAccountId
-        : config.accountsPayableControlAccountId;
-      if (controlAccountId) return controlAccountId;
-      throw new BadRequestException(
-        `Configure an accounts ${isReceivable ? 'receivable' : 'payable'} ` +
-          `control account before creating "${type}" entities`,
-      );
-    }
-
-    throw new BadRequestException(
-      `"${type}" has no accounting relation set — edit it under Entities > Types, ` +
-        'or provide a control account manually',
-    );
+    return entityType;
   }
 
   async updateSubledgerAccount(
@@ -1841,28 +1776,19 @@ export class AccountingMasterDataService {
    *  their own counterparties. `dto.type` is not a fixed value — it must name an Entity
    *  Type the tenant has already created (Settings > Entities > Types), exactly like a
    *  human creating an entity manually. Accounting has no built-in knowledge of what a
-   *  "Cedant" or "Reinsurer" is; it only knows Entity Types and their accounting relation. */
+   *  "Cedant" or "Reinsurer" is; it only knows Entity Types. No control account is
+   *  resolved or required — which GL account eventually gets affected is decided entirely
+   *  by whichever Transaction Type Rule is used when a document is created for this entity. */
   async ensureInternalInsuranceSubledger(
     callingService: string,
     dto: EnsureInternalSubledgerDto,
   ) {
     const externalRef = this.requiredExternalRef(dto.externalRef);
     const name = this.requiredName(dto.name);
-    const controlAccountId = await this.resolveSubledgerControlAccount(
-      dto.tenantId,
-      dto.type,
-    );
+    await this.assertEntityType(dto.tenantId, dto.type);
 
     const existing = await this.prisma.subledgerAccount.findFirst({
-      where: {
-        tenantId: dto.tenantId,
-        type: dto.type,
-        externalRef,
-        controlAccountId,
-      },
-      include: {
-        controlAccount: { select: { id: true, code: true, name: true } },
-      },
+      where: { tenantId: dto.tenantId, type: dto.type, externalRef },
     });
 
     if (existing) {
@@ -1891,9 +1817,6 @@ export class AccountingMasterDataService {
             : {}),
           updatedByUserId: this.internalActor(callingService),
         },
-        include: {
-          controlAccount: { select: { id: true, code: true, name: true } },
-        },
       });
     }
 
@@ -1909,13 +1832,9 @@ export class AccountingMasterDataService {
           name,
           type: dto.type,
           externalRef,
-          controlAccountId,
           currency: dto.currency,
           createdByUserId: this.internalActor(callingService),
           updatedByUserId: this.internalActor(callingService),
-        },
-        include: {
-          controlAccount: { select: { id: true, code: true, name: true } },
         },
       });
     } catch (error) {
@@ -2307,45 +2226,6 @@ export class AccountingMasterDataService {
       throw new BadRequestException(`${label} must be a ${category} account`);
     }
     return account;
-  }
-
-  private async getConfiguredControlAccounts(tenantId: string) {
-    const config = await this.prisma.accountingTenantConfig.findUnique({
-      where: { tenantId },
-      select: {
-        accountsReceivableControlAccountId: true,
-        accountsPayableControlAccountId: true,
-      },
-    });
-    if (!config) {
-      throw new BadRequestException(
-        'Configure Accounting before creating Receivable/Payable entities',
-      );
-    }
-    return config;
-  }
-
-  private async calculateSubledgerBalances(
-    tenantId: string,
-    subledgerAccountIds: string[],
-    normalBalance: NormalBalance,
-  ) {
-    const uniqueSubledgerIds = Array.from(new Set(subledgerAccountIds));
-    if (uniqueSubledgerIds.length === 0) {
-      return new Map<string, ReturnType<typeof this.emptyBalance>>();
-    }
-    const subledgers = await this.prisma.subledgerAccount.findMany({
-      where: { tenantId, id: { in: uniqueSubledgerIds } },
-      select: { id: true, controlAccountId: true },
-    });
-    return this.calculateSubledgerDimensionBalances(
-      tenantId,
-      subledgers.map((subledger) => ({
-        subledgerAccountId: subledger.id,
-        controlAccountId: subledger.controlAccountId,
-        normalBalance,
-      })),
-    );
   }
 
   private async calculateSubledgerDimensionBalances(

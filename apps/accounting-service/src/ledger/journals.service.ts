@@ -735,29 +735,20 @@ export class JournalsService {
       ),
     ];
 
-    const [accounts, subledgers, costCentres, controlAccountLinks] =
-      await Promise.all([
-        client.gLAccount.findMany({
-          where: { tenantId, id: { in: accountIds } },
-          include: {
-            _count: { select: { childAccounts: true } },
-          },
-        }),
-        client.subledgerAccount.findMany({
-          where: { tenantId, id: { in: subledgerIds } },
-        }),
-        client.costCentre.findMany({
-          where: { tenantId, id: { in: costCentreIds } },
-        }),
-        client.subledgerAccount.findMany({
-          where: {
-            tenantId,
-            controlAccountId: { in: accountIds },
-            status: RecordStatus.ACTIVE,
-          },
-          select: { controlAccountId: true },
-        }),
-      ]);
+    const [accounts, subledgers, costCentres] = await Promise.all([
+      client.gLAccount.findMany({
+        where: { tenantId, id: { in: accountIds } },
+        include: {
+          _count: { select: { childAccounts: true } },
+        },
+      }),
+      client.subledgerAccount.findMany({
+        where: { tenantId, id: { in: subledgerIds } },
+      }),
+      client.costCentre.findMany({
+        where: { tenantId, id: { in: costCentreIds } },
+      }),
+    ]);
     if (accounts.length !== accountIds.length) {
       throw new BadRequestException(
         'One or more GL accounts do not belong to this tenant',
@@ -800,28 +791,6 @@ export class JournalsService {
       throw new BadRequestException(
         'Cost centres must be active and belong to this tenant',
       );
-    }
-
-    const subledgerMap = new Map(
-      subledgers.map((subledger) => [subledger.id, subledger]),
-    );
-    const controlAccountIds = new Set(
-      controlAccountLinks.map((subledger) => subledger.controlAccountId),
-    );
-    for (const line of lines) {
-      const subledger = line.subledgerAccountId
-        ? subledgerMap.get(line.subledgerAccountId)
-        : undefined;
-      if (subledger && subledger.controlAccountId !== line.glAccountId) {
-        throw new BadRequestException(
-          'Subledger account must be posted through its configured control account',
-        );
-      }
-      if (controlAccountIds.has(line.glAccountId) && !subledger) {
-        throw new BadRequestException(
-          'Control account journal lines require a matching subledger account',
-        );
-      }
     }
   }
 

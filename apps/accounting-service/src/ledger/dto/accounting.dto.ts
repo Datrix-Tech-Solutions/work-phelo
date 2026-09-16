@@ -64,23 +64,6 @@ export class UpdateAccountingTenantConfigDto {
   @Min(0)
   @Max(4)
   decimalPlaces?: number;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    description: 'Default posting-enabled asset control account for customers.',
-  })
-  @IsOptional()
-  @IsUUID()
-  accountsReceivableControlAccountId?: string;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    description:
-      'Default posting-enabled liability control account for vendors.',
-  })
-  @IsOptional()
-  @IsUUID()
-  accountsPayableControlAccountId?: string;
 }
 
 export class CreateAccountingCurrencyDto {

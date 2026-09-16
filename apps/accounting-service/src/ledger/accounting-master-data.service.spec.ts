@@ -210,18 +210,13 @@ describe('AccountingMasterDataService', () => {
     );
   });
 
-  it('ensures a Cedant subledger from an internal service using the AR control account', async () => {
+  it('ensures a Cedant subledger from an internal service with no control account', async () => {
     const { prisma, service } = setup();
     prisma.subledgerAccount.findFirst.mockResolvedValue(null);
     prisma.entityType.findFirst.mockResolvedValue({
       id: 'entity-type-cedant',
       tenantId: actor.tenantId,
       name: 'Cedant',
-      accountingRelation: 'RECEIVABLE',
-    });
-    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
-      accountsReceivableControlAccountId: 'ar-control',
-      accountsPayableControlAccountId: 'ap-control',
     });
     prisma.accountingCurrency.findUnique.mockResolvedValue({
       code: 'GHS',
@@ -251,9 +246,9 @@ describe('AccountingMasterDataService', () => {
       tenantId: actor.tenantId,
       type: 'Cedant',
       externalRef: 'counterparty-1',
-      controlAccountId: 'ar-control',
       createdByUserId: 'service:reinsurance-service',
     });
+    expect(createArgs.data.controlAccountId).toBeUndefined();
     expect(createArgs.data.code).toEqual(
       expect.stringMatching(/^CED-[A-F0-9]{12}$/),
     );
@@ -265,11 +260,6 @@ describe('AccountingMasterDataService', () => {
       id: 'entity-type-reinsurer',
       tenantId: actor.tenantId,
       name: 'Reinsurer',
-      accountingRelation: 'PAYABLE',
-    });
-    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
-      accountsReceivableControlAccountId: 'ar-control',
-      accountsPayableControlAccountId: 'ap-control',
     });
     prisma.subledgerAccount.findFirst.mockResolvedValue({
       id: 'subledger-1',
@@ -299,12 +289,6 @@ describe('AccountingMasterDataService', () => {
         tenantId: actor.tenantId,
         type: 'Reinsurer',
         externalRef: 'counterparty-1',
-        controlAccountId: 'ap-control',
-      },
-      include: {
-        controlAccount: {
-          select: { id: true, code: true, name: true },
-        },
       },
     });
     const [updateArgs] = prisma.subledgerAccount.update.mock.calls[0] as [
@@ -329,11 +313,6 @@ describe('AccountingMasterDataService', () => {
       id: 'entity-type-cedant',
       tenantId: actor.tenantId,
       name: 'Cedant',
-      accountingRelation: 'RECEIVABLE',
-    });
-    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
-      accountsReceivableControlAccountId: 'ar-control',
-      accountsPayableControlAccountId: 'ap-control',
     });
     prisma.subledgerAccount.findFirst.mockResolvedValue({
       id: 'subledger-1',
@@ -824,33 +803,5 @@ describe('AccountingMasterDataService', () => {
         },
       }),
     );
-  });
-
-  it('rejects AP control accounts that are not liability accounts', async () => {
-    const { prisma, service } = setup();
-    prisma.accountingCurrency.findUnique.mockResolvedValue({
-      code: 'GHS',
-      isActive: true,
-    });
-    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
-      tenantId: actor.tenantId,
-      baseCurrency: 'GHS',
-    });
-    prisma.gLAccount.findFirst.mockResolvedValue({
-      id: 'asset-control',
-      tenantId: actor.tenantId,
-      category: GLAccountCategory.ASSET,
-      status: RecordStatus.ACTIVE,
-      allowPosting: true,
-    });
-    prisma.gLAccount.count.mockResolvedValue(0);
-
-    await expect(
-      service.updateConfig(actor, {
-        baseCurrency: 'GHS',
-        accountsPayableControlAccountId: 'asset-control',
-      }),
-    ).rejects.toThrow('Accounts payable control account must be a LIABILITY');
-    expect(prisma.accountingTenantConfig.upsert).not.toHaveBeenCalled();
   });
 });

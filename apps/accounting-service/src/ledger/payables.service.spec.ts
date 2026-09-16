@@ -50,6 +50,7 @@ const bill = (overrides: Record<string, unknown> = {}) => ({
   sourceModule: null,
   sourceRecordId: null,
   offsetGlAccountId: offsetAccountId,
+  apAccountId: apControlAccountId,
   originalBillId: null,
   status: AccountingPayableStatus.DRAFT,
   createdByUserId: actor.id,
@@ -96,6 +97,7 @@ const payment = (overrides: Record<string, unknown> = {}) => ({
   postedAt: new Date('2026-08-10'),
   reversedAt: null,
   reversalOfPaymentId: null,
+  apAccountId: apControlAccountId,
   vendor,
   cashbookTransaction: {
     id: 'cashbook-1',
@@ -109,13 +111,6 @@ const payment = (overrides: Record<string, unknown> = {}) => ({
 
 const setup = () => {
   const prisma = {
-    accountingTenantConfig: {
-      findUnique: jest.fn().mockResolvedValue({
-        tenantId: actor.tenantId,
-        baseCurrency: 'GHS',
-        accountsPayableControlAccountId: apControlAccountId,
-      }),
-    },
     accountingCurrency: {
       findUnique: jest.fn().mockResolvedValue({ code: 'GHS', isActive: true }),
     },
@@ -147,6 +142,13 @@ const setup = () => {
             id: 'line-1',
             direction: PostingDirection.DR,
             accountId: offsetAccountId,
+            taxTypeId: null,
+            taxType: null,
+          },
+          {
+            id: 'line-2',
+            direction: PostingDirection.CR,
+            accountId: apControlAccountId,
             taxTypeId: null,
             taxType: null,
           },
@@ -247,7 +249,7 @@ const setup = () => {
 };
 
 describe('PayablesService', () => {
-  it('creates a draft standalone bill using tenant AP configuration', async () => {
+  it('creates a draft standalone bill using the rule-resolved AP account', async () => {
     const { prisma, service } = setup();
 
     const result = await service.createBill(actor, {
@@ -260,15 +262,13 @@ describe('PayablesService', () => {
     });
 
     expect(result.documentType).toBe(AccountingPayableDocumentType.BILL);
-    expect(prisma.accountingTenantConfig.findUnique).toHaveBeenCalledWith({
-      where: { tenantId: actor.tenantId },
-    });
     expect(prisma.accountingPayableDocument.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           vendorId: vendor.id,
           totalAmount: new Prisma.Decimal(1000),
           offsetGlAccountId: offsetAccountId,
+          apAccountId: apControlAccountId,
         }) as unknown,
       }),
     );
@@ -307,6 +307,7 @@ describe('PayablesService', () => {
 
     await service.createPayment(actor, {
       vendorId: vendor.id,
+      billId: 'bill-1',
       cashAccountId: 'cash-account-1',
       amount: 600,
       currency: 'GHS',
