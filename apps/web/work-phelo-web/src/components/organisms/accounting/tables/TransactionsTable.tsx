@@ -102,7 +102,7 @@ export function TransactionsTable() {
       {
         key: 'documentNumber',
         label: 'Transaction ID',
-        width: '150px',
+        width: '120px',
         render: (row) => (
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
             {row.documentNumber}
@@ -112,13 +112,13 @@ export function TransactionsTable() {
       {
         key: 'documentDate',
         label: 'Date',
-        width: '120px',
+        width: '100px',
         render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.documentDate)}</span>,
       },
       {
         key: 'entity',
         label: 'Entity',
-        width: 'minmax(150px, 1fr)',
+        width: 'minmax(120px, 1fr)',
         render: (row) => (
           <span className="text-sm text-gray-800 font-medium">{row.party.name}</span>
         ),
@@ -137,7 +137,7 @@ export function TransactionsTable() {
       {
         key: 'taxAmount',
         label: 'Tax',
-        width: '120px',
+        width: '90px',
         className: 'text-right pr-6',
         render: (row) => (
           <span className="block text-right text-sm text-gray-700">
@@ -170,13 +170,13 @@ export function TransactionsTable() {
       {
         key: 'status',
         label: 'Status',
-        width: '110px',
+        width: '90px',
         render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
       },
       {
         key: 'actions',
         label: '',
-        width: '150px',
+        width: '170px',
         render: (row) => (
           <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
             <TableButton variant="green" onClick={() => setPaymentTarget(row)}>
