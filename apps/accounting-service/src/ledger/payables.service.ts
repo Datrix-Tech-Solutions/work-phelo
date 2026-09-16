@@ -1575,9 +1575,7 @@ export class PayablesService {
       expectedCategory === TransactionTypeCategory.RECEIVABLE
         ? PostingDirection.DR
         : PostingDirection.CR;
-    const apLine = rule.lines.find(
-      (l) => l.direction === autoBalanceDirection,
-    );
+    const apLine = rule.lines.find((l) => l.direction === autoBalanceDirection);
     if (!apLine) {
       throw new ConflictException(
         "This transaction type's rule has no Payable line configured",

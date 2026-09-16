@@ -1611,9 +1611,7 @@ export class ReceivablesService {
       expectedCategory === TransactionTypeCategory.RECEIVABLE
         ? PostingDirection.DR
         : PostingDirection.CR;
-    const arLine = rule.lines.find(
-      (l) => l.direction === autoBalanceDirection,
-    );
+    const arLine = rule.lines.find((l) => l.direction === autoBalanceDirection);
     if (!arLine) {
       throw new ConflictException(
         "This transaction type's rule has no Receivable line configured",
