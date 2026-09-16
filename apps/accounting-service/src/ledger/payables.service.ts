@@ -1594,10 +1594,7 @@ export class PayablesService {
       .filter((l) => l.taxTypeId && selected.has(l.taxTypeId))
       .map((line) => {
         const rate = new Prisma.Decimal(line.taxType!.rate);
-        const amount = subtotal
-          .times(rate)
-          .dividedBy(100)
-          .toDecimalPlaces(2);
+        const amount = subtotal.times(rate).dividedBy(100).toDecimalPlaces(2);
         return {
           glAccountId: line.accountId,
           taxTypeId: line.taxTypeId!,
