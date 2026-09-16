@@ -14,16 +14,13 @@ import {
   NormalBalance,
   Prisma,
   RecordStatus,
-  SubledgerType,
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateAccountClassificationDto,
   CreateAccountGroupDto,
-  CreateAccountingCustomerDto,
   CreateAccountingCurrencyDto,
-  CreateAccountingVendorDto,
   CreateCostCentreDto,
   CreateExchangeRateDto,
   CreateFiscalPeriodDto,
@@ -31,7 +28,6 @@ import {
   CreateSubledgerAccountDto,
   CreateTransactionTypeDto,
   EnsureInternalSubledgerDto,
-  QueryAccountingPartiesDto,
   QueryAccountGroupsDto,
   QueryAccountHierarchyDto,
   QueryFiscalPeriodsDto,
@@ -39,10 +35,8 @@ import {
   QuerySubledgerAccountsDto,
   UpdateAccountClassificationDto,
   UpdateAccountGroupDto,
-  UpdateAccountingCustomerDto,
   UpdateAccountingCurrencyDto,
   UpdateAccountingTenantConfigDto,
-  UpdateAccountingVendorDto,
   UpdateCostCentreDto,
   UpdateExchangeRateDto,
   UpdateGLAccountDto,
@@ -1843,24 +1837,21 @@ export class AccountingMasterDataService {
     });
   }
 
+  /** Called by other services (e.g. Reinsurance) to get-or-create a subledger for one of
+   *  their own counterparties. `dto.type` is not a fixed value — it must name an Entity
+   *  Type the tenant has already created (Settings > Entities > Types), exactly like a
+   *  human creating an entity manually. Accounting has no built-in knowledge of what a
+   *  "Cedant" or "Reinsurer" is; it only knows Entity Types and their accounting relation. */
   async ensureInternalInsuranceSubledger(
     callingService: string,
     dto: EnsureInternalSubledgerDto,
   ) {
     const externalRef = this.requiredExternalRef(dto.externalRef);
     const name = this.requiredName(dto.name);
-    const config = await this.getConfiguredControlAccounts(dto.tenantId);
-    const controlAccountId =
-      dto.type === SubledgerType.CEDANT
-        ? config.accountsReceivableControlAccountId
-        : config.accountsPayableControlAccountId;
-    if (!controlAccountId) {
-      throw new BadRequestException(
-        dto.type === SubledgerType.CEDANT
-          ? 'Configure an accounts receivable control account before syncing Cedant subledgers'
-          : 'Configure an accounts payable control account before syncing Reinsurer subledgers',
-      );
-    }
+    const controlAccountId = await this.resolveSubledgerControlAccount(
+      dto.tenantId,
+      dto.type,
+    );
 
     const existing = await this.prisma.subledgerAccount.findFirst({
       where: {
@@ -1906,16 +1897,6 @@ export class AccountingMasterDataService {
       });
     }
 
-    await this.assertControlAccount(
-      dto.tenantId,
-      controlAccountId,
-      dto.type === SubledgerType.CEDANT
-        ? GLAccountCategory.ASSET
-        : GLAccountCategory.LIABILITY,
-      dto.type === SubledgerType.CEDANT
-        ? 'Cedant receivable control account'
-        : 'Reinsurer payable control account',
-    );
     if (dto.currency) {
       await this.assertActiveCurrency(dto.tenantId, dto.currency);
     }
@@ -1940,396 +1921,6 @@ export class AccountingMasterDataService {
     } catch (error) {
       this.rethrowUnique(error, 'Subledger account already exists');
     }
-  }
-
-  async listCustomers(tenantId: string, query: QueryAccountingPartiesDto) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 50;
-    const where = this.buildCustomerWhere(query);
-    const orderBy = {
-      [query.sortBy ?? 'code']: query.sortOrder ?? 'asc',
-    } as Prisma.AccountingCustomerOrderByWithRelationInput;
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.accountingCustomer.findMany({
-        where: { tenantId, ...where },
-        include: {
-          subledgerAccount: {
-            select: { id: true, code: true, name: true, status: true },
-          },
-        },
-        orderBy,
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.accountingCustomer.count({
-        where: { tenantId, ...where },
-      }),
-    ]);
-    const balances = await this.calculateSubledgerBalances(
-      tenantId,
-      items.map((customer) => customer.subledgerAccountId),
-      NormalBalance.DEBIT,
-    );
-    return {
-      items: items.map((customer) => ({
-        ...customer,
-        balance:
-          balances.get(customer.subledgerAccountId) ?? this.emptyBalance(),
-      })),
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
-  }
-
-  async createCustomer(user: RequestUser, dto: CreateAccountingCustomerDto) {
-    await this.assertActiveCurrency(user.tenantId, dto.currency);
-    const config = await this.getConfiguredControlAccounts(user.tenantId);
-    if (!config.accountsReceivableControlAccountId) {
-      throw new BadRequestException(
-        'Configure an accounts receivable control account before creating customers',
-      );
-    }
-
-    try {
-      const customer = await this.prisma.$transaction(async (tx) => {
-        const subledger = await tx.subledgerAccount.create({
-          data: {
-            tenantId: user.tenantId,
-            code: dto.code,
-            name: dto.legalName,
-            type: SubledgerType.CUSTOMER,
-            externalRef: this.optional(dto.externalRef),
-            controlAccountId: config.accountsReceivableControlAccountId!,
-            currency: dto.currency,
-            createdByUserId: user.id,
-            updatedByUserId: user.id,
-          },
-        });
-        return tx.accountingCustomer.create({
-          data: {
-            tenantId: user.tenantId,
-            code: dto.code,
-            legalName: dto.legalName,
-            tradingName: this.optional(dto.tradingName),
-            primaryContactName: this.optional(dto.primaryContactName),
-            email: this.optional(dto.email),
-            phone: this.optional(dto.phone),
-            billingAddress: this.optional(dto.billingAddress),
-            countryCode: this.optional(dto.countryCode),
-            currency: dto.currency,
-            paymentTermsDays: dto.paymentTermsDays ?? 30,
-            creditLimit:
-              dto.creditLimit !== undefined
-                ? new Prisma.Decimal(dto.creditLimit)
-                : undefined,
-            taxNumber: this.optional(dto.taxNumber),
-            externalRef: this.optional(dto.externalRef),
-            sourceModule: this.optional(dto.sourceModule),
-            subledgerAccountId: subledger.id,
-            notes: this.optional(dto.notes),
-            createdByUserId: user.id,
-            updatedByUserId: user.id,
-          },
-          include: {
-            subledgerAccount: {
-              select: { id: true, code: true, name: true, status: true },
-            },
-          },
-        });
-      });
-      return this.withCustomerBalance(customer);
-    } catch (error) {
-      this.rethrowUnique(
-        error,
-        'Customer code or external reference already exists',
-      );
-    }
-  }
-
-  async getCustomer(user: RequestUser, customerId: string) {
-    const customer = await this.findCustomer(user.tenantId, customerId);
-    return this.withCustomerBalance(customer);
-  }
-
-  async updateCustomer(
-    user: RequestUser,
-    customerId: string,
-    dto: UpdateAccountingCustomerDto,
-  ) {
-    const customer = await this.findCustomer(user.tenantId, customerId);
-    if (dto.currency) {
-      await this.assertActiveCurrency(user.tenantId, dto.currency);
-    }
-    try {
-      const updated = await this.prisma.$transaction(async (tx) => {
-        if (
-          dto.code !== undefined ||
-          dto.legalName !== undefined ||
-          dto.externalRef !== undefined ||
-          dto.currency !== undefined ||
-          dto.isActive !== undefined
-        ) {
-          await tx.subledgerAccount.update({
-            where: {
-              id_tenantId: {
-                id: customer.subledgerAccountId,
-                tenantId: user.tenantId,
-              },
-            },
-            data: {
-              ...(dto.code ? { code: dto.code } : {}),
-              ...(dto.legalName ? { name: dto.legalName } : {}),
-              ...(dto.externalRef !== undefined
-                ? { externalRef: this.optional(dto.externalRef) }
-                : {}),
-              ...(dto.currency ? { currency: dto.currency } : {}),
-              ...(dto.isActive !== undefined
-                ? {
-                    status: dto.isActive
-                      ? RecordStatus.ACTIVE
-                      : RecordStatus.INACTIVE,
-                  }
-                : {}),
-              updatedByUserId: user.id,
-            },
-          });
-        }
-        return tx.accountingCustomer.update({
-          where: {
-            id_tenantId: { id: customer.id, tenantId: user.tenantId },
-          },
-          data: this.customerUpdateData(dto, user.id),
-          include: {
-            subledgerAccount: {
-              select: { id: true, code: true, name: true, status: true },
-            },
-          },
-        });
-      });
-      return this.withCustomerBalance(updated);
-    } catch (error) {
-      this.rethrowUnique(
-        error,
-        'Customer code or external reference already exists',
-      );
-    }
-  }
-
-  async deactivateCustomer(user: RequestUser, customerId: string) {
-    return this.updateCustomer(user, customerId, { isActive: false });
-  }
-
-  async activateCustomer(user: RequestUser, customerId: string) {
-    return this.updateCustomer(user, customerId, { isActive: true });
-  }
-
-  async listVendors(tenantId: string, query: QueryAccountingPartiesDto) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 50;
-    const where = this.buildVendorWhere(query);
-    const orderBy = {
-      [query.sortBy ?? 'code']: query.sortOrder ?? 'asc',
-    } as Prisma.AccountingVendorOrderByWithRelationInput;
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.accountingVendor.findMany({
-        where: { tenantId, ...where },
-        include: {
-          subledgerAccount: {
-            select: { id: true, code: true, name: true, status: true },
-          },
-          defaultExpenseAccount: {
-            select: { id: true, code: true, name: true },
-          },
-        },
-        orderBy,
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.accountingVendor.count({
-        where: { tenantId, ...where },
-      }),
-    ]);
-    const balances = await this.calculateSubledgerBalances(
-      tenantId,
-      items.map((vendor) => vendor.subledgerAccountId),
-      NormalBalance.CREDIT,
-    );
-    return {
-      items: items.map((vendor) => ({
-        ...vendor,
-        balance: balances.get(vendor.subledgerAccountId) ?? this.emptyBalance(),
-      })),
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
-  }
-
-  async createVendor(user: RequestUser, dto: CreateAccountingVendorDto) {
-    await this.assertActiveCurrency(user.tenantId, dto.currency);
-    const config = await this.getConfiguredControlAccounts(user.tenantId);
-    if (!config.accountsPayableControlAccountId) {
-      throw new BadRequestException(
-        'Configure an accounts payable control account before creating vendors',
-      );
-    }
-    if (dto.defaultExpenseAccountId) {
-      await this.assertPostingAccount(
-        user.tenantId,
-        dto.defaultExpenseAccountId,
-        GLAccountCategory.EXPENSE,
-        'Default expense account',
-      );
-    }
-
-    try {
-      const vendor = await this.prisma.$transaction(async (tx) => {
-        const subledger = await tx.subledgerAccount.create({
-          data: {
-            tenantId: user.tenantId,
-            code: dto.code,
-            name: dto.legalName,
-            type: SubledgerType.VENDOR,
-            externalRef: this.optional(dto.externalRef),
-            controlAccountId: config.accountsPayableControlAccountId!,
-            currency: dto.currency,
-            createdByUserId: user.id,
-            updatedByUserId: user.id,
-          },
-        });
-        return tx.accountingVendor.create({
-          data: {
-            tenantId: user.tenantId,
-            code: dto.code,
-            legalName: dto.legalName,
-            tradingName: this.optional(dto.tradingName),
-            primaryContactName: this.optional(dto.primaryContactName),
-            email: this.optional(dto.email),
-            phone: this.optional(dto.phone),
-            billingAddress: this.optional(dto.billingAddress),
-            countryCode: this.optional(dto.countryCode),
-            currency: dto.currency,
-            paymentTermsDays: dto.paymentTermsDays ?? 30,
-            taxNumber: this.optional(dto.taxNumber),
-            externalRef: this.optional(dto.externalRef),
-            sourceModule: this.optional(dto.sourceModule),
-            subledgerAccountId: subledger.id,
-            defaultExpenseAccountId:
-              dto.defaultExpenseAccountId === undefined
-                ? undefined
-                : dto.defaultExpenseAccountId || null,
-            notes: this.optional(dto.notes),
-            createdByUserId: user.id,
-            updatedByUserId: user.id,
-          },
-          include: {
-            subledgerAccount: {
-              select: { id: true, code: true, name: true, status: true },
-            },
-            defaultExpenseAccount: {
-              select: { id: true, code: true, name: true },
-            },
-          },
-        });
-      });
-      return this.withVendorBalance(vendor);
-    } catch (error) {
-      this.rethrowUnique(
-        error,
-        'Vendor code or external reference already exists',
-      );
-    }
-  }
-
-  async getVendor(user: RequestUser, vendorId: string) {
-    const vendor = await this.findVendor(user.tenantId, vendorId);
-    return this.withVendorBalance(vendor);
-  }
-
-  async updateVendor(
-    user: RequestUser,
-    vendorId: string,
-    dto: UpdateAccountingVendorDto,
-  ) {
-    const vendor = await this.findVendor(user.tenantId, vendorId);
-    if (dto.currency) {
-      await this.assertActiveCurrency(user.tenantId, dto.currency);
-    }
-    if (dto.defaultExpenseAccountId) {
-      await this.assertPostingAccount(
-        user.tenantId,
-        dto.defaultExpenseAccountId,
-        GLAccountCategory.EXPENSE,
-        'Default expense account',
-      );
-    }
-    try {
-      const updated = await this.prisma.$transaction(async (tx) => {
-        if (
-          dto.code !== undefined ||
-          dto.legalName !== undefined ||
-          dto.externalRef !== undefined ||
-          dto.currency !== undefined ||
-          dto.isActive !== undefined
-        ) {
-          await tx.subledgerAccount.update({
-            where: {
-              id_tenantId: {
-                id: vendor.subledgerAccountId,
-                tenantId: user.tenantId,
-              },
-            },
-            data: {
-              ...(dto.code ? { code: dto.code } : {}),
-              ...(dto.legalName ? { name: dto.legalName } : {}),
-              ...(dto.externalRef !== undefined
-                ? { externalRef: this.optional(dto.externalRef) }
-                : {}),
-              ...(dto.currency ? { currency: dto.currency } : {}),
-              ...(dto.isActive !== undefined
-                ? {
-                    status: dto.isActive
-                      ? RecordStatus.ACTIVE
-                      : RecordStatus.INACTIVE,
-                  }
-                : {}),
-              updatedByUserId: user.id,
-            },
-          });
-        }
-        return tx.accountingVendor.update({
-          where: {
-            id_tenantId: { id: vendor.id, tenantId: user.tenantId },
-          },
-          data: this.vendorUpdateData(dto, user.id),
-          include: {
-            subledgerAccount: {
-              select: { id: true, code: true, name: true, status: true },
-            },
-            defaultExpenseAccount: {
-              select: { id: true, code: true, name: true },
-            },
-          },
-        });
-      });
-      return this.withVendorBalance(updated);
-    } catch (error) {
-      this.rethrowUnique(
-        error,
-        'Vendor code or external reference already exists',
-      );
-    }
-  }
-
-  async deactivateVendor(user: RequestUser, vendorId: string) {
-    return this.updateVendor(user, vendorId, { isActive: false });
-  }
-
-  async activateVendor(user: RequestUser, vendorId: string) {
-    return this.updateVendor(user, vendorId, { isActive: true });
   }
 
   async findFiscalPeriod(tenantId: string, id: string) {
@@ -2605,41 +2196,6 @@ export class AccountingMasterDataService {
     return subledger;
   }
 
-  private findCustomer(tenantId: string, id: string) {
-    return this.prisma.accountingCustomer
-      .findFirst({
-        where: { id, tenantId },
-        include: {
-          subledgerAccount: {
-            select: { id: true, code: true, name: true, status: true },
-          },
-        },
-      })
-      .then((customer) => {
-        if (!customer) throw new NotFoundException('Customer not found');
-        return customer;
-      });
-  }
-
-  private findVendor(tenantId: string, id: string) {
-    return this.prisma.accountingVendor
-      .findFirst({
-        where: { id, tenantId },
-        include: {
-          subledgerAccount: {
-            select: { id: true, code: true, name: true, status: true },
-          },
-          defaultExpenseAccount: {
-            select: { id: true, code: true, name: true },
-          },
-        },
-      })
-      .then((vendor) => {
-        if (!vendor) throw new NotFoundException('Vendor not found');
-        return vendor;
-      });
-  }
-
   private async assertActiveCurrency(tenantId: string, code: string) {
     const currency = await this.prisma.accountingCurrency.findUnique({
       where: { tenantId_code: { tenantId, code } },
@@ -2763,188 +2319,10 @@ export class AccountingMasterDataService {
     });
     if (!config) {
       throw new BadRequestException(
-        'Configure Accounting before creating customer or vendor master records',
+        'Configure Accounting before creating Receivable/Payable entities',
       );
     }
     return config;
-  }
-
-  private buildCustomerWhere(
-    query: QueryAccountingPartiesDto,
-  ): Prisma.AccountingCustomerWhereInput {
-    return {
-      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
-      ...(query.currency ? { currency: query.currency } : {}),
-      ...(query.sourceModule ? { sourceModule: query.sourceModule } : {}),
-      ...(query.externalRef ? { externalRef: query.externalRef } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { code: { contains: query.search, mode: 'insensitive' } },
-              { legalName: { contains: query.search, mode: 'insensitive' } },
-              { tradingName: { contains: query.search, mode: 'insensitive' } },
-              {
-                primaryContactName: {
-                  contains: query.search,
-                  mode: 'insensitive',
-                },
-              },
-              { email: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
-  }
-
-  private buildVendorWhere(
-    query: QueryAccountingPartiesDto,
-  ): Prisma.AccountingVendorWhereInput {
-    return {
-      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
-      ...(query.currency ? { currency: query.currency } : {}),
-      ...(query.sourceModule ? { sourceModule: query.sourceModule } : {}),
-      ...(query.externalRef ? { externalRef: query.externalRef } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { code: { contains: query.search, mode: 'insensitive' } },
-              { legalName: { contains: query.search, mode: 'insensitive' } },
-              { tradingName: { contains: query.search, mode: 'insensitive' } },
-              {
-                primaryContactName: {
-                  contains: query.search,
-                  mode: 'insensitive',
-                },
-              },
-              { email: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
-  }
-
-  private customerUpdateData(
-    dto: UpdateAccountingCustomerDto,
-    userId: string,
-  ): Prisma.AccountingCustomerUpdateInput {
-    return {
-      ...(dto.code ? { code: dto.code } : {}),
-      ...(dto.legalName ? { legalName: dto.legalName } : {}),
-      ...(dto.tradingName !== undefined
-        ? { tradingName: this.optional(dto.tradingName) }
-        : {}),
-      ...(dto.primaryContactName !== undefined
-        ? { primaryContactName: this.optional(dto.primaryContactName) }
-        : {}),
-      ...(dto.email !== undefined ? { email: this.optional(dto.email) } : {}),
-      ...(dto.phone !== undefined ? { phone: this.optional(dto.phone) } : {}),
-      ...(dto.billingAddress !== undefined
-        ? { billingAddress: this.optional(dto.billingAddress) }
-        : {}),
-      ...(dto.countryCode !== undefined
-        ? { countryCode: this.optional(dto.countryCode) }
-        : {}),
-      ...(dto.currency ? { currency: dto.currency } : {}),
-      ...(dto.paymentTermsDays !== undefined
-        ? { paymentTermsDays: dto.paymentTermsDays }
-        : {}),
-      ...(dto.creditLimit !== undefined
-        ? { creditLimit: new Prisma.Decimal(dto.creditLimit) }
-        : {}),
-      ...(dto.taxNumber !== undefined
-        ? { taxNumber: this.optional(dto.taxNumber) }
-        : {}),
-      ...(dto.externalRef !== undefined
-        ? { externalRef: this.optional(dto.externalRef) }
-        : {}),
-      ...(dto.sourceModule !== undefined
-        ? { sourceModule: this.optional(dto.sourceModule) }
-        : {}),
-      ...(dto.notes !== undefined ? { notes: this.optional(dto.notes) } : {}),
-      ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-      updatedByUserId: userId,
-    };
-  }
-
-  private vendorUpdateData(
-    dto: UpdateAccountingVendorDto,
-    userId: string,
-  ): Prisma.AccountingVendorUpdateInput {
-    return {
-      ...(dto.code ? { code: dto.code } : {}),
-      ...(dto.legalName ? { legalName: dto.legalName } : {}),
-      ...(dto.tradingName !== undefined
-        ? { tradingName: this.optional(dto.tradingName) }
-        : {}),
-      ...(dto.primaryContactName !== undefined
-        ? { primaryContactName: this.optional(dto.primaryContactName) }
-        : {}),
-      ...(dto.email !== undefined ? { email: this.optional(dto.email) } : {}),
-      ...(dto.phone !== undefined ? { phone: this.optional(dto.phone) } : {}),
-      ...(dto.billingAddress !== undefined
-        ? { billingAddress: this.optional(dto.billingAddress) }
-        : {}),
-      ...(dto.countryCode !== undefined
-        ? { countryCode: this.optional(dto.countryCode) }
-        : {}),
-      ...(dto.currency ? { currency: dto.currency } : {}),
-      ...(dto.paymentTermsDays !== undefined
-        ? { paymentTermsDays: dto.paymentTermsDays }
-        : {}),
-      ...(dto.taxNumber !== undefined
-        ? { taxNumber: this.optional(dto.taxNumber) }
-        : {}),
-      ...(dto.externalRef !== undefined
-        ? { externalRef: this.optional(dto.externalRef) }
-        : {}),
-      ...(dto.sourceModule !== undefined
-        ? { sourceModule: this.optional(dto.sourceModule) }
-        : {}),
-      ...(dto.defaultExpenseAccountId !== undefined
-        ? { defaultExpenseAccountId: dto.defaultExpenseAccountId || null }
-        : {}),
-      ...(dto.notes !== undefined ? { notes: this.optional(dto.notes) } : {}),
-      ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-      updatedByUserId: userId,
-    };
-  }
-
-  private async withCustomerBalance<
-    T extends { tenantId: string; subledgerAccountId: string },
-  >(customer: T) {
-    const balance = await this.calculateSubledgerBalance(
-      customer.tenantId,
-      customer.subledgerAccountId,
-      NormalBalance.DEBIT,
-    );
-    return { ...customer, balance };
-  }
-
-  private async withVendorBalance<
-    T extends { tenantId: string; subledgerAccountId: string },
-  >(vendor: T) {
-    const balance = await this.calculateSubledgerBalance(
-      vendor.tenantId,
-      vendor.subledgerAccountId,
-      NormalBalance.CREDIT,
-    );
-    return { ...vendor, balance };
-  }
-
-  private async calculateSubledgerBalance(
-    tenantId: string,
-    subledgerAccountId: string,
-    normalBalance: NormalBalance,
-  ) {
-    return (
-      (
-        await this.calculateSubledgerBalances(
-          tenantId,
-          [subledgerAccountId],
-          normalBalance,
-        )
-      ).get(subledgerAccountId) ?? this.emptyBalance()
-    );
   }
 
   private async calculateSubledgerBalances(
@@ -3115,11 +2493,10 @@ export class AccountingMasterDataService {
     return value.trim() || null;
   }
 
-  private integrationSubledgerCode(
-    type: SubledgerType,
-    externalRef: string,
-  ): string {
-    const prefix = type === SubledgerType.CEDANT ? 'CED' : 'REI';
+  private integrationSubledgerCode(type: string, externalRef: string): string {
+    // Derived from the type name itself rather than a fixed set — "Cedant" and
+    // "Reinsurer" still produce the same CED/REI prefixes they always did.
+    const prefix = type.trim().toUpperCase().slice(0, 3) || 'SUB';
     const digest = createHash('sha1').update(externalRef).digest('hex');
     return `${prefix}-${digest.slice(0, 12).toUpperCase()}`;
   }

@@ -23,15 +23,13 @@ const subledgerAccountId = 'vendor-subledger';
 const transactionTypeId = 'txn-type-1';
 
 const vendor = {
-  id: 'vendor-1',
+  id: subledgerAccountId,
   tenantId: actor.tenantId,
   code: 'VEND-001',
-  legalName: 'Supply Co',
+  name: 'Supply Co',
+  type: 'VENDOR',
   currency: 'GHS',
-  paymentTermsDays: 30,
-  isActive: true,
-  subledgerAccountId,
-  subledgerAccount: { id: subledgerAccountId, status: 'ACTIVE' },
+  status: 'ACTIVE',
 };
 
 const bill = (overrides: Record<string, unknown> = {}) => ({
@@ -121,8 +119,16 @@ const setup = () => {
     accountingCurrency: {
       findUnique: jest.fn().mockResolvedValue({ code: 'GHS', isActive: true }),
     },
-    accountingVendor: {
+    subledgerAccount: {
       findFirst: jest.fn().mockResolvedValue(vendor),
+    },
+    entityType: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'entity-type-vendor',
+        tenantId: actor.tenantId,
+        name: 'Vendor',
+        accountingRelation: 'PAYABLE',
+      }),
     },
     transactionType: {
       findFirst: jest.fn().mockResolvedValue({

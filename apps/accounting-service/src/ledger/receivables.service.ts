@@ -9,6 +9,7 @@ import {
   AccountingReceivableAllocationSource,
   AccountingReceivableDocumentType,
   AccountingReceivableStatus,
+  EntityAccountingRelation,
   FiscalPeriodStatus,
   GLAccountCategory,
   JournalStatus,
@@ -36,16 +37,14 @@ import {
 import { JournalsService } from './journals.service';
 
 const zero = new Prisma.Decimal(0);
+// SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
+// payment-terms field the way the old AccountingCustomer master record did — fall back to
+// the same 30-day default that record always used unless the invoice sets an explicit due date.
+const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
 const receivableDocumentInclude = {
   customer: {
-    select: {
-      id: true,
-      code: true,
-      legalName: true,
-      currency: true,
-      subledgerAccountId: true,
-    },
+    select: { id: true, code: true, name: true, currency: true },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
   postedJournalEntry: {
@@ -66,13 +65,7 @@ const receivableDocumentInclude = {
 
 const receivableReceiptInclude = {
   customer: {
-    select: {
-      id: true,
-      code: true,
-      legalName: true,
-      currency: true,
-      subledgerAccountId: true,
-    },
+    select: { id: true, code: true, name: true, currency: true },
   },
   cashbookTransaction: {
     select: {
@@ -187,7 +180,7 @@ export class ReceivablesService {
       customer: {
         id: customer.id,
         code: customer.code,
-        legalName: customer.legalName,
+        name: customer.name,
       },
       ...this.agingResult(asOfDate, rows),
       documents: rows,
@@ -215,7 +208,7 @@ export class ReceivablesService {
           dueDate: true,
           currency: true,
           totalAmount: true,
-          customer: { select: { id: true, code: true, legalName: true } },
+          customer: { select: { id: true, code: true, name: true } },
         },
         orderBy: [{ dueDate: 'asc' }, { documentDate: 'asc' }],
       }),
@@ -329,7 +322,7 @@ export class ReceivablesService {
         documentDate: new Date(dto.documentDate),
         dueDate: new Date(
           dto.dueDate ??
-            this.addDays(dto.documentDate, customer.paymentTermsDays),
+            this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
         ),
         currency: dto.currency,
         exchangeRate: dto.exchangeRate,
@@ -541,9 +534,9 @@ export class ReceivablesService {
       counterpartyType: 'CUSTOMER',
       counterpartyId: customer.id,
       externalReference: dto.externalReference,
-      description: dto.description ?? `Receipt from ${customer.legalName}`,
+      description: dto.description ?? `Receipt from ${customer.name}`,
       offsetGlAccountId: config.accountsReceivableControlAccountId,
-      offsetSubledgerAccountId: customer.subledgerAccountId,
+      offsetSubledgerAccountId: customer.id,
       sourceModule: dto.sourceModule ?? 'ACCOUNTING',
       sourceRecordId: dto.sourceRecordId ?? 'AR_RECEIPT_PENDING',
       exchangeRate: dto.exchangeRate,
@@ -853,7 +846,7 @@ export class ReceivablesService {
   }
 
   async customerBalance(tenantId: string, customerId: string) {
-    const customer = await this.prisma.accountingCustomer.findFirst({
+    const customer = await this.prisma.subledgerAccount.findFirst({
       where: { id: customerId, tenantId },
     });
     if (!customer) throw new NotFoundException('Customer not found');
@@ -1266,7 +1259,7 @@ export class ReceivablesService {
 
     const arLine = {
       glAccountId: arControlAccountId,
-      subledgerAccountId: document.customer.subledgerAccountId,
+      subledgerAccountId: document.customer.id,
       description,
     };
     // A resolved rule splits tax onto its own account(s), leaving the offset line at just
@@ -1513,18 +1506,23 @@ export class ReceivablesService {
   }
 
   private async resolveCustomer(tenantId: string, customerId: string) {
-    const customer = await this.prisma.accountingCustomer.findFirst({
+    const customer = await this.prisma.subledgerAccount.findFirst({
       where: { id: customerId, tenantId },
-      include: { subledgerAccount: true },
     });
     if (!customer) throw new NotFoundException('Customer not found');
-    if (!customer.isActive) {
-      throw new ConflictException(
-        'Inactive customers cannot receive AR activity',
-      );
-    }
-    if (customer.subledgerAccount.status !== RecordStatus.ACTIVE) {
+    if (customer.status !== RecordStatus.ACTIVE) {
       throw new ConflictException('Customer subledger account is inactive');
+    }
+    const entityType = await this.prisma.entityType.findFirst({
+      where: { tenantId, name: { equals: customer.type, mode: 'insensitive' } },
+    });
+    const isReceivable =
+      entityType?.accountingRelation === EntityAccountingRelation.RECEIVABLE ||
+      entityType?.accountingRelation === EntityAccountingRelation.BOTH;
+    if (!isReceivable) {
+      throw new BadRequestException(
+        `"${customer.type}" is not a Receivable-marked Entity Type — it cannot be used as an AR customer`,
+      );
     }
     return customer;
   }
@@ -1665,8 +1663,11 @@ export class ReceivablesService {
     });
   }
 
-  private assertCustomerCurrency(customerCurrency: string, currency: string) {
-    if (customerCurrency !== currency) {
+  private assertCustomerCurrency(
+    customerCurrency: string | null,
+    currency: string,
+  ) {
+    if (customerCurrency && customerCurrency !== currency) {
       throw new BadRequestException(
         'Standalone AR Phase 1 requires customer currency to match the document or receipt currency',
       );

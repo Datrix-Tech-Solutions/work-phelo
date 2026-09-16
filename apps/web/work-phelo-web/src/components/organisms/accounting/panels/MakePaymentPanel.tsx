@@ -168,7 +168,7 @@ export function MakePaymentPanel({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
             <SummaryRow label="Invoice" value={document.documentNumber} />
-            <SummaryRow label="Entity" value={document.party.legalName} />
+            <SummaryRow label="Entity" value={document.party.name} />
             <SummaryRow
               label="Invoice Total"
               value={fmtAmount(document.totalAmount, document.currency)}

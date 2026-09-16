@@ -192,7 +192,7 @@ export function TradeSettlementDetailPanel({
             <div className="grid grid-cols-2 gap-4">
               <Field
                 label={isReceivable ? 'Customer' : 'Vendor'}
-                value={`${settlement.party.legalName} (${settlement.party.code})`}
+                value={`${settlement.party.name} (${settlement.party.code})`}
               />
               <Field label="Date" value={fmtDate(settlement.settlementDate)} />
               <Field label="Amount" value={fmtAmount(settlement.amount, settlement.currency)} />

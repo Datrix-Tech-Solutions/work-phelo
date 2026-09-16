@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -10,9 +11,13 @@ import {
   useCashAccountOptions,
   useCreatePayablePayment,
   useCreateReceivableReceipt,
-  useCustomers,
-  useVendors,
+  useEntityTypes,
+  useSubledgers,
 } from '@/hooks';
+import {
+  matchesTradeSide,
+  resolveEntityAccountingRelation,
+} from '@/lib/accounting/entityAccountingRelation';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { SETTLEMENT_METHOD_OPTIONS } from '@/lib/accounting/settlementMethod';
@@ -51,12 +56,19 @@ export function AddTradeSettlementPanel({ isOpen, onClose, side }: AddTradeSettl
   const partyLabel = isReceivable ? 'Customer' : 'Vendor';
   const documentLabel = isReceivable ? 'Receipt' : 'Payment';
 
-  const { data: customersData, isLoading: isLoadingCustomers } = useCustomers();
-  const { data: vendorsData, isLoading: isLoadingVendors } = useVendors();
-  const parties = isReceivable ? (customersData?.items ?? []) : (vendorsData?.items ?? []);
+  const { data: entities, isLoading: isLoadingEntities } = useSubledgers({ status: 'ACTIVE' });
+  const { data: entityTypes, isLoading: isLoadingEntityTypes } = useEntityTypes();
+  const isLoadingParties = isLoadingEntities || isLoadingEntityTypes;
+  const parties = useMemo(
+    () =>
+      (entities ?? []).filter((entity) =>
+        matchesTradeSide(resolveEntityAccountingRelation(entity, entityTypes), side),
+      ),
+    [entities, entityTypes, side],
+  );
   const partyOptions: SearchSelectOption[] = parties.map((p) => ({
     value: p.id,
-    label: `${p.code} — ${p.legalName}`,
+    label: `${p.code} — ${p.name}`,
   }));
 
   const { options: cashAccountOptions, isLoading: isLoadingCashAccounts } = useCashAccountOptions();
@@ -129,17 +141,13 @@ export function AddTradeSettlementPanel({ isOpen, onClose, side }: AddTradeSettl
           render={({ field }) => (
             <SearchSelect
               label={partyLabel}
-              placeholder={
-                (isReceivable ? isLoadingCustomers : isLoadingVendors)
-                  ? 'Loading…'
-                  : `Select ${partyLabel.toLowerCase()}…`
-              }
+              placeholder={isLoadingParties ? 'Loading…' : `Select ${partyLabel.toLowerCase()}…`}
               options={partyOptions}
               value={field.value}
               onChange={(value) => {
                 field.onChange(value);
                 const party = parties.find((p) => p.id === value);
-                if (party) setValue('currency', party.currency);
+                if (party?.currency) setValue('currency', party.currency);
               }}
               error={errors.partyId?.message}
             />

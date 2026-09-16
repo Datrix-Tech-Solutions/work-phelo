@@ -57,7 +57,7 @@ export function TradeSettlementsTable({ side }: TradeSettlementsTableProps) {
     return settlements.filter(
       (r) =>
         r.settlementNumber.toLowerCase().includes(q) ||
-        r.party.legalName.toLowerCase().includes(q) ||
+        r.party.name.toLowerCase().includes(q) ||
         (r.reference ?? '').toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q),
     );
@@ -83,7 +83,7 @@ export function TradeSettlementsTable({ side }: TradeSettlementsTableProps) {
         label: isReceivable ? 'Customer' : 'Vendor',
         width: 'minmax(150px, 1fr)',
         render: (row) => (
-          <span className="text-sm text-gray-800 font-medium">{row.party.legalName}</span>
+          <span className="text-sm text-gray-800 font-medium">{row.party.name}</span>
         ),
       },
       {

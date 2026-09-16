@@ -66,8 +66,6 @@ export * from './accounting/useAgingReports';
 export * from './accounting/useTradeSummaries';
 export * from './accounting/useTradeSettlements';
 export * from './accounting/useFiscalPeriods';
-export * from './accounting/useVendors';
-export * from './accounting/useCustomers';
 export * from './accounting/useSubledgers';
 export * from './accounting/useEntityTypes';
 export * from './accounting/useAccountClassifications';
