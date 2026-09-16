@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -126,13 +126,16 @@ export function FiscalPeriodsTable() {
     }
   }
 
-  async function reopen(row: FiscalPeriod) {
-    try {
-      await openMutation.mutateAsync(row.id);
-    } catch (err) {
-      toast.error(extractError(err, 'Failed to reopen period'));
-    }
-  }
+  const reopen = useCallback(
+    async (row: FiscalPeriod) => {
+      try {
+        await openMutation.mutateAsync(row.id);
+      } catch (err) {
+        toast.error(extractError(err, 'Failed to reopen period'));
+      }
+    },
+    [openMutation, toast],
+  );
 
   async function confirmClose(row: FiscalPeriod) {
     try {
@@ -152,7 +155,10 @@ export function FiscalPeriodsTable() {
     }
   }
 
-  const columns = useMemo(() => buildColumns(reopen, setCloseTarget, setLockTarget), []);
+  const columns = useMemo(
+    () => buildColumns(reopen, setCloseTarget, setLockTarget),
+    [reopen],
+  );
 
   const availableYears = useMemo(() => {
     const years = periods.map((p) => new Date(p.startDate).getFullYear());
