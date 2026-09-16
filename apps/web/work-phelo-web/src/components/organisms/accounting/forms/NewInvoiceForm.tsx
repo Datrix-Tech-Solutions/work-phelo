@@ -12,7 +12,6 @@ import {
   useCreatePayableBill,
   useCreateReceivableInvoice,
   useEntityTypes,
-  useGLAccountOptions,
   useSubledgers,
 } from '@/hooks';
 import {
@@ -55,30 +54,22 @@ export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewIn
     label: `${p.code} — ${p.name}`,
   }));
 
-  const { options: glAccountOptions, isLoading: isLoadingGLAccounts } = useGLAccountOptions();
-
   const createInvoice = useCreateReceivableInvoice();
   const createBill = useCreatePayableBill();
   const isPending = isReceivable ? createInvoice.isPending : createBill.isPending;
 
   const onSubmit = async (data: InvoiceFormValues) => {
-    
     const subtotalAmount = data.lines.reduce(
       (sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0),
       0,
     );
-    const taxAmount = data.lines.reduce((sum, line) => {
-      const lineAmount = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
-      return sum + (lineAmount * (Number(line.tax) || 0)) / 100;
-    }, 0);
-    const offsetGlAccountId = data.lines.find((line) => line.glAccount)?.glAccount;
 
     if (subtotalAmount <= 0) {
       toast.error('Add at least one line with a quantity and unit price.');
       return;
     }
-    if (!offsetGlAccountId) {
-      toast.error('Select a GL account on at least one line.');
+    if (!data.transactionTypeId) {
+      toast.error('Select a transaction type.');
       return;
     }
 
@@ -88,8 +79,8 @@ export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewIn
       dueDate: data.dueDate || undefined,
       currency: data.currency,
       amount: subtotalAmount,
-      taxAmount: taxAmount || undefined,
-      offsetGlAccountId,
+      transactionTypeId: data.transactionTypeId,
+      selectedTaxTypeIds: data.selectedTaxTypeIds.length ? data.selectedTaxTypeIds : undefined,
       description: data.description || undefined,
       externalReference: data.invoiceNumber || undefined,
     };
@@ -116,14 +107,11 @@ export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewIn
             vendorLabel={partyLabel}
             partyOptions={partyOptions}
             isLoadingParties={isLoadingParties}
+            side={side}
           />
         </div>
 
-        <InvoiceLineDetailsSection
-          form={form}
-          glAccountOptions={glAccountOptions}
-          isLoadingGLAccounts={isLoadingGLAccounts}
-        />
+        <InvoiceLineDetailsSection form={form} />
 
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={() => setShowCancelModal(true)}>

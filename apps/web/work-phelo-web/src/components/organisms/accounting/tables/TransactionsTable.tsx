@@ -242,6 +242,10 @@ export function TransactionsTable() {
                   {type.description && (
                     <span className="text-xs text-gray-500">{type.description}</span>
                   )}
+                  {(type.category === 'RECEIVABLE' || type.category === 'PAYABLE') &&
+                    type.rulesCount === 0 && (
+                      <span className="text-xs text-orange-600">Rule required to use</span>
+                    )}
                 </div>
                 <TypeChip
                   label={TRANSACTION_TYPE_CATEGORY_LABEL[type.category]}
@@ -256,6 +260,10 @@ export function TransactionsTable() {
       <NewTransactionPanel
         transactionType={selectedType}
         onClose={() => setSelectedType(undefined)}
+        onPostedForPayment={(document) => {
+          setSelectedType(undefined);
+          setPaymentTarget(document);
+        }}
       />
 
       <TradeDocumentDetailPanel

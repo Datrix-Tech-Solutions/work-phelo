@@ -451,10 +451,8 @@ export interface QueryJournalsParams {
 
 export interface InvoiceLine {
   description: string;
-  glAccount: string;
   unitPrice: number | '';
   quantity: number | '';
-  tax: number | '';
 }
 
 export interface InvoiceFormValues {
@@ -464,6 +462,11 @@ export interface InvoiceFormValues {
   dueDate: string;
   currency: string;
   description: string;
+  /** The Receivable/Payable Transaction Type driving this invoice/bill — its Rule
+   *  resolves the offset account and any tax lines, replacing manual GL entry. */
+  transactionTypeId: string;
+  /** Which of the Rule's Deduction (tax) lines to apply, by TaxType id. */
+  selectedTaxTypeIds: string[];
   lines: InvoiceLine[];
 }
 
@@ -474,7 +477,9 @@ export const INVOICE_DEFAULTS: InvoiceFormValues = {
   dueDate: '',
   currency: '',
   description: '',
-  lines: [{ description: '', glAccount: '', unitPrice: '', quantity: '', tax: '' }],
+  transactionTypeId: '',
+  selectedTaxTypeIds: [],
+  lines: [{ description: '', unitPrice: '', quantity: '' }],
 };
 
 export type AccountingTradeSide = 'RECEIVABLE' | 'PAYABLE';
@@ -527,6 +532,9 @@ export interface AccountingTradeDocument {
   sourceModule: string | null;
   sourceRecordId: string | null;
   offsetGlAccountId: string;
+  /** The Transaction Type that drove this document's rule-based posting, if any —
+   *  a plain audit trail, null for credit notes and pre-existing documents. */
+  transactionTypeId: string | null;
   originalDocumentId: string | null;
   status: AccountingTradeDocumentStatus;
   createdAt: string;
@@ -561,10 +569,14 @@ export interface CreateTradeInvoicePayload {
   documentDate: string;
   dueDate?: string;
   currency: string;
+  /** The subtotal, before any tax lines the rule adds on top. */
   amount: number;
-  taxAmount?: number;
   exchangeRate?: number;
-  offsetGlAccountId: string;
+  /** The Receivable/Payable-category Transaction Type driving this document — its
+   *  Rule resolves the offset account and any tax lines. A Rule must exist for it. */
+  transactionTypeId: string;
+  /** Which of the Rule's Deduction (tax) lines to apply, by TaxType id. */
+  selectedTaxTypeIds?: string[];
   description?: string;
   externalReference?: string;
 }

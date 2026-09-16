@@ -822,6 +822,13 @@ model AccountingReceivableDocument {
   sourceModule           String?
   sourceRecordId         String?
   offsetGlAccountId      String
+  /// Which TransactionTypeRule drove the resolved offsetGlAccountId/taxBreakdown below —
+  /// not a live FK (a plain audit trail), null for documents created before this existed
+  /// or for credit notes (still manually posted, out of scope for now).
+  transactionTypeId      String?
+  /// [{ glAccountId, taxTypeId, amount }] — the rule's resolved Deduction lines, each
+  /// posted to its own account instead of being lumped into offsetGlAccountId.
+  taxBreakdown           Json?
   originalInvoiceId      String?
   status                 AccountingReceivableStatus       @default(DRAFT)
   createdByUserId        String
@@ -949,6 +956,9 @@ model AccountingPayableDocument {
   sourceModule           String?
   sourceRecordId         String?
   offsetGlAccountId      String
+  /// See AccountingReceivableDocument's matching fields — same purpose, Payable side.
+  transactionTypeId      String?
+  taxBreakdown           Json?
   originalBillId         String?
   status                 AccountingPayableStatus       @default(DRAFT)
   createdByUserId        String

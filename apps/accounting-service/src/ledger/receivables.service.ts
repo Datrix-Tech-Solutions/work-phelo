@@ -12,8 +12,10 @@ import {
   FiscalPeriodStatus,
   GLAccountCategory,
   JournalStatus,
+  PostingDirection,
   Prisma,
   RecordStatus,
+  TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CashbookService } from './cashbook.service';
@@ -298,16 +300,25 @@ export class ReceivablesService {
       this.resolveCustomer(user.tenantId, dto.customerId),
       this.resolveConfig(user.tenantId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
-      this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
-    const { subtotalAmount, taxAmount, totalAmount } =
-      this.documentAmounts(dto);
     if (!config.accountsReceivableControlAccountId) {
       throw new ConflictException(
         'Configure an accounts receivable control account before creating AR invoices',
       );
     }
+
+    const subtotalAmount = new Prisma.Decimal(dto.amount);
+    const { offsetGlAccountId, taxAmount, taxBreakdown } =
+      await this.resolveRulePosting(
+        user.tenantId,
+        dto.transactionTypeId,
+        TransactionTypeCategory.RECEIVABLE,
+        subtotalAmount,
+        dto.selectedTaxTypeIds,
+      );
+    await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
+    const totalAmount = subtotalAmount.plus(taxAmount);
 
     const document = await this.prisma.accountingReceivableDocument.create({
       data: {
@@ -329,7 +340,9 @@ export class ReceivablesService {
         externalReference: this.optional(dto.externalReference),
         sourceModule: this.optional(dto.sourceModule),
         sourceRecordId: this.optional(dto.sourceRecordId),
-        offsetGlAccountId: dto.offsetGlAccountId,
+        offsetGlAccountId,
+        transactionTypeId: dto.transactionTypeId,
+        taxBreakdown,
         createdByUserId: user.id,
         updatedByUserId: user.id,
       },
@@ -1246,25 +1259,49 @@ export class ReceivablesService {
     arControlAccountId: string,
     fiscalPeriodId: string,
   ): CreateJournalDto {
-    const amount = Number(document.totalAmount.toString());
+    const totalAmount = Number(document.totalAmount.toString());
+    const subtotalAmount = Number(document.subtotalAmount.toString());
+    const description = document.description ?? document.documentNumber;
+    const taxBreakdown = this.parseTaxBreakdown(document.taxBreakdown);
+
     const arLine = {
       glAccountId: arControlAccountId,
       subledgerAccountId: document.customer.subledgerAccountId,
-      description: document.description ?? document.documentNumber,
+      description,
     };
-    const offsetLine = {
-      glAccountId: document.offsetGlAccountId,
-      description: document.description ?? document.documentNumber,
-    };
+    // A resolved rule splits tax onto its own account(s), leaving the offset line at just
+    // the subtotal; a document with no breakdown (a credit note, or one predating rules)
+    // keeps the old behavior of lumping the full total onto the offset line.
+    const offsetLines = taxBreakdown.length
+      ? [
+          {
+            glAccountId: document.offsetGlAccountId,
+            amount: subtotalAmount,
+            description,
+          },
+          ...taxBreakdown.map((t) => ({
+            glAccountId: t.glAccountId,
+            amount: t.amount,
+            description: `${description} — tax`,
+          })),
+        ]
+      : [
+          {
+            glAccountId: document.offsetGlAccountId,
+            amount: totalAmount,
+            description,
+          },
+        ];
+
     const lines =
       document.documentType === AccountingReceivableDocumentType.INVOICE
         ? [
-            { ...arLine, debit: amount, credit: 0 },
-            { ...offsetLine, debit: 0, credit: amount },
+            { ...arLine, debit: totalAmount, credit: 0 },
+            ...offsetLines.map((l) => ({ ...l, debit: 0, credit: l.amount })),
           ]
         : [
-            { ...offsetLine, debit: amount, credit: 0 },
-            { ...arLine, debit: 0, credit: amount },
+            ...offsetLines.map((l) => ({ ...l, debit: l.amount, credit: 0 })),
+            { ...arLine, debit: 0, credit: totalAmount },
           ];
     return {
       transactionDate: document.documentDate.toISOString(),
@@ -1531,6 +1568,101 @@ export class ReceivablesService {
         'Receivable offset account must be active, leaf, posting-enabled and non-asset',
       );
     }
+  }
+
+  /** Resolves the offset account and any tax lines from the transaction type's Rule —
+   *  requires one to exist, so a Rule is mandatory before a type can be used to post an
+   *  Invoice/Bill. The AR/AP side itself is untouched — still the tenant's configured
+   *  control account, exactly as before; only the non-auto-balancing side comes from here. */
+  private async resolveRulePosting(
+    tenantId: string,
+    transactionTypeId: string,
+    expectedCategory: TransactionTypeCategory,
+    subtotal: Prisma.Decimal,
+    selectedTaxTypeIds: string[] | undefined,
+  ): Promise<{
+    offsetGlAccountId: string;
+    taxAmount: Prisma.Decimal;
+    taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
+  }> {
+    const transactionType = await this.prisma.transactionType.findFirst({
+      where: { id: transactionTypeId, tenantId },
+    });
+    if (!transactionType) {
+      throw new NotFoundException('Transaction type not found');
+    }
+    if (transactionType.category !== expectedCategory) {
+      throw new BadRequestException(
+        `Transaction type must be ${expectedCategory} category`,
+      );
+    }
+
+    const rule = await this.prisma.transactionTypeRule.findFirst({
+      where: { tenantId, transactionTypeId },
+      include: { lines: { include: { taxType: true } } },
+    });
+    if (!rule) {
+      throw new BadRequestException(
+        'Configure a rule for this transaction type before creating documents against it',
+      );
+    }
+
+    const autoBalanceDirection =
+      expectedCategory === TransactionTypeCategory.RECEIVABLE
+        ? PostingDirection.DR
+        : PostingDirection.CR;
+    const explicitLines = rule.lines.filter(
+      (l) => l.direction !== autoBalanceDirection,
+    );
+    const mainLine = explicitLines.find((l) => !l.taxTypeId);
+    if (!mainLine) {
+      throw new ConflictException(
+        "This transaction type's rule has no main (non-tax) line configured",
+      );
+    }
+
+    const selected = new Set(selectedTaxTypeIds ?? []);
+    const taxBreakdown = explicitLines
+      .filter((l) => l.taxTypeId && selected.has(l.taxTypeId))
+      .map((line) => {
+        const rate = new Prisma.Decimal(line.taxType!.rate);
+        const amount = subtotal.times(rate).dividedBy(100).toDecimalPlaces(2);
+        return {
+          glAccountId: line.accountId,
+          taxTypeId: line.taxTypeId!,
+          amount: amount.toString(),
+        };
+      });
+    const taxAmount = taxBreakdown.reduce(
+      (sum, t) => sum.plus(new Prisma.Decimal(t.amount)),
+      new Prisma.Decimal(0),
+    );
+
+    return { offsetGlAccountId: mainLine.accountId, taxAmount, taxBreakdown };
+  }
+
+  private parseTaxBreakdown(
+    value: Prisma.JsonValue | null,
+  ): { glAccountId: string; taxTypeId: string; amount: number }[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((entry) => {
+      if (
+        !entry ||
+        typeof entry !== 'object' ||
+        Array.isArray(entry) ||
+        typeof entry.glAccountId !== 'string' ||
+        typeof entry.amount !== 'string'
+      ) {
+        return [];
+      }
+      return [
+        {
+          glAccountId: entry.glAccountId,
+          taxTypeId: typeof entry.taxTypeId === 'string' ? entry.taxTypeId : '',
+          amount: Number(entry.amount),
+        },
+      ];
+    });
   }
 
   private assertCustomerCurrency(customerCurrency: string, currency: string) {

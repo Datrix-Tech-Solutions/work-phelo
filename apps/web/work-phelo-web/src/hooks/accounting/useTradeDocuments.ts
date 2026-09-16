@@ -85,6 +85,7 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     sourceModule: raw.sourceModule ?? null,
     sourceRecordId: raw.sourceRecordId ?? null,
     offsetGlAccountId: raw.offsetGlAccountId,
+    transactionTypeId: raw.transactionTypeId ?? null,
     originalDocumentId: raw[config.originalIdField] ?? null,
     status: raw.status,
     createdAt: raw.createdAt,

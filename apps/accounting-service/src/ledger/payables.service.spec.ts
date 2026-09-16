@@ -5,7 +5,9 @@ import {
   AccountingPayableDocumentType,
   AccountingPayableStatus,
   AccountingSettlementMethod,
+  PostingDirection,
   Prisma,
+  TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { CashbookService } from './cashbook.service';
 import { JournalsService } from './journals.service';
@@ -18,6 +20,7 @@ const actor = {
 const apControlAccountId = 'ap-control';
 const offsetAccountId = 'expense-account';
 const subledgerAccountId = 'vendor-subledger';
+const transactionTypeId = 'txn-type-1';
 
 const vendor = {
   id: 'vendor-1',
@@ -121,6 +124,29 @@ const setup = () => {
     accountingVendor: {
       findFirst: jest.fn().mockResolvedValue(vendor),
     },
+    transactionType: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: transactionTypeId,
+        tenantId: actor.tenantId,
+        category: TransactionTypeCategory.PAYABLE,
+      }),
+    },
+    transactionTypeRule: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'rule-1',
+        tenantId: actor.tenantId,
+        transactionTypeId,
+        lines: [
+          {
+            id: 'line-1',
+            direction: PostingDirection.DR,
+            accountId: offsetAccountId,
+            taxTypeId: null,
+            taxType: null,
+          },
+        ],
+      }),
+    },
     gLAccount: {
       findFirst: jest.fn().mockResolvedValue({
         id: offsetAccountId,
@@ -223,7 +249,7 @@ describe('PayablesService', () => {
       documentDate: '2026-08-10',
       currency: 'GHS',
       amount: 1000,
-      offsetGlAccountId: offsetAccountId,
+      transactionTypeId,
       description: 'Bill',
     });
 

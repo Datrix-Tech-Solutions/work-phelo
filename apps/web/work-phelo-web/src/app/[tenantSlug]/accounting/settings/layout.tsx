@@ -16,7 +16,6 @@ export default function AccountingSettingsLayout({ children }: { children: React
         { key: 'transaction-types', label: 'Transaction Types', href: `${base}/transaction-types` },
         { key: 'source-types', label: 'Source Types', href: `${base}/source-types` },
         { key: 'rules', label: 'Rules', href: `${base}/rules` },
-        { key: 'tax-types', label: 'Tax Types', href: `${base}/tax-types` },
       ],
     },
     {
@@ -25,14 +24,13 @@ export default function AccountingSettingsLayout({ children }: { children: React
         // { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
         // { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
         // { key: 'cost-centres', label: 'Cost Centres', href: `${base}/cost-centres` },
+        { key: 'tax-types', label: 'Tax Types', href: `${base}/tax-types` },
         { key: 'currency', label: 'Currency', href: `${base}/currency` },
         // { key: 'posting-rules', label: 'Posting Rules', href: `${base}/posting-rules` },
       ],
     },
     {
-      tabs: [
-        { key: 'fiscal-year', label: 'Fiscal Year', href: `${base}/fiscal-year` },
-      ],
+      tabs: [{ key: 'fiscal-year', label: 'Fiscal Year', href: `${base}/fiscal-year` }],
     },
   ];
 

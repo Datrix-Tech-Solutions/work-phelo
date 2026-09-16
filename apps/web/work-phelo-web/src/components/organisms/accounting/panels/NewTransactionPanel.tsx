@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { Toggle } from '@/components/atoms/Toggle';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { TransactionTypeDefinition } from '@/types/accounting';
+import { AccountingTradeDocument, TransactionTypeDefinition } from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
   useCreatePayableBill,
@@ -18,17 +18,10 @@ import {
   usePostPayableBill,
   usePostReceivableInvoice,
   useSubledgers,
+  useTransactionTypeRules,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-
-interface TaxTypeOption extends SearchSelectOption {
-  /** Percentage rate applied to the subtotal — drives the breakdown below the field. */
-  rate: number;
-}
-
-// TODO: populate from a tax types API once one exists.
-const TAX_TYPE_OPTIONS: TaxTypeOption[] = [];
 
 function fmtAmount(value: number, currency: string) {
   const formatted = value.toLocaleString(undefined, {
@@ -44,8 +37,6 @@ type FormValues = {
   description: string;
   amount: string;
   currency: string;
-  applyTax: boolean;
-  taxType: string;
   entryDate: string;
   dueDate: string;
 };
@@ -60,8 +51,6 @@ const DEFAULTS: FormValues = {
   description: '',
   amount: '',
   currency: '',
-  applyTax: false,
-  taxType: '',
   entryDate: '',
   dueDate: '',
 };
@@ -69,17 +58,23 @@ const DEFAULTS: FormValues = {
 export function NewTransactionPanel({
   transactionType,
   onClose,
+  onPostedForPayment,
 }: {
   transactionType: TransactionTypeDefinition | null | undefined;
   onClose: () => void;
+  /** Fired after a successful "Post and Make Payment" so the caller can open the
+   *  payment popup for the freshly-posted document. */
+  onPostedForPayment?: (document: AccountingTradeDocument) => void;
 }) {
   const isOpen = transactionType !== null && transactionType !== undefined;
   const isReceivable = transactionType?.category === 'RECEIVABLE';
   const isPayable = transactionType?.category === 'PAYABLE';
   const isSupported = isReceivable || isPayable;
+  const hasRule = (transactionType?.rulesCount ?? 0) > 0;
+  const canUse = isSupported && hasRule;
   const toast = useToast();
+  const [pendingAction, setPendingAction] = useState<'draft' | 'post' | 'postAndPay' | null>(null);
 
-  const { options: currencyOptions } = useAccountingCurrencyOptions();
   const createInvoice = useCreateReceivableInvoice();
   const createBill = useCreatePayableBill();
   const postInvoice = usePostReceivableInvoice();
@@ -97,7 +92,28 @@ export function NewTransactionPanel({
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
+  const { options: currencyOptions } = useAccountingCurrencyOptions();
   const { data: entityTypesData = [] } = useEntityTypes();
+  const { data: rules = [] } = useTransactionTypeRules();
+  const rule = useMemo(
+    () => rules.find((r) => r.transactionTypeId === transactionType?.id),
+    [rules, transactionType],
+  );
+  // The rule's Deduction lines — each backed by a TaxType and shown as its own
+  // checkbox, since a single invoice can apply more than one at once.
+  const taxLines = useMemo(
+    () =>
+      (rule?.lines ?? [])
+        .filter((line) => line.taxType)
+        .map((line) => ({
+          taxTypeId: line.taxType!.id,
+          name: line.taxType!.name,
+          rate: line.taxType!.rate,
+        })),
+    [rule],
+  );
+  const [selectedTaxTypeIds, setSelectedTaxTypeIds] = useState<string[]>([]);
+
   // Only the roles actually configured on this transaction type — not the tenant's full
   // Entity Types list — and any of them works now, not just the old fixed enum names.
   const businessRoleOptions = useMemo<SearchSelectOption[]>(() => {
@@ -109,15 +125,14 @@ export function NewTransactionPanel({
   }, [transactionType, entityTypesData]);
 
   const businessRole = useWatch({ control, name: 'businessRole' });
-  const applyTax = useWatch({ control, name: 'applyTax' });
-  const taxType = useWatch({ control, name: 'taxType' });
   const amount = useWatch({ control, name: 'amount' });
   const currency = useWatch({ control, name: 'currency' });
 
-  const selectedTaxType = TAX_TYPE_OPTIONS.find((t) => t.value === taxType);
   const subtotal = Number(amount) || 0;
-  const taxRate = selectedTaxType?.rate ?? 0;
-  const taxAmount = (subtotal * taxRate) / 100;
+  const taxBreakdown = taxLines
+    .filter((line) => selectedTaxTypeIds.includes(line.taxTypeId))
+    .map((line) => ({ ...line, amount: (subtotal * line.rate) / 100 }));
+  const taxAmount = taxBreakdown.reduce((sum, line) => sum + line.amount, 0);
   const total = subtotal + taxAmount;
 
   useEffect(() => {
@@ -129,6 +144,7 @@ export function NewTransactionPanel({
       businessRole: configuredRoles.length === 1 ? configuredRoles[0] : '',
       entryDate: today(),
     });
+    setSelectedTaxTypeIds([]);
   }, [isOpen, transactionType, reset]);
 
   const { data: entities = [], isLoading: isLoadingEntities } = useSubledgers(
@@ -141,49 +157,65 @@ export function NewTransactionPanel({
 
   const close = () => {
     reset(DEFAULTS);
+    setSelectedTaxTypeIds([]);
     onClose();
   };
 
-  const submit = (action: 'draft' | 'post') => async (values: FormValues) => {
+  const toggleTaxType = (taxTypeId: string) => {
+    setSelectedTaxTypeIds((prev) =>
+      prev.includes(taxTypeId) ? prev.filter((id) => id !== taxTypeId) : [...prev, taxTypeId],
+    );
+  };
+
+  const submit = (action: 'draft' | 'post' | 'postAndPay') => async (values: FormValues) => {
     const entity = entities.find((e) => e.id === values.businessEntity);
     if (!entity) {
       toast.error('Select a business entity');
       return;
     }
-    const taxTypeOption = TAX_TYPE_OPTIONS.find((t) => t.value === values.taxType);
+    if (!transactionType) return;
+
     const payload = {
       partyId: values.businessEntity,
       documentDate: values.entryDate || today(),
       dueDate: values.dueDate || undefined,
       currency: values.currency,
       amount: Number(values.amount),
-      taxAmount:
-        values.applyTax && taxTypeOption
-          ? (Number(values.amount) * taxTypeOption.rate) / 100
-          : undefined,
-      offsetGlAccountId: entity.controlAccountId,
+      transactionTypeId: transactionType.id,
+      selectedTaxTypeIds: selectedTaxTypeIds.length ? selectedTaxTypeIds : undefined,
       description: values.description || undefined,
       // No externalReference here — the system generates the transaction/document
       // number itself (e.g. INV-2026-0001) once the document is created.
     };
 
+    setPendingAction(action);
     try {
       const document = await createDocument.mutateAsync(payload);
-      if (action === 'post') {
-        try {
-          await postDocument.mutateAsync(document.id);
+      if (action === 'draft') {
+        toast.success('Transaction saved as draft.');
+        close();
+        return;
+      }
+
+      try {
+        const posted = await postDocument.mutateAsync(document.id);
+        if (action === 'postAndPay') {
           toast.success('Transaction posted.');
-        } catch (error) {
-          toast.error(extractError(error, 'Saved as draft, but posting failed'));
           close();
+          onPostedForPayment?.(posted);
           return;
         }
-      } else {
-        toast.success('Transaction saved as draft.');
+        toast.success('Transaction posted.');
+      } catch (error) {
+        toast.error(extractError(error, 'Saved as draft, but posting failed'));
+        close();
+        return;
       }
       close();
     } catch (error) {
       toast.error(extractError(error, 'Failed to save transaction'));
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -200,11 +232,11 @@ export function NewTransactionPanel({
           <Button variant="outline" onClick={close} disabled={isSaving}>
             Cancel
           </Button>
-          {isSupported && (
+          {canUse && (
             <>
               <Button
                 variant="secondary"
-                isLoading={createDocument.isPending && !postDocument.isPending}
+                isLoading={isSaving && pendingAction === 'draft'}
                 loadingText="Saving…"
                 disabled={isSaving}
                 onClick={handleSubmit(submit('draft'))}
@@ -212,11 +244,21 @@ export function NewTransactionPanel({
                 Save Draft
               </Button>
               <Button
-                isLoading={isSaving}
-                loadingText="Saving…"
+                variant="secondary"
+                isLoading={isSaving && pendingAction === 'post'}
+                loadingText="Posting…"
+                disabled={isSaving}
                 onClick={handleSubmit(submit('post'))}
               >
                 Post
+              </Button>
+              <Button
+                isLoading={isSaving && pendingAction === 'postAndPay'}
+                loadingText="Posting…"
+                disabled={isSaving}
+                onClick={handleSubmit(submit('postAndPay'))}
+              >
+                Post and Make Payment
               </Button>
             </>
           )}
@@ -227,6 +269,11 @@ export function NewTransactionPanel({
         <p className="text-sm text-gray-500">
           Forms for {transactionType?.category.toLowerCase() ?? 'this'} transaction types are coming
           soon.
+        </p>
+      ) : !hasRule ? (
+        <p className="text-sm text-gray-500">
+          {transactionType?.name} has no rule configured yet. Add one under Settings → Transaction
+          Types before creating transactions of this type.
         </p>
       ) : (
         <div className="flex flex-col gap-4">
@@ -287,16 +334,22 @@ export function NewTransactionPanel({
           />
 
           <div className="grid grid-cols-2 gap-4">
-            <FormField
-              label="Amount"
-              type="number"
-              step="0.01"
-              registration={register('amount', {
+            <Controller
+              name="amount"
+              control={control}
+              rules={{
                 required: 'Amount is required',
                 min: { value: 0.01, message: 'Amount must be greater than 0' },
-              })}
-              error={errors.amount}
-              placeholder="0.00"
+              }}
+              render={({ field }) => (
+                <CurrencyInput
+                  label="Amount"
+                  value={field.value}
+                  currency={currency}
+                  onValueChange={field.onChange}
+                  error={errors.amount?.message}
+                />
+              )}
             />
             <Controller
               name="currency"
@@ -315,48 +368,44 @@ export function NewTransactionPanel({
             />
           </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-gray-900">Apply Tax</span>
-            <Controller
-              name="applyTax"
-              control={control}
-              render={({ field }) => <Toggle enabled={field.value} onChange={field.onChange} />}
-            />
-          </div>
-
-          {applyTax && (
-            <>
-              <Controller
-                name="taxType"
-                control={control}
-                render={({ field }) => (
-                  <SearchSelect
-                    label="Tax Type"
-                    placeholder="No tax types configured yet"
-                    options={TAX_TYPE_OPTIONS}
-                    value={field.value}
-                    onChange={field.onChange}
+          {taxLines.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
+              <span className="text-sm font-bold text-gray-900">Tax / Deductions</span>
+              {taxLines.map((line) => (
+                <label key={line.taxTypeId} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedTaxTypeIds.includes(line.taxTypeId)}
+                    onChange={() => toggleTaxType(line.taxTypeId)}
+                    className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
                   />
-                )}
-              />
+                  <span className="text-sm text-gray-700">
+                    {line.name} ({line.rate}%)
+                  </span>
+                </label>
+              ))}
 
-              {taxType && (
-                <div className="flex flex-col gap-1.5 rounded-xl border border-gray-200 p-3">
+              {taxBreakdown.length > 0 && (
+                <div className="mt-1 flex flex-col gap-1.5 border-t border-gray-100 pt-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal</span>
                     <span className="text-gray-900">{fmtAmount(subtotal, currency)}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Tax{taxRate ? ` (${taxRate}%)` : ''}</span>
-                    <span className="text-gray-900">{fmtAmount(taxAmount, currency)}</span>
-                  </div>
+                  {taxBreakdown.map((line) => (
+                    <div key={line.taxTypeId} className="flex justify-between text-sm">
+                      <span className="text-gray-600">
+                        {line.name} ({line.rate}%)
+                      </span>
+                      <span className="text-gray-900">{fmtAmount(line.amount, currency)}</span>
+                    </div>
+                  ))}
                   <div className="flex justify-between border-t border-gray-100 pt-1.5 text-sm font-semibold">
                     <span className="text-gray-900">Total</span>
                     <span className="text-gray-900">{fmtAmount(total, currency)}</span>
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
