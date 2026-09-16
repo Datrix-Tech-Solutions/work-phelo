@@ -20,6 +20,17 @@ export function useSubledgers(params: QuerySubledgerAccountsParams = {}) {
   });
 }
 
+export function useSubledger(id: string | undefined) {
+  return useQuery({
+    queryKey: [...SUBLEDGERS_KEY, id],
+    queryFn: async () => {
+      const res = await api.get<SubledgerAccount>(`${BASE}/${id}`);
+      return res.data;
+    },
+    enabled: !!id,
+  });
+}
+
 export function useCreateSubledger() {
   const queryClient = useQueryClient();
   return useMutation({

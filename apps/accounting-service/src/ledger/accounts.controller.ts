@@ -341,6 +341,20 @@ export class AccountsController {
     return this.masterData.listSubledgerAccounts(request.user.tenantId, query);
   }
 
+  @Get('subledger-accounts/:subledgerId')
+  @ApiTags('Accounting - Subledgers')
+  @ApiOperation({ summary: 'Get a single tenant subledger account' })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_VIEW)
+  getSubledger(
+    @Param('subledgerId', ParseUUIDPipe) subledgerId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.getSubledgerAccount(
+      request.user.tenantId,
+      subledgerId,
+    );
+  }
+
   @Post('subledger-accounts')
   @ApiTags('Accounting - Subledgers')
   @ApiOperation({ summary: 'Create a tenant subledger account' })

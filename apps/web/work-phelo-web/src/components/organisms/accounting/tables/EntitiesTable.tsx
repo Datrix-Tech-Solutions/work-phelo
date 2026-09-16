@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-// import { useParams } from 'next/navigation';
-// import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
@@ -32,8 +32,8 @@ function fmtBalance(amount: number, currency: string) {
 }
 
 export function EntitiesTable() {
-  // const router = useRouter();
-  // const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -188,7 +188,7 @@ export function EntitiesTable() {
           setPage(1);
         }}
         extraFilters={extraFilters}
-        // onRowClick={(row) => router.push(`/${tenantSlug}/accounting/accountspayable/entities/${row.id}`)}
+        onRowClick={(row) => router.push(`/${tenantSlug}/accounting/entities/${row.id}`)}
         actionButton={{ label: 'Add Entity', onClick: () => setPanelTarget(null) }}
         emptyMessage="No entities found"
         currentPage={page}

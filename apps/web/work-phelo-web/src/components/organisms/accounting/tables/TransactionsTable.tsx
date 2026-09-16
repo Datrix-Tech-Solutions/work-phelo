@@ -49,7 +49,7 @@ function fmtAmount(amount: string, currency: string) {
   return `${currency} ${Number.isFinite(value) ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amount}`;
 }
 
-export function TransactionsTable() {
+export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
@@ -62,10 +62,10 @@ export function TransactionsTable() {
   const { data: transactionTypes = [], isLoading: isLoadingTransactionTypes } =
     useTransactionTypes();
 
-  const invoices = useReceivableInvoices({ limit: 100 });
-  const bills = usePayableBills({ limit: 100 });
-  const receivableCreditNotes = useReceivableCreditNotes({ limit: 100 });
-  const payableCreditNotes = usePayableCreditNotes({ limit: 100 });
+  const invoices = useReceivableInvoices({ limit: 100, partyId });
+  const bills = usePayableBills({ limit: 100, partyId });
+  const receivableCreditNotes = useReceivableCreditNotes({ limit: 100, partyId });
+  const payableCreditNotes = usePayableCreditNotes({ limit: 100, partyId });
 
   const isLoading =
     invoices.isLoading || bills.isLoading || receivableCreditNotes.isLoading ||
