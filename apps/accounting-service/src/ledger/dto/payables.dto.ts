@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsDateString,
   IsEnum,
   IsNumber,
@@ -43,18 +44,15 @@ export class CreatePayableBillDto {
   @Length(3, 3)
   currency!: string;
 
-  @ApiProperty({ example: 1000, minimum: 0.0001 })
+  @ApiProperty({
+    example: 1000,
+    minimum: 0.0001,
+    description: 'The subtotal, before any tax lines the rule adds on top.',
+  })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
   amount!: number;
-
-  @ApiPropertyOptional({ example: 0, minimum: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 4 })
-  @Min(0)
-  taxAmount?: number;
 
   @ApiPropertyOptional({ example: 1.25, minimum: 0.00000001 })
   @IsOptional()
@@ -66,10 +64,22 @@ export class CreatePayableBillDto {
   @ApiProperty({
     format: 'uuid',
     description:
-      'Posting-enabled expense, asset or other offset account debited when the bill is posted.',
+      'The Payable-category Transaction Type driving this bill — its Rule resolves the ' +
+      'offset account and any tax lines. A Rule must exist for it.',
   })
   @IsUUID()
-  offsetGlAccountId!: string;
+  transactionTypeId!: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      "Which of the Rule's Deduction (tax) lines to apply, by TaxType id — each computes " +
+      'its own amount from the rate and posts to its own account.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  selectedTaxTypeIds?: string[];
 
   @ApiPropertyOptional({ example: 'Vendor bill' })
   @IsOptional()
@@ -122,6 +132,13 @@ export class CreatePayableCreditNoteDto extends PartialType(
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
   amount!: number;
+
+  @ApiPropertyOptional({ example: 0, minimum: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  taxAmount?: number;
 
   @ApiProperty({
     format: 'uuid',
