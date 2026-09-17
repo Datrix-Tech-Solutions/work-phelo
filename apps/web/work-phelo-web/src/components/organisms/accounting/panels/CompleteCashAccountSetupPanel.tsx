@@ -1,17 +1,21 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm, useWatch, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { AccountingCashAccountKind } from '@/types/accounting';
-import { useAccountingCurrencyOptions, useCreateCashAccount, useGLAccountOptions } from '@/hooks';
+import { AccountingCashAccountKind, GLAccount } from '@/types/accounting';
+import { useAccountingCurrencyOptions, useCreateCashAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
-interface AddCashAccountPanelProps {
-  isOpen: boolean;
+interface CompleteCashAccountSetupPanelProps {
+  /** The GL leaf account (already created under Chart of Accounts > Cash and Bank)
+   *  this Cash Account record will be linked to. Null closes the panel. */
+  glAccount: GLAccount | null;
   onClose: () => void;
 }
 
@@ -19,7 +23,6 @@ type FormValues = {
   name: string;
   accountKind: AccountingCashAccountKind | '';
   currency: string;
-  glAccountId: string;
   bankName: string;
   accountNumber: string;
   branch: string;
@@ -30,7 +33,6 @@ const DEFAULTS: FormValues = {
   name: '',
   accountKind: '',
   currency: '',
-  glAccountId: '',
   bankName: '',
   accountNumber: '',
   branch: '',
@@ -44,14 +46,12 @@ const KIND_OPTIONS: SearchSelectOption[] = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-export function AddCashAccountPanel({ isOpen, onClose }: AddCashAccountPanelProps) {
+export function CompleteCashAccountSetupPanel({
+  glAccount,
+  onClose,
+}: CompleteCashAccountSetupPanelProps) {
   const toast = useToast();
   const { mutateAsync: createCashAccount, isPending } = useCreateCashAccount();
-  // Only active, posting-enabled ASSET accounts can back a cash/bank account.
-  const { options: glAccountOptions, isLoading: isLoadingGLAccounts } = useGLAccountOptions({
-    category: 'ASSET',
-  });
-  // Currency choices come from the tenant's configured currencies (Settings > Currency).
   const { options: currencyOptions, isLoading: isLoadingCurrencies } =
     useAccountingCurrencyOptions();
 
@@ -65,36 +65,41 @@ export function AddCashAccountPanel({ isOpen, onClose }: AddCashAccountPanelProp
 
   const accountKind = useWatch({ control, name: 'accountKind' });
 
+  useEffect(() => {
+    if (glAccount) reset({ ...DEFAULTS, name: glAccount.name });
+  }, [glAccount, reset]);
+
   const handleClose = () => {
     reset(DEFAULTS);
     onClose();
   };
 
   const onSubmit = async (data: FormValues) => {
+    if (!glAccount) return;
     try {
       await createCashAccount({
         name: data.name,
         accountKind: data.accountKind as AccountingCashAccountKind,
         currency: data.currency,
-        glAccountId: data.glAccountId,
+        glAccountId: glAccount.id,
         bankName: data.bankName || undefined,
         accountNumber: data.accountNumber || undefined,
         branch: data.branch || undefined,
         description: data.description || undefined,
       });
-      toast.success('Cash account created successfully');
+      toast.success('Cash account setup complete — ready for payments.');
       handleClose();
     } catch (err) {
-      toast.error(extractError(err, 'Failed to create cash account'));
+      toast.error(extractError(err, 'Failed to complete cash account setup'));
     }
   };
 
   return (
     <SidePanel
-      isOpen={isOpen}
+      isOpen={!!glAccount}
       onClose={handleClose}
-      title="Add Cash/Bank Account"
-      description="Add a bank, cash or mobile money account and link it to a GL asset account."
+      title="Complete Cash/Bank Account Setup"
+      description="Add the remaining details for this account so it can be used for payments and receipts."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -107,6 +112,12 @@ export function AddCashAccountPanel({ isOpen, onClose }: AddCashAccountPanelProp
       }
     >
       <div className="flex flex-col gap-4">
+        <Input
+          label="GL Account"
+          readOnly
+          value={glAccount ? `${glAccount.code} – ${glAccount.name}` : ''}
+        />
+
         <FormField
           label="Account Name"
           registration={register('name', { required: 'Account name is required' })}
@@ -152,22 +163,6 @@ export function AddCashAccountPanel({ isOpen, onClose }: AddCashAccountPanelProp
             </span>
           )}
         </div>
-
-        <Controller
-          name="glAccountId"
-          control={control}
-          rules={{ required: 'GL asset account is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="GL Asset Account"
-              placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select GL asset account…'}
-              options={glAccountOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.glAccountId?.message}
-            />
-          )}
-        />
 
         {accountKind === 'BANK' && (
           <>

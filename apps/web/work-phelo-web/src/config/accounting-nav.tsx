@@ -57,6 +57,19 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
+  // {
+  //   label: 'Cash and Bank',
+  //   items: [
+  //     {
+  //       key: 'cash-and-bank',
+  //       label: 'Cash and Bank',
+  //       icon: <CashAndBankIcon />,
+  //       href: 'cashandbank',
+  //       enabled: true,
+  //       active: true,
+  //     },
+  //   ],
+  // },
   {
     label: 'Sales & Revenue',
     items: [
@@ -198,14 +211,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
   //       enabled: true,
   //       active: true,
   //       exact: true,
-  //     },
-  //     {
-  //       key: 'cash-and-bank',
-  //       label: 'Cash and Bank',
-  //       icon: <CashAndBankIcon />,
-  //       href: 'cashandbank',
-  //       enabled: true,
-  //       active: true,
   //     },
   //   ],
   // },

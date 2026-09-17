@@ -51,16 +51,18 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
     handleSubmit,
     reset,
     control,
-    setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
   const isBaseCurrency = useWatch({ control, name: 'isBaseCurrency' });
 
-  // No base currency configured yet — the first currency added must become it.
+  // Re-sync on every open, not just on mount — otherwise closing the panel (which resets
+  // the form) while no base currency exists yet leaves the checkbox stuck unchecked and
+  // disabled, since it only forces true when hasBaseCurrency changes value, not on reopen.
   useEffect(() => {
-    if (!hasBaseCurrency) setValue('isBaseCurrency', true);
-  }, [hasBaseCurrency, setValue]);
+    if (!isOpen) return;
+    reset({ ...DEFAULTS, isBaseCurrency: !hasBaseCurrency });
+  }, [isOpen, hasBaseCurrency, reset]);
 
   const handleClose = () => {
     reset(DEFAULTS);

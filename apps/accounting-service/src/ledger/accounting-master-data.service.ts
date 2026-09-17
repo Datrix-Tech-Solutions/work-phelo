@@ -109,6 +109,12 @@ const NORMAL_BALANCE_BY_CATEGORY: Record<GLAccountCategory, NormalBalance> = {
   [GLAccountCategory.EXPENSE]: NormalBalance.DEBIT,
 };
 
+// Trimmed to exactly what every tenant structurally needs — one group per category
+// that a Cash Account, Transaction Type Rule, or Bill/Invoice offset line must be able
+// to point at. Nothing here is looked up by code elsewhere in the app (forms all pick
+// GL accounts by category, never by classification/group), so this is just enough
+// default organization to avoid ad hoc groups like a one-off "Bank Account" group that
+// don't match the intended Cash and Bank / Accounts Receivable / Accounts Payable setup.
 const STANDARD_ACCOUNT_HIERARCHY = [
   {
     code: 'CURRENT_ASSETS',
@@ -117,33 +123,9 @@ const STANDARD_ACCOUNT_HIERARCHY = [
     displayOrder: 10,
     groups: [
       { code: 'CASH_AND_BANK', name: 'Cash and Bank', displayOrder: 10 },
-      { code: 'RECEIVABLES', name: 'Receivables', displayOrder: 20 },
       {
         code: 'ACCOUNTS_RECEIVABLE',
         name: 'Accounts Receivable',
-        displayOrder: 25,
-      },
-      {
-        code: 'OTHER_CURRENT_ASSETS',
-        name: 'Other Current Assets',
-        displayOrder: 30,
-      },
-    ],
-  },
-  {
-    code: 'NON_CURRENT_ASSETS',
-    name: 'Non-current Assets',
-    category: GLAccountCategory.ASSET,
-    displayOrder: 20,
-    groups: [
-      {
-        code: 'PROPERTY_AND_EQUIPMENT',
-        name: 'Property and Equipment',
-        displayOrder: 10,
-      },
-      {
-        code: 'OTHER_NON_CURRENT_ASSETS',
-        name: 'Other Non-current Assets',
         displayOrder: 20,
       },
     ],
@@ -152,107 +134,28 @@ const STANDARD_ACCOUNT_HIERARCHY = [
     code: 'CURRENT_LIABILITIES',
     name: 'Current Liabilities',
     category: GLAccountCategory.LIABILITY,
-    displayOrder: 30,
+    displayOrder: 20,
     groups: [
-      { code: 'PAYABLES', name: 'Payables', displayOrder: 10 },
       {
         code: 'ACCOUNTS_PAYABLE',
         name: 'Accounts Payable',
-        displayOrder: 15,
-      },
-      {
-        code: 'TAX_AND_STATUTORY',
-        name: 'Tax and Statutory Liabilities',
-        displayOrder: 20,
-      },
-      {
-        code: 'OTHER_CURRENT_LIABILITIES',
-        name: 'Other Current Liabilities',
-        displayOrder: 30,
-      },
-    ],
-  },
-  {
-    code: 'NON_CURRENT_LIABILITIES',
-    name: 'Non-current Liabilities',
-    category: GLAccountCategory.LIABILITY,
-    displayOrder: 35,
-    groups: [
-      {
-        code: 'LONG_TERM_BORROWINGS',
-        name: 'Long-term Borrowings',
         displayOrder: 10,
-      },
-      {
-        code: 'OTHER_NON_CURRENT_LIABILITIES',
-        name: 'Other Non-current Liabilities',
-        displayOrder: 20,
-      },
-    ],
-  },
-  {
-    code: 'EQUITY_CAPITAL',
-    name: 'Equity and Capital',
-    category: GLAccountCategory.EQUITY,
-    displayOrder: 40,
-    groups: [
-      { code: 'CAPITAL_ACCOUNTS', name: 'Capital Accounts', displayOrder: 10 },
-      {
-        code: 'RETAINED_EARNINGS',
-        name: 'Retained Earnings',
-        displayOrder: 20,
       },
     ],
   },
   {
     code: 'OPERATING_REVENUE',
-    name: 'Operating Revenue',
+    name: 'Revenue',
     category: GLAccountCategory.REVENUE,
-    displayOrder: 50,
-    groups: [
-      { code: 'SERVICE_REVENUE', name: 'Service Revenue', displayOrder: 10 },
-      { code: 'OTHER_INCOME', name: 'Other Income', displayOrder: 20 },
-    ],
-  },
-  {
-    code: 'NON_OPERATING_REVENUE',
-    name: 'Non-operating Revenue',
-    category: GLAccountCategory.REVENUE,
-    displayOrder: 55,
-    groups: [
-      {
-        code: 'INVESTMENT_INCOME',
-        name: 'Investment Income',
-        displayOrder: 10,
-      },
-      {
-        code: 'OTHER_NON_OPERATING_INCOME',
-        name: 'Other Non-operating Income',
-        displayOrder: 20,
-      },
-    ],
+    displayOrder: 30,
+    groups: [{ code: 'REVENUE', name: 'Revenue', displayOrder: 10 }],
   },
   {
     code: 'OPERATING_EXPENSES',
-    name: 'Operating Expenses',
+    name: 'Expenses',
     category: GLAccountCategory.EXPENSE,
-    displayOrder: 60,
-    groups: [
-      { code: 'COST_OF_SALES', name: 'Cost of Sales', displayOrder: 5 },
-      { code: 'PAYROLL_EXPENSES', name: 'Payroll Expenses', displayOrder: 10 },
-      {
-        code: 'ADMIN_EXPENSES',
-        name: 'Administrative Expenses',
-        displayOrder: 20,
-      },
-      { code: 'FINANCE_COSTS', name: 'Finance Costs', displayOrder: 30 },
-      { code: 'TAX_EXPENSE', name: 'Tax Expense', displayOrder: 40 },
-      {
-        code: 'NON_OPERATING_EXPENSES',
-        name: 'Non-operating Expenses',
-        displayOrder: 50,
-      },
-    ],
+    displayOrder: 40,
+    groups: [{ code: 'EXPENSES', name: 'Expenses', displayOrder: 10 }],
   },
 ] as const;
 
@@ -897,9 +800,22 @@ export class AccountingMasterDataService {
   }
 
   async listAccountClassifications(
-    tenantId: string,
+    user: RequestUser,
     query: QueryAccountHierarchyDto,
   ) {
+    const tenantId = user.tenantId;
+    // Seed the standard hierarchy the first time a tenant has none of it yet — same
+    // lazy pattern as listTransactionTypes, checked by isSystemTemplate rather than an
+    // empty table, so a tenant that already created their own classifications still
+    // gets the standard ones too. Fully editable/deletable afterwards either way.
+    const hasSeeded = await this.prisma.accountClassification.findFirst({
+      where: { tenantId, isSystemTemplate: true },
+      select: { id: true },
+    });
+    if (!hasSeeded) {
+      await this.seedStandardAccountHierarchy(user);
+    }
+
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
     const where: Prisma.AccountClassificationWhereInput = {
