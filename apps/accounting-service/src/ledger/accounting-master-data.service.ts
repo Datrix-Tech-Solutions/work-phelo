@@ -115,47 +115,50 @@ const NORMAL_BALANCE_BY_CATEGORY: Record<GLAccountCategory, NormalBalance> = {
 // GL accounts by category, never by classification/group), so this is just enough
 // default organization to avoid ad hoc groups like a one-off "Bank Account" group that
 // don't match the intended Cash and Bank / Accounts Receivable / Accounts Payable setup.
+// Sub-numbered within each category's reserved thousand-block (Asset 1000s, Liability
+// 2000s, Equity 3000s — unused here, Revenue 4000s, Expense 5000s): x100 for the
+// classification, x110/x120/... for its groups.
 const STANDARD_ACCOUNT_HIERARCHY = [
   {
-    code: 'CURRENT_ASSETS',
+    code: '1100',
     name: 'Current Assets',
     category: GLAccountCategory.ASSET,
     displayOrder: 10,
     groups: [
-      { code: 'CASH_AND_BANK', name: 'Cash and Bank', displayOrder: 10 },
+      { code: '1110', name: 'Cash and Bank', displayOrder: 10 },
       {
-        code: 'ACCOUNTS_RECEIVABLE',
+        code: '1120',
         name: 'Accounts Receivable',
         displayOrder: 20,
       },
     ],
   },
   {
-    code: 'CURRENT_LIABILITIES',
+    code: '2100',
     name: 'Current Liabilities',
     category: GLAccountCategory.LIABILITY,
     displayOrder: 20,
     groups: [
       {
-        code: 'ACCOUNTS_PAYABLE',
+        code: '2110',
         name: 'Accounts Payable',
         displayOrder: 10,
       },
     ],
   },
   {
-    code: 'OPERATING_REVENUE',
+    code: '4100',
     name: 'Revenue',
     category: GLAccountCategory.REVENUE,
     displayOrder: 30,
-    groups: [{ code: 'REVENUE', name: 'Revenue', displayOrder: 10 }],
+    groups: [{ code: '4110', name: 'Revenue', displayOrder: 10 }],
   },
   {
-    code: 'OPERATING_EXPENSES',
+    code: '5100',
     name: 'Expenses',
     category: GLAccountCategory.EXPENSE,
     displayOrder: 40,
-    groups: [{ code: 'EXPENSES', name: 'Expenses', displayOrder: 10 }],
+    groups: [{ code: '5110', name: 'Expenses', displayOrder: 10 }],
   },
 ] as const;
 
