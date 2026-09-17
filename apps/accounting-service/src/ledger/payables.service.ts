@@ -290,46 +290,62 @@ export class PayablesService {
     this.assertVendorCurrency(vendor.currency, dto.currency);
 
     const subtotalAmount = new Prisma.Decimal(dto.amount);
-    const { apAccountId, offsetGlAccountId, taxAmount, taxBreakdown } =
-      await this.resolveRulePosting(
-        user.tenantId,
-        dto.transactionTypeId,
-        TransactionTypeCategory.PAYABLE,
-        subtotalAmount,
-        dto.selectedTaxTypeIds,
-      );
+    const {
+      apAccountId,
+      offsetGlAccountId,
+      taxAmount,
+      taxBreakdown,
+      transactionTypeCode,
+    } = await this.resolveRulePosting(
+      user.tenantId,
+      dto.transactionTypeId,
+      TransactionTypeCategory.PAYABLE,
+      subtotalAmount,
+      dto.selectedTaxTypeIds,
+    );
     await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
     const totalAmount = subtotalAmount.plus(taxAmount);
 
-    const document = await this.prisma.accountingPayableDocument.create({
-      data: {
-        tenantId: user.tenantId,
-        vendorId: vendor.id,
-        documentType: AccountingPayableDocumentType.BILL,
-        documentNumber: await this.nextDocumentNumber(user.tenantId, 'APB'),
-        documentDate: new Date(dto.documentDate),
-        dueDate: new Date(
-          dto.dueDate ??
-            this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
-        ),
-        currency: dto.currency,
-        exchangeRate: dto.exchangeRate,
-        subtotalAmount,
-        taxAmount,
-        totalAmount,
-        description: this.optional(dto.description),
-        externalReference: this.optional(dto.externalReference),
-        sourceModule: this.optional(dto.sourceModule),
-        sourceRecordId: this.optional(dto.sourceRecordId),
-        offsetGlAccountId,
-        apAccountId,
-        transactionTypeId: dto.transactionTypeId,
-        taxBreakdown,
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
+    const document = await this.withDocumentNumberLock(
+      user.tenantId,
+      `bill:${transactionTypeCode}`,
+      async (tx) => {
+        const documentNumber = await this.nextRuleDocumentNumber(
+          tx,
+          user.tenantId,
+          transactionTypeCode,
+        );
+        return tx.accountingPayableDocument.create({
+          data: {
+            tenantId: user.tenantId,
+            vendorId: vendor.id,
+            documentType: AccountingPayableDocumentType.BILL,
+            documentNumber,
+            documentDate: new Date(dto.documentDate),
+            dueDate: new Date(
+              dto.dueDate ??
+                this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
+            ),
+            currency: dto.currency,
+            exchangeRate: dto.exchangeRate,
+            subtotalAmount,
+            taxAmount,
+            totalAmount,
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            offsetGlAccountId,
+            apAccountId,
+            transactionTypeId: dto.transactionTypeId,
+            taxBreakdown,
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: payableDocumentInclude,
+        });
       },
-      include: payableDocumentInclude,
-    });
+    );
     await this.recordAudit(
       user,
       'PAYABLE_BILL_CREATED',
@@ -380,30 +396,41 @@ export class PayablesService {
 
     const { subtotalAmount, taxAmount, totalAmount } =
       this.documentAmounts(dto);
-    const document = await this.prisma.accountingPayableDocument.create({
-      data: {
-        tenantId: user.tenantId,
-        vendorId: vendor.id,
-        documentType: AccountingPayableDocumentType.CREDIT_NOTE,
-        documentNumber: await this.nextDocumentNumber(user.tenantId, 'APC'),
-        documentDate: new Date(dto.documentDate),
-        currency: dto.currency,
-        exchangeRate: dto.exchangeRate,
-        subtotalAmount,
-        taxAmount,
-        totalAmount,
-        description: this.optional(dto.description),
-        externalReference: this.optional(dto.externalReference),
-        sourceModule: this.optional(dto.sourceModule),
-        sourceRecordId: this.optional(dto.sourceRecordId),
-        offsetGlAccountId: dto.offsetGlAccountId,
-        apAccountId: dto.apAccountId,
-        originalBillId: this.optional(dto.originalBillId),
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
+    const document = await this.withDocumentNumberLock(
+      user.tenantId,
+      'APC',
+      async (tx) => {
+        const documentNumber = await this.nextDocumentNumber(
+          tx,
+          user.tenantId,
+          'APC',
+        );
+        return tx.accountingPayableDocument.create({
+          data: {
+            tenantId: user.tenantId,
+            vendorId: vendor.id,
+            documentType: AccountingPayableDocumentType.CREDIT_NOTE,
+            documentNumber,
+            documentDate: new Date(dto.documentDate),
+            currency: dto.currency,
+            exchangeRate: dto.exchangeRate,
+            subtotalAmount,
+            taxAmount,
+            totalAmount,
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            offsetGlAccountId: dto.offsetGlAccountId,
+            apAccountId: dto.apAccountId,
+            originalBillId: this.optional(dto.originalBillId),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: payableDocumentInclude,
+        });
       },
-      include: payableDocumentInclude,
-    });
+    );
     await this.recordAudit(
       user,
       'PAYABLE_CREDIT_NOTE_CREATED',
@@ -518,27 +545,34 @@ export class PayablesService {
       user,
       cashbookDto,
     );
-    const payment = await this.prisma.accountingPayablePayment.create({
-      data: {
-        tenantId: user.tenantId,
-        vendorId: vendor.id,
-        apAccountId: bill.apAccountId,
-        cashbookTransactionId: cashbookTransaction.id,
-        paymentNumber: await this.nextPaymentNumber(user.tenantId),
-        paymentDate: new Date(dto.paymentDate),
-        currency: dto.currency,
-        amount: dto.amount,
-        exchangeRate: dto.exchangeRate,
-        reference: this.optional(dto.reference),
-        description: this.optional(dto.description),
-        externalReference: this.optional(dto.externalReference),
-        sourceModule: this.optional(dto.sourceModule),
-        sourceRecordId: this.optional(dto.sourceRecordId),
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
+    const payment = await this.withDocumentNumberLock(
+      user.tenantId,
+      'APP',
+      async (tx) => {
+        const paymentNumber = await this.nextPaymentNumber(tx, user.tenantId);
+        return tx.accountingPayablePayment.create({
+          data: {
+            tenantId: user.tenantId,
+            vendorId: vendor.id,
+            apAccountId: bill.apAccountId,
+            cashbookTransactionId: cashbookTransaction.id,
+            paymentNumber,
+            paymentDate: new Date(dto.paymentDate),
+            currency: dto.currency,
+            amount: dto.amount,
+            exchangeRate: dto.exchangeRate,
+            reference: this.optional(dto.reference),
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: payablePaymentInclude,
+        });
       },
-      include: payablePaymentInclude,
-    });
+    );
     await this.prisma.cashbookTransaction.update({
       where: {
         id_tenantId: {
@@ -1548,6 +1582,7 @@ export class PayablesService {
     offsetGlAccountId: string;
     taxAmount: Prisma.Decimal;
     taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
+    transactionTypeCode: string;
   }> {
     const transactionType = await this.prisma.transactionType.findFirst({
       where: { id: transactionTypeId, tenantId },
@@ -1613,6 +1648,7 @@ export class PayablesService {
       offsetGlAccountId: mainLine.accountId,
       taxAmount,
       taxBreakdown,
+      transactionTypeCode: transactionType.code,
     };
   }
 
@@ -1722,18 +1758,56 @@ export class PayablesService {
     return 'OPEN';
   }
 
-  private async nextDocumentNumber(tenantId: string, prefix: string) {
-    const count = await this.prisma.accountingPayableDocument.count({
+  /** Runs `fn` inside a transaction holding a per-tenant, per-key advisory lock — used to
+   *  make document-numbering race-safe: two concurrent creates can no longer read the same
+   *  count and mint the same number, since the count-then-create is now one atomic section. */
+  private async withDocumentNumberLock<T>(
+    tenantId: string,
+    lockKey: string,
+    fn: (tx: TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${'accounting-doc-number:' + tenantId + ':' + lockKey})
+        )
+      `;
+      return fn(tx);
+    });
+  }
+
+  /** Old scheme — kept for credit notes and payments, which have no Transaction Type to
+   *  draw a code from. The count is global (never resets), only the lock is new. */
+  private async nextDocumentNumber(
+    tx: TransactionClient,
+    tenantId: string,
+    prefix: string,
+  ) {
+    const count = await tx.accountingPayableDocument.count({
       where: { tenantId },
     });
     return `${prefix}-${new Date().getUTCFullYear()}-${String(count + 1).padStart(6, '0')}`;
   }
 
-  private async nextPaymentNumber(tenantId: string) {
-    const count = await this.prisma.accountingPayablePayment.count({
+  private async nextPaymentNumber(tx: TransactionClient, tenantId: string) {
+    const count = await tx.accountingPayablePayment.count({
       where: { tenantId },
     });
     return `APP-${new Date().getUTCFullYear()}-${String(count + 1).padStart(6, '0')}`;
+  }
+
+  /** New scheme for Rule-driven documents (bills): <TransactionType code><YY>-<00001>,
+   *  resetting to 1 each calendar year per transaction type. */
+  private async nextRuleDocumentNumber(
+    tx: TransactionClient,
+    tenantId: string,
+    transactionTypeCode: string,
+  ) {
+    const prefix = `${transactionTypeCode}${String(new Date().getUTCFullYear()).slice(-2)}`;
+    const count = await tx.accountingPayableDocument.count({
+      where: { tenantId, documentNumber: { startsWith: `${prefix}-` } },
+    });
+    return `${prefix}-${String(count + 1).padStart(5, '0')}`;
   }
 
   private addDays(date: string, days: number) {

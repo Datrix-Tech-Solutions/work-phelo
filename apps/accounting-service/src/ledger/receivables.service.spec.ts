@@ -129,6 +129,7 @@ const setup = () => {
       findFirst: jest.fn().mockResolvedValue({
         id: transactionTypeId,
         tenantId: actor.tenantId,
+        code: 'INV',
         category: TransactionTypeCategory.RECEIVABLE,
       }),
     },
@@ -233,6 +234,7 @@ const setup = () => {
     },
     $transaction: jest.fn(),
     $queryRaw: jest.fn().mockResolvedValue([]),
+    $executeRaw: jest.fn().mockResolvedValue(undefined),
   };
   prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
     fn(prisma),

@@ -296,46 +296,62 @@ export class ReceivablesService {
     this.assertCustomerCurrency(customer.currency, dto.currency);
 
     const subtotalAmount = new Prisma.Decimal(dto.amount);
-    const { arAccountId, offsetGlAccountId, taxAmount, taxBreakdown } =
-      await this.resolveRulePosting(
-        user.tenantId,
-        dto.transactionTypeId,
-        TransactionTypeCategory.RECEIVABLE,
-        subtotalAmount,
-        dto.selectedTaxTypeIds,
-      );
+    const {
+      arAccountId,
+      offsetGlAccountId,
+      taxAmount,
+      taxBreakdown,
+      transactionTypeCode,
+    } = await this.resolveRulePosting(
+      user.tenantId,
+      dto.transactionTypeId,
+      TransactionTypeCategory.RECEIVABLE,
+      subtotalAmount,
+      dto.selectedTaxTypeIds,
+    );
     await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
     const totalAmount = subtotalAmount.plus(taxAmount);
 
-    const document = await this.prisma.accountingReceivableDocument.create({
-      data: {
-        tenantId: user.tenantId,
-        customerId: customer.id,
-        documentType: AccountingReceivableDocumentType.INVOICE,
-        documentNumber: await this.nextDocumentNumber(user.tenantId, 'ARI'),
-        documentDate: new Date(dto.documentDate),
-        dueDate: new Date(
-          dto.dueDate ??
-            this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
-        ),
-        currency: dto.currency,
-        exchangeRate: dto.exchangeRate,
-        subtotalAmount,
-        taxAmount,
-        totalAmount,
-        description: this.optional(dto.description),
-        externalReference: this.optional(dto.externalReference),
-        sourceModule: this.optional(dto.sourceModule),
-        sourceRecordId: this.optional(dto.sourceRecordId),
-        offsetGlAccountId,
-        arAccountId,
-        transactionTypeId: dto.transactionTypeId,
-        taxBreakdown,
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
+    const document = await this.withDocumentNumberLock(
+      user.tenantId,
+      `invoice:${transactionTypeCode}`,
+      async (tx) => {
+        const documentNumber = await this.nextRuleDocumentNumber(
+          tx,
+          user.tenantId,
+          transactionTypeCode,
+        );
+        return tx.accountingReceivableDocument.create({
+          data: {
+            tenantId: user.tenantId,
+            customerId: customer.id,
+            documentType: AccountingReceivableDocumentType.INVOICE,
+            documentNumber,
+            documentDate: new Date(dto.documentDate),
+            dueDate: new Date(
+              dto.dueDate ??
+                this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
+            ),
+            currency: dto.currency,
+            exchangeRate: dto.exchangeRate,
+            subtotalAmount,
+            taxAmount,
+            totalAmount,
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            offsetGlAccountId,
+            arAccountId,
+            transactionTypeId: dto.transactionTypeId,
+            taxBreakdown,
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: receivableDocumentInclude,
+        });
       },
-      include: receivableDocumentInclude,
-    });
+    );
     await this.recordAudit(
       user,
       'RECEIVABLE_INVOICE_CREATED',
@@ -389,30 +405,41 @@ export class ReceivablesService {
 
     const { subtotalAmount, taxAmount, totalAmount } =
       this.documentAmounts(dto);
-    const document = await this.prisma.accountingReceivableDocument.create({
-      data: {
-        tenantId: user.tenantId,
-        customerId: customer.id,
-        documentType: AccountingReceivableDocumentType.CREDIT_NOTE,
-        documentNumber: await this.nextDocumentNumber(user.tenantId, 'ARC'),
-        documentDate: new Date(dto.documentDate),
-        currency: dto.currency,
-        exchangeRate: dto.exchangeRate,
-        subtotalAmount,
-        taxAmount,
-        totalAmount,
-        description: this.optional(dto.description),
-        externalReference: this.optional(dto.externalReference),
-        sourceModule: this.optional(dto.sourceModule),
-        sourceRecordId: this.optional(dto.sourceRecordId),
-        offsetGlAccountId: dto.offsetGlAccountId,
-        arAccountId: dto.arAccountId,
-        originalInvoiceId: this.optional(dto.originalInvoiceId),
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
+    const document = await this.withDocumentNumberLock(
+      user.tenantId,
+      'ARC',
+      async (tx) => {
+        const documentNumber = await this.nextDocumentNumber(
+          tx,
+          user.tenantId,
+          'ARC',
+        );
+        return tx.accountingReceivableDocument.create({
+          data: {
+            tenantId: user.tenantId,
+            customerId: customer.id,
+            documentType: AccountingReceivableDocumentType.CREDIT_NOTE,
+            documentNumber,
+            documentDate: new Date(dto.documentDate),
+            currency: dto.currency,
+            exchangeRate: dto.exchangeRate,
+            subtotalAmount,
+            taxAmount,
+            totalAmount,
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            offsetGlAccountId: dto.offsetGlAccountId,
+            arAccountId: dto.arAccountId,
+            originalInvoiceId: this.optional(dto.originalInvoiceId),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: receivableDocumentInclude,
+        });
       },
-      include: receivableDocumentInclude,
-    });
+    );
     await this.recordAudit(
       user,
       'RECEIVABLE_CREDIT_NOTE_CREATED',
@@ -542,27 +569,34 @@ export class ReceivablesService {
       user,
       cashbookDto,
     );
-    const receipt = await this.prisma.accountingReceivableReceipt.create({
-      data: {
-        tenantId: user.tenantId,
-        customerId: customer.id,
-        arAccountId: invoice.arAccountId,
-        cashbookTransactionId: cashbookTransaction.id,
-        receiptNumber: await this.nextReceiptNumber(user.tenantId),
-        receiptDate: new Date(dto.receiptDate),
-        currency: dto.currency,
-        amount: dto.amount,
-        exchangeRate: dto.exchangeRate,
-        reference: this.optional(dto.reference),
-        description: this.optional(dto.description),
-        externalReference: this.optional(dto.externalReference),
-        sourceModule: this.optional(dto.sourceModule),
-        sourceRecordId: this.optional(dto.sourceRecordId),
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
+    const receipt = await this.withDocumentNumberLock(
+      user.tenantId,
+      'ARR',
+      async (tx) => {
+        const receiptNumber = await this.nextReceiptNumber(tx, user.tenantId);
+        return tx.accountingReceivableReceipt.create({
+          data: {
+            tenantId: user.tenantId,
+            customerId: customer.id,
+            arAccountId: invoice.arAccountId,
+            cashbookTransactionId: cashbookTransaction.id,
+            receiptNumber,
+            receiptDate: new Date(dto.receiptDate),
+            currency: dto.currency,
+            amount: dto.amount,
+            exchangeRate: dto.exchangeRate,
+            reference: this.optional(dto.reference),
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: receivableReceiptInclude,
+        });
       },
-      include: receivableReceiptInclude,
-    });
+    );
     await this.prisma.cashbookTransaction.update({
       where: {
         id_tenantId: {
@@ -1584,6 +1618,7 @@ export class ReceivablesService {
     offsetGlAccountId: string;
     taxAmount: Prisma.Decimal;
     taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
+    transactionTypeCode: string;
   }> {
     const transactionType = await this.prisma.transactionType.findFirst({
       where: { id: transactionTypeId, tenantId },
@@ -1649,6 +1684,7 @@ export class ReceivablesService {
       offsetGlAccountId: mainLine.accountId,
       taxAmount,
       taxBreakdown,
+      transactionTypeCode: transactionType.code,
     };
   }
 
@@ -1762,18 +1798,56 @@ export class ReceivablesService {
     return 'OPEN';
   }
 
-  private async nextDocumentNumber(tenantId: string, prefix: string) {
-    const count = await this.prisma.accountingReceivableDocument.count({
+  /** Runs `fn` inside a transaction holding a per-tenant, per-key advisory lock — used to
+   *  make document-numbering race-safe: two concurrent creates can no longer read the same
+   *  count and mint the same number, since the count-then-create is now one atomic section. */
+  private async withDocumentNumberLock<T>(
+    tenantId: string,
+    lockKey: string,
+    fn: (tx: TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${'accounting-doc-number:' + tenantId + ':' + lockKey})
+        )
+      `;
+      return fn(tx);
+    });
+  }
+
+  /** Old scheme — kept for credit notes and receipts, which have no Transaction Type to
+   *  draw a code from. The count is global (never resets), only the lock is new. */
+  private async nextDocumentNumber(
+    tx: TransactionClient,
+    tenantId: string,
+    prefix: string,
+  ) {
+    const count = await tx.accountingReceivableDocument.count({
       where: { tenantId },
     });
     return `${prefix}-${new Date().getUTCFullYear()}-${String(count + 1).padStart(6, '0')}`;
   }
 
-  private async nextReceiptNumber(tenantId: string) {
-    const count = await this.prisma.accountingReceivableReceipt.count({
+  private async nextReceiptNumber(tx: TransactionClient, tenantId: string) {
+    const count = await tx.accountingReceivableReceipt.count({
       where: { tenantId },
     });
     return `ARR-${new Date().getUTCFullYear()}-${String(count + 1).padStart(6, '0')}`;
+  }
+
+  /** New scheme for Rule-driven documents (invoices): <TransactionType code><YY>-<00001>,
+   *  resetting to 1 each calendar year per transaction type. */
+  private async nextRuleDocumentNumber(
+    tx: TransactionClient,
+    tenantId: string,
+    transactionTypeCode: string,
+  ) {
+    const prefix = `${transactionTypeCode}${String(new Date().getUTCFullYear()).slice(-2)}`;
+    const count = await tx.accountingReceivableDocument.count({
+      where: { tenantId, documentNumber: { startsWith: `${prefix}-` } },
+    });
+    return `${prefix}-${String(count + 1).padStart(5, '0')}`;
   }
 
   private addDays(date: string, days: number) {
