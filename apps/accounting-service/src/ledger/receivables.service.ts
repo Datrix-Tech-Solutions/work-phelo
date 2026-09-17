@@ -296,8 +296,13 @@ export class ReceivablesService {
     this.assertCustomerCurrency(customer.currency, dto.currency);
 
     const subtotalAmount = new Prisma.Decimal(dto.amount);
-    const { arAccountId, offsetGlAccountId, taxAmount, taxBreakdown, transactionTypeCode } =
-      await this.resolveRulePosting(
+    const {
+      arAccountId,
+      offsetGlAccountId,
+      taxAmount,
+      taxBreakdown,
+      transactionTypeCode,
+    } = await this.resolveRulePosting(
         user.tenantId,
         dto.transactionTypeId,
         TransactionTypeCategory.RECEIVABLE,
