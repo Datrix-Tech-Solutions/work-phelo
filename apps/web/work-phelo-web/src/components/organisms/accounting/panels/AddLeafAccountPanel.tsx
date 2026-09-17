@@ -156,7 +156,7 @@ export function AddLeafAccountPanel({
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
-            Add Leaf Account
+            {fixedGroup ? 'Add Account' : 'Add Leaf Account'}
           </Button>
         </div>
       }
@@ -205,7 +205,9 @@ export function AddLeafAccountPanel({
                 render={({ field }) => (
                   <SearchSelect
                     label="Classification"
-                    placeholder={isLoadingClassifications ? 'Loading…' : 'Select classification…'}
+                    placeholder={
+                      isLoadingClassifications ? 'Loading…' : 'Select classification…'
+                    }
                     options={classificationOptions}
                     value={field.value}
                     onChange={field.onChange}
