@@ -297,12 +297,12 @@ export class PayablesService {
       taxBreakdown,
       transactionTypeCode,
     } = await this.resolveRulePosting(
-        user.tenantId,
-        dto.transactionTypeId,
-        TransactionTypeCategory.PAYABLE,
-        subtotalAmount,
-        dto.selectedTaxTypeIds,
-      );
+      user.tenantId,
+      dto.transactionTypeId,
+      TransactionTypeCategory.PAYABLE,
+      subtotalAmount,
+      dto.selectedTaxTypeIds,
+    );
     await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
     const totalAmount = subtotalAmount.plus(taxAmount);
 
