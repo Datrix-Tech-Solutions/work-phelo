@@ -264,31 +264,31 @@ const transactionTypeRuleCountInclude = {
 
 const STANDARD_TRANSACTION_TYPES = [
   {
-    code: 'RECEIPT',
+    code: 'RCPT',
     name: 'Receipt',
     category: TransactionTypeCategory.RECEIVABLE,
     description: 'Money received into a cash/bank account.',
   },
   {
-    code: 'PAYMENT',
+    code: 'PMNT',
     name: 'Payment',
     category: TransactionTypeCategory.PAYABLE,
     description: 'Money paid out of a cash/bank account.',
   },
   {
-    code: 'TRANSFER',
+    code: 'TRNSF',
     name: 'Transfer',
     category: TransactionTypeCategory.NEUTRAL,
     description: 'Move funds between two cash/bank accounts.',
   },
   {
-    code: 'CHARGE',
+    code: 'CHRG',
     name: 'Bank Charge',
     category: TransactionTypeCategory.NEUTRAL,
     description: 'A bank fee against a cash/bank account.',
   },
   {
-    code: 'ADJUSTMENT',
+    code: 'ADJST',
     name: 'Adjustment',
     category: TransactionTypeCategory.NONE,
     description: 'Manual correction to a cash/bank account.',
