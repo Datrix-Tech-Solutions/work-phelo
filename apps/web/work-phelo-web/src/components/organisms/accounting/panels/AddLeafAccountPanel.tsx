@@ -4,12 +4,21 @@ import { useEffect } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { GLAccount, GLAccountCategory } from '@/types/accounting';
 import { useAccountClassifications, useAccountGroups, useCreateGLAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+
+interface FixedGroup {
+  accountType: GLAccountCategory;
+  classificationId: string;
+  groupId: string;
+  /** e.g. "Asset > Current Assets > Cash and Bank" */
+  label: string;
+}
 
 interface AddLeafAccountPanelProps {
   isOpen: boolean;
@@ -18,6 +27,11 @@ interface AddLeafAccountPanelProps {
   initialName?: string;
 
   onCreated?: (account: GLAccount) => void;
+
+  /** When set, Account Type/Classification/Parent Account are fixed to this group
+   *  instead of asked — used when the account must always live in one specific place
+   *  (e.g. a Cash/Bank account, always under Asset > Current Assets > Cash and Bank). */
+  fixedGroup?: FixedGroup;
 }
 
 type FormValues = {
@@ -49,6 +63,7 @@ export function AddLeafAccountPanel({
   onClose,
   initialName,
   onCreated,
+  fixedGroup,
 }: AddLeafAccountPanelProps) {
   const toast = useToast();
   const { mutateAsync: createAccount, isPending } = useCreateGLAccount();
@@ -62,10 +77,22 @@ export function AddLeafAccountPanel({
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
-  // Seed the name from whatever the caller had already typed each time the panel opens.
+  // Seed the name from whatever the caller had already typed each time the panel opens —
+  // and pre-fill/lock the type-classification-group chain when it's fixed by the caller.
   useEffect(() => {
-    if (isOpen) reset({ ...DEFAULTS, accountName: initialName ?? '' });
-  }, [isOpen, initialName, reset]);
+    if (!isOpen) return;
+    reset({
+      ...DEFAULTS,
+      accountName: initialName ?? '',
+      ...(fixedGroup
+        ? {
+            accountType: fixedGroup.accountType,
+            classificationId: fixedGroup.classificationId,
+            parentAccountId: fixedGroup.groupId,
+          }
+        : {}),
+    });
+  }, [isOpen, initialName, fixedGroup, reset]);
 
   const accountType = useWatch({ control, name: 'accountType' });
   const classificationId = useWatch({ control, name: 'classificationId' });
@@ -84,12 +111,14 @@ export function AddLeafAccountPanel({
     : [];
 
   useEffect(() => {
+    if (fixedGroup) return;
     setValue('classificationId', '');
-  }, [accountType, setValue]);
+  }, [accountType, fixedGroup, setValue]);
 
   useEffect(() => {
+    if (fixedGroup) return;
     setValue('parentAccountId', '');
-  }, [classificationId, setValue]);
+  }, [classificationId, fixedGroup, setValue]);
 
   const handleClose = () => {
     reset(DEFAULTS);
@@ -115,15 +144,19 @@ export function AddLeafAccountPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Add Leaf Account"
-      description="Add a new posting account under a parent account in the chart of accounts."
+      title={fixedGroup ? 'Add Cash/Bank Account' : 'Add Leaf Account'}
+      description={
+        fixedGroup
+          ? `Adds a new posting account under ${fixedGroup.label}.`
+          : 'Add a new posting account under a parent account in the chart of accounts.'
+      }
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
-            Add Leaf Account
+            {fixedGroup ? 'Add Account' : 'Add Leaf Account'}
           </Button>
         </div>
       }
@@ -144,56 +177,64 @@ export function AddLeafAccountPanel({
           placeholder="e.g. Ecobank"
         />
 
-        <Controller
-          name="accountType"
-          control={control}
-          rules={{ required: 'Account type is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Account Type"
-              placeholder="Select account type…"
-              options={TYPE_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.accountType?.message}
+        {fixedGroup ? (
+          <Input label="Account Group" readOnly value={fixedGroup.label} />
+        ) : (
+          <>
+            <Controller
+              name="accountType"
+              control={control}
+              rules={{ required: 'Account type is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Account Type"
+                  placeholder="Select account type…"
+                  options={TYPE_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.accountType?.message}
+                />
+              )}
             />
-          )}
-        />
 
-        {accountType && (
-          <Controller
-            name="classificationId"
-            control={control}
-            rules={{ required: 'Classification is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Classification"
-                placeholder={isLoadingClassifications ? 'Loading…' : 'Select classification…'}
-                options={classificationOptions}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.classificationId?.message}
+            {accountType && (
+              <Controller
+                name="classificationId"
+                control={control}
+                rules={{ required: 'Classification is required' }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Classification"
+                    placeholder={
+                      isLoadingClassifications ? 'Loading…' : 'Select classification…'
+                    }
+                    options={classificationOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.classificationId?.message}
+                  />
+                )}
               />
             )}
-          />
-        )}
 
-        {classificationId && (
-          <Controller
-            name="parentAccountId"
-            control={control}
-            rules={{ required: 'Parent account is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Parent Account"
-                placeholder={isLoadingGroups ? 'Loading…' : 'Select parent account…'}
-                options={parentAccountOptions}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.parentAccountId?.message}
+            {classificationId && (
+              <Controller
+                name="parentAccountId"
+                control={control}
+                rules={{ required: 'Parent account is required' }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Parent Account"
+                    placeholder={isLoadingGroups ? 'Loading…' : 'Select parent account…'}
+                    options={parentAccountOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.parentAccountId?.message}
+                  />
+                )}
               />
             )}
-          />
+          </>
         )}
       </div>
     </SidePanel>

@@ -12,7 +12,7 @@ import {
   Settings,
   Target,
   Users,
-  // Wallet,
+  Wallet,
   WalletCards,
 } from 'lucide-react';
 
@@ -22,7 +22,7 @@ const ChartOfAccountsIcon = () => <BookOpenText className="w-5 h-5" />;
 const JournalEntriesIcon = () => <NotebookTabsIcon className="w-5 h-5" />;
 // const AccountsPayableIcon = () => <BanknoteArrowUp className="w-5 h-5" />;
 // const AccountsReceivableIcon = () => <BanknoteArrowDown className="w-5 h-5" />;
-// const CashAndBankIcon = () => <Wallet className="w-5 h-5" />;
+const CashAndBankIcon = () => <Wallet className="w-5 h-5" />;
 const FinancialReportsIcon = () => <ChartLine className="w-5 h-5" />;
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
 const BudgetIcon = () => <Target className="w-5 h-5" />;
@@ -52,6 +52,19 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         label: 'Transactions',
         icon: <ReceiptText />,
         href: 'transactions',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
+    label: 'Cash and Bank',
+    items: [
+      {
+        key: 'cash-and-bank',
+        label: 'Cash and Bank',
+        icon: <CashAndBankIcon />,
+        href: 'cashandbank',
         enabled: true,
         active: true,
       },
@@ -198,14 +211,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
   //       enabled: true,
   //       active: true,
   //       exact: true,
-  //     },
-  //     {
-  //       key: 'cash-and-bank',
-  //       label: 'Cash and Bank',
-  //       icon: <CashAndBankIcon />,
-  //       href: 'cashandbank',
-  //       enabled: true,
-  //       active: true,
   //     },
   //   ],
   // },

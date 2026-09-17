@@ -70,10 +70,7 @@ export class AccountsController {
     @Query() query: QueryAccountHierarchyDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.masterData.listAccountClassifications(
-      request.user.tenantId,
-      query,
-    );
+    return this.masterData.listAccountClassifications(request.user, query);
   }
 
   @Post('account-classifications')

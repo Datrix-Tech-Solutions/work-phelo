@@ -26,6 +26,7 @@ import { extractError } from '@/lib/extractError';
 
 type FormValues = {
   amount: string;
+  cashAccountId: string;
   settlementMethod: AccountingCashbookSettlementMethod | '';
   reference: string;
   paymentDate: string;
@@ -37,6 +38,7 @@ function today() {
 
 const DEFAULTS: FormValues = {
   amount: '',
+  cashAccountId: '',
   settlementMethod: '',
   reference: '',
   paymentDate: '',
@@ -79,8 +81,8 @@ export function MakePaymentPanel({
   const outstanding = balance?.outstandingAmount ?? document?.totalAmount ?? '0';
   const amountPaid = balance?.appliedSettlements ?? '0';
 
-  const { options: cashAccountOptions } = useCashAccountOptions();
-  const defaultCashAccountId = cashAccountOptions[0]?.value;
+  const { options: cashAccountOptions, isLoading: isLoadingCashAccounts } =
+    useCashAccountOptions();
 
   const createReceipt = useCreateReceivableReceipt();
   const createPayment = useCreatePayablePayment();
@@ -105,7 +107,12 @@ export function MakePaymentPanel({
 
   useEffect(() => {
     if (!isOpen) return;
-    reset({ ...DEFAULTS, amount: Number(outstanding) > 0 ? outstanding : '', paymentDate: today() });
+    reset({
+      ...DEFAULTS,
+      amount: Number(outstanding) > 0 ? outstanding : '',
+      cashAccountId: cashAccountOptions[0]?.value ?? '',
+      paymentDate: today(),
+    });
     // Only re-prefill when a different document is opened — not on every balance refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, document?.id, reset]);
@@ -117,8 +124,8 @@ export function MakePaymentPanel({
 
   const onSubmit = async (values: FormValues) => {
     if (!document) return;
-    if (!defaultCashAccountId) {
-      toast.error('No active cash/bank account is configured.');
+    if (!values.cashAccountId) {
+      toast.error('Select a cash/bank account.');
       return;
     }
 
@@ -126,7 +133,7 @@ export function MakePaymentPanel({
       const settlement = await createSettlement.mutateAsync({
         partyId: document.party.id,
         documentId: document.id,
-        cashAccountId: defaultCashAccountId,
+        cashAccountId: values.cashAccountId,
         amount: Number(values.amount),
         currency: document.currency,
         settlementDate: values.paymentDate,
@@ -198,6 +205,22 @@ export function MakePaymentPanel({
                 lockCurrency
                 onValueChange={field.onChange}
                 error={errors.amount?.message}
+              />
+            )}
+          />
+
+          <Controller
+            name="cashAccountId"
+            control={control}
+            rules={{ required: 'Cash/bank account is required' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Cash/Bank Account"
+                placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select cash/bank account…'}
+                options={cashAccountOptions}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.cashAccountId?.message}
               />
             )}
           />
