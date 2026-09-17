@@ -13,11 +13,15 @@ import {
 import { useAccountGroups, useCashAccounts, useGLAccounts, useUpdateCashAccount } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
+import { AddCashAndBankAccountPanel } from '@/components/organisms/accounting/panels/AddCashAndBankAccountPanel';
 import { EditCashAccountPanel } from '@/components/organisms/accounting/panels/EditCashAccountPanel';
 import { CompleteCashAccountSetupPanel } from '@/components/organisms/accounting/panels/CompleteCashAccountSetupPanel';
 
 const PAGE_SIZE = 10;
+
+/** Standard account hierarchy code for the seeded "Cash and Bank" group under
+ *  Current Assets — see STANDARD_ACCOUNT_HIERARCHY in accounting-master-data.service.ts. */
+const CASH_AND_BANK_GROUP_CODE = '1110';
 
 const KIND_LABEL: Record<AccountingCashAccountKind, string> = {
   BANK: 'Bank',
@@ -52,7 +56,7 @@ export function CashAccountsTable() {
   const isLoading = isLoadingCashAccounts || isLoadingGLAccounts || isLoadingGroups;
 
   const cashAndBankGroup = useMemo(
-    () => (groupsData?.items ?? []).find((g) => g.code === 'CASH_AND_BANK'),
+    () => (groupsData?.items ?? []).find((g) => g.code === CASH_AND_BANK_GROUP_CODE),
     [groupsData],
   );
 
@@ -268,14 +272,10 @@ export function CashAccountsTable() {
         }
       />
 
-      <AddLeafAccountPanel
+      <AddCashAndBankAccountPanel
         isOpen={addPanelOpen}
         onClose={() => setAddPanelOpen(false)}
         fixedGroup={fixedGroup}
-        onCreated={(account) => {
-          setAddPanelOpen(false);
-          setSetupTarget(account);
-        }}
       />
 
       <EditCashAccountPanel account={editTarget} onClose={() => setEditTarget(null)} />

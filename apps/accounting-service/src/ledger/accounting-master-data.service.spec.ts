@@ -652,7 +652,7 @@ describe('AccountingMasterDataService', () => {
     prisma.accountClassification.create.mockResolvedValue({
       id: 'classification-1',
       tenantId: actor.tenantId,
-      code: 'CURRENT_ASSETS',
+      code: '1100',
       category: GLAccountCategory.ASSET,
     });
     prisma.accountGroup.findUnique.mockResolvedValue(null);
@@ -678,7 +678,7 @@ describe('AccountingMasterDataService', () => {
       >
     ).mock.calls[0][0];
     expect(classificationCreateCall.data.tenantId).toBe(actor.tenantId);
-    expect(classificationCreateCall.data.code).toBe('CURRENT_ASSETS');
+    expect(classificationCreateCall.data.code).toBe('1100');
     expect(classificationCreateCall.data.isSystemTemplate).toBe(true);
   });
 
@@ -700,7 +700,7 @@ describe('AccountingMasterDataService', () => {
     prisma.accountClassification.findUniqueOrThrow.mockResolvedValue({
       id: 'classification-1',
       tenantId: actor.tenantId,
-      code: 'CURRENT_ASSETS',
+      code: '1100',
       category: GLAccountCategory.ASSET,
     });
     prisma.accountGroup.findUnique.mockResolvedValue({

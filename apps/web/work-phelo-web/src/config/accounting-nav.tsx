@@ -58,19 +58,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Cash and Bank',
-    items: [
-      {
-        key: 'cash-and-bank',
-        label: 'Cash and Bank',
-        icon: <CashAndBankIcon />,
-        href: 'cashandbank',
-        enabled: true,
-        active: true,
-      },
-    ],
-  },
-  {
     label: 'Sales & Revenue',
     items: [
       // {
@@ -99,14 +86,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Accounting',
     items: [
-      {
-        key: 'ap-entities',
-        label: 'Entities',
-        icon: <EntitiesIcon />,
-        href: 'entities',
-        enabled: true,
-        active: true,
-      },
+      
       {
         key: 'chart-of-accounts',
         label: 'Chart of Accounts',
@@ -120,6 +100,22 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         label: 'Journal Entries',
         icon: <JournalEntriesIcon />,
         href: 'journalentry',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'cash-and-bank',
+        label: 'Cash and Bank',
+        icon: <CashAndBankIcon />,
+        href: 'cashandbank',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'ap-entities',
+        label: 'Entities',
+        icon: <EntitiesIcon />,
+        href: 'entities',
         enabled: true,
         active: true,
       },
