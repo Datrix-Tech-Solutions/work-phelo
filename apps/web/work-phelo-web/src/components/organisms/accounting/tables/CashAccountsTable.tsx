@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -38,6 +40,8 @@ type Row =
   | { id: string; status: 'incomplete'; glAccount: GLAccount };
 
 export function CashAccountsTable() {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [deactivateTarget, setDeactivateTarget] = useState<AccountingCashAccount | null>(null);
@@ -230,6 +234,11 @@ export function CashAccountsTable() {
           label: 'Add Cash/Bank Account',
           onClick: () => setAddPanelOpen(true),
         }}
+        onRowClick={(row) => {
+          if (row.status === 'complete') {
+            router.push(`/${tenantSlug}/accounting/cashandbank/${row.cashAccount.id}`);
+          }
+        }}
         rowActions={(row) =>
           row.status === 'complete'
             ? [
@@ -249,6 +258,7 @@ export function CashAccountsTable() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       <Modal

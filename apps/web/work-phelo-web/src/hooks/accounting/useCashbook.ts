@@ -94,6 +94,46 @@ export function useCashAndBankStats() {
   });
 }
 
+export interface CashAccountStats {
+  inflow: Record<string, number>;
+  outflow: Record<string, number>;
+  net: Record<string, number>;
+}
+
+/** All-time inflow/outflow/net for one Cash/Bank account, computed the same way as
+ *  useCashAndBankStats (per-currency, no FX guessing) — Cashbook has no per-account
+ *  aggregate endpoint. */
+export function useCashAccountStats(cashAccountId: string | undefined) {
+  return useQuery({
+    queryKey: [...CASHBOOK_KEY, 'account-stats', cashAccountId],
+    queryFn: async (): Promise<CashAccountStats> => {
+      const first = await api.get<PaginatedResult<CashbookTransaction>>(BASE, {
+        params: { cashAccountId, status: 'POSTED', page: 1, limit: 100 },
+      });
+      const pages = await Promise.all(
+        Array.from({ length: Math.max(0, first.data.totalPages - 1) }, (_, index) =>
+          api.get<PaginatedResult<CashbookTransaction>>(BASE, {
+            params: { cashAccountId, status: 'POSTED', page: index + 2, limit: 100 },
+          }),
+        ),
+      );
+      const transactions = [first.data, ...pages.map((page) => page.data)].flatMap(
+        (page) => page.items,
+      );
+      const stats: CashAccountStats = { inflow: {}, outflow: {}, net: {} };
+
+      for (const transaction of transactions) {
+        if (transaction.direction === 'TRANSFER') continue;
+        const isInflow = transaction.direction === 'INFLOW';
+        add(isInflow ? stats.inflow : stats.outflow, transaction.currency, transaction.amount);
+        add(stats.net, transaction.currency, `${isInflow ? '' : '-'}${transaction.amount}`);
+      }
+      return stats;
+    },
+    enabled: !!cashAccountId,
+  });
+}
+
 export function useCashbookTransaction(transactionId: string | undefined) {
   return useQuery({
     queryKey: [...CASHBOOK_KEY, transactionId],

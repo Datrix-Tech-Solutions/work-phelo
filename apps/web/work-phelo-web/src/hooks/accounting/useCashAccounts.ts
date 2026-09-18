@@ -24,6 +24,17 @@ export function useCashAccounts(params: QueryCashAccountsParams = {}) {
   });
 }
 
+export function useCashAccount(id: string | undefined) {
+  return useQuery({
+    queryKey: [...CASH_ACCOUNTS_KEY, id],
+    queryFn: async () => {
+      const res = await api.get<AccountingCashAccount>(`${BASE}/${id}`);
+      return res.data;
+    },
+    enabled: !!id,
+  });
+}
+
 export function useCreateCashAccount() {
   const queryClient = useQueryClient();
   return useMutation({

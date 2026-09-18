@@ -22,6 +22,7 @@ import {
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
 import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
+import { BulkPaymentPanel } from '@/components/organisms/accounting/panels/BulkPaymentPanel';
 import {
   TRANSACTION_TYPE_CATEGORY_CHIP_COLOR,
   TRANSACTION_TYPE_CATEGORY_LABEL,
@@ -55,6 +56,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<AccountingTradeDocument | null>(null);
   const [newTransactionOpen, setNewTransactionOpen] = useState(false);
+  const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<TransactionTypeDefinition | null | undefined>(
     undefined,
   );
@@ -82,6 +84,14 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }, [invoices.data, bills.data, receivableCreditNotes.data, payableCreditNotes.data]);
+
+  // On an entity's page, "New Transaction" doesn't make sense — offer the payment
+  // action for whichever side actually has documents here instead.
+  const bulkPaymentSide = useMemo(() => {
+    const payableCount = transactions.filter((t) => t.side === 'PAYABLE').length;
+    const receivableCount = transactions.filter((t) => t.side === 'RECEIVABLE').length;
+    return payableCount > receivableCount ? 'PAYABLE' : 'RECEIVABLE';
+  }, [transactions]);
 
   const filtered = useMemo(() => {
     if (!search) return transactions;
@@ -211,7 +221,14 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           setPage(1);
         }}
         onRowClick={(row) => setDetailTarget(row)}
-        actionButton={{ label: 'New Transaction', onClick: () => setNewTransactionOpen(true) }}
+        actionButton={
+          partyId
+            ? {
+                label: bulkPaymentSide === 'PAYABLE' ? 'Make Payment' : 'Receive Payment',
+                onClick: () => setBulkPaymentOpen(true),
+              }
+            : { label: 'New Transaction', onClick: () => setNewTransactionOpen(true) }
+        }
         emptyMessage="No transactions found"
         currentPage={page}
         totalPages={totalPages}
@@ -284,6 +301,15 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       />
 
       <MakePaymentPanel document={paymentTarget} onClose={() => setPaymentTarget(null)} />
+
+      {partyId && (
+        <BulkPaymentPanel
+          isOpen={bulkPaymentOpen}
+          onClose={() => setBulkPaymentOpen(false)}
+          side={bulkPaymentSide}
+          partyId={partyId}
+        />
+      )}
     </>
   );
 }
