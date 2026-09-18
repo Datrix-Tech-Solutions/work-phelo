@@ -109,6 +109,19 @@ const NORMAL_BALANCE_BY_CATEGORY: Record<GLAccountCategory, NormalBalance> = {
   [GLAccountCategory.EXPENSE]: NormalBalance.DEBIT,
 };
 
+// The numbering blocks every classification/group/GL account code must fall inside,
+// keyed by GL account category. Mirrors STANDARD_ACCOUNT_HIERARCHY above.
+const CATEGORY_CODE_RANGES: Record<
+  GLAccountCategory,
+  { min: number; max: number }
+> = {
+  [GLAccountCategory.ASSET]: { min: 1000, max: 1999 },
+  [GLAccountCategory.LIABILITY]: { min: 2000, max: 2999 },
+  [GLAccountCategory.EQUITY]: { min: 3000, max: 3999 },
+  [GLAccountCategory.REVENUE]: { min: 4000, max: 4999 },
+  [GLAccountCategory.EXPENSE]: { min: 5000, max: 5999 },
+};
+
 // Trimmed to exactly what every tenant structurally needs — one group per category
 // that a Cash Account, Transaction Type Rule, or Bill/Invoice offset line must be able
 // to point at. Nothing here is looked up by code elsewhere in the app (forms all pick
@@ -658,12 +671,17 @@ export class AccountingMasterDataService {
       user.tenantId,
       dto,
     );
+    this.assertCodeInCategoryRange(dto.code, hierarchy.category, 'GL account');
+    if (hierarchy.groupCode) {
+      this.assertCodeWithinBand(dto.code, hierarchy.groupCode, 'GL account');
+    }
     await this.assertParentAccount(
       user.tenantId,
       undefined,
       dto.parentAccountId,
       hierarchy.category,
       dto.accountGroupId ?? null,
+      dto.code,
     );
     try {
       const account = await this.prisma.gLAccount.create({
@@ -714,12 +732,18 @@ export class AccountingMasterDataService {
       dto.accountGroupId !== undefined
         ? dto.accountGroupId || null
         : account.accountGroupId;
+    const nextCode = dto.code ?? account.code;
+    this.assertCodeInCategoryRange(nextCode, nextCategory, 'GL account');
+    if (hierarchy.groupCode) {
+      this.assertCodeWithinBand(nextCode, hierarchy.groupCode, 'GL account');
+    }
     await this.assertParentAccount(
       user.tenantId,
       account.id,
       dto.parentAccountId ?? account.parentAccountId ?? undefined,
       nextCategory,
       nextAccountGroupId,
+      nextCode,
     );
     if (dto.allowPosting === true) {
       const childCount = await this.prisma.gLAccount.count({
@@ -853,6 +877,11 @@ export class AccountingMasterDataService {
     user: RequestUser,
     dto: CreateAccountClassificationDto,
   ) {
+    this.assertCodeInCategoryRange(
+      dto.code,
+      dto.category,
+      'Account classification',
+    );
     try {
       const classification = await this.prisma.accountClassification.create({
         data: {
@@ -902,6 +931,11 @@ export class AccountingMasterDataService {
         );
       }
     }
+    this.assertCodeInCategoryRange(
+      dto.code ?? classification.code,
+      dto.category ?? classification.category,
+      'Account classification',
+    );
     try {
       const updated = await this.prisma.accountClassification.update({
         where: {
@@ -1000,7 +1034,11 @@ export class AccountingMasterDataService {
   }
 
   async createAccountGroup(user: RequestUser, dto: CreateAccountGroupDto) {
-    await this.assertActiveClassification(user.tenantId, dto.classificationId);
+    const classification = await this.assertActiveClassification(
+      user.tenantId,
+      dto.classificationId,
+    );
+    this.assertCodeWithinBand(dto.code, classification.code, 'Account group');
     try {
       const group = await this.prisma.accountGroup.create({
         data: {
@@ -1044,11 +1082,12 @@ export class AccountingMasterDataService {
     dto: UpdateAccountGroupDto,
   ) {
     const group = await this.findAccountGroup(user.tenantId, groupId);
+    let targetClassification = group.classification;
     if (
       dto.classificationId &&
       dto.classificationId !== group.classificationId
     ) {
-      await this.assertActiveClassification(
+      targetClassification = await this.assertActiveClassification(
         user.tenantId,
         dto.classificationId,
       );
@@ -1061,6 +1100,11 @@ export class AccountingMasterDataService {
         );
       }
     }
+    this.assertCodeWithinBand(
+      dto.code ?? group.code,
+      targetClassification.code,
+      'Account group',
+    );
     try {
       const updated = await this.prisma.accountGroup.update({
         where: { id_tenantId: { id: group.id, tenantId: user.tenantId } },
@@ -2034,7 +2078,7 @@ export class AccountingMasterDataService {
           'GL account normal balance must match the selected account group category',
         );
       }
-      return { category, normalBalance };
+      return { category, normalBalance, groupCode: group.code };
     }
 
     if (!dto.category) {
@@ -2048,7 +2092,7 @@ export class AccountingMasterDataService {
         'GL account normal balance must match the account category',
       );
     }
-    return { category: dto.category, normalBalance };
+    return { category: dto.category, normalBalance, groupCode: null };
   }
 
   private async resolveAccountHierarchyForUpdate(
@@ -2077,7 +2121,7 @@ export class AccountingMasterDataService {
           'GL account normal balance must match the selected account group category',
         );
       }
-      return { category, normalBalance };
+      return { category, normalBalance, groupCode: group.code };
     }
 
     if (account.accountGroupId && dto.accountGroupId === undefined) {
@@ -2091,9 +2135,14 @@ export class AccountingMasterDataService {
           'Clear accountGroupId before overriding a grouped GL account normal balance',
         );
       }
+      const group = await this.findAccountGroup(
+        tenantId,
+        account.accountGroupId,
+      );
       return {
         category: account.category,
         normalBalance: account.normalBalance,
+        groupCode: group.code,
       };
     }
 
@@ -2104,7 +2153,58 @@ export class AccountingMasterDataService {
         'GL account normal balance must match the account category',
       );
     }
-    return { category, normalBalance };
+    return { category, normalBalance, groupCode: null };
+  }
+
+  /** Parses a chart-of-accounts code as a positive whole number, e.g. "1100" -> 1100. */
+  private parseAccountCode(code: string, label: string): number {
+    if (!/^\d+$/.test(code)) {
+      throw new BadRequestException(`${label} code must be numeric`);
+    }
+    return Number(code);
+  }
+
+  private assertCodeInCategoryRange(
+    code: string,
+    category: GLAccountCategory,
+    label: string,
+  ) {
+    const range = CATEGORY_CODE_RANGES[category];
+    const numeric = this.parseAccountCode(code, label);
+    if (numeric < range.min || numeric > range.max) {
+      throw new BadRequestException(
+        `${label} code must be between ${range.min} and ${range.max} for ${category} accounts`,
+      );
+    }
+  }
+
+  /**
+   * The numbering block a code reserves for its children, derived from its trailing
+   * zeros (1100 -> 1100-1199, 1110 -> 1110-1119) rather than a hardcoded depth, so it
+   * keeps working as the hierarchy gets deeper.
+   */
+  private codeBand(
+    code: string,
+    label: string,
+  ): { start: number; end: number } {
+    const numeric = this.parseAccountCode(code, label);
+    let width = 1;
+    while (width < 1000 && numeric % (width * 10) === 0) width *= 10;
+    return { start: numeric, end: numeric + width - 1 };
+  }
+
+  private assertCodeWithinBand(
+    code: string,
+    parentCode: string,
+    label: string,
+  ) {
+    const numeric = this.parseAccountCode(code, label);
+    const band = this.codeBand(parentCode, label);
+    if (numeric < band.start || numeric > band.end) {
+      throw new BadRequestException(
+        `${label} code must be between ${band.start} and ${band.end} to stay within parent code ${parentCode}`,
+      );
+    }
   }
 
   private async recordAudit(
@@ -2172,6 +2272,7 @@ export class AccountingMasterDataService {
     parentAccountId: string | undefined,
     category: GLAccountCategory,
     accountGroupId: string | null,
+    code: string,
   ) {
     if (!parentAccountId) return;
     if (accountId === parentAccountId) {
@@ -2194,6 +2295,7 @@ export class AccountingMasterDataService {
         'Parent and child GL accounts must use the same account group',
       );
     }
+    this.assertCodeWithinBand(code, parent.code, 'GL account');
     let ancestorId = parent.parentAccountId;
     while (ancestorId) {
       if (ancestorId === accountId) {

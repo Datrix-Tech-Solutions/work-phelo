@@ -7,11 +7,8 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import {
-  AccountingCashAccount,
-  AccountingCashAccountKind,
-  GLAccount,
-} from '@/types/accounting';
+import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
+import { AccountingCashAccount, AccountingCashAccountKind, GLAccount } from '@/types/accounting';
 import { useAccountGroups, useCashAccounts, useGLAccounts, useUpdateCashAccount } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
@@ -32,9 +29,18 @@ const KIND_LABEL: Record<AccountingCashAccountKind, string> = {
   OTHER: 'Other',
 };
 
-/** A row is either a fully set-up Cash Account, or a leaf GL account already created
- *  under Chart of Accounts > Cash and Bank that's still waiting to be completed —
- *  it's visible here as soon as it exists, but can't be used for payments until then. */
+const KIND_CHIP_COLOR: Record<AccountingCashAccountKind, TypeChipColor> = {
+  BANK: 'blue',
+  CASH: 'green',
+  MOBILE_MONEY: 'amber',
+  OTHER: 'gray',
+};
+
+function fmtAmount(amount: string, currency: string) {
+  const value = Number(amount);
+  return `${currency} ${Number.isFinite(value) ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amount}`;
+}
+
 type Row =
   | { id: string; status: 'complete'; cashAccount: AccountingCashAccount }
   | { id: string; status: 'incomplete'; glAccount: GLAccount };
@@ -101,17 +107,17 @@ export function CashAccountsTable() {
       {
         key: 'name',
         label: 'Account Name',
-        width: 'minmax(180px, 1fr)',
+        width: 'minmax(150px, 1fr)',
         render: (row) =>
           row.status === 'complete' ? (
             <div className="flex flex-col">
-              <span className="font-medium text-gray-900">{row.cashAccount.name}</span>
+              <span className="font-semibold text-gray-900">{row.cashAccount.name}</span>
               {row.cashAccount.bankName && (
                 <span className="text-xs text-gray-400">{row.cashAccount.bankName}</span>
               )}
             </div>
           ) : (
-            <span className="font-medium text-gray-900">{row.glAccount.name}</span>
+            <span className="font-semibold text-gray-900">{row.glAccount.name}</span>
           ),
       },
       {
@@ -120,9 +126,10 @@ export function CashAccountsTable() {
         width: '130px',
         render: (row) =>
           row.status === 'complete' ? (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-              {KIND_LABEL[row.cashAccount.accountKind]}
-            </span>
+            <TypeChip
+              label={KIND_LABEL[row.cashAccount.accountKind]}
+              color={KIND_CHIP_COLOR[row.cashAccount.accountKind]}
+            />
           ) : (
             <span className="text-gray-400 text-sm">—</span>
           ),
@@ -130,10 +137,23 @@ export function CashAccountsTable() {
       {
         key: 'currency',
         label: 'Currency',
-        width: '100px',
+        width: '90px',
         render: (row) => (
-          <span className="text-gray-700 text-sm">
+          <span className="text-gray-700 text-xs font-semibold">
             {row.status === 'complete' ? row.cashAccount.currency : '—'}
+          </span>
+        ),
+      },
+      {
+        key: 'balance',
+        label: 'Cash Position',
+        width: '150px',
+        className: 'text-right pr-6',
+        render: (row) => (
+          <span className="block text-right text-sm font-bold text-gray-900">
+            {row.status === 'complete'
+              ? fmtAmount(row.cashAccount.balance, row.cashAccount.currency)
+              : '—'}
           </span>
         ),
       },
@@ -142,7 +162,7 @@ export function CashAccountsTable() {
         label: 'Account No.',
         width: '150px',
         render: (row) => (
-          <span className="text-gray-600 text-sm">
+          <span className="text-gray-600 text-sm font-bold">
             {row.status === 'complete' ? (row.cashAccount.accountNumber ?? '—') : '—'}
           </span>
         ),
@@ -150,11 +170,11 @@ export function CashAccountsTable() {
       {
         key: 'glAccount',
         label: 'GL Account',
-        width: 'minmax(160px, 1fr)',
+        width: 'minmax(140px, 1fr)',
         render: (row) => {
           const gl = row.status === 'complete' ? row.cashAccount.glAccount : row.glAccount;
           return (
-            <span className="text-gray-700 text-sm">
+            <span className="text-gray-700 text-xs font-semibold">
               {gl.code} – {gl.name}
             </span>
           );
@@ -163,7 +183,7 @@ export function CashAccountsTable() {
       {
         key: 'isActive',
         label: 'Status',
-        width: '130px',
+        width: '80px',
         render: (row) =>
           row.status === 'complete' ? (
             <Badge
@@ -209,8 +229,7 @@ export function CashAccountsTable() {
         );
       }
       return (
-        row.glAccount.name.toLowerCase().includes(q) ||
-        row.glAccount.code.toLowerCase().includes(q)
+        row.glAccount.name.toLowerCase().includes(q) || row.glAccount.code.toLowerCase().includes(q)
       );
     });
   }, [search, rows]);

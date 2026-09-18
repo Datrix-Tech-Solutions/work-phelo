@@ -39,8 +39,19 @@ import { ResignationPanel } from '@/components/organisms/hr/employee/resignation
 import { ApplyLeavePanel } from '@/components/organisms/hr/leave/ApplyLeavePanel';
 import { EmployeePermissionsPanel } from '@/components/organisms/roles/EmployeePermissionsPanel';
 import { AssignPermissionPanel } from '@/components/organisms/roles/assignPermissionPanel';
+import { RecordsSection } from '@/components/organisms/hr/time-clock/RecordSection';
+import { CorrectionsSection } from '@/components/organisms/hr/time-clock/CorrectionSection';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
 import { useLeaveBalances } from '@/hooks/hr/useLeave';
+import {
+  useAttendanceRecords,
+  useCorrectionRequests,
+  useReviewCorrectionRequest,
+} from '@/hooks/hr/useTimeClock';
+import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 import { EmployeeDetailSkeleton } from '@/components/molecules/hr/employees/employeeDetailSkeleton';
+import { formatDate } from '@/lib/formatters';
 import type { LeaveBalance, UpdateEmployeePayload } from '@/types/hr';
 
 type ProfileTab =
@@ -49,7 +60,9 @@ type ProfileTab =
   | 'banking'
   | 'documents'
   | 'announcements'
-  | 'scheduling';
+  | 'scheduling'
+  | 'clockInHistory'
+  | 'timeCorrection';
 
 export function ProfileContent() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -91,6 +104,9 @@ export function ProfileContent() {
   const canApproveShiftSwap = usePermission(Permission.APPROVE_SHIFT_SWAP);
   const canAccessScheduling = canReadSchedules || canManageSchedules || canApproveShiftSwap;
   const canAccessProjects = Boolean(user?.featureConfig?.hr?.projects);
+  const canManageTime = usePermission(Permission.APPROVE_TIME_CORRECTION);
+  const isAdmin = user?.role === 'TENANT_ADMIN';
+  const canApproveCorrections = canManageTime || isAdmin;
 
   const canCreateAppraisal = usePermission(Permission.CREATE_APPRAISAL);
   const canConfigureAppraisal = usePermission(Permission.CONFIGURE_APPRAISAL);
@@ -100,11 +116,64 @@ export function ProfileContent() {
   const [appraisalSearch, setAppraisalSearch] = useState('');
   const [appraisalPage, setAppraisalPage] = useState(1);
 
+  // Clock-in history
+  const [recordsPage, setRecordsPage] = useState(1);
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+  const [filterDept, setFilterDept] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [recordsSearch, setRecordsSearch] = useState('');
+  const { data: recordsData, isLoading: recordsLoading } = useAttendanceRecords({
+    page: recordsPage,
+    fromDate: filterFrom,
+    toDate: filterTo,
+    departmentId: filterDept,
+    status: filterStatus,
+    search: recordsSearch,
+  });
+  const { data: departmentsRaw } = useDepartmentOptions();
+  const departments = Array.isArray(departmentsRaw) ? departmentsRaw : [];
+
+  // Time correction
+  const [correctionStatusFilter, setCorrectionStatusFilter] = useState<
+    'PENDING' | 'APPROVED' | 'REJECTED'
+  >('PENDING');
+  const { data: corrections = [], isLoading: correctionsLoading } = useCorrectionRequests(
+    correctionStatusFilter,
+    { enabled: canApproveCorrections },
+  );
+  const { data: pendingCorrections = [] } = useCorrectionRequests('PENDING', {
+    enabled: canApproveCorrections,
+  });
+  const { mutate: reviewCorrection, isPending: isReviewing } = useReviewCorrectionRequest();
+  const [reviewTarget, setReviewTarget] = useState<{
+    req: { id: string; employeeName?: string; date: string };
+    action: 'APPROVED' | 'REJECTED';
+  } | null>(null);
+
+  const handleReview = () => {
+    if (!reviewTarget) return;
+    reviewCorrection(
+      { id: reviewTarget.req.id, action: reviewTarget.action },
+      {
+        onSuccess: () => {
+          toast.success(
+            reviewTarget.action === 'APPROVED' ? 'Correction approved' : 'Correction rejected',
+          );
+          setReviewTarget(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to review correction')),
+      },
+    );
+  };
+
   const TABS = [
     { key: 'personal', label: 'My Data' },
     { key: 'performance', label: 'Performance' },
     { key: 'banking', label: 'My Payslip' },
     { key: 'documents', label: 'My Documents' },
+    { key: 'clockInHistory', label: 'Clock In History' },
+    canApproveCorrections && { key: 'timeCorrection', label: 'Time Correction' },
     canAccessAnnouncements && { key: 'announcements', label: 'Announcements' },
     canAccessScheduling && { key: 'scheduling', label: 'Smart Scheduling' },
   ].filter((tab): tab is { key: string; label: string } => Boolean(tab));
@@ -264,6 +333,37 @@ export function ProfileContent() {
 
           {activeTab === 'documents' && <div />}
 
+          {activeTab === 'clockInHistory' && (
+            <RecordsSection
+              recordsData={recordsData}
+              recordsLoading={recordsLoading}
+              recordsPage={recordsPage}
+              onRecordsPageChange={setRecordsPage}
+              filterFrom={filterFrom}
+              filterTo={filterTo}
+              filterDept={filterDept}
+              filterStatus={filterStatus}
+              recordsSearch={recordsSearch}
+              onFilterFromChange={setFilterFrom}
+              onFilterToChange={setFilterTo}
+              onFilterDeptChange={setFilterDept}
+              onFilterStatusChange={setFilterStatus}
+              onRecordsSearchChange={setRecordsSearch}
+              departments={departments}
+            />
+          )}
+
+          {activeTab === 'timeCorrection' && canApproveCorrections && (
+            <CorrectionsSection
+              corrections={corrections}
+              correctionsLoading={correctionsLoading}
+              correctionStatusFilter={correctionStatusFilter}
+              onStatusFilterChange={setCorrectionStatusFilter}
+              pendingCount={pendingCorrections.length}
+              onReview={(req, action) => setReviewTarget({ req, action })}
+            />
+          )}
+
           {activeTab === 'announcements' && canAccessAnnouncements && (
             <div className="flex flex-col gap-6">
               <AnnouncementsContent />
@@ -329,6 +429,30 @@ export function ProfileContent() {
           userId={employee.userId}
         />
       )}
+      <Modal
+        isOpen={!!reviewTarget}
+        onClose={() => setReviewTarget(null)}
+        title={reviewTarget?.action === 'APPROVED' ? 'Approve Correction' : 'Reject Correction'}
+        description={
+          reviewTarget
+            ? `${reviewTarget.action === 'APPROVED' ? 'Approve' : 'Reject'} the correction request from ${reviewTarget.req.employeeName ?? 'this employee'} for ${formatDate(reviewTarget.req.date)}?`
+            : ''
+        }
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setReviewTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant={reviewTarget?.action === 'APPROVED' ? 'primary' : 'danger'}
+              isLoading={isReviewing}
+              onClick={handleReview}
+            >
+              {reviewTarget?.action === 'APPROVED' ? 'Approve' : 'Reject'}
+            </Button>
+          </div>
+        }
+      />
     </div>
   );
 }

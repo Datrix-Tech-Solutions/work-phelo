@@ -741,6 +741,9 @@ export interface AccountingCashAccount {
   accountKind: AccountingCashAccountKind;
   currency: string;
   glAccountId: string;
+  /** The account's GL running balance (i.e. its cash position) as of now — computed
+   *  server-side from posted journal lines, not a stored field. */
+  balance: string;
   bankName: string | null;
   accountNumber: string | null;
   branch: string | null;

@@ -13,6 +13,7 @@ import {
   FiscalPeriodStatus,
   GLAccountCategory,
   JournalStatus,
+  NormalBalance,
   Prisma,
   RecordStatus,
 } from '../../prisma/generated/client';
@@ -34,8 +35,18 @@ import { CreateJournalDto, JournalLineDto } from './dto/accounting.dto';
 import { JournalsService } from './journals.service';
 
 const cashAccountInclude = {
-  glAccount: { select: { id: true, code: true, name: true, category: true } },
+  glAccount: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      category: true,
+      normalBalance: true,
+    },
+  },
 } satisfies Prisma.AccountingCashAccountInclude;
+
+const zero = new Prisma.Decimal(0);
 
 const cashbookInclude = {
   cashAccount: {
@@ -107,8 +118,8 @@ export class CashbookService {
     private readonly journals: JournalsService,
   ) {}
 
-  listCashAccounts(tenantId: string, query: QueryCashAccountsDto) {
-    return this.prisma.accountingCashAccount.findMany({
+  async listCashAccounts(tenantId: string, query: QueryCashAccountsDto) {
+    const accounts = await this.prisma.accountingCashAccount.findMany({
       where: {
         tenantId,
         ...(query.accountKind ? { accountKind: query.accountKind } : {}),
@@ -118,6 +129,7 @@ export class CashbookService {
       include: cashAccountInclude,
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     });
+    return this.attachCashBalances(tenantId, accounts);
   }
 
   async getCashAccount(user: RequestUser, cashAccountId: string) {
@@ -126,7 +138,60 @@ export class CashbookService {
       include: cashAccountInclude,
     });
     if (!account) throw new NotFoundException('Cash account not found');
-    return account;
+    const [withBalance] = await this.attachCashBalances(user.tenantId, [
+      account,
+    ]);
+    return withBalance;
+  }
+
+  // One grouped aggregate for the whole page instead of a per-account ledger lookup — a
+  // cash/bank account's position is just its GL account's running balance (debit normal,
+  // like every Asset account), computed from posted (+ reversed, which nets itself out
+  // via the reversal's own offsetting lines) journal lines.
+  private async attachCashBalances<
+    T extends {
+      glAccountId: string;
+      glAccount: { normalBalance: NormalBalance };
+    },
+  >(tenantId: string, accounts: T[]) {
+    const glAccountIds = Array.from(
+      new Set(accounts.map((a) => a.glAccountId)),
+    );
+    const totalsByGlAccount = new Map<
+      string,
+      { debit: Prisma.Decimal; credit: Prisma.Decimal }
+    >();
+    if (glAccountIds.length > 0) {
+      const grouped = await this.prisma.journalLine.groupBy({
+        by: ['glAccountId'],
+        where: {
+          tenantId,
+          glAccountId: { in: glAccountIds },
+          journalEntry: {
+            status: { in: [JournalStatus.POSTED, JournalStatus.REVERSED] },
+          },
+        },
+        _sum: { transactionDebit: true, transactionCredit: true },
+      });
+      for (const row of grouped) {
+        totalsByGlAccount.set(row.glAccountId, {
+          debit: row._sum.transactionDebit ?? zero,
+          credit: row._sum.transactionCredit ?? zero,
+        });
+      }
+    }
+    return accounts.map((account) => {
+      const totals = totalsByGlAccount.get(account.glAccountId) ?? {
+        debit: zero,
+        credit: zero,
+      };
+      const isDebitNormal =
+        account.glAccount.normalBalance === NormalBalance.DEBIT;
+      const balance = isDebitNormal
+        ? totals.debit.minus(totals.credit)
+        : totals.credit.minus(totals.debit);
+      return { ...account, balance: balance.toFixed(4) };
+    });
   }
 
   async createCashAccount(user: RequestUser, dto: CreateCashAccountDto) {
