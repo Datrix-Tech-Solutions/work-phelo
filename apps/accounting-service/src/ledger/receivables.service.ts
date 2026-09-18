@@ -1293,10 +1293,26 @@ export class ReceivablesService {
     const description = document.description ?? document.documentNumber;
     const taxBreakdown = this.parseTaxBreakdown(document.taxBreakdown);
 
+    // An Invoice debits AR and credits everything else; a Credit Note reverses that. A
+    // tax line normally takes the same side as the main offset, but can carry its own
+    // explicit direction from the rule instead (e.g. a withholding tax debited on an
+    // invoice even though the invoice's own offset is a credit).
+    const isInvoice =
+      document.documentType === AccountingReceivableDocumentType.INVOICE;
+    const arDirection = isInvoice ? PostingDirection.DR : PostingDirection.CR;
+    const offsetDirection = isInvoice
+      ? PostingDirection.CR
+      : PostingDirection.DR;
+    const debitCredit = (direction: PostingDirection, amount: number) => ({
+      debit: direction === PostingDirection.DR ? amount : 0,
+      credit: direction === PostingDirection.CR ? amount : 0,
+    });
+
     const arLine = {
       glAccountId: document.arAccountId,
       subledgerAccountId: document.customer.id,
       description,
+      ...debitCredit(arDirection, totalAmount),
     };
     // A resolved rule splits tax onto its own account(s), leaving the offset line at just
     // the subtotal; a document with no breakdown (a credit note, or one predating rules)
@@ -1305,33 +1321,26 @@ export class ReceivablesService {
       ? [
           {
             glAccountId: document.offsetGlAccountId,
-            amount: subtotalAmount,
             description,
+            ...debitCredit(offsetDirection, subtotalAmount),
           },
           ...taxBreakdown.map((t) => ({
             glAccountId: t.glAccountId,
-            amount: t.amount,
             description: `${description} — tax`,
+            ...debitCredit(t.direction ?? offsetDirection, t.amount),
           })),
         ]
       : [
           {
             glAccountId: document.offsetGlAccountId,
-            amount: totalAmount,
             description,
+            ...debitCredit(offsetDirection, totalAmount),
           },
         ];
 
-    const lines =
-      document.documentType === AccountingReceivableDocumentType.INVOICE
-        ? [
-            { ...arLine, debit: totalAmount, credit: 0 },
-            ...offsetLines.map((l) => ({ ...l, debit: 0, credit: l.amount })),
-          ]
-        : [
-            ...offsetLines.map((l) => ({ ...l, debit: l.amount, credit: 0 })),
-            { ...arLine, debit: 0, credit: totalAmount },
-          ];
+    const lines = isInvoice
+      ? [arLine, ...offsetLines]
+      : [...offsetLines, arLine];
     return {
       transactionDate: document.documentDate.toISOString(),
       fiscalPeriodId,
@@ -1406,13 +1415,50 @@ export class ReceivablesService {
       }),
       this.prisma.accountingReceivableDocument.count({ where }),
     ]);
-    return {
+    const itemsWithPaymentState = await this.attachPaymentStates(
+      tenantId,
       items,
+    );
+    return {
+      items: itemsWithPaymentState,
       total,
       page,
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  // One grouped aggregate for the whole page instead of a per-row balance lookup — keeps
+  // list responses cheap regardless of page size.
+  private async attachPaymentStates<T extends ReceivableDocument>(
+    tenantId: string,
+    documents: T[],
+  ) {
+    const postedIds = documents
+      .filter((doc) => doc.status === AccountingReceivableStatus.POSTED)
+      .map((doc) => doc.id);
+    const appliedByInvoiceId = new Map<string, Prisma.Decimal>();
+    if (postedIds.length > 0) {
+      const grouped = await this.prisma.accountingReceivableAllocation.groupBy({
+        by: ['invoiceId'],
+        where: { tenantId, reversedAt: null, invoiceId: { in: postedIds } },
+        _sum: { amount: true },
+      });
+      for (const row of grouped) {
+        appliedByInvoiceId.set(row.invoiceId, row._sum.amount ?? zero);
+      }
+    }
+    return documents.map((document) => {
+      const applied = appliedByInvoiceId.get(document.id) ?? zero;
+      const outstanding =
+        document.status === AccountingReceivableStatus.POSTED
+          ? document.totalAmount.minus(applied)
+          : zero;
+      return {
+        ...document,
+        paymentState: this.paymentState(document, outstanding),
+      };
+    });
   }
 
   private async paginateReceipts(
@@ -1617,7 +1663,12 @@ export class ReceivablesService {
     arAccountId: string;
     offsetGlAccountId: string;
     taxAmount: Prisma.Decimal;
-    taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
+    taxBreakdown: {
+      glAccountId: string;
+      taxTypeId: string;
+      amount: string;
+      direction: PostingDirection;
+    }[];
     transactionTypeCode: string;
   }> {
     const transactionType = await this.prisma.transactionType.findFirst({
@@ -1646,15 +1697,18 @@ export class ReceivablesService {
       expectedCategory === TransactionTypeCategory.RECEIVABLE
         ? PostingDirection.DR
         : PostingDirection.CR;
-    const arLine = rule.lines.find((l) => l.direction === autoBalanceDirection);
+    // The auto-balance (AR) line is never a tax line — checking direction alone isn't
+    // enough, since a deduction can be configured with that same direction (e.g. a
+    // withholding tax debited on an invoice, same as the AR line itself).
+    const arLine = rule.lines.find(
+      (l) => l.direction === autoBalanceDirection && !l.taxTypeId,
+    );
     if (!arLine) {
       throw new ConflictException(
         "This transaction type's rule has no Receivable line configured",
       );
     }
-    const explicitLines = rule.lines.filter(
-      (l) => l.direction !== autoBalanceDirection,
-    );
+    const explicitLines = rule.lines.filter((l) => l.id !== arLine.id);
     const mainLine = explicitLines.find((l) => !l.taxTypeId);
     if (!mainLine) {
       throw new ConflictException(
@@ -1672,6 +1726,7 @@ export class ReceivablesService {
           glAccountId: line.accountId,
           taxTypeId: line.taxTypeId!,
           amount: amount.toString(),
+          direction: line.direction,
         };
       });
     const taxAmount = taxBreakdown.reduce(
@@ -1688,9 +1743,14 @@ export class ReceivablesService {
     };
   }
 
-  private parseTaxBreakdown(
-    value: Prisma.JsonValue | null,
-  ): { glAccountId: string; taxTypeId: string; amount: number }[] {
+  private parseTaxBreakdown(value: Prisma.JsonValue | null): {
+    glAccountId: string;
+    taxTypeId: string;
+    amount: number;
+    /** Null for documents created before tax lines carried their own direction —
+     *  documentJournalDto falls back to the offset line's direction for those. */
+    direction: PostingDirection | null;
+  }[] {
     if (!Array.isArray(value)) return [];
     return value.flatMap((entry) => {
       if (
@@ -1702,11 +1762,17 @@ export class ReceivablesService {
       ) {
         return [];
       }
+      const direction =
+        entry.direction === PostingDirection.DR ||
+        entry.direction === PostingDirection.CR
+          ? entry.direction
+          : null;
       return [
         {
           glAccountId: entry.glAccountId,
           taxTypeId: typeof entry.taxTypeId === 'string' ? entry.taxTypeId : '',
           amount: Number(entry.amount),
+          direction,
         },
       ];
     });

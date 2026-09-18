@@ -481,7 +481,11 @@ export type AccountingTradeSide = 'RECEIVABLE' | 'PAYABLE';
 export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
 export type AccountingTradeDocumentKind = 'INVOICE' | 'CREDIT_NOTE' | 'BILL';
 export type AccountingTradeDocumentPaymentState =
-  'DRAFT' | 'REVERSED' | 'PAID' | 'PARTIALLY_PAID' | 'OPEN';
+  | 'DRAFT'
+  | 'REVERSED'
+  | 'PAID'
+  | 'PARTIALLY_PAID'
+  | 'OPEN';
 
 export interface AccountingTradePartyRef {
   id: string;
@@ -532,6 +536,7 @@ export interface AccountingTradeDocument {
   transactionTypeId: string | null;
   originalDocumentId: string | null;
   status: AccountingTradeDocumentStatus;
+  paymentState: AccountingTradeDocumentPaymentState;
   createdAt: string;
   updatedAt: string;
   postedAt: string | null;
@@ -778,7 +783,13 @@ export type CashbookTransactionType = 'RECEIPT' | 'PAYMENT' | 'TRANSFER' | 'CHAR
 export type CashbookDirection = 'INFLOW' | 'OUTFLOW' | 'TRANSFER';
 export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
 export type AccountingCashbookSettlementMethod =
-  'BANK_TRANSFER' | 'CHEQUE' | 'CASH' | 'MOBILE_MONEY' | 'INTERNAL_TRANSFER' | 'JOURNAL' | 'OTHER';
+  | 'BANK_TRANSFER'
+  | 'CHEQUE'
+  | 'CASH'
+  | 'MOBILE_MONEY'
+  | 'INTERNAL_TRANSFER'
+  | 'JOURNAL'
+  | 'OTHER';
 
 export interface CashbookAccountRef {
   id: string;
@@ -909,7 +920,13 @@ export interface PaginatedResult<T> {
 }
 
 export type SubledgerType =
-  'CUSTOMER' | 'VENDOR' | 'CEDANT' | 'REINSURER' | 'EMPLOYEE' | 'STATUTORY' | 'OTHER';
+  | 'CUSTOMER'
+  | 'VENDOR'
+  | 'CEDANT'
+  | 'REINSURER'
+  | 'EMPLOYEE'
+  | 'STATUTORY'
+  | 'OTHER';
 
 export const MANUAL_SUBLEDGER_TYPES: SubledgerType[] = [
   'CUSTOMER',

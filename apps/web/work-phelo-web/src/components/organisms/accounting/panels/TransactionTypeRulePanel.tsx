@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { Control, Controller, FieldErrors, useFieldArray, useForm, useWatch } from 'react-hook-form';
+import {
+  Control,
+  Controller,
+  FieldErrors,
+  useFieldArray,
+  useForm,
+  useWatch,
+} from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -133,11 +140,24 @@ export function TransactionTypeRulePanel({
     label: `${t.name} (${t.rate}%)`,
   }));
 
+  // A deduction always posts opposite the auto-balancing line for Receivable/Payable
+  // types (Credit for Receivable — output tax is a liability; Debit for Payable —
+  // input tax is a recoverable asset) — the only direction the backend can actually
+  // resolve correctly, so it's fixed rather than asked. Neutral/None types have no
+  // auto-balancing side to be opposite of, so those still ask.
+  const fixedDeductionDirection: PostingLineDirection | null =
+    selectedType?.category === 'RECEIVABLE'
+      ? 'CR'
+      : selectedType?.category === 'PAYABLE'
+        ? 'DR'
+        : null;
+
   const {
     register,
     control,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
@@ -272,6 +292,7 @@ export function TransactionTypeRulePanel({
               key={field.id}
               control={control}
               register={register}
+              setValue={setValue}
               errors={errors}
               index={index}
               canRemove={fields.length > 2}
@@ -280,6 +301,7 @@ export function TransactionTypeRulePanel({
               isLoadingAccounts={isLoadingAccounts}
               subledgerTypeOptions={subledgerTypeOptions}
               taxTypeOptions={taxTypeOptions}
+              fixedDeductionDirection={fixedDeductionDirection}
             />
           ))}
         </div>
@@ -291,6 +313,7 @@ export function TransactionTypeRulePanel({
 function RuleLineEditor({
   control,
   register,
+  setValue,
   errors,
   index,
   canRemove,
@@ -299,9 +322,11 @@ function RuleLineEditor({
   isLoadingAccounts,
   subledgerTypeOptions,
   taxTypeOptions,
+  fixedDeductionDirection,
 }: {
   control: Control<FormValues>;
   register: ReturnType<typeof useForm<FormValues>>['register'];
+  setValue: ReturnType<typeof useForm<FormValues>>['setValue'];
   errors: FieldErrors<FormValues>;
   index: number;
   canRemove: boolean;
@@ -310,8 +335,15 @@ function RuleLineEditor({
   isLoadingAccounts: boolean;
   subledgerTypeOptions: SearchSelectOption[];
   taxTypeOptions: SearchSelectOption[];
+  fixedDeductionDirection: PostingLineDirection | null;
 }) {
   const kind = useWatch({ control, name: `lines.${index}.kind` });
+
+  useEffect(() => {
+    if (kind === 'DEDUCTION' && fixedDeductionDirection) {
+      setValue(`lines.${index}.deductionDirection`, fixedDeductionDirection);
+    }
+  }, [kind, fixedDeductionDirection, index, setValue]);
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3">
@@ -346,21 +378,29 @@ function RuleLineEditor({
 
       {kind === 'DEDUCTION' && (
         <div className="grid grid-cols-2 gap-3">
-          <Controller
-            name={`lines.${index}.deductionDirection`}
-            control={control}
-            rules={{ required: 'Required' }}
-            render={({ field: f }) => (
-              <SearchSelect
-                label="Posts As"
-                placeholder="Debit or credit…"
-                options={DEDUCTION_DIRECTION_OPTIONS}
-                value={f.value}
-                onChange={f.onChange}
-                error={errors.lines?.[index]?.deductionDirection?.message}
-              />
-            )}
-          />
+          {fixedDeductionDirection ? (
+            <Input
+              label="Posts As"
+              readOnly
+              value={fixedDeductionDirection === 'DR' ? 'Debit (DR)' : 'Credit (CR)'}
+            />
+          ) : (
+            <Controller
+              name={`lines.${index}.deductionDirection`}
+              control={control}
+              rules={{ required: 'Required' }}
+              render={({ field: f }) => (
+                <SearchSelect
+                  label="Posts As"
+                  placeholder="Debit or credit…"
+                  options={DEDUCTION_DIRECTION_OPTIONS}
+                  value={f.value}
+                  onChange={f.onChange}
+                  error={errors.lines?.[index]?.deductionDirection?.message}
+                />
+              )}
+            />
+          )}
           <Controller
             name={`lines.${index}.taxTypeId`}
             control={control}
