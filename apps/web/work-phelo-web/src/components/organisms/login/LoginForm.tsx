@@ -58,7 +58,7 @@ export function LoginForm({
     <AuthCard title="Sign in" tenantSlug={tenantSlug}>
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="flex flex-col gap-(--field-stack-gap,0.75rem) [&_input]:border-white/75! [&_input]:text-white/95! [&_input]:placeholder:text-white/75! [&_label]:text-white/75!"
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
       >
         <FormField
           label="Email"
@@ -79,7 +79,7 @@ export function LoginForm({
           <div className="flex justify-end">
             <Link
               href={forgotPasswordHref}
-              className="text-xs text-white/75 hover:text-white transition-colors"
+              className="text-xs text-foreground/60 hover:text-foreground transition-colors"
             >
               Forgot your Password?
             </Link>

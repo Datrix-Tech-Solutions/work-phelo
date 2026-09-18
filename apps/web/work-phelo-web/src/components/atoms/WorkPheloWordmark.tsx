@@ -19,7 +19,7 @@ interface CompanyWordmarkProps {
 
 export function CompanyWordmark({ className }: CompanyWordmarkProps) {
   return (
-    <span className={cn('text-xl font-bold tracking-tight', className)}>
+    <span className={cn('text-lg font-bold tracking-tight', className)}>
       <span>Datrixtech</span>
     </span>
   );

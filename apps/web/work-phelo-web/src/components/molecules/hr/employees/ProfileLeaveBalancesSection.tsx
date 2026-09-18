@@ -7,7 +7,12 @@ import { cardClass } from '@/lib/utils';
 import { TableButton } from '@/components/atoms/TableButton';
 import { HeaderTab } from '@/components/molecules/shared/HeaderTab';
 import { LeaveRequestDetailPanel } from '@/components/organisms/hr/leave/LeaveRequestDetailPanel';
-import { useLeaveBalances, useMyLeaveRequests, useLeaveRequests } from '@/hooks/hr/useLeave';
+import {
+  useLeaveBalances,
+  useLeaveTypes,
+  useMyLeaveRequests,
+  useLeaveRequests,
+} from '@/hooks/hr/useLeave';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import type { LeaveBalance, LeaveRequest } from '@/types/hr';
@@ -65,6 +70,9 @@ export function ProfileLeaveBalancesSection({ onSelect }: Props) {
     ? balancesRaw
     : ((balancesRaw as { data?: LeaveBalance[] } | undefined)?.data ?? []);
 
+  const { data: leaveTypes = [] } = useLeaveTypes(tenantSlug);
+  const activeLeaveTypeIds = new Set(leaveTypes.filter((t) => t.isActive).map((t) => t.id));
+
   const { data: myRequests = [] } = useMyLeaveRequests();
   const todayIso = new Date().toISOString().slice(0, 10);
   // A leave already in progress takes priority over "upcoming" — it isn't upcoming anymore.
@@ -82,7 +90,7 @@ export function ProfileLeaveBalancesSection({ onSelect }: Props) {
   const leave = currentLeave ?? nextLeave;
   const isCurrent = Boolean(currentLeave);
 
-  const eligible = balances.filter((b) => b.entitled > 0);
+  const eligible = balances.filter((b) => b.entitled > 0 && activeLeaveTypeIds.has(b.leaveTypeId));
 
   // Requests awaiting this user's review — only surfaced as a tab if there are any.
   const { data: pendingRaw = [] } = useLeaveRequests('PENDING', { enabled: canApproveLeave });

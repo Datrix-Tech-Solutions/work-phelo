@@ -217,7 +217,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           <div className="flex flex-col gap-0.5">
             <Badge label={STATUS_LABEL[row.status]} variant={STATUS_VARIANT[row.status]} />
             {row.status !== 'DRAFT' && (
-              <span className="text-xs text-gray-400">{PAYMENT_STATE_LABEL[row.paymentState]}</span>
+              <span className="font-semibold text-xs text-gray-500">
+                {PAYMENT_STATE_LABEL[row.paymentState]}
+              </span>
             )}
           </div>
         ),

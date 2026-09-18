@@ -21,7 +21,7 @@ export function AuthCard({ title, tenantSlug, subtitle, children }: AuthCardProp
     <div className={cardClass('w-full max-w-sm px-8 py-10')}>
       <div className="text-center mb-3">
         {branding?.tenantName && (
-          <p className="text-2xl font-bold text-white/85 mt-2">{branding.tenantName}</p>
+          <p className="text-2xl font-bold text-foreground/85 mt-2">{branding.tenantName}</p>
         )}
         {isError && (
           <p className="text-sm text-red-500 mt-2">
@@ -30,13 +30,13 @@ export function AuthCard({ title, tenantSlug, subtitle, children }: AuthCardProp
         )}
       </div>
 
-      <h1 className="text-xl font-semibold text-white/75 text-center mb-3">{title}</h1>
-      {subtitle && <p className="-mt-1 mb-4 text-center text-sm text-white/70">{subtitle}</p>}
+      <h1 className="text-xl font-semibold text-foreground/80 text-center mb-3">{title}</h1>
+      {subtitle && <p className="-mt-1 mb-4 text-center text-sm text-foreground/60">{subtitle}</p>}
 
       {children}
 
-      <p className="mt-3 text-center text-xs text-white/75">
-        Powered by <CompanyWordmark className="inline-block h-4 ml-1" />
+      <p className="mt-3 text-center text-xs text-foreground/60">
+        Powered by <CompanyWordmark className="inline-block h-2 ml-1" />
       </p>
     </div>
   );

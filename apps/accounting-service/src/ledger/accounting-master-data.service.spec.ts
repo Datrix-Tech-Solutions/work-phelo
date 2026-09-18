@@ -539,12 +539,12 @@ describe('AccountingMasterDataService', () => {
     prisma.accountGroup.findFirst.mockResolvedValue({
       id: 'group-1',
       tenantId: actor.tenantId,
-      code: 'BANK',
+      code: '1110',
       name: 'Bank Accounts',
       isActive: true,
       classification: {
         id: 'classification-1',
-        code: 'CURRENT_ASSET',
+        code: '1100',
         name: 'Current Assets',
         category: GLAccountCategory.ASSET,
         isActive: true,
@@ -553,7 +553,7 @@ describe('AccountingMasterDataService', () => {
     prisma.gLAccount.create.mockResolvedValue({
       id: 'account-1',
       tenantId: actor.tenantId,
-      code: '1100',
+      code: '1111',
       name: 'Cash at Bank',
       category: GLAccountCategory.ASSET,
       normalBalance: NormalBalance.DEBIT,
@@ -561,11 +561,11 @@ describe('AccountingMasterDataService', () => {
       parentAccountId: null,
       accountGroup: {
         id: 'group-1',
-        code: 'BANK',
+        code: '1110',
         name: 'Bank Accounts',
         classification: {
           id: 'classification-1',
-          code: 'CURRENT_ASSET',
+          code: '1100',
           name: 'Current Assets',
           category: GLAccountCategory.ASSET,
         },
@@ -574,7 +574,7 @@ describe('AccountingMasterDataService', () => {
     });
 
     const result = await service.createGLAccount(actor, {
-      code: '1100',
+      code: '1111',
       name: 'Cash at Bank',
       accountGroupId: 'group-1',
     });
@@ -596,8 +596,8 @@ describe('AccountingMasterDataService', () => {
 
     expect(result.category).toBe(GLAccountCategory.ASSET);
     expect(result.normalBalance).toBe(NormalBalance.DEBIT);
-    expect(result.classification.code).toBe('CURRENT_ASSET');
-    expect(result.accountGroup?.code).toBe('BANK');
+    expect(result.classification.code).toBe('1100');
+    expect(result.accountGroup?.code).toBe('1110');
     expect(result.isLegacyUnclassified).toBe(false);
 
     const auditCall = (
@@ -746,11 +746,11 @@ describe('AccountingMasterDataService', () => {
     prisma.accountGroup.findFirst.mockResolvedValue({
       id: 'group-1',
       tenantId: actor.tenantId,
-      code: 'BANK',
+      code: '1110',
       isActive: true,
       classification: {
         id: 'classification-1',
-        code: 'CURRENT_ASSET',
+        code: '1100',
         name: 'Current Assets',
         category: GLAccountCategory.ASSET,
         isActive: true,
@@ -767,7 +767,7 @@ describe('AccountingMasterDataService', () => {
 
     await expect(
       service.createGLAccount(actor, {
-        code: '1101',
+        code: '1111',
         name: 'Ecobank Current Account',
         accountGroupId: 'group-1',
         parentAccountId: 'parent-1',

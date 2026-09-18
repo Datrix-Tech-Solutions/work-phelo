@@ -32,7 +32,7 @@ export function LoginHero() {
     <div className="relative w-full h-full overflow-hidden">
       {/* Background image*/}
       <Image
-        src="/loginbg.jpg"
+        src="/login_page_image.jpg"
         alt="WorkPhelo hero"
         fill
         sizes="100vw"
