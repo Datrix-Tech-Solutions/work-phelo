@@ -58,7 +58,7 @@ export default function SetPassword() {
   if (!token) {
     return (
       <AuthCard title="Invalid Link" tenantSlug={tenantSlug}>
-        <p className="text-white/70 text-center text-sm">
+        <p className="text-foreground/70 text-center text-sm">
           This invitation link is invalid or has expired.
         </p>
       </AuthCard>
@@ -73,7 +73,7 @@ export default function SetPassword() {
     >
       <form
         onSubmit={handleSubmit(handleSetPassword)}
-        className="flex flex-col gap-(--field-stack-gap,0.75rem) [&_input]:border-white/75! [&_input]:text-white/95! [&_input]:placeholder:text-white/75! [&_label]:text-white/75!"
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
       >
         <div>
           <FormField
@@ -90,7 +90,7 @@ export default function SetPassword() {
                 key={label}
                 className={cn(
                   'flex items-center gap-1.5 text-xs',
-                  test(password) ? 'text-green-400' : 'text-white/55',
+                  test(password) ? 'text-green-500' : 'text-foreground/55',
                 )}
               >
                 <span>{test(password) ? '✓' : '✗'}</span>

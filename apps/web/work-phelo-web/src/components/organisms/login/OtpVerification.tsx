@@ -122,8 +122,8 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
             className={cn(
               'w-11 h-13 text-center text-lg font-semibold border rounded-input bg-transparent',
               'focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand',
-              'transition-colors text-white/95',
-              verifyError ? 'border-red-400' : digit ? 'border-brand' : 'border-white/75',
+              'transition-colors text-foreground/95',
+              verifyError ? 'border-red-400' : digit ? 'border-brand' : 'border-foreground/25',
             )}
           />
         ))}
@@ -141,12 +141,12 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
         Verify Code
       </Button>
 
-      <p className="text-center text-xs text-white/55 mt-6">
+      <p className="text-center text-xs text-foreground/55 mt-6">
         Didn&apos;t receive a code?{' '}
         <button
           onClick={handleResend}
           disabled={isResending || isResendingForgot}
-          className="text-white/85 font-medium hover:underline disabled:opacity-50"
+          className="text-foreground/85 font-medium hover:underline disabled:opacity-50"
         >
           {isResending || isResendingForgot ? 'Resending...' : 'Resend'}
         </button>

@@ -534,4 +534,119 @@ describe('PermissionsService tenant entitlement scoping', () => {
       service.getPermissionSets(tenantId, operationsAdminActor),
     ).resolves.toMatchObject([{ id: 'ops-set' }]);
   });
+  describe('HR role administrators (no operations scope)', () => {
+    const hrSet = (id: string, name: string) => ({
+      id,
+      tenantId,
+      name,
+      isSystem: false,
+      isActive: true,
+      resources: [
+        {
+          resourceId: 'res-hr',
+          action: PermissionAction.VIEW,
+          resource: resources[1],
+        },
+        {
+          resourceId: 'res-auth',
+          action: PermissionAction.ASSIGN,
+          resource: resources[0],
+        },
+      ],
+      _count: { users: 0 },
+    });
+    const opsSet = {
+      id: 'ops-set',
+      tenantId,
+      name: 'Reinsurance Viewer',
+      isSystem: false,
+      isActive: true,
+      resources: [
+        {
+          resourceId: 'res-reinsurance',
+          action: PermissionAction.VIEW,
+          resource: resources[2],
+        },
+      ],
+      _count: { users: 0 },
+    };
+    const emptySet = {
+      id: 'empty-set',
+      tenantId,
+      name: 'Empty Role',
+      isSystem: false,
+      isActive: true,
+      resources: [],
+      _count: { users: 0 },
+    };
+    const hrAdminPermissions = [
+      permissionSetAction(PermissionAction.VIEW),
+      { action: PermissionAction.VIEW, resource: resources[1] },
+    ];
+
+    it('lists every HR/Auth role, but not operations roles outside their scope', async () => {
+      const { service } = makeService({
+        actorPermissions: hrAdminPermissions,
+        permissionSets: [
+          hrSet('ceo', 'CEO'),
+          hrSet('manager', 'Manager'),
+          emptySet,
+          opsSet,
+        ],
+      });
+
+      const sets = await service.getPermissionSets(
+        tenantId,
+        operationsAdminActor,
+      );
+      expect(sets.map((set: { id: string }) => set.id)).toEqual([
+        'ceo',
+        'manager',
+        'empty-set',
+      ]);
+    });
+
+    it('lists roles for an actor holding only permission-sets access', async () => {
+      const { service } = makeService({
+        actorPermissions: [permissionSetAction(PermissionAction.VIEW)],
+        permissionSets: [hrSet('ceo', 'CEO'), hrSet('manager', 'Manager')],
+      });
+
+      const sets = await service.getPermissionSets(
+        tenantId,
+        operationsAdminActor,
+      );
+      expect(sets).toHaveLength(2);
+    });
+
+    it('does not widen scope for actors with operations permissions', async () => {
+      const { service } = makeService({
+        actorPermissions: [
+          permissionSetAction(PermissionAction.VIEW),
+          reinsuranceAction(PermissionAction.VIEW),
+        ],
+        permissionSets: [hrSet('ceo', 'CEO'), opsSet],
+      });
+
+      const sets = await service.getPermissionSets(
+        tenantId,
+        operationsAdminActor,
+      );
+      expect(sets.map((set: { id: string }) => set.id)).toEqual(['ops-set']);
+    });
+
+    it('returns HR and Auth resources to the role builder', async () => {
+      const { service } = makeService({ actorPermissions: hrAdminPermissions });
+
+      const list = await service.getAllResources(
+        tenantId,
+        false,
+        operationsAdminActor,
+      );
+      expect(list.map((resource: { name: string }) => resource.name)).toEqual([
+        'permission-sets',
+        'employees',
+      ]);
+    });
+  });
 });

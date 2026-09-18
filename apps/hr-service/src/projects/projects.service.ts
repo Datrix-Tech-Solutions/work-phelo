@@ -358,6 +358,27 @@ export class ProjectsService {
     return projects.map((project) => this.serializeProject(project));
   }
 
+  /** Projects a given employee belongs to. Deliberately not scoped to the caller's own
+   * visibility — the employee page shows these as summaries, and opening one is still
+   * gated by findOne. */
+  async findEmployeeProjects(tenantId: string, employeeId: string) {
+    const projects = await this.prisma.project.findMany({
+      where: {
+        tenantId,
+        isArchived: false,
+        OR: [
+          { managerId: employeeId },
+          { members: { some: { employeeId } } },
+          { tasks: { some: { assignedEmployeeId: employeeId } } },
+        ],
+      },
+      include: PROJECT_INCLUDE,
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    return projects.map((project) => this.serializeProject(project));
+  }
+
   async findMyProjects(tenantId: string, user: RequestUser) {
     const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
     this.assertAccess(actorEmployeeId);

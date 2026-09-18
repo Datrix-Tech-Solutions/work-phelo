@@ -7,19 +7,17 @@ interface Props {
   assets: EmployeeAsset[];
   onAssignAsset?: () => void;
   onManage?: () => void;
+  onSelectAsset?: (asset: EmployeeAsset) => void;
 }
 
-export function AssetsSection({ assets, onAssignAsset, onManage }: Props) {
+export function AssetsSection({ assets, onAssignAsset, onManage, onSelectAsset }: Props) {
   const headerAction =
     onAssignAsset || onManage ? (
       <div className="flex items-center gap-3">
         {onAssignAsset && (
-          <button
-            onClick={onAssignAsset}
-            className="text-xs font-medium text-brand hover:text-brand/80 transition-colors"
-          >
-            + Assign Asset
-          </button>
+          <TableButton variant="blue" onClick={onAssignAsset}>
+            Assign Asset
+          </TableButton>
         )}
         {onManage && (
           <TableButton variant="blue" onClick={onManage}>
@@ -43,7 +41,7 @@ export function AssetsSection({ assets, onAssignAsset, onManage }: Props) {
     <SectionCard title="Assets" scrollX headerAction={headerAction}>
       <div className="flex gap-2 px-3 py-0" style={{ width: 'max-content', minWidth: '100%' }}>
         {assets.map((asset) => (
-          <AssetCard key={asset.id} asset={asset} />
+          <AssetCard key={asset.id} asset={asset} onSelect={onSelectAsset} />
         ))}
       </div>
     </SectionCard>

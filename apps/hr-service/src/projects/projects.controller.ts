@@ -52,6 +52,19 @@ export class ProjectsController {
     return this.projectsService.findMyProjects(req.user.tenantId, req.user);
   }
 
+  @Get('employee/:employeeId')
+  @ApiOperation({ summary: 'List projects a given employee belongs to' })
+  @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
+  findEmployeeProjects(
+    @Param('employeeId') employeeId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.projectsService.findEmployeeProjects(
+      req.user.tenantId,
+      employeeId,
+    );
+  }
+
   @Get('my-tasks')
   @ApiOperation({ summary: 'List tasks assigned to the current employee' })
   findMyTasks(@Req() req: Request & { user: RequestUser }) {

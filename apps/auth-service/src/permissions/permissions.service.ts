@@ -26,6 +26,17 @@ type PermissionActor = {
   role: string;
 };
 
+type ActorGrantScope = {
+  keys: Set<string>;
+  // HR role administrators (no operations/finance/etc. resources) manage HR and
+  // Auth role content freely, as they did before module-scoped delegation.
+  // Non-core modules stay limited to the permissions the actor holds.
+  coreUnrestricted: boolean;
+};
+
+// Modules a role administrator without any other module scope may manage freely.
+const CORE_ROLE_ADMIN_MODULES = new Set(['HR', 'AUTH']);
+
 type PermissionGrant = {
   resourceId: string;
   action: PermissionAction;
@@ -60,15 +71,18 @@ export class PermissionsService {
 
     if (!actor || this.isSystemAdminActor(actor)) return enabledResources;
 
-    const grantScope = await this.getActorEffectivePermissionKeys(
-      tenantId,
-      actor,
-    );
+    const grantScope = await this.getActorGrantScope(tenantId, actor);
     return enabledResources.filter((resource) => {
+      if (
+        grantScope.coreUnrestricted &&
+        CORE_ROLE_ADMIN_MODULES.has(resource.module)
+      ) {
+        return true;
+      }
       if (isTenantAdminManagedResource(resource)) return false;
       const actions = Object.values(PermissionAction);
       return actions.some((action) =>
-        grantScope.has(`${resource.name}:${action}`),
+        grantScope.keys.has(`${resource.name}:${action}`),
       );
     });
   }
@@ -452,10 +466,7 @@ export class PermissionsService {
 
     if (!actor || this.isSystemAdminActor(actor)) return sets;
 
-    const grantScope = await this.getActorEffectivePermissionKeys(
-      tenantId,
-      actor,
-    );
+    const grantScope = await this.getActorGrantScope(tenantId, actor);
     return sets.filter((set) =>
       this.areGrantsWithinActorScope(
         grantScope,
@@ -757,12 +768,13 @@ export class PermissionsService {
     return actor?.role === 'SUPER_ADMIN' || actor?.role === 'TENANT_ADMIN';
   }
 
-  private async getActorEffectivePermissionKeys(
+  private async getActorGrantScope(
     tenantId: string,
     actor?: PermissionActor,
-  ): Promise<Set<string>> {
-    if (!actor) return new Set();
-    if (this.isSystemAdminActor(actor)) return new Set();
+  ): Promise<ActorGrantScope> {
+    if (!actor || this.isSystemAdminActor(actor)) {
+      return { keys: new Set(), coreUnrestricted: false };
+    }
 
     const now = new Date();
     const [directPerms, setAssignments] = await Promise.all([
@@ -789,15 +801,27 @@ export class PermissionsService {
     ]);
 
     const keys = new Set<string>();
+    let hasNonCoreModule = false;
+    const track = (
+      resource: { name: string; module: string },
+      action: string,
+    ) => {
+      keys.add(`${resource.name}:${action}`);
+      if (!CORE_ROLE_ADMIN_MODULES.has(resource.module))
+        hasNonCoreModule = true;
+    };
     for (const permission of directPerms) {
-      keys.add(`${permission.resource.name}:${permission.action}`);
+      track(permission.resource, permission.action);
     }
     for (const assignment of setAssignments) {
       for (const permission of assignment.permissionSet.resources) {
-        keys.add(`${permission.resource.name}:${permission.action}`);
+        track(permission.resource, permission.action);
       }
     }
-    return keys;
+    const hasRoleAccess = [...keys].some((key) =>
+      key.startsWith('permission-sets:'),
+    );
+    return { keys, coreUnrestricted: hasRoleAccess && !hasNonCoreModule };
   }
 
   private async assertActorHasPermissionSetAction(
@@ -807,11 +831,8 @@ export class PermissionsService {
   ) {
     if (!actor || this.isSystemAdminActor(actor)) return;
 
-    const grantScope = await this.getActorEffectivePermissionKeys(
-      tenantId,
-      actor,
-    );
-    if (grantScope.has(`permission-sets:${action}`)) return;
+    const grantScope = await this.getActorGrantScope(tenantId, actor);
+    if (grantScope.keys.has(`permission-sets:${action}`)) return;
 
     throw new ForbiddenException(
       `Cannot ${action.toLowerCase()} permission sets without permission-sets:${action}`,
@@ -841,14 +862,21 @@ export class PermissionsService {
   }
 
   private areGrantsWithinActorScope(
-    grantScope: Set<string>,
+    grantScope: ActorGrantScope,
     grants: PermissionGrant[],
   ): boolean {
+    if (grantScope.coreUnrestricted) {
+      return grants.every(
+        ({ resource, action }) =>
+          CORE_ROLE_ADMIN_MODULES.has(resource.module) ||
+          grantScope.keys.has(`${resource.name}:${action}`),
+      );
+    }
     if (grants.length === 0) return false;
 
     return grants.every(({ resource, action }) => {
       if (isTenantAdminManagedResource(resource)) return false;
-      return grantScope.has(`${resource.name}:${action}`);
+      return grantScope.keys.has(`${resource.name}:${action}`);
     });
   }
 
@@ -858,16 +886,13 @@ export class PermissionsService {
     grants: PermissionGrant[],
   ) {
     if (!actor || this.isSystemAdminActor(actor)) return;
-    if (grants.length === 0) {
+    const grantScope = await this.getActorGrantScope(tenantId, actor);
+    if (grants.length === 0 && !grantScope.coreUnrestricted) {
       throw new ForbiddenException(
         'Cannot manage permission sets without at least one permission inside your delegated module scope',
       );
     }
 
-    const grantScope = await this.getActorEffectivePermissionKeys(
-      tenantId,
-      actor,
-    );
     const disallowed = grants.filter(
       (grant) => !this.areGrantsWithinActorScope(grantScope, [grant]),
     );

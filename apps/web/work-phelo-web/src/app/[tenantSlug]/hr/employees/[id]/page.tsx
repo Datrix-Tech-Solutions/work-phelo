@@ -9,7 +9,12 @@ import {
   useResendEmployeeInvite,
   useResignationRecord,
 } from '@/hooks/hr/useEmployees';
-import { useAvailableAssets } from '@/hooks/hr/useAssets';
+import {
+  useAssignAsset,
+  useAsset,
+  useAvailableAssets,
+  useUnassignAsset,
+} from '@/hooks/hr/useAssets';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
@@ -23,12 +28,18 @@ import { Breadcrumb } from '@/components/molecules/hr/employees/employeebreadcru
 import { ProfileBanner } from '@/components/molecules/hr/employees/ProfileBanner';
 import { EmployeeDetailSidebar } from '@/components/molecules/hr/employees/EmployeeDetailSidebar';
 import { PersonalInformationSection } from '@/components/molecules/hr/employees/PersonalInformationSection';
+import { cardClass } from '@/lib/utils';
+import { EmployeeProjectsSection } from '@/components/molecules/hr/employees/EmployeeProjectsSection';
+import { useAuthStore } from '@/store/auth.store';
 import { AssetsSection } from '@/components/molecules/hr/employees/assetSection';
 import { EmployeeDetailSkeleton } from '@/components/molecules/hr/employees/employeeDetailSkeleton';
 import {
   EmployeeDetailPanels,
   type EmployeeDetailPanel,
 } from '@/components/organisms/hr/employee/EmployeeDetailPanels';
+import { AssetDetailPanel } from '@/components/organisms/hr/assets/AssetDetailPanel';
+import { TransferAssetPanel } from '@/components/organisms/hr/assets/TransferAssetPanel';
+import { UnassignAssetModal } from '@/components/organisms/hr/assets/UnassignAssetModal';
 import { EmployeePayslipTab } from '@/components/molecules/hr/employees/EmployeePayslipTab';
 import { pageBreadcrumb, pagePx, pageContent } from '@/lib/layout';
 
@@ -51,15 +62,22 @@ export default function EmployeeDetailPage({
 
   const [activeTab, setActiveTab] = useState<EmployeeTab>('personal');
   const [activePanel, setActivePanel] = useState<EmployeeDetailPanel | null>(null);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [unassignOpen, setUnassignOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   const { data: employee, isLoading, error } = useEmployee(id);
   const { data: resignationRecord } = useResignationRecord(id);
   const { data: allHrEmployees = [] } = useEmployeeOptions();
   const { data: availableAssets = [] } = useAvailableAssets();
+  const { data: selectedAsset } = useAsset(selectedAssetId ?? '');
+  const { mutate: unassignAsset, isPending: isUnassigningAsset } = useUnassignAsset();
+  const { mutate: assignAsset } = useAssignAsset();
   const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
 
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canReadProjects = usePermission(Permission.READ_PROJECTS);
   const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
   const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
 
@@ -71,6 +89,7 @@ export default function EmployeeDetailPage({
     useRemovePermissionSet();
 
   const toast = useToast();
+  const canAccessProjects = Boolean(useAuthStore((s) => s.user)?.featureConfig?.hr?.projects);
 
   const userPermsTyped = userPermsRaw as
     | {
@@ -165,7 +184,7 @@ export default function EmployeeDetailPage({
         <div className={pageContent}>
           {activeTab === 'personal' && (
             <div className="flex flex-col lg:flex-row gap-6 items-start">
-              <div className="shrink-0">
+              <div className={cardClass('shrink-0 w-full lg:w-80 p-4')}>
                 <PersonalInformationSection employee={employee} showNationalId />
               </div>
               <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -184,9 +203,16 @@ export default function EmployeeDetailPage({
                   onManagePermissions={() => setActivePanel('permissions')}
                   directPermissions={directPermissions}
                 />
+                {canAccessProjects && (
+                  <EmployeeProjectsSection
+                    employeeId={employee.id}
+                    canOpenProjects={canReadProjects}
+                  />
+                )}
                 <AssetsSection
                   assets={employee.assets ?? []}
                   onAssignAsset={canAssignAsset ? () => setActivePanel('assign-asset') : undefined}
+                  onSelectAsset={(a) => setSelectedAssetId(a.id)}
                 />
               </div>
             </div>
@@ -194,6 +220,54 @@ export default function EmployeeDetailPage({
           {activeTab === 'payroll' && <EmployeePayslipTab employee={employee} />}
         </div>
       </div>
+
+      <AssetDetailPanel
+        isOpen={!!selectedAssetId}
+        onClose={() => setSelectedAssetId(null)}
+        asset={selectedAsset ?? null}
+        canAssign={canAssignAsset}
+        onUnassign={() => setUnassignOpen(true)}
+        onTransfer={() => setTransferOpen(true)}
+      />
+
+      <TransferAssetPanel
+        isOpen={transferOpen}
+        onClose={() => setTransferOpen(false)}
+        asset={selectedAsset ?? null}
+        employees={allHrEmployees.filter((e) =>
+          ['ACTIVE', 'PROBATION'].includes(e.employmentStatus),
+        )}
+        onTransfer={(assetId, employeeId) =>
+          assignAsset(
+            { assetId, employeeId },
+            {
+              onSuccess: () => {
+                toast.success('Asset transferred successfully');
+                setTransferOpen(false);
+                setSelectedAssetId(null);
+              },
+              onError: () => toast.error('Failed to transfer asset'),
+            },
+          )
+        }
+      />
+
+      <UnassignAssetModal
+        isOpen={unassignOpen}
+        onClose={() => setUnassignOpen(false)}
+        asset={selectedAsset ?? null}
+        isLoading={isUnassigningAsset}
+        onConfirm={(assetId) =>
+          unassignAsset(assetId, {
+            onSuccess: () => {
+              toast.success('Asset unassigned successfully');
+              setUnassignOpen(false);
+              setSelectedAssetId(null);
+            },
+            onError: () => toast.error('Failed to unassign asset'),
+          })
+        }
+      />
 
       <EmployeeDetailPanels
         activePanel={activePanel}
