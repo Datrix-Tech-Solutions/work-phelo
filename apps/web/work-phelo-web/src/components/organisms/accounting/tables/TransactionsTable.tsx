@@ -5,10 +5,12 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { TableButton } from '@/components/atoms/TableButton';
+import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Icons } from '@/components/atoms/icons';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
   AccountingTradeDocument,
+  AccountingTradeDocumentPaymentState,
   AccountingTradeDocumentStatus,
   TransactionTypeDefinition,
 } from '@/types/accounting';
@@ -36,6 +38,31 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   REVERSED: 'danger',
 };
 
+const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
+  DRAFT: 'PENDING',
+  POSTED: 'POSTED',
+  REVERSED: 'REVERSED',
+};
+
+const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
+  DRAFT: 'Draft',
+  REVERSED: 'Reversed',
+  PAID: 'Paid',
+  PARTIALLY_PAID: 'Partially Paid',
+  OPEN: 'Unpaid',
+};
+
+const STATUS_FILTER_OPTIONS: SearchSelectOption[] = [
+  { value: 'DRAFT', label: 'Pending' },
+  { value: 'POSTED', label: 'Posted' },
+  { value: 'REVERSED', label: 'Reversed' },
+];
+
+const TYPE_FILTER_OPTIONS: SearchSelectOption[] = [
+  { value: 'RECEIVABLE', label: 'Receivable' },
+  { value: 'PAYABLE', label: 'Payable' },
+];
+
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -52,6 +79,8 @@ function fmtAmount(amount: string, currency: string) {
 
 export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<AccountingTradeDocument | null>(null);
@@ -70,7 +99,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const payableCreditNotes = usePayableCreditNotes({ limit: 100, partyId });
 
   const isLoading =
-    invoices.isLoading || bills.isLoading || receivableCreditNotes.isLoading ||
+    invoices.isLoading ||
+    bills.isLoading ||
+    receivableCreditNotes.isLoading ||
     payableCreditNotes.isLoading;
 
   const transactions = useMemo(() => {
@@ -80,9 +111,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       ...(receivableCreditNotes.data?.items ?? []),
       ...(payableCreditNotes.data?.items ?? []),
     ];
-    return all.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [invoices.data, bills.data, receivableCreditNotes.data, payableCreditNotes.data]);
 
   // On an entity's page, "New Transaction" doesn't make sense — offer the payment
@@ -94,15 +123,18 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   }, [transactions]);
 
   const filtered = useMemo(() => {
-    if (!search) return transactions;
-    const q = search.toLowerCase();
-    return transactions.filter(
-      (r) =>
+    const q = search.trim().toLowerCase();
+    return transactions.filter((r) => {
+      if (statusFilter && r.status !== statusFilter) return false;
+      if (typeFilter && r.side !== typeFilter) return false;
+      if (!q) return true;
+      return (
         r.documentNumber.toLowerCase().includes(q) ||
         r.party.name.toLowerCase().includes(q) ||
-        r.status.toLowerCase().includes(q),
-    );
-  }, [search, transactions]);
+        r.status.toLowerCase().includes(q)
+      );
+    });
+  }, [search, statusFilter, typeFilter, transactions]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -180,8 +212,15 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'status',
         label: 'Status',
-        width: '70px',
-        render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
+        width: '90px',
+        render: (row) => (
+          <div className="flex flex-col gap-0.5">
+            <Badge label={STATUS_LABEL[row.status]} variant={STATUS_VARIANT[row.status]} />
+            {row.status !== 'DRAFT' && (
+              <span className="text-xs text-gray-400">{PAYMENT_STATE_LABEL[row.paymentState]}</span>
+            )}
+          </div>
+        ),
       },
       {
         key: 'actions',
@@ -193,12 +232,16 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
               <TableButton variant="green" onClick={() => setDetailTarget(row)}>
                 Post
               </TableButton>
-            ) : row.status === 'POSTED' ? (
+            ) : row.status === 'POSTED' && row.paymentState !== 'PAID' ? (
               <TableButton variant="green" onClick={() => setPaymentTarget(row)}>
                 {row.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
               </TableButton>
             ) : null}
-            <TableButton variant="blue" tooltip="View Documents" onClick={() => setDetailTarget(row)}>
+            <TableButton
+              variant="blue"
+              tooltip="View Documents"
+              onClick={() => setDetailTarget(row)}
+            >
               <Icons.FileText className="w-3.5 h-3.5" />
             </TableButton>
           </div>
@@ -206,6 +249,33 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       },
     ],
     [],
+  );
+
+  const extraFilters = (
+    <>
+      <SearchSelect
+        size="sm"
+        placeholder="Status"
+        options={STATUS_FILTER_OPTIONS}
+        value={statusFilter}
+        showAllOption
+        onChange={(v) => {
+          setStatusFilter(v);
+          setPage(1);
+        }}
+      />
+      <SearchSelect
+        size="sm"
+        placeholder="Type"
+        options={TYPE_FILTER_OPTIONS}
+        value={typeFilter}
+        showAllOption
+        onChange={(v) => {
+          setTypeFilter(v);
+          setPage(1);
+        }}
+      />
+    </>
   );
 
   return (
@@ -220,6 +290,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           setSearch(q);
           setPage(1);
         }}
+        extraFilters={extraFilters}
         onRowClick={(row) => setDetailTarget(row)}
         actionButton={
           partyId
@@ -283,10 +354,6 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       <NewTransactionPanel
         transactionType={selectedType}
         onClose={() => setSelectedType(undefined)}
-        onPostedForPayment={(document) => {
-          setSelectedType(undefined);
-          setPaymentTarget(document);
-        }}
       />
 
       <TradeDocumentDetailPanel

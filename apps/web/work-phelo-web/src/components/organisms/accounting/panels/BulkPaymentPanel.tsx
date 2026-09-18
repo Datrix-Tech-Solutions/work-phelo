@@ -140,9 +140,7 @@ export function BulkPaymentPanel({ isOpen, onClose, side, partyId }: BulkPayment
     queryFn: async () => {
       const results = await Promise.all(
         balanceIds.map((id) =>
-          api.get<{ outstandingAmount: string }>(
-            `${balanceBase}/${balanceSegment}/${id}/balance`,
-          ),
+          api.get<{ outstandingAmount: string }>(`${balanceBase}/${balanceSegment}/${id}/balance`),
         ),
       );
       const map = new Map<string, number>();
@@ -247,13 +245,6 @@ export function BulkPaymentPanel({ isOpen, onClose, side, partyId }: BulkPayment
     setStep('pay');
   };
 
-  // Not one combined settlement — each document gets its own independent settlement,
-  // created, posted, and allocated against just that document, so it naturally inherits
-  // that document's own AR/AP account (no "documents must share an account" restriction
-  // to worry about). The shared payment details (cash account, method, date, reference)
-  // are just reused across all of them, and the amount each one gets is either its own
-  // full outstanding balance or, if the entered total didn't match, whatever the
-  // breakdown assigned it.
   const onSubmit = async (values: PaymentFormValues) => {
     if (selectedDocuments.length === 0 || !values.cashAccountId) return;
 
@@ -298,7 +289,7 @@ export function BulkPaymentPanel({ isOpen, onClose, side, partyId }: BulkPayment
       title={actionLabel}
       description={
         step === 'select'
-          ? 'Select the posted documents to include in this payment.'
+          ? 'Select the posted transactions to include in this payment.'
           : `Recording ${selectedDocuments.length} separate payment(s) to the same cash account.`
       }
       footer={
@@ -335,7 +326,7 @@ export function BulkPaymentPanel({ isOpen, onClose, side, partyId }: BulkPayment
 
           <MultiSelect
             label="Documents"
-            placeholder="Select posted documents…"
+            placeholder="Select posted transactions…"
             options={options}
             value={selectedIds}
             onChange={setSelectedIds}

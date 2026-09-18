@@ -1257,10 +1257,23 @@ export class PayablesService {
     const description = document.description ?? document.documentNumber;
     const taxBreakdown = this.parseTaxBreakdown(document.taxBreakdown);
 
+    // A Bill credits AP and debits everything else; a Credit Note reverses that. A tax
+    // line normally takes the same side as the main offset, but can carry its own
+    // explicit direction from the rule instead (e.g. a withholding tax deducted on a
+    // bill still posts as a credit even though the bill's own offset is a debit).
+    const isBill = document.documentType === AccountingPayableDocumentType.BILL;
+    const apDirection = isBill ? PostingDirection.CR : PostingDirection.DR;
+    const offsetDirection = isBill ? PostingDirection.DR : PostingDirection.CR;
+    const debitCredit = (direction: PostingDirection, amount: number) => ({
+      debit: direction === PostingDirection.DR ? amount : 0,
+      credit: direction === PostingDirection.CR ? amount : 0,
+    });
+
     const apLine = {
       glAccountId: document.apAccountId,
       subledgerAccountId: document.vendor.id,
       description,
+      ...debitCredit(apDirection, totalAmount),
     };
     // A resolved rule splits tax onto its own account(s), leaving the offset line at just
     // the subtotal; a document with no breakdown (a credit note, or one predating rules)
@@ -1269,33 +1282,24 @@ export class PayablesService {
       ? [
           {
             glAccountId: document.offsetGlAccountId,
-            amount: subtotalAmount,
             description,
+            ...debitCredit(offsetDirection, subtotalAmount),
           },
           ...taxBreakdown.map((t) => ({
             glAccountId: t.glAccountId,
-            amount: t.amount,
             description: `${description} — tax`,
+            ...debitCredit(t.direction ?? offsetDirection, t.amount),
           })),
         ]
       : [
           {
             glAccountId: document.offsetGlAccountId,
-            amount: totalAmount,
             description,
+            ...debitCredit(offsetDirection, totalAmount),
           },
         ];
 
-    const lines =
-      document.documentType === AccountingPayableDocumentType.BILL
-        ? [
-            ...offsetLines.map((l) => ({ ...l, debit: l.amount, credit: 0 })),
-            { ...apLine, debit: 0, credit: totalAmount },
-          ]
-        : [
-            { ...apLine, debit: totalAmount, credit: 0 },
-            ...offsetLines.map((l) => ({ ...l, debit: 0, credit: l.amount })),
-          ];
+    const lines = isBill ? [...offsetLines, apLine] : [apLine, ...offsetLines];
     return {
       transactionDate: document.documentDate.toISOString(),
       fiscalPeriodId,
@@ -1370,13 +1374,50 @@ export class PayablesService {
       }),
       this.prisma.accountingPayableDocument.count({ where }),
     ]);
-    return {
+    const itemsWithPaymentState = await this.attachPaymentStates(
+      tenantId,
       items,
+    );
+    return {
+      items: itemsWithPaymentState,
       total,
       page,
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  // One grouped aggregate for the whole page instead of a per-row balance lookup — keeps
+  // list responses cheap regardless of page size.
+  private async attachPaymentStates<T extends PayableDocument>(
+    tenantId: string,
+    documents: T[],
+  ) {
+    const postedIds = documents
+      .filter((doc) => doc.status === AccountingPayableStatus.POSTED)
+      .map((doc) => doc.id);
+    const appliedByBillId = new Map<string, Prisma.Decimal>();
+    if (postedIds.length > 0) {
+      const grouped = await this.prisma.accountingPayableAllocation.groupBy({
+        by: ['billId'],
+        where: { tenantId, reversedAt: null, billId: { in: postedIds } },
+        _sum: { amount: true },
+      });
+      for (const row of grouped) {
+        appliedByBillId.set(row.billId, row._sum.amount ?? zero);
+      }
+    }
+    return documents.map((document) => {
+      const applied = appliedByBillId.get(document.id) ?? zero;
+      const outstanding =
+        document.status === AccountingPayableStatus.POSTED
+          ? document.totalAmount.minus(applied)
+          : zero;
+      return {
+        ...document,
+        paymentState: this.paymentState(document, outstanding),
+      };
+    });
   }
 
   private async paginatePayments(
@@ -1581,7 +1622,12 @@ export class PayablesService {
     apAccountId: string;
     offsetGlAccountId: string;
     taxAmount: Prisma.Decimal;
-    taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
+    taxBreakdown: {
+      glAccountId: string;
+      taxTypeId: string;
+      amount: string;
+      direction: PostingDirection;
+    }[];
     transactionTypeCode: string;
   }> {
     const transactionType = await this.prisma.transactionType.findFirst({
@@ -1610,15 +1656,18 @@ export class PayablesService {
       expectedCategory === TransactionTypeCategory.RECEIVABLE
         ? PostingDirection.DR
         : PostingDirection.CR;
-    const apLine = rule.lines.find((l) => l.direction === autoBalanceDirection);
+    // The auto-balance (AP) line is never a tax line — checking direction alone isn't
+    // enough, since a deduction can be configured with that same direction (e.g. a
+    // withholding tax credited on a bill, same as the AP line itself).
+    const apLine = rule.lines.find(
+      (l) => l.direction === autoBalanceDirection && !l.taxTypeId,
+    );
     if (!apLine) {
       throw new ConflictException(
         "This transaction type's rule has no Payable line configured",
       );
     }
-    const explicitLines = rule.lines.filter(
-      (l) => l.direction !== autoBalanceDirection,
-    );
+    const explicitLines = rule.lines.filter((l) => l.id !== apLine.id);
     const mainLine = explicitLines.find((l) => !l.taxTypeId);
     if (!mainLine) {
       throw new ConflictException(
@@ -1636,6 +1685,7 @@ export class PayablesService {
           glAccountId: line.accountId,
           taxTypeId: line.taxTypeId!,
           amount: amount.toString(),
+          direction: line.direction,
         };
       });
     const taxAmount = taxBreakdown.reduce(
@@ -1652,9 +1702,14 @@ export class PayablesService {
     };
   }
 
-  private parseTaxBreakdown(
-    value: Prisma.JsonValue | null,
-  ): { glAccountId: string; taxTypeId: string; amount: number }[] {
+  private parseTaxBreakdown(value: Prisma.JsonValue | null): {
+    glAccountId: string;
+    taxTypeId: string;
+    amount: number;
+    /** Null for documents created before tax lines carried their own direction —
+     *  documentJournalDto falls back to the offset line's direction for those. */
+    direction: PostingDirection | null;
+  }[] {
     if (!Array.isArray(value)) return [];
     return value.flatMap((entry) => {
       if (
@@ -1666,11 +1721,17 @@ export class PayablesService {
       ) {
         return [];
       }
+      const direction =
+        entry.direction === PostingDirection.DR ||
+        entry.direction === PostingDirection.CR
+          ? entry.direction
+          : null;
       return [
         {
           glAccountId: entry.glAccountId,
           taxTypeId: typeof entry.taxTypeId === 'string' ? entry.taxTypeId : '',
           amount: Number(entry.amount),
+          direction,
         },
       ];
     });

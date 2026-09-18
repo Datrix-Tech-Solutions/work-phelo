@@ -91,6 +91,7 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     transactionTypeId: raw.transactionTypeId ?? null,
     originalDocumentId: raw[config.originalIdField] ?? null,
     status: raw.status,
+    paymentState: raw.paymentState,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,

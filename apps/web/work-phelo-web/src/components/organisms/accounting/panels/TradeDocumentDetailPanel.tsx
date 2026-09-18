@@ -49,6 +49,12 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   REVERSED: 'danger',
 };
 
+const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
+  DRAFT: 'PENDING APPROVAL',
+  POSTED: 'POSTED',
+  REVERSED: 'REVERSED',
+};
+
 const PAYMENT_STATE_VARIANT: Record<
   AccountingTradeDocumentPaymentState,
   'success' | 'neutral' | 'danger' | 'warning' | 'info'
@@ -271,7 +277,10 @@ export function TradeDocumentDetailPanel({
         {document && (
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
-              <Badge label={document.status} variant={STATUS_VARIANT[document.status]} />
+              <Badge
+                label={STATUS_LABEL[document.status]}
+                variant={STATUS_VARIANT[document.status]}
+              />
               {balance && balance.paymentState !== 'DRAFT' && (
                 <Badge
                   label={PAYMENT_STATE_LABEL[balance.paymentState]}
@@ -281,10 +290,7 @@ export function TradeDocumentDetailPanel({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field
-                label={partyLabel}
-                value={`${document.party.name} (${document.party.code})`}
-              />
+              <Field label={partyLabel} value={`${document.party.name} (${document.party.code})`} />
               <Field label="Document Date" value={fmtDate(document.documentDate)} />
               <Field label="Due Date" value={fmtDate(document.dueDate)} />
               <Field

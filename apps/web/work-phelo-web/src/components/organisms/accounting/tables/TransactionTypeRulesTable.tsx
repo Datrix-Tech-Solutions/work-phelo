@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { SearchIcon } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
-import { Icons } from '@/components/atoms/icons';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { TransactionTypeRulePanel } from '@/components/organisms/accounting/panels/TransactionTypeRulePanel';
 import { TypeChip } from '@/components/atoms/TypeChip';
@@ -79,12 +79,12 @@ export function TransactionTypeRulesTable() {
             />
           </div>
           <div className="flex-1" />
-          <Button size="sm" onClick={() => setPanel({ rule: null })} className="group">
+          {/* <Button size="sm" onClick={() => setPanel({ rule: null })} className="group">
             Add Rule
             <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
               <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
             </span>
-          </Button>
+          </Button> */}
         </div>
       </div>
 
@@ -183,29 +183,17 @@ function RuleCard({
         </div>
         {rule ? (
           <div className="flex shrink-0 gap-1">
-            <button
-              type="button"
-              onClick={onUpdate}
-              className="text-sm font-medium text-brand hover:bg-brand/5 px-2 py-1 rounded-lg transition-colors"
-            >
+            <TableButton variant="blue" onClick={onUpdate}>
               Update
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="text-sm font-medium text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
-            >
+            </TableButton>
+            <TableButton variant="red" onClick={onDelete}>
               Delete
-            </button>
+            </TableButton>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="shrink-0 text-sm font-medium text-brand hover:bg-brand/5 px-2 py-1 rounded-lg transition-colors"
-          >
+          <TableButton className="shrink-0" onClick={onAdd}>
             + Add Rule
-          </button>
+          </TableButton>
         )}
       </div>
 
@@ -232,10 +220,7 @@ function RuleCard({
                 {line.account.code} – {line.account.name}
               </span>
               <span className="min-w-0 truncate text-gray-600">{line.description ?? '—'}</span>
-              <TypeChip
-                label={line.direction}
-                color={line.direction === 'DR' ? 'blue' : 'green'}
-              />
+              <TypeChip label={line.direction} color={line.direction === 'DR' ? 'blue' : 'green'} />
               <span className="min-w-0 truncate text-gray-600">
                 {line.taxType ? `${line.taxType.name} (${line.taxType.rate}%)` : ''}
                 {line.taxType && line.subledgerType ? ' · ' : ''}
