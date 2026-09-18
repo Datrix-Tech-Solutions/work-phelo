@@ -36,6 +36,17 @@ export function useMyProjects() {
   });
 }
 
+export function useEmployeeProjects(employeeId: string) {
+  return useQuery({
+    queryKey: [KEY, 'employee', employeeId],
+    queryFn: async () => {
+      const res = await api.get<ProjectDetail[]>(`/hr/projects/employee/${employeeId}`);
+      return res.data;
+    },
+    enabled: !!employeeId,
+  });
+}
+
 export function useMyTasks() {
   return useQuery({
     queryKey: [KEY, 'my-tasks'],

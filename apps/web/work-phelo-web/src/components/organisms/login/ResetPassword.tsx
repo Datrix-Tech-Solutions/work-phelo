@@ -71,7 +71,7 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
     >
       <form
         onSubmit={handleSubmit(handleReset)}
-        className="flex flex-col gap-(--field-stack-gap,0.75rem) [&_input]:border-white/75! [&_input]:text-white/95! [&_input]:placeholder:text-white/75! [&_label]:text-white/75!"
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
       >
         <div>
           <FormField
@@ -88,7 +88,7 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
                 key={label}
                 className={cn(
                   'flex items-center gap-1.5 text-xs',
-                  test(password) ? 'text-green-400' : 'text-white/55',
+                  test(password) ? 'text-green-500' : 'text-foreground/55',
                 )}
               >
                 <span>{test(password) ? '✓' : '✗'}</span>

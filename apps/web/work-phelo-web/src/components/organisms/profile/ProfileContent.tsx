@@ -25,6 +25,7 @@ import { ProfileBanner } from '@/components/molecules/hr/employees/ProfileBanner
 import { ProfileSummaryCard } from '@/components/molecules/hr/employees/ProfileSummaryCard';
 import { ProfilePerformanceSummaryCard } from '@/components/molecules/hr/employees/ProfilePerformanceSummaryCard';
 import { PersonalInformationSection } from '@/components/molecules/hr/employees/PersonalInformationSection';
+import { cardClass } from '@/lib/utils';
 import { RolesAndPermissionsCard } from '@/components/molecules/hr/employees/RolesAndPermissionsCard';
 import { ProfileLeaveBalancesSection } from '@/components/molecules/hr/employees/ProfileLeaveBalancesSection';
 import { ProfileProjectsSection } from '@/components/molecules/hr/employees/ProfileProjectsSection';
@@ -280,7 +281,7 @@ export function ProfileContent() {
         <div className={pageContent}>
           {activeTab === 'personal' && (
             <div className="flex flex-col lg:flex-row gap-6 items-start">
-              <div className="shrink-0">
+              <div className={cardClass('shrink-0 w-full lg:w-80 p-4')}>
                 <PersonalInformationSection employee={employee} />
               </div>
               <div className="flex-1 min-w-0 flex flex-col gap-4">

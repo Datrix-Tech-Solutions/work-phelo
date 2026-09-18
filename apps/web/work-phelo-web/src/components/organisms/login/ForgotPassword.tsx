@@ -48,9 +48,9 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
     return (
       <AuthCard title="Check your email" tenantSlug={tenantSlug}>
         <div className="flex justify-center mb-4">
-          <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-full bg-foreground/10 flex items-center justify-center">
             <svg
-              className="w-7 h-7 text-white/80"
+              className="w-7 h-7 text-foreground/70"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -65,11 +65,11 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
           </div>
         </div>
 
-        <p className="text-sm text-white/70 text-center mb-2">
+        <p className="text-sm text-foreground/70 text-center mb-2">
           We&apos;ve sent a password reset link to
         </p>
-        <p className="text-sm font-medium text-white/85 text-center mb-6">{sentEmail}</p>
-        <p className="text-xs text-white/55 text-center mb-6">
+        <p className="text-sm font-medium text-foreground/85 text-center mb-6">{sentEmail}</p>
+        <p className="text-xs text-foreground/55 text-center mb-6">
           Click the link in the email to reset your password. If you don&apos;t see it, check your
           spam folder.
         </p>
@@ -91,7 +91,7 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
     >
       <form
         onSubmit={handleSubmit(handleSubmit2)}
-        className="flex flex-col gap-(--field-stack-gap,0.75rem) [&_input]:border-white/75! [&_input]:text-white/95! [&_input]:placeholder:text-white/75! [&_label]:text-white/75!"
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
       >
         <FormField
           label="Email"
@@ -113,9 +113,9 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
         </Button>
       </form>
 
-      <p className="text-center text-xs text-white/55 mt-4">
+      <p className="text-center text-xs text-foreground/55 mt-4">
         Remembered it?{' '}
-        <a href={backHref} className="text-white/85 font-medium hover:underline">
+        <a href={backHref} className="text-foreground/85 font-medium hover:underline">
           Sign in
         </a>
       </p>
