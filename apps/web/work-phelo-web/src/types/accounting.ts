@@ -256,16 +256,60 @@ export interface UpdateTransactionTypeRulePayload {
   lines?: TransactionTypeRuleLineInput[];
 }
 
-export type FiscalPeriodStatus = 'OPEN' | 'CLOSED' | 'LOCKED';
+/** SOFT_CLOSED is the month-end review state — for now it blocks posting like CLOSED. */
+export type FiscalPeriodStatus = 'OPEN' | 'SOFT_CLOSED' | 'CLOSED' | 'LOCKED';
 
 export interface FiscalPeriod {
+  id: string;
+  fiscalYearId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: FiscalPeriodStatus;
+  softClosedAt: string | null;
+  closedAt: string | null;
+  lockedAt: string | null;
+}
+
+/** A fiscal year and how far through its periods it is. There is no stored status — it is
+ *  derived from the periods: open while any is open, closed once all are. */
+export interface FiscalYear {
   id: string;
   name: string;
   startDate: string;
   endDate: string;
   status: FiscalPeriodStatus;
-  closedAt: string | null;
-  lockedAt: string | null;
+  periodCount: number;
+  /** Periods that are closed or locked. */
+  closedPeriodCount: number;
+  createdAt: string;
+}
+
+export interface FiscalYearDetail extends FiscalYear {
+  periods: FiscalPeriod[];
+}
+
+export type CloseCheckCode =
+  | 'PRIOR_PERIOD_OPEN'
+  | 'DRAFT_JOURNALS'
+  | 'DRAFT_PAYABLE_DOCUMENTS'
+  | 'DRAFT_RECEIVABLE_DOCUMENTS'
+  | 'DRAFT_CASHBOOK_TRANSACTIONS'
+  | 'SOURCE_EVENTS_PENDING'
+  | 'BANK_RECONCILIATION_PENDING';
+
+export interface CloseCheckItem {
+  code: CloseCheckCode;
+  message: string;
+  count: number;
+}
+
+/** What must be cleared (blockers) or looked at (warnings) before an open period can be closed. */
+export interface FiscalPeriodCloseCheck {
+  periodId: string;
+  blockers: CloseCheckItem[];
+  warnings: CloseCheckItem[];
+  canClose: boolean;
 }
 
 export interface CreateFiscalPeriodPayload {

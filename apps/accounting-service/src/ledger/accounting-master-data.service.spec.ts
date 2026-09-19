@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   FiscalPeriodStatus,
@@ -37,13 +41,26 @@ describe('AccountingMasterDataService', () => {
         update: jest.fn(),
       },
       journalEntry: {
-        count: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
       },
       fiscalPeriod: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         findUniqueOrThrow: jest.fn(),
+        create: jest.fn(),
+        createMany: jest.fn().mockResolvedValue({ count: 12 }),
         updateMany: jest.fn(),
       },
+      fiscalYear: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      accountingPayableDocument: { count: jest.fn().mockResolvedValue(0) },
+      accountingReceivableDocument: { count: jest.fn().mockResolvedValue(0) },
+      cashbookTransaction: { count: jest.fn().mockResolvedValue(0) },
+      sourceEventInbox: { count: jest.fn().mockResolvedValue(0) },
+      accountingCashAccount: { findMany: jest.fn().mockResolvedValue([]) },
       gLAccount: {
         findMany: jest.fn(),
         findFirst: jest.fn(),
@@ -148,6 +165,337 @@ describe('AccountingMasterDataService', () => {
         },
       }),
     );
+  });
+
+  describe('fiscal period soft close', () => {
+    const march = (status: FiscalPeriodStatus) => ({
+      id: 'period-3',
+      tenantId: actor.tenantId,
+      name: '2026-03',
+      status,
+      startDate: new Date('2026-03-01T00:00:00.000Z'),
+      endDate: new Date('2026-03-31T00:00:00.000Z'),
+    });
+
+    const withPeriod = (status: FiscalPeriodStatus) => {
+      const ctx = setup();
+      const period = march(status);
+      ctx.prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+      ctx.prisma.fiscalPeriod.updateMany.mockResolvedValue({ count: 1 });
+      ctx.prisma.fiscalPeriod.findUniqueOrThrow.mockResolvedValue(period);
+      return ctx;
+    };
+
+    it('soft closes an open period after a clean pre-close check', async () => {
+      const { prisma, service } = withPeriod(FiscalPeriodStatus.OPEN);
+
+      await service.changeFiscalPeriodStatus(
+        actor,
+        'period-3',
+        FiscalPeriodStatus.SOFT_CLOSED,
+      );
+
+      expect(prisma.journalEntry.count).toHaveBeenCalled();
+      expect(prisma.fiscalPeriod.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: 'period-3',
+            tenantId: actor.tenantId,
+            status: FiscalPeriodStatus.OPEN,
+          },
+          data: expect.objectContaining({
+            status: FiscalPeriodStatus.SOFT_CLOSED,
+            softClosedByUserId: actor.id,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it.each([FiscalPeriodStatus.SOFT_CLOSED, FiscalPeriodStatus.CLOSED])(
+      'refuses to leave OPEN for %s while drafts remain, and lists why',
+      async (target) => {
+        const { prisma, service } = withPeriod(FiscalPeriodStatus.OPEN);
+        prisma.journalEntry.count.mockResolvedValue(2);
+        prisma.cashbookTransaction.count.mockResolvedValue(1);
+
+        const error = await service
+          .changeFiscalPeriodStatus(actor, 'period-3', target)
+          .catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(ConflictException);
+        const body = (error as ConflictException).getResponse() as {
+          message: string;
+          blockers: { code: string }[];
+        };
+        expect(body.message).toContain('2026-03 cannot be closed yet');
+        expect(body.blockers.map((b) => b.code)).toEqual([
+          'DRAFT_JOURNALS',
+          'DRAFT_CASHBOOK_TRANSACTIONS',
+        ]);
+        expect(prisma.fiscalPeriod.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('closes a soft-closed period without re-running the check', async () => {
+      const { prisma, service } = withPeriod(FiscalPeriodStatus.SOFT_CLOSED);
+      prisma.journalEntry.count.mockResolvedValue(5);
+
+      await service.changeFiscalPeriodStatus(
+        actor,
+        'period-3',
+        FiscalPeriodStatus.CLOSED,
+      );
+
+      expect(prisma.journalEntry.count).not.toHaveBeenCalled();
+      expect(prisma.fiscalPeriod.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: FiscalPeriodStatus.SOFT_CLOSED,
+          }) as unknown,
+          data: expect.objectContaining({
+            status: FiscalPeriodStatus.CLOSED,
+            closedByUserId: actor.id,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('still allows closing an open period directly', async () => {
+      const { prisma, service } = withPeriod(FiscalPeriodStatus.OPEN);
+
+      await service.changeFiscalPeriodStatus(
+        actor,
+        'period-3',
+        FiscalPeriodStatus.CLOSED,
+      );
+
+      expect(prisma.fiscalPeriod.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([FiscalPeriodStatus.SOFT_CLOSED, FiscalPeriodStatus.CLOSED])(
+      'reopens a %s period and clears the closing stamps',
+      async (from) => {
+        const { prisma, service } = withPeriod(from);
+
+        await service.changeFiscalPeriodStatus(
+          actor,
+          'period-3',
+          FiscalPeriodStatus.OPEN,
+        );
+
+        expect(prisma.fiscalPeriod.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              status: FiscalPeriodStatus.OPEN,
+              softClosedAt: null,
+              softClosedByUserId: null,
+              closedAt: null,
+              closedByUserId: null,
+            }) as unknown,
+          }),
+        );
+      },
+    );
+
+    it('rejects transitions the state machine does not allow', async () => {
+      for (const [from, to] of [
+        [FiscalPeriodStatus.CLOSED, FiscalPeriodStatus.SOFT_CLOSED],
+        [FiscalPeriodStatus.SOFT_CLOSED, FiscalPeriodStatus.LOCKED],
+      ] as [FiscalPeriodStatus, FiscalPeriodStatus][]) {
+        const { prisma, service } = withPeriod(from);
+        await expect(
+          service.changeFiscalPeriodStatus(actor, 'period-3', to),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(prisma.fiscalPeriod.updateMany).not.toHaveBeenCalled();
+      }
+    });
+
+    it('serves the pre-close check and 404s for an unknown period', async () => {
+      const { prisma, service } = withPeriod(FiscalPeriodStatus.OPEN);
+      prisma.accountingPayableDocument.count.mockResolvedValue(1);
+
+      const check = await service.fiscalPeriodCloseCheck(
+        actor.tenantId,
+        'period-3',
+      );
+      expect(check.canClose).toBe(false);
+      expect(check.blockers[0].code).toBe('DRAFT_PAYABLE_DOCUMENTS');
+
+      prisma.fiscalPeriod.findFirst.mockResolvedValue(null);
+      await expect(
+        service.fiscalPeriodCloseCheck(actor.tenantId, 'nope'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('fiscal years', () => {
+    const yearRow = (overrides: Record<string, unknown> = {}) => ({
+      id: 'year-1',
+      tenantId: actor.tenantId,
+      name: 'FY2026',
+      startDate: new Date('2026-01-01T00:00:00.000Z'),
+      endDate: new Date('2026-12-31T00:00:00.000Z'),
+      createdAt: new Date('2025-12-01'),
+      periods: [],
+      ...overrides,
+    });
+
+    const withGenerate = (startMonth: number) => {
+      const ctx = setup();
+      ctx.prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+        tenantId: actor.tenantId,
+        fiscalYearStartMonth: startMonth,
+      });
+      ctx.prisma.fiscalPeriod.findFirst.mockResolvedValue(null);
+      ctx.prisma.fiscalYear.create.mockResolvedValue({ id: 'year-1' });
+      ctx.prisma.fiscalYear.findFirst.mockResolvedValue(yearRow());
+      return ctx;
+    };
+
+    it('generates the year record and its 12 periods together, attached to the year', async () => {
+      const { prisma, service } = withGenerate(1);
+
+      await service.generateFiscalYear(actor, 2026);
+
+      expect(prisma.fiscalYear.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tenantId: actor.tenantId,
+          name: 'FY2026',
+          startDate: new Date('2026-01-01T00:00:00.000Z'),
+          endDate: new Date('2026-12-31T00:00:00.000Z'),
+        }) as unknown,
+      });
+      const [{ data }] = prisma.fiscalPeriod.createMany.mock.calls[0] as [
+        { data: { name: string; fiscalYearId: string }[] },
+      ];
+      expect(data).toHaveLength(12);
+      expect(data.every((p) => p.fiscalYearId === 'year-1')).toBe(true);
+      expect(data[0].name).toBe('Jan 2026');
+      expect(data[11].name).toBe('Dec 2026');
+    });
+
+    it('names and dates a non-January year across the calendar boundary', async () => {
+      const { prisma, service } = withGenerate(7);
+
+      await service.generateFiscalYear(actor, 2026);
+
+      expect(prisma.fiscalYear.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'FY2026/27',
+          startDate: new Date('2026-07-01T00:00:00.000Z'),
+          endDate: new Date('2027-06-30T00:00:00.000Z'),
+        }) as unknown,
+      });
+    });
+
+    it('lets the caller pick the start month instead of the tenant setting', async () => {
+      const { prisma, service } = withGenerate(1);
+
+      await service.generateFiscalYear(actor, 2026, 4);
+
+      expect(prisma.fiscalYear.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'FY2026/27',
+          startDate: new Date('2026-04-01T00:00:00.000Z'),
+          endDate: new Date('2027-03-31T00:00:00.000Z'),
+        }) as unknown,
+      });
+      expect(prisma.accountingTenantConfig.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('creates nothing when the year would overlap an existing period', async () => {
+      const { prisma, service } = withGenerate(1);
+      prisma.fiscalPeriod.findFirst.mockResolvedValue({
+        id: 'p',
+        name: 'Mar 2026',
+      });
+
+      await expect(service.generateFiscalYear(actor, 2026)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.fiscalYear.create).not.toHaveBeenCalled();
+      expect(prisma.fiscalPeriod.createMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps the old generateYear endpoint returning the periods', async () => {
+      const { prisma, service } = withGenerate(1);
+      const periods = [{ id: 'p1', status: FiscalPeriodStatus.OPEN }];
+      prisma.fiscalYear.findFirst.mockResolvedValue(yearRow({ periods }));
+
+      await expect(
+        service.createFiscalPeriod(actor, { generateYear: 2026 }),
+      ).resolves.toEqual(periods);
+    });
+
+    it('lists years newest first with derived status and progress', async () => {
+      const { prisma, service } = setup();
+      prisma.fiscalYear.findMany.mockResolvedValue([
+        yearRow({
+          periods: [
+            { status: FiscalPeriodStatus.CLOSED },
+            { status: FiscalPeriodStatus.OPEN },
+          ],
+        }),
+      ]);
+
+      const [year] = await service.listFiscalYears(actor.tenantId);
+
+      expect(prisma.fiscalYear.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: actor.tenantId },
+          orderBy: { startDate: 'desc' },
+        }),
+      );
+      expect(year).toMatchObject({
+        name: 'FY2026',
+        status: FiscalPeriodStatus.OPEN,
+        periodCount: 2,
+        closedPeriodCount: 1,
+      });
+    });
+
+    it('returns one year with its periods, or 404s', async () => {
+      const { prisma, service } = setup();
+      prisma.fiscalYear.findFirst.mockResolvedValue(
+        yearRow({ periods: [{ id: 'p1', status: FiscalPeriodStatus.LOCKED }] }),
+      );
+
+      const year = await service.getFiscalYear(actor.tenantId, 'year-1');
+      expect(year.status).toBe(FiscalPeriodStatus.LOCKED);
+      expect(year.periods).toHaveLength(1);
+
+      prisma.fiscalYear.findFirst.mockResolvedValue(null);
+      await expect(
+        service.getFiscalYear(actor.tenantId, 'nope'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('only accepts a one-off period that falls inside an existing year', async () => {
+      const { prisma, service } = setup();
+      prisma.$executeRaw.mockResolvedValue(1);
+      prisma.fiscalPeriod.findFirst.mockResolvedValue(null);
+      prisma.fiscalYear.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createFiscalPeriod(actor, {
+          name: 'Stray',
+          startDate: '2030-01-01',
+          endDate: '2030-01-31',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.fiscalPeriod.create).not.toHaveBeenCalled();
+
+      prisma.fiscalYear.findFirst.mockResolvedValue({ id: 'year-1' });
+      prisma.fiscalPeriod.create.mockResolvedValue({ id: 'p' });
+      await service.createFiscalPeriod(actor, {
+        name: 'Gap',
+        startDate: '2026-02-01',
+        endDate: '2026-02-28',
+      });
+      expect(prisma.fiscalPeriod.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ fiscalYearId: 'year-1' }) as unknown,
+      });
+    });
   });
 
   it('blocks base currency changes after journals exist', async () => {

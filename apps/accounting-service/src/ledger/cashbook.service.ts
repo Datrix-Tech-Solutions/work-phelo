@@ -1021,7 +1021,7 @@ export class CashbookService {
     }
     if (period.status !== FiscalPeriodStatus.OPEN) {
       throw new ConflictException(
-        `Cannot post cashbook transaction into a ${period.status.toLowerCase()} fiscal period`,
+        `Cannot post cashbook transaction into a ${period.status.toLowerCase().replace('_', ' ')} fiscal period`,
       );
     }
     return period;

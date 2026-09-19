@@ -33,6 +33,7 @@ import {
   CreateAccountingCurrencyDto,
   CreateExchangeRateDto,
   CreateFiscalPeriodDto,
+  GenerateFiscalYearDto,
   CreateTransactionTypeDto,
   QueryFiscalPeriodsDto,
   UpdateAccountingCurrencyDto,
@@ -130,6 +131,48 @@ export class AccountingSettingsController {
     return this.service.updateExchangeRate(request.user, rateId, dto);
   }
 
+  @Get('fiscal-years')
+  @ApiTags('Accounting - Fiscal Years')
+  @ApiOperation({
+    summary: 'List fiscal years',
+    description:
+      'Each year carries a derived status (open while any period is open, closed once all are) and period progress.',
+  })
+  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  listFiscalYears(@Req() request: Request & { user: RequestUser }) {
+    return this.service.listFiscalYears(request.user.tenantId);
+  }
+
+  @Get('fiscal-years/:yearId')
+  @ApiTags('Accounting - Fiscal Years')
+  @ApiOperation({ summary: 'Get a fiscal year with its periods' })
+  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  getFiscalYear(
+    @Param('yearId', ParseUUIDPipe) yearId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.getFiscalYear(request.user.tenantId, yearId);
+  }
+
+  @Post('fiscal-years')
+  @ApiTags('Accounting - Fiscal Years')
+  @ApiOperation({
+    summary: 'Generate a fiscal year and its 12 monthly periods',
+    description:
+      "Starts in the given month, or the tenant's configured fiscal year start month when none is sent. Rejected if any of the periods would overlap an existing one.",
+  })
+  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  generateFiscalYear(
+    @Body() dto: GenerateFiscalYearDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.generateFiscalYear(
+      request.user,
+      dto.year,
+      dto.startMonth,
+    );
+  }
+
   @Get('fiscal-periods')
   @ApiTags('Accounting - Fiscal Periods')
   @ApiOperation({ summary: 'List tenant fiscal periods' })
@@ -155,9 +198,26 @@ export class AccountingSettingsController {
     return this.service.createFiscalPeriod(request.user, dto);
   }
 
+  @Get('fiscal-periods/:periodId/close-check')
+  @ApiTags('Accounting - Fiscal Periods')
+  @ApiOperation({
+    summary: 'Check what must be cleared before a period can be closed',
+    description:
+      'Blockers (earlier periods still open, draft journals, bills, invoices or cashbook ' +
+      'entries dated in the period) stop the period leaving OPEN. Warnings (pending source ' +
+      'events, bank accounts without a completed reconciliation) never do.',
+  })
+  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  fiscalPeriodCloseCheck(
+    @Param('periodId', ParseUUIDPipe) periodId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.fiscalPeriodCloseCheck(request.user.tenantId, periodId);
+  }
+
   @Post('fiscal-periods/:periodId/open')
   @ApiTags('Accounting - Fiscal Periods')
-  @ApiOperation({ summary: 'Reopen a closed fiscal period' })
+  @ApiOperation({ summary: 'Reopen a soft-closed or closed fiscal period' })
   @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
   openFiscalPeriod(
     @Param('periodId', ParseUUIDPipe) periodId: string,
@@ -170,9 +230,29 @@ export class AccountingSettingsController {
     );
   }
 
+  @Post('fiscal-periods/:periodId/soft-close')
+  @ApiTags('Accounting - Fiscal Periods')
+  @ApiOperation({
+    summary: 'Soft close an open fiscal period',
+    description:
+      'The month-end review state. Runs the same pre-close check as close, and for now ' +
+      'blocks posting exactly like a closed period.',
+  })
+  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  softCloseFiscalPeriod(
+    @Param('periodId', ParseUUIDPipe) periodId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.changeFiscalPeriodStatus(
+      request.user,
+      periodId,
+      FiscalPeriodStatus.SOFT_CLOSED,
+    );
+  }
+
   @Post('fiscal-periods/:periodId/close')
   @ApiTags('Accounting - Fiscal Periods')
-  @ApiOperation({ summary: 'Close an open fiscal period' })
+  @ApiOperation({ summary: 'Close an open or soft-closed fiscal period' })
   @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
   closeFiscalPeriod(
     @Param('periodId', ParseUUIDPipe) periodId: string,

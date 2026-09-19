@@ -12,6 +12,7 @@ datasource db {
 
 enum FiscalPeriodStatus {
   OPEN
+  SOFT_CLOSED
   CLOSED
   LOCKED
 
@@ -246,13 +247,36 @@ model ExchangeRate {
   @@schema("accounting")
 }
 
-model FiscalPeriod {
-  id              String             @id @default(uuid())
+/// A fiscal year and the periods (normally 12) that make up its calendar. Its status is never
+/// stored — it is derived from its periods, so closing the last period closes the year.
+model FiscalYear {
+  id              String         @id @default(uuid())
   tenantId        String
   name            String
   startDate       DateTime
   endDate         DateTime
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  periods         FiscalPeriod[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, name])
+  @@index([tenantId, startDate])
+  @@schema("accounting")
+}
+
+model FiscalPeriod {
+  id              String             @id @default(uuid())
+  tenantId        String
+  fiscalYearId    String
+  name            String
+  startDate       DateTime
+  endDate         DateTime
   status          FiscalPeriodStatus @default(OPEN)
+  softClosedAt    DateTime?
+  softClosedByUserId String?
   closedAt        DateTime?
   closedByUserId  String?
   lockedAt        DateTime?
@@ -262,9 +286,11 @@ model FiscalPeriod {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   journals        JournalEntry[]
+  fiscalYear      FiscalYear         @relation(fields: [fiscalYearId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
+  @@index([tenantId, fiscalYearId])
   @@index([tenantId, status, startDate, endDate])
   @@schema("accounting")
 }

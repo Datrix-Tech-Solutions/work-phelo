@@ -1816,7 +1816,7 @@ export class ReceivablesService {
     }
     if (period.status !== FiscalPeriodStatus.OPEN) {
       throw new ConflictException(
-        `Cannot post receivable transaction into a ${period.status.toLowerCase()} fiscal period`,
+        `Cannot post receivable transaction into a ${period.status.toLowerCase().replace('_', ' ')} fiscal period`,
       );
     }
     return period;
