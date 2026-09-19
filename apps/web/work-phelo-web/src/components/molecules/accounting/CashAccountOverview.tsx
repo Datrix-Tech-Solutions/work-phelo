@@ -39,9 +39,7 @@ export function CashAccountOverview({ account }: CashAccountOverviewProps) {
         {account.accountNumber && (
           <DetailField label="Account Number" value={account.accountNumber} />
         )}
-        {account.description && (
-          <DetailField label="Description" value={account.description} />
-        )}
+        {account.description && <DetailField label="Description" value={account.description} />}
       </div>
     </CollapsibleOverview>
   );

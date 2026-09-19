@@ -25,9 +25,7 @@ export function SelectableTreeRow({
   icon: Icon,
 }: SelectableTreeRowProps) {
   return (
-    <div
-      className={cn('relative group/row rounded-lg', isSelected && getSelectedRowTint(color))}
-    >
+    <div className={cn('relative group/row rounded-lg', isSelected && getSelectedRowTint(color))}>
       <TreeRowHoverOverlay />
       <button
         type="button"

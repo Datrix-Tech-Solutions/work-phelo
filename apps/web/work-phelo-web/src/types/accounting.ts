@@ -110,11 +110,37 @@ export interface TrialBalanceReport {
   imbalanceAmount: string;
 }
 
+export interface StatementRow {
+  account: FinancialReportAccount;
+  amount: string;
+}
+
+export interface StatementHierarchyGroup {
+  id: string | null;
+  code: string;
+  name: string;
+  accounts: StatementRow[];
+}
+
+export interface StatementHierarchyClassification {
+  id: string | null;
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  groups: StatementHierarchyGroup[];
+}
+
+export interface StatementHierarchyCategory {
+  category: GLAccountCategory;
+  classifications: StatementHierarchyClassification[];
+}
+
 export interface IncomeStatementReport {
   fromDate: string;
   toDate: string;
-  revenueAccounts: Array<{ account: FinancialReportAccount; amount: string }>;
-  expenseAccounts: Array<{ account: FinancialReportAccount; amount: string }>;
+  revenueAccounts: StatementRow[];
+  expenseAccounts: StatementRow[];
+  hierarchy: StatementHierarchyCategory[];
   totalRevenue: string;
   totalExpenses: string;
   netProfitOrLoss: string;
@@ -125,6 +151,7 @@ export interface BalanceSheetReport {
   assets: Array<{ account: FinancialReportAccount; amount: string }>;
   liabilities: Array<{ account: FinancialReportAccount; amount: string }>;
   equity: Array<{ account: FinancialReportAccount; amount: string }>;
+  hierarchy: StatementHierarchyCategory[];
   totalAssets: string;
   totalLiabilities: string;
   totalEquity: string;
@@ -1153,6 +1180,24 @@ export interface AccountingOpenItem {
 
 export interface AccountingAgingReport {
   agingByCurrency: AccountingAgingCurrencyTotal[];
+}
+
+/** An open document with its age at the report date. */
+export interface AccountingAgingDocument extends AccountingOpenItem {
+  daysOverdue: number;
+  bucket: AgingBucket;
+}
+
+/** One customer or vendor: its aging per currency and the open documents behind it. */
+export interface AccountingAgingParty {
+  party: { id: string; code: string; name: string };
+  agingByCurrency: AccountingAgingCurrencyTotal[];
+  documents: AccountingAgingDocument[];
+}
+
+export interface AccountingAgingPartyReport extends AccountingAgingReport {
+  asOfDate: string;
+  parties: AccountingAgingParty[];
 }
 
 export interface AccountingPartyStatement extends AccountingAgingReport {
