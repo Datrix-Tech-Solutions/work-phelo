@@ -18,6 +18,7 @@ import {
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { agingBucket, partyAging } from './aging.util';
 import { CashbookService } from './cashbook.service';
 import { CreateJournalDto } from './dto/accounting.dto';
 import { CreateCashbookReceiptDto } from './dto/cashbook.dto';
@@ -169,7 +170,16 @@ export class ReceivablesService {
   async aging(tenantId: string, query: QueryReceivableAgingDto) {
     const asOfDate = this.asOfDate(query.asOfDate);
     const rows = await this.openItems(tenantId, asOfDate, query.customerId);
-    return this.agingResult(asOfDate, rows);
+    return {
+      asOfDate,
+      ...this.agingResult(asOfDate, rows),
+      parties: partyAging(
+        asOfDate,
+        rows,
+        (row) => row.customer,
+        (value) => this.money(value),
+      ),
+    };
   }
 
   async statement(tenantId: string, customerId: string, asOf?: string) {
@@ -252,22 +262,7 @@ export class ReceivablesService {
           (typeof buckets)[number],
           Prisma.Decimal
         >);
-      const age = row.dueDate
-        ? Math.max(
-            0,
-            Math.floor((asOfDate.getTime() - row.dueDate.getTime()) / 86400000),
-          )
-        : 0;
-      const bucket =
-        age === 0
-          ? 'CURRENT'
-          : age <= 30
-            ? '1_30'
-            : age <= 60
-              ? '31_60'
-              : age <= 90
-                ? '61_90'
-                : 'OVER_90';
+      const { bucket } = agingBucket(asOfDate, row.dueDate);
       total[bucket] = total[bucket].plus(row.outstandingAmount);
       totals.set(row.currency, total);
     }

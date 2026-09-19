@@ -92,6 +92,10 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
 
   const { data: transactionTypes = [], isLoading: isLoadingTransactionTypes } =
     useTransactionTypes();
+  const selectableTypes = useMemo(
+    () => transactionTypes.filter((t) => t.category === 'RECEIVABLE' || t.category === 'PAYABLE'),
+    [transactionTypes],
+  );
 
   const invoices = useReceivableInvoices({ limit: 100, partyId });
   const bills = usePayableBills({ limit: 100, partyId });
@@ -317,13 +321,13 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       >
         {isLoadingTransactionTypes ? (
           <p className="text-sm text-gray-500">Loading transaction types…</p>
-        ) : transactionTypes.length === 0 ? (
+        ) : selectableTypes.length === 0 ? (
           <p className="text-sm text-gray-500">
             No transaction types configured yet. Add one under Settings → Transaction Types.
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-2">
-            {transactionTypes.map((type) => (
+            {selectableTypes.map((type) => (
               <button
                 key={type.id}
                 type="button"
@@ -338,10 +342,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
                   {type.description && (
                     <span className="text-xs text-gray-500">{type.description}</span>
                   )}
-                  {(type.category === 'RECEIVABLE' || type.category === 'PAYABLE') &&
-                    type.rulesCount === 0 && (
-                      <span className="text-xs text-orange-600">Rule required to use</span>
-                    )}
+                  {type.rulesCount === 0 && (
+                    <span className="text-xs text-orange-600">Rule required to use</span>
+                  )}
                 </div>
                 <TypeChip
                   label={TRANSACTION_TYPE_CATEGORY_LABEL[type.category]}

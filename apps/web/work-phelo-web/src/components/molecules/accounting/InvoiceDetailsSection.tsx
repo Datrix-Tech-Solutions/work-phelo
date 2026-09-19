@@ -6,11 +6,7 @@ import { FormSection } from '@/components/atoms/FormSection';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
-import {
-  AccountingTradeSide,
-  InvoiceFormValues,
-  SubledgerAccount,
-} from '@/types/accounting';
+import { AccountingTradeSide, InvoiceFormValues, SubledgerAccount } from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
   useTransactionTypeRules,
@@ -61,10 +57,7 @@ export function InvoiceDetailsSection({
     () => rules.find((r) => r.transactionTypeId === transactionTypeId),
     [rules, transactionTypeId],
   );
-  const taxLines = useMemo(
-    () => (rule?.lines ?? []).filter((line) => line.taxType),
-    [rule],
-  );
+  const taxLines = useMemo(() => (rule?.lines ?? []).filter((line) => line.taxType), [rule]);
 
   const toggleTaxType = (taxTypeId: string) => {
     setValue(

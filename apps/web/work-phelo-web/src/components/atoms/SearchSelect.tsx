@@ -39,6 +39,8 @@ interface SearchSelectProps {
    *  empty — lets callers offer a quick action (e.g. "No account found — Create account").
    *  Receives the typed query and a `close` callback to dismiss the dropdown afterwards. */
   emptyState?: (ctx: { query: string; close: () => void }) => React.ReactNode;
+  /** Shows the current value but blocks opening, typing and clearing (e.g. a locked setting). */
+  disabled?: boolean;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -61,6 +63,7 @@ export function SearchSelect({
   showAllOption = false,
   allLabel,
   emptyState,
+  disabled = false,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -241,6 +244,7 @@ export function SearchSelect({
       <div
         className={cn(
           'flex items-center border rounded-input px-4 transition-colors',
+          disabled && 'opacity-60 cursor-not-allowed',
           open
             ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
             : error
@@ -251,6 +255,7 @@ export function SearchSelect({
         <input
           ref={inputRef}
           type="text"
+          disabled={disabled}
           value={inputDisplay}
           onChange={handleInputChange}
           onFocus={handleFocus}
@@ -272,7 +277,7 @@ export function SearchSelect({
         <div className="flex items-center gap-1 shrink-0 ml-2">
           {rightSlot}
           {/* Clear button — only when something is selected */}
-          {clearable && value && !open && (
+          {clearable && value && !open && !disabled && (
             <button
               type="button"
               onClick={handleClear}
@@ -284,6 +289,7 @@ export function SearchSelect({
           {/* Chevron toggle */}
           <button
             type="button"
+            disabled={disabled}
             onClick={handleChevronClick}
             className="text-gray-400 hover:text-gray-600 transition-colors p-0.5"
           >

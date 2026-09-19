@@ -1,8 +1,11 @@
+'use client';
+
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { SUBLEDGER_TYPE_LABELS, SubledgerAccount } from '@/types/accounting';
+import { useAccountingConfig } from '@/hooks';
 import {
   SUBLEDGER_TYPE_CHIP_COLOR,
   type SubledgerTypeChipColor,
@@ -23,6 +26,10 @@ interface EntityOverviewProps {
 }
 
 export function EntityOverview({ entity }: EntityOverviewProps) {
+  const { data: config } = useAccountingConfig();
+  // The balance is summed from base-currency journal amounts, whatever currency the entity trades in.
+  const baseCurrency = config?.baseCurrency ?? entity.currency ?? '';
+
   return (
     <CollapsibleOverview>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
@@ -32,9 +39,7 @@ export function EntityOverview({ entity }: EntityOverviewProps) {
           label="Type"
           value={
             <TypeChip
-              label={
-                (SUBLEDGER_TYPE_LABELS as Record<string, string>)[entity.type] ?? entity.type
-              }
+              label={(SUBLEDGER_TYPE_LABELS as Record<string, string>)[entity.type] ?? entity.type}
               color={
                 (SUBLEDGER_TYPE_CHIP_COLOR as Record<string, SubledgerTypeChipColor>)[
                   entity.type
@@ -54,7 +59,7 @@ export function EntityOverview({ entity }: EntityOverviewProps) {
         />
         <DetailField
           label="Outstanding Balance"
-          value={fmtBalance(entity.balance.baseBalance, entity.currency ?? '')}
+          value={fmtBalance(entity.balance.baseBalance, baseCurrency)}
         />
         {entity.contactName && <DetailField label="Contact" value={entity.contactName} />}
         {entity.address && <DetailField label="Address" value={entity.address} />}

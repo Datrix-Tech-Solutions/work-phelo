@@ -7,6 +7,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   FiscalPeriodStatus,
   GLAccountCategory,
+  JournalStatus,
   NormalBalance,
   Prisma,
   RecordStatus,
@@ -723,8 +724,8 @@ describe('AccountingMasterDataService', () => {
     ]);
     prisma.journalLine.findMany.mockResolvedValue([
       {
-        glAccountId: 'premium-payable-control',
         subledgerAccountId: 'reinsurer-premium-ap-subledger',
+        glAccount: { normalBalance: NormalBalance.CREDIT },
         transactionDebit: new Prisma.Decimal(0),
         transactionCredit: new Prisma.Decimal(100),
         baseDebit: new Prisma.Decimal(0),
@@ -735,8 +736,8 @@ describe('AccountingMasterDataService', () => {
         },
       },
       {
-        glAccountId: 'claims-receivable-control',
         subledgerAccountId: 'reinsurer-claims-ar-subledger',
+        glAccount: { normalBalance: NormalBalance.DEBIT },
         transactionDebit: new Prisma.Decimal(100),
         transactionCredit: new Prisma.Decimal(0),
         baseDebit: new Prisma.Decimal(100),
@@ -833,8 +834,8 @@ describe('AccountingMasterDataService', () => {
     ]);
     prisma.journalLine.findMany.mockResolvedValue([
       {
-        glAccountId: 'premium-receivable-control',
         subledgerAccountId: 'cedant-premium-ar-subledger',
+        glAccount: { normalBalance: NormalBalance.DEBIT },
         transactionDebit: new Prisma.Decimal(250),
         transactionCredit: new Prisma.Decimal(0),
         baseDebit: new Prisma.Decimal(250),
@@ -845,8 +846,8 @@ describe('AccountingMasterDataService', () => {
         },
       },
       {
-        glAccountId: 'claims-payable-control',
         subledgerAccountId: 'cedant-claims-ap-subledger',
+        glAccount: { normalBalance: NormalBalance.CREDIT },
         transactionDebit: new Prisma.Decimal(0),
         transactionCredit: new Prisma.Decimal(90),
         baseDebit: new Prisma.Decimal(0),
@@ -879,6 +880,132 @@ describe('AccountingMasterDataService', () => {
     expect(result[1].balance).toMatchObject({
       baseBalance: 90,
       transactionBalance: 90,
+    });
+  });
+
+  describe('entity outstanding balances', () => {
+    const entity = (id: string, type: string) => ({
+      id,
+      tenantId: actor.tenantId,
+      code: id.toUpperCase(),
+      name: id,
+      type,
+      controlAccountId: null,
+      controlAccount: null,
+      currency: 'GHS',
+      status: RecordStatus.ACTIVE,
+    });
+    const line = (
+      subledgerAccountId: string,
+      normalBalance: NormalBalance,
+      debit: number,
+      credit: number,
+      currency = 'GHS',
+    ) => ({
+      subledgerAccountId,
+      glAccount: { normalBalance },
+      transactionDebit: new Prisma.Decimal(debit),
+      transactionCredit: new Prisma.Decimal(credit),
+      baseDebit: new Prisma.Decimal(debit),
+      baseCredit: new Prisma.Decimal(credit),
+      journalEntry: { transactionCurrency: currency },
+    });
+
+    it('works without a control account: what a customer owes and what is owed to a vendor', async () => {
+      const { prisma, service } = setup();
+      prisma.subledgerAccount.findMany.mockResolvedValue([
+        entity('cust', 'CUSTOMER'),
+        entity('vend', 'VENDOR'),
+        entity('idle', 'CUSTOMER'),
+      ]);
+      prisma.journalLine.findMany.mockResolvedValue([
+        // customer: invoiced 1,000 on receivables (debit-normal), then paid 400
+        line('cust', NormalBalance.DEBIT, 1000, 0),
+        line('cust', NormalBalance.DEBIT, 0, 400),
+        // vendor: billed 800 on payables (credit-normal), then paid 300
+        line('vend', NormalBalance.CREDIT, 0, 800),
+        line('vend', NormalBalance.CREDIT, 300, 0),
+      ]);
+
+      const [cust, vend, idle] = await service.listSubledgerAccounts(
+        actor.tenantId,
+      );
+
+      expect(cust.balance.baseBalance).toBe(600);
+      expect(vend.balance.baseBalance).toBe(500);
+      expect(idle.balance.baseBalance).toBe(0);
+      expect(cust.balance).toMatchObject({
+        baseDebit: 1000,
+        baseCredit: 400,
+        transactionCurrencies: ['GHS'],
+      });
+    });
+
+    it('uses base amounts, not the transaction currency, for the balance', async () => {
+      const { prisma, service } = setup();
+      prisma.subledgerAccount.findMany.mockResolvedValue([
+        entity('cust', 'CUSTOMER'),
+      ]);
+      prisma.journalLine.findMany.mockResolvedValue([
+        {
+          ...line('cust', NormalBalance.DEBIT, 100, 0, 'USD'),
+          baseDebit: new Prisma.Decimal(1500),
+        },
+      ]);
+
+      const [cust] = await service.listSubledgerAccounts(actor.tenantId);
+
+      expect(cust.balance.baseBalance).toBe(1500);
+      expect(cust.balance.transactionBalance).toBe(100);
+      expect(cust.balance.transactionCurrencies).toEqual(['USD']);
+    });
+
+    it('reads only posted and reversed journals for the listed entities', async () => {
+      const { prisma, service } = setup();
+      prisma.subledgerAccount.findMany.mockResolvedValue([
+        entity('cust', 'CUSTOMER'),
+      ]);
+      prisma.journalLine.findMany.mockResolvedValue([]);
+
+      await service.listSubledgerAccounts(actor.tenantId);
+
+      expect(prisma.journalLine.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: actor.tenantId,
+            subledgerAccountId: { in: ['cust'] },
+            journalEntry: {
+              status: {
+                in: [JournalStatus.POSTED, JournalStatus.REVERSED],
+              },
+            },
+          },
+        }),
+      );
+    });
+
+    it('skips the query entirely when there are no entities', async () => {
+      const { prisma, service } = setup();
+      prisma.subledgerAccount.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.listSubledgerAccounts(actor.tenantId),
+      ).resolves.toEqual([]);
+      expect(prisma.journalLine.findMany).not.toHaveBeenCalled();
+    });
+
+    it('returns the same balance on a single entity', async () => {
+      const { prisma, service } = setup();
+      prisma.subledgerAccount.findFirst.mockResolvedValue(
+        entity('vend', 'VENDOR'),
+      );
+      prisma.journalLine.findMany.mockResolvedValue([
+        line('vend', NormalBalance.CREDIT, 0, 250),
+      ]);
+
+      const result = await service.getSubledgerAccount(actor.tenantId, 'vend');
+
+      expect(result.balance.baseBalance).toBe(250);
     });
   });
 

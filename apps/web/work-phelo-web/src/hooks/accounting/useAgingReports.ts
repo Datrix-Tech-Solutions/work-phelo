@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { AccountingAgingReport, AccountingPartyStatement } from '@/types/accounting';
+import type { AccountingAgingPartyReport, AccountingPartyStatement } from '@/types/accounting';
 
 type Side = 'receivables' | 'payables';
 
@@ -8,8 +8,11 @@ export function useAgingReport(side: Side, asOfDate: string, enabled = true) {
   return useQuery({
     queryKey: ['accounting', side, 'aging', asOfDate],
     queryFn: async () =>
-      (await api.get<AccountingAgingReport>(`/accounting/${side}/aging`, { params: { asOfDate } }))
-        .data,
+      (
+        await api.get<AccountingAgingPartyReport>(`/accounting/${side}/aging`, {
+          params: { asOfDate },
+        })
+      ).data,
     enabled,
   });
 }

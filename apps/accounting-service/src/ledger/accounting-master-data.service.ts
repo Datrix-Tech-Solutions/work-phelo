@@ -1788,21 +1788,9 @@ export class AccountingMasterDataService {
       },
       orderBy: { code: 'asc' },
     });
-    // Entities with no control account (the norm now — see the SubledgerAccount schema
-    // note) have nothing to compute a control-account balance against.
-    const balances = await this.calculateSubledgerDimensionBalances(
+    const balances = await this.calculateSubledgerBalances(
       tenantId,
-      items.flatMap((item) =>
-        item.controlAccountId && item.controlAccount
-          ? [
-              {
-                subledgerAccountId: item.id,
-                controlAccountId: item.controlAccountId,
-                normalBalance: item.controlAccount.normalBalance,
-              },
-            ]
-          : [],
-      ),
+      items.map((item) => item.id),
     );
     return items.map((item) => ({
       ...item,
@@ -1826,16 +1814,7 @@ export class AccountingMasterDataService {
       },
     });
     if (!item) throw new NotFoundException('Subledger account not found');
-    const balances =
-      item.controlAccountId && item.controlAccount
-        ? await this.calculateSubledgerDimensionBalances(tenantId, [
-            {
-              subledgerAccountId: item.id,
-              controlAccountId: item.controlAccountId,
-              normalBalance: item.controlAccount.normalBalance,
-            },
-          ])
-        : new Map<string, ReturnType<typeof this.emptyBalance>>();
+    const balances = await this.calculateSubledgerBalances(tenantId, [item.id]);
     return { ...item, balance: balances.get(item.id) ?? this.emptyBalance() };
   }
 
@@ -2465,119 +2444,98 @@ export class AccountingMasterDataService {
     return account;
   }
 
-  private async calculateSubledgerDimensionBalances(
+  /**
+   * Each entity's outstanding balance, from every posted journal line that carries it as its
+   * subledger — so it does not depend on the entity having a control account of its own (the
+   * control account now comes from the transaction type's rule at posting time). The sign
+   * follows the account each line hits: a debit-normal account (receivables) counts debits
+   * minus credits, so a positive balance is what a customer owes; a credit-normal one
+   * (payables) counts credits minus debits, so a positive balance is what is owed to a
+   * vendor. Base amounts are in the tenant's base currency, and reversed journals stay in so
+   * their reversals net them out. Entities with no postings get no entry.
+   */
+  private async calculateSubledgerBalances(
     tenantId: string,
-    dimensions: Array<{
-      subledgerAccountId: string;
-      controlAccountId: string;
-      normalBalance: NormalBalance;
-    }>,
+    subledgerIds: string[],
   ) {
-    const uniqueDimensions = Array.from(
-      new Map(
-        dimensions.map((dimension) => [
-          dimension.subledgerAccountId,
-          dimension,
-        ]),
-      ).values(),
-    );
-    if (uniqueDimensions.length === 0) {
-      return new Map<string, ReturnType<typeof this.emptyBalance>>();
-    }
-    const uniqueSubledgerIds = uniqueDimensions.map(
-      (dimension) => dimension.subledgerAccountId,
-    );
-    const dimensionBySubledger = new Map(
-      uniqueDimensions.map((dimension) => [
-        dimension.subledgerAccountId,
-        dimension,
-      ]),
-    );
+    const balances = new Map<string, ReturnType<typeof this.emptyBalance>>();
+    if (subledgerIds.length === 0) return balances;
+
     const lines = await this.prisma.journalLine.findMany({
       where: {
         tenantId,
-        subledgerAccountId: { in: uniqueSubledgerIds },
+        subledgerAccountId: { in: subledgerIds },
         journalEntry: {
           status: { in: [JournalStatus.POSTED, JournalStatus.REVERSED] },
         },
       },
       select: {
-        glAccountId: true,
         subledgerAccountId: true,
         transactionDebit: true,
         transactionCredit: true,
         baseDebit: true,
         baseCredit: true,
-        journalEntry: {
-          select: { transactionCurrency: true, baseCurrency: true },
-        },
+        glAccount: { select: { normalBalance: true } },
+        journalEntry: { select: { transactionCurrency: true } },
       },
     });
-    const totalsBySubledger = new Map<
+
+    const totals = new Map<
       string,
       {
-        baseDebit: number;
-        baseCredit: number;
-        transactionDebit: number;
-        transactionCredit: number;
+        baseDebit: Prisma.Decimal;
+        baseCredit: Prisma.Decimal;
+        baseBalance: Prisma.Decimal;
+        transactionDebit: Prisma.Decimal;
+        transactionCredit: Prisma.Decimal;
+        transactionBalance: Prisma.Decimal;
         currencies: Set<string>;
       }
     >();
-    for (const id of uniqueSubledgerIds) {
-      totalsBySubledger.set(id, {
-        baseDebit: 0,
-        baseCredit: 0,
-        transactionDebit: 0,
-        transactionCredit: 0,
-        currencies: new Set<string>(),
-      });
-    }
-
     for (const line of lines) {
       if (!line.subledgerAccountId) continue;
-      const dimension = dimensionBySubledger.get(line.subledgerAccountId);
-      if (!dimension || dimension.controlAccountId !== line.glAccountId) {
-        continue;
-      }
-      const totals =
-        totalsBySubledger.get(line.subledgerAccountId) ?? this.emptyTotals();
-      totals.baseDebit += Number(line.baseDebit);
-      totals.baseCredit += Number(line.baseCredit);
-      totals.transactionDebit += Number(line.transactionDebit);
-      totals.transactionCredit += Number(line.transactionCredit);
-      totals.currencies.add(line.journalEntry.transactionCurrency);
-      totalsBySubledger.set(line.subledgerAccountId, totals);
+      const current = totals.get(line.subledgerAccountId) ?? {
+        baseDebit: new Prisma.Decimal(0),
+        baseCredit: new Prisma.Decimal(0),
+        baseBalance: new Prisma.Decimal(0),
+        transactionDebit: new Prisma.Decimal(0),
+        transactionCredit: new Prisma.Decimal(0),
+        transactionBalance: new Prisma.Decimal(0),
+        currencies: new Set<string>(),
+      };
+      const debitNormal = line.glAccount.normalBalance === NormalBalance.DEBIT;
+      const base = line.baseDebit.minus(line.baseCredit);
+      const transaction = line.transactionDebit.minus(line.transactionCredit);
+      current.baseDebit = current.baseDebit.plus(line.baseDebit);
+      current.baseCredit = current.baseCredit.plus(line.baseCredit);
+      current.baseBalance = current.baseBalance.plus(
+        debitNormal ? base : base.negated(),
+      );
+      current.transactionDebit = current.transactionDebit.plus(
+        line.transactionDebit,
+      );
+      current.transactionCredit = current.transactionCredit.plus(
+        line.transactionCredit,
+      );
+      current.transactionBalance = current.transactionBalance.plus(
+        debitNormal ? transaction : transaction.negated(),
+      );
+      current.currencies.add(line.journalEntry.transactionCurrency);
+      totals.set(line.subledgerAccountId, current);
     }
 
-    const balances = new Map<string, ReturnType<typeof this.emptyBalance>>();
-    for (const [subledgerId, totals] of totalsBySubledger) {
-      const dimension = dimensionBySubledger.get(subledgerId);
-      const isDebitNormal = dimension?.normalBalance === NormalBalance.DEBIT;
+    for (const [subledgerId, t] of totals) {
       balances.set(subledgerId, {
-        baseDebit: totals.baseDebit,
-        baseCredit: totals.baseCredit,
-        baseBalance: isDebitNormal
-          ? totals.baseDebit - totals.baseCredit
-          : totals.baseCredit - totals.baseDebit,
-        transactionDebit: totals.transactionDebit,
-        transactionCredit: totals.transactionCredit,
-        transactionBalance: isDebitNormal
-          ? totals.transactionDebit - totals.transactionCredit
-          : totals.transactionCredit - totals.transactionDebit,
-        transactionCurrencies: Array.from(totals.currencies).sort(),
+        baseDebit: t.baseDebit.toNumber(),
+        baseCredit: t.baseCredit.toNumber(),
+        baseBalance: t.baseBalance.toNumber(),
+        transactionDebit: t.transactionDebit.toNumber(),
+        transactionCredit: t.transactionCredit.toNumber(),
+        transactionBalance: t.transactionBalance.toNumber(),
+        transactionCurrencies: Array.from(t.currencies).sort(),
       });
     }
     return balances;
-  }
-
-  private emptyTotals() {
-    return {
-      baseDebit: 0,
-      baseCredit: 0,
-      transactionDebit: 0,
-      transactionCredit: 0,
-      currencies: new Set<string>(),
-    };
   }
 
   private emptyBalance() {

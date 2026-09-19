@@ -525,11 +525,13 @@ describe('ReceivablesService', () => {
     prisma.accountingReceivableDocument.findMany.mockResolvedValueOnce([
       invoice({
         id: 'current',
+        customer: { id: customer.id, code: customer.code, name: customer.name },
         dueDate: new Date('2026-08-10'),
         totalAmount: new Prisma.Decimal(100),
       }),
       invoice({
         id: 'overdue',
+        customer: { id: customer.id, code: customer.code, name: customer.name },
         dueDate: new Date('2026-06-01'),
         totalAmount: new Prisma.Decimal(250),
       }),
@@ -538,19 +540,38 @@ describe('ReceivablesService', () => {
       { invoiceId: 'overdue', amount: new Prisma.Decimal(50) },
     ]);
 
-    await expect(
-      service.aging(actor.tenantId, { asOfDate: '2026-08-10' }),
-    ).resolves.toEqual({
-      agingByCurrency: [
-        {
-          currency: 'GHS',
-          CURRENT: '100.0000',
-          '1_30': '0.0000',
-          '31_60': '0.0000',
-          '61_90': '200.0000',
-          OVER_90: '0.0000',
-        },
-      ],
+    const result = await service.aging(actor.tenantId, {
+      asOfDate: '2026-08-10',
     });
+
+    expect(result.agingByCurrency).toEqual([
+      {
+        currency: 'GHS',
+        CURRENT: '100.0000',
+        '1_30': '0.0000',
+        '31_60': '0.0000',
+        '61_90': '200.0000',
+        OVER_90: '0.0000',
+      },
+    ]);
+    // The same open items, grouped under their customer, with what is still unpaid.
+    expect(result.parties).toHaveLength(1);
+    expect(result.parties[0].party).toEqual({
+      id: customer.id,
+      code: customer.code,
+      name: customer.name,
+    });
+    expect(result.parties[0].agingByCurrency).toEqual(result.agingByCurrency);
+    expect(
+      result.parties[0].documents.map((document) => [
+        document.id,
+        document.outstandingAmount,
+        document.daysOverdue,
+        document.bucket,
+      ]),
+    ).toEqual([
+      ['current', '100.0000', 0, 'CURRENT'],
+      ['overdue', '200.0000', 70, '61_90'],
+    ]);
   });
 });
