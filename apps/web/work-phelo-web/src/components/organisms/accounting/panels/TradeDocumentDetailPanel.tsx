@@ -301,6 +301,12 @@ export function TradeDocumentDetailPanel({
                 label="Subtotal / Tax"
                 value={`${fmtAmount(document.subtotalAmount, document.currency)} / ${fmtAmount(document.taxAmount, document.currency)}`}
               />
+              {document.costCentre && (
+                <Field
+                  label="Cost Centre"
+                  value={`${document.costCentre.code} – ${document.costCentre.name}`}
+                />
+              )}
               {document.externalReference && (
                 <Field label="External Reference" value={document.externalReference} />
               )}

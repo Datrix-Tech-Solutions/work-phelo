@@ -159,6 +159,11 @@ export const RESOURCES = [
       'Standalone Accounting accounts payable documents, payments and allocations',
   },
   {
+    name: 'accounting.budgets',
+    module: 'ACCOUNTING',
+    description: 'Period budgets by account and cost centre, with actuals',
+  },
+  {
     name: 'accounting.journals',
     module: 'ACCOUNTING',
     description: 'Draft, post and reverse journal entries',

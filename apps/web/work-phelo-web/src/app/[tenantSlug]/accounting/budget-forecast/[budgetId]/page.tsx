@@ -4,9 +4,11 @@ import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { Badge } from '@/components/atoms/Badge';
+import { Skeleton } from '@/components/atoms/Skeleton';
 import { Button } from '@/components/atoms/Button';
 import { StatCard } from '@/components/atoms/StatCard';
 import { TypeChip } from '@/components/atoms/TypeChip';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { BudgetPanel } from '@/components/organisms/accounting/panels/BudgetPanel';
 import { cardClass } from '@/lib/utils';
@@ -16,7 +18,8 @@ import {
   BUDGET_SCOPE_LABELS,
   BUDGET_STATUS_LABELS,
 } from '@/lib/accounting/budgetPeriod';
-import { BudgetDetail, BudgetStatus, GLAccountCategory } from '@/types/accounting';
+import { BudgetStatus, GLAccountCategory } from '@/types/accounting';
+import { useBudget } from '@/hooks';
 
 const STATUS_VARIANT: Record<BudgetStatus, 'neutral' | 'success' | 'info'> = {
   DRAFT: 'neutral',
@@ -24,8 +27,8 @@ const STATUS_VARIANT: Record<BudgetStatus, 'neutral' | 'success' | 'info'> = {
   CLOSED: 'info',
 };
 
-// TODO: replace with useBudget(budgetId) once the budgets API is ready.
-const MOCK_DETAIL: BudgetDetail | null = null;
+/** Filter value for lines with no cost centre. */
+const COMPANY_WIDE = '__company__';
 
 function fmt(amount: number, currency: string) {
   return `${currency ? `${currency} ` : ''}${amount.toLocaleString(undefined, {
@@ -39,6 +42,7 @@ type AnalysisRow = {
   accountCode: string;
   accountName: string;
   category: GLAccountCategory;
+  costCentre: string | null;
   currency: string;
   budgeted: number;
   actual: number | null;
@@ -88,6 +92,17 @@ const ANALYSIS_COLUMNS: Column<AnalysisRow>[] = [
         <span className="font-semibold text-gray-400">{row.accountCode}</span> {row.accountName}
       </span>
     ),
+  },
+  {
+    key: 'costCentre',
+    label: 'Cost Centre',
+    width: '170px',
+    render: (row) =>
+      row.costCentre ? (
+        <span className="text-sm text-gray-700">{row.costCentre}</span>
+      ) : (
+        <span className="text-sm text-gray-400">Company-wide</span>
+      ),
   },
   {
     key: 'category',
@@ -153,16 +168,44 @@ export default function BudgetDetailPage({
 }: {
   params: Promise<{ tenantSlug: string; budgetId: string }>;
 }) {
-  const { tenantSlug } = use(params);
+  const { tenantSlug, budgetId } = use(params);
   const base = `/${tenantSlug}/accounting/budget-forecast`;
 
-  const budget = MOCK_DETAIL;
+  const { data: budget, isLoading } = useBudget(budgetId);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [costCentreFilterChoice, setCostCentreFilter] = useState('');
+
+  const costCentreOptions = useMemo(() => {
+    if (!budget) return [];
+    const seen = new Map<string, string>();
+    for (const l of budget.lines) {
+      if (l.costCentreId) seen.set(l.costCentreId, `${l.costCentreCode} – ${l.costCentreName}`);
+    }
+    const opts = [...seen].map(([value, label]) => ({ value, label }));
+    if (budget.lines.some((l) => !l.costCentreId)) {
+      opts.push({ value: COMPANY_WIDE, label: 'Company-wide (no cost centre)' });
+    }
+    return opts;
+  }, [budget]);
+
+  // A filter pointing at a cost centre that an edit has since removed falls back to "all".
+  const costCentreFilter = costCentreOptions.some((o) => o.value === costCentreFilterChoice)
+    ? costCentreFilterChoice
+    : '';
+
+  // The summary cards and the table both follow the cost-centre filter.
+  const visibleLines = useMemo(() => {
+    if (!budget) return [];
+    if (!costCentreFilter) return budget.lines;
+    return budget.lines.filter((l) =>
+      costCentreFilter === COMPANY_WIDE ? !l.costCentreId : l.costCentreId === costCentreFilter,
+    );
+  }, [budget, costCentreFilter]);
 
   const summary = useMemo(() => {
     if (!budget) return null;
     const totalFor = (category: GLAccountCategory) =>
-      budget.lines
+      visibleLines
         .filter((l) => l.category === category)
         .reduce(
           (acc, l) => ({
@@ -181,21 +224,22 @@ export default function BudgetDetailPage({
         actual: income.actual - expense.actual,
       },
     };
-  }, [budget]);
+  }, [budget, visibleLines]);
 
   const rows = useMemo<AnalysisRow[]>(() => {
     if (!budget) return [];
-    return budget.lines.map((line) => {
+    return visibleLines.map((line) => {
       const variance = line.actual == null ? null : line.actual - line.budgeted;
       const variancePct =
         variance == null || line.budgeted === 0 ? null : (variance / line.budgeted) * 100;
       const favorable =
         variance == null ? null : line.category === 'EXPENSE' ? variance <= 0 : variance >= 0;
       return {
-        id: line.accountId,
+        id: `${line.accountId}:${line.costCentreId ?? ''}`,
         accountCode: line.accountCode,
         accountName: line.accountName,
         category: line.category,
+        costCentre: line.costCentreId ? `${line.costCentreCode} – ${line.costCentreName}` : null,
         currency: budget.currency,
         budgeted: line.budgeted,
         actual: line.actual,
@@ -204,10 +248,10 @@ export default function BudgetDetailPage({
         favorable,
       };
     });
-  }, [budget]);
+  }, [budget, visibleLines]);
 
   return (
-    <div className="flex flex-col gap-6 p-6 min-h-0 overflow-y-auto flex-1">
+    <div className="flex flex-col gap-6 py-6 pr-6 pl-(--page-pl) min-h-0 overflow-y-auto flex-1">
       <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link href={base} className="hover:text-gray-700 transition-colors">
           Budgets
@@ -216,13 +260,19 @@ export default function BudgetDetailPage({
         <span className="text-gray-700 font-medium">{budget?.name ?? 'Budget'}</span>
       </nav>
 
-      {!budget ? (
+      {isLoading ? (
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : !budget ? (
         <div
           className={cardClass('flex flex-col items-center justify-center gap-1 py-16 text-center')}
         >
-          <p className="text-sm font-medium text-gray-700">Budget analysis coming soon</p>
+          <p className="text-sm font-medium text-gray-700">Budget not found</p>
           <p className="text-xs text-gray-400">
-            This page will show budgeted vs. actual by account once the budgets API is wired in.
+            It may have been removed, or the link is incorrect.
           </p>
         </div>
       ) : (
@@ -242,9 +292,11 @@ export default function BudgetDetailPage({
                 {BUDGET_SCOPE_LABELS[budget.scope]}
               </p>
             </div>
-            <Button variant="outline" onClick={() => setIsEditOpen(true)}>
-              Edit Budget
-            </Button>
+            {budget.status !== 'CLOSED' && (
+              <Button variant="outline" onClick={() => setIsEditOpen(true)}>
+                Edit Budget
+              </Button>
+            )}
           </div>
 
           {summary && (
@@ -281,6 +333,19 @@ export default function BudgetDetailPage({
 
           <DataTable
             columns={ANALYSIS_COLUMNS}
+            extraFilters={
+              costCentreOptions.length > 0 ? (
+                <SearchSelect
+                  size="sm"
+                  placeholder="Cost centre"
+                  showAllOption
+                  allLabel="All cost centres"
+                  options={costCentreOptions}
+                  value={costCentreFilter}
+                  onChange={setCostCentreFilter}
+                />
+              ) : undefined
+            }
             data={rows}
             emptyMessage="No budget lines"
             currentPage={1}

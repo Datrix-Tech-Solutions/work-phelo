@@ -1,27 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { DetailField } from '@/components/atoms/DetailField';
-import { FormField } from '@/components/molecules/shared/FormField';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { useDeactivateGLAccount, useUpdateGLAccount } from '@/hooks';
+import { useDeactivateGLAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { EditLeafAccountPanel } from '@/components/organisms/accounting/panels/EditLeafAccountPanel';
 import { GLAccountLedger } from '@/components/organisms/accounting/GLAccountLedger';
 import type { GLAccount } from '@/types/accounting';
 
 interface GLAccountDetailProps {
   account: GLAccount;
-}
-
-interface FormValues {
-  name: string;
-  description: string;
-  allowPosting: boolean;
 }
 
 const TABS = [
@@ -31,54 +24,10 @@ const TABS = [
 
 export function GLAccountDetail({ account }: GLAccountDetailProps) {
   const toast = useToast();
-  const { mutateAsync: updateAccount, isPending: isUpdating } = useUpdateGLAccount();
   const { mutateAsync: deactivateAccount, isPending: isDeactivating } = useDeactivateGLAccount();
   const [activeTab, setActiveTab] = useState('ledger');
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false);
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<FormValues>();
-
-  const formValues = () => ({
-    name: account.name,
-    description: account.description ?? '',
-    allowPosting: account.allowPosting,
-  });
-
-  useEffect(() => {
-    reset(formValues());
-    setIsEditing(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account, reset]);
-
-  const startEditing = () => {
-    reset(formValues());
-    setIsEditing(true);
-  };
-
-  const cancelEditing = () => {
-    reset(formValues());
-    setIsEditing(false);
-  };
-
-  const save = async (values: FormValues) => {
-    try {
-      await updateAccount({
-        id: account.id,
-        name: values.name,
-        description: values.description || undefined,
-        allowPosting: values.allowPosting,
-      });
-      toast.success('Account updated');
-      setIsEditing(false);
-    } catch (error) {
-      toast.error(extractError(error, 'Unable to update account'));
-    }
-  };
 
   const deactivate = async () => {
     try {
@@ -139,55 +88,29 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
 
           <div className="flex items-center justify-between border-t border-gray-200 pt-5">
             <h4 className="text-sm font-semibold text-gray-900">Account settings</h4>
-            {!isEditing && (
-              <Button type="button" variant="outline" size="sm" onClick={startEditing}>
-                Edit
-              </Button>
-            )}
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+              Edit {account.name}
+            </Button>
           </div>
 
-          {isEditing ? (
-            <form className="mt-4 flex flex-col gap-4" onSubmit={handleSubmit(save)}>
-              <FormField
-                label="Account Name"
-                registration={register('name', { required: 'Account name is required' })}
-                error={errors.name}
-              />
-              <FormField
-                label="Description"
-                type="textarea"
-                rows={4}
-                registration={register('description')}
-                error={errors.description}
-              />
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" className="h-4 w-4" {...register('allowPosting')} />
-                Allow postings to this account
-              </label>
-
-              <div className="mt-2 flex justify-end gap-3">
-                <Button type="button" variant="ghost" onClick={cancelEditing} disabled={isUpdating}>
-                  Cancel
-                </Button>
-                <Button type="submit" isLoading={isUpdating} loadingText="Saving…">
-                  Save Changes
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <div className="mt-4 grid grid-cols-1 gap-4">
-              <DetailField label="Account Name" value={account.name} />
-              <DetailField label="Description" value={account.description || '—'} />
-              <DetailField
-                label="Allow postings to this account"
-                value={account.allowPosting ? 'Yes' : 'No'}
-              />
-            </div>
-          )}
+          <div className="mt-4 grid grid-cols-1 gap-4">
+            <DetailField label="Account Name" value={account.name} />
+            <DetailField label="Description" value={account.description || '—'} />
+            <DetailField
+              label="Allow postings to this account"
+              value={account.allowPosting ? 'Yes' : 'No'}
+            />
+          </div>
         </div>
       ) : (
         <GLAccountLedger accountId={account.id} />
       )}
+
+      <EditLeafAccountPanel
+        isOpen={isEditing}
+        onClose={() => setIsEditing(false)}
+        account={account}
+      />
 
       <Modal
         isOpen={confirmDeactivateOpen}

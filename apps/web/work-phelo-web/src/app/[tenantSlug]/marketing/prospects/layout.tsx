@@ -3,7 +3,6 @@
 import { useParams, usePathname } from 'next/navigation';
 import { pageHeader, pagePx } from '@/lib/layout';
 import { ProspectsTabs } from '@/components/molecules/marketing/ProspectsTabs';
-import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function ProspectsLayout({ children }: { children: React.ReactNode }) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -24,9 +23,7 @@ export default function ProspectsLayout({ children }: { children: React.ReactNod
         </div>
       )}
 
-      <AppBackground as="main" className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        {children}
-      </AppBackground>
+      <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
     </div>
   );
 }

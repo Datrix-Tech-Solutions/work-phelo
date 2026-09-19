@@ -2,12 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { TwoPanelShell } from '@/components/organisms/shared/TwoPanelShell';
-import { AccountScope, ChartOfAccountsTree } from '@/components/organisms/accounting/ChartOfAccountsTree';
+import {
+  AccountScope,
+  ChartOfAccountsTree,
+} from '@/components/organisms/accounting/ChartOfAccountsTree';
 import { AddClassificationPanel } from '@/components/organisms/accounting/panels/AddClassificationPanel';
 import { AddParentAccountPanel } from '@/components/organisms/accounting/panels/AddParentAccountPanel';
 import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
 import { GLAccountDetail } from '@/components/organisms/accounting/GLAccountDetail';
 import { GLAccountListPanel } from '@/components/organisms/accounting/GLAccountListPanel';
+import { ChartOfAccountsBreadcrumb } from '@/components/molecules/accounting/ChartOfAccountsBreadcrumb';
 import { ChartOfAccountsToolbar } from '@/components/molecules/accounting/ChartOfAccountsToolbar';
 import { SeedHierarchyDialog } from '@/components/molecules/accounting/SeedHierarchyDialog';
 import { getScopedAccounts, getScopeTitle } from '@/lib/accounting/chartOfAccountsScope';
@@ -23,7 +27,13 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
-type OpenPanel = 'classification' | 'parent-account' | 'leaf-account' | null;
+type OpenPanel =
+  | 'classification'
+  | 'parent-account'
+  | 'leaf-account'
+  | 'edit-classification'
+  | 'edit-parent-account'
+  | null;
 
 export default function ChartOfAccountsPage() {
   const [search, setSearch] = useState('');
@@ -61,11 +71,24 @@ export default function ChartOfAccountsPage() {
   const hasAccountFilter = Boolean(search.trim() || status);
   const isLoading = isLoadingClassifications || isLoadingGroups || isLoadingGLAccounts;
 
+  // The selected scope holds a snapshot; re-resolve it from the live lists so saved edits show.
+  const liveScope = useMemo<AccountScope>(() => {
+    if (scope.kind === 'classification') {
+      const classification = classifications.find((c) => c.id === scope.classification.id);
+      return classification ? { kind: 'classification', classification } : scope;
+    }
+    if (scope.kind === 'group') {
+      const group = groups.find((g) => g.id === scope.group.id);
+      return group ? { kind: 'group', group } : scope;
+    }
+    return scope;
+  }, [scope, classifications, groups]);
+
   const scopedAccounts = useMemo(
-    () => getScopedAccounts(scope, glAccounts, groups),
-    [scope, glAccounts, groups],
+    () => getScopedAccounts(liveScope, glAccounts, groups),
+    [liveScope, glAccounts, groups],
   );
-  const scopeTitle = useMemo(() => getScopeTitle(scope), [scope]);
+  const scopeTitle = useMemo(() => getScopeTitle(liveScope), [liveScope]);
   const balanceByAccountId = useMemo(() => buildAccountBalanceMap(trialBalance), [trialBalance]);
 
   const seedStandardHierarchy = async () => {
@@ -108,7 +131,6 @@ export default function ChartOfAccountsPage() {
                   description: 'e.g. Ecobank',
                   onClick: () => setOpenPanel('leaf-account'),
                 },
-                
               ]}
             />
           </div>
@@ -127,19 +149,43 @@ export default function ChartOfAccountsPage() {
           />
         )}
         rightPanel={
-          scope.kind === 'account' ? (
-            <GLAccountDetail account={scope.account} />
-          ) : (
-            <GLAccountListPanel
-              title={scopeTitle}
-              accounts={scopedAccounts}
-              isLoading={isLoading}
-              onSelectAccount={(account) => setScope({ kind: 'account', account })}
-              balanceByAccountId={balanceByAccountId}
-              baseCurrency={config?.baseCurrency ?? undefined}
+          <div className="flex h-full flex-col gap-3">
+            <ChartOfAccountsBreadcrumb
+              scope={liveScope}
+              classifications={classifications}
               groups={groups}
+              onSelectScope={setScope}
             />
-          )
+            <div className="min-h-0 flex-1">
+              {scope.kind === 'account' ? (
+                <GLAccountDetail key={scope.account.id} account={scope.account} />
+              ) : (
+                <GLAccountListPanel
+                  title={scopeTitle}
+                  accounts={scopedAccounts}
+                  isLoading={isLoading}
+                  onSelectAccount={(account) => setScope({ kind: 'account', account })}
+                  balanceByAccountId={balanceByAccountId}
+                  baseCurrency={config?.baseCurrency ?? undefined}
+                  groups={groups}
+                  editLabel={
+                    liveScope.kind === 'classification'
+                      ? liveScope.classification.name
+                      : liveScope.kind === 'group'
+                        ? liveScope.group.name
+                        : undefined
+                  }
+                  onEdit={
+                    scope.kind === 'classification'
+                      ? () => setOpenPanel('edit-classification')
+                      : scope.kind === 'group'
+                        ? () => setOpenPanel('edit-parent-account')
+                        : undefined
+                  }
+                />
+              )}
+            </div>
+          </div>
         }
       />
 
@@ -150,6 +196,16 @@ export default function ChartOfAccountsPage() {
       <AddParentAccountPanel
         isOpen={openPanel === 'parent-account'}
         onClose={() => setOpenPanel(null)}
+      />
+      <AddClassificationPanel
+        isOpen={openPanel === 'edit-classification'}
+        onClose={() => setOpenPanel(null)}
+        editing={liveScope.kind === 'classification' ? liveScope.classification : undefined}
+      />
+      <AddParentAccountPanel
+        isOpen={openPanel === 'edit-parent-account'}
+        onClose={() => setOpenPanel(null)}
+        editing={liveScope.kind === 'group' ? liveScope.group : undefined}
       />
       <AddLeafAccountPanel
         isOpen={openPanel === 'leaf-account'}

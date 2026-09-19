@@ -18,7 +18,7 @@ export default function EntityDetailPage({
   const base = `/${tenantSlug}/accounting/entities`;
 
   return (
-    <div className="flex flex-col gap-6 p-6 min-h-0 overflow-y-auto flex-1">
+    <div className="flex flex-col gap-6 py-6 pr-6 pl-(--page-pl) min-h-0 overflow-y-auto flex-1">
       <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link href={base} className="hover:text-gray-700 transition-colors">
           Entities

@@ -490,7 +490,7 @@ Verdict: `BOTH`.
 | Surface                                                 | Classification                                | Reason                                                                             |
 | ------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------- |
 | `AccountTypeDefinitionsTable` and `AddAccountTypePanel` | DEPRECATE_LATER                               | Backend has fixed account categories, not tenant CRUD for account types.           |
-| `BudgetForecastTable`, `NewBudgetPanel`                 | KEEP/UNKNOWN                                  | Future feature shell; no backend today.                                            |
+| `BudgetForecastTable`, `BudgetPanel`                    | WIRE_NEXT                                     | Budgets API exists (`/budgets`); UI still reads mock data. Forecasting not built.  |
 | `AccountsReceivableTable` mock                          | REMOVE_NOW when wiring backend                | Backend exists; mock table is stale.                                               |
 | `AccountsPayableTable` mock                             | REMOVE_NOW when wiring backend                | Backend exists; mock table is stale.                                               |
 | `JournalEntriesTable` mock                              | REMOVE_NOW when wiring backend                | Hooks exist; table stale.                                                          |
@@ -612,7 +612,7 @@ P2 gaps:
 
 - Generic backend confirmation aggregator.
 - Aging/statement reports once backend exists.
-- Budgeting/forecasting backend or removal of shell.
+- Wire the budgets UI to `/budgets` (backend done); forecasting backend not started.
 - Advanced setup wizard.
 - Throttle optimization through aggregate endpoints.
 

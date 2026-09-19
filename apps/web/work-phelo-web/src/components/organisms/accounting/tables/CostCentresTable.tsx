@@ -87,6 +87,7 @@ export function CostCentresTable() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
       <CostCentrePanel costCentre={panelTarget} onClose={() => setPanelTarget(undefined)} />
       <Modal

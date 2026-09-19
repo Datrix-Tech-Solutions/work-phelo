@@ -81,6 +81,17 @@ export class CreatePayableBillDto {
   @IsUUID('4', { each: true })
   selectedTaxTypeIds?: string[];
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Optional active cost centre (department) this bill belongs to. Carried onto the ' +
+      'offset (P&L) journal line when posted — not the AP control line or tax lines — so ' +
+      'budgets and reports can slice by department.',
+  })
+  @IsOptional()
+  @IsUUID()
+  costCentreId?: string;
+
   @ApiPropertyOptional({ example: 'Vendor bill' })
   @IsOptional()
   @Transform(trimmed)

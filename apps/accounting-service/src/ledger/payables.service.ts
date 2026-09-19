@@ -46,6 +46,7 @@ const payableDocumentInclude = {
     select: { id: true, code: true, name: true, currency: true },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
+  costCentre: { select: { id: true, code: true, name: true } },
   apAccount: { select: { id: true, code: true, name: true } },
   postedJournalEntry: {
     select: { id: true, journalNumber: true, status: true, postedAt: true },
@@ -286,6 +287,7 @@ export class PayablesService {
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
+      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
     ]);
     this.assertVendorCurrency(vendor.currency, dto.currency);
 
@@ -336,6 +338,7 @@ export class PayablesService {
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
             offsetGlAccountId,
+            costCentreId: this.optional(dto.costCentreId),
             apAccountId,
             transactionTypeId: dto.transactionTypeId,
             taxBreakdown,
@@ -360,6 +363,7 @@ export class PayablesService {
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
+      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
       this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
       this.assertApAccount(user.tenantId, dto.apAccountId),
     ]);
@@ -422,6 +426,7 @@ export class PayablesService {
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
             offsetGlAccountId: dto.offsetGlAccountId,
+            costCentreId: this.optional(dto.costCentreId),
             apAccountId: dto.apAccountId,
             originalBillId: this.optional(dto.originalBillId),
             createdByUserId: user.id,
@@ -1282,6 +1287,7 @@ export class PayablesService {
       ? [
           {
             glAccountId: document.offsetGlAccountId,
+            costCentreId: document.costCentreId ?? undefined,
             description,
             ...debitCredit(offsetDirection, subtotalAmount),
           },
@@ -1294,6 +1300,7 @@ export class PayablesService {
       : [
           {
             glAccountId: document.offsetGlAccountId,
+            costCentreId: document.costCentreId ?? undefined,
             description,
             ...debitCredit(offsetDirection, totalAmount),
           },
@@ -1879,6 +1886,22 @@ export class PayablesService {
 
   private money(value: Prisma.Decimal) {
     return value.toFixed(4);
+  }
+
+  /** The optional department tag — when given, it must be an active cost centre of this
+   *  tenant. Checked at creation for early feedback; posting re-validates it. */
+  private async assertActiveCostCentre(
+    tenantId: string,
+    costCentreId: string | undefined,
+  ) {
+    if (!costCentreId) return;
+    const costCentre = await this.prisma.costCentre.findFirst({
+      where: { id: costCentreId, tenantId },
+    });
+    if (!costCentre) throw new NotFoundException('Cost centre not found');
+    if (costCentre.status !== RecordStatus.ACTIVE) {
+      throw new ConflictException('Cost centre is inactive');
+    }
   }
 
   private optional(value: string | undefined): string | null {

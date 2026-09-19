@@ -1,7 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Pencil } from 'lucide-react';
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
 import { CATEGORIES } from '@/components/organisms/accounting/ChartOfAccountsTree';
@@ -25,6 +27,8 @@ interface GLAccountListPanelProps {
   balanceByAccountId?: Map<string, number>;
   baseCurrency?: string;
   groups?: AccountGroup[];
+  onEdit?: () => void;
+  editLabel?: string;
 }
 
 export function GLAccountListPanel({
@@ -35,6 +39,8 @@ export function GLAccountListPanel({
   balanceByAccountId,
   baseCurrency = '',
   groups = [],
+  onEdit,
+  editLabel,
 }: GLAccountListPanelProps) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(accounts.length / PAGE_SIZE));
@@ -52,7 +58,11 @@ export function GLAccountListPanel({
         key: 'code',
         label: 'Code',
         width: '70px',
-        render: (row) => <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 font-mono text-xs text-gray-500">{row.code}</span>,
+        render: (row) => (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 font-mono text-xs text-gray-500">
+            {row.code}
+          </span>
+        ),
       },
       {
         key: 'name',
@@ -123,11 +133,23 @@ export function GLAccountListPanel({
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        <p className="text-xs text-gray-500">
-          {accounts.length} account{accounts.length === 1 ? '' : 's'}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+          <p className="text-xs text-gray-500">
+            {accounts.length} account{accounts.length === 1 ? '' : 's'}
+          </p>
+        </div>
+        {onEdit && (
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Pencil className="h-3.5 w-3.5" />}
+            onClick={onEdit}
+          >
+            {editLabel ? `Edit ${editLabel}` : 'Edit'}
+          </Button>
+        )}
       </div>
 
       <DataTable

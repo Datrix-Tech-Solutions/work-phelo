@@ -300,6 +300,7 @@ model GLAccount {
   payableOffsets    AccountingPayableDocument[]    @relation("PayableOffsetAccount")
   payableApAccounts AccountingPayableDocument[]    @relation("PayableApAccount")
   payablePaymentApAccounts AccountingPayablePayment[] @relation("PayablePaymentApAccount")
+  budgetLines       BudgetLine[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -379,6 +380,9 @@ model CostCentre {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   journalLines    JournalLine[]
+  payableDocuments    AccountingPayableDocument[]
+  receivableDocuments AccountingReceivableDocument[]
+  budgetLines         BudgetLine[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -748,6 +752,9 @@ model AccountingReceivableDocument {
   sourceModule           String?
   sourceRecordId         String?
   offsetGlAccountId      String
+  /// Optional department tag for budgeting/reporting — carried onto the document's offset
+  /// (P&L) journal line when posted, never onto the control line or tax lines.
+  costCentreId           String?
   /// The Receivable-side GL account this document actually posts to — resolved once, at
   /// creation, from the driving TransactionTypeRule's auto-balancing line (never re-derived
   /// from any tenant-wide setting). A Receipt paying this document inherits this same
@@ -776,6 +783,7 @@ model AccountingReceivableDocument {
   reversalOfDocumentId   String?
   customer               SubledgerAccount                 @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
   offsetGlAccount        GLAccount                        @relation("ReceivableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre             CostCentre?  @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
   arAccount              GLAccount                        @relation("ReceivableArAccount", fields: [arAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   postedJournalEntry     JournalEntry?                    @relation("ReceivablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalJournalEntry   JournalEntry?                    @relation("ReceivableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
@@ -797,6 +805,7 @@ model AccountingReceivableDocument {
   @@index([tenantId, currency])
   @@index([tenantId, sourceModule, sourceRecordId])
   @@index([tenantId, originalInvoiceId])
+  @@index([tenantId, costCentreId])
   @@schema("accounting")
 }
 
@@ -894,6 +903,9 @@ model AccountingPayableDocument {
   sourceModule           String?
   sourceRecordId         String?
   offsetGlAccountId      String
+  /// Optional department tag for budgeting/reporting — carried onto the document's offset
+  /// (P&L) journal line when posted, never onto the control line or tax lines.
+  costCentreId           String?
   /// See AccountingReceivableDocument's matching fields — same purpose, Payable side.
   apAccountId            String
   transactionTypeId      String?
@@ -913,6 +925,7 @@ model AccountingPayableDocument {
   reversalOfDocumentId   String?
   vendor                 SubledgerAccount              @relation(fields: [vendorId, tenantId], references: [id, tenantId], onDelete: Restrict)
   offsetGlAccount        GLAccount                     @relation("PayableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre             CostCentre?  @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
   apAccount              GLAccount                     @relation("PayableApAccount", fields: [apAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   postedJournalEntry     JournalEntry?                 @relation("PayablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalJournalEntry   JournalEntry?                 @relation("PayableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
@@ -934,6 +947,7 @@ model AccountingPayableDocument {
   @@index([tenantId, currency])
   @@index([tenantId, sourceModule, sourceRecordId])
   @@index([tenantId, originalBillId])
+  @@index([tenantId, costCentreId])
   @@schema("accounting")
 }
 
@@ -1135,5 +1149,82 @@ model EntityType {
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
+  @@schema("accounting")
+}
+
+enum BudgetPeriod {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+
+  @@schema("accounting")
+}
+
+/// Which side of the chart of accounts a budget targets — drives which leaf accounts may
+/// carry a line: EXPENSE → expense accounts, INCOME → revenue accounts, BOTH → either.
+enum BudgetScope {
+  EXPENSE
+  INCOME
+  BOTH
+
+  @@schema("accounting")
+}
+
+enum BudgetStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+
+  @@schema("accounting")
+}
+
+/// A spending/income plan over one period. `endDate` is derived from period + startDate at
+/// write time; actuals are never stored — they are rolled up from posted journal lines when
+/// a budget is read.
+model Budget {
+  id              String       @id @default(uuid())
+  tenantId        String
+  name            String
+  period          BudgetPeriod
+  scope           BudgetScope
+  startDate       DateTime     @db.Date
+  endDate         DateTime     @db.Date
+  /// The tenant's base currency when the budget was created; actuals are summed in base currency.
+  currency        String
+  status          BudgetStatus @default(DRAFT)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  activatedAt     DateTime?
+  closedAt        DateTime?
+  lines           BudgetLine[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, status, startDate])
+  @@schema("accounting")
+}
+
+/// One target per account, optionally split by cost centre. A null cost centre means the line
+/// covers the account company-wide (all cost centres); an account is never both company-wide
+/// and split on the same budget — enforced by BudgetsService.
+model BudgetLine {
+  id           String      @id @default(uuid())
+  tenantId     String
+  budgetId     String
+  glAccountId  String
+  costCentreId String?
+  amount       Decimal     @db.Decimal(20, 4)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  budget       Budget      @relation(fields: [budgetId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount    GLAccount   @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre   CostCentre? @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([budgetId, glAccountId, costCentreId])
+  @@index([tenantId, budgetId])
+  @@index([tenantId, glAccountId])
+  @@index([tenantId, costCentreId])
   @@schema("accounting")
 }

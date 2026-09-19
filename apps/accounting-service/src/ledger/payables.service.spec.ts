@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   AccountingPayableAllocationSource,
@@ -109,6 +109,8 @@ const payment = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const costCentreId = 'cost-centre-sales';
+
 const setup = () => {
   const prisma = {
     accountingCurrency: {
@@ -154,6 +156,13 @@ const setup = () => {
             taxType: null,
           },
         ],
+      }),
+    },
+    costCentre: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: costCentreId,
+        tenantId: actor.tenantId,
+        status: 'ACTIVE',
       }),
     },
     gLAccount: {
@@ -251,6 +260,92 @@ const setup = () => {
 };
 
 describe('PayablesService', () => {
+  it('stores an optional cost centre on a draft bill', async () => {
+    const { prisma, service } = setup();
+
+    await service.createBill(actor, {
+      vendorId: vendor.id,
+      documentDate: '2026-08-10',
+      currency: 'GHS',
+      amount: 1000,
+      transactionTypeId,
+      costCentreId,
+    });
+
+    expect(prisma.costCentre.findFirst).toHaveBeenCalledWith({
+      where: { id: costCentreId, tenantId: actor.tenantId },
+    });
+    expect(prisma.accountingPayableDocument.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ costCentreId }) as unknown,
+      }),
+    );
+  });
+
+  it('leaves the cost centre empty and skips the lookup when none is given', async () => {
+    const { prisma, service } = setup();
+
+    await service.createBill(actor, {
+      vendorId: vendor.id,
+      documentDate: '2026-08-10',
+      currency: 'GHS',
+      amount: 1000,
+      transactionTypeId,
+    });
+
+    expect(prisma.costCentre.findFirst).not.toHaveBeenCalled();
+    expect(prisma.accountingPayableDocument.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ costCentreId: null }) as unknown,
+      }),
+    );
+  });
+
+  it('rejects an unknown or inactive cost centre before creating the bill', async () => {
+    const { prisma, service } = setup();
+    const input = {
+      vendorId: vendor.id,
+      documentDate: '2026-08-10',
+      currency: 'GHS',
+      amount: 1000,
+      transactionTypeId,
+      costCentreId,
+    };
+
+    prisma.costCentre.findFirst.mockResolvedValueOnce(null);
+    await expect(service.createBill(actor, input)).rejects.toThrow(
+      NotFoundException,
+    );
+
+    prisma.costCentre.findFirst.mockResolvedValueOnce({
+      id: costCentreId,
+      tenantId: actor.tenantId,
+      status: 'INACTIVE',
+    });
+    await expect(service.createBill(actor, input)).rejects.toThrow(
+      ConflictException,
+    );
+
+    expect(prisma.accountingPayableDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('tags only the offset line with the cost centre when posting', async () => {
+    const { journals, prisma, service } = setup();
+    prisma.accountingPayableDocument.findFirst.mockResolvedValueOnce(
+      bill({ costCentreId }),
+    );
+
+    await service.postBill(actor, 'bill-1');
+
+    const dto = journals.createPostedInTransaction.mock.calls[0][2];
+    const offsetLine = dto.lines.find((l) => l.glAccountId === offsetAccountId);
+    const controlLine = dto.lines.find(
+      (l) => l.glAccountId === apControlAccountId,
+    );
+    expect(offsetLine?.costCentreId).toBe(costCentreId);
+    expect(controlLine?.costCentreId).toBeUndefined();
+  });
+
   it('creates a draft standalone bill using the rule-resolved AP account', async () => {
     const { prisma, service } = setup();
 

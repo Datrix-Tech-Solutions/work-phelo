@@ -3,7 +3,6 @@
 import { useParams } from 'next/navigation';
 import { pageHeader, pagePx } from '@/lib/layout';
 import { NavigateTabs } from '@/components/molecules/marketing/NavigateTabs';
-import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function NavigateLayout({ children }: { children: React.ReactNode }) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -18,9 +17,7 @@ export default function NavigateLayout({ children }: { children: React.ReactNode
         <NavigateTabs base={base} className={pagePx} />
       </div>
 
-      <AppBackground as="main" className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-        {children}
-      </AppBackground>
+      <main className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</main>
     </div>
   );
 }

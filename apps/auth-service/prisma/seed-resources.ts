@@ -168,6 +168,11 @@ export const RESOURCES = [
       'Standalone Accounting accounts payable documents, payments and allocations',
   },
   {
+    name: 'accounting.budgets',
+    module: 'ACCOUNTING',
+    description: 'Period budgets by account and cost centre, with actuals',
+  },
+  {
     name: 'accounting.journals',
     module: 'ACCOUNTING',
     description: 'Draft, post and reverse journal entries',
@@ -187,7 +192,8 @@ export const RESOURCES = [
   {
     name: 'operations.reinsurance.accounting-operations',
     module: 'OPERATIONS',
-    description: 'Reinsurance Accounting integration operational diagnostics and support actions',
+    description:
+      'Reinsurance Accounting integration operational diagnostics and support actions',
   },
   {
     name: 'operations.reinsurance.placements',

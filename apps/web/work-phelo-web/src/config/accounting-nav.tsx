@@ -7,6 +7,7 @@ import {
   ChartLine,
   LayoutDashboard,
   // LibraryBig,
+  Network,
   NotebookTabsIcon,
   ReceiptText,
   Settings,
@@ -28,6 +29,7 @@ const SettingsIcon = () => <Settings className="w-5 h-5" />;
 const BudgetIcon = () => <Target className="w-5 h-5" />;
 const FiscalYearIcon = () => <WalletCards className="w-5 h-5" />;
 const EntitiesIcon = () => <Users className="w-5 h-5" />;
+const CostCentresIcon = () => <Network className="w-5 h-5" />;
 // const BillsIcon = () => <ReceiptText className="w-5 h-5" />;
 
 export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
@@ -86,7 +88,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Accounting',
     items: [
-      
       {
         key: 'chart-of-accounts',
         label: 'Chart of Accounts',
@@ -111,11 +112,24 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
+    ],
+  },
+  {
+    label: 'Master Data',
+    items: [
       {
         key: 'ap-entities',
         label: 'Entities',
         icon: <EntitiesIcon />,
         href: 'entities',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'cost-centres',
+        label: 'Cost Centres',
+        icon: <CostCentresIcon />,
+        href: 'cost-centres',
         enabled: true,
         active: true,
       },

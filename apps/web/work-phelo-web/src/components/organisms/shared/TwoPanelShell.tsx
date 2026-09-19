@@ -32,7 +32,7 @@ export function TwoPanelShell({
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {header && <div className="px-6 pt-6 pb-4 shrink-0">{header}</div>}
+      {header && <div className="pl-(--page-pl) pr-6 pt-6 pb-4 shrink-0">{header}</div>}
 
       {/* Two-panel layout */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
@@ -41,7 +41,7 @@ export function TwoPanelShell({
           className={cardClass(
             cn(
               'flex flex-col shrink-0 overflow-hidden transition-all duration-500',
-              'mx-6 mt-1 mb-6 lg:mx-0 lg:ml-6',
+              'ml-(--page-pl) mr-6 mt-1 mb-6 lg:mr-0',
               collapsed ? 'h-14 lg:h-auto lg:w-10' : 'max-h-[45vh] lg:max-h-none lg:w-1/4',
             ),
           )}
