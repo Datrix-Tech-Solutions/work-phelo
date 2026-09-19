@@ -6,32 +6,20 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
 import { Badge } from '@/components/atoms/Badge';
-import { GenerateFiscalYearModal } from '@/components/organisms/accounting/modals/GenerateFiscalYearModal';
-import { YearSelect } from '@/components/atoms/YearSelect';
-import { FiscalPeriod, FiscalPeriodStatus } from '@/types/accounting';
+import {
+  ClosePeriodAction,
+  ClosePeriodModal,
+} from '@/components/organisms/accounting/modals/ClosePeriodModal';
+import { FiscalPeriod } from '@/types/accounting';
 import {
   useCloseFiscalPeriod,
-  useFiscalPeriods,
-  useGenerateFiscalYear,
   useLockFiscalPeriod,
   useOpenFiscalPeriod,
+  useSoftCloseFiscalPeriod,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-
-const PAGE_SIZE = 12;
-
-const STATUS_VARIANT: Record<FiscalPeriodStatus, 'success' | 'warning' | 'neutral'> = {
-  OPEN: 'success',
-  CLOSED: 'warning',
-  LOCKED: 'neutral',
-};
-
-const STATUS_LABEL: Record<FiscalPeriodStatus, string> = {
-  OPEN: 'Open',
-  CLOSED: 'Closed',
-  LOCKED: 'Locked',
-};
+import { FISCAL_STATUS_LABEL, FISCAL_STATUS_VARIANT } from '@/lib/accounting/fiscalPeriodStatus';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -43,7 +31,7 @@ function fmtDate(iso: string) {
 
 function buildColumns(
   onReopen: (row: FiscalPeriod) => void,
-  onCloseRequest: (row: FiscalPeriod) => void,
+  onCloseRequest: (row: FiscalPeriod, action: ClosePeriodAction) => void,
   onLockRequest: (row: FiscalPeriod) => void,
 ): Column<FiscalPeriod>[] {
   return [
@@ -68,21 +56,39 @@ function buildColumns(
     {
       key: 'status',
       label: 'Status',
-      width: '140px',
+      width: '150px',
       render: (row) => (
-        <Badge label={STATUS_LABEL[row.status]} variant={STATUS_VARIANT[row.status]} />
+        <Badge
+          label={FISCAL_STATUS_LABEL[row.status]}
+          variant={FISCAL_STATUS_VARIANT[row.status]}
+        />
       ),
     },
     {
       key: 'actions',
       label: '',
-      width: '190px',
+      width: '240px',
       render: (row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           {row.status === 'OPEN' && (
-            <TableButton variant="red" onClick={() => onCloseRequest(row)}>
-              Close
-            </TableButton>
+            <>
+              <TableButton variant="blue" onClick={() => onCloseRequest(row, 'soft-close')}>
+                Soft Close
+              </TableButton>
+              <TableButton variant="red" onClick={() => onCloseRequest(row, 'close')}>
+                Close
+              </TableButton>
+            </>
+          )}
+          {row.status === 'SOFT_CLOSED' && (
+            <>
+              <TableButton variant="red" onClick={() => onCloseRequest(row, 'close')}>
+                Close
+              </TableButton>
+              <TableButton variant="green" onClick={() => onReopen(row)}>
+                Reopen
+              </TableButton>
+            </>
           )}
           {row.status === 'CLOSED' && (
             <>
@@ -100,31 +106,25 @@ function buildColumns(
   ];
 }
 
-export function FiscalPeriodsTable() {
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [generateOpen, setGenerateOpen] = useState(false);
-  const [closeTarget, setCloseTarget] = useState<FiscalPeriod | null>(null);
+/** The periods of one fiscal year, with the close / soft close / reopen / lock actions. */
+export function FiscalPeriodsTable({
+  periods,
+  isLoading = false,
+}: {
+  periods: FiscalPeriod[];
+  isLoading?: boolean;
+}) {
+  const [closeTarget, setCloseTarget] = useState<{
+    period: FiscalPeriod;
+    action: ClosePeriodAction;
+  } | null>(null);
   const [lockTarget, setLockTarget] = useState<FiscalPeriod | null>(null);
-  // `null` = follow the latest year present; a number = an explicit pick.
-  const [yearFilter, setYearFilter] = useState<number | null>(null);
 
   const toast = useToast();
-  const { data: periods = [], isLoading } = useFiscalPeriods();
-  const generateYearMutation = useGenerateFiscalYear();
   const openMutation = useOpenFiscalPeriod();
+  const softCloseMutation = useSoftCloseFiscalPeriod();
   const closeMutation = useCloseFiscalPeriod();
   const lockMutation = useLockFiscalPeriod();
-
-  async function generateYear(year: number) {
-    try {
-      await generateYearMutation.mutateAsync(year);
-      toast.success(`Generated 12 periods for ${year}`);
-      setGenerateOpen(false);
-    } catch (err) {
-      toast.error(extractError(err, 'Failed to generate fiscal year'));
-    }
-  }
 
   const reopen = useCallback(
     async (row: FiscalPeriod) => {
@@ -137,12 +137,21 @@ export function FiscalPeriodsTable() {
     [openMutation, toast],
   );
 
-  async function confirmClose(row: FiscalPeriod) {
+  async function confirmClose({
+    period,
+    action,
+  }: {
+    period: FiscalPeriod;
+    action: ClosePeriodAction;
+  }) {
+    const soft = action === 'soft-close';
     try {
-      await closeMutation.mutateAsync(row.id);
+      await (soft ? softCloseMutation : closeMutation).mutateAsync(period.id);
       setCloseTarget(null);
     } catch (err) {
-      toast.error(extractError(err, 'Failed to close period'));
+      toast.error(
+        extractError(err, soft ? 'Failed to soft close period' : 'Failed to close period'),
+      );
     }
   }
 
@@ -156,88 +165,30 @@ export function FiscalPeriodsTable() {
   }
 
   const columns = useMemo(
-    () => buildColumns(reopen, setCloseTarget, setLockTarget),
+    () =>
+      buildColumns(reopen, (period, action) => setCloseTarget({ period, action }), setLockTarget),
     [reopen],
   );
-
-  const availableYears = useMemo(() => {
-    const years = periods.map((p) => new Date(p.startDate).getFullYear());
-    return [...new Set(years)].sort((a, b) => b - a);
-  }, [periods]);
-  // Default the filter to the latest year present until the user picks another.
-  const activeYear: number | null = yearFilter ?? availableYears[0] ?? null;
-
-  const filtered = useMemo(() => {
-    let rows = periods;
-    if (activeYear !== null) {
-      rows = rows.filter((r) => new Date(r.startDate).getFullYear() === activeYear);
-    }
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter((r) => r.name.toLowerCase().includes(q));
-    }
-    return rows;
-  }, [search, periods, activeYear]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
       <DataTable
         columns={columns}
-        data={paged}
+        data={periods}
         isLoading={isLoading}
-        searchPlaceholder="Search periods…"
-        searchValue={search}
-        onSearch={(q) => {
-          setSearch(q);
-          setPage(1);
-        }}
-        extraFilters={
-          activeYear !== null ? (
-            <YearSelect
-              value={activeYear}
-              onChange={(y) => {
-                setYearFilter(y);
-                setPage(1);
-              }}
-              minYear={availableYears[availableYears.length - 1]}
-              maxYear={availableYears[0]}
-            />
-          ) : undefined
-        }
-        actionButton={{
-          label: 'Generate Fiscal Year',
-          onClick: () => setGenerateOpen(true),
-        }}
-        emptyMessage="No fiscal periods yet — generate a year to get started"
-        currentPage={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
+        emptyMessage="This fiscal year has no periods"
+        currentPage={1}
+        totalPages={1}
+        onPageChange={() => {}}
         noInternalScroll
       />
 
-      <Modal
-        isOpen={!!closeTarget}
+      <ClosePeriodModal
+        period={closeTarget?.period ?? null}
+        action={closeTarget?.action ?? 'close'}
+        isSubmitting={closeMutation.isPending || softCloseMutation.isPending}
         onClose={() => setCloseTarget(null)}
-        title="Close Period"
-        description={`Close "${closeTarget?.name}"? No further entries can be posted to it. It can still be reopened later.`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setCloseTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              isLoading={closeMutation.isPending}
-              loadingText="Closing…"
-              onClick={() => closeTarget && confirmClose(closeTarget)}
-            >
-              Close
-            </Button>
-          </div>
-        }
+        onConfirm={() => closeTarget && confirmClose(closeTarget)}
       />
 
       <Modal
@@ -260,14 +211,6 @@ export function FiscalPeriodsTable() {
             </Button>
           </div>
         }
-      />
-
-      <GenerateFiscalYearModal
-        key={String(generateOpen)}
-        isOpen={generateOpen}
-        onClose={() => setGenerateOpen(false)}
-        onGenerate={generateYear}
-        isGenerating={generateYearMutation.isPending}
       />
     </>
   );

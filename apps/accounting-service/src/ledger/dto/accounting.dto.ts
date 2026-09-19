@@ -180,6 +180,31 @@ export class CreateFiscalPeriodDto {
   generateYear?: number;
 }
 
+export class GenerateFiscalYearDto {
+  @ApiProperty({
+    example: 2026,
+    description:
+      'The calendar year the fiscal year starts in. With a July start month, 2026 creates FY2026/27 (Jul 2026 – Jun 2027).',
+  })
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  year!: number;
+
+  @ApiPropertyOptional({
+    example: 7,
+    minimum: 1,
+    maximum: 12,
+    description:
+      "The month the fiscal year starts in. Defaults to the tenant's configured fiscal year start month.",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  startMonth?: number;
+}
+
 export class QueryFiscalPeriodsDto {
   @ApiPropertyOptional({ enum: FiscalPeriodStatus })
   @IsOptional()

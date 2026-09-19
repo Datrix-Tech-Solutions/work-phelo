@@ -700,7 +700,7 @@ export class JournalsService {
     if (!period) throw new NotFoundException('Fiscal period not found');
     if (period.status !== FiscalPeriodStatus.OPEN) {
       throw new ConflictException(
-        `Cannot post into a ${period.status.toLowerCase()} fiscal period`,
+        `Cannot post into a ${period.status.toLowerCase().replace('_', ' ')} fiscal period`,
       );
     }
     if (

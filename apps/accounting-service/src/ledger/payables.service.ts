@@ -1775,7 +1775,7 @@ export class PayablesService {
     }
     if (period.status !== FiscalPeriodStatus.OPEN) {
       throw new ConflictException(
-        `Cannot post payable transaction into a ${period.status.toLowerCase()} fiscal period`,
+        `Cannot post payable transaction into a ${period.status.toLowerCase().replace('_', ' ')} fiscal period`,
       );
     }
     return period;

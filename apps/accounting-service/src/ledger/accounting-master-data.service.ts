@@ -16,6 +16,8 @@ import {
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { runFiscalPeriodCloseChecks } from './fiscal-period-close-check';
+import { fiscalYearName, summarizeFiscalYear } from './fiscal-year';
 import {
   CreateAccountClassificationDto,
   CreateAccountGroupDto,
@@ -213,6 +215,29 @@ const STANDARD_TRANSACTION_TYPES = [
     description: 'Manual correction to a cash/bank account.',
   },
 ] as const;
+
+/** Which current statuses may move to each target status, and the error when they can't. */
+const FISCAL_PERIOD_TRANSITIONS: Record<
+  FiscalPeriodStatus,
+  { from: FiscalPeriodStatus[]; message: string }
+> = {
+  [FiscalPeriodStatus.OPEN]: {
+    from: [FiscalPeriodStatus.SOFT_CLOSED, FiscalPeriodStatus.CLOSED],
+    message: 'Only a soft-closed or closed fiscal period can be reopened',
+  },
+  [FiscalPeriodStatus.SOFT_CLOSED]: {
+    from: [FiscalPeriodStatus.OPEN],
+    message: 'Only an open fiscal period can be soft closed',
+  },
+  [FiscalPeriodStatus.CLOSED]: {
+    from: [FiscalPeriodStatus.OPEN, FiscalPeriodStatus.SOFT_CLOSED],
+    message: 'Only an open or soft-closed fiscal period can be closed',
+  },
+  [FiscalPeriodStatus.LOCKED]: {
+    from: [FiscalPeriodStatus.CLOSED],
+    message: 'Only a closed fiscal period can be locked',
+  },
+};
 
 @Injectable()
 export class AccountingMasterDataService {
@@ -439,7 +464,7 @@ export class AccountingMasterDataService {
 
   async createFiscalPeriod(user: RequestUser, dto: CreateFiscalPeriodDto) {
     if (dto.generateYear !== undefined) {
-      return this.generateFiscalYear(user, dto.generateYear);
+      return (await this.generateFiscalYear(user, dto.generateYear)).periods;
     }
     if (!dto.name || !dto.startDate || !dto.endDate) {
       throw new BadRequestException(
@@ -473,10 +498,26 @@ export class AccountingMasterDataService {
         );
       }
 
+      // Every period belongs to a fiscal year, so a one-off period must fall inside one.
+      const year = await tx.fiscalYear.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          startDate: { lte: startDate },
+          endDate: { gte: endDate },
+        },
+        select: { id: true },
+      });
+      if (!year) {
+        throw new BadRequestException(
+          'A fiscal period must fall inside an existing fiscal year — generate the year first',
+        );
+      }
+
       try {
         return await tx.fiscalPeriod.create({
           data: {
             tenantId: user.tenantId,
+            fiscalYearId: year.id,
             name: dto.name!,
             startDate,
             endDate,
@@ -490,13 +531,42 @@ export class AccountingMasterDataService {
     });
   }
 
-  /** Generates the 12 monthly periods of a fiscal year starting in `calendarYear`, using
-   *  the tenant's configured fiscalYearStartMonth (e.g. a July start makes generateYear
-   *  2026 produce Jul 2026 – Jun 2027). Same overlap-check/advisory-lock transaction as a
-   *  single createFiscalPeriod, just inserting all 12 rows together. */
-  private async generateFiscalYear(user: RequestUser, calendarYear: number) {
-    const config = await this.getConfig(user.tenantId);
-    const startMonth = config.fiscalYearStartMonth ?? 1;
+  async listFiscalYears(tenantId: string) {
+    const years = await this.prisma.fiscalYear.findMany({
+      where: { tenantId },
+      include: { periods: { select: { status: true } } },
+      orderBy: { startDate: 'desc' },
+    });
+    return years.map((year) => summarizeFiscalYear(year, year.periods));
+  }
+
+  /** One fiscal year with its periods in calendar order. */
+  async getFiscalYear(tenantId: string, yearId: string) {
+    const year = await this.prisma.fiscalYear.findFirst({
+      where: { id: yearId, tenantId },
+      include: { periods: { orderBy: { startDate: 'asc' } } },
+    });
+    if (!year) throw new NotFoundException('Fiscal year not found');
+    return {
+      ...summarizeFiscalYear(year, year.periods),
+      periods: year.periods,
+    };
+  }
+
+  /** Creates the fiscal year record and its 12 monthly periods for the year starting in
+   *  `calendarYear`, beginning in `startMonthOverride` or else the tenant's configured
+   *  fiscalYearStartMonth (e.g. a July start makes 2026 produce FY2026/27: Jul 2026 –
+   *  Jun 2027). Same overlap-check/advisory-lock
+   *  transaction as a single createFiscalPeriod. */
+  async generateFiscalYear(
+    user: RequestUser,
+    calendarYear: number,
+    startMonthOverride?: number,
+  ) {
+    const startMonth =
+      startMonthOverride ??
+      (await this.getConfig(user.tenantId)).fiscalYearStartMonth ??
+      1;
 
     const periods = Array.from({ length: 12 }, (_, i) => {
       const monthOffset = startMonth - 1 + i;
@@ -509,7 +579,7 @@ export class AccountingMasterDataService {
     const rangeStart = periods[0].startDate;
     const rangeEnd = periods[periods.length - 1].endDate;
 
-    return this.prisma.$transaction(async (tx) => {
+    const yearId = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`
         SELECT pg_advisory_xact_lock(
           hashtext(${'accounting-period:' + user.tenantId})
@@ -530,9 +600,20 @@ export class AccountingMasterDataService {
       }
 
       try {
+        const year = await tx.fiscalYear.create({
+          data: {
+            tenantId: user.tenantId,
+            name: fiscalYearName(calendarYear, startMonth),
+            startDate: rangeStart,
+            endDate: rangeEnd,
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+        });
         await tx.fiscalPeriod.createMany({
           data: periods.map((period) => ({
             tenantId: user.tenantId,
+            fiscalYearId: year.id,
             name: period.name,
             startDate: period.startDate,
             endDate: period.endDate,
@@ -540,22 +621,25 @@ export class AccountingMasterDataService {
             updatedByUserId: user.id,
           })),
         });
+        return year.id;
       } catch (error) {
         this.rethrowUnique(
           error,
-          'A fiscal period with a generated name already exists',
+          'A fiscal year or period with a generated name already exists',
         );
       }
-
-      return tx.fiscalPeriod.findMany({
-        where: {
-          tenantId: user.tenantId,
-          startDate: { gte: rangeStart },
-          endDate: { lte: rangeEnd },
-        },
-        orderBy: { startDate: 'asc' },
-      });
     });
+
+    return this.getFiscalYear(user.tenantId, yearId);
+  }
+
+  /** What still needs attention before an open period can be soft closed or closed. */
+  async fiscalPeriodCloseCheck(tenantId: string, periodId: string) {
+    const period = await this.prisma.fiscalPeriod.findFirst({
+      where: { id: periodId, tenantId },
+    });
+    if (!period) throw new NotFoundException('Fiscal period not found');
+    return runFiscalPeriodCloseChecks(this.prisma, tenantId, period);
   }
 
   async changeFiscalPeriodStatus(
@@ -574,47 +658,59 @@ export class AccountingMasterDataService {
         throw new ConflictException('Locked fiscal periods are immutable');
       }
 
-      const requiredCurrentStatus =
-        nextStatus === FiscalPeriodStatus.OPEN
-          ? FiscalPeriodStatus.CLOSED
-          : nextStatus === FiscalPeriodStatus.CLOSED
-            ? FiscalPeriodStatus.OPEN
-            : FiscalPeriodStatus.CLOSED;
-      if (period.status !== requiredCurrentStatus) {
-        const message =
-          nextStatus === FiscalPeriodStatus.OPEN
-            ? 'Only a closed fiscal period can be reopened'
-            : nextStatus === FiscalPeriodStatus.CLOSED
-              ? 'Only an open fiscal period can be closed'
-              : 'Only a closed fiscal period can be locked';
-        throw new BadRequestException(message);
+      const rule = FISCAL_PERIOD_TRANSITIONS[nextStatus];
+      if (!rule.from.includes(period.status)) {
+        throw new BadRequestException(rule.message);
       }
 
+      // Leaving OPEN is the point of no return for postings, so anything still unposted in
+      // the period has to be dealt with first.
+      if (
+        period.status === FiscalPeriodStatus.OPEN &&
+        (nextStatus === FiscalPeriodStatus.SOFT_CLOSED ||
+          nextStatus === FiscalPeriodStatus.CLOSED)
+      ) {
+        const check = await runFiscalPeriodCloseChecks(
+          tx,
+          user.tenantId,
+          period,
+        );
+        if (!check.canClose) {
+          throw new ConflictException({
+            message: `${period.name} cannot be closed yet: ${check.blockers
+              .map((blocker) => blocker.message)
+              .join('; ')}`,
+            blockers: check.blockers,
+            warnings: check.warnings,
+          });
+        }
+      }
+
+      const now = new Date();
       const changed = await tx.fiscalPeriod.updateMany({
         where: {
           id: period.id,
           tenantId: user.tenantId,
-          status: requiredCurrentStatus,
+          status: period.status,
         },
         data: {
           status: nextStatus,
           ...(nextStatus === FiscalPeriodStatus.OPEN
             ? {
+                softClosedAt: null,
+                softClosedByUserId: null,
                 closedAt: null,
                 closedByUserId: null,
               }
             : {}),
+          ...(nextStatus === FiscalPeriodStatus.SOFT_CLOSED
+            ? { softClosedAt: now, softClosedByUserId: user.id }
+            : {}),
           ...(nextStatus === FiscalPeriodStatus.CLOSED
-            ? {
-                closedAt: new Date(),
-                closedByUserId: user.id,
-              }
+            ? { closedAt: now, closedByUserId: user.id }
             : {}),
           ...(nextStatus === FiscalPeriodStatus.LOCKED
-            ? {
-                lockedAt: new Date(),
-                lockedByUserId: user.id,
-              }
+            ? { lockedAt: now, lockedByUserId: user.id }
             : {}),
           updatedByUserId: user.id,
         },
