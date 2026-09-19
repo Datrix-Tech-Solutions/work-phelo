@@ -386,6 +386,30 @@
   --sidebar-accent: var(--module-marketing);
 }
 
+/* Page left inset — single knob for the left padding of module content pages
+   (see lib/layout.ts). Default matches the old px-4/sm:px-6/lg:px-8 gutter, so HR
+   is unchanged; every other module shell zeroes it. Set a non-zero value here
+   (e.g. 0.25rem) to give those modules a small left inset. */
+:root {
+  --page-pl: 1rem;
+}
+@media (min-width: 40rem) {
+  :root {
+    --page-pl: 1.5rem;
+  }
+}
+@media (min-width: 64rem) {
+  :root {
+    --page-pl: 2rem;
+  }
+}
+.layout-operations,
+.layout-accounting,
+.layout-marketing {
+  --page-pl: 1px;
+  --tab-first-pl: 1px; /* first tab label lines up with the page title */
+}
+
 /* Dark-mode module overrides — only the tokens previously mixed toward *white*
    (table-header-bg, tint, border) need a dark-appropriate replacement.
    --module-accent is deliberately left alone: <AppBackground> reads it directly

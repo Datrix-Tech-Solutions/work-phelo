@@ -81,6 +81,17 @@ export class CreateReceivableInvoiceDto {
   @IsUUID('4', { each: true })
   selectedTaxTypeIds?: string[];
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Optional active cost centre (department) this invoice belongs to. Carried onto the ' +
+      'offset (P&L) journal line when posted — not the AR control line or tax lines — so ' +
+      'budgets and reports can slice by department.',
+  })
+  @IsOptional()
+  @IsUUID()
+  costCentreId?: string;
+
   @ApiPropertyOptional({ example: 'Consulting invoice' })
   @IsOptional()
   @Transform(trimmed)

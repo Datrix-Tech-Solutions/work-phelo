@@ -13,9 +13,11 @@ import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { TransactionTypeDefinition } from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
+  useCostCentres,
   useCreatePayableBill,
   useCreateReceivableInvoice,
   useEntityTypes,
+  useGLAccounts,
   useSubledgers,
   useTransactionTypeRules,
 } from '@/hooks';
@@ -36,6 +38,7 @@ type FormValues = {
   description: string;
   amount: string;
   currency: string;
+  costCentreId: string;
   entryDate: string;
   dueDate: string;
 };
@@ -50,6 +53,7 @@ const DEFAULTS: FormValues = {
   description: '',
   amount: '',
   currency: '',
+  costCentreId: '',
   entryDate: '',
   dueDate: '',
 };
@@ -103,6 +107,27 @@ export function NewTransactionPanel({
         })),
     [rule],
   );
+  const { data: costCentres = [] } = useCostCentres();
+  const { data: glAccounts = [] } = useGLAccounts();
+  const costCentreOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      costCentres
+        .filter((c) => c.status === 'ACTIVE')
+        .map((c) => ({ value: c.id, label: `${c.code} – ${c.name}` }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [costCentres],
+  );
+  // The department tag lands on the rule's main (non-tax, non-control) line — hide the field
+  // when that account is a balance-sheet one (e.g. an asset purchase), since there is no
+  // P&L cost to attribute. While accounts are still loading, err on the side of showing it.
+  const showCostCentre = useMemo(() => {
+    const controlDirection = isReceivable ? 'DR' : 'CR';
+    const mainLine = (rule?.lines ?? []).find(
+      (l) => !l.taxType && l.direction !== controlDirection,
+    );
+    const category = glAccounts.find((a) => a.id === mainLine?.account.id)?.category;
+    return !category || category === 'EXPENSE' || category === 'REVENUE';
+  }, [rule, glAccounts, isReceivable]);
   const [selectedTaxTypeIds, setSelectedTaxTypeIds] = useState<string[]>([]);
   const [successTransactionType, setSuccessTransactionType] = useState<string | null>(null);
 
@@ -178,6 +203,7 @@ export function NewTransactionPanel({
       amount: Number(values.amount),
       transactionTypeId: transactionType.id,
       selectedTaxTypeIds: selectedTaxTypeIds.length ? selectedTaxTypeIds : undefined,
+      costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
       description: values.description || undefined,
       // No externalReference here — the system generates the transaction/document
       // number itself (e.g. INV-2026-0001) once the document is created.
@@ -282,6 +308,22 @@ export function NewTransactionPanel({
                 />
               )}
             />
+
+            {showCostCentre && (
+              <Controller
+                name="costCentreId"
+                control={control}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Cost Centre"
+                    placeholder="Optional — select a cost centre"
+                    options={costCentreOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            )}
 
             <FormField
               label="Description"

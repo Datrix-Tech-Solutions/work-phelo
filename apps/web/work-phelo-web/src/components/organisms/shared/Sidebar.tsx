@@ -78,7 +78,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
 
   return (
     /* tooltip wrapper */
-    <div className="relative group/tip px-2">
+    <div className={cn('relative group/tip', collapsed ? 'px-1' : 'px-1')}>
       {/* Active left-bar accent */}
       {isCurrent && !isDeactivated && (
         <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-(--sidebar-accent,#fff) rounded-r-full" />
@@ -190,7 +190,7 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
   );
 
   return (
-    <div className="relative group/tip px-2">
+    <div className={cn('relative group/tip', collapsed ? 'px-1' : 'px-1')}>
       {/* Highlight bar when a child is active */}
       {isAnyChildActive && !isDeactivated && !collapsed && (
         <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-(--sidebar-accent,#fff) rounded-r-full" />
@@ -313,7 +313,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
         'absolute inset-y-0 left-0 z-40 w-60 transition-transform duration-200',
         // Desktop: static in flex flow with width animation (spring curve)
         'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-350 md:ease-[cubic-bezier(0.34,1.8,0.64,1)]',
-        effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-50',
+        effectiveCollapsed ? '-translate-x-full md:w-10' : 'translate-x-0 md:w-50',
       )}
     >
       <nav className="flex-1 overflow-y-auto pt-10 pb-2 flex flex-col">
@@ -325,7 +325,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
             <div key={group.label} className="mb-1">
               {/* Group label / divider */}
               {effectiveCollapsed ? (
-                <div className="mx-3 my-2 h-px bg-(--sidebar-divider,rgba(255,255,255,0.2))" />
+                <div className="mx-2 my-2 h-px bg-(--sidebar-divider,rgba(255,255,255,0.2))" />
               ) : (
                 <p className="px-5 pt-3 pb-1.5 text-[10px] font-semibold tracking-widest text-(--sidebar-label,rgba(255,255,255,0.5)) uppercase select-none">
                   {group.label}

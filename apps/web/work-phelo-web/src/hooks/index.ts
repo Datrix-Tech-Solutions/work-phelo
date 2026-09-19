@@ -55,6 +55,7 @@ export * from './accounting/useGLAccounts';
 export * from './accounting/useGLAccountLedger';
 export * from './accounting/useFinancialReports';
 export * from './accounting/useCostCentres';
+export * from './accounting/useBudgets';
 export * from './accounting/useTransactionTypes';
 export * from './accounting/useSourceTypes';
 export * from './accounting/useTransactionTypeRules';

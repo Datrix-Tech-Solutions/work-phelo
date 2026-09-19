@@ -54,6 +54,7 @@ export function useUpdateAccountGroup() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: GROUPS_KEY });
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'gl-accounts'] });
     },
   });
 }

@@ -531,6 +531,8 @@ export interface AccountingTradeDocument {
   sourceModule: string | null;
   sourceRecordId: string | null;
   offsetGlAccountId: string;
+  /** Optional department tag, carried onto the offset (P&L) journal line when posted. */
+  costCentreId: string | null;
   /** The Transaction Type that drove this document's rule-based posting, if any —
    *  a plain audit trail, null for credit notes and pre-existing documents. */
   transactionTypeId: string | null;
@@ -546,6 +548,7 @@ export interface AccountingTradeDocument {
   reversalOfDocumentId: string | null;
   party: AccountingTradePartyRef;
   offsetGlAccount: AccountingTradeGLAccountRef;
+  costCentre: AccountingTradeGLAccountRef | null;
   /** The Receivable (AR) or Payable (AP) account this document actually posts to —
    *  resolved once from the Transaction Type Rule at creation, not a fixed setting. */
   controlAccount: AccountingTradeGLAccountRef;
@@ -584,6 +587,8 @@ export interface CreateTradeInvoicePayload {
   transactionTypeId: string;
   /** Which of the Rule's Deduction (tax) lines to apply, by TaxType id. */
   selectedTaxTypeIds?: string[];
+  /** Optional active cost centre (department) — tags the offset (P&L) line, not the AR/AP or tax lines. */
+  costCentreId?: string;
   description?: string;
   externalReference?: string;
 }
@@ -1200,6 +1205,8 @@ export type BudgetScope = 'EXPENSE' | 'INCOME' | 'BOTH';
 
 export interface BudgetLineInput {
   accountId: string;
+  /** Optional dimension — null/omitted means the line is company-wide. A line is unique per account + cost centre. */
+  costCentreId?: string | null;
   amount: number;
 }
 
@@ -1218,8 +1225,12 @@ export interface BudgetLine {
   accountCode: string;
   accountName: string;
   category: GLAccountCategory;
+  /** Null for a company-wide line (no cost-centre split). */
+  costCentreId: string | null;
+  costCentreCode: string | null;
+  costCentreName: string | null;
   budgeted: number;
-  /** Posted actual for the account over the budget window; null until the period has activity. */
+  /** Posted actual for the account (and cost centre, when set) over the budget window; null until the period has activity. */
   actual: number | null;
 }
 

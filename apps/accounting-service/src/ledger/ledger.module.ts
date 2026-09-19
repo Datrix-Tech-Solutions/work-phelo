@@ -8,6 +8,8 @@ import { CashbookController } from './cashbook.controller';
 import { CashbookService } from './cashbook.service';
 import { BankReconciliationsController } from './bank-reconciliations.controller';
 import { BankReconciliationsService } from './bank-reconciliations.service';
+import { BudgetsController } from './budgets.controller';
+import { BudgetsService } from './budgets.service';
 import { EntityTypesController } from './entity-types.controller';
 import { EntityTypesService } from './entity-types.service';
 import { InternalSubledgersController } from './internal-subledgers.controller';
@@ -30,6 +32,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     AccountsController,
     CashbookController,
     BankReconciliationsController,
+    BudgetsController,
     EntityTypesController,
     InternalSubledgersController,
     JournalsController,
@@ -42,6 +45,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     AccountingMasterDataService,
     CashbookService,
     BankReconciliationsService,
+    BudgetsService,
     EntityTypesService,
     JournalPolicy,
     JournalsService,

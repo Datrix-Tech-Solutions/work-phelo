@@ -4,7 +4,6 @@ import { useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pagePx, pageHeader, pageContent } from '@/lib/layout';
 import { TabBar, TabGroup } from '@/components/molecules/shared/TabBar';
-import { AppBackground } from '@/components/atoms/AppBackground';
 import { useCanAccessRoles } from '@/hooks/hr/usePermission';
 
 export default function ReinsuranceSettingsLayout({ children }: { children: React.ReactNode }) {
@@ -58,12 +57,9 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
       </div>
 
       {/* Content */}
-      <AppBackground
-        as="main"
-        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
-      >
+      <main className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}>
         {children}
-      </AppBackground>
+      </main>
     </div>
   );
 }

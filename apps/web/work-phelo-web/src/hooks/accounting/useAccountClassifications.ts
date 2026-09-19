@@ -54,6 +54,8 @@ export function useUpdateAccountClassification() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CLASSIFICATIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'account-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'gl-accounts'] });
     },
   });
 }

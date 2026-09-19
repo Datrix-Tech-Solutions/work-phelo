@@ -46,6 +46,7 @@ const receivableDocumentInclude = {
     select: { id: true, code: true, name: true, currency: true },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
+  costCentre: { select: { id: true, code: true, name: true } },
   arAccount: { select: { id: true, code: true, name: true } },
   postedJournalEntry: {
     select: { id: true, journalNumber: true, status: true, postedAt: true },
@@ -292,6 +293,7 @@ export class ReceivablesService {
     const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
+      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
 
@@ -342,6 +344,7 @@ export class ReceivablesService {
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
             offsetGlAccountId,
+            costCentreId: this.optional(dto.costCentreId),
             arAccountId,
             transactionTypeId: dto.transactionTypeId,
             taxBreakdown,
@@ -369,6 +372,7 @@ export class ReceivablesService {
     const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
+      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
       this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
       this.assertArAccount(user.tenantId, dto.arAccountId),
     ]);
@@ -431,6 +435,7 @@ export class ReceivablesService {
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
             offsetGlAccountId: dto.offsetGlAccountId,
+            costCentreId: this.optional(dto.costCentreId),
             arAccountId: dto.arAccountId,
             originalInvoiceId: this.optional(dto.originalInvoiceId),
             createdByUserId: user.id,
@@ -1321,6 +1326,7 @@ export class ReceivablesService {
       ? [
           {
             glAccountId: document.offsetGlAccountId,
+            costCentreId: document.costCentreId ?? undefined,
             description,
             ...debitCredit(offsetDirection, subtotalAmount),
           },
@@ -1333,6 +1339,7 @@ export class ReceivablesService {
       : [
           {
             glAccountId: document.offsetGlAccountId,
+            costCentreId: document.costCentreId ?? undefined,
             description,
             ...debitCredit(offsetDirection, totalAmount),
           },
@@ -1924,6 +1931,22 @@ export class ReceivablesService {
 
   private money(value: Prisma.Decimal) {
     return value.toFixed(4);
+  }
+
+  /** The optional department tag — when given, it must be an active cost centre of this
+   *  tenant. Checked at creation for early feedback; posting re-validates it. */
+  private async assertActiveCostCentre(
+    tenantId: string,
+    costCentreId: string | undefined,
+  ) {
+    if (!costCentreId) return;
+    const costCentre = await this.prisma.costCentre.findFirst({
+      where: { id: costCentreId, tenantId },
+    });
+    if (!costCentre) throw new NotFoundException('Cost centre not found');
+    if (costCentre.status !== RecordStatus.ACTIVE) {
+      throw new ConflictException('Cost centre is inactive');
+    }
   }
 
   private optional(value: string | undefined): string | null {

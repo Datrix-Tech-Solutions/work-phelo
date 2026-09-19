@@ -1,14 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { MultiSelect, MultiSelectOption } from '@/components/atoms/MultiSelect';
+import { Icons } from '@/components/atoms/icons';
+import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { useAccountingConfig, useGLAccounts } from '@/hooks';
+import {
+  useAccountingConfig,
+  useCostCentres,
+  useCreateBudget,
+  useGLAccounts,
+  useUpdateBudget,
+} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import {
@@ -47,23 +54,35 @@ interface BudgetPanelProps {
   /** Provide to edit an existing budget; omit (or null) for create mode. */
   budget?: BudgetDetail | null;
   onClose: () => void;
-  /** Fired with the assembled payload (and the budget id in edit mode) once the API is wired in. */
-  onSaved?: (payload: CreateBudgetPayload, budgetId?: string) => void;
 }
 
-export function BudgetPanel({ isOpen, budget, onClose, onSaved }: BudgetPanelProps) {
+/** One editable budget line. A line is unique per account + cost centre (`''` = company-wide). */
+interface LineRow {
+  key: string;
+  accountId: string;
+  costCentreId: string;
+  amount: string;
+}
+
+const COMPANY_WIDE = 'Company-wide (no cost centre)';
+
+export function BudgetPanel({ isOpen, budget, onClose }: BudgetPanelProps) {
   const isEdit = !!budget;
   const toast = useToast();
   const { data: config } = useAccountingConfig();
   const { data: accounts = [], isLoading: isLoadingAccounts } = useGLAccounts();
+  const { data: costCentres = [] } = useCostCentres();
 
   const [name, setName] = useState('');
   const [period, setPeriod] = useState<BudgetPeriod>('MONTHLY');
   const [startDate, setStartDate] = useState(today);
   const [scope, setScope] = useState<BudgetScope>('BOTH');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [amounts, setAmounts] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
+  const [rows, setRows] = useState<LineRow[]>([]);
+  const createBudget = useCreateBudget();
+  const updateBudget = useUpdateBudget();
+  const isSaving = createBudget.isPending || updateBudget.isPending;
+  const nextKey = useRef(0);
+  const newKey = () => `row-${nextKey.current++}`;
 
   const currency = config?.baseCurrency ?? '';
 
@@ -72,29 +91,40 @@ export function BudgetPanel({ isOpen, budget, onClose, onSaved }: BudgetPanelPro
     setPeriod('MONTHLY');
     setStartDate(today());
     setScope('BOTH');
-    setSelectedIds([]);
-    setAmounts({});
+    setRows([]);
   };
 
   // Seed the form each time the panel opens — from the budget in edit mode, blank otherwise.
-  useEffect(() => {
-    if (!isOpen) return;
-    if (budget) {
+  // Done during render (not in an effect) and keyed on the budget's id rather than its object,
+  // so a background refetch of the same budget never wipes in-progress edits — see
+  // https://react.dev/learn/you-might-not-need-an-effect.
+  const openKey = isOpen ? (budget?.id ?? 'new') : null;
+  const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
+  if (openKey !== lastOpenKey) {
+    setLastOpenKey(openKey);
+    if (budget && openKey !== null) {
       setName(budget.name);
       setPeriod(budget.period);
       setStartDate(budget.startDate);
       setScope(budget.scope);
-      setSelectedIds(budget.lines.map((l) => l.accountId));
-      setAmounts(Object.fromEntries(budget.lines.map((l) => [l.accountId, String(l.budgeted)])));
-    } else {
+      setRows(
+        budget.lines.map((l) => ({
+          // Account + cost centre is unique per budget, so it doubles as a stable key here.
+          key: `${l.accountId}:${l.costCentreId ?? ''}`,
+          accountId: l.accountId,
+          costCentreId: l.costCentreId ?? '',
+          amount: String(l.budgeted),
+        })),
+      );
+    } else if (openKey !== null) {
       blank();
     }
-  }, [isOpen, budget]);
+  }
 
   // Leaf accounts are the postable ones — parent/header accounts don't allow posting. Narrow
   // them to the categories the chosen scope covers, then keep the budget's own line accounts
   // selectable even if one has since been deactivated.
-  const accountOptions = useMemo<MultiSelectOption[]>(() => {
+  const accountOptions = useMemo<SearchSelectOption[]>(() => {
     const categories = SCOPE_CATEGORIES[scope];
     const opts = accounts
       .filter((a) => a.status === 'ACTIVE' && a.allowPosting && categories.includes(a.category))
@@ -104,6 +134,7 @@ export function BudgetPanel({ isOpen, budget, onClose, onSaved }: BudgetPanelPro
       const known = new Set(opts.map((o) => o.value));
       for (const l of budget.lines) {
         if (!known.has(l.accountId) && categories.includes(l.category)) {
+          known.add(l.accountId);
           opts.push({
             value: l.accountId,
             label: `${l.accountCode} – ${l.accountName}`,
@@ -115,16 +146,53 @@ export function BudgetPanel({ isOpen, budget, onClose, onSaved }: BudgetPanelPro
     return opts.sort((a, b) => a.label.localeCompare(b.label));
   }, [accounts, scope, budget]);
 
-  // Changing the scope can strand accounts that no longer belong — keep only the still-valid ones.
-  const allowedIds = useMemo(() => new Set(accountOptions.map((o) => o.value)), [accountOptions]);
-  const lineIds = selectedIds.filter((id) => allowedIds.has(id));
+  // Active cost centres, plus any the budget already uses that have since been deactivated.
+  const costCentreOptions = useMemo<SearchSelectOption[]>(() => {
+    const opts = costCentres
+      .filter((c) => c.status === 'ACTIVE')
+      .map((c) => ({ value: c.id, label: `${c.code} – ${c.name}` }));
+    const known = new Set(opts.map((o) => o.value));
+    for (const l of budget?.lines ?? []) {
+      if (l.costCentreId && !known.has(l.costCentreId)) {
+        known.add(l.costCentreId);
+        opts.push({ value: l.costCentreId, label: `${l.costCentreCode} – ${l.costCentreName}` });
+      }
+    }
+    return opts.sort((a, b) => a.label.localeCompare(b.label));
+  }, [costCentres, budget]);
 
-  const selectedAccounts = useMemo(
-    () => accountOptions.filter((o) => lineIds.includes(o.value)),
-    [accountOptions, lineIds],
+  // Changing the scope can strand accounts that no longer belong — keep only the still-valid rows.
+  const accountLabels = useMemo(
+    () => new Map(accountOptions.map((o) => [o.value, o.label])),
+    [accountOptions],
   );
+  const lineRows = rows.filter((r) => accountLabels.has(r.accountId));
 
-  const total = lineIds.reduce((sum, id) => sum + (Number(amounts[id]) || 0), 0);
+  const total = lineRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  const addAccount = (accountId: string) => {
+    if (!accountId) return;
+    setRows((prev) => [...prev, { key: newKey(), accountId, costCentreId: '', amount: '' }]);
+  };
+
+  const updateRow = (key: string, patch: Partial<LineRow>) =>
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  const removeRow = (key: string) => setRows((prev) => prev.filter((r) => r.key !== key));
+
+  // Splitting an account across cost centres = another row for the same account, right below it.
+  const splitRow = (key: string) =>
+    setRows((prev) => {
+      const i = prev.findIndex((r) => r.key === key);
+      if (i < 0) return prev;
+      const copy: LineRow = {
+        key: newKey(),
+        accountId: prev[i].accountId,
+        costCentreId: '',
+        amount: '',
+      };
+      return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)];
+    });
 
   const fmt = (n: number) =>
     `${currency ? `${currency} ` : ''}${n.toLocaleString(undefined, {
@@ -142,9 +210,29 @@ export function BudgetPanel({ isOpen, budget, onClose, onSaved }: BudgetPanelPro
       toast.error('Enter a budget name');
       return;
     }
-    if (lineIds.length === 0) {
-      toast.error('Pick at least one account to budget for');
+    if (lineRows.length === 0) {
+      toast.error('Add at least one account to budget for');
       return;
+    }
+
+    // An account is either budgeted company-wide (one line) or split across cost centres —
+    // never both, and never the same cost centre twice.
+    const byAccount = new Map<string, LineRow[]>();
+    for (const r of lineRows)
+      byAccount.set(r.accountId, [...(byAccount.get(r.accountId) ?? []), r]);
+    for (const [accountId, group] of byAccount) {
+      if (group.length < 2) continue;
+      const label = accountLabels.get(accountId) ?? 'An account';
+      if (group.some((r) => r.costCentreId === '')) {
+        toast.error(
+          `${label}: pick a cost centre on every line, or keep a single company-wide line`,
+        );
+        return;
+      }
+      if (new Set(group.map((r) => r.costCentreId)).size !== group.length) {
+        toast.error(`${label} is listed twice for the same cost centre`);
+        return;
+      }
     }
 
     const payload: CreateBudgetPayload = {
@@ -152,21 +240,25 @@ export function BudgetPanel({ isOpen, budget, onClose, onSaved }: BudgetPanelPro
       period,
       startDate,
       scope,
-      lines: lineIds.map((id) => ({ accountId: id, amount: Number(amounts[id]) || 0 })),
+      lines: lineRows.map((r) => ({
+        accountId: r.accountId,
+        costCentreId: r.costCentreId || null,
+        amount: Number(r.amount) || 0,
+      })),
     };
 
     try {
-      setIsSaving(true);
-      // TODO: replace with useCreateBudget()/useUpdateBudget() once the budgets API lands.
-      onSaved?.(payload, budget?.id);
+      if (budget) {
+        await updateBudget.mutateAsync({ id: budget.id, ...payload });
+      } else {
+        await createBudget.mutateAsync(payload);
+      }
       toast.success(isEdit ? 'Budget updated' : 'Budget saved');
       close();
     } catch (error) {
       toast.error(
         extractError(error, isEdit ? 'Failed to update budget' : 'Failed to save budget'),
       );
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -207,36 +299,71 @@ export function BudgetPanel({ isOpen, budget, onClose, onSaved }: BudgetPanelPro
           <SegmentedToggle options={SCOPE_OPTIONS} value={scope} onChange={setScope} />
         </div>
 
-        <MultiSelect
+        <SearchSelect
           label="Accounts"
-          placeholder={isLoadingAccounts ? 'Loading accounts…' : 'Select accounts…'}
+          placeholder={isLoadingAccounts ? 'Loading accounts…' : 'Add an account…'}
           options={accountOptions}
-          value={lineIds}
-          onChange={setSelectedIds}
-          hideChips
+          value=""
+          onChange={addAccount}
+          clearable={false}
+          size="md"
         />
 
-        {selectedAccounts.length > 0 && (
+        {lineRows.length > 0 && (
           <div className="overflow-hidden rounded-xl border border-gray-200">
             <div className="flex items-center justify-between bg-gray-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              <span>Account</span>
+              <span>Account · Cost centre</span>
               <span>Budgeted Amount</span>
             </div>
             <div className="divide-y divide-gray-100">
-              {selectedAccounts.map((opt) => (
-                <div key={opt.value} className="flex items-center gap-3 px-3 py-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-gray-900" title={opt.label}>
-                    {opt.label}
-                  </span>
-                  <div className="w-44 shrink-0">
-                    <CurrencyInput
-                      lockCurrency
-                      currency={currency || undefined}
-                      value={amounts[opt.value] ?? ''}
-                      onValueChange={(v) =>
-                        setAmounts((prev) => ({ ...prev, [opt.value]: v }))
-                      }
-                    />
+              {lineRows.map((row) => (
+                <div key={row.key} className="flex flex-col gap-2 px-3 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900"
+                      title={accountLabels.get(row.accountId)}
+                    >
+                      {accountLabels.get(row.accountId)}
+                    </span>
+                    <button
+                      type="button"
+                      title="Split by another cost centre"
+                      aria-label="Split by another cost centre"
+                      onClick={() => splitRow(row.key)}
+                      className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                    >
+                      <Icons.Plus className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Remove line"
+                      aria-label="Remove line"
+                      onClick={() => removeRow(row.key)}
+                      className="rounded-md p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Icons.Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <SearchSelect
+                        placeholder="Cost centre"
+                        showAllOption
+                        allLabel={COMPANY_WIDE}
+                        clearable={false}
+                        options={costCentreOptions}
+                        value={row.costCentreId}
+                        onChange={(v) => updateRow(row.key, { costCentreId: v })}
+                      />
+                    </div>
+                    <div className="w-44 shrink-0">
+                      <CurrencyInput
+                        lockCurrency
+                        currency={currency || undefined}
+                        value={row.amount}
+                        onValueChange={(v) => updateRow(row.key, { amount: v })}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
