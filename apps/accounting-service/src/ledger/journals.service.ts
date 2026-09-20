@@ -87,7 +87,6 @@ export class JournalsService {
       // number back and the sequence stays gapless.
       return await this.prisma.$transaction(async (tx) => {
         const draft = await this.resolveDraft(tx, user.tenantId, dto);
-        await this.assertNoBareControlAccounts(tx, user.tenantId, draft.lines);
         const entryType = dto.entryType ?? JournalEntryType.STANDARD;
         const journalNumber = await this.nextJournalNumber(
           tx,
@@ -307,7 +306,6 @@ export class JournalsService {
             credit: Number(line.transactionCredit.toString()),
           })),
       });
-      await this.assertNoBareControlAccounts(tx, user.tenantId, draft.lines);
 
       return tx.journalEntry.update({
         where: {
@@ -393,7 +391,6 @@ export class JournalsService {
         postLines,
         journal.transactionCurrency,
       );
-      await this.assertNoBareControlAccounts(tx, user.tenantId, postLines);
 
       const claimed = await tx.journalEntry.updateMany({
         where: {
@@ -989,69 +986,6 @@ export class JournalsService {
       WHERE "id" = ${journalId} AND "tenantId" = ${tenantId}
       FOR UPDATE
     `;
-  }
-
-  /**
-   * A receivables or payables account carries customer and supplier balances in its subledger,
-   * so a manual line on one must name the subledger account — otherwise the GL and the
-   * subledger drift apart. Documents and settlements post through their own modules, which
-   * always supply it. Such an account is one that a receivable/payable document, receipt or
-   * payment has actually used. An entity's optional "control account" is NOT a signal: it is
-   * only a per-entity override and can point at any account, including cash and bank.
-   */
-  private async assertNoBareControlAccounts(
-    client: PrismaService | Prisma.TransactionClient,
-    tenantId: string,
-    lines: JournalLineDto[],
-  ) {
-    const bareAccountIds = [
-      ...new Set(
-        lines
-          .filter((line) => !line.subledgerAccountId)
-          .map((line) => line.glAccountId),
-      ),
-    ];
-    if (bareAccountIds.length === 0) return;
-
-    const inList = { in: bareAccountIds };
-    const [byAr, byReceipt, byAp, byPayment] = await Promise.all([
-      client.accountingReceivableDocument.findMany({
-        where: { tenantId, arAccountId: inList },
-        select: { arAccountId: true },
-        distinct: ['arAccountId'],
-      }),
-      client.accountingReceivableReceipt.findMany({
-        where: { tenantId, arAccountId: inList },
-        select: { arAccountId: true },
-        distinct: ['arAccountId'],
-      }),
-      client.accountingPayableDocument.findMany({
-        where: { tenantId, apAccountId: inList },
-        select: { apAccountId: true },
-        distinct: ['apAccountId'],
-      }),
-      client.accountingPayablePayment.findMany({
-        where: { tenantId, apAccountId: inList },
-        select: { apAccountId: true },
-        distinct: ['apAccountId'],
-      }),
-    ]);
-    const controlIds = new Set<string>([
-      ...byAr.map((row) => row.arAccountId),
-      ...byReceipt.map((row) => row.arAccountId),
-      ...byAp.map((row) => row.apAccountId),
-      ...byPayment.map((row) => row.apAccountId),
-    ]);
-    const offending = bareAccountIds.find((id) => controlIds.has(id));
-    if (offending) {
-      const account = await client.gLAccount.findFirst({
-        where: { id: offending, tenantId },
-        select: { code: true, name: true },
-      });
-      throw new BadRequestException(
-        `${account ? `${account.code} ${account.name}` : 'This account'} is a receivables or payables account, so a manual journal line on it needs a subledger account; use the receivables or payables module instead`,
-      );
-    }
   }
 
   private optional(
