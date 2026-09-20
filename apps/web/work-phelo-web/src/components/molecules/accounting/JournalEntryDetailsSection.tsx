@@ -15,16 +15,9 @@ import {
 } from '@/types/accounting';
 import { useAccountingConfig, useAccountingCurrencyOptions, useFiscalPeriods } from '@/hooks';
 import { cn } from '@/lib/utils';
-import {
-  useFiscalYears,
-  useIncomeStatementReport,
-  useJournals,
-  useTrialBalanceReport,
-} from '@/hooks';
+import { useFiscalYears, useIncomeStatementReport, useTrialBalanceReport } from '@/hooks';
 import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
-import { formatJournalNumber } from '@/lib/formatters';
 import { buildClosingLines, buildOpeningLines } from '@/lib/accounting/yearEndLines';
-import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 
 interface JournalEntryDetailsSectionProps {
   form: UseFormReturn<JournalEntryFormValues>;
@@ -43,21 +36,15 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
   const { options: currencyOptions } = useAccountingCurrencyOptions();
   const { data: config } = useAccountingConfig();
   const { data: openPeriods = [] } = useFiscalPeriods({ status: 'OPEN' });
-  const { data: allPeriods = [] } = useFiscalPeriods();
-  const { data: postedJournals = [] } = useJournals({ status: 'POSTED' });
   const { data: glAccounts = [] } = useGLAccounts();
   const { data: fiscalYears = [] } = useFiscalYears();
 
   const transactionDate = useWatch({ control, name: 'transactionDate' });
   const currency = useWatch({ control, name: 'currency' });
-  const reversalDate = useWatch({ control, name: 'reversalDate' });
-  const isReversing = entryType === 'reversing';
-  // A reversal posts on its reversal date; its transaction date is only the original's date.
-  const postingDate = isReversing ? reversalDate : transactionDate;
 
-  const matchedPeriod = postingDate
+  const matchedPeriod = transactionDate
     ? openPeriods.find((p) => {
-        const date = new Date(postingDate).getTime();
+        const date = new Date(transactionDate).getTime();
         return date >= new Date(p.startDate).getTime() && date <= new Date(p.endDate).getTime();
       })
     : undefined;
@@ -201,74 +188,12 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
     appliedAdjustingDefault.current = true;
   }, [isAdjusting, openPeriods, setValue]);
 
-  // Reversals default to the first day of the next fiscal month; applied once per switch.
-  const appliedReversalDefault = useRef(false);
-  useEffect(() => {
-    if (!isReversing) {
-      appliedReversalDefault.current = false;
-      setValue('originalJournalId', '');
-      setValue('reversalDate', '');
-      return;
-    }
-    if (appliedReversalDefault.current) return;
-    const now = Date.now();
-    const next = allPeriods
-      .filter((p) => new Date(p.startDate).getTime() > now)
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
-    if (!next) return;
-    setValue('reversalDate', next.startDate.slice(0, 10), { shouldValidate: true });
-    appliedReversalDefault.current = true;
-  }, [isReversing, allPeriods, setValue]);
-
-  // Picking the journal to reverse copies its date, currency and lines, with debit/credit swapped.
-  const handleOriginalJournalChange = (journalId: string) => {
-    setValue('originalJournalId', journalId, { shouldValidate: true });
-    const journal = postedJournals.find((j) => j.id === journalId);
-    if (!journal) return;
-    const categoryById = new Map(glAccounts.map((a) => [a.id, a.category]));
-    setValue('transactionDate', journal.transactionDate.slice(0, 10), { shouldValidate: true });
-    setValue('currency', journal.transactionCurrency, { shouldValidate: true });
-    setValue('exchangeRate', Number(journal.exchangeRate) || '');
-    setValue(
-      'lines',
-      journal.lines.map((l) => ({
-        accountClass: categoryById.get(l.glAccountId) ?? '',
-        targetAccount: l.glAccountId,
-        description: l.description ?? '',
-        debit: Number(l.transactionCredit) || '',
-        credit: Number(l.transactionDebit) || '',
-      })),
-    );
-  };
-
   const needsExchangeRate =
     !!currency && !!config?.baseCurrency && currency !== config.baseCurrency;
 
   return (
     <FormSection title="Entry Details">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {isReversing && (
-          <Controller
-            name="originalJournalId"
-            control={control}
-            rules={{ required: 'Select the journal to reverse' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Original Journal"
-                placeholder="Select posted journal…"
-                options={postedJournals.map((j) => ({
-                  value: j.id,
-                  label: formatJournalNumber(j.journalNumber),
-                  sublabel: formatSourceEventDescription(j.description),
-                }))}
-                value={field.value}
-                onChange={handleOriginalJournalChange}
-                error={errors.originalJournalId?.message}
-              />
-            )}
-          />
-        )}
-
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <Controller
             name="transactionDate"
@@ -276,14 +201,14 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
             rules={{ required: 'Transaction date is required' }}
             render={({ field }) => (
               <DatePicker
-                label={isReversing ? 'Original Date' : 'Transaction Date'}
+                label="Transaction Date"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.transactionDate?.message}
               />
             )}
           />
-          {postingDate && !isReversing && (
+          {transactionDate && (
             <p className={cn('text-xs', matchedPeriod ? 'text-gray-400' : 'text-red-500')}>
               {matchedPeriod
                 ? `Fiscal Period: ${matchedPeriod.name}`
@@ -291,31 +216,6 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
             </p>
           )}
         </div>
-
-        {isReversing && (
-          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-            <Controller
-              name="reversalDate"
-              control={control}
-              rules={{ required: 'Reversal date is required' }}
-              render={({ field }) => (
-                <DatePicker
-                  label="Reversal Date"
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={errors.reversalDate?.message}
-                />
-              )}
-            />
-            {reversalDate && (
-              <p className={cn('text-xs', matchedPeriod ? 'text-gray-400' : 'text-red-500')}>
-                {matchedPeriod
-                  ? `Fiscal Period: ${matchedPeriod.name}`
-                  : 'No open fiscal period covers this date'}
-              </p>
-            )}
-          </div>
-        )}
 
         <Controller
           name="currency"

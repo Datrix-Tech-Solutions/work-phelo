@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
@@ -11,6 +11,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { JournalEntryDetailsSection } from '@/components/molecules/accounting/JournalEntryDetailsSection';
 import { RecurringEntryDetailsSection } from '@/components/molecules/accounting/RecurringEntryDetailsSection';
+import { ReversingEntryForm } from '@/components/molecules/accounting/ReversingEntryForm';
 import { JournalLinesSection } from '@/components/molecules/accounting/JournalLinesSection';
 import { JournalTotalsSection } from '@/components/molecules/accounting/JournalTotalsSection';
 import {
@@ -21,7 +22,9 @@ import {
   JOURNAL_ENTRY_DEFAULTS,
 } from '@/types/accounting';
 import { cardClass } from '@/lib/utils';
-import { useCreateJournal } from '@/hooks';
+import { useCreateJournal, useJournal, useReverseJournal } from '@/hooks';
+import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
+import { formatJournalNumber } from '@/lib/formatters';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -45,12 +48,59 @@ export default function NewJournalEntryPage() {
 
   const form = useForm<JournalEntryFormValues>({ defaultValues: JOURNAL_ENTRY_DEFAULTS });
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [entryType, setEntryType] = useState<JournalEntryType>('standard');
   const [attachment, setAttachment] = useState<File | null>(null);
+
+  // "Reverse & correct" lands here with ?correct=<journal id>: load that journal and pre-fill a
+  // replacement from its lines, starting from the same entry type unless the user picks another.
+  const correctId = useSearchParams().get('correct') ?? undefined;
+  const { data: correcting } = useJournal(correctId);
+  const { data: glAccounts = [] } = useGLAccounts();
+  const [chosenType, setEntryType] = useState<JournalEntryType | null>(null);
+  const correctingType = correcting?.entryType.toLowerCase() as JournalEntryType | undefined;
+  const entryType: JournalEntryType =
+    chosenType ?? (correctingType && correctingType !== 'reversing' ? correctingType : 'standard');
+
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!correcting || glAccounts.length === 0 || prefilled.current) return;
+    prefilled.current = true;
+    const categoryById = new Map(glAccounts.map((a) => [a.id, a.category]));
+    form.reset({
+      ...JOURNAL_ENTRY_DEFAULTS,
+      transactionDate: correcting.transactionDate.slice(0, 10),
+      currency: correcting.transactionCurrency,
+      exchangeRate: Number(correcting.exchangeRate) === 1 ? '' : Number(correcting.exchangeRate),
+      description: correcting.description,
+      lines: correcting.lines.map((l) => ({
+        accountClass: categoryById.get(l.glAccountId) ?? '',
+        targetAccount: l.glAccountId,
+        description: l.description ?? '',
+        debit: Number(l.transactionDebit) || '',
+        credit: Number(l.transactionCredit) || '',
+      })),
+    });
+  }, [correcting, glAccounts, form]);
   const toast = useToast();
-  const { mutateAsync: createJournal, isPending } = useCreateJournal();
+  const { mutateAsync: createJournal, isPending: isCreating } = useCreateJournal();
+  const { mutateAsync: reverseJournal, isPending: isReversing } = useReverseJournal();
+  const isPending = isCreating || isReversing;
 
   const onSubmit = async (data: JournalEntryFormValues) => {
+    if (entryType === 'reversing') {
+      try {
+        const reversal = await reverseJournal({
+          id: data.originalJournalId,
+          reversalDate: data.reversalDate,
+          reason: data.reversalReason.trim(),
+        });
+        toast.success(`Reversal ${reversal.journalNumber} posted`);
+        router.push(base);
+      } catch (err) {
+        toast.error(extractError(err, 'Failed to reverse journal'));
+      }
+      return;
+    }
+
     if (entryType !== 'recurring' && !data.fiscalPeriodId) {
       toast.error('No open fiscal period covers this transaction date');
       return;
@@ -78,8 +128,7 @@ export default function NewJournalEntryPage() {
     try {
       const journal = await createJournal({
         entryType: entryType.toUpperCase() as JournalEntryTypeCode,
-        // A reversal posts on its reversal date; its transaction date is only the original's.
-        transactionDate: entryType === 'reversing' ? data.reversalDate : data.transactionDate,
+        transactionDate: data.transactionDate,
         fiscalPeriodId: data.fiscalPeriodId,
         transactionCurrency: data.currency,
         exchangeRate: data.exchangeRate || undefined,
@@ -138,25 +187,38 @@ export default function NewJournalEntryPage() {
             loadingText="Saving…"
             onClick={form.handleSubmit(onSubmit)}
           >
-            Submit for Review
+            {entryType === 'reversing' ? 'Post Reversal' : 'Submit for Review'}
           </Button>
         </div>
       </div>
 
-      <div className={cardClass('p-4')}>
-        {entryType === 'recurring' ? (
-          <RecurringEntryDetailsSection form={form} />
-        ) : (
-          <JournalEntryDetailsSection form={form} entryType={entryType} />
-        )}
-      </div>
+      {correcting && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Correcting {formatJournalNumber(correcting.journalNumber)}, which has been reversed. The
+          original lines are loaded below — fix them and submit the corrected entry.
+        </div>
+      )}
 
-      <JournalLinesSection
-        form={form}
-        allowedClasses={entryType === 'opening' ? BALANCE_SHEET_CLASSES : undefined}
-      />
+      {entryType === 'reversing' ? (
+        <ReversingEntryForm form={form} />
+      ) : (
+        <>
+          <div className={cardClass('p-4')}>
+            {entryType === 'recurring' ? (
+              <RecurringEntryDetailsSection form={form} />
+            ) : (
+              <JournalEntryDetailsSection form={form} entryType={entryType} />
+            )}
+          </div>
 
-      <JournalTotalsSection form={form} />
+          <JournalLinesSection
+            form={form}
+            allowedClasses={entryType === 'opening' ? BALANCE_SHEET_CLASSES : undefined}
+          />
+
+          <JournalTotalsSection form={form} />
+        </>
+      )}
 
       <Modal
         isOpen={showCancelModal}

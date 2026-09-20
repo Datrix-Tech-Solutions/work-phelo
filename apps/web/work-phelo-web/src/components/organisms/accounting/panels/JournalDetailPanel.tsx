@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, ChangeEvent } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -12,6 +13,7 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 import { formatJournalNumber } from '@/lib/formatters';
+import { canReverse, displayStatus } from '@/lib/accounting/journalStatus';
 
 interface JournalDetailPanelProps {
   journal: JournalEntryRecord | null;
@@ -44,8 +46,11 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps) {
   const toast = useToast();
-  const [reverseOpen, setReverseOpen] = useState(false);
-  const [reversalDate, setReversalDate] = useState(new Date().toISOString().slice(0, 10));
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
+  // 'reverse' just cancels the journal; 'correct' also opens a pre-filled replacement afterwards.
+  const [reverseMode, setReverseMode] = useState<'reverse' | 'correct' | null>(null);
+  const [reversalDate, setReversalDate] = useState('');
   const [reason, setReason] = useState('');
 
   const { data: fiscalPeriods = [] } = useFiscalPeriods();
@@ -60,8 +65,17 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
   const creditTotal =
     journal?.lines.reduce((sum, line) => sum + Number(line.transactionCredit), 0) ?? 0;
 
+  // The reversal cannot be dated before the original, and today is the natural default.
+  const openReverse = (mode: 'reverse' | 'correct') => {
+    if (!journal) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const originalDate = journal.transactionDate.slice(0, 10);
+    setReversalDate(today > originalDate ? today : originalDate);
+    setReverseMode(mode);
+  };
+
   const handleClose = () => {
-    setReverseOpen(false);
+    setReverseMode(null);
     setReason('');
     onClose();
   };
@@ -83,11 +97,17 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
       return;
     }
     try {
-      await reverseJournal.mutateAsync({ id: journal.id, reversalDate, reason: reason.trim() });
-      toast.success('Journal reversed.');
-      setReverseOpen(false);
-      setReason('');
+      const reversal = await reverseJournal.mutateAsync({
+        id: journal.id,
+        reversalDate,
+        reason: reason.trim(),
+      });
+      toast.success(`Journal reversed by ${formatJournalNumber(reversal.journalNumber)}.`);
+      const correctId = reverseMode === 'correct' ? journal.id : null;
       handleClose();
+      if (correctId) {
+        router.push(`/${tenantSlug}/accounting/journalentry/new?correct=${correctId}`);
+      }
     } catch (err) {
       toast.error(extractError(err, 'Failed to reverse journal'));
     }
@@ -110,12 +130,15 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                 Post
               </Button>
             </div>
-          ) : journal?.status === 'POSTED' ? (
+          ) : journal && canReverse(journal) ? (
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
-              <Button variant="danger" onClick={() => setReverseOpen(true)}>
+              <Button variant="outline" onClick={() => openReverse('correct')}>
+                Reverse &amp; correct
+              </Button>
+              <Button variant="danger" onClick={() => openReverse('reverse')}>
                 Reverse
               </Button>
             </div>
@@ -131,7 +154,10 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
         {journal && (
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
-              <Badge label={journal.status} variant={STATUS_VARIANT[journal.status]} />
+              <Badge
+                label={displayStatus(journal)}
+                variant={STATUS_VARIANT[displayStatus(journal)]}
+              />
               {journal.reference && (
                 <span className="text-xs text-gray-500">Ref: {journal.reference}</span>
               )}
@@ -210,9 +236,16 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               </div>
             </div>
 
-            {journal.reversalOfJournalId && (
+            {journal.reversalOfJournal && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                This journal reverses another posted journal.
+                This journal reverses {formatJournalNumber(journal.reversalOfJournal.journalNumber)}
+                .
+              </div>
+            )}
+            {journal.reversalJournal && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Reversed by {formatJournalNumber(journal.reversalJournal.journalNumber)} on{' '}
+                {fmtDate(journal.reversalJournal.transactionDate)}. The original entry is unchanged.
               </div>
             )}
           </div>
@@ -220,13 +253,17 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
       </SidePanel>
 
       <Modal
-        isOpen={reverseOpen}
-        onClose={() => setReverseOpen(false)}
-        title="Reverse Journal"
-        description="Creates an exact linked reversal. The original posted journal is not edited."
+        isOpen={reverseMode !== null}
+        onClose={() => setReverseMode(null)}
+        title={reverseMode === 'correct' ? 'Reverse & Correct Journal' : 'Reverse Journal'}
+        description={
+          reverseMode === 'correct'
+            ? 'Posts a linked reversal, then opens a new journal pre-filled with the original lines for you to correct. The original is not edited.'
+            : 'Creates an exact linked reversal. The original posted journal is not edited.'
+        }
         footer={
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setReverseOpen(false)}>
+            <Button variant="outline" onClick={() => setReverseMode(null)}>
               Cancel
             </Button>
             <Button
@@ -235,7 +272,7 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               loadingText="Reversing…"
               onClick={handleReverse}
             >
-              Reverse Journal
+              {reverseMode === 'correct' ? 'Reverse & Correct' : 'Reverse Journal'}
             </Button>
           </div>
         }

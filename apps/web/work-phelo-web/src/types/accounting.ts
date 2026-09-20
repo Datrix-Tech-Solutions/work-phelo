@@ -433,6 +433,7 @@ export interface JournalEntryFormValues {
    *  reversal posts on (transactionDate then holds the original journal's date). */
   originalJournalId: string;
   reversalDate: string;
+  reversalReason: string;
   /** Only used by closing and opening balance entries. */
   fiscalYearId: string;
   /** Closing entries: where the year's net profit or loss is posted. */
@@ -461,6 +462,7 @@ export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   adjustmentCategory: '',
   originalJournalId: '',
   reversalDate: '',
+  reversalReason: '',
   fiscalYearId: '',
   retainedEarningsAccountId: '',
   balancingAccountId: '',
@@ -544,6 +546,10 @@ export interface JournalEntryRecord {
   id: string;
   journalNumber: string;
   entryType: JournalEntryTypeCode;
+  /** Set when a reversal of this journal exists. The original itself is never modified. */
+  reversalJournal: { id: string; journalNumber: string; transactionDate: string } | null;
+  /** Set on a reversal journal: the journal it reverses. */
+  reversalOfJournal: { id: string; journalNumber: string } | null;
   status: JournalRecordStatus;
   transactionDate: string;
   postingDate: string | null;
