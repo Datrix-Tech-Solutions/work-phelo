@@ -17,6 +17,7 @@ import {
   GLAccountCategory,
   JournalEntryFormValues,
   JournalEntryType,
+  JournalEntryTypeCode,
   JOURNAL_ENTRY_DEFAULTS,
 } from '@/types/accounting';
 import { cardClass } from '@/lib/utils';
@@ -62,7 +63,8 @@ export default function NewJournalEntryPage() {
       toast.error('A journal entry needs at least 2 lines');
       return;
     }
-    if (debitTotal !== creditTotal) {
+    // Compare in cents so floating-point sums (0.1 + 0.2) don't fail a balanced entry.
+    if (Math.round(debitTotal * 100) !== Math.round(creditTotal * 100)) {
       toast.error('Debit and credit totals must be equal');
       return;
     }
@@ -74,13 +76,13 @@ export default function NewJournalEntryPage() {
     }
 
     try {
-      await createJournal({
+      const journal = await createJournal({
+        entryType: entryType.toUpperCase() as JournalEntryTypeCode,
         // A reversal posts on its reversal date; its transaction date is only the original's.
         transactionDate: entryType === 'reversing' ? data.reversalDate : data.transactionDate,
         fiscalPeriodId: data.fiscalPeriodId,
         transactionCurrency: data.currency,
         exchangeRate: data.exchangeRate || undefined,
-        reference: data.reference || undefined,
         description: data.description,
         lines: lines.map((l) => ({
           glAccountId: l.targetAccount,
@@ -89,7 +91,7 @@ export default function NewJournalEntryPage() {
           credit: Number(l.credit) || 0,
         })),
       });
-      toast.success('Journal entry saved as draft');
+      toast.success(`Journal entry ${journal.journalNumber} saved as draft`);
       router.push(base);
     } catch (err) {
       toast.error(extractError(err, 'Failed to save journal entry'));

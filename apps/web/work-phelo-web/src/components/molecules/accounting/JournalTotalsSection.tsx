@@ -19,8 +19,9 @@ export function JournalTotalsSection({ form }: JournalTotalsSectionProps) {
 
   const debitTotal = (lines ?? []).reduce((sum, l) => sum + (Number(l?.debit) || 0), 0);
   const creditTotal = (lines ?? []).reduce((sum, l) => sum + (Number(l?.credit) || 0), 0);
-  const difference = debitTotal - creditTotal;
-  const isBalanced = difference === 0;
+  const differenceCents = Math.round(debitTotal * 100) - Math.round(creditTotal * 100);
+  const difference = differenceCents / 100;
+  const isBalanced = differenceCents === 0;
 
   const items = [
     { label: 'Total Debit', value: fmtAmount(debitTotal, currency), tone: 'text-gray-900' },

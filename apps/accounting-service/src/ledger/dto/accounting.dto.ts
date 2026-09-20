@@ -23,6 +23,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   FiscalPeriodStatus,
   GLAccountCategory,
+  JournalEntryType,
   JournalStatus,
   NormalBalance,
   RecordStatus,
@@ -707,6 +708,16 @@ export class CreateJournalDto {
   transactionCurrency!: string;
 
   @ApiPropertyOptional({
+    enum: JournalEntryType,
+    default: JournalEntryType.STANDARD,
+    description:
+      'Kind of journal. Sets the number prefix (STN, ADJ, RVS, CLS, OPN, RCR). Fixed once created.',
+  })
+  @IsOptional()
+  @IsEnum(JournalEntryType)
+  entryType?: JournalEntryType;
+
+  @ApiPropertyOptional({
     example: 1,
     minimum: 0.00000001,
     description:
@@ -842,4 +853,23 @@ export class QueryJournalsDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 500,
+    description: 'Page size. Omit to return every journal.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
+
+  @ApiPropertyOptional({ minimum: 0, description: 'Journals to skip.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
 }

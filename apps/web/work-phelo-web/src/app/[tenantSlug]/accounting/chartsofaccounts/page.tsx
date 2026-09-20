@@ -149,7 +149,7 @@ export default function ChartOfAccountsPage() {
           />
         )}
         rightPanel={
-          <div className="flex h-full flex-col gap-3">
+          <div className="flex h-full flex-col">
             <ChartOfAccountsBreadcrumb
               scope={liveScope}
               classifications={classifications}

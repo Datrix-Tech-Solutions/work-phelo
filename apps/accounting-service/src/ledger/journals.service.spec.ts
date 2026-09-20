@@ -7,6 +7,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   FiscalPeriodStatus,
   GLAccountCategory,
+  JournalEntryType,
   JournalStatus,
   NormalBalance,
   Prisma,
@@ -128,10 +129,22 @@ describe('JournalsService', () => {
         findMany: jest.fn(),
       },
       subledgerAccount: {
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      accountingReceivableDocument: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      accountingReceivableReceipt: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      accountingPayableDocument: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      accountingPayablePayment: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       costCentre: {
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       journalEntry: {
         findFirst: jest.fn(),
@@ -147,7 +160,8 @@ describe('JournalsService', () => {
         update: jest.fn(),
       },
       $transaction: jest.fn(),
-      $queryRaw: jest.fn(),
+      // The journal number sequence: the first number issued is 0.
+      $queryRaw: jest.fn().mockResolvedValue([{ lastNumber: 0 }]),
       $executeRaw: jest.fn().mockResolvedValue(1),
     };
     prisma.$transaction.mockImplementation(
@@ -390,7 +404,57 @@ describe('JournalsService', () => {
     expect(prisma.journalEntry.create).not.toHaveBeenCalled();
   });
 
-  it('rejects a journal when base-currency line rounding is unbalanced', async () => {
+  it('absorbs base-currency rounding into the largest line instead of rejecting a balanced journal', async () => {
+    const { prisma, service } = setup();
+    prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      tenantId: actor.tenantId,
+      baseCurrency: 'GHS',
+      fiscalYearStartMonth: 1,
+      decimalPlaces: 2,
+    });
+    prisma.accountingCurrency.findUnique.mockResolvedValue({
+      code: 'GHS',
+      decimalPlaces: 2,
+      isActive: true,
+    });
+    prisma.gLAccount.findMany.mockResolvedValue([
+      account('cash'),
+      account('income'),
+    ]);
+    prisma.journalEntry.create.mockImplementation(
+      (args: { data: unknown }) => args.data,
+    );
+
+    const result = (await service.create(actor, {
+      transactionDate: '2026-07-10',
+      fiscalPeriodId: period.id,
+      transactionCurrency: 'USD',
+      exchangeRate: 0.5,
+      description: 'Rounding difference',
+      lines: [
+        { glAccountId: 'cash', debit: 0.04 },
+        { glAccountId: 'income', credit: 0.01 },
+        { glAccountId: 'income', credit: 0.03 },
+      ],
+    })) as unknown as {
+      lines: {
+        create: Array<{
+          baseDebit: Prisma.Decimal;
+          baseCredit: Prisma.Decimal;
+        }>;
+      };
+    };
+
+    const sum = (side: 'baseDebit' | 'baseCredit') =>
+      result.lines.create
+        .reduce((total, line) => total.plus(line[side]), new Prisma.Decimal(0))
+        .toFixed(2);
+    expect(sum('baseDebit')).toBe(sum('baseCredit'));
+    expect(sum('baseDebit')).toBe('0.02');
+  });
+
+  it('still rejects a journal that is genuinely unbalanced in base currency', async () => {
     const { prisma, service } = setup();
     prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
     prisma.accountingTenantConfig.findUnique.mockResolvedValue({
@@ -409,17 +473,256 @@ describe('JournalsService', () => {
       service.create(actor, {
         transactionDate: '2026-07-10',
         fiscalPeriodId: period.id,
-        transactionCurrency: 'USD',
-        exchangeRate: 0.5,
-        description: 'Rounding imbalance',
+        transactionCurrency: 'GHS',
+        description: 'Off by a lot',
         lines: [
-          { glAccountId: 'cash', debit: 0.04 },
-          { glAccountId: 'income', credit: 0.01 },
-          { glAccountId: 'income', credit: 0.03 },
+          { glAccountId: 'cash', debit: 100 },
+          { glAccountId: 'income', credit: 99 },
         ],
       }),
     ).rejects.toThrow('Journal is unbalanced');
     expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+  });
+
+  describe('journal numbers and types', () => {
+    function readyToCreate() {
+      const ctx = setup();
+      ctx.prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+      ctx.prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+        tenantId: actor.tenantId,
+        baseCurrency: 'GHS',
+        fiscalYearStartMonth: 1,
+        decimalPlaces: 2,
+      });
+      ctx.prisma.accountingCurrency.findUnique.mockResolvedValue({
+        code: 'GHS',
+        decimalPlaces: 2,
+        isActive: true,
+      });
+      ctx.prisma.gLAccount.findMany.mockResolvedValue([
+        account('cash'),
+        account('income'),
+      ]);
+      ctx.prisma.journalEntry.create.mockImplementation(
+        (args: { data: unknown }) => args.data,
+      );
+      return ctx;
+    }
+    const input = {
+      transactionDate: '2026-07-10',
+      fiscalPeriodId: period.id,
+      transactionCurrency: 'GHS',
+      description: 'Numbered journal',
+      lines: [
+        { glAccountId: 'cash', debit: 100 },
+        { glAccountId: 'income', credit: 100 },
+      ],
+    };
+
+    it('numbers a standard journal JE-STN<yymm>-<n>, starting at 0', async () => {
+      const { service } = readyToCreate();
+
+      const result = (await service.create(actor, input)) as unknown as {
+        journalNumber: string;
+        entryType: string;
+      };
+
+      expect(result.journalNumber).toBe('JE-STN2607-0000');
+      expect(result.entryType).toBe('STANDARD');
+    });
+
+    it('pads the sequence and uses the type code for other types', async () => {
+      const { prisma, service } = readyToCreate();
+      prisma.$queryRaw.mockResolvedValue([{ lastNumber: 12 }]);
+
+      const result = (await service.create(actor, {
+        ...input,
+        entryType: JournalEntryType.ADJUSTING,
+      })) as unknown as { journalNumber: string; entryType: string };
+
+      expect(result.journalNumber).toBe('JE-ADJ2607-0012');
+      expect(result.entryType).toBe('ADJUSTING');
+    });
+
+    it('takes the month from the transaction date, not from today', async () => {
+      const { prisma, service } = readyToCreate();
+      prisma.fiscalPeriod.findFirst.mockResolvedValue({
+        ...period,
+        startDate: new Date('2025-12-01T00:00:00.000Z'),
+        endDate: new Date('2025-12-31T23:59:59.999Z'),
+      });
+
+      const result = (await service.create(actor, {
+        ...input,
+        transactionDate: '2025-12-31',
+        entryType: JournalEntryType.CLOSING,
+      })) as unknown as { journalNumber: string };
+
+      expect(result.journalNumber).toBe('JE-CLS2512-0000');
+    });
+
+    it('allocates the number inside the create transaction', async () => {
+      const { prisma, service } = readyToCreate();
+
+      await service.create(actor, input);
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('control accounts', () => {
+    it('rejects a manual line on a control account without a subledger', async () => {
+      const { prisma, service } = setup();
+      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+        tenantId: actor.tenantId,
+        baseCurrency: 'GHS',
+        fiscalYearStartMonth: 1,
+        decimalPlaces: 2,
+      });
+      prisma.accountingCurrency.findUnique.mockResolvedValue({
+        code: 'GHS',
+        decimalPlaces: 2,
+        isActive: true,
+      });
+      prisma.gLAccount.findMany.mockResolvedValue([
+        account('receivables'),
+        account('income'),
+      ]);
+      prisma.accountingReceivableDocument.findMany.mockResolvedValue([
+        { arAccountId: 'receivables' },
+      ]);
+
+      await expect(
+        service.create(actor, {
+          transactionDate: '2026-07-10',
+          fiscalPeriodId: period.id,
+          transactionCurrency: 'GHS',
+          description: 'Manual AR posting',
+          lines: [
+            { glAccountId: 'receivables', debit: 100 },
+            { glAccountId: 'income', credit: 100 },
+          ],
+        }),
+      ).rejects.toThrow('control account');
+      expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it('allows a control account line that names its subledger', async () => {
+      const { prisma, service } = setup();
+      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+        tenantId: actor.tenantId,
+        baseCurrency: 'GHS',
+        fiscalYearStartMonth: 1,
+        decimalPlaces: 2,
+      });
+      prisma.accountingCurrency.findUnique.mockResolvedValue({
+        code: 'GHS',
+        decimalPlaces: 2,
+        isActive: true,
+      });
+      prisma.gLAccount.findMany.mockResolvedValue([
+        account('receivables'),
+        account('income'),
+      ]);
+      prisma.subledgerAccount.findMany.mockResolvedValue([
+        { id: 'customer-1', status: RecordStatus.ACTIVE, currency: null },
+      ]);
+      prisma.accountingReceivableDocument.findMany.mockResolvedValue([
+        { arAccountId: 'receivables' },
+      ]);
+      prisma.journalEntry.create.mockImplementation(
+        (args: { data: unknown }) => args.data,
+      );
+
+      await expect(
+        service.create(actor, {
+          transactionDate: '2026-07-10',
+          fiscalPeriodId: period.id,
+          transactionCurrency: 'GHS',
+          description: 'Subledger AR posting',
+          lines: [
+            {
+              glAccountId: 'receivables',
+              subledgerAccountId: 'customer-1',
+              debit: 100,
+            },
+            { glAccountId: 'income', credit: 100 },
+          ],
+        }),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  describe('draft edits', () => {
+    it('locks the journal row before it decides the draft is editable', async () => {
+      const { prisma, service } = setup();
+      prisma.journalEntry.findFirst.mockResolvedValue({
+        ...draftJournal,
+        status: JournalStatus.POSTED,
+      });
+
+      await expect(
+        service.updateDraft(actor, draftJournal.id, { description: 'Late' }),
+      ).rejects.toThrow('immutable');
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.$executeRaw).toHaveBeenCalled();
+      expect(prisma.journalEntry.update).not.toHaveBeenCalled();
+    });
+
+    it('clears the reference when an empty one is sent, and keeps it when omitted', async () => {
+      const { prisma, service } = setup();
+      prisma.journalEntry.findFirst.mockResolvedValue({
+        ...draftJournal,
+        reference: 'OLD-REF',
+      });
+      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+        tenantId: actor.tenantId,
+        baseCurrency: 'GHS',
+        fiscalYearStartMonth: 1,
+        decimalPlaces: 2,
+      });
+      prisma.accountingCurrency.findUnique.mockResolvedValue({
+        code: 'GHS',
+        decimalPlaces: 2,
+        isActive: true,
+      });
+      prisma.gLAccount.findMany.mockResolvedValue([
+        account('cash'),
+        account('income'),
+      ]);
+      prisma.journalEntry.update.mockImplementation(
+        (args: { data: unknown }) => args.data,
+      );
+
+      const cleared = (await service.updateDraft(actor, draftJournal.id, {
+        reference: '',
+      })) as unknown as { reference?: string | null };
+      expect(cleared.reference).toBeNull();
+
+      const kept = (await service.updateDraft(actor, draftJournal.id, {
+        description: 'Only the memo changed',
+      })) as unknown as { reference?: string | null };
+      expect(kept).not.toHaveProperty('reference');
+    });
+  });
+
+  it('paginates the list only when a limit is given', async () => {
+    const { prisma, service } = setup();
+    prisma.journalEntry.findMany.mockResolvedValue([]);
+
+    await service.list(actor.tenantId, {});
+    await service.list(actor.tenantId, { limit: 25, offset: 50 });
+
+    const [all, paged] = prisma.journalEntry.findMany.mock.calls as Array<
+      [Record<string, unknown>]
+    >;
+    expect(all[0]).not.toHaveProperty('take');
+    expect(paged[0]).toMatchObject({ take: 25, skip: 50 });
   });
 
   it('resolves a fresh FX rate when draft currency changes', async () => {
@@ -504,6 +807,46 @@ describe('JournalsService', () => {
     expect(reversal.lines.create[0].transactionDebit.toString()).toBe('0');
     expect(reversal.lines.create[0].transactionCredit.toString()).toBe('100');
     expect(prisma.journalEntry.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('numbers a reversal as a REVERSING journal from its own sequence', async () => {
+    const { prisma, service } = setup();
+    const posted = {
+      ...draftJournal,
+      status: JournalStatus.POSTED,
+      reversalJournal: null,
+    };
+    prisma.journalEntry.findFirst.mockResolvedValue(posted);
+    prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+    prisma.journalEntry.updateMany.mockResolvedValue({ count: 1 });
+    prisma.journalEntry.create.mockImplementation(
+      (args: { data: unknown }) => args.data,
+    );
+
+    const reversal = (await service.reverse(actor, posted.id, {
+      reversalDate: '2026-07-20',
+      reason: 'Correction',
+    })) as unknown as { journalNumber: string; entryType: string };
+
+    expect(reversal.journalNumber).toBe('JE-RVS2607-0000');
+    expect(reversal.entryType).toBe('REVERSING');
+  });
+
+  it('rejects a reversal dated before the journal it reverses', async () => {
+    const { prisma, service } = setup();
+    prisma.journalEntry.findFirst.mockResolvedValue({
+      ...draftJournal,
+      status: JournalStatus.POSTED,
+      reversalJournal: null,
+    });
+
+    await expect(
+      service.reverse(actor, draftJournal.id, {
+        reversalDate: '2026-07-05',
+        reason: 'Too early',
+      }),
+    ).rejects.toThrow('before the date of the journal');
+    expect(prisma.journalEntry.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects reversal-of-reversal chains', async () => {
