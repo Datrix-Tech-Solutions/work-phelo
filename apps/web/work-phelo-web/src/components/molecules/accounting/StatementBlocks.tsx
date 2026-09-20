@@ -108,14 +108,18 @@ export function SectionBlock({
 
           {classification.groups.map((group) => (
             <Fragment key={group.key}>
-              <div className={cn(grid, 'pt-2')}>
-                <span className="col-span-full pl-4 text-sm font-medium text-gray-700">
-                  {group.name}
-                </span>
-              </div>
+              {!group.isPlaceholder && (
+                <div className={cn(grid, 'pt-2')}>
+                  <span className="col-span-full pl-4 text-sm font-medium text-gray-700">
+                    {group.name}
+                  </span>
+                </div>
+              )}
               {group.lines.map((line) => (
                 <div key={line.account.id} className={cn(grid, 'py-1 hover:bg-gray-50')}>
-                  <span className="pl-9 text-sm text-gray-700">
+                  <span
+                    className={cn('text-sm text-gray-700', group.isPlaceholder ? 'pl-4' : 'pl-9')}
+                  >
                     <span className="mr-3 text-gray-400 tabular-nums">{line.account.code}</span>
                     {line.account.name}
                   </span>
@@ -127,15 +131,17 @@ export function SectionBlock({
                   />
                 </div>
               ))}
-              <div className={cn(grid, 'py-1')}>
-                <span className="pl-4 text-sm text-gray-500">Total {group.name}</span>
-                <Figures
-                  current={group.current}
-                  previous={group.previous}
-                  compare={compare}
-                  className="text-sm text-gray-700"
-                />
-              </div>
+              {!group.isPlaceholder && (
+                <div className={cn(grid, 'py-1')}>
+                  <span className="pl-4 text-sm text-gray-500">Total {group.name}</span>
+                  <Figures
+                    current={group.current}
+                    previous={group.previous}
+                    compare={compare}
+                    className="text-sm text-gray-700"
+                  />
+                </div>
+              )}
             </Fragment>
           ))}
 

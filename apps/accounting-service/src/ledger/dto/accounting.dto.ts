@@ -281,7 +281,7 @@ export class CreateGLAccountDto {
   @ApiPropertyOptional({
     enum: GLAccountCategory,
     description:
-      'Legacy/unclassified account category. Derived from accountGroupId when provided.',
+      'Legacy/unclassified account category. Derived from accountGroupId or classificationId when provided.',
   })
   @IsOptional()
   @IsEnum(GLAccountCategory)
@@ -299,11 +299,21 @@ export class CreateGLAccountDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Official reporting hierarchy group. New posting accounts should provide this.',
+      'Classification the account sits under. Required when accountGroupId is not provided; when a group is provided it must belong to this classification (and defaults from it).',
   })
   @IsOptional()
   @IsUUID()
-  accountGroupId?: string;
+  classificationId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Optional account group within the classification. Omit (or send null on update) to post the account directly under its classification.',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountGroupId?: string | null;
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

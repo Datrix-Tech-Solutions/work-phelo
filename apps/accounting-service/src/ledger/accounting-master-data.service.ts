@@ -739,22 +739,17 @@ export class AccountingMasterDataService {
             ? { accountGroupId: query.accountGroupId }
             : {}),
           ...(query.classificationId
-            ? { accountGroup: { classificationId: query.classificationId } }
+            ? {
+                OR: [
+                  { classificationId: query.classificationId },
+                  {
+                    accountGroup: { classificationId: query.classificationId },
+                  },
+                ],
+              }
             : {}),
         },
-        include: {
-          parentAccount: { select: { id: true, code: true, name: true } },
-          accountGroup: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              classification: {
-                select: { id: true, code: true, name: true, category: true },
-              },
-            },
-          },
-        },
+        include: this.glAccountHierarchyInclude(),
         orderBy: { code: 'asc' },
       })
       .then((accounts) =>
@@ -768,8 +763,8 @@ export class AccountingMasterDataService {
       dto,
     );
     this.assertCodeInCategoryRange(dto.code, hierarchy.category, 'GL account');
-    if (hierarchy.groupCode) {
-      this.assertCodeWithinBand(dto.code, hierarchy.groupCode, 'GL account');
+    if (hierarchy.bandCode) {
+      this.assertCodeWithinBand(dto.code, hierarchy.bandCode, 'GL account');
     }
     await this.assertParentAccount(
       user.tenantId,
@@ -777,6 +772,7 @@ export class AccountingMasterDataService {
       dto.parentAccountId,
       hierarchy.category,
       dto.accountGroupId ?? null,
+      hierarchy.classificationId,
       dto.code,
     );
     try {
@@ -787,6 +783,7 @@ export class AccountingMasterDataService {
           name: dto.name,
           category: hierarchy.category,
           normalBalance: hierarchy.normalBalance,
+          classificationId: hierarchy.classificationId,
           accountGroupId: dto.accountGroupId,
           parentAccountId: dto.parentAccountId,
           allowPosting: dto.allowPosting ?? true,
@@ -803,6 +800,7 @@ export class AccountingMasterDataService {
         account.id,
         {
           code: account.code,
+          classificationId: account.classificationId,
           accountGroupId: account.accountGroupId,
         },
       );
@@ -830,8 +828,8 @@ export class AccountingMasterDataService {
         : account.accountGroupId;
     const nextCode = dto.code ?? account.code;
     this.assertCodeInCategoryRange(nextCode, nextCategory, 'GL account');
-    if (hierarchy.groupCode) {
-      this.assertCodeWithinBand(nextCode, hierarchy.groupCode, 'GL account');
+    if (hierarchy.bandCode) {
+      this.assertCodeWithinBand(nextCode, hierarchy.bandCode, 'GL account');
     }
     await this.assertParentAccount(
       user.tenantId,
@@ -839,6 +837,7 @@ export class AccountingMasterDataService {
       dto.parentAccountId ?? account.parentAccountId ?? undefined,
       nextCategory,
       nextAccountGroupId,
+      hierarchy.classificationId,
       nextCode,
     );
     if (dto.allowPosting === true) {
@@ -858,7 +857,8 @@ export class AccountingMasterDataService {
       (dto.normalBalance !== undefined &&
         dto.normalBalance !== account.normalBalance) ||
       (dto.accountGroupId !== undefined &&
-        dto.accountGroupId !== account.accountGroupId) ||
+        (dto.accountGroupId || null) !== account.accountGroupId) ||
+      hierarchy.classificationId !== account.classificationId ||
       (dto.parentAccountId !== undefined &&
         dto.parentAccountId !== account.parentAccountId);
     if (changesStructure) {
@@ -871,7 +871,7 @@ export class AccountingMasterDataService {
       });
       if (postedUse > 0) {
         throw new ConflictException(
-          'Posted GL accounts cannot change code, category, normal balance, account group or parent',
+          'Posted GL accounts cannot change code, category, normal balance, classification, account group or parent',
         );
       }
     }
@@ -886,6 +886,7 @@ export class AccountingMasterDataService {
           ...(dto.name ? { name: dto.name } : {}),
           category: hierarchy.category,
           normalBalance: hierarchy.normalBalance,
+          classificationId: hierarchy.classificationId,
           ...(dto.accountGroupId !== undefined
             ? { accountGroupId: dto.accountGroupId || null }
             : {}),
@@ -909,6 +910,7 @@ export class AccountingMasterDataService {
           'GLAccount',
           updated.id,
           {
+            classificationId: updated.classificationId,
             accountGroupId: updated.accountGroupId,
             parentAccountId: updated.parentAccountId,
             category: updated.category,
@@ -1018,10 +1020,15 @@ export class AccountingMasterDataService {
       classificationId,
     );
     if (dto.category && dto.category !== classification.category) {
-      const dependentCount = await this.prisma.accountGroup.count({
-        where: { tenantId: user.tenantId, classificationId },
-      });
-      if (dependentCount > 0) {
+      const [groupCount, accountCount] = await Promise.all([
+        this.prisma.accountGroup.count({
+          where: { tenantId: user.tenantId, classificationId },
+        }),
+        this.prisma.gLAccount.count({
+          where: { tenantId: user.tenantId, classificationId },
+        }),
+      ]);
+      if (groupCount + accountCount > 0) {
         throw new ConflictException(
           'Classification category cannot change after groups or accounts are linked',
         );
@@ -2019,6 +2026,9 @@ export class AccountingMasterDataService {
   private glAccountHierarchyInclude() {
     return {
       parentAccount: { select: { id: true, code: true, name: true } },
+      classification: {
+        select: { id: true, code: true, name: true, category: true },
+      },
       accountGroup: {
         select: {
           id: true,
@@ -2035,6 +2045,12 @@ export class AccountingMasterDataService {
   private withAccountHierarchy<
     T extends {
       category: GLAccountCategory;
+      classification?: {
+        id: string;
+        code: string;
+        name: string;
+        category: GLAccountCategory;
+      } | null;
       accountGroup?: {
         id: string;
         code: string;
@@ -2048,7 +2064,9 @@ export class AccountingMasterDataService {
       } | null;
     },
   >(account: T) {
-    const classification = account.accountGroup?.classification ?? null;
+    // The account's own classification wins; grouped accounts fall back to their group's.
+    const classification =
+      account.classification ?? account.accountGroup?.classification ?? null;
     const accountGroup = account.accountGroup
       ? {
           id: account.accountGroup.id,
@@ -2069,10 +2087,11 @@ export class AccountingMasterDataService {
       hierarchyPath: [
         account.category,
         classification?.name ?? 'Unclassified',
-        accountGroup?.name ?? 'Unclassified',
+        accountGroup?.name,
         'name' in account ? account.name : undefined,
       ].filter(Boolean),
-      isLegacyUnclassified: !account.accountGroup,
+      // No classification at all — an account with a classification but no group is fine.
+      isLegacyUnclassified: !classification,
     };
   }
 
@@ -2132,6 +2151,35 @@ export class AccountingMasterDataService {
     return group;
   }
 
+  /** Category and normal balance for an account placed directly under a classification. */
+  private classificationHierarchy(
+    classification: {
+      id: string;
+      code: string;
+      category: GLAccountCategory;
+    },
+    dto: { category?: GLAccountCategory; normalBalance?: NormalBalance },
+  ) {
+    const category = classification.category;
+    const normalBalance = NORMAL_BALANCE_BY_CATEGORY[category];
+    if (dto.category && dto.category !== category) {
+      throw new BadRequestException(
+        'GL account category must match the selected classification',
+      );
+    }
+    if (dto.normalBalance && dto.normalBalance !== normalBalance) {
+      throw new BadRequestException(
+        'GL account normal balance must match the selected classification category',
+      );
+    }
+    return {
+      category,
+      normalBalance,
+      bandCode: classification.code as string | null,
+      classificationId: classification.id as string | null,
+    };
+  }
+
   private async resolveAccountHierarchyForCreate(
     tenantId: string,
     dto: CreateGLAccountDto,
@@ -2141,6 +2189,14 @@ export class AccountingMasterDataService {
         tenantId,
         dto.accountGroupId,
       );
+      if (
+        dto.classificationId &&
+        dto.classificationId !== group.classificationId
+      ) {
+        throw new BadRequestException(
+          'The selected account group does not belong to the selected classification',
+        );
+      }
       const category = group.classification.category;
       const normalBalance = NORMAL_BALANCE_BY_CATEGORY[category];
       if (dto.category && dto.category !== category) {
@@ -2153,12 +2209,26 @@ export class AccountingMasterDataService {
           'GL account normal balance must match the selected account group category',
         );
       }
-      return { category, normalBalance, groupCode: group.code };
+      return {
+        category,
+        normalBalance,
+        bandCode: group.code as string | null,
+        classificationId: group.classificationId as string | null,
+      };
+    }
+
+    // No group: the account sits directly under a classification.
+    if (dto.classificationId) {
+      const classification = await this.assertActiveClassification(
+        tenantId,
+        dto.classificationId,
+      );
+      return this.classificationHierarchy(classification, dto);
     }
 
     if (!dto.category) {
       throw new BadRequestException(
-        'GL account category is required when accountGroupId is not provided',
+        'GL account category is required when neither accountGroupId nor classificationId is provided',
       );
     }
     const normalBalance = NORMAL_BALANCE_BY_CATEGORY[dto.category];
@@ -2167,7 +2237,12 @@ export class AccountingMasterDataService {
         'GL account normal balance must match the account category',
       );
     }
-    return { category: dto.category, normalBalance, groupCode: null };
+    return {
+      category: dto.category,
+      normalBalance,
+      bandCode: null as string | null,
+      classificationId: null as string | null,
+    };
   }
 
   private async resolveAccountHierarchyForUpdate(
@@ -2175,6 +2250,7 @@ export class AccountingMasterDataService {
     account: {
       category: GLAccountCategory;
       normalBalance: NormalBalance;
+      classificationId: string | null;
       accountGroupId: string | null;
     },
     dto: UpdateGLAccountDto,
@@ -2184,6 +2260,14 @@ export class AccountingMasterDataService {
         tenantId,
         dto.accountGroupId,
       );
+      if (
+        dto.classificationId &&
+        dto.classificationId !== group.classificationId
+      ) {
+        throw new BadRequestException(
+          'The selected account group does not belong to the selected classification',
+        );
+      }
       const category = group.classification.category;
       const normalBalance = NORMAL_BALANCE_BY_CATEGORY[category];
       if (dto.category && dto.category !== category) {
@@ -2196,7 +2280,12 @@ export class AccountingMasterDataService {
           'GL account normal balance must match the selected account group category',
         );
       }
-      return { category, normalBalance, groupCode: group.code };
+      return {
+        category,
+        normalBalance,
+        bandCode: group.code as string | null,
+        classificationId: group.classificationId as string | null,
+      };
     }
 
     if (account.accountGroupId && dto.accountGroupId === undefined) {
@@ -2214,11 +2303,38 @@ export class AccountingMasterDataService {
         tenantId,
         account.accountGroupId,
       );
+      if (
+        dto.classificationId &&
+        dto.classificationId !== group.classificationId
+      ) {
+        throw new BadRequestException(
+          'Change or clear the account group to move the account to another classification',
+        );
+      }
       return {
         category: account.category,
         normalBalance: account.normalBalance,
-        groupCode: group.code,
+        bandCode: group.code as string | null,
+        classificationId: group.classificationId as string | null,
       };
+    }
+
+    // The account has no group (or its group is being cleared): it stays under the requested
+    // classification, or the one it already has.
+    if (dto.classificationId) {
+      const classification = await this.assertActiveClassification(
+        tenantId,
+        dto.classificationId,
+      );
+      return this.classificationHierarchy(classification, dto);
+    }
+    const currentClassificationId = account.classificationId;
+    if (currentClassificationId) {
+      const classification = await this.findAccountClassification(
+        tenantId,
+        currentClassificationId,
+      );
+      return this.classificationHierarchy(classification, dto);
     }
 
     const category = dto.category ?? account.category;
@@ -2228,7 +2344,12 @@ export class AccountingMasterDataService {
         'GL account normal balance must match the account category',
       );
     }
-    return { category, normalBalance, groupCode: null };
+    return {
+      category,
+      normalBalance,
+      bandCode: null as string | null,
+      classificationId: null as string | null,
+    };
   }
 
   /** Parses a chart-of-accounts code as a positive whole number, e.g. "1100" -> 1100. */
@@ -2347,6 +2468,7 @@ export class AccountingMasterDataService {
     parentAccountId: string | undefined,
     category: GLAccountCategory,
     accountGroupId: string | null,
+    classificationId: string | null,
     code: string,
   ) {
     if (!parentAccountId) return;
@@ -2368,6 +2490,11 @@ export class AccountingMasterDataService {
     if ((parent.accountGroupId ?? null) !== accountGroupId) {
       throw new BadRequestException(
         'Parent and child GL accounts must use the same account group',
+      );
+    }
+    if ((parent.classificationId ?? null) !== classificationId) {
+      throw new BadRequestException(
+        'Parent and child GL accounts must use the same classification',
       );
     }
     this.assertCodeWithinBand(code, parent.code, 'GL account');

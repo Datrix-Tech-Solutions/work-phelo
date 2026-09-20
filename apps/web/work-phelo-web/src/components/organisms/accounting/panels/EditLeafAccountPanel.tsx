@@ -73,7 +73,7 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
       accountCode: account.code,
       accountName: account.name,
       accountType: account.category,
-      classificationId: group?.classificationId ?? '',
+      classificationId: group?.classificationId ?? account.classificationId ?? '',
       accountGroupId: account.accountGroupId ?? '',
       description: account.description ?? '',
       allowPosting: account.allowPosting,
@@ -87,7 +87,8 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
         id: account.id,
         code: data.accountCode,
         name: data.accountName,
-        accountGroupId: data.accountGroupId,
+        classificationId: data.classificationId,
+        accountGroupId: data.accountGroupId || null,
         description: data.description,
         allowPosting: data.allowPosting,
       });
@@ -176,11 +177,12 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
           <Controller
             name="accountGroupId"
             control={control}
-            rules={{ required: 'Parent account is required' }}
             render={({ field }) => (
               <SearchSelect
-                label="Parent Account"
-                placeholder={isLoadingGroups ? 'Loading…' : 'Select parent account…'}
+                label="Parent Account (optional)"
+                placeholder={
+                  isLoadingGroups ? 'Loading…' : 'None — post directly under classification'
+                }
                 options={groupOptions}
                 value={field.value}
                 onChange={field.onChange}

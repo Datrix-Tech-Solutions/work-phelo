@@ -4,35 +4,30 @@ import { useState } from 'react';
 import { useFieldArray, useWatch, Controller, UseFormReturn } from 'react-hook-form';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Icons } from '@/components/atoms/icons';
-import { cn, inputClass } from '@/lib/utils';
+import { inputClass } from '@/lib/utils';
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
 import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
-import { AddEntityPanel } from '@/components/organisms/accounting/panels/AddEntityPanel';
-import { JournalEntryFormValues, JournalLine, SubledgerType } from '@/types/accounting';
-import { useGLAccountOptions, useSubledgers } from '@/hooks';
+import { CATEGORIES } from '@/components/organisms/accounting/ChartOfAccountsTree';
+import { GLAccountCategory, JournalEntryFormValues, JournalLine } from '@/types/accounting';
+import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
 
 const EMPTY_LINE: JournalLine = {
+  accountClass: '',
   targetAccount: '',
-  subledgerAccountId: '',
   description: '',
   debit: '',
   credit: '',
 };
 
-// A journal line's subledger is a client or supplier relationship, not an employee/statutory/
-// other entity — narrow the quick-create panel to those two types.
-const CUSTOMER_VENDOR_TYPES: SubledgerType[] = ['CUSTOMER', 'VENDOR'];
-
-function fmtAmount(value: number, currency: string) {
-  const n = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return currency ? `${currency} ${n}` : n;
-}
+const CLASS_OPTIONS = CATEGORIES.map((c) => ({ value: c.value, label: c.label }));
 
 interface JournalLinesSectionProps {
   form: UseFormReturn<JournalEntryFormValues>;
+  /** Restricts the Account Class choices (e.g. opening balances are balance sheet only). */
+  allowedClasses?: GLAccountCategory[];
 }
 
-export function JournalLinesSection({ form }: JournalLinesSectionProps) {
+export function JournalLinesSection({ form, allowedClasses }: JournalLinesSectionProps) {
   const {
     register,
     control,
@@ -43,43 +38,49 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
   const [createAccountForIndex, setCreateAccountForIndex] = useState<number | null>(null);
   const [createAccountQuery, setCreateAccountQuery] = useState('');
 
-  // Same idea for the subledger column's "create customer/vendor" action — also needs to
-  // remember which control account the new entity must be pinned to.
-  const [createSubledgerForIndex, setCreateSubledgerForIndex] = useState<number | null>(null);
-  const [createSubledgerQuery, setCreateSubledgerQuery] = useState('');
-  const [createSubledgerControlAccount, setCreateSubledgerControlAccount] = useState({
-    id: '',
-    label: '',
-  });
-
   const lines = useWatch({ control, name: 'lines' });
-  const currency = useWatch({ control, name: 'currency' });
-  const { options: accountOptions, isLoading: isLoadingAccounts } = useGLAccountOptions();
-
-  const { data: subledgers = [] } = useSubledgers();
-  // Most entities carry no control account at all now (see the SubledgerAccount schema
-  // note) — only those with one can be auto-suggested when a control account is targeted.
-  const controlAccountIds = new Set(
-    subledgers.flatMap((s) => (s.controlAccountId ? [s.controlAccountId] : [])),
-  );
-  const subledgerOptionsByControlAccount = new Map<string, { value: string; label: string }[]>();
-  for (const s of subledgers) {
-    if (!s.controlAccountId) continue;
-    const list = subledgerOptionsByControlAccount.get(s.controlAccountId) ?? [];
-    list.push({ value: s.id, label: `${s.code} – ${s.name}` });
-    subledgerOptionsByControlAccount.set(s.controlAccountId, list);
-  }
-
-  const debitTotal = (lines ?? []).reduce((sum, l) => sum + (Number(l?.debit) || 0), 0);
-  const creditTotal = (lines ?? []).reduce((sum, l) => sum + (Number(l?.credit) || 0), 0);
-  const difference = debitTotal - creditTotal;
-  const isBalanced = difference === 0;
+  const { data: glAccounts = [], isLoading: isLoadingAccounts } = useGLAccounts({
+    status: 'ACTIVE',
+  });
+  const postingAccounts = glAccounts.filter((a) => a.allowPosting);
+  const optionsFor = (accountClass: string) =>
+    postingAccounts
+      .filter((a) => !accountClass || a.category === accountClass)
+      .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` }));
 
   const columns: InlineTableColumn[] = [
     {
+      key: 'accountClass',
+      label: 'Account Class',
+      width: '200px',
+      renderField: (index) => (
+        <Controller
+          name={`lines.${index}.accountClass`}
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              placeholder="Select class…"
+              options={
+                allowedClasses
+                  ? CLASS_OPTIONS.filter((o) => allowedClasses.includes(o.value))
+                  : CLASS_OPTIONS
+              }
+              value={field.value}
+              onChange={(value) => {
+                field.onChange(value);
+                // The chosen account may not belong to the new class
+                form.setValue(`lines.${index}.targetAccount`, '');
+              }}
+              size="sm"
+            />
+          )}
+        />
+      ),
+    },
+    {
       key: 'targetAccount',
-      label: 'Target Account',
-      width: 'minmax(120px,1fr)',
+      label: 'Account',
+      width: 'minmax(100px,0.8fr)',
       renderField: (index) => {
         const err = errors.lines?.[index]?.targetAccount;
         return (
@@ -90,12 +91,13 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
             render={({ field }) => (
               <SearchSelect
                 placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
-                options={accountOptions}
+                options={optionsFor(lines?.[index]?.accountClass ?? '')}
                 value={field.value}
                 onChange={(value) => {
                   field.onChange(value);
-
-                  form.setValue(`lines.${index}.subledgerAccountId`, '');
+                  // Keep the class in sync when the account is picked directly
+                  const picked = postingAccounts.find((a) => a.id === value);
+                  if (picked) form.setValue(`lines.${index}.accountClass`, picked.category);
                 }}
                 error={err?.message}
                 size="sm"
@@ -123,68 +125,9 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
       },
     },
     {
-      key: 'subledgerAccountId',
-      label: 'Subledger',
-      width: 'minmax(120px,1fr)',
-      renderField: (index) => {
-        const targetAccount = lines?.[index]?.targetAccount ?? '';
-        const isControlAccount = controlAccountIds.has(targetAccount);
-        const err = errors.lines?.[index]?.subledgerAccountId;
-
-        return (
-          <Controller
-            name={`lines.${index}.subledgerAccountId`}
-            control={control}
-            rules={{
-              validate: (value) =>
-                !isControlAccount ||
-                !!value ||
-                'Subledger account is required for this control account',
-            }}
-            render={({ field }) =>
-              isControlAccount ? (
-                <SearchSelect
-                  placeholder="Select subledger…"
-                  options={subledgerOptionsByControlAccount.get(targetAccount) ?? []}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={err?.message}
-                  size="sm"
-                  emptyState={({ query, close }) => (
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setCreateSubledgerQuery(query);
-                        setCreateSubledgerControlAccount({
-                          id: targetAccount,
-                          label: accountOptions.find((o) => o.value === targetAccount)?.label ?? '',
-                        });
-                        setCreateSubledgerForIndex(index);
-                        close();
-                      }}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-left text-brand hover:bg-gray-300 transition-colors"
-                    >
-                      <Icons.Plus className="w-4 h-4 shrink-0" />
-                      <span>
-                        No subledger found —{' '}
-                        <span className="font-semibold">Create customer/vendor</span>
-                      </span>
-                    </button>
-                  )}
-                />
-              ) : (
-                <span className="block px-3 py-2 text-sm text-gray-400">N/A</span>
-              )
-            }
-          />
-        );
-      },
-    },
-    {
       key: 'description',
       label: 'Description',
-      width: '170px',
+      width: 'minmax(150px,1fr)',
       renderField: (index) => (
         <input
           {...register(`lines.${index}.description`)}
@@ -211,11 +154,6 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
           />
         );
       },
-      renderFooter: () => (
-        <div className="flex flex-col items-end gap-0.5">
-          <span>{fmtAmount(debitTotal, currency)}</span>
-        </div>
-      ),
     },
     {
       key: 'credit',
@@ -235,11 +173,6 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
           />
         );
       },
-      renderFooter: () => (
-        <div className="flex flex-col items-end gap-0.5">
-          <span>{fmtAmount(creditTotal, currency)}</span>
-        </div>
-      ),
     },
   ];
 
@@ -247,23 +180,12 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
     <>
       <InlineTable
         title="Journal Lines"
+        compact
         addLabel="Add Line"
         columns={columns}
         fieldIds={fields.map((f) => f.id)}
         onAddRow={() => append({ ...EMPTY_LINE })}
         onRemoveRow={(index) => remove(index)}
-        footerNote={
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">
-              Difference
-            </span>
-            <span
-              className={cn('text-sm font-semibold', isBalanced ? 'text-gray-900' : 'text-red-600')}
-            >
-              {fmtAmount(Math.abs(difference), currency)}
-            </span>
-          </div>
-        }
       />
 
       <AddLeafAccountPanel
@@ -272,21 +194,8 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
         initialName={createAccountQuery}
         onCreated={(account) => {
           if (createAccountForIndex === null) return;
+          form.setValue(`lines.${createAccountForIndex}.accountClass`, account.category);
           form.setValue(`lines.${createAccountForIndex}.targetAccount`, account.id);
-          form.setValue(`lines.${createAccountForIndex}.subledgerAccountId`, '');
-        }}
-      />
-
-      <AddEntityPanel
-        isOpen={createSubledgerForIndex !== null}
-        onClose={() => setCreateSubledgerForIndex(null)}
-        initialName={createSubledgerQuery}
-        initialControlAccountId={createSubledgerControlAccount.id}
-        initialControlAccountLabel={createSubledgerControlAccount.label}
-        allowedTypes={CUSTOMER_VENDOR_TYPES}
-        onCreated={(subledger) => {
-          if (createSubledgerForIndex === null) return;
-          form.setValue(`lines.${createSubledgerForIndex}.subledgerAccountId`, subledger.id);
         }}
       />
     </>

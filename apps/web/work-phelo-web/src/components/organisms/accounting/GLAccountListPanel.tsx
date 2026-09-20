@@ -86,9 +86,9 @@ export function GLAccountListPanel({
         label: 'Classification',
         width: 'minmax(120px, 1fr)',
         render: (row) => {
-          const classification = row.accountGroupId
-            ? classificationByGroupId.get(row.accountGroupId)
-            : undefined;
+          const classification =
+            (row.classification?.id ? row.classification : undefined) ??
+            (row.accountGroupId ? classificationByGroupId.get(row.accountGroupId) : undefined);
           return (
             <span className="font-semibold text-gray-500">
               {classification ? `${classification.code} — ${classification.name}` : 'Unclassified'}
@@ -102,9 +102,7 @@ export function GLAccountListPanel({
         width: 'minmax(120px, 1fr)',
         render: (row) => (
           <span className="font-semibold text-gray-500">
-            {row.accountGroup
-              ? `${row.accountGroup.code} — ${row.accountGroup.name}`
-              : 'Unclassified'}
+            {row.accountGroup ? `${row.accountGroup.code} — ${row.accountGroup.name}` : '—'}
           </span>
         ),
       },

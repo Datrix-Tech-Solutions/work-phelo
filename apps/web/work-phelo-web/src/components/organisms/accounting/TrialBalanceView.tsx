@@ -166,8 +166,8 @@ export function TrialBalanceView() {
               No posted accounting activity matches this report.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <div className="flex flex-col pb-6 min-w-[560px]">
+            <div className="overflow-x-auto p-4">
+              <div className="flex flex-col min-w-[560px]">
                 <TrialTableHead currency={currency} />
                 {categories.map((category) => (
                   <TrialCategoryBlock key={category.category} category={category} />

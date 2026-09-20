@@ -17,6 +17,9 @@ interface AddLeafAccountPanelProps {
 
   initialName?: string;
 
+  /** Pre-selects the account type each time the panel opens (e.g. equity for retained earnings). */
+  initialAccountType?: GLAccountCategory;
+
   onCreated?: (account: GLAccount) => void;
 }
 
@@ -48,6 +51,7 @@ export function AddLeafAccountPanel({
   isOpen,
   onClose,
   initialName,
+  initialAccountType,
   onCreated,
 }: AddLeafAccountPanelProps) {
   const toast = useToast();
@@ -64,8 +68,10 @@ export function AddLeafAccountPanel({
 
   // Seed the name from whatever the caller had already typed each time the panel opens.
   useEffect(() => {
-    if (isOpen) reset({ ...DEFAULTS, accountName: initialName ?? '' });
-  }, [isOpen, initialName, reset]);
+    if (isOpen) {
+      reset({ ...DEFAULTS, accountName: initialName ?? '', accountType: initialAccountType ?? '' });
+    }
+  }, [isOpen, initialName, initialAccountType, reset]);
 
   const accountType = useWatch({ control, name: 'accountType' });
   const classificationId = useWatch({ control, name: 'classificationId' });
@@ -101,7 +107,8 @@ export function AddLeafAccountPanel({
       const account = await createAccount({
         code: data.accountCode,
         name: data.accountName,
-        accountGroupId: data.parentAccountId,
+        classificationId: data.classificationId,
+        accountGroupId: data.parentAccountId || undefined,
       });
       toast.success('Account created successfully');
       onCreated?.(account);
@@ -116,7 +123,7 @@ export function AddLeafAccountPanel({
       isOpen={isOpen}
       onClose={handleClose}
       title="Add Leaf Account"
-      description="Add a new posting account under a parent account in the chart of accounts."
+      description="Add a new posting account under a classification, optionally within a parent account."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -182,11 +189,12 @@ export function AddLeafAccountPanel({
           <Controller
             name="parentAccountId"
             control={control}
-            rules={{ required: 'Parent account is required' }}
             render={({ field }) => (
               <SearchSelect
-                label="Parent Account"
-                placeholder={isLoadingGroups ? 'Loading…' : 'Select parent account…'}
+                label="Parent Account (optional)"
+                placeholder={
+                  isLoadingGroups ? 'Loading…' : 'None — post directly under classification'
+                }
                 options={parentAccountOptions}
                 value={field.value}
                 onChange={field.onChange}

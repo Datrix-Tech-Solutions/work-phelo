@@ -21,7 +21,9 @@ export function getScopedAccounts(
           .map((group) => group.id),
       );
       return glAccounts.filter(
-        (account) => account.accountGroupId && groupIds.has(account.accountGroupId),
+        (account) =>
+          account.classificationId === scope.classification.id ||
+          (account.accountGroupId !== null && groupIds.has(account.accountGroupId)),
       );
     }
     case 'group':

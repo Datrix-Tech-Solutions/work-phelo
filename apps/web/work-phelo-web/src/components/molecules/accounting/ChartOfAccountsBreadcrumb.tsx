@@ -59,8 +59,9 @@ export function ChartOfAccountsBreadcrumb({
       }
       case 'account': {
         const group = groups.find((g) => g.id === scope.account.accountGroupId);
-        const classification = group
-          ? classifications.find((c) => c.id === group.classificationId)
+        const classificationId = group?.classificationId ?? scope.account.classificationId;
+        const classification = classificationId
+          ? classifications.find((c) => c.id === classificationId)
           : undefined;
         trail.push(categoryOf(scope.account.category));
         if (classification) trail.push(classificationCrumb(classification));

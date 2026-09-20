@@ -46,7 +46,11 @@ const groupKey = (id: string) => `group:${id}`;
 /** The ancestor-chain keys that must be open for the given scope to be visible. Selecting a
  *  scope replaces `openKeys` with exactly this set, so every branch not on the path collapses
  *  — at every level, in one move. */
-function pathKeysForScope(scope: AccountScope, groups: AccountGroup[]): Set<string> {
+function pathKeysForScope(
+  scope: AccountScope,
+  groups: AccountGroup[],
+  classifications: AccountClassification[],
+): Set<string> {
   switch (scope.kind) {
     case 'all':
       return new Set();
@@ -67,7 +71,12 @@ function pathKeysForScope(scope: AccountScope, groups: AccountGroup[]): Set<stri
       const group = scope.account.accountGroupId
         ? groups.find((g) => g.id === scope.account.accountGroupId)
         : undefined;
-      if (!group) return new Set([typeKey(scope.account.category)]);
+      if (!group) {
+        // No group: the account sits directly under its classification, if it has one.
+        const classification = classifications.find((c) => c.id === scope.account.classificationId);
+        if (!classification) return new Set([typeKey(scope.account.category)]);
+        return new Set([typeKey(classification.category), classificationKey(classification.id)]);
+      }
       return new Set([
         typeKey(group.classification.category),
         classificationKey(group.classificationId),
@@ -175,10 +184,14 @@ function ClassificationNode({
 }: ClassificationNodeProps) {
   const key = classificationKey(classification.id);
   const open = openKeys.has(key);
-  const hasGroups = groups.length > 0;
+  // Accounts placed straight under the classification, with no group in between.
+  const directAccounts = glAccounts.filter(
+    (a) => a.classificationId === classification.id && !a.accountGroupId,
+  );
+  const hasChildren = groups.length > 0 || directAccounts.length > 0;
   const isSelected = classification.id === selectedClassificationId;
 
-  if (!hasGroups) {
+  if (!hasChildren) {
     return (
       <SelectableTreeRow
         onSelect={() => onSelectScope({ kind: 'classification', classification })}
@@ -202,7 +215,7 @@ function ClassificationNode({
         color={color}
         code={classification.code}
         label={classification.name}
-        count={groups.length}
+        count={groups.length + directAccounts.length}
       />
 
       {open && (
@@ -218,6 +231,17 @@ function ClassificationNode({
               openKeys={openKeys}
               onToggleOpen={onToggleOpen}
               onSelectScope={onSelectScope}
+            />
+          ))}
+          {directAccounts.map((account) => (
+            <SelectableTreeRow
+              key={account.id}
+              onSelect={() => onSelectScope({ kind: 'account', account })}
+              isSelected={account.id === selectedAccountId}
+              color={color}
+              code={account.code}
+              label={account.name}
+              icon={FileText}
             />
           ))}
         </div>
@@ -300,7 +324,7 @@ function TypeNode({
             <div className="mt-1 rounded-lg bg-amber-50 px-3 py-2">
               <p className="text-xs font-semibold text-amber-800">Unclassified accounts</p>
               <p className="mt-0.5 text-xs text-amber-700">
-                Assign these accounts to a standard group when their hierarchy is ready.
+                Assign these accounts to a classification when their hierarchy is ready.
               </p>
               <div className="mt-2 flex flex-col">
                 {unclassifiedAccounts.map((account) => {
@@ -371,11 +395,13 @@ export function ChartOfAccountsTree({
   const visibleClassifications = useMemo(
     () =>
       hasAccountFilter
-        ? classifications.filter((classification) =>
-            visibleGroups.some((group) => group.classificationId === classification.id),
+        ? classifications.filter(
+            (classification) =>
+              visibleGroups.some((group) => group.classificationId === classification.id) ||
+              glAccounts.some((account) => account.classificationId === classification.id),
           )
         : classifications,
-    [classifications, hasAccountFilter, visibleGroups],
+    [classifications, glAccounts, hasAccountFilter, visibleGroups],
   );
 
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
@@ -390,7 +416,7 @@ export function ChartOfAccountsTree({
   };
 
   const selectScope = (nextScope: AccountScope) => {
-    setOpenKeys(pathKeysForScope(nextScope, groups));
+    setOpenKeys(pathKeysForScope(nextScope, groups, classifications));
     onSelectScope(nextScope);
   };
 
@@ -458,7 +484,10 @@ export function ChartOfAccountsTree({
               groups={visibleGroups}
               glAccounts={glAccounts}
               unclassifiedAccounts={glAccounts.filter(
-                (account) => account.category === cat.value && !account.accountGroupId,
+                (account) =>
+                  account.category === cat.value &&
+                  !account.accountGroupId &&
+                  !account.classificationId,
               )}
               selectedCategory={selectedCategory}
               selectedClassificationId={selectedClassificationId}

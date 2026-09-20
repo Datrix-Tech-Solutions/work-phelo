@@ -308,8 +308,8 @@ export function ProfitAndLossView() {
               No posted accounting activity matches this report.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <div className={cn('flex flex-col pb-6', compare && 'min-w-[820px]')}>
+            <div className="overflow-x-auto p-4">
+              <div className={cn('flex flex-col', compare && 'min-w-[820px]')}>
                 <SectionBlock
                   title="Revenue"
                   classifications={revenue}
