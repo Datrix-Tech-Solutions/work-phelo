@@ -605,8 +605,51 @@ describe('JournalsService', () => {
             { glAccountId: 'income', credit: 100 },
           ],
         }),
-      ).rejects.toThrow('control account');
+      ).rejects.toThrow('receivables or payables account');
       expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it('does not treat an entity control-account override as a control account', async () => {
+      const { prisma, service } = setup();
+      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+        tenantId: actor.tenantId,
+        baseCurrency: 'GHS',
+        fiscalYearStartMonth: 1,
+        decimalPlaces: 2,
+      });
+      prisma.accountingCurrency.findUnique.mockResolvedValue({
+        code: 'GHS',
+        decimalPlaces: 2,
+        isActive: true,
+      });
+      prisma.gLAccount.findMany.mockResolvedValue([
+        account('cash-a'),
+        account('cash-b'),
+      ]);
+      // An entity happens to name cash-a as its control account; that must not block a transfer.
+      prisma.subledgerAccount.findMany.mockImplementation(
+        (args: { where: { controlAccountId?: unknown } }) =>
+          Promise.resolve(
+            args.where.controlAccountId ? [{ controlAccountId: 'cash-a' }] : [],
+          ),
+      );
+      prisma.journalEntry.create.mockImplementation(
+        (args: { data: unknown }) => args.data,
+      );
+
+      await expect(
+        service.create(actor, {
+          transactionDate: '2026-07-10',
+          fiscalPeriodId: period.id,
+          transactionCurrency: 'GHS',
+          description: 'Transfer between bank accounts',
+          lines: [
+            { glAccountId: 'cash-a', debit: 100 },
+            { glAccountId: 'cash-b', credit: 100 },
+          ],
+        }),
+      ).resolves.toBeDefined();
     });
 
     it('allows a control account line that names its subledger', async () => {
