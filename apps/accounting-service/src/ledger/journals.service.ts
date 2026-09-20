@@ -992,11 +992,12 @@ export class JournalsService {
   }
 
   /**
-   * A control account (receivables/payables) carries customer and supplier balances in its
-   * subledger, so a manual line on one must name the subledger account — otherwise the GL and
-   * the subledger drift apart. Documents and settlements post through their own modules, which
-   * always supply it. Control accounts are those a subledger account points at, or that a
-   * receivable/payable document, receipt or payment has used.
+   * A receivables or payables account carries customer and supplier balances in its subledger,
+   * so a manual line on one must name the subledger account — otherwise the GL and the
+   * subledger drift apart. Documents and settlements post through their own modules, which
+   * always supply it. Such an account is one that a receivable/payable document, receipt or
+   * payment has actually used. An entity's optional "control account" is NOT a signal: it is
+   * only a per-entity override and can point at any account, including cash and bank.
    */
   private async assertNoBareControlAccounts(
     client: PrismaService | Prisma.TransactionClient,
@@ -1013,12 +1014,7 @@ export class JournalsService {
     if (bareAccountIds.length === 0) return;
 
     const inList = { in: bareAccountIds };
-    const [bySubledger, byAr, byReceipt, byAp, byPayment] = await Promise.all([
-      client.subledgerAccount.findMany({
-        where: { tenantId, controlAccountId: inList },
-        select: { controlAccountId: true },
-        distinct: ['controlAccountId'],
-      }),
+    const [byAr, byReceipt, byAp, byPayment] = await Promise.all([
       client.accountingReceivableDocument.findMany({
         where: { tenantId, arAccountId: inList },
         select: { arAccountId: true },
@@ -1040,8 +1036,7 @@ export class JournalsService {
         distinct: ['apAccountId'],
       }),
     ]);
-    const controlIds = new Set<string | null>([
-      ...bySubledger.map((row) => row.controlAccountId),
+    const controlIds = new Set<string>([
       ...byAr.map((row) => row.arAccountId),
       ...byReceipt.map((row) => row.arAccountId),
       ...byAp.map((row) => row.apAccountId),
@@ -1049,8 +1044,12 @@ export class JournalsService {
     ]);
     const offending = bareAccountIds.find((id) => controlIds.has(id));
     if (offending) {
+      const account = await client.gLAccount.findFirst({
+        where: { id: offending, tenantId },
+        select: { code: true, name: true },
+      });
       throw new BadRequestException(
-        'A receivables or payables control account cannot be posted to by a manual journal without a subledger account; use the receivables or payables module',
+        `${account ? `${account.code} ${account.name}` : 'This account'} is a receivables or payables account, so a manual journal line on it needs a subledger account; use the receivables or payables module instead`,
       );
     }
   }
