@@ -53,6 +53,51 @@ export class JournalPolicy {
       .toDecimalPlaces(decimalPlaces, Prisma.Decimal.ROUND_HALF_UP);
   }
 
+  /**
+   * Base-currency debit/credit for each line. Converting each line and rounding it can leave
+   * the base totals a cent or so apart even though the transaction-currency totals match. That
+   * rounding difference (bounded by half a unit of the last decimal per line) is absorbed by
+   * the largest line on the heavier side, so a journal that balances in its own currency is
+   * never rejected in base. A genuine imbalance is left alone for `validateBalanced` to catch.
+   */
+  allocateBaseAmounts(
+    lines: JournalAmountLine[],
+    exchangeRate: number | string | Prisma.Decimal,
+    decimalPlaces: number,
+  ): Array<{ debit: Prisma.Decimal; credit: Prisma.Decimal }> {
+    const base = lines.map((line) => ({
+      debit: this.baseAmount(line.debit ?? 0, exchangeRate, decimalPlaces),
+      credit: this.baseAmount(line.credit ?? 0, exchangeRate, decimalPlaces),
+    }));
+    const sum = (side: 'debit' | 'credit') =>
+      base.reduce(
+        (total, line) => total.plus(line[side]),
+        new Prisma.Decimal(0),
+      );
+    const diff = sum('debit').minus(sum('credit'));
+    if (diff.isZero()) return base;
+
+    const tolerance = new Prisma.Decimal(10)
+      .pow(-decimalPlaces)
+      .times(0.5)
+      .times(lines.length);
+    if (diff.abs().greaterThan(tolerance)) return base;
+
+    // Debits too high -> trim the largest debit; credits too high -> trim the largest credit.
+    const side = diff.greaterThan(0) ? 'debit' : 'credit';
+    let largest = -1;
+    for (const [index, line] of base.entries()) {
+      if (largest === -1 || line[side].greaterThan(base[largest][side])) {
+        largest = index;
+      }
+    }
+    if (largest === -1 || base[largest][side].lessThanOrEqualTo(diff.abs())) {
+      return base;
+    }
+    base[largest][side] = base[largest][side].minus(diff.abs());
+    return base;
+  }
+
   validateCurrencyPrecision(
     lines: JournalAmountLine[],
     currency: string,

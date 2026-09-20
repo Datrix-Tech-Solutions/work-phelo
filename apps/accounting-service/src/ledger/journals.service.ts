@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   FiscalPeriodStatus,
+  JournalEntryType,
   JournalStatus,
   Prisma,
   RecordStatus,
@@ -21,6 +22,16 @@ import {
   UpdateDraftJournalDto,
 } from './dto/accounting.dto';
 import { JournalPolicy } from './journal.policy';
+
+/** Three-letter code identifying the journal type inside its number (JE-STN2609-0000). */
+const JOURNAL_TYPE_CODES: Record<JournalEntryType, string> = {
+  STANDARD: 'STN',
+  ADJUSTING: 'ADJ',
+  REVERSING: 'RVS',
+  CLOSING: 'CLS',
+  OPENING: 'OPN',
+  RECURRING: 'RCR',
+};
 
 const journalInclude = {
   fiscalPeriod: true,
@@ -71,41 +82,54 @@ export class JournalsService {
       if (existing) return existing;
     }
 
-    const draft = await this.resolveDraft(this.prisma, user.tenantId, dto);
     try {
-      return await this.prisma.journalEntry.create({
-        data: {
-          journalNumber: this.journalNumber('JE'),
-          transactionDate: draft.transactionDate,
-          fiscalPeriod: {
-            connect: {
-              id_tenantId: {
-                id: draft.fiscalPeriodId,
-                tenantId: user.tenantId,
+      // The number comes from a counter row locked until commit, so a failed create rolls the
+      // number back and the sequence stays gapless.
+      return await this.prisma.$transaction(async (tx) => {
+        const draft = await this.resolveDraft(tx, user.tenantId, dto);
+        await this.assertNoBareControlAccounts(tx, user.tenantId, draft.lines);
+        const entryType = dto.entryType ?? JournalEntryType.STANDARD;
+        const journalNumber = await this.nextJournalNumber(
+          tx,
+          user.tenantId,
+          entryType,
+          draft.transactionDate,
+        );
+        return tx.journalEntry.create({
+          data: {
+            journalNumber,
+            entryType,
+            transactionDate: draft.transactionDate,
+            fiscalPeriod: {
+              connect: {
+                id_tenantId: {
+                  id: draft.fiscalPeriodId,
+                  tenantId: user.tenantId,
+                },
               },
             },
+            transactionCurrency: draft.transactionCurrency,
+            baseCurrency: draft.baseCurrency,
+            exchangeRate: draft.exchangeRate,
+            reference: this.optional(dto.reference),
+            description: dto.description,
+            idempotencyKey: this.optional(dto.idempotencyKey),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordType: this.optional(dto.sourceRecordType),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+            lines: {
+              create: this.lineCreateData(
+                user.tenantId,
+                draft.lines,
+                draft.exchangeRate,
+                draft.decimalPlaces,
+              ),
+            },
           },
-          transactionCurrency: draft.transactionCurrency,
-          baseCurrency: draft.baseCurrency,
-          exchangeRate: draft.exchangeRate,
-          reference: this.optional(dto.reference),
-          description: dto.description,
-          idempotencyKey: this.optional(dto.idempotencyKey),
-          sourceModule: this.optional(dto.sourceModule),
-          sourceRecordType: this.optional(dto.sourceRecordType),
-          sourceRecordId: this.optional(dto.sourceRecordId),
-          createdByUserId: user.id,
-          updatedByUserId: user.id,
-          lines: {
-            create: this.lineCreateData(
-              user.tenantId,
-              draft.lines,
-              draft.exchangeRate,
-              draft.decimalPlaces,
-            ),
-          },
-        },
-        include: journalInclude,
+          include: journalInclude,
+        });
       });
     } catch (error) {
       if (
@@ -217,6 +241,8 @@ export class JournalsService {
       },
       include: journalInclude,
       orderBy: [{ transactionDate: 'desc' }, { createdAt: 'desc' }],
+      ...(query.limit !== undefined ? { take: query.limit } : {}),
+      ...(query.offset !== undefined ? { skip: query.offset } : {}),
     });
   }
 
@@ -234,80 +260,97 @@ export class JournalsService {
     journalId: string,
     dto: UpdateDraftJournalDto,
   ) {
-    const current = await this.findOne(user.tenantId, journalId);
-    if (current.status !== JournalStatus.DRAFT) {
-      throw new ConflictException('Posted or reversed journals are immutable');
-    }
+    return this.prisma.$transaction(async (tx) => {
+      // Lock the journal row so a concurrent post cannot slip between the status check and the
+      // rewrite; whichever transaction gets the lock second sees the other's result.
+      await this.lockJournal(tx, user.tenantId, journalId);
+      const current = await tx.journalEntry.findFirst({
+        where: { id: journalId, tenantId: user.tenantId },
+        include: journalInclude,
+      });
+      if (!current) throw new NotFoundException('Journal entry not found');
+      if (current.status !== JournalStatus.DRAFT) {
+        throw new ConflictException(
+          'Posted or reversed journals are immutable',
+        );
+      }
 
-    const shouldReuseExchangeRate =
-      dto.exchangeRate === undefined &&
-      dto.transactionDate === undefined &&
-      dto.transactionCurrency === undefined;
-    const draft = await this.resolveDraft(this.prisma, user.tenantId, {
-      transactionDate:
-        dto.transactionDate ?? current.transactionDate.toISOString(),
-      fiscalPeriodId: dto.fiscalPeriodId ?? current.fiscalPeriodId,
-      transactionCurrency:
-        dto.transactionCurrency ?? current.transactionCurrency,
-      exchangeRate:
-        dto.exchangeRate ??
-        (shouldReuseExchangeRate
-          ? Number(current.exchangeRate.toString())
-          : undefined),
-      reference: dto.reference ?? current.reference ?? undefined,
-      description: dto.description ?? current.description,
-      lines:
-        dto.lines ??
-        current.lines.map((line) => ({
-          glAccountId: line.glAccountId,
-          subledgerAccountId: line.subledgerAccountId ?? undefined,
-          costCentreId: line.costCentreId ?? undefined,
-          description: line.description ?? undefined,
-          debit: Number(line.transactionDebit.toString()),
-          credit: Number(line.transactionCredit.toString()),
-        })),
-    });
+      const shouldReuseExchangeRate =
+        dto.exchangeRate === undefined &&
+        dto.transactionDate === undefined &&
+        dto.transactionCurrency === undefined;
+      const draft = await this.resolveDraft(tx, user.tenantId, {
+        transactionDate:
+          dto.transactionDate ?? current.transactionDate.toISOString(),
+        fiscalPeriodId: dto.fiscalPeriodId ?? current.fiscalPeriodId,
+        transactionCurrency:
+          dto.transactionCurrency ?? current.transactionCurrency,
+        exchangeRate:
+          dto.exchangeRate ??
+          (shouldReuseExchangeRate
+            ? Number(current.exchangeRate.toString())
+            : undefined),
+        // An explicit empty reference clears it; leaving it out keeps the current one.
+        reference:
+          dto.reference !== undefined
+            ? dto.reference
+            : (current.reference ?? undefined),
+        description: dto.description ?? current.description,
+        lines:
+          dto.lines ??
+          current.lines.map((line) => ({
+            glAccountId: line.glAccountId,
+            subledgerAccountId: line.subledgerAccountId ?? undefined,
+            costCentreId: line.costCentreId ?? undefined,
+            description: line.description ?? undefined,
+            debit: Number(line.transactionDebit.toString()),
+            credit: Number(line.transactionCredit.toString()),
+          })),
+      });
+      await this.assertNoBareControlAccounts(tx, user.tenantId, draft.lines);
 
-    return this.prisma.journalEntry.update({
-      where: {
-        id_tenantId: { id: current.id, tenantId: user.tenantId },
-      },
-      data: {
-        transactionDate: draft.transactionDate,
-        fiscalPeriod: {
-          connect: {
-            id_tenantId: {
-              id: draft.fiscalPeriodId,
-              tenantId: user.tenantId,
+      return tx.journalEntry.update({
+        where: {
+          id_tenantId: { id: current.id, tenantId: user.tenantId },
+        },
+        data: {
+          transactionDate: draft.transactionDate,
+          fiscalPeriod: {
+            connect: {
+              id_tenantId: {
+                id: draft.fiscalPeriodId,
+                tenantId: user.tenantId,
+              },
             },
           },
+          transactionCurrency: draft.transactionCurrency,
+          baseCurrency: draft.baseCurrency,
+          exchangeRate: draft.exchangeRate,
+          ...(dto.reference !== undefined
+            ? { reference: this.optional(dto.reference) }
+            : {}),
+          ...(dto.description !== undefined
+            ? { description: dto.description }
+            : {}),
+          updatedByUserId: user.id,
+          lines: {
+            deleteMany: {},
+            create: this.lineCreateData(
+              user.tenantId,
+              draft.lines,
+              draft.exchangeRate,
+              draft.decimalPlaces,
+            ),
+          },
         },
-        transactionCurrency: draft.transactionCurrency,
-        baseCurrency: draft.baseCurrency,
-        exchangeRate: draft.exchangeRate,
-        ...(dto.reference !== undefined
-          ? { reference: this.optional(dto.reference) }
-          : {}),
-        ...(dto.description !== undefined
-          ? { description: dto.description }
-          : {}),
-        updatedByUserId: user.id,
-        lines: {
-          deleteMany: {},
-          create: this.lineCreateData(
-            user.tenantId,
-            draft.lines,
-            draft.exchangeRate,
-            draft.decimalPlaces,
-          ),
-        },
-      },
-      include: journalInclude,
+        include: journalInclude,
+      });
     });
   }
 
   async post(user: RequestUser, journalId: string) {
     return this.prisma.$transaction(async (tx) => {
+      await this.lockJournal(tx, user.tenantId, journalId);
       const journal = await tx.journalEntry.findFirst({
         where: { id: journalId, tenantId: user.tenantId },
         include: journalInclude,
@@ -337,18 +380,20 @@ export class JournalsService {
           credit: line.baseCredit,
         })),
       );
+      const postLines = journal.lines.map((line) => ({
+        glAccountId: line.glAccountId,
+        subledgerAccountId: line.subledgerAccountId ?? undefined,
+        costCentreId: line.costCentreId ?? undefined,
+        debit: Number(line.transactionDebit.toString()),
+        credit: Number(line.transactionCredit.toString()),
+      }));
       await this.assertLineReferences(
         tx,
         user.tenantId,
-        journal.lines.map((line) => ({
-          glAccountId: line.glAccountId,
-          subledgerAccountId: line.subledgerAccountId ?? undefined,
-          costCentreId: line.costCentreId ?? undefined,
-          debit: Number(line.transactionDebit.toString()),
-          credit: Number(line.transactionCredit.toString()),
-        })),
+        postLines,
         journal.transactionCurrency,
       );
+      await this.assertNoBareControlAccounts(tx, user.tenantId, postLines);
 
       const claimed = await tx.journalEntry.updateMany({
         where: {
@@ -410,6 +455,11 @@ export class JournalsService {
       );
 
       const reversalDate = new Date(dto.reversalDate);
+      if (reversalDate < original.transactionDate) {
+        throw new BadRequestException(
+          'Reversal date cannot be before the date of the journal being reversed',
+        );
+      }
       const period = await tx.fiscalPeriod.findFirst({
         where: {
           tenantId: user.tenantId,
@@ -445,7 +495,13 @@ export class JournalsService {
 
       return tx.journalEntry.create({
         data: {
-          journalNumber: this.journalNumber('REV'),
+          journalNumber: await this.nextJournalNumber(
+            tx,
+            user.tenantId,
+            JournalEntryType.REVERSING,
+            reversalDate,
+          ),
+          entryType: JournalEntryType.REVERSING,
           status: JournalStatus.POSTED,
           transactionDate: reversalDate,
           postingDate: new Date(),
@@ -619,18 +675,11 @@ export class JournalsService {
       dto.exchangeRate,
     );
     this.policy.validateBalanced(
-      dto.lines.map((line) => ({
-        debit: this.policy.baseAmount(
-          line.debit ?? 0,
-          exchangeRate,
-          config.decimalPlaces,
-        ),
-        credit: this.policy.baseAmount(
-          line.credit ?? 0,
-          exchangeRate,
-          config.decimalPlaces,
-        ),
-      })),
+      this.policy.allocateBaseAmounts(
+        dto.lines,
+        exchangeRate,
+        config.decimalPlaces,
+      ),
     );
     await this.assertLineReferences(
       client,
@@ -844,6 +893,11 @@ export class JournalsService {
     exchangeRate: Prisma.Decimal,
     decimalPlaces: number,
   ): Prisma.JournalLineCreateWithoutJournalEntryInput[] {
+    const baseAmounts = this.policy.allocateBaseAmounts(
+      lines,
+      exchangeRate,
+      decimalPlaces,
+    );
     return lines.map((line, index) => {
       const debit = new Prisma.Decimal(line.debit ?? 0);
       const credit = new Prisma.Decimal(line.credit ?? 0);
@@ -884,15 +938,121 @@ export class JournalsService {
         description: this.optional(line.description),
         transactionDebit: debit,
         transactionCredit: credit,
-        baseDebit: this.policy.baseAmount(debit, exchangeRate, decimalPlaces),
-        baseCredit: this.policy.baseAmount(credit, exchangeRate, decimalPlaces),
+        baseDebit: baseAmounts[index].debit,
+        baseCredit: baseAmounts[index].credit,
       };
     });
   }
 
+  /** Random-suffixed number for system-generated (source event / integration) journals. */
   private journalNumber(prefix: string) {
     const date = new Date().toISOString().slice(0, 10).replaceAll('-', '');
     return `${prefix}-${date}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  }
+
+  /**
+   * Next number for a manual journal: JE-<type code><yymm>-<n>, e.g. JE-STN2609-0000. Each type
+   * has its own sequence per month (the type code and month are part of the number, so the
+   * streams never collide and a gap in one is easy to spot). It starts at 0 and grows past four
+   * digits when it has to. The counter row stays locked until the surrounding transaction
+   * commits, so concurrent creates are serialised and a rolled-back create frees its number.
+   */
+  private async nextJournalNumber(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entryType: JournalEntryType,
+    transactionDate: Date,
+  ) {
+    const yy = String(transactionDate.getUTCFullYear()).slice(-2);
+    const mm = String(transactionDate.getUTCMonth() + 1).padStart(2, '0');
+    const key = `${JOURNAL_TYPE_CODES[entryType]}${yy}${mm}`;
+    const rows = await tx.$queryRaw<Array<{ lastNumber: number }>>`
+      INSERT INTO "accounting"."JournalNumberSequence"
+        ("id", "tenantId", "key", "lastNumber", "updatedAt")
+      VALUES (${randomUUID()}, ${tenantId}, ${key}, 0, NOW())
+      ON CONFLICT ("tenantId", "key") DO UPDATE
+        SET "lastNumber" = "JournalNumberSequence"."lastNumber" + 1,
+            "updatedAt" = NOW()
+      RETURNING "lastNumber"
+    `;
+    return `JE-${key}-${String(rows[0].lastNumber).padStart(4, '0')}`;
+  }
+
+  private async lockJournal(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    journalId: string,
+  ) {
+    await tx.$executeRaw`
+      SELECT "id"
+      FROM "accounting"."JournalEntry"
+      WHERE "id" = ${journalId} AND "tenantId" = ${tenantId}
+      FOR UPDATE
+    `;
+  }
+
+  /**
+   * A control account (receivables/payables) carries customer and supplier balances in its
+   * subledger, so a manual line on one must name the subledger account — otherwise the GL and
+   * the subledger drift apart. Documents and settlements post through their own modules, which
+   * always supply it. Control accounts are those a subledger account points at, or that a
+   * receivable/payable document, receipt or payment has used.
+   */
+  private async assertNoBareControlAccounts(
+    client: PrismaService | Prisma.TransactionClient,
+    tenantId: string,
+    lines: JournalLineDto[],
+  ) {
+    const bareAccountIds = [
+      ...new Set(
+        lines
+          .filter((line) => !line.subledgerAccountId)
+          .map((line) => line.glAccountId),
+      ),
+    ];
+    if (bareAccountIds.length === 0) return;
+
+    const inList = { in: bareAccountIds };
+    const [bySubledger, byAr, byReceipt, byAp, byPayment] = await Promise.all([
+      client.subledgerAccount.findMany({
+        where: { tenantId, controlAccountId: inList },
+        select: { controlAccountId: true },
+        distinct: ['controlAccountId'],
+      }),
+      client.accountingReceivableDocument.findMany({
+        where: { tenantId, arAccountId: inList },
+        select: { arAccountId: true },
+        distinct: ['arAccountId'],
+      }),
+      client.accountingReceivableReceipt.findMany({
+        where: { tenantId, arAccountId: inList },
+        select: { arAccountId: true },
+        distinct: ['arAccountId'],
+      }),
+      client.accountingPayableDocument.findMany({
+        where: { tenantId, apAccountId: inList },
+        select: { apAccountId: true },
+        distinct: ['apAccountId'],
+      }),
+      client.accountingPayablePayment.findMany({
+        where: { tenantId, apAccountId: inList },
+        select: { apAccountId: true },
+        distinct: ['apAccountId'],
+      }),
+    ]);
+    const controlIds = new Set<string | null>([
+      ...bySubledger.map((row) => row.controlAccountId),
+      ...byAr.map((row) => row.arAccountId),
+      ...byReceipt.map((row) => row.arAccountId),
+      ...byAp.map((row) => row.apAccountId),
+      ...byPayment.map((row) => row.apAccountId),
+    ]);
+    const offending = bareAccountIds.find((id) => controlIds.has(id));
+    if (offending) {
+      throw new BadRequestException(
+        'A receivables or payables control account cannot be posted to by a manual journal without a subledger account; use the receivables or payables module',
+      );
+    }
   }
 
   private optional(

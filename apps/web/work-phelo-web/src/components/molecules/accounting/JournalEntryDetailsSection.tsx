@@ -15,9 +15,15 @@ import {
 } from '@/types/accounting';
 import { useAccountingConfig, useAccountingCurrencyOptions, useFiscalPeriods } from '@/hooks';
 import { cn } from '@/lib/utils';
-import { useFiscalYears, useJournals } from '@/hooks';
+import {
+  useFiscalYears,
+  useIncomeStatementReport,
+  useJournals,
+  useTrialBalanceReport,
+} from '@/hooks';
 import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
 import { formatJournalNumber } from '@/lib/formatters';
+import { buildClosingLines, buildOpeningLines } from '@/lib/accounting/yearEndLines';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 
 interface JournalEntryDetailsSectionProps {
@@ -30,6 +36,7 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
     register,
     control,
     setValue,
+    getValues,
     formState: { errors },
   } = form;
 
@@ -101,6 +108,70 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
     setValue('retainedEarningsAccountId', '');
     setValue('balancingAccountId', '');
   }, [needsFiscalYear, setValue]);
+
+  const fiscalYearId = useWatch({ control, name: 'fiscalYearId' });
+  const retainedEarningsAccountId = useWatch({ control, name: 'retainedEarningsAccountId' });
+  const balancingAccountId = useWatch({ control, name: 'balancingAccountId' });
+  const selectedYear = fiscalYears.find((y) => y.id === fiscalYearId);
+  const yearAccountId = isClosing ? retainedEarningsAccountId : balancingAccountId;
+
+  // Opening balances carry over what the books held the day before the year started.
+  const dayBeforeStart = selectedYear
+    ? new Date(new Date(selectedYear.startDate).getTime() - 86_400_000).toISOString().slice(0, 10)
+    : undefined;
+  const { data: incomeReport, isLoading: isLoadingIncome } = useIncomeStatementReport(
+    {
+      fromDate: selectedYear?.startDate.slice(0, 10),
+      toDate: selectedYear?.endDate.slice(0, 10),
+    },
+    isClosing && !!selectedYear,
+  );
+  const { data: trialReport, isLoading: isLoadingTrial } = useTrialBalanceReport(
+    { asOfDate: dayBeforeStart },
+    isOpening && !!selectedYear,
+  );
+  const isGeneratingLines = isClosing ? isLoadingIncome : isOpening ? isLoadingTrial : false;
+
+  // Generates the lines once the year, its report and the offsetting account are all known.
+  // Regenerates only when one of those changes, so hand edits survive a background refetch.
+  const generatedFor = useRef('');
+  useEffect(() => {
+    if (!needsFiscalYear) {
+      generatedFor.current = '';
+      return;
+    }
+    const report = isClosing ? incomeReport : trialReport;
+    if (!selectedYear || !yearAccountId || !report) return;
+    const key = `${entryType}:${selectedYear.id}:${yearAccountId}`;
+    if (generatedFor.current === key) return;
+    generatedFor.current = key;
+
+    const lines = isClosing
+      ? buildClosingLines(incomeReport!, yearAccountId)
+      : buildOpeningLines(trialReport!, yearAccountId);
+    if (lines.length > 0) setValue('lines', lines);
+    if (config?.baseCurrency) {
+      setValue('currency', config.baseCurrency, { shouldValidate: true });
+      setValue('exchangeRate', '');
+    }
+    if (!getValues('description')) {
+      setValue(
+        'description',
+        `${isClosing ? 'Closing entry' : 'Opening balances'} – ${selectedYear.name}`,
+      );
+    }
+  }, [
+    needsFiscalYear,
+    isClosing,
+    entryType,
+    selectedYear,
+    yearAccountId,
+    incomeReport,
+    trialReport,
+    config?.baseCurrency,
+    setValue,
+    getValues,
+  ]);
 
   // Closing entries post on the year's last day, opening balances on its first day.
   const handleFiscalYearChange = (yearId: string) => {
@@ -261,13 +332,6 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
             />
           )}
         />
-
-        <FormField
-          label="Reference Number"
-          registration={register('reference', { required: 'Reference is required' })}
-          error={errors.reference}
-          placeholder="e.g. JE-2025-001"
-        />
       </div>
 
       {needsFiscalYear && (
@@ -321,6 +385,15 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
                 />
               )}
             />
+          )}
+          {selectedYear && yearAccountId && (
+            <p className="text-xs text-gray-400 sm:col-span-3">
+              {isGeneratingLines
+                ? 'Generating lines…'
+                : isClosing
+                  ? `Lines are generated from ${selectedYear.name}'s revenue and expenses. Edit them or post as they are.`
+                  : `Lines are generated from the balances at the end of the previous year. Edit them or post as they are.`}
+            </p>
           )}
         </div>
       )}

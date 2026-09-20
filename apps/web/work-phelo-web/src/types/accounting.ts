@@ -391,6 +391,15 @@ export type JournalEntryType =
   | 'opening'
   | 'recurring';
 
+/** The backend's journal type. It sets the number prefix (JE-STN2609-0000, ADJ, RVS, CLS, OPN, RCR). */
+export type JournalEntryTypeCode =
+  | 'STANDARD'
+  | 'ADJUSTING'
+  | 'REVERSING'
+  | 'CLOSING'
+  | 'OPENING'
+  | 'RECURRING';
+
 export type RecurrenceFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUALLY';
 export type RecurrenceEndType = 'NEVER' | 'ON_DATE';
 export type RecurringOnGeneration = 'AUTO_POST' | 'CREATE_DRAFT';
@@ -443,7 +452,6 @@ export interface JournalEntryFormValues {
   fiscalPeriodId: string;
   currency: string;
   exchangeRate: number | '';
-  reference: string;
   description: string;
   lines: JournalLine[];
 }
@@ -466,7 +474,6 @@ export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   fiscalPeriodId: '',
   currency: '',
   exchangeRate: '',
-  reference: '',
   description: '',
   lines: [
     { accountClass: '', targetAccount: '', description: '', debit: '', credit: '' },
@@ -536,6 +543,7 @@ export interface JournalLineRecord {
 export interface JournalEntryRecord {
   id: string;
   journalNumber: string;
+  entryType: JournalEntryTypeCode;
   status: JournalRecordStatus;
   transactionDate: string;
   postingDate: string | null;
@@ -564,6 +572,7 @@ export interface CreateJournalLinePayload {
 }
 
 export interface CreateJournalPayload {
+  entryType?: JournalEntryTypeCode;
   transactionDate: string;
   fiscalPeriodId: string;
   transactionCurrency: string;

@@ -63,6 +63,18 @@ enum JournalStatus {
   @@schema("accounting")
 }
 
+/// What kind of journal this is; also drives its number prefix (STN, ADJ, RVS, CLS, OPN, RCR).
+enum JournalEntryType {
+  STANDARD
+  ADJUSTING
+  REVERSING
+  CLOSING
+  OPENING
+  RECURRING
+
+  @@schema("accounting")
+}
+
 enum PostingDirection {
   DR
   CR
@@ -465,10 +477,24 @@ model SubledgerAccount {
   @@schema("accounting")
 }
 
+/// Gapless per-tenant counters behind journal numbers, one per type and month
+/// (key = e.g. "STN2609"). lastNumber is the most recently issued number, starting at 0.
+model JournalNumberSequence {
+  id         String   @id @default(uuid())
+  tenantId   String
+  key        String
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@schema("accounting")
+}
+
 model JournalEntry {
   id                          String                        @id @default(uuid())
   tenantId                    String
   journalNumber               String
+  entryType                   JournalEntryType              @default(STANDARD)
   status                      JournalStatus                 @default(DRAFT)
   transactionDate             DateTime
   postingDate                 DateTime?
