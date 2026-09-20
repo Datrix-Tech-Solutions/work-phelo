@@ -131,18 +131,6 @@ describe('JournalsService', () => {
       subledgerAccount: {
         findMany: jest.fn().mockResolvedValue([]),
       },
-      accountingReceivableDocument: {
-        findMany: jest.fn().mockResolvedValue([]),
-      },
-      accountingReceivableReceipt: {
-        findMany: jest.fn().mockResolvedValue([]),
-      },
-      accountingPayableDocument: {
-        findMany: jest.fn().mockResolvedValue([]),
-      },
-      accountingPayablePayment: {
-        findMany: jest.fn().mockResolvedValue([]),
-      },
       costCentre: {
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -571,132 +559,40 @@ describe('JournalsService', () => {
     });
   });
 
-  describe('control accounts', () => {
-    it('rejects a manual line on a control account without a subledger', async () => {
-      const { prisma, service } = setup();
-      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
-      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
-        tenantId: actor.tenantId,
-        baseCurrency: 'GHS',
-        fiscalYearStartMonth: 1,
-        decimalPlaces: 2,
-      });
-      prisma.accountingCurrency.findUnique.mockResolvedValue({
-        code: 'GHS',
-        decimalPlaces: 2,
-        isActive: true,
-      });
-      prisma.gLAccount.findMany.mockResolvedValue([
-        account('receivables'),
-        account('income'),
-      ]);
-      prisma.accountingReceivableDocument.findMany.mockResolvedValue([
-        { arAccountId: 'receivables' },
-      ]);
-
-      await expect(
-        service.create(actor, {
-          transactionDate: '2026-07-10',
-          fiscalPeriodId: period.id,
-          transactionCurrency: 'GHS',
-          description: 'Manual AR posting',
-          lines: [
-            { glAccountId: 'receivables', debit: 100 },
-            { glAccountId: 'income', credit: 100 },
-          ],
-        }),
-      ).rejects.toThrow('receivables or payables account');
-      expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+  it('lets a manual journal move funds between any two active posting accounts', async () => {
+    const { prisma, service } = setup();
+    prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      tenantId: actor.tenantId,
+      baseCurrency: 'GHS',
+      fiscalYearStartMonth: 1,
+      decimalPlaces: 2,
     });
-
-    it('does not treat an entity control-account override as a control account', async () => {
-      const { prisma, service } = setup();
-      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
-      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
-        tenantId: actor.tenantId,
-        baseCurrency: 'GHS',
-        fiscalYearStartMonth: 1,
-        decimalPlaces: 2,
-      });
-      prisma.accountingCurrency.findUnique.mockResolvedValue({
-        code: 'GHS',
-        decimalPlaces: 2,
-        isActive: true,
-      });
-      prisma.gLAccount.findMany.mockResolvedValue([
-        account('cash-a'),
-        account('cash-b'),
-      ]);
-      // An entity happens to name cash-a as its control account; that must not block a transfer.
-      prisma.subledgerAccount.findMany.mockImplementation(
-        (args: { where: { controlAccountId?: unknown } }) =>
-          Promise.resolve(
-            args.where.controlAccountId ? [{ controlAccountId: 'cash-a' }] : [],
-          ),
-      );
-      prisma.journalEntry.create.mockImplementation(
-        (args: { data: unknown }) => args.data,
-      );
-
-      await expect(
-        service.create(actor, {
-          transactionDate: '2026-07-10',
-          fiscalPeriodId: period.id,
-          transactionCurrency: 'GHS',
-          description: 'Transfer between bank accounts',
-          lines: [
-            { glAccountId: 'cash-a', debit: 100 },
-            { glAccountId: 'cash-b', credit: 100 },
-          ],
-        }),
-      ).resolves.toBeDefined();
+    prisma.accountingCurrency.findUnique.mockResolvedValue({
+      code: 'GHS',
+      decimalPlaces: 2,
+      isActive: true,
     });
+    prisma.gLAccount.findMany.mockResolvedValue([
+      account('cash-a'),
+      account('cash-b'),
+    ]);
+    prisma.journalEntry.create.mockImplementation(
+      (args: { data: unknown }) => args.data,
+    );
 
-    it('allows a control account line that names its subledger', async () => {
-      const { prisma, service } = setup();
-      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
-      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
-        tenantId: actor.tenantId,
-        baseCurrency: 'GHS',
-        fiscalYearStartMonth: 1,
-        decimalPlaces: 2,
-      });
-      prisma.accountingCurrency.findUnique.mockResolvedValue({
-        code: 'GHS',
-        decimalPlaces: 2,
-        isActive: true,
-      });
-      prisma.gLAccount.findMany.mockResolvedValue([
-        account('receivables'),
-        account('income'),
-      ]);
-      prisma.subledgerAccount.findMany.mockResolvedValue([
-        { id: 'customer-1', status: RecordStatus.ACTIVE, currency: null },
-      ]);
-      prisma.accountingReceivableDocument.findMany.mockResolvedValue([
-        { arAccountId: 'receivables' },
-      ]);
-      prisma.journalEntry.create.mockImplementation(
-        (args: { data: unknown }) => args.data,
-      );
-
-      await expect(
-        service.create(actor, {
-          transactionDate: '2026-07-10',
-          fiscalPeriodId: period.id,
-          transactionCurrency: 'GHS',
-          description: 'Subledger AR posting',
-          lines: [
-            {
-              glAccountId: 'receivables',
-              subledgerAccountId: 'customer-1',
-              debit: 100,
-            },
-            { glAccountId: 'income', credit: 100 },
-          ],
-        }),
-      ).resolves.toBeDefined();
-    });
+    await expect(
+      service.create(actor, {
+        transactionDate: '2026-07-10',
+        fiscalPeriodId: period.id,
+        transactionCurrency: 'GHS',
+        description: 'Transfer between bank accounts',
+        lines: [
+          { glAccountId: 'cash-a', debit: 100 },
+          { glAccountId: 'cash-b', credit: 100 },
+        ],
+      }),
+    ).resolves.toBeDefined();
   });
 
   describe('draft edits', () => {
