@@ -186,7 +186,7 @@ export function AgingReportView({ side }: { side: Side }) {
                   {allExpanded ? 'Collapse all' : 'Expand all'}
                 </button>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto p-4">
                 <AgingBlocks
                   blocks={blocks}
                   partyLabel={copy.partyLabel}

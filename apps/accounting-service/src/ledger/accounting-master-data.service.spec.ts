@@ -101,6 +101,7 @@ describe('AccountingMasterDataService', () => {
       },
       journalLine: {
         findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
       },
       $queryRaw: jest.fn(),
       $executeRaw: jest.fn().mockResolvedValue(1),
@@ -1089,6 +1090,191 @@ describe('AccountingMasterDataService', () => {
     expect(auditCall.data.action).toBe('GL_ACCOUNT_CREATE');
     expect(auditCall.data.entityType).toBe('GLAccount');
     expect(auditCall.data.entityId).toBe('account-1');
+  });
+
+  describe('accounts directly under a classification', () => {
+    const classification = {
+      id: 'classification-1',
+      tenantId: actor.tenantId,
+      code: '1100',
+      name: 'Current Assets',
+      category: GLAccountCategory.ASSET,
+      isActive: true,
+    };
+
+    it('creates an account with a classification and no group', async () => {
+      const { prisma, service } = setup();
+      prisma.accountClassification.findFirst.mockResolvedValue(classification);
+      prisma.gLAccount.create.mockResolvedValue({
+        id: 'account-1',
+        tenantId: actor.tenantId,
+        code: '1101',
+        name: 'Petty Cash',
+        category: GLAccountCategory.ASSET,
+        normalBalance: NormalBalance.DEBIT,
+        classificationId: 'classification-1',
+        classification,
+        accountGroupId: null,
+        accountGroup: null,
+        parentAccountId: null,
+        parentAccount: null,
+      });
+
+      const result = await service.createGLAccount(actor, {
+        code: '1101',
+        name: 'Petty Cash',
+        classificationId: 'classification-1',
+      });
+
+      const createCall = (
+        prisma.gLAccount.create as jest.MockedFunction<
+          (args: {
+            data: {
+              category: GLAccountCategory;
+              normalBalance: NormalBalance;
+              classificationId: string;
+              accountGroupId?: string;
+            };
+          }) => Promise<unknown>
+        >
+      ).mock.calls[0][0];
+      expect(createCall.data.category).toBe(GLAccountCategory.ASSET);
+      expect(createCall.data.normalBalance).toBe(NormalBalance.DEBIT);
+      expect(createCall.data.classificationId).toBe('classification-1');
+      expect(createCall.data.accountGroupId).toBeUndefined();
+
+      expect(result.classification.code).toBe('1100');
+      expect(result.accountGroup).toBeNull();
+      expect(result.isLegacyUnclassified).toBe(false);
+      expect(result.hierarchyPath).toEqual([
+        GLAccountCategory.ASSET,
+        'Current Assets',
+        'Petty Cash',
+      ]);
+    });
+
+    it('keeps the code inside the classification band', async () => {
+      const { prisma, service } = setup();
+      prisma.accountClassification.findFirst.mockResolvedValue(classification);
+
+      await expect(
+        service.createGLAccount(actor, {
+          code: '1201',
+          name: 'Out of band',
+          classificationId: 'classification-1',
+        }),
+      ).rejects.toThrow('between 1100 and 1199');
+      expect(prisma.gLAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a group that belongs to a different classification', async () => {
+      const { prisma, service } = setup();
+      prisma.accountGroup.findFirst.mockResolvedValue({
+        id: 'group-1',
+        tenantId: actor.tenantId,
+        classificationId: 'classification-2',
+        code: '1210',
+        isActive: true,
+        classification: {
+          id: 'classification-2',
+          code: '1200',
+          name: 'Fixed Assets',
+          category: GLAccountCategory.ASSET,
+          isActive: true,
+        },
+      });
+
+      await expect(
+        service.createGLAccount(actor, {
+          code: '1211',
+          name: 'Vehicles',
+          classificationId: 'classification-1',
+          accountGroupId: 'group-1',
+        }),
+      ).rejects.toThrow('does not belong to the selected classification');
+      expect(prisma.gLAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('needs a category when neither group nor classification is given', async () => {
+      const { prisma, service } = setup();
+
+      await expect(
+        service.createGLAccount(actor, { code: '1101', name: 'Petty Cash' }),
+      ).rejects.toThrow('neither accountGroupId nor classificationId');
+      expect(prisma.gLAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps the classification when the group is cleared', async () => {
+      const { prisma, service } = setup();
+      prisma.gLAccount.findFirst.mockResolvedValue({
+        id: 'account-1',
+        tenantId: actor.tenantId,
+        code: '1111',
+        name: 'Cash at Bank',
+        category: GLAccountCategory.ASSET,
+        normalBalance: NormalBalance.DEBIT,
+        classificationId: 'classification-1',
+        accountGroupId: 'group-1',
+        parentAccountId: null,
+        allowPosting: true,
+        status: RecordStatus.ACTIVE,
+      });
+      prisma.accountClassification.findFirst.mockResolvedValue(classification);
+      prisma.journalLine.count.mockResolvedValue(0);
+      prisma.gLAccount.update.mockResolvedValue({
+        id: 'account-1',
+        tenantId: actor.tenantId,
+        code: '1111',
+        name: 'Cash at Bank',
+        category: GLAccountCategory.ASSET,
+        normalBalance: NormalBalance.DEBIT,
+        classificationId: 'classification-1',
+        classification,
+        accountGroupId: null,
+        accountGroup: null,
+        parentAccountId: null,
+        parentAccount: null,
+      });
+
+      const result = await service.updateGLAccount(actor, 'account-1', {
+        accountGroupId: null,
+      });
+
+      const updateCall = (
+        prisma.gLAccount.update as jest.MockedFunction<
+          (args: {
+            data: {
+              classificationId: string;
+              accountGroupId: string | null;
+            };
+          }) => Promise<unknown>
+        >
+      ).mock.calls[0][0];
+      expect(updateCall.data.classificationId).toBe('classification-1');
+      expect(updateCall.data.accountGroupId).toBeNull();
+      expect(result.accountGroup).toBeNull();
+    });
+
+    it('filters by classification whether the account is grouped or not', async () => {
+      const { prisma, service } = setup();
+      prisma.gLAccount.findMany.mockResolvedValue([]);
+
+      await service.listGLAccounts(actor.tenantId, {
+        classificationId: 'classification-1',
+      });
+
+      const findCall = (
+        prisma.gLAccount.findMany as jest.MockedFunction<
+          (args: { where: unknown }) => Promise<unknown>
+        >
+      ).mock.calls[0][0];
+      expect(findCall.where).toMatchObject({
+        OR: [
+          { classificationId: 'classification-1' },
+          { accountGroup: { classificationId: 'classification-1' } },
+        ],
+      });
+    });
   });
 
   it('keeps legacy GL accounts readable as unclassified', async () => {

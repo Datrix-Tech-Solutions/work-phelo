@@ -39,6 +39,9 @@ const reportLineInclude = {
       name: true,
       category: true,
       normalBalance: true,
+      classification: {
+        select: { id: true, code: true, name: true, category: true },
+      },
       accountGroup: {
         select: {
           id: true,
@@ -161,6 +164,9 @@ export class ReportsService {
       this.prisma.gLAccount.findMany({
         where: { tenantId },
         include: {
+          classification: {
+            select: { id: true, code: true, name: true, category: true },
+          },
           accountGroup: {
             select: {
               id: true,
@@ -416,6 +422,12 @@ export class ReportsService {
         name: string;
         category: GLAccountCategory;
         normalBalance: NormalBalance;
+        classification?: {
+          id: string;
+          code: string;
+          name: string;
+          category: GLAccountCategory;
+        } | null;
         accountGroup?: {
           id: string;
           code: string;
@@ -497,6 +509,12 @@ export class ReportsService {
     name: string;
     category: GLAccountCategory;
     normalBalance?: NormalBalance;
+    classification?: {
+      id: string;
+      code: string;
+      name: string;
+      category: GLAccountCategory;
+    } | null;
     accountGroup?: {
       id: string;
       code: string;
@@ -509,19 +527,24 @@ export class ReportsService {
       };
     } | null;
   }) {
-    const classification = account.accountGroup?.classification ?? {
-      id: null,
-      code: 'UNCLASSIFIED',
-      name: 'Unclassified',
-      category: account.category,
-    };
+    // The account's own classification wins; grouped accounts fall back to their group's.
+    const classification = account.classification ??
+      account.accountGroup?.classification ?? {
+        id: null,
+        code: 'UNCLASSIFIED',
+        name: 'Unclassified',
+        category: account.category,
+      };
+    // An account with a classification but no group gets an id-less stand-in group named after
+    // the classification, so it still lands in the classification → group → account nesting
+    // (and every statement total) instead of dropping out. Clients hide it as a placeholder.
     const accountGroup = account.accountGroup
       ? {
           id: account.accountGroup.id,
           code: account.accountGroup.code,
           name: account.accountGroup.name,
         }
-      : { id: null, code: 'UNCLASSIFIED', name: 'Unclassified' };
+      : { id: null, code: classification.code, name: classification.name };
     return {
       id: account.id,
       code: account.code,
@@ -535,10 +558,12 @@ export class ReportsService {
       hierarchyPath: [
         account.category,
         classification.name,
-        accountGroup.name,
+        ...(account.accountGroup || !classification.id
+          ? [accountGroup.name]
+          : []),
         account.name,
       ],
-      isLegacyUnclassified: !account.accountGroup,
+      isLegacyUnclassified: !account.classification && !account.accountGroup,
     };
   }
 

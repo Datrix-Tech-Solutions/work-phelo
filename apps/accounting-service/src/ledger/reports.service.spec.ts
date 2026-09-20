@@ -226,6 +226,72 @@ describe('ReportsService', () => {
     expect(result.imbalanceAmount).toBe('0.00');
   });
 
+  it('nests an account with a classification but no group under an id-less stand-in group', async () => {
+    const classification = {
+      id: 'classification-1',
+      code: '4100',
+      name: 'Operating Revenue',
+      category: GLAccountCategory.REVENUE,
+    };
+    const directRevenue = { ...revenueAccount, classification };
+    const groupedRevenue = {
+      ...revenueAccount,
+      id: 'grouped-revenue',
+      code: '4110',
+      name: 'Commission Income',
+      classification,
+      accountGroup: {
+        id: 'group-1',
+        code: '4110',
+        name: 'Commissions',
+        classification,
+      },
+    };
+    const { service } = setup([
+      reportLine(directRevenue, 0, 300),
+      reportLine(groupedRevenue, 0, 50),
+    ]);
+
+    const result = await service.incomeStatement(tenantId, {
+      fromDate: '2026-07-01',
+      toDate: '2026-07-31',
+    });
+
+    // Both accounts count toward the statement total.
+    expect(result.totalRevenue).toBe('350.00');
+    const revenue = result.hierarchy.find(
+      (entry) => entry.category === GLAccountCategory.REVENUE,
+    );
+    expect(revenue?.classifications).toHaveLength(1);
+    const groups = revenue?.classifications[0].groups ?? [];
+    const standIn = groups.find((group) => group.id === null);
+    expect(standIn).toMatchObject({ code: '4100', name: 'Operating Revenue' });
+    expect(standIn?.accounts.map((row) => row.account.id)).toEqual([
+      'revenue-account',
+    ]);
+    expect(
+      groups.find((group) => group.id === 'group-1')?.accounts,
+    ).toHaveLength(1);
+  });
+
+  it('flags accounts with no classification and no group as unclassified', async () => {
+    const { service } = setup([reportLine(revenueAccount, 0, 300)]);
+
+    const result = await service.incomeStatement(tenantId, {
+      fromDate: '2026-07-01',
+      toDate: '2026-07-31',
+    });
+
+    const revenue = result.hierarchy.find(
+      (entry) => entry.category === GLAccountCategory.REVENUE,
+    );
+    expect(revenue?.classifications[0]).toMatchObject({
+      id: null,
+      code: 'UNCLASSIFIED',
+    });
+    expect(result.totalRevenue).toBe('300.00');
+  });
+
   it('lets reversal journals offset reversed originals naturally', async () => {
     const { service } = setup([
       reportLine(assetAccount, 100, 0, { status: JournalStatus.REVERSED }),

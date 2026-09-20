@@ -59,7 +59,7 @@ export function AgingBlocks({
   onToggle: (key: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-8 pb-6 min-w-[1000px]">
+    <div className="flex flex-col gap-8 min-w-[1000px]">
       {blocks.map((block) => (
         <div key={block.currency} className="flex flex-col">
           <div className={cn(agingGrid, 'py-2 bg-gray-50 border-y border-gray-200')}>

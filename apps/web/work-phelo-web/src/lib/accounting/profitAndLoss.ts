@@ -91,6 +91,9 @@ export type StatementLine = {
 export type StatementGroup = {
   key: string;
   name: string;
+  /** True for the backend's stand-in group (no id) holding accounts that sit directly under a
+   *  classification. It has no header or subtotal of its own. */
+  isPlaceholder: boolean;
   lines: StatementLine[];
   current: number;
   previous: number;
@@ -104,7 +107,12 @@ export type StatementClassification = {
 };
 
 type Side = 'current' | 'previous';
-type MutableGroup = { key: string; name: string; lines: Map<string, StatementLine> };
+type MutableGroup = {
+  key: string;
+  name: string;
+  isPlaceholder: boolean;
+  lines: Map<string, StatementLine>;
+};
 type MutableClassification = { key: string; name: string; groups: Map<string, MutableGroup> };
 
 /**
@@ -136,6 +144,7 @@ export function mergeSection(
         const groupNode = classificationNode.groups.get(groupKey) ?? {
           key: groupKey,
           name: group.name,
+          isPlaceholder: group.id === null,
           lines: new Map<string, StatementLine>(),
         };
         classificationNode.groups.set(groupKey, groupNode);
@@ -169,6 +178,7 @@ export function mergeSection(
         {
           key: group.key,
           name: group.name,
+          isPlaceholder: group.isPlaceholder,
           lines,
           current: sum(lines, 'current'),
           previous: sum(lines, 'previous'),

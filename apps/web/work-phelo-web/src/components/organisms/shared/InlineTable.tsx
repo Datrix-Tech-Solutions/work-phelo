@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
-import { cardClass } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 
 export interface InlineTableColumn {
   key: string;
@@ -22,6 +22,8 @@ interface InlineTableProps {
   onRemoveRow: (index: number) => void;
   /** Optional extra line rendered below the totals footer, e.g. a balance/difference summary. */
   footerNote?: React.ReactNode;
+  /** Tighter spacing between the card header and the column headers. */
+  compact?: boolean;
 }
 
 export function InlineTable({
@@ -32,6 +34,7 @@ export function InlineTable({
   onAddRow,
   onRemoveRow,
   footerNote,
+  compact,
 }: InlineTableProps) {
   const colTemplate = [...columns.map((c) => c.width ?? '1fr'), '44px'].join(' ');
   const hasFooter = columns.some((c) => c.renderFooter);
@@ -39,7 +42,7 @@ export function InlineTable({
   return (
     <div className={cardClass('overflow-hidden')}>
       {/* Card header */}
-      <div className="flex items-center justify-between px-6 py-2">
+      <div className={cn('flex items-center justify-between px-6', compact ? 'pt-2 pb-0' : 'py-2')}>
         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">{title}</h3>
         <Button
           type="button"
@@ -56,7 +59,7 @@ export function InlineTable({
       <div className="overflow-x-auto">
         <div className="min-w-max w-full">
           {/* Column headers — floating pill matching DataTable */}
-          <div className="pt-3">
+          <div className={compact ? 'pt-1' : 'pt-3'}>
             <div className="relative shrink-0">
               <div
                 className={cardClass(

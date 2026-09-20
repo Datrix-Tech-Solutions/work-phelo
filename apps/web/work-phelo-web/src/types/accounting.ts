@@ -22,6 +22,12 @@ export interface GLAccount {
   name: string;
   category: GLAccountCategory;
   normalBalance: NormalBalance;
+  /** The account's classification. Set directly, so an account can sit under a classification
+   *  with no group; when a group is set, it belongs to this classification. */
+  classificationId: string | null;
+  /** `id` is null for legacy accounts that have neither a classification nor a group. */
+  classification: { id: string | null; code: string; name: string } | null;
+  /** Optional — not every account has a group ("parent account" in the UI). */
   accountGroupId: string | null;
   accountGroup: { id: string; code: string; name: string } | null;
   parentAccountId: string | null;
@@ -36,7 +42,9 @@ export interface CreateGLAccountPayload {
   name: string;
   category?: GLAccountCategory;
   normalBalance?: NormalBalance;
-  accountGroupId?: string;
+  classificationId?: string;
+  /** null clears the group, leaving the account directly under its classification. */
+  accountGroupId?: string | null;
   parentAccountId?: string;
   allowPosting?: boolean;
   description?: string;
@@ -368,15 +376,70 @@ export interface AccountCategoryDefinition {
 }
 
 export interface JournalLine {
+  accountClass: GLAccountCategory | '';
   targetAccount: string;
-  subledgerAccountId: string;
   description: string;
   debit: number | '';
   credit: number | '';
 }
 
+export type JournalEntryType =
+  | 'standard'
+  | 'adjusting'
+  | 'reversing'
+  | 'closing'
+  | 'opening'
+  | 'recurring';
+
+export type RecurrenceFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUALLY';
+export type RecurrenceEndType = 'NEVER' | 'ON_DATE';
+export type RecurringOnGeneration = 'AUTO_POST' | 'CREATE_DRAFT';
+
+export const RECURRENCE_FREQUENCY_OPTIONS: { value: RecurrenceFrequency; label: string }[] = [
+  { value: 'DAILY', label: 'Daily' },
+  { value: 'WEEKLY', label: 'Weekly' },
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'QUARTERLY', label: 'Quarterly' },
+  { value: 'ANNUALLY', label: 'Annually' },
+];
+
+export const RECURRING_ON_GENERATION_OPTIONS: { value: RecurringOnGeneration; label: string }[] = [
+  { value: 'AUTO_POST', label: 'Auto Post' },
+  { value: 'CREATE_DRAFT', label: 'Create as Draft' },
+];
+
+export const ADJUSTMENT_CATEGORY_OPTIONS = [
+  { value: 'accrual', label: 'Accrual' },
+  { value: 'depreciation', label: 'Depreciation' },
+  { value: 'bad_debt', label: 'Bad Debt' },
+  { value: 'deferral', label: 'Deferral' },
+  { value: 'prepaid_recognition', label: 'Prepaid Recognition' },
+];
+
 export interface JournalEntryFormValues {
   transactionDate: string;
+  /** Only used by adjusting entries. */
+  adjustmentCategory: string;
+  /** Only used by reversing entries: the posted journal being reversed and the date the
+   *  reversal posts on (transactionDate then holds the original journal's date). */
+  originalJournalId: string;
+  reversalDate: string;
+  /** Only used by closing and opening balance entries. */
+  fiscalYearId: string;
+  /** Closing entries: where the year's net profit or loss is posted. */
+  retainedEarningsAccountId: string;
+  /** Opening balance entries: the offsetting account (e.g. Opening Balance Equity). */
+  balancingAccountId: string;
+  /** Only used by recurring entries (the memo is `description`). */
+  recurringName: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endType: RecurrenceEndType;
+  /** Only meaningful when endType is 'ON_DATE'. */
+  endDate: string;
+  /** Derived from startDate + frequency; not user-editable. */
+  nextRunDate: string;
+  onGeneration: RecurringOnGeneration;
   fiscalPeriodId: string;
   currency: string;
   exchangeRate: number | '';
@@ -387,14 +450,27 @@ export interface JournalEntryFormValues {
 
 export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   transactionDate: '',
+  adjustmentCategory: '',
+  originalJournalId: '',
+  reversalDate: '',
+  fiscalYearId: '',
+  retainedEarningsAccountId: '',
+  balancingAccountId: '',
+  recurringName: '',
+  frequency: 'MONTHLY',
+  startDate: '',
+  endType: 'NEVER',
+  endDate: '',
+  nextRunDate: '',
+  onGeneration: 'CREATE_DRAFT',
   fiscalPeriodId: '',
   currency: '',
   exchangeRate: '',
   reference: '',
   description: '',
   lines: [
-    { targetAccount: '', subledgerAccountId: '', description: '', debit: '', credit: '' },
-    { targetAccount: '', subledgerAccountId: '', description: '', debit: '', credit: '' },
+    { accountClass: '', targetAccount: '', description: '', debit: '', credit: '' },
+    { accountClass: '', targetAccount: '', description: '', debit: '', credit: '' },
   ],
 };
 
@@ -497,6 +573,18 @@ export interface CreateJournalPayload {
   sourceModule?: string;
   sourceRecordType?: string;
   sourceRecordId?: string;
+  lines: CreateJournalLinePayload[];
+}
+
+export interface CreateRecurringJournalPayload {
+  name: string;
+  description: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  /** null = never ends. */
+  endDate: string | null;
+  nextRunDate: string;
+  onGeneration: RecurringOnGeneration;
   lines: CreateJournalLinePayload[];
 }
 

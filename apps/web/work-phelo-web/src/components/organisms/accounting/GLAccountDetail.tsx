@@ -76,11 +76,19 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
             <DetailField label="Category" value={account.category} />
             <DetailField label="Normal Balance" value={account.normalBalance} />
             <DetailField
+              label="Classification"
+              value={
+                account.classification?.id
+                  ? `${account.classification.code} — ${account.classification.name}`
+                  : 'Unclassified'
+              }
+            />
+            <DetailField
               label="Account Group"
               value={
                 account.accountGroup
                   ? `${account.accountGroup.code} — ${account.accountGroup.name}`
-                  : 'Unclassified'
+                  : '—'
               }
             />
             <DetailField label="Parent Account" value={account.parentAccount?.name ?? '—'} />
