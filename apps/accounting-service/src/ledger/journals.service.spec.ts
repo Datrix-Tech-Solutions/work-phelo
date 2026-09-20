@@ -472,6 +472,102 @@ describe('JournalsService', () => {
     expect(prisma.journalEntry.create).not.toHaveBeenCalled();
   });
 
+  describe('debit and credit stay on the account they were entered against', () => {
+    it('stores a credit-first entry exactly as entered and posts it unchanged', async () => {
+      const { prisma, service } = setup();
+      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+        tenantId: actor.tenantId,
+        baseCurrency: 'GHS',
+        fiscalYearStartMonth: 1,
+        decimalPlaces: 2,
+      });
+      prisma.accountingCurrency.findUnique.mockResolvedValue({
+        code: 'GHS',
+        decimalPlaces: 2,
+        isActive: true,
+      });
+      prisma.gLAccount.findMany.mockResolvedValue([
+        account('petty-cash'),
+        account('ecobank'),
+      ]);
+      prisma.journalEntry.create.mockImplementation(
+        (args: { data: unknown }) => args.data,
+      );
+
+      // Petty cash credited 300, Ecobank debited 300 — the credit line comes first.
+      const result = (await service.create(actor, {
+        transactionDate: '2026-07-10',
+        fiscalPeriodId: period.id,
+        transactionCurrency: 'GHS',
+        description: 'Credit line first',
+        lines: [
+          { glAccountId: 'petty-cash', credit: 300 },
+          { glAccountId: 'ecobank', debit: 300 },
+        ],
+      })) as unknown as {
+        lines: {
+          create: Array<{
+            glAccount: { connect: { id_tenantId: { id: string } } };
+            transactionDebit: Prisma.Decimal;
+            transactionCredit: Prisma.Decimal;
+            baseDebit: Prisma.Decimal;
+            baseCredit: Prisma.Decimal;
+          }>;
+        };
+      };
+
+      const [petty, eco] = result.lines.create;
+      expect(petty.glAccount.connect.id_tenantId.id).toBe('petty-cash');
+      expect(petty.transactionDebit.toString()).toBe('0');
+      expect(petty.transactionCredit.toString()).toBe('300');
+      expect(petty.baseDebit.toString()).toBe('0');
+      expect(petty.baseCredit.toString()).toBe('300');
+      expect(eco.glAccount.connect.id_tenantId.id).toBe('ecobank');
+      expect(eco.transactionDebit.toString()).toBe('300');
+      expect(eco.transactionCredit.toString()).toBe('0');
+      expect(eco.baseDebit.toString()).toBe('300');
+      expect(eco.baseCredit.toString()).toBe('0');
+    });
+
+    it('shows a credit on a debit-normal asset account as a negative running balance', async () => {
+      const { prisma, service } = setup();
+      prisma.gLAccount.findFirst.mockResolvedValue({
+        ...account('petty-cash'),
+        normalBalance: NormalBalance.DEBIT,
+      });
+      prisma.journalLine.findMany.mockResolvedValue([
+        {
+          ...journalLine('line-1', 'petty-cash', 0, 300),
+          journalEntry: { id: 'journal-1' },
+        },
+      ]);
+
+      const ledger = await service.accountLedger(actor.tenantId, 'petty-cash');
+
+      expect(ledger.entries[0].runningBalance).toBe('-300.00');
+      expect(ledger.closingBalance).toBe('-300.00');
+    });
+
+    it('shows a debit on a debit-normal asset account as a positive running balance', async () => {
+      const { prisma, service } = setup();
+      prisma.gLAccount.findFirst.mockResolvedValue({
+        ...account('petty-cash'),
+        normalBalance: NormalBalance.DEBIT,
+      });
+      prisma.journalLine.findMany.mockResolvedValue([
+        {
+          ...journalLine('line-1', 'petty-cash', 300, 0),
+          journalEntry: { id: 'journal-1' },
+        },
+      ]);
+
+      const ledger = await service.accountLedger(actor.tenantId, 'petty-cash');
+
+      expect(ledger.closingBalance).toBe('300.00');
+    });
+  });
+
   describe('journal numbers and types', () => {
     function readyToCreate() {
       const ctx = setup();
@@ -745,7 +841,11 @@ describe('JournalsService', () => {
     });
     expect(reversal.lines.create[0].transactionDebit.toString()).toBe('0');
     expect(reversal.lines.create[0].transactionCredit.toString()).toBe('100');
-    expect(prisma.journalEntry.updateMany).toHaveBeenCalledTimes(1);
+    // The original is left exactly as posted: no status flip, no edit.
+    expect(prisma.journalEntry.updateMany).not.toHaveBeenCalled();
+    expect(prisma.journalEntry.update).not.toHaveBeenCalled();
+    // The row is locked so two concurrent reversals cannot both proceed.
+    expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
   it('numbers a reversal as a REVERSING journal from its own sequence', async () => {

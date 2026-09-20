@@ -35,6 +35,11 @@ const JOURNAL_TYPE_CODES: Record<JournalEntryType, string> = {
 
 const journalInclude = {
   fiscalPeriod: true,
+  // Links both ways, so a journal can say it was reversed (and by what) without being edited.
+  reversalJournal: {
+    select: { id: true, journalNumber: true, transactionDate: true },
+  },
+  reversalOfJournal: { select: { id: true, journalNumber: true } },
   lines: {
     include: {
       glAccount: { select: { id: true, code: true, name: true } },
@@ -419,8 +424,16 @@ export class JournalsService {
     });
   }
 
+  /**
+   * Reverses a posted journal by posting a second, linked journal with every debit and credit
+   * swapped. The original is never modified — its status, lines and dates stay as posted — so
+   * both entries remain in the books; "reversed" is read from the link the reversal carries.
+   * The original's row is locked so two concurrent reversals cannot both go through (the unique
+   * reversal link is the backstop).
+   */
   async reverse(user: RequestUser, journalId: string, dto: ReverseJournalDto) {
     return this.prisma.$transaction(async (tx) => {
+      await this.lockJournal(tx, user.tenantId, journalId);
       const original = await tx.journalEntry.findFirst({
         where: { id: journalId, tenantId: user.tenantId },
         include: {
@@ -472,23 +485,6 @@ export class JournalsService {
       }
       await this.lockFiscalPeriod(tx, user.tenantId, period.id);
       await this.assertOpenPeriod(tx, user.tenantId, period.id, reversalDate);
-
-      const claimed = await tx.journalEntry.updateMany({
-        where: {
-          id: original.id,
-          tenantId: user.tenantId,
-          status: JournalStatus.POSTED,
-        },
-        data: {
-          status: JournalStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          updatedByUserId: user.id,
-        },
-      });
-      if (claimed.count !== 1) {
-        throw new ConflictException('Journal was changed by another request');
-      }
 
       return tx.journalEntry.create({
         data: {

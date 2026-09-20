@@ -7,6 +7,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { JournalEntryRecord, JournalRecordStatus } from '@/types/accounting';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 import { formatJournalNumber } from '@/lib/formatters';
+import { displayStatus } from '@/lib/accounting/journalStatus';
 import { useJournals } from '@/hooks';
 import { JournalDetailPanel } from '@/components/organisms/accounting/panels/JournalDetailPanel';
 
@@ -152,7 +153,9 @@ export function JournalEntriesTable() {
         key: 'status',
         label: 'Status',
         width: '100px',
-        render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
+        render: (row) => (
+          <Badge label={displayStatus(row)} variant={STATUS_VARIANT[displayStatus(row)]} />
+        ),
       },
     ],
     [],
