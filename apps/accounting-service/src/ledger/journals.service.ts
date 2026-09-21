@@ -50,8 +50,79 @@ const journalInclude = {
   },
 } satisfies Prisma.JournalEntryInclude;
 
-type JournalRecord = Prisma.JournalEntryGetPayload<{
-  include: typeof journalInclude;
+/** What a journal came from, so the ledger can show its originating transaction. */
+const journalSourceInclude = {
+  receivablePostedDocument: {
+    select: { id: true, documentType: true, documentNumber: true },
+  },
+  receivableReversalDocument: {
+    select: { id: true, documentType: true, documentNumber: true },
+  },
+  payablePostedDocument: {
+    select: { id: true, documentType: true, documentNumber: true },
+  },
+  payableReversalDocument: {
+    select: { id: true, documentType: true, documentNumber: true },
+  },
+  cashbookPostedTransaction: {
+    select: {
+      id: true,
+      transactionType: true,
+      reference: true,
+      receivableReceipt: { select: { id: true, receiptNumber: true } },
+      payablePayment: { select: { id: true, paymentNumber: true } },
+    },
+  },
+  cashbookReversalTransaction: {
+    select: {
+      id: true,
+      transactionType: true,
+      reference: true,
+      receivableReceipt: { select: { id: true, receiptNumber: true } },
+      payablePayment: { select: { id: true, paymentNumber: true } },
+    },
+  },
+  sourceEvent: {
+    select: { id: true, sourceModule: true, sourceEventType: true },
+  },
+} satisfies Prisma.JournalEntryInclude;
+
+const journalListInclude = {
+  ...journalInclude,
+  ...journalSourceInclude,
+} satisfies Prisma.JournalEntryInclude;
+
+export type JournalSourceCategory =
+  | 'RECEIVABLE'
+  | 'PAYABLE'
+  | 'CASH_AND_BANK'
+  | 'INTEGRATION'
+  | 'MANUAL';
+
+export interface JournalSource {
+  category: JournalSourceCategory;
+  /** Human label for the kind of transaction, e.g. "Invoice", "Receipt", "Transfer". */
+  kind: string;
+  /** The originating transaction's own number, when it has one. */
+  number: string | null;
+}
+
+const DOCUMENT_KIND: Record<string, string> = {
+  INVOICE: 'Invoice',
+  BILL: 'Bill',
+  CREDIT_NOTE: 'Credit note',
+};
+
+const CASHBOOK_KIND: Record<string, string> = {
+  RECEIPT: 'Receipt',
+  PAYMENT: 'Payment',
+  TRANSFER: 'Transfer',
+  CHARGE: 'Charge',
+  ADJUSTMENT: 'Adjustment',
+};
+
+type JournalWithSource = Prisma.JournalEntryGetPayload<{
+  include: typeof journalListInclude;
 }>;
 
 interface ResolvedJournalDraft {
@@ -191,7 +262,14 @@ export class JournalsService {
     const now = new Date();
     return tx.journalEntry.create({
       data: {
-        journalNumber: this.journalNumber('AUTO'),
+        journalNumber: await this.nextJournalNumber(
+          tx,
+          user.tenantId,
+          JournalEntryType.STANDARD,
+          draft.transactionDate,
+          'AUT',
+        ),
+        entryType: JournalEntryType.STANDARD,
         status: JournalStatus.POSTED,
         transactionDate: draft.transactionDate,
         postingDate: now,
@@ -229,8 +307,8 @@ export class JournalsService {
     });
   }
 
-  list(tenantId: string, query: QueryJournalsDto) {
-    return this.prisma.journalEntry.findMany({
+  async list(tenantId: string, query: QueryJournalsDto) {
+    const journals = await this.prisma.journalEntry.findMany({
       where: {
         tenantId,
         ...(query.status ? { status: query.status } : {}),
@@ -243,20 +321,21 @@ export class JournalsService {
             }
           : {}),
       },
-      include: journalInclude,
+      include: journalListInclude,
       orderBy: [{ transactionDate: 'desc' }, { createdAt: 'desc' }],
       ...(query.limit !== undefined ? { take: query.limit } : {}),
       ...(query.offset !== undefined ? { skip: query.offset } : {}),
     });
+    return journals.map((journal) => this.withSource(journal));
   }
 
-  async findOne(tenantId: string, journalId: string): Promise<JournalRecord> {
+  async findOne(tenantId: string, journalId: string) {
     const journal = await this.prisma.journalEntry.findFirst({
       where: { id: journalId, tenantId },
-      include: journalInclude,
+      include: journalListInclude,
     });
     if (!journal) throw new NotFoundException('Journal entry not found');
-    return journal;
+    return this.withSource(journal);
   }
 
   async updateDraft(
@@ -937,14 +1016,89 @@ export class JournalsService {
     });
   }
 
-  /** Random-suffixed number for system-generated (source event / integration) journals. */
-  private journalNumber(prefix: string) {
-    const date = new Date().toISOString().slice(0, 10).replaceAll('-', '');
-    return `${prefix}-${date}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  /** Adds `source` and drops the raw source relations from the response. */
+  private withSource(journal: JournalWithSource) {
+    const {
+      receivablePostedDocument,
+      receivableReversalDocument,
+      payablePostedDocument,
+      payableReversalDocument,
+      cashbookPostedTransaction,
+      cashbookReversalTransaction,
+      sourceEvent,
+      ...rest
+    } = journal;
+    return {
+      ...rest,
+      source: this.describeSource({
+        receivableDocument:
+          receivablePostedDocument ?? receivableReversalDocument,
+        payableDocument: payablePostedDocument ?? payableReversalDocument,
+        cashbookTransaction:
+          cashbookPostedTransaction ?? cashbookReversalTransaction,
+        sourceEvent,
+      }),
+    };
+  }
+
+  private describeSource(links: {
+    receivableDocument: JournalWithSource['receivablePostedDocument'];
+    payableDocument: JournalWithSource['payablePostedDocument'];
+    cashbookTransaction: JournalWithSource['cashbookPostedTransaction'];
+    sourceEvent: JournalWithSource['sourceEvent'];
+  }): JournalSource {
+    const { receivableDocument, payableDocument, cashbookTransaction } = links;
+    if (receivableDocument) {
+      return {
+        category: 'RECEIVABLE',
+        kind: DOCUMENT_KIND[receivableDocument.documentType] ?? 'Document',
+        number: receivableDocument.documentNumber,
+      };
+    }
+    if (payableDocument) {
+      return {
+        category: 'PAYABLE',
+        kind: DOCUMENT_KIND[payableDocument.documentType] ?? 'Document',
+        number: payableDocument.documentNumber,
+      };
+    }
+    if (cashbookTransaction) {
+      // Receipts and payments settle a customer invoice or supplier bill, so they belong to
+      // receivables/payables even though they move through Cash & Bank.
+      if (cashbookTransaction.receivableReceipt) {
+        return {
+          category: 'RECEIVABLE',
+          kind: 'Receipt',
+          number: cashbookTransaction.receivableReceipt.receiptNumber,
+        };
+      }
+      if (cashbookTransaction.payablePayment) {
+        return {
+          category: 'PAYABLE',
+          kind: 'Payment',
+          number: cashbookTransaction.payablePayment.paymentNumber,
+        };
+      }
+      return {
+        category: 'CASH_AND_BANK',
+        kind:
+          CASHBOOK_KIND[cashbookTransaction.transactionType] ?? 'Transaction',
+        number: cashbookTransaction.reference,
+      };
+    }
+    if (links.sourceEvent) {
+      return {
+        category: 'INTEGRATION',
+        kind: links.sourceEvent.sourceEventType,
+        number: null,
+      };
+    }
+    return { category: 'MANUAL', kind: 'Journal entry', number: null };
   }
 
   /**
-   * Next number for a manual journal: JE-<type code><yymm>-<n>, e.g. JE-STN2609-0000. Each type
+   * Next journal number: JE-<code><yymm>-<n>, e.g. JE-STN2609-0000. The code is the entry type's,
+   * or `AUT` for journals posted automatically from a transaction or integration event. Each type
    * has its own sequence per month (the type code and month are part of the number, so the
    * streams never collide and a gap in one is easy to spot). It starts at 0 and grows past four
    * digits when it has to. The counter row stays locked until the surrounding transaction
@@ -955,10 +1109,11 @@ export class JournalsService {
     tenantId: string,
     entryType: JournalEntryType,
     transactionDate: Date,
+    codeOverride?: string,
   ) {
     const yy = String(transactionDate.getUTCFullYear()).slice(-2);
     const mm = String(transactionDate.getUTCMonth() + 1).padStart(2, '0');
-    const key = `${JOURNAL_TYPE_CODES[entryType]}${yy}${mm}`;
+    const key = `${codeOverride ?? JOURNAL_TYPE_CODES[entryType]}${yy}${mm}`;
     const rows = await tx.$queryRaw<Array<{ lastNumber: number }>>`
       INSERT INTO "accounting"."JournalNumberSequence"
         ("id", "tenantId", "key", "lastNumber", "updatedAt")

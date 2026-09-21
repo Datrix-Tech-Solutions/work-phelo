@@ -542,10 +542,27 @@ export interface JournalLineRecord {
   costCentre: { id: string; code: string; name: string } | null;
 }
 
+export type JournalSourceCategory =
+  | 'RECEIVABLE'
+  | 'PAYABLE'
+  | 'CASH_AND_BANK'
+  | 'INTEGRATION'
+  | 'MANUAL';
+
+/** The transaction a journal was posted from. Present on the journal list and detail. */
+export interface JournalSource {
+  category: JournalSourceCategory;
+  /** e.g. "Invoice", "Bill", "Receipt", "Payment", "Transfer". */
+  kind: string;
+  /** The originating transaction's own number, when it has one. */
+  number: string | null;
+}
+
 export interface JournalEntryRecord {
   id: string;
   journalNumber: string;
   entryType: JournalEntryTypeCode;
+  source?: JournalSource;
   /** Set when a reversal of this journal exists. The original itself is never modified. */
   reversalJournal: { id: string; journalNumber: string; transactionDate: string } | null;
   /** Set on a reversal journal: the journal it reverses. */

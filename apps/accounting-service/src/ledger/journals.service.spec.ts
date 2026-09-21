@@ -362,8 +362,16 @@ describe('JournalsService', () => {
           { glAccountId: 'income', credit: 100 },
         ],
       },
-    )) as unknown as { status: JournalStatus; postedAt: Date };
+    )) as unknown as {
+      status: JournalStatus;
+      postedAt: Date;
+      journalNumber: string;
+      entryType: string;
+    };
 
+    // Automated journals draw from their own AUT series: JE-AUT<yymm>-<n>.
+    expect(result.journalNumber).toBe('JE-AUT2607-0000');
+    expect(result.entryType).toBe('STANDARD');
     expect(result.status).toBe(JournalStatus.POSTED);
     expect(result.postedAt).toBeInstanceOf(Date);
     expect(prisma.$executeRaw).toHaveBeenCalled();
@@ -565,6 +573,146 @@ describe('JournalsService', () => {
       const ledger = await service.accountLedger(actor.tenantId, 'petty-cash');
 
       expect(ledger.closingBalance).toBe('300.00');
+    });
+  });
+
+  describe('journal source', () => {
+    const base = {
+      ...draftJournal,
+      status: JournalStatus.POSTED,
+      receivablePostedDocument: null,
+      receivableReversalDocument: null,
+      payablePostedDocument: null,
+      payableReversalDocument: null,
+      cashbookPostedTransaction: null,
+      cashbookReversalTransaction: null,
+      sourceEvent: null,
+    };
+
+    async function sourceOf(overrides: Record<string, unknown>) {
+      const { prisma, service } = setup();
+      prisma.journalEntry.findMany.mockResolvedValue([
+        { ...base, ...overrides },
+      ]);
+      const [journal] = (await service.list(actor.tenantId, {})) as unknown as [
+        Record<string, unknown> & {
+          source: { category: string; kind: string; number: string | null };
+        },
+      ];
+      return journal;
+    }
+
+    it('labels a hand-typed journal as manual', async () => {
+      const journal = await sourceOf({});
+      expect(journal.source).toEqual({
+        category: 'MANUAL',
+        kind: 'Journal entry',
+        number: null,
+      });
+    });
+
+    it('labels an invoice posting as receivable, with the invoice number', async () => {
+      const journal = await sourceOf({
+        receivablePostedDocument: {
+          id: 'doc-1',
+          documentType: 'INVOICE',
+          documentNumber: 'INV26-00001',
+        },
+      });
+      expect(journal.source).toEqual({
+        category: 'RECEIVABLE',
+        kind: 'Invoice',
+        number: 'INV26-00001',
+      });
+    });
+
+    it('labels a bill posting as payable', async () => {
+      const journal = await sourceOf({
+        payablePostedDocument: {
+          id: 'doc-2',
+          documentType: 'BILL',
+          documentNumber: 'BIL26-00004',
+        },
+      });
+      expect(journal.source).toMatchObject({
+        category: 'PAYABLE',
+        kind: 'Bill',
+        number: 'BIL26-00004',
+      });
+    });
+
+    it('counts a receipt or payment as receivable or payable, not just cash', async () => {
+      const receipt = await sourceOf({
+        cashbookPostedTransaction: {
+          id: 'cb-1',
+          transactionType: 'RECEIPT',
+          reference: null,
+          receivableReceipt: { id: 'r-1', receiptNumber: 'ARR-2026-000001' },
+          payablePayment: null,
+        },
+      });
+      expect(receipt.source).toEqual({
+        category: 'RECEIVABLE',
+        kind: 'Receipt',
+        number: 'ARR-2026-000001',
+      });
+
+      const payment = await sourceOf({
+        cashbookPostedTransaction: {
+          id: 'cb-2',
+          transactionType: 'PAYMENT',
+          reference: null,
+          receivableReceipt: null,
+          payablePayment: { id: 'p-1', paymentNumber: 'APP-2026-000001' },
+        },
+      });
+      expect(payment.source).toMatchObject({
+        category: 'PAYABLE',
+        kind: 'Payment',
+      });
+    });
+
+    it('labels a bank transfer as cash and bank', async () => {
+      const journal = await sourceOf({
+        cashbookPostedTransaction: {
+          id: 'cb-3',
+          transactionType: 'TRANSFER',
+          reference: 'TRF-1',
+          receivableReceipt: null,
+          payablePayment: null,
+        },
+      });
+      expect(journal.source).toEqual({
+        category: 'CASH_AND_BANK',
+        kind: 'Transfer',
+        number: 'TRF-1',
+      });
+    });
+
+    it('uses the reversal side when the journal is a document reversal', async () => {
+      const journal = await sourceOf({
+        receivableReversalDocument: {
+          id: 'doc-3',
+          documentType: 'CREDIT_NOTE',
+          documentNumber: 'CN-2026-000001',
+        },
+      });
+      expect(journal.source).toMatchObject({
+        category: 'RECEIVABLE',
+        kind: 'Credit note',
+      });
+    });
+
+    it('does not leak the raw source relations into the response', async () => {
+      const journal = await sourceOf({
+        receivablePostedDocument: {
+          id: 'doc-1',
+          documentType: 'INVOICE',
+          documentNumber: 'INV26-00001',
+        },
+      });
+      expect(journal).not.toHaveProperty('receivablePostedDocument');
+      expect(journal).not.toHaveProperty('sourceEvent');
     });
   });
 
