@@ -22,7 +22,12 @@ import {
   JOURNAL_ENTRY_DEFAULTS,
 } from '@/types/accounting';
 import { cardClass } from '@/lib/utils';
-import { useCreateJournal, useJournal, useReverseJournal } from '@/hooks';
+import {
+  useCreateJournal,
+  useCreateRecurringJournal,
+  useJournal,
+  useReverseJournal,
+} from '@/hooks';
 import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
 import { formatJournalNumber } from '@/lib/formatters';
 import { useToast } from '@/hooks/useToast';
@@ -52,13 +57,17 @@ export default function NewJournalEntryPage() {
 
   // "Reverse & correct" lands here with ?correct=<journal id>: load that journal and pre-fill a
   // replacement from its lines, starting from the same entry type unless the user picks another.
-  const correctId = useSearchParams().get('correct') ?? undefined;
+  const searchParams = useSearchParams();
+  const correctId = searchParams.get('correct') ?? undefined;
+  const typeParam = ENTRY_TYPE_OPTIONS.find((o) => o.value === searchParams.get('type'))?.value;
   const { data: correcting } = useJournal(correctId);
   const { data: glAccounts = [] } = useGLAccounts();
   const [chosenType, setEntryType] = useState<JournalEntryType | null>(null);
   const correctingType = correcting?.entryType.toLowerCase() as JournalEntryType | undefined;
   const entryType: JournalEntryType =
-    chosenType ?? (correctingType && correctingType !== 'reversing' ? correctingType : 'standard');
+    chosenType ??
+    typeParam ??
+    (correctingType && correctingType !== 'reversing' ? correctingType : 'standard');
 
   const prefilled = useRef(false);
   useEffect(() => {
@@ -83,7 +92,9 @@ export default function NewJournalEntryPage() {
   const toast = useToast();
   const { mutateAsync: createJournal, isPending: isCreating } = useCreateJournal();
   const { mutateAsync: reverseJournal, isPending: isReversing } = useReverseJournal();
-  const isPending = isCreating || isReversing;
+  const { mutateAsync: createRecurring, isPending: isCreatingRecurring } =
+    useCreateRecurringJournal();
+  const isPending = isCreating || isReversing || isCreatingRecurring;
 
   const onSubmit = async (data: JournalEntryFormValues) => {
     if (entryType === 'reversing') {
@@ -120,8 +131,26 @@ export default function NewJournalEntryPage() {
     }
 
     if (entryType === 'recurring') {
-      // TODO: send as CreateRecurringJournalPayload once the recurring-entry API exists.
-      toast.error('Saving recurring entries is not available yet');
+      try {
+        await createRecurring({
+          name: data.recurringName,
+          description: data.description,
+          frequency: data.frequency,
+          startDate: data.startDate,
+          endDate: data.endType === 'ON_DATE' ? data.endDate : null,
+          onGeneration: data.onGeneration,
+          lines: lines.map((l) => ({
+            glAccountId: l.targetAccount,
+            description: l.description || undefined,
+            debit: Number(l.debit) || 0,
+            credit: Number(l.credit) || 0,
+          })),
+        });
+        toast.success(`Recurring entry "${data.recurringName}" created`);
+        router.push(`${base}/recurring`);
+      } catch (err) {
+        toast.error(extractError(err, 'Failed to save recurring entry'));
+      }
       return;
     }
 
@@ -187,7 +216,11 @@ export default function NewJournalEntryPage() {
             loadingText="Saving…"
             onClick={form.handleSubmit(onSubmit)}
           >
-            {entryType === 'reversing' ? 'Post Reversal' : 'Submit for Review'}
+            {entryType === 'reversing'
+              ? 'Post Reversal'
+              : entryType === 'recurring'
+                ? 'Save Recurring Entry'
+                : 'Submit for Review'}
           </Button>
         </div>
       </div>

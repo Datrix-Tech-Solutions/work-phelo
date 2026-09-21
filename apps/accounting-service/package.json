@@ -24,6 +24,7 @@
     "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.4.0",
     "@nestjs/platform-express": "^10.4.0",
+    "@nestjs/schedule": "^6.1.3",
     "@nestjs/swagger": "^7.4.2",
     "@prisma/client": "^5.22.0",
     "@work-phelo/config": "file:../../packages/config",
