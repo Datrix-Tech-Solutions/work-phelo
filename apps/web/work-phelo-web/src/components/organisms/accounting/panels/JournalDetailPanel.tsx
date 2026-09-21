@@ -14,6 +14,7 @@ import { extractError } from '@/lib/extractError';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 import { formatJournalNumber } from '@/lib/formatters';
 import { canReverse, displayStatus } from '@/lib/accounting/journalStatus';
+import { JOURNAL_SOURCE_LABELS, describeJournalSource } from '@/lib/accounting/journalSource';
 
 interface JournalDetailPanelProps {
   journal: JournalEntryRecord | null;
@@ -164,6 +165,12 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              {journal.source && (
+                <Field
+                  label="Source"
+                  value={`${JOURNAL_SOURCE_LABELS[journal.source.category]} · ${describeJournalSource(journal.source)}`}
+                />
+              )}
               <Field label="Transaction Date" value={fmtDate(journal.transactionDate)} />
               <Field label="Posting Date" value={fmtDate(journal.postingDate)} />
               <Field label="Fiscal Period" value={fiscalPeriodName ?? '—'} />

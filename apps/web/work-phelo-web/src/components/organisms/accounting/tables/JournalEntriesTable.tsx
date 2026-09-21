@@ -8,6 +8,11 @@ import { JournalEntryRecord, JournalRecordStatus } from '@/types/accounting';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 import { formatJournalNumber } from '@/lib/formatters';
 import { displayStatus } from '@/lib/accounting/journalStatus';
+import {
+  JOURNAL_SOURCE_LABELS,
+  JOURNAL_SOURCE_VARIANT,
+  describeJournalSource,
+} from '@/lib/accounting/journalSource';
 import { useJournals } from '@/hooks';
 import { JournalDetailPanel } from '@/components/organisms/accounting/panels/JournalDetailPanel';
 
@@ -67,6 +72,7 @@ export function JournalEntriesTable() {
         r.journalNumber.toLowerCase().includes(q) ||
         r.description.toLowerCase().includes(q) ||
         r.transactionCurrency.toLowerCase().includes(q) ||
+        (r.source ? describeJournalSource(r.source).toLowerCase().includes(q) : false) ||
         clientNames(r).some((name) => name.toLowerCase().includes(q)),
     );
   }, [search, data]);
@@ -85,6 +91,28 @@ export function JournalEntriesTable() {
             {formatJournalNumber(row.journalNumber)}
           </span>
         ),
+      },
+      {
+        key: 'source',
+        label: 'Source',
+        width: '190px',
+        render: (row) =>
+          row.source ? (
+            <div className="flex flex-col gap-0.5">
+              <Badge
+                label={JOURNAL_SOURCE_LABELS[row.source.category]}
+                variant={JOURNAL_SOURCE_VARIANT[row.source.category]}
+              />
+              <span
+                className="text-xs text-gray-500 truncate"
+                title={describeJournalSource(row.source)}
+              >
+                {describeJournalSource(row.source)}
+              </span>
+            </div>
+          ) : (
+            <span className="text-gray-400 text-sm">—</span>
+          ),
       },
       {
         key: 'transactionDate',
