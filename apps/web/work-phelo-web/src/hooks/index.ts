@@ -74,6 +74,7 @@ export * from './accounting/useAccountCategories';
 export * from './accounting/useAccountGroups';
 export * from './accounting/useStandardAccountHierarchy';
 export * from './accounting/useJournals';
+export * from './accounting/useRecurringJournals';
 export * from './accounting/usePostingRules';
 export * from './accounting/useReinsuranceBankConfirmations';
 export * from './accounting/useReinsuranceAccountingIntegrationStatus';

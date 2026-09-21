@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AccountingMasterDataService } from './accounting-master-data.service';
@@ -18,6 +19,9 @@ import { JournalsController } from './journals.controller';
 import { JournalsService } from './journals.service';
 import { PayablesController } from './payables.controller';
 import { PayablesService } from './payables.service';
+import { RecurringJournalsController } from './recurring-journals.controller';
+import { RecurringJournalsCron } from './recurring-journals.cron';
+import { RecurringJournalsService } from './recurring-journals.service';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { ReceivablesController } from './receivables.controller';
@@ -26,7 +30,7 @@ import { TransactionTypeRulesController } from './transaction-type-rules.control
 import { TransactionTypeRulesService } from './transaction-type-rules.service';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, ScheduleModule.forRoot()],
   controllers: [
     AccountingSettingsController,
     AccountsController,
@@ -37,6 +41,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     InternalSubledgersController,
     JournalsController,
     PayablesController,
+    RecurringJournalsController,
     ReceivablesController,
     ReportsController,
     TransactionTypeRulesController,
@@ -50,6 +55,8 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     JournalPolicy,
     JournalsService,
     PayablesService,
+    RecurringJournalsCron,
+    RecurringJournalsService,
     ReceivablesService,
     ReportsService,
     TransactionTypeRulesService,

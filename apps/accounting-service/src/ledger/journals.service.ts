@@ -144,7 +144,12 @@ export class JournalsService {
     private readonly policy: JournalPolicy,
   ) {}
 
-  async create(user: RequestUser, dto: CreateJournalDto) {
+  async create(
+    user: RequestUser,
+    dto: CreateJournalDto,
+    /** Set by the recurring-entry generator: which template and run date this journal is for. */
+    recurring?: { recurringJournalId: string; recurringRunDate: Date },
+  ) {
     if (dto.idempotencyKey) {
       const existing = await this.prisma.journalEntry.findUnique({
         where: {
@@ -174,6 +179,19 @@ export class JournalsService {
           data: {
             journalNumber,
             entryType,
+            ...(recurring
+              ? {
+                  recurringJournal: {
+                    connect: {
+                      id_tenantId: {
+                        id: recurring.recurringJournalId,
+                        tenantId: user.tenantId,
+                      },
+                    },
+                  },
+                  recurringRunDate: recurring.recurringRunDate,
+                }
+              : {}),
             transactionDate: draft.transactionDate,
             fiscalPeriod: {
               connect: {

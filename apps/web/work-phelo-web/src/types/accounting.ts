@@ -608,6 +608,8 @@ export interface CreateJournalPayload {
   lines: CreateJournalLinePayload[];
 }
 
+export type RecurringJournalStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
+
 export interface CreateRecurringJournalPayload {
   name: string;
   description: string;
@@ -615,9 +617,35 @@ export interface CreateRecurringJournalPayload {
   startDate: string;
   /** null = never ends. */
   endDate: string | null;
-  nextRunDate: string;
+  /** The next run is calculated by the server. */
   onGeneration: RecurringOnGeneration;
   lines: CreateJournalLinePayload[];
+}
+
+export interface RecurringJournalRecord {
+  id: string;
+  name: string;
+  description: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endDate: string | null;
+  nextRunDate: string;
+  onGeneration: RecurringOnGeneration;
+  status: RecurringJournalStatus;
+  transactionCurrency: string;
+  lastRunAt: string | null;
+  /** Why the last run failed, or a note that a journal was created but could not be posted. */
+  lastError: string | null;
+  lastErrorAt: string | null;
+  createdAt: string;
+  lines: Array<{
+    id: string;
+    glAccountId: string;
+    description: string | null;
+    debit: string;
+    credit: string;
+    glAccount: { id: string; code: string; name: string };
+  }>;
 }
 
 export type UpdateDraftJournalPayload = Partial<Omit<CreateJournalPayload, 'lines'>> & {

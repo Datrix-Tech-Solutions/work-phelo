@@ -341,6 +341,7 @@ model GLAccount {
   payableApAccounts AccountingPayableDocument[]    @relation("PayableApAccount")
   payablePaymentApAccounts AccountingPayablePayment[] @relation("PayablePaymentApAccount")
   budgetLines       BudgetLine[]
+  recurringLines    RecurringJournalLine[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -477,6 +478,85 @@ model SubledgerAccount {
   @@schema("accounting")
 }
 
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+
+  @@schema("accounting")
+}
+
+/// What a recurring entry does each time it comes due.
+enum RecurringOnGeneration {
+  AUTO_POST
+  CREATE_DRAFT
+
+  @@schema("accounting")
+}
+
+enum RecurringJournalStatus {
+  ACTIVE
+  PAUSED
+  /// Ran past its end date; nothing left to generate.
+  COMPLETED
+  CANCELLED
+
+  @@schema("accounting")
+}
+
+/// A template that generates a journal on a schedule. Dates are calendar dates (no time).
+/// The generator creates one journal per due date; (recurringJournalId, recurringRunDate) on
+/// JournalEntry makes a date impossible to generate twice.
+model RecurringJournal {
+  id                  String                 @id @default(uuid())
+  tenantId            String
+  name                String
+  description         String
+  frequency           RecurrenceFrequency
+  startDate           DateTime               @db.Date
+  /// Null = never ends.
+  endDate             DateTime?              @db.Date
+  nextRunDate         DateTime               @db.Date
+  onGeneration        RecurringOnGeneration
+  status              RecurringJournalStatus @default(ACTIVE)
+  /// Base currency of the tenant when the template was created; generated journals use it.
+  transactionCurrency String
+  lastRunAt           DateTime?
+  lastError           String?
+  lastErrorAt         DateTime?
+  createdByUserId     String
+  updatedByUserId     String
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  lines               RecurringJournalLine[]
+  journals            JournalEntry[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, name])
+  @@index([status, nextRunDate])
+  @@index([tenantId, status])
+  @@schema("accounting")
+}
+
+model RecurringJournalLine {
+  id                 String           @id @default(uuid())
+  tenantId           String
+  recurringJournalId String
+  lineNumber         Int
+  glAccountId        String
+  description        String?
+  debit              Decimal          @default(0) @db.Decimal(20, 4)
+  credit             Decimal          @default(0) @db.Decimal(20, 4)
+  recurringJournal   RecurringJournal @relation(fields: [recurringJournalId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount          GLAccount        @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([recurringJournalId, lineNumber])
+  @@index([tenantId, glAccountId])
+  @@schema("accounting")
+}
+
 /// Gapless per-tenant counters behind journal numbers, one per type and month
 /// (key = e.g. "STN2609"). lastNumber is the most recently issued number, starting at 0.
 model JournalNumberSequence {
@@ -509,6 +589,9 @@ model JournalEntry {
   sourceRecordType            String?
   sourceRecordId              String?
   reversalOfJournalId         String?
+  /// Set when a recurring entry generated this journal, with the run date it was generated for.
+  recurringJournalId          String?
+  recurringRunDate            DateTime?                     @db.Date
   createdByUserId             String
   updatedByUserId             String
   postedByUserId              String?
@@ -518,6 +601,7 @@ model JournalEntry {
   postedAt                    DateTime?
   reversedAt                  DateTime?
   fiscalPeriod                FiscalPeriod                  @relation(fields: [fiscalPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  recurringJournal            RecurringJournal?             @relation(fields: [recurringJournalId, tenantId], references: [id, tenantId], onDelete: Restrict)
   lines                       JournalLine[]
   reversalOfJournal           JournalEntry?                 @relation("JournalReversal", fields: [reversalOfJournalId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalJournal             JournalEntry?                 @relation("JournalReversal")
@@ -533,6 +617,7 @@ model JournalEntry {
   @@unique([tenantId, journalNumber])
   @@unique([tenantId, idempotencyKey])
   @@unique([reversalOfJournalId, tenantId])
+  @@unique([recurringJournalId, recurringRunDate])
   @@index([tenantId, status, transactionDate])
   @@index([tenantId, fiscalPeriodId, status])
   @@index([tenantId, sourceModule, sourceRecordType, sourceRecordId])

@@ -25,6 +25,9 @@ import {
   GLAccountCategory,
   JournalEntryType,
   JournalStatus,
+  RecurrenceFrequency,
+  RecurringJournalStatus,
+  RecurringOnGeneration,
   NormalBalance,
   RecordStatus,
   TransactionTypeCategory,
@@ -872,4 +875,125 @@ export class QueryJournalsDto {
   @IsInt()
   @Min(0)
   offset?: number;
+}
+
+export class RecurringJournalLineDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  glAccountId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ example: 100, minimum: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  debit?: number;
+
+  @ApiPropertyOptional({ example: 0, minimum: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  credit?: number;
+}
+
+export class CreateRecurringJournalDto {
+  @ApiProperty({ example: 'Monthly office rent' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ description: 'Memo copied onto every generated journal.' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(1000)
+  description!: string;
+
+  @ApiProperty({ enum: RecurrenceFrequency })
+  @IsEnum(RecurrenceFrequency)
+  frequency!: RecurrenceFrequency;
+
+  @ApiProperty({ type: String, format: 'date' })
+  @IsDateString()
+  startDate!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: 'Omit or send null to repeat forever.',
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string | null;
+
+  @ApiProperty({ enum: RecurringOnGeneration })
+  @IsEnum(RecurringOnGeneration)
+  onGeneration!: RecurringOnGeneration;
+
+  @ApiProperty({ type: [RecurringJournalLineDto], minItems: 2 })
+  @IsArray()
+  @ArrayMinSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => RecurringJournalLineDto)
+  lines!: RecurringJournalLineDto[];
+}
+
+export class UpdateRecurringJournalDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  @ApiPropertyOptional({ enum: RecurrenceFrequency })
+  @IsOptional()
+  @IsEnum(RecurrenceFrequency)
+  frequency?: RecurrenceFrequency;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: 'Send null to repeat forever.',
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string | null;
+
+  @ApiPropertyOptional({ enum: RecurringOnGeneration })
+  @IsOptional()
+  @IsEnum(RecurringOnGeneration)
+  onGeneration?: RecurringOnGeneration;
+
+  @ApiPropertyOptional({ type: [RecurringJournalLineDto], minItems: 2 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => RecurringJournalLineDto)
+  lines?: RecurringJournalLineDto[];
+}
+
+export class QueryRecurringJournalsDto {
+  @ApiPropertyOptional({ enum: RecurringJournalStatus })
+  @IsOptional()
+  @IsEnum(RecurringJournalStatus)
+  status?: RecurringJournalStatus;
 }
