@@ -66,7 +66,7 @@ export function ChartOfAccountsBreadcrumb({
         trail.push(categoryOf(scope.account.category));
         if (classification) trail.push(classificationCrumb(classification));
         if (group) trail.push(groupCrumb(group));
-        trail.push({ label: scope.account.name, scope });
+        trail.push({ label: `${scope.account.name} (${scope.account.code})`, scope });
         break;
       }
     }

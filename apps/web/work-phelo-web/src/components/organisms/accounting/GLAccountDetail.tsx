@@ -49,10 +49,6 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
           className="border-b-0"
         />
         <div className="flex items-center gap-3 pb-2 shrink-0">
-          <div className="text-right">
-            <h3 className="text-sm font-semibold text-gray-900">{account.name}</h3>
-            <p className="text-xs text-gray-500">{account.code}</p>
-          </div>
           <Badge
             label={account.status}
             variant={account.status === 'ACTIVE' ? 'success' : 'neutral'}
