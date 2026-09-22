@@ -232,6 +232,24 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
             />
           )}
         />
+
+        {isAdjusting && (
+          <Controller
+            name="adjustmentCategory"
+            control={control}
+            rules={{ required: 'Adjustment category is required' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Adjustment Category"
+                placeholder="Select category…"
+                options={ADJUSTMENT_CATEGORY_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.adjustmentCategory?.message}
+              />
+            )}
+          />
+        )}
       </div>
 
       {needsFiscalYear && (
@@ -296,24 +314,6 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
             </p>
           )}
         </div>
-      )}
-
-      {isAdjusting && (
-        <Controller
-          name="adjustmentCategory"
-          control={control}
-          rules={{ required: 'Adjustment category is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Adjustment Category"
-              placeholder="Select category…"
-              options={ADJUSTMENT_CATEGORY_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.adjustmentCategory?.message}
-            />
-          )}
-        />
       )}
 
       {needsExchangeRate && (

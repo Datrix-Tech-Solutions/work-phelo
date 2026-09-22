@@ -6,6 +6,7 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
 import { AccountingCashAccount, AccountingCashAccountKind, GLAccount } from '@/types/accounting';
@@ -183,7 +184,7 @@ export function CashAccountsTable() {
       {
         key: 'isActive',
         label: 'Status',
-        width: '80px',
+        width: '100px',
         render: (row) =>
           row.status === 'complete' ? (
             <Badge
@@ -194,7 +195,48 @@ export function CashAccountsTable() {
             <Badge label="Setup Required" variant="warning" />
           ),
       },
+      {
+        key: 'actions',
+        label: 'Actions',
+        width: '170px',
+        className: 'pr-6',
+        render: (row) =>
+          row.status === 'complete' ? (
+            <div className="flex items-center gap-2">
+              <TableButton
+                variant="gray"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditTarget(row.cashAccount);
+                }}
+              >
+                Update
+              </TableButton>
+              <TableButton
+                variant={row.cashAccount.isActive ? 'red' : 'green'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (row.cashAccount.isActive) setDeactivateTarget(row.cashAccount);
+                  else reactivate(row.cashAccount);
+                }}
+              >
+                {row.cashAccount.isActive ? 'Deactivate' : 'Reactivate'}
+              </TableButton>
+            </div>
+          ) : (
+            <TableButton
+              variant="blue"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSetupTarget(row.glAccount);
+              }}
+            >
+              Complete Setup
+            </TableButton>
+          ),
+      },
     ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -258,21 +300,6 @@ export function CashAccountsTable() {
             router.push(`/${tenantSlug}/accounting/cashandbank/${row.cashAccount.id}`);
           }
         }}
-        rowActions={(row) =>
-          row.status === 'complete'
-            ? [
-                { label: 'Update', onClick: () => setEditTarget(row.cashAccount) },
-                {
-                  label: row.cashAccount.isActive ? 'Deactivate' : 'Reactivate',
-                  onClick: () =>
-                    row.cashAccount.isActive
-                      ? setDeactivateTarget(row.cashAccount)
-                      : reactivate(row.cashAccount),
-                  danger: row.cashAccount.isActive,
-                },
-              ]
-            : [{ label: 'Complete Setup', onClick: () => setSetupTarget(row.glAccount) }]
-        }
         emptyMessage="No cash or bank accounts found"
         currentPage={page}
         totalPages={totalPages}

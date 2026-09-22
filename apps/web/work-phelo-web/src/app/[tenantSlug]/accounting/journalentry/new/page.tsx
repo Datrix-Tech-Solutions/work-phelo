@@ -15,6 +15,7 @@ import { ReversingEntryForm } from '@/components/molecules/accounting/ReversingE
 import { JournalLinesSection } from '@/components/molecules/accounting/JournalLinesSection';
 import { JournalTotalsSection } from '@/components/molecules/accounting/JournalTotalsSection';
 import {
+  AdjustmentCategoryCode,
   GLAccountCategory,
   JournalEntryFormValues,
   JournalEntryType,
@@ -157,6 +158,10 @@ export default function NewJournalEntryPage() {
     try {
       const journal = await createJournal({
         entryType: entryType.toUpperCase() as JournalEntryTypeCode,
+        adjustmentCategory:
+          entryType === 'adjusting'
+            ? (data.adjustmentCategory.toUpperCase() as AdjustmentCategoryCode)
+            : undefined,
         transactionDate: data.transactionDate,
         fiscalPeriodId: data.fiscalPeriodId,
         transactionCurrency: data.currency,

@@ -61,15 +61,15 @@ export default function HRLayout({
   }
 
   return (
-    <AppBackground className="h-dvh overflow-hidden flex layout-hr">
-      <HrSidebar groups={groups} forceOpen={pinned} onRequestClose={() => setPinned(false)} />
-      <div className="flex flex-1 min-h-0 min-w-0 flex-col relative">
-        <TopNav
-          showMenuButton
-          onMenuClick={() => setPinned((v) => !v)}
-          userInitials={initials}
-          logoVariant="image"
-        />
+    <AppBackground className="h-dvh overflow-hidden flex flex-col layout-hr">
+      <TopNav
+        showMenuButton
+        onMenuClick={() => setPinned((v) => !v)}
+        userInitials={initials}
+        logoVariant="image"
+      />
+      <div className="flex flex-1 min-h-0 relative">
+        <HrSidebar groups={groups} forceOpen={pinned} onRequestClose={() => setPinned(false)} />
         <main className="flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col">{children}</main>
       </div>
 

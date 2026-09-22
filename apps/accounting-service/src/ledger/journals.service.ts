@@ -7,6 +7,7 @@ import {
 import { randomUUID } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
+  AdjustmentCategory,
   FiscalPeriodStatus,
   JournalEntryType,
   JournalStatus,
@@ -126,6 +127,8 @@ type JournalWithSource = Prisma.JournalEntryGetPayload<{
 }>;
 
 interface ResolvedJournalDraft {
+  entryType: JournalEntryType;
+  adjustmentCategory: AdjustmentCategory | null;
   transactionDate: Date;
   fiscalPeriodId: string;
   transactionCurrency: string;
@@ -168,17 +171,17 @@ export class JournalsService {
       // number back and the sequence stays gapless.
       return await this.prisma.$transaction(async (tx) => {
         const draft = await this.resolveDraft(tx, user.tenantId, dto);
-        const entryType = dto.entryType ?? JournalEntryType.STANDARD;
         const journalNumber = await this.nextJournalNumber(
           tx,
           user.tenantId,
-          entryType,
+          draft.entryType,
           draft.transactionDate,
         );
         return tx.journalEntry.create({
           data: {
             journalNumber,
-            entryType,
+            entryType: draft.entryType,
+            adjustmentCategory: draft.adjustmentCategory,
             ...(recurring
               ? {
                   recurringJournal: {
@@ -726,6 +729,17 @@ export class JournalsService {
     dto: Omit<CreateJournalDto, 'idempotencyKey'> &
       Partial<Pick<CreateJournalDto, 'idempotencyKey'>>,
   ): Promise<ResolvedJournalDraft> {
+    const entryType = dto.entryType ?? JournalEntryType.STANDARD;
+    if (entryType === JournalEntryType.ADJUSTING && !dto.adjustmentCategory) {
+      throw new BadRequestException(
+        'An adjustment category is required for an adjusting entry',
+      );
+    }
+    if (entryType !== JournalEntryType.ADJUSTING && dto.adjustmentCategory) {
+      throw new BadRequestException(
+        'An adjustment category can only be set on an adjusting entry',
+      );
+    }
     this.policy.validateBalanced(dto.lines);
     const transactionDate = new Date(dto.transactionDate);
     const period = await client.fiscalPeriod.findFirst({
@@ -779,6 +793,8 @@ export class JournalsService {
     );
 
     return {
+      entryType,
+      adjustmentCategory: dto.adjustmentCategory ?? null,
       transactionDate,
       fiscalPeriodId: period.id,
       transactionCurrency: dto.transactionCurrency,

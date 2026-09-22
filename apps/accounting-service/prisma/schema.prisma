@@ -488,6 +488,17 @@ enum RecurrenceFrequency {
   @@schema("accounting")
 }
 
+/// Why an Adjusting journal was needed. Set only when entryType is ADJUSTING.
+enum AdjustmentCategory {
+  ACCRUAL
+  DEPRECIATION
+  BAD_DEBT
+  DEFERRAL
+  PREPAID_RECOGNITION
+
+  @@schema("accounting")
+}
+
 /// What a recurring entry does each time it comes due.
 enum RecurringOnGeneration {
   AUTO_POST
@@ -575,6 +586,8 @@ model JournalEntry {
   tenantId                    String
   journalNumber               String
   entryType                   JournalEntryType              @default(STANDARD)
+  /// Set only when entryType is ADJUSTING.
+  adjustmentCategory          AdjustmentCategory?
   status                      JournalStatus                 @default(DRAFT)
   transactionDate             DateTime
   postingDate                 DateTime?

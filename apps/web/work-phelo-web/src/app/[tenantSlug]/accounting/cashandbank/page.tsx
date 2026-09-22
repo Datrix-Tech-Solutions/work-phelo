@@ -27,8 +27,8 @@ export default function CashAndBankPage() {
       <CashAndBankStatsRow
         isLoading={isLoadingStats}
         totalCashPosition={formatTotals(stats?.netCashPosition)}
-        cashInflowMtd={formatTotals(stats?.inflowMtd)}
-        cashOutflowMtd={formatTotals(stats?.outflowMtd)}
+        cashInflowYtd={formatTotals(stats?.inflowYtd)}
+        cashOutflowYtd={formatTotals(stats?.outflowYtd)}
       />
 
       <CashAccountsTable />

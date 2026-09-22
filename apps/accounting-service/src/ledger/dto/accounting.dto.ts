@@ -23,6 +23,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   FiscalPeriodStatus,
   GLAccountCategory,
+  AdjustmentCategory,
   JournalEntryType,
   JournalStatus,
   RecurrenceFrequency,
@@ -719,6 +720,15 @@ export class CreateJournalDto {
   @IsOptional()
   @IsEnum(JournalEntryType)
   entryType?: JournalEntryType;
+
+  @ApiPropertyOptional({
+    enum: AdjustmentCategory,
+    description:
+      'Only valid (and required) when entryType is ADJUSTING; rejected otherwise.',
+  })
+  @IsOptional()
+  @IsEnum(AdjustmentCategory)
+  adjustmentCategory?: AdjustmentCategory;
 
   @ApiPropertyOptional({
     example: 1,

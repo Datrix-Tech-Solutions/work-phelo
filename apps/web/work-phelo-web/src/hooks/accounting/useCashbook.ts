@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { CASHBOOK_KEY, CASH_ACCOUNTS_KEY } from '@/hooks/accounting/useCashAccounts';
+import { useFiscalYears } from '@/hooks/accounting/useFiscalPeriods';
 import type {
   CashbookTransaction,
   CreateCashbookAdjustmentPayload,
@@ -25,8 +26,8 @@ export function useCashbookTransactions(params: QueryCashbookParams = {}) {
 
 export interface CashAndBankStats {
   netCashPosition: Record<string, number>;
-  inflowMtd: Record<string, number>;
-  outflowMtd: Record<string, number>;
+  inflowYtd: Record<string, number>;
+  outflowYtd: Record<string, number>;
 }
 
 function localDate(value: Date) {
@@ -44,12 +45,21 @@ function add(totals: Record<string, number>, currency: string, amount: string) {
  * Cashbook is the authoritative cash posting path. The API intentionally has no
  * multi-currency aggregate endpoint, so this reads every posted transaction and
  * returns separate per-currency totals rather than applying an unapproved FX rate.
+ *
+ * Inflow/outflow are year-to-date, starting from the fiscal year that contains today rather
+ * than the calendar year — a tenant whose fiscal year doesn't start in January should still
+ * see "this year" mean their fiscal year. Falls back to 1 January if no fiscal year covers
+ * today (e.g. none has been set up yet).
  */
 export function useCashAndBankStats() {
-  const start = new Date();
-  start.setDate(1);
-  const fromDate = localDate(start);
+  const { data: fiscalYears = [] } = useFiscalYears();
   const toDate = localDate(new Date());
+  const currentYear = fiscalYears.find(
+    (year) => year.startDate.slice(0, 10) <= toDate && toDate <= year.endDate.slice(0, 10),
+  );
+  const fromDate = currentYear
+    ? currentYear.startDate.slice(0, 10)
+    : `${new Date().getFullYear()}-01-01`;
 
   return useQuery({
     queryKey: [...CASHBOOK_KEY, 'stats', fromDate, toDate],
@@ -69,8 +79,8 @@ export function useCashAndBankStats() {
       );
       const stats: CashAndBankStats = {
         netCashPosition: {},
-        inflowMtd: {},
-        outflowMtd: {},
+        inflowYtd: {},
+        outflowYtd: {},
       };
 
       for (const transaction of transactions) {
@@ -84,7 +94,7 @@ export function useCashAndBankStats() {
         const transactionDate = transaction.transactionDate.slice(0, 10);
         if (transactionDate < fromDate || transactionDate > toDate) continue;
         add(
-          isInflow ? stats.inflowMtd : stats.outflowMtd,
+          isInflow ? stats.inflowYtd : stats.outflowYtd,
           transaction.currency,
           transaction.amount,
         );
