@@ -316,7 +316,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
         effectiveCollapsed ? '-translate-x-full md:w-10' : 'translate-x-0 md:w-50',
       )}
     >
-      <nav className="flex-1 overflow-y-auto pt-10 pb-2 flex flex-col">
+      <nav className="flex-1 overflow-y-auto pt-4 pb-2 flex flex-col">
         {groups.map((group) => {
           const visibleItems = group.items.filter((item) => item.enabled !== false);
           if (visibleItems.length === 0) return null;

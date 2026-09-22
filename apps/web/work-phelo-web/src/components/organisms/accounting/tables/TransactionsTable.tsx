@@ -148,7 +148,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'documentNumber',
         label: 'Transaction ID',
-        width: '120px',
+        width: '160px',
         render: (row) => (
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
             {row.documentNumber}

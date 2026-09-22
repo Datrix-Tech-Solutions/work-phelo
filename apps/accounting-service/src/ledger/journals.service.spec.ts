@@ -7,6 +7,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   FiscalPeriodStatus,
   GLAccountCategory,
+  AdjustmentCategory,
   JournalEntryType,
   JournalStatus,
   NormalBalance,
@@ -716,6 +717,88 @@ describe('JournalsService', () => {
     });
   });
 
+  describe('adjustment category', () => {
+    function readyToCreate() {
+      const { prisma, service } = setup();
+      prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+      prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+        tenantId: actor.tenantId,
+        baseCurrency: 'GHS',
+        fiscalYearStartMonth: 1,
+        decimalPlaces: 2,
+      });
+      prisma.accountingCurrency.findUnique.mockResolvedValue({
+        code: 'GHS',
+        decimalPlaces: 2,
+        isActive: true,
+      });
+      prisma.gLAccount.findMany.mockResolvedValue([
+        account('cash'),
+        account('income'),
+      ]);
+      prisma.journalEntry.create.mockImplementation(
+        (args: { data: unknown }) => args.data,
+      );
+      return { prisma, service };
+    }
+    const input = {
+      transactionDate: '2026-07-10',
+      fiscalPeriodId: period.id,
+      transactionCurrency: 'GHS',
+      description: 'Adjusting entry',
+      lines: [
+        { glAccountId: 'cash', debit: 100 },
+        { glAccountId: 'income', credit: 100 },
+      ],
+    };
+
+    it('requires a category on an adjusting entry', async () => {
+      const { prisma, service } = readyToCreate();
+
+      await expect(
+        service.create(actor, {
+          ...input,
+          entryType: JournalEntryType.ADJUSTING,
+        }),
+      ).rejects.toThrow('adjustment category is required');
+      expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it('stores the category on an adjusting entry', async () => {
+      const { service } = readyToCreate();
+
+      const result = (await service.create(actor, {
+        ...input,
+        entryType: JournalEntryType.ADJUSTING,
+        adjustmentCategory: AdjustmentCategory.DEPRECIATION,
+      })) as unknown as { adjustmentCategory: string };
+
+      expect(result.adjustmentCategory).toBe('DEPRECIATION');
+    });
+
+    it('rejects a category on a non-adjusting entry', async () => {
+      const { prisma, service } = readyToCreate();
+
+      await expect(
+        service.create(actor, {
+          ...input,
+          adjustmentCategory: AdjustmentCategory.BAD_DEBT,
+        }),
+      ).rejects.toThrow('only be set on an adjusting entry');
+      expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it('leaves the category null on a standard entry', async () => {
+      const { service } = readyToCreate();
+
+      const result = (await service.create(actor, input)) as unknown as {
+        adjustmentCategory: string | null;
+      };
+
+      expect(result.adjustmentCategory).toBeNull();
+    });
+  });
+
   describe('journal numbers and types', () => {
     function readyToCreate() {
       const ctx = setup();
@@ -770,6 +853,7 @@ describe('JournalsService', () => {
       const result = (await service.create(actor, {
         ...input,
         entryType: JournalEntryType.ADJUSTING,
+        adjustmentCategory: AdjustmentCategory.ACCRUAL,
       })) as unknown as { journalNumber: string; entryType: string };
 
       expect(result.journalNumber).toBe('JE-ADJ2607-0012');

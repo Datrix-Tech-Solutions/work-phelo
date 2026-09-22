@@ -51,28 +51,30 @@ export default function AccountingLayout({
   return (
     <AppBackground className="h-dvh overflow-hidden flex layout-accounting">
       {hasVisitedHr && <ModuleRail groups={parkedHrGroups} />}
-      <Sidebar groups={groups} collapsed={collapsed} />
-      <div className="flex flex-1 min-h-0 min-w-0 flex-col relative">
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col">
         <TopNav
           showMenuButton
           onMenuClick={() => setCollapsed((v) => !v)}
           userInitials={initials}
           logoVariant="image"
         />
-        {!collapsed && (
-          <div
-            className="absolute inset-0 bg-black/40 z-30 md:hidden"
-            onClick={() => setCollapsed(true)}
-          />
-        )}
-        <main
-          className="flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col"
-          onClick={() => {
-            if (!collapsed) setCollapsed(true);
-          }}
-        >
-          {children}
-        </main>
+        <div className="flex flex-1 min-h-0 relative">
+          <Sidebar groups={groups} collapsed={collapsed} />
+          {!collapsed && (
+            <div
+              className="absolute inset-0 bg-black/40 z-30 md:hidden"
+              onClick={() => setCollapsed(true)}
+            />
+          )}
+          <main
+            className="flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col"
+            onClick={() => {
+              if (!collapsed) setCollapsed(true);
+            }}
+          >
+            {children}
+          </main>
+        </div>
       </div>
     </AppBackground>
   );

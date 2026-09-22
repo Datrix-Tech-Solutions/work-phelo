@@ -400,6 +400,15 @@ export type JournalEntryTypeCode =
   | 'OPENING'
   | 'RECURRING';
 
+export const JOURNAL_ENTRY_TYPE_LABELS: Record<JournalEntryTypeCode, string> = {
+  STANDARD: 'Standard',
+  ADJUSTING: 'Adjusting Entry',
+  REVERSING: 'Reversing Entry',
+  CLOSING: 'Closing Entry',
+  OPENING: 'Opening Balance Entry',
+  RECURRING: 'Recurring Entry',
+};
+
 export type RecurrenceFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUALLY';
 export type RecurrenceEndType = 'NEVER' | 'ON_DATE';
 export type RecurringOnGeneration = 'AUTO_POST' | 'CREATE_DRAFT';
@@ -416,6 +425,13 @@ export const RECURRING_ON_GENERATION_OPTIONS: { value: RecurringOnGeneration; la
   { value: 'AUTO_POST', label: 'Auto Post' },
   { value: 'CREATE_DRAFT', label: 'Create as Draft' },
 ];
+
+export type AdjustmentCategoryCode =
+  | 'ACCRUAL'
+  | 'DEPRECIATION'
+  | 'BAD_DEBT'
+  | 'DEFERRAL'
+  | 'PREPAID_RECOGNITION';
 
 export const ADJUSTMENT_CATEGORY_OPTIONS = [
   { value: 'accrual', label: 'Accrual' },
@@ -562,6 +578,7 @@ export interface JournalEntryRecord {
   id: string;
   journalNumber: string;
   entryType: JournalEntryTypeCode;
+  adjustmentCategory: AdjustmentCategoryCode | null;
   source?: JournalSource;
   /** Set when a reversal of this journal exists. The original itself is never modified. */
   reversalJournal: { id: string; journalNumber: string; transactionDate: string } | null;
@@ -596,6 +613,7 @@ export interface CreateJournalLinePayload {
 
 export interface CreateJournalPayload {
   entryType?: JournalEntryTypeCode;
+  adjustmentCategory?: AdjustmentCategoryCode;
   transactionDate: string;
   fiscalPeriodId: string;
   transactionCurrency: string;

@@ -1,13 +1,18 @@
 'use client';
 
-import { useState, ChangeEvent } from 'react';
+import { Fragment, useState, ChangeEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { Input } from '@/components/atoms/Input';
-import { JournalEntryRecord, JournalRecordStatus } from '@/types/accounting';
+import {
+  ADJUSTMENT_CATEGORY_OPTIONS,
+  JOURNAL_ENTRY_TYPE_LABELS,
+  JournalEntryRecord,
+  JournalRecordStatus,
+} from '@/types/accounting';
 import { useFiscalPeriods, usePostJournal, useReverseJournal } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -61,10 +66,9 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
   const postJournal = usePostJournal();
   const reverseJournal = useReverseJournal();
 
+  // Debit and credit always match on a saved journal, so one total covers both sides.
   const debitTotal =
     journal?.lines.reduce((sum, line) => sum + Number(line.transactionDebit), 0) ?? 0;
-  const creditTotal =
-    journal?.lines.reduce((sum, line) => sum + Number(line.transactionCredit), 0) ?? 0;
 
   // The reversal cannot be dated before the original, and today is the natural default.
   const openReverse = (mode: 'reverse' | 'correct') => {
@@ -165,6 +169,17 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <Field label="Journal Type" value={JOURNAL_ENTRY_TYPE_LABELS[journal.entryType]} />
+              {journal.adjustmentCategory && (
+                <Field
+                  label="Adjustment Category"
+                  value={
+                    ADJUSTMENT_CATEGORY_OPTIONS.find(
+                      (o) => o.value.toUpperCase() === journal.adjustmentCategory,
+                    )?.label ?? journal.adjustmentCategory
+                  }
+                />
+              )}
               {journal.source && (
                 <Field
                   label="Source"
@@ -184,62 +199,48 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               />
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="rounded-xl border border-gray-200 p-3 flex flex-col gap-2">
               <span className="text-xs font-semibold text-gray-500">Lines</span>
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-xs text-gray-500">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium">GL Account</th>
-                      <th className="px-3 py-2 text-left font-medium">Description</th>
-                      <th className="px-3 py-2 text-right font-medium">Debit</th>
-                      <th className="px-3 py-2 text-right font-medium">Credit</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {journal.lines.map((line) => (
-                      <tr key={line.id} className="border-t border-gray-100">
-                        <td className="px-3 py-2 text-gray-900">
-                          {line.glAccount.code} – {line.glAccount.name}
-                          {line.subledgerAccount && (
-                            <div className="text-xs text-gray-400">
-                              {line.subledgerAccount.code} {line.subledgerAccount.name}
-                            </div>
-                          )}
-                        </td>
-                        <td
-                          className="px-3 py-2 text-gray-600"
-                          title={line.description ?? undefined}
-                        >
-                          {formatSourceEventDescription(line.description)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-gray-900">
-                          {Number(line.transactionDebit) > 0
-                            ? fmtAmount(Number(line.transactionDebit), journal.transactionCurrency)
-                            : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right text-gray-900">
-                          {Number(line.transactionCredit) > 0
-                            ? fmtAmount(Number(line.transactionCredit), journal.transactionCurrency)
-                            : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="border-t border-gray-200 bg-gray-50 font-semibold text-gray-900">
-                    <tr>
-                      <td className="px-3 py-2" colSpan={2}>
-                        Total
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {fmtAmount(debitTotal, journal.transactionCurrency)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {fmtAmount(creditTotal, journal.transactionCurrency)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+              <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-1.5 text-sm">
+                <span className="text-gray-500 text-xs font-medium">Account</span>
+                <span className="text-gray-500 text-xs font-medium">Side</span>
+                <span className="text-gray-500 text-xs font-medium text-right">Amount</span>
+
+                {journal.lines.map((line) => {
+                  const isDebit = Number(line.transactionDebit) > 0;
+                  const amount = isDebit
+                    ? Number(line.transactionDebit)
+                    : Number(line.transactionCredit);
+                  return (
+                    <Fragment key={line.id}>
+                      <span className="text-gray-900">
+                        {line.glAccount.code} – {line.glAccount.name}
+                        {line.subledgerAccount && (
+                          <span className="block text-xs text-gray-400">
+                            {line.subledgerAccount.code} {line.subledgerAccount.name}
+                          </span>
+                        )}
+                        {line.description && (
+                          <span className="block text-xs text-gray-400">
+                            {formatSourceEventDescription(line.description)}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-gray-700">{isDebit ? 'Debit' : 'Credit'}</span>
+                      <span className="text-right text-gray-900">
+                        {fmtAmount(amount, journal.transactionCurrency)}
+                      </span>
+                    </Fragment>
+                  );
+                })}
+
+                <span className="text-gray-500 text-xs font-medium pt-1 border-t border-gray-100">
+                  Total
+                </span>
+                <span className="pt-1 border-t border-gray-100" />
+                <span className="text-right font-semibold text-gray-900 pt-1 border-t border-gray-100">
+                  {fmtAmount(debitTotal, journal.transactionCurrency)}
+                </span>
               </div>
             </div>
 

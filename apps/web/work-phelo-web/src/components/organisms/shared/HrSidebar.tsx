@@ -140,7 +140,7 @@ export function HrSidebar({ groups, forceOpen = false, onRequestClose }: HrSideb
           expanded ? 'w-50 shadow-xl' : 'w-11',
         )}
       >
-        <nav className="flex-1 overflow-y-auto pt-10 pb-2 flex flex-col">
+        <nav className="flex-1 overflow-y-auto pt-4 pb-2 flex flex-col">
           {groups.map((group) => {
             const visibleItems = group.items.filter((item) => item.enabled !== false);
             if (visibleItems.length === 0) return null;

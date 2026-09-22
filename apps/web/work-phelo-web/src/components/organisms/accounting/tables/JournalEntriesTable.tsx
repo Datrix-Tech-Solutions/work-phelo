@@ -4,7 +4,11 @@ import { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import { JournalEntryRecord, JournalRecordStatus } from '@/types/accounting';
+import {
+  JOURNAL_ENTRY_TYPE_LABELS,
+  JournalEntryRecord,
+  JournalRecordStatus,
+} from '@/types/accounting';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 import { formatJournalNumber } from '@/lib/formatters';
 import { displayStatus } from '@/lib/accounting/journalStatus';
@@ -119,7 +123,9 @@ export function JournalEntriesTable() {
         label: 'Date',
         width: '80px',
         render: (row) => (
-          <span className="text-gray-700 text-sm">{fmtDate(row.transactionDate)}</span>
+          <span className="font-semibold text-gray-700 text-sm">
+            {fmtDate(row.transactionDate)}
+          </span>
         ),
       },
       {
@@ -127,7 +133,7 @@ export function JournalEntriesTable() {
         label: 'Description',
         width: 'minmax(100px, 1fr)',
         render: (row) => (
-          <span className="text-gray-700 text-sm" title={row.description}>
+          <span className="font-semibold text-gray-700 text-sm" title={row.description}>
             {formatSourceEventDescription(row.description)}
           </span>
         ),
@@ -138,9 +144,18 @@ export function JournalEntriesTable() {
         width: 'minmax(100px, 1fr)',
         render: (row) => {
           const names = clientNames(row);
+          if (names.length > 0) {
+            return (
+              <span className="font-semibold text-gray-700 text-sm" title={names.join(', ')}>
+                {names.join(', ')}
+              </span>
+            );
+          }
+          // No subledger party (a manual entry) — the entry type is at least as distinguishing
+          // as a client name would be, and never blank.
           return (
-            <span className="text-gray-700 text-sm" title={names.join(', ')}>
-              {names.length > 0 ? names.join(', ') : '—'}
+            <span className="font-semibold text-gray-400 text-sm">
+              {JOURNAL_ENTRY_TYPE_LABELS[row.entryType]}
             </span>
           );
         },
