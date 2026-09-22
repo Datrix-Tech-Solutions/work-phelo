@@ -460,11 +460,17 @@ export class RecurringJournalsService {
     }
   }
 
-  private lineData(tenantId: string, lines: RecurringJournalLineDto[]) {
+  /** Nested create data. The account is connected through the tenant-scoped composite key, as
+   *  JournalsService does, so the line's tenant comes from its parent and cannot disagree. */
+  private lineData(
+    tenantId: string,
+    lines: RecurringJournalLineDto[],
+  ): Prisma.RecurringJournalLineCreateWithoutRecurringJournalInput[] {
     return lines.map((line, index) => ({
-      tenantId,
       lineNumber: index + 1,
-      glAccountId: line.glAccountId,
+      glAccount: {
+        connect: { id_tenantId: { id: line.glAccountId, tenantId } },
+      },
       description: line.description?.trim() || null,
       debit: new Prisma.Decimal(line.debit ?? 0),
       credit: new Prisma.Decimal(line.credit ?? 0),
