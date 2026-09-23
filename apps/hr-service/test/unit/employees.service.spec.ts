@@ -7,6 +7,7 @@ import { NotificationsService } from '../../src/notifications/notifications.serv
 import { RabbitMQPublisher } from '../../src/messaging/rabbitmq.publisher';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { FieldEncryptionService } from '../../src/crypto/field-encryption.service';
+import { AvatarUrlResolverService } from '../../src/common/avatar-url-resolver.service';
 import { EmployeesService } from '../../src/employees/employees.service';
 import { RESIGNATION_QUEUE } from '../../src/employees/resignation-notification.processor';
 
@@ -48,6 +49,13 @@ describe('EmployeesService', () => {
     hmac: jest.fn((v: string) => `hmac:${v}`),
   };
 
+  const avatarUrlResolver = {
+    resolve: jest.fn(async (value: unknown) => value ?? null),
+    resolveMany: jest.fn(async (values: unknown[]) =>
+      values.map((value) => value ?? null),
+    ),
+  };
+
   const resignationQueue = { add: jest.fn(async () => undefined) };
 
   let service: EmployeesService;
@@ -61,6 +69,7 @@ describe('EmployeesService', () => {
         { provide: LeaveService, useValue: leaveService },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: FieldEncryptionService, useValue: encryption },
+        { provide: AvatarUrlResolverService, useValue: avatarUrlResolver },
         {
           provide: getQueueToken(RESIGNATION_QUEUE),
           useValue: resignationQueue,
