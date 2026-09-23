@@ -6,7 +6,12 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { AccountGroup, GLAccountCategory } from '@/types/accounting';
+import {
+  AccountGroup,
+  CASH_FLOW_CATEGORY_OPTIONS,
+  CashFlowCategory,
+  GLAccountCategory,
+} from '@/types/accounting';
 import {
   useAccountClassifications,
   useAccountingCurrencyOptions,
@@ -32,6 +37,7 @@ type FormValues = {
   currency: string;
   status: string;
   description: string;
+  cashFlowCategory: CashFlowCategory | '';
 };
 
 const DEFAULTS: FormValues = {
@@ -42,6 +48,7 @@ const DEFAULTS: FormValues = {
   currency: '',
   status: '',
   description: '',
+  cashFlowCategory: '',
 };
 
 const TYPE_OPTIONS: SearchSelectOption[] = [
@@ -90,6 +97,7 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
       accountType: editing.classification.category,
       classificationId: editing.classificationId,
       status: editing.isActive ? 'Active' : 'Inactive',
+      cashFlowCategory: editing.cashFlowCategory ?? '',
     });
   }, [isOpen, editing, reset]);
 
@@ -111,6 +119,7 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
           code: data.accountCode,
           name: data.accountName,
           classificationId: data.classificationId,
+          cashFlowCategory: data.cashFlowCategory || undefined,
           ...(data.status ? { isActive: data.status === 'Active' } : {}),
         });
         toast.success('Parent account updated successfully');
@@ -121,6 +130,7 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
         code: data.accountCode,
         name: data.accountName,
         classificationId: data.classificationId,
+        cashFlowCategory: data.cashFlowCategory || undefined,
       });
       toast.success('Parent account created successfully');
       handleClose();
@@ -240,6 +250,20 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
           registration={register('description')}
           error={errors.description}
           placeholder="Provide a brief description of this account…"
+        />
+
+        <Controller
+          name="cashFlowCategory"
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              label="Cash Flow Category (optional)"
+              placeholder="Defaults from the classification, or Operating"
+              options={CASH_FLOW_CATEGORY_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
         />
       </div>
     </SidePanel>

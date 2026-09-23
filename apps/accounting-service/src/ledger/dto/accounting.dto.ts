@@ -21,6 +21,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
+  CashFlowCategory,
   FiscalPeriodStatus,
   GLAccountCategory,
   AdjustmentCategory,
@@ -336,6 +337,15 @@ export class CreateGLAccountDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiPropertyOptional({
+    enum: CashFlowCategory,
+    description:
+      'Cash Flow Statement section this belongs to. Defaults from the level above (group, then classification, then Operating for asset/liability/equity accounts); Cash & Bank accounts are always excluded automatically regardless of this.',
+  })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export class UpdateGLAccountDto extends PartialType(CreateGLAccountDto) {}
@@ -444,6 +454,15 @@ export class CreateAccountClassificationDto {
   @IsOptional()
   @IsBoolean()
   isSystemTemplate?: boolean;
+
+  @ApiPropertyOptional({
+    enum: CashFlowCategory,
+    description:
+      'Cash Flow Statement section this belongs to. Defaults from the level above (group, then classification, then Operating for asset/liability/equity accounts); Cash & Bank accounts are always excluded automatically regardless of this.',
+  })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export class UpdateAccountClassificationDto extends PartialType(
@@ -478,6 +497,15 @@ export class CreateAccountGroupDto {
   @IsInt()
   @Min(0)
   displayOrder?: number;
+
+  @ApiPropertyOptional({
+    enum: CashFlowCategory,
+    description:
+      'Cash Flow Statement section this belongs to. Defaults from the level above (group, then classification, then Operating for asset/liability/equity accounts); Cash & Bank accounts are always excluded automatically regardless of this.',
+  })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export class UpdateAccountGroupDto extends PartialType(CreateAccountGroupDto) {
@@ -485,6 +513,114 @@ export class UpdateAccountGroupDto extends PartialType(CreateAccountGroupDto) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class BulkImportClassificationDto {
+  @ApiProperty({ example: 'CURRENT_ASSET' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  code!: string;
+
+  @ApiProperty({ example: 'Current Assets' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ enum: GLAccountCategory })
+  @IsEnum(GLAccountCategory)
+  category!: GLAccountCategory;
+}
+
+export class BulkImportAccountGroupDto {
+  @ApiProperty({ example: 'BANK_ACCOUNTS' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  code!: string;
+
+  @ApiProperty({ example: 'Bank Accounts' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({
+    example: 'CURRENT_ASSET',
+    description:
+      'Code of the classification this group belongs to — either an existing one or one included in this same request.',
+  })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  classificationCode!: string;
+}
+
+export class BulkImportGLAccountDto {
+  @ApiProperty({ example: '1101' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ example: 'Ecobank' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ enum: GLAccountCategory })
+  @IsEnum(GLAccountCategory)
+  category!: GLAccountCategory;
+
+  @ApiProperty({
+    example: 'CURRENT_ASSET',
+    description:
+      'Code of the classification this account belongs to — either an existing one or one included in this same request.',
+  })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  classificationCode!: string;
+
+  @ApiPropertyOptional({
+    example: 'CASH_AND_BANK',
+    description:
+      'Code of the parent account (group) this account belongs to — either an existing one or one included in this same request.',
+  })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  parentAccountCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+}
+
+export class BulkImportAccountsDto {
+  @ApiProperty({ type: [BulkImportClassificationDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BulkImportClassificationDto)
+  classifications!: BulkImportClassificationDto[];
+
+  @ApiProperty({ type: [BulkImportAccountGroupDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BulkImportAccountGroupDto)
+  groups!: BulkImportAccountGroupDto[];
+
+  @ApiProperty({ type: [BulkImportGLAccountDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BulkImportGLAccountDto)
+  accounts!: BulkImportGLAccountDto[];
 }
 
 export class CreateCostCentreDto {

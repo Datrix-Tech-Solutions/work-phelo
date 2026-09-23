@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn, cardClass, inputClass, popupClass } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
-import { SearchIcon } from 'lucide-react';
+import { SearchIcon, ArrowUp, ArrowDown } from 'lucide-react';
 import { NoSearchLogo } from '../../atoms/NoSearchLogo';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
@@ -15,6 +15,12 @@ export interface Column<T> {
   width?: string;
   className?: string;
   render?: (row: T) => React.ReactNode;
+  sortable?: boolean;
+}
+
+export interface SortState {
+  key: string;
+  direction: 'asc' | 'desc';
 }
 
 export interface RowAction {
@@ -67,6 +73,8 @@ interface DataTableProps<T extends { id: string | number }> {
   totalPages: number;
   onPageChange: (page: number) => void;
   noInternalScroll?: boolean;
+  sortState?: SortState;
+  onSort?: (key: string) => void;
 }
 
 function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
@@ -206,6 +214,8 @@ export function DataTable<T extends { id: string | number }>({
   totalPages,
   onPageChange,
   noInternalScroll = false,
+  sortState,
+  onSort,
 }: DataTableProps<T>) {
   const hasToolbar = !!(
     onSearch ||
@@ -362,11 +372,49 @@ export function DataTable<T extends { id: string | number }>({
                   ].join(' '),
                 }}
               >
-                {columns.map((col) => (
-                  <div key={col.key} className={cn('min-w-0', col.className)}>
-                    {col.label}
-                  </div>
-                ))}
+                {columns.map((col) =>
+                  col.sortable ? (
+                    <button
+                      key={col.key}
+                      type="button"
+                      onClick={() => onSort?.(col.key)}
+                      className={cn(
+                        'min-w-0 flex items-center gap-1 text-left uppercase tracking-wide hover:text-gray-900',
+                        col.className?.includes('text-right') && 'justify-end',
+                        col.className,
+                      )}
+                    >
+                      {col.label}
+                      <span className="flex items-center -space-x-1 shrink-0">
+                        <ArrowUp
+                          className={cn(
+                            'h-3 w-3',
+                            sortState?.key === col.key && sortState.direction === 'asc'
+                              ? 'opacity-100'
+                              : 'opacity-30',
+                          )}
+                        />
+                        <ArrowDown
+                          className={cn(
+                            'h-3 w-3',
+                            sortState?.key === col.key && sortState.direction === 'desc'
+                              ? 'opacity-100'
+                              : 'opacity-30',
+                          )}
+                        />
+                      </span>
+                      {sortState?.key === col.key && (
+                        <span className="sr-only">
+                          {sortState.direction === 'asc' ? 'ascending' : 'descending'}
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    <div key={col.key} className={cn('min-w-0', col.className)}>
+                      {col.label}
+                    </div>
+                  ),
+                )}
                 {rowActions && <span />}
               </div>
             </div>

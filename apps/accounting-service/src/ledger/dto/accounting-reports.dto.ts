@@ -104,3 +104,20 @@ export class BalanceSheetReportQueryDto {
   @IsUUID()
   fiscalPeriodId?: string;
 }
+
+export class CashFlowReportQueryDto {
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  fromDate?: string;
+
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  toDate?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  fiscalPeriodId?: string;
+}

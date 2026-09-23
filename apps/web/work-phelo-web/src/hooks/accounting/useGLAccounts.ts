@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
+  BulkImportAccountsPayload,
+  BulkImportAccountsResult,
   CreateGLAccountPayload,
   GLAccount,
   QueryGLAccountsParams,
@@ -30,6 +32,21 @@ export function useCreateGLAccount() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: GL_ACCOUNTS_KEY });
+    },
+  });
+}
+
+export function useBulkImportGLAccounts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: BulkImportAccountsPayload) => {
+      const res = await api.post<BulkImportAccountsResult>(`${BASE}/bulk-import`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: GL_ACCOUNTS_KEY });
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'account-classifications'] });
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'account-groups'] });
     },
   });
 }

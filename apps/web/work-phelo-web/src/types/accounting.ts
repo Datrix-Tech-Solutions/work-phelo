@@ -32,6 +32,8 @@ export interface GLAccount {
   accountGroup: { id: string; code: string; name: string } | null;
   parentAccountId: string | null;
   parentAccount: { id: string; code: string; name: string } | null;
+  /** Overrides the group's (or classification's) cash-flow default for this one account. */
+  cashFlowCategory: CashFlowCategory | null;
   allowPosting: boolean;
   description: string | null;
   status: GLAccountStatus;
@@ -46,11 +48,52 @@ export interface CreateGLAccountPayload {
   /** null clears the group, leaving the account directly under its classification. */
   accountGroupId?: string | null;
   parentAccountId?: string;
+  cashFlowCategory?: CashFlowCategory;
   allowPosting?: boolean;
   description?: string;
 }
 
 export type UpdateGLAccountPayload = Partial<CreateGLAccountPayload>;
+
+export interface BulkImportClassificationPayload {
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+}
+
+export interface BulkImportAccountGroupPayload {
+  code: string;
+  name: string;
+  classificationCode: string;
+}
+
+export interface BulkImportGLAccountPayload {
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  classificationCode: string;
+  parentAccountCode?: string;
+  description?: string;
+}
+
+export interface BulkImportAccountsPayload {
+  classifications: BulkImportClassificationPayload[];
+  groups: BulkImportAccountGroupPayload[];
+  accounts: BulkImportGLAccountPayload[];
+}
+
+export interface BulkImportRowResult {
+  code: string;
+  status: 'created' | 'skipped' | 'failed';
+  id?: string;
+  message?: string;
+}
+
+export interface BulkImportAccountsResult {
+  classifications: BulkImportRowResult[];
+  groups: BulkImportRowResult[];
+  accounts: BulkImportRowResult[];
+}
 
 export interface GLAccountLedgerEntry {
   id: string;
@@ -164,6 +207,27 @@ export interface BalanceSheetReport {
   totalLiabilities: string;
   totalEquity: string;
   imbalanceAmount: string;
+}
+
+export interface CashFlowStatementReport {
+  fromDate: string;
+  toDate: string;
+  operatingActivities: {
+    netIncome: string;
+    adjustments: Array<{ account: FinancialReportAccount; amount: string }>;
+    total: string;
+  };
+  investingActivities: {
+    lines: Array<{ account: FinancialReportAccount; amount: string }>;
+    total: string;
+  };
+  financingActivities: {
+    lines: Array<{ account: FinancialReportAccount; amount: string }>;
+    total: string;
+  };
+  netChangeInCash: string;
+  openingCash: string;
+  closingCash: string;
 }
 
 export interface QueryGLAccountsParams {
@@ -1371,6 +1435,21 @@ export interface AccountingPartyStatement extends AccountingAgingReport {
   documents: AccountingOpenItem[];
 }
 
+/** Which Cash Flow Statement section an account's balance change belongs in. EXCLUDED covers
+ *  both non-flows (Cash & Bank accounts — always resolved automatically, never set here) and
+ *  non-cash items that belong in the supplemental disclosure note rather than the statement
+ *  itself. Untagged: inherits from the level above, or defaults to Operating for an
+ *  asset/liability/equity account (a revenue/expense account is simply left out of the
+ *  statement's per-account lines — it's already inside Net Income). */
+export type CashFlowCategory = 'OPERATING' | 'INVESTING' | 'FINANCING' | 'EXCLUDED';
+
+export const CASH_FLOW_CATEGORY_OPTIONS: { value: CashFlowCategory; label: string }[] = [
+  { value: 'OPERATING', label: 'Operating' },
+  { value: 'INVESTING', label: 'Investing' },
+  { value: 'FINANCING', label: 'Financing' },
+  { value: 'EXCLUDED', label: 'Excluded / Non-cash' },
+];
+
 export interface AccountClassification {
   id: string;
   code: string;
@@ -1379,6 +1458,8 @@ export interface AccountClassification {
   displayOrder: number;
   isSystemTemplate: boolean;
   isActive: boolean;
+  /** Default for accounts under this classification; a group or account can override it. */
+  cashFlowCategory: CashFlowCategory | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1389,6 +1470,7 @@ export interface CreateAccountClassificationPayload {
   category: GLAccountCategory;
   displayOrder?: number;
   isSystemTemplate?: boolean;
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export type UpdateAccountClassificationPayload = Partial<CreateAccountClassificationPayload> & {
@@ -1415,9 +1497,12 @@ export interface AccountGroup {
     code: string;
     name: string;
     category: GLAccountCategory;
+    cashFlowCategory: CashFlowCategory | null;
   };
   displayOrder: number;
   isActive: boolean;
+  /** Overrides the classification's cash-flow default for every account in this group. */
+  cashFlowCategory: CashFlowCategory | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1427,6 +1512,7 @@ export interface CreateAccountGroupPayload {
   code: string;
   name: string;
   displayOrder?: number;
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export type UpdateAccountGroupPayload = Partial<CreateAccountGroupPayload> & {

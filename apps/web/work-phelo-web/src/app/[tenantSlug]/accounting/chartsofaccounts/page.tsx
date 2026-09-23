@@ -8,12 +8,16 @@ import {
 } from '@/components/organisms/accounting/ChartOfAccountsTree';
 import { AddClassificationPanel } from '@/components/organisms/accounting/panels/AddClassificationPanel';
 import { AddParentAccountPanel } from '@/components/organisms/accounting/panels/AddParentAccountPanel';
-import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
+import {
+  AddLeafAccountPanel,
+  LockedAccountScope,
+} from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
 import { GLAccountDetail } from '@/components/organisms/accounting/GLAccountDetail';
 import { GLAccountListPanel } from '@/components/organisms/accounting/GLAccountListPanel';
 import { ChartOfAccountsBreadcrumb } from '@/components/molecules/accounting/ChartOfAccountsBreadcrumb';
 import { ChartOfAccountsToolbar } from '@/components/molecules/accounting/ChartOfAccountsToolbar';
 import { SeedHierarchyDialog } from '@/components/molecules/accounting/SeedHierarchyDialog';
+import { BulkImportGLAccountsDialog } from '@/components/organisms/accounting/BulkImportGLAccountsDialog';
 import { getScopedAccounts, getScopeTitle } from '@/lib/accounting/chartOfAccountsScope';
 import { buildAccountBalanceMap } from '@/lib/accounting/glAccountBalance';
 import {
@@ -31,6 +35,7 @@ type OpenPanel =
   | 'classification'
   | 'parent-account'
   | 'leaf-account'
+  | 'leaf-account-scoped'
   | 'edit-classification'
   | 'edit-parent-account'
   | null;
@@ -41,6 +46,7 @@ export default function ChartOfAccountsPage() {
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
   const [scope, setScope] = useState<AccountScope>({ kind: 'all' });
   const [seedDialogOpen, setSeedDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const seedHierarchy = useSeedStandardAccountHierarchy();
   const toast = useToast();
 
@@ -91,6 +97,30 @@ export default function ChartOfAccountsPage() {
   const scopeTitle = useMemo(() => getScopeTitle(liveScope), [liveScope]);
   const balanceByAccountId = useMemo(() => buildAccountBalanceMap(trialBalance), [trialBalance]);
 
+  // What "Create Account" from the current scope should lock the new account to. Nothing for
+  // "all accounts" or a bare type (neither pins a classification, which a leaf account always
+  // needs) or a single account (GLAccountDetail handles that itself, mirroring its own group).
+  const lockedScope = useMemo<LockedAccountScope | undefined>(() => {
+    switch (liveScope.kind) {
+      case 'classification':
+        return {
+          accountType: liveScope.classification.category,
+          classificationId: liveScope.classification.id,
+          classificationName: liveScope.classification.name,
+        };
+      case 'group':
+        return {
+          accountType: liveScope.group.classification.category,
+          classificationId: liveScope.group.classificationId,
+          classificationName: liveScope.group.classification.name,
+          groupId: liveScope.group.id,
+          groupName: liveScope.group.name,
+        };
+      default:
+        return undefined;
+    }
+  }, [liveScope]);
+
   const seedStandardHierarchy = async () => {
     try {
       const result = await seedHierarchy.mutateAsync();
@@ -115,6 +145,7 @@ export default function ChartOfAccountsPage() {
               onSearchChange={setSearch}
               status={status}
               onStatusChange={setStatus}
+              onImport={() => setImportDialogOpen(true)}
               registerActions={[
                 {
                   label: 'Classification',
@@ -182,6 +213,9 @@ export default function ChartOfAccountsPage() {
                         ? () => setOpenPanel('edit-parent-account')
                         : undefined
                   }
+                  onCreateAccount={
+                    lockedScope ? () => setOpenPanel('leaf-account-scoped') : undefined
+                  }
                 />
               )}
             </div>
@@ -211,11 +245,23 @@ export default function ChartOfAccountsPage() {
         isOpen={openPanel === 'leaf-account'}
         onClose={() => setOpenPanel(null)}
       />
+      <AddLeafAccountPanel
+        isOpen={openPanel === 'leaf-account-scoped'}
+        onClose={() => setOpenPanel(null)}
+        lockedScope={lockedScope}
+      />
       <SeedHierarchyDialog
         isOpen={seedDialogOpen}
         onClose={() => setSeedDialogOpen(false)}
         onConfirm={seedStandardHierarchy}
         isPending={seedHierarchy.isPending}
+      />
+      <BulkImportGLAccountsDialog
+        isOpen={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        classifications={classifications}
+        groups={groups}
+        existingAccounts={glAccountsData ?? []}
       />
     </>
   );
