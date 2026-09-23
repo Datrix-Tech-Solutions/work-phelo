@@ -18,6 +18,14 @@ import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { AuditService } from '../audit/audit.service';
 import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
 import { normalizeEmail } from '../common/email.helper';
+import { TenantAssetStorageService } from '../tenants/tenant-asset-storage.service';
+
+const AVATAR_ALLOWED_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+]);
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
 @Injectable()
 export class UsersService {
@@ -28,6 +36,7 @@ export class UsersService {
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly jwtService: JwtService,
     private readonly audit: AuditService,
+    private readonly storage: TenantAssetStorageService,
   ) {}
 
   private async validateInvitedEmployeePermissionSets(
@@ -549,5 +558,113 @@ export class UsersService {
       where: { id },
       data: { forcePasswordReset: true },
     });
+  }
+
+  async uploadAvatar(
+    tenantId: string,
+    userId: string,
+    file: Express.Multer.File | undefined,
+  ): Promise<{ avatarUrl: string; user: { id: string; avatarUrl: string } }> {
+    this.validateAvatar(file);
+    const uploadedFile = file as Express.Multer.File;
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      include: { tenant: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const previousAvatarUrl = user.avatarUrl;
+
+    const stored = await this.storage.storeUserAvatar({
+      tenantId,
+      tenantSlug: user.tenant.slug,
+      userId,
+      body: uploadedFile.buffer,
+      contentType: uploadedFile.mimetype,
+      originalFileName: uploadedFile.originalname,
+    });
+
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl: stored.objectKey },
+      });
+    } catch (error) {
+      await this.storage
+        .delete(stored.objectKey)
+        .catch((cleanupError) =>
+          this.logger.error(
+            `Failed to clean up orphaned avatar object ${stored.objectKey}`,
+            cleanupError,
+          ),
+        );
+      throw error;
+    }
+
+    if (
+      previousAvatarUrl &&
+      this.storage.isUserAvatarObjectKey(previousAvatarUrl, tenantId, userId)
+    ) {
+      await this.storage
+        .delete(previousAvatarUrl)
+        .catch((error) =>
+          this.logger.error(
+            `Failed to delete previous avatar object ${previousAvatarUrl}`,
+            error,
+          ),
+        );
+    }
+
+    const signed = await this.storage.createSignedReadUrl({
+      objectKey: stored.objectKey,
+      mimeType: stored.mimeType,
+      fileName: stored.fileName,
+    });
+
+    return {
+      avatarUrl: signed.readUrl,
+      user: { id: userId, avatarUrl: signed.readUrl },
+    };
+  }
+
+  private validateAvatar(file: Express.Multer.File | undefined): void {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Avatar image is required.');
+    }
+    if (!AVATAR_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Avatar must be PNG, JPEG or WEBP.');
+    }
+    if (!this.matchesImageSignature(file.buffer, file.mimetype)) {
+      throw new BadRequestException(
+        'Image content does not match its declared MIME type.',
+      );
+    }
+    if (
+      file.size > AVATAR_MAX_BYTES ||
+      file.buffer.byteLength > AVATAR_MAX_BYTES
+    ) {
+      throw new BadRequestException(
+        `Avatar image exceeds the ${AVATAR_MAX_BYTES / 1024 / 1024} MB limit.`,
+      );
+    }
+  }
+
+  private matchesImageSignature(buffer: Buffer, mimeType: string): boolean {
+    if (mimeType === 'image/png') {
+      return buffer
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    if (mimeType === 'image/jpeg') {
+      return buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
+    }
+    if (mimeType === 'image/webp') {
+      return (
+        buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+      );
+    }
+    return false;
   }
 }
