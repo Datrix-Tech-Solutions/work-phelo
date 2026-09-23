@@ -32,6 +32,7 @@ export interface RequestUser {
   tenantName: string;
   firstName: string;
   companyRoleId?: string | null;
+  avatarUrl?: string | null;
   moduleConfig: Record<string, boolean>;
   featureConfig: Record<string, Record<string, boolean>>;
   integrationConfig?: Record<string, boolean>;

@@ -1,5 +1,9 @@
 import { randomUUID } from 'crypto';
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -72,8 +76,8 @@ interface TenantAssetStorageProvider {
   ): Promise<StoredTenantDocumentAsset>;
   createSignedReadUrl(input: {
     objectKey: string;
-    mimeType: string;
-    fileName: string;
+    mimeType?: string;
+    fileName?: string;
   }): Promise<SignedTenantDocumentAsset>;
   delete(objectKey: string): Promise<void>;
 }
@@ -111,8 +115,34 @@ const MAX_SIGNED_URL_TTL_SECONDS = 900;
 
 @Injectable()
 export class TenantAssetStorageService {
+  private readonly logger = new Logger(TenantAssetStorageService.name);
   private s3Provider?: S3TenantAssetStorageProvider;
   private cloudinaryProvider?: CloudinaryTenantAssetStorageProvider;
+
+  /**
+   * Best-effort read URL for an object key when no stored mimeType/fileName
+   * is available (e.g. resolving User.avatarUrl on /auth/me) — unlike
+   * createSignedReadUrl() this never throws, returning null on failure so
+   * callers can fall back to no avatar instead of failing the request.
+   */
+  async resolveAvatarReadUrl(
+    objectKey: string | null | undefined,
+  ): Promise<string | null> {
+    if (!objectKey) return null;
+    if (/^https?:\/\//i.test(objectKey)) return objectKey;
+
+    try {
+      const { readUrl } = await this.createSignedReadUrl({ objectKey });
+      return readUrl;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to resolve avatar read URL for object key ${objectKey}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+  }
 
   async store(
     input: StoreTenantDocumentAssetInput,
@@ -137,8 +167,8 @@ export class TenantAssetStorageService {
 
   async createSignedReadUrl(input: {
     objectKey: string;
-    mimeType: string;
-    fileName: string;
+    mimeType?: string;
+    fileName?: string;
   }): Promise<SignedTenantDocumentAsset> {
     return this.providerForObjectKey(input.objectKey).createSignedReadUrl(
       input,
@@ -339,8 +369,8 @@ export class S3TenantAssetStorageProvider implements TenantAssetStorageProvider 
 
   async createSignedReadUrl(input: {
     objectKey: string;
-    mimeType: string;
-    fileName: string;
+    mimeType?: string;
+    fileName?: string;
   }): Promise<SignedTenantDocumentAsset> {
     const expiresIn = this.signedUrlTtlSeconds();
     const readUrl = await getSignedUrl(
@@ -348,8 +378,12 @@ export class S3TenantAssetStorageProvider implements TenantAssetStorageProvider 
       new GetObjectCommand({
         Bucket: this.config.bucket,
         Key: input.objectKey,
-        ResponseContentType: input.mimeType,
-        ResponseContentDisposition: `inline; filename="${this.safeFileName(input.fileName)}"`,
+        ...(input.mimeType ? { ResponseContentType: input.mimeType } : {}),
+        ...(input.fileName
+          ? {
+              ResponseContentDisposition: `inline; filename="${this.safeFileName(input.fileName)}"`,
+            }
+          : {}),
       }),
       { expiresIn },
     );
@@ -445,14 +479,14 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
 
   async createSignedReadUrl(input: {
     objectKey: string;
-    mimeType: string;
-    fileName: string;
+    mimeType?: string;
+    fileName?: string;
   }): Promise<SignedTenantDocumentAsset> {
     this.configure();
     const reference = this.parseCloudinaryObjectKey(input.objectKey);
     const expiresIn = this.signedUrlTtlSeconds();
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
-    const format = this.formatFor(input.mimeType, input.fileName);
+    const format = this.formatFor(input.mimeType ?? '', input.fileName ?? '');
     const readUrl = cloudinary.utils.private_download_url(
       reference.publicId,
       format,
@@ -603,7 +637,9 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
     ) {
       return 'ico';
     }
-    return 'bin';
+    // All tenant assets stored here are images; jpg is a safe best-effort
+    // default when neither the mimeType nor fileName tell us the format.
+    return mimeType ? 'bin' : 'jpg';
   }
 
   private safeFileName(fileName: string): string {

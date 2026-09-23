@@ -31,6 +31,7 @@ import { ProfileLeaveBalancesSection } from '@/components/molecules/hr/employees
 import { ProfileProjectsSection } from '@/components/molecules/hr/employees/ProfileProjectsSection';
 import { AssetsSection } from '@/components/molecules/hr/employees/assetSection';
 import { ProfilePayslipTab } from '@/components/molecules/hr/employees/ProfilePayslipTab';
+import { MyDocumentsContent } from '@/components/organisms/hr/documents/MyDocumentsContent';
 import { MyAppraisalsTable } from '@/components/organisms/hr/appraisal/MyAppraisalTable';
 import { AnnouncementsContent } from '@/components/organisms/hr/announcements/AnnouncementsContent';
 import { SchedulingContent } from '@/components/organisms/hr/scheduling/SchedulingContent';
@@ -332,7 +333,7 @@ export function ProfileContent() {
 
           {activeTab === 'banking' && <ProfilePayslipTab />}
 
-          {activeTab === 'documents' && <div />}
+          {activeTab === 'documents' && <MyDocumentsContent />}
 
           {activeTab === 'clockInHistory' && (
             <RecordsSection
