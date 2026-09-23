@@ -60,6 +60,12 @@ describe('EmployeesService', () => {
       { ensurePublicHolidaysSeededForEmployee: jest.fn() } as never,
       {} as never,
       encryption as never,
+      {
+        resolve: jest.fn((value: unknown) => Promise.resolve(value ?? null)),
+        resolveMany: jest.fn((values: unknown[]) =>
+          Promise.resolve(values.map((value) => value ?? null)),
+        ),
+      } as never,
       {} as never,
     );
   });

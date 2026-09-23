@@ -49,6 +49,7 @@ import {
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FieldEncryptionService } from '../crypto/field-encryption.service';
+import { AvatarUrlResolverService } from '../common/avatar-url-resolver.service';
 import {
   RESIGNATION_QUEUE,
   RESIGNATION_NOTIFY_JOB,
@@ -83,6 +84,7 @@ export class EmployeesService {
     private readonly leaveService: LeaveService,
     private readonly notificationsService: NotificationsService,
     private readonly encryption: FieldEncryptionService,
+    private readonly avatarUrlResolver: AvatarUrlResolverService,
     @InjectQueue(RESIGNATION_QUEUE)
     private readonly resignationQueue: Queue<ResignationNotifyPayload>,
   ) {}
@@ -657,9 +659,20 @@ export class EmployeesService {
     const userIds = employees
       .map((employee) => employee.userId)
       .filter((id): id is string => Boolean(id));
-    const statusMap = await this.getUserStatusMap(tenantId, userIds);
-    const employeesWithStatus = employees.map((employee) =>
-      this.withUserStatus(this.encryption.maskListFields(employee), statusMap),
+    const [statusMap, avatarUrls] = await Promise.all([
+      this.getUserStatusMap(tenantId, userIds),
+      this.avatarUrlResolver.resolveMany(
+        employees.map((employee) => employee.avatarUrl),
+      ),
+    ]);
+    const employeesWithStatus = employees.map((employee, index) =>
+      this.withUserStatus(
+        this.encryption.maskListFields({
+          ...employee,
+          avatarUrl: avatarUrls[index],
+        }),
+        statusMap,
+      ),
     );
 
     return {
@@ -725,10 +738,11 @@ export class EmployeesService {
     const decrypted = this.encryption.decryptEmployeeFields(employee);
     const employeeWithAssets = { ...decrypted, assignedAssets };
 
-    const statusMap = await this.getUserStatusMap(
-      tenantId,
-      employee.userId ? [employee.userId] : [],
-    );
+    const [statusMap, resolvedAvatarUrl] = await Promise.all([
+      this.getUserStatusMap(tenantId, employee.userId ? [employee.userId] : []),
+      this.avatarUrlResolver.resolve(employeeWithAssets.avatarUrl),
+    ]);
+    employeeWithAssets.avatarUrl = resolvedAvatarUrl;
 
     if (!actor) {
       return this.withUserStatus(
@@ -807,6 +821,9 @@ export class EmployeesService {
 
     const decrypted = this.encryption.decryptEmployeeFields(employee);
     const employeeWithAssets = { ...decrypted, assignedAssets };
+    employeeWithAssets.avatarUrl = await this.avatarUrlResolver.resolve(
+      employeeWithAssets.avatarUrl,
+    );
     return this.withUserStatus(
       this.mapEmployeeAssets(employeeWithAssets),
       statusMap,
