@@ -96,6 +96,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
           PermissionAction.VIEW,
           PermissionAction.CREATE,
           PermissionAction.EDIT,
+          PermissionAction.DELETE,
         ],
         departments: [
           PermissionAction.CREATE,

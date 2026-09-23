@@ -356,8 +356,30 @@ model User {
   documentProfilesUpdated   TenantDocumentProfile[] @relation("TenantDocumentProfileUpdatedBy")
   tenantBankAccountsCreated TenantBankAccount[]     @relation("TenantBankAccountCreatedBy")
   tenantBankAccountsUpdated TenantBankAccount[]     @relation("TenantBankAccountUpdatedBy")
+  documents                 UserDocument[]
 
   @@unique([tenantId, email])
+  @@schema("w_auth")
+}
+
+// ── UserDocument ─────────────────────────────────────────────────────────
+// Self-service "Personal Documents" — files the user uploads about
+// themselves (ID, certificates, ...). Distinct from hr-service's
+// EmployeeDocument, which HR uploads about an employee ("Company Documents").
+
+model UserDocument {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String
+  category   String
+  objectKey  String
+  mimeType   String
+  fileName   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@schema("w_auth")
 }
 

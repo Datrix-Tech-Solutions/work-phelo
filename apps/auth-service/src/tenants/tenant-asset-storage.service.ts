@@ -22,6 +22,7 @@ export type TenantBrandingAssetType =
   | 'login-logo'
   | 'favicon';
 export type UserAvatarAssetType = 'avatar';
+export type UserDocumentAssetType = 'document';
 
 export interface StoreTenantDocumentAssetInput {
   tenantId: string;
@@ -49,6 +50,16 @@ export interface StoreUserAvatarAssetInput {
   originalFileName: string;
 }
 
+export interface StoreUserDocumentAssetInput {
+  tenantId: string;
+  tenantSlug: string;
+  userId: string;
+  assetType: UserDocumentAssetType;
+  body: Buffer;
+  contentType: string;
+  originalFileName: string;
+}
+
 export interface StoredTenantDocumentAsset {
   objectKey: string;
   mimeType: string;
@@ -62,8 +73,12 @@ export interface SignedTenantDocumentAsset {
 }
 
 type TenantAssetProviderName = 's3' | 'cloudinary';
-type TenantAssetNamespace = 'document-profile' | 'branding' | 'user-avatar';
-type CloudinaryResourceType = 'image';
+type TenantAssetNamespace =
+  | 'document-profile'
+  | 'branding'
+  | 'user-avatar'
+  | 'user-document';
+type CloudinaryResourceType = 'image' | 'raw';
 type CloudinaryDeliveryType = 'authenticated';
 
 interface TenantAssetStorageProvider {
@@ -71,7 +86,8 @@ interface TenantAssetStorageProvider {
     input:
       | StoreTenantDocumentAssetInput
       | StoreTenantBrandingAssetInput
-      | StoreUserAvatarAssetInput,
+      | StoreUserAvatarAssetInput
+      | StoreUserDocumentAssetInput,
     namespace: TenantAssetNamespace,
   ): Promise<StoredTenantDocumentAsset>;
   createSignedReadUrl(input: {
@@ -108,7 +124,7 @@ type TenantAssetReference =
     };
 
 const CLOUDINARY_OBJECT_KEY_PREFIX = 'cloudinary';
-const CLOUDINARY_RESOURCE_TYPE: CloudinaryResourceType = 'image';
+const CLOUDINARY_RESOURCE_TYPES: CloudinaryResourceType[] = ['image', 'raw'];
 const CLOUDINARY_DELIVERY_TYPE: CloudinaryDeliveryType = 'authenticated';
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 120;
 const MAX_SIGNED_URL_TTL_SECONDS = 900;
@@ -162,6 +178,15 @@ export class TenantAssetStorageService {
     return this.activeProvider().store(
       { ...input, assetType: 'avatar' },
       'user-avatar',
+    );
+  }
+
+  async storeUserDocument(
+    input: Omit<StoreUserDocumentAssetInput, 'assetType'>,
+  ): Promise<StoredTenantDocumentAsset> {
+    return this.activeProvider().store(
+      { ...input, assetType: 'document' },
+      'user-document',
     );
   }
 
@@ -281,15 +306,16 @@ export class TenantAssetStorageService {
 
   private parseReference(objectKey: string): TenantAssetReference {
     const parts = objectKey.split(':');
+    const resourceType = parts[1] as CloudinaryResourceType;
     if (
       parts.length >= 4 &&
       parts[0] === CLOUDINARY_OBJECT_KEY_PREFIX &&
-      parts[1] === CLOUDINARY_RESOURCE_TYPE &&
+      CLOUDINARY_RESOURCE_TYPES.includes(resourceType) &&
       parts[2] === CLOUDINARY_DELIVERY_TYPE
     ) {
       return {
         provider: 'cloudinary',
-        resourceType: CLOUDINARY_RESOURCE_TYPE,
+        resourceType,
         deliveryType: CLOUDINARY_DELIVERY_TYPE,
         publicId: parts.slice(3).join(':'),
       };
@@ -328,17 +354,20 @@ export class S3TenantAssetStorageProvider implements TenantAssetStorageProvider 
     input:
       | StoreTenantDocumentAssetInput
       | StoreTenantBrandingAssetInput
-      | StoreUserAvatarAssetInput,
+      | StoreUserAvatarAssetInput
+      | StoreUserDocumentAssetInput,
     namespace: TenantAssetNamespace,
   ): Promise<StoredTenantDocumentAsset> {
     const fileName = this.safeFileName(input.originalFileName);
-    const isUserAvatar = namespace === 'user-avatar' && 'userId' in input;
+    const hasUserScope =
+      (namespace === 'user-avatar' || namespace === 'user-document') &&
+      'userId' in input;
     const objectKey = [
       this.cleanPrefix(this.config.prefix),
       'tenants',
       input.tenantId,
       namespace,
-      ...(isUserAvatar ? ['users', input.userId] : []),
+      ...(hasUserScope ? ['users', input.userId] : []),
       input.assetType,
       `${randomUUID()}-${fileName}`,
     ]
@@ -354,7 +383,7 @@ export class S3TenantAssetStorageProvider implements TenantAssetStorageProvider 
         Metadata: {
           tenantId: input.tenantId,
           assetType: input.assetType,
-          ...(isUserAvatar ? { userId: input.userId } : {}),
+          ...(hasUserScope ? { userId: input.userId } : {}),
         },
       }),
     );
@@ -439,20 +468,29 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
     input:
       | StoreTenantDocumentAssetInput
       | StoreTenantBrandingAssetInput
-      | StoreUserAvatarAssetInput,
+      | StoreUserAvatarAssetInput
+      | StoreUserDocumentAssetInput,
     namespace: TenantAssetNamespace,
   ): Promise<StoredTenantDocumentAsset> {
     this.configure();
     const fileName = this.safeFileName(input.originalFileName);
+    // Non-image files (PDF, Word, Excel, ...) must go in as Cloudinary's
+    // 'raw' resource type — 'image' rejects/mangles anything that isn't a
+    // picture (or a PDF, which it treats as one for thumbnailing).
+    const resourceType: CloudinaryResourceType =
+      namespace === 'user-document' && !input.contentType.startsWith('image/')
+        ? 'raw'
+        : 'image';
     const upload = await this.uploadBuffer(input.body, {
-      resource_type: CLOUDINARY_RESOURCE_TYPE,
+      resource_type: resourceType,
       type: CLOUDINARY_DELIVERY_TYPE,
       folder: this.folderFor(
         input.tenantId,
         input.tenantSlug,
         namespace,
         input.assetType,
-        namespace === 'user-avatar' && 'userId' in input
+        (namespace === 'user-avatar' || namespace === 'user-document') &&
+          'userId' in input
           ? input.userId
           : undefined,
       ),
@@ -470,7 +508,7 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
     }
 
     return {
-      objectKey: this.toCloudinaryObjectKey(upload.public_id),
+      objectKey: this.toCloudinaryObjectKey(upload.public_id, resourceType),
       mimeType: input.contentType,
       fileName,
       sizeBytes: input.body.byteLength,
@@ -563,7 +601,8 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
     assetType:
       | TenantDocumentAssetType
       | TenantBrandingAssetType
-      | UserAvatarAssetType,
+      | UserAvatarAssetType
+      | UserDocumentAssetType,
     userId?: string,
   ): string {
     return [
@@ -591,10 +630,13 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
     return `${sanitizedSlug}--${shortId}`;
   }
 
-  private toCloudinaryObjectKey(publicId: string): string {
+  private toCloudinaryObjectKey(
+    publicId: string,
+    resourceType: CloudinaryResourceType,
+  ): string {
     return [
       CLOUDINARY_OBJECT_KEY_PREFIX,
-      CLOUDINARY_RESOURCE_TYPE,
+      resourceType,
       CLOUDINARY_DELIVERY_TYPE,
       publicId,
     ].join(':');
@@ -604,10 +646,11 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
     objectKey: string,
   ): Extract<TenantAssetReference, { provider: 'cloudinary' }> {
     const parts = objectKey.split(':');
+    const resourceType = parts[1] as CloudinaryResourceType;
     if (
       parts.length < 4 ||
       parts[0] !== CLOUDINARY_OBJECT_KEY_PREFIX ||
-      parts[1] !== CLOUDINARY_RESOURCE_TYPE ||
+      !CLOUDINARY_RESOURCE_TYPES.includes(resourceType) ||
       parts[2] !== CLOUDINARY_DELIVERY_TYPE
     ) {
       throw new InternalServerErrorException(
@@ -617,7 +660,7 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
 
     return {
       provider: 'cloudinary',
-      resourceType: CLOUDINARY_RESOURCE_TYPE,
+      resourceType,
       deliveryType: CLOUDINARY_DELIVERY_TYPE,
       publicId: parts.slice(3).join(':'),
     };

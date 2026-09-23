@@ -37,6 +37,7 @@ import {
   AllowanceType,
   AssetStatus,
   EmploymentStatus,
+  EmployeeDocument,
   PayrollTaxPolicy,
   Prisma,
 } from '../../prisma/generated/client';
@@ -50,6 +51,8 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { FieldEncryptionService } from '../crypto/field-encryption.service';
 import { AvatarUrlResolverService } from '../common/avatar-url-resolver.service';
+import { EmployeeDocumentStorageService } from '../common/employee-document-storage.service';
+import { CreateEmployeeDocumentDto } from './dto/create-employee-document.dto';
 import {
   RESIGNATION_QUEUE,
   RESIGNATION_NOTIFY_JOB,
@@ -57,6 +60,7 @@ import {
 } from './resignation-notification.processor';
 
 const RESIGNATION_NOTIFY_DELAY_MS = 30 * 60 * 1000;
+const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
 type ResignationNotificationRecipient = {
   userId: string | null;
@@ -85,6 +89,7 @@ export class EmployeesService {
     private readonly notificationsService: NotificationsService,
     private readonly encryption: FieldEncryptionService,
     private readonly avatarUrlResolver: AvatarUrlResolverService,
+    private readonly documentStorage: EmployeeDocumentStorageService,
     @InjectQueue(RESIGNATION_QUEUE)
     private readonly resignationQueue: Queue<ResignationNotifyPayload>,
   ) {}
@@ -1919,15 +1924,117 @@ export class EmployeesService {
     await this.prisma.employeeDeduction.delete({ where: { id: deductionId } });
   }
 
+  async listDocuments(tenantId: string, employeeId: string) {
+    await this.findById(tenantId, employeeId);
+    return this.resolveDocumentUrls(
+      await this.prisma.employeeDocument.findMany({
+        where: { tenantId, employeeId },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+  }
+
+  async listDocumentsForUser(tenantId: string, userId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId, tenantId },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Employee profile not found');
+    return this.listDocuments(tenantId, employee.id);
+  }
+
+  private async resolveDocumentUrls(documents: EmployeeDocument[]) {
+    return Promise.all(
+      documents.map(async (doc) => ({
+        ...doc,
+        url: await this.documentStorage
+          .createSignedReadUrl({
+            objectKey: doc.url,
+            mimeType: doc.mimeType,
+            fileName: doc.name,
+          })
+          .then((signed) => signed.readUrl),
+      })),
+    );
+  }
+
   async uploadDocument(
     tenantId: string,
     employeeId: string,
-    dto: Prisma.EmployeeDocumentUncheckedCreateInput,
+    dto: CreateEmployeeDocumentDto,
+    file: Express.Multer.File | undefined,
+    actor: RequestUser,
   ) {
     await this.findById(tenantId, employeeId);
-    return this.prisma.employeeDocument.create({
-      data: { ...dto, tenantId, employeeId },
+    this.validateDocumentFile(file);
+    const uploadedFile = file as Express.Multer.File;
+
+    const stored = await this.documentStorage.store({
+      tenantId,
+      employeeId,
+      body: uploadedFile.buffer,
+      contentType: uploadedFile.mimetype,
+      originalFileName: uploadedFile.originalname,
     });
+
+    const document = await this.prisma.employeeDocument.create({
+      data: {
+        tenantId,
+        employeeId,
+        type: dto.type,
+        customType:
+          dto.type === 'OTHER' ? dto.customType?.trim() || null : null,
+        name: stored.fileName,
+        url: stored.objectKey,
+        mimeType: stored.mimeType,
+        sizeBytes: stored.sizeBytes,
+        uploadedBy: actor.email ?? actor.id,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+      },
+    });
+
+    const signed = await this.documentStorage.createSignedReadUrl({
+      objectKey: document.url,
+      mimeType: stored.mimeType,
+      fileName: document.name,
+    });
+    return { ...document, url: signed.readUrl };
+  }
+
+  async deleteDocument(
+    tenantId: string,
+    employeeId: string,
+    documentId: string,
+  ): Promise<void> {
+    const document = await this.prisma.employeeDocument.findFirst({
+      where: { id: documentId, tenantId, employeeId },
+    });
+    if (!document) throw new NotFoundException('Document not found');
+
+    await this.prisma.employeeDocument.delete({ where: { id: document.id } });
+
+    await this.documentStorage
+      .delete(document.url)
+      .catch((error) =>
+        this.logger.error(
+          `Failed to delete employee document object ${document.url}`,
+          error,
+        ),
+      );
+  }
+
+  private validateDocumentFile(file: Express.Multer.File | undefined): void {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('A document file is required.');
+    }
+    if (
+      file.size > DOCUMENT_MAX_BYTES ||
+      file.buffer.byteLength > DOCUMENT_MAX_BYTES
+    ) {
+      throw new BadRequestException(
+        `Document exceeds the ${DOCUMENT_MAX_BYTES / 1024 / 1024} MB limit.`,
+      );
+    }
   }
 
   async resendInvite(tenantId: string, employeeId: string) {

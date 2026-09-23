@@ -40,14 +40,14 @@ import {
 import { AssetDetailPanel } from '@/components/organisms/hr/assets/AssetDetailPanel';
 import { TransferAssetPanel } from '@/components/organisms/hr/assets/TransferAssetPanel';
 import { UnassignAssetModal } from '@/components/organisms/hr/assets/UnassignAssetModal';
-import { EmployeePayslipTab } from '@/components/molecules/hr/employees/EmployeePayslipTab';
+import { EmployeeDocumentsTab } from '@/components/molecules/hr/employees/EmployeeDocumentsTab';
 import { pageBreadcrumb, pagePx, pageContent } from '@/lib/layout';
 
-type EmployeeTab = 'personal' | 'payroll';
+type EmployeeTab = 'personal' | 'documents';
 
 const TABS = [
   { key: 'personal', label: 'Personal' },
-  { key: 'payroll', label: 'Payroll' },
+  { key: 'documents', label: 'Documents' },
 ];
 
 const NOTIFY_DELAY_MS = 30 * 60 * 1000;
@@ -217,7 +217,7 @@ export default function EmployeeDetailPage({
               </div>
             </div>
           )}
-          {activeTab === 'payroll' && <EmployeePayslipTab employee={employee} />}
+          {activeTab === 'documents' && <EmployeeDocumentsTab employee={employee} />}
         </div>
       </div>
 

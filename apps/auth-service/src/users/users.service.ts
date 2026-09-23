@@ -19,6 +19,7 @@ import { AuditService } from '../audit/audit.service';
 import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
 import { normalizeEmail } from '../common/email.helper';
 import { TenantAssetStorageService } from '../tenants/tenant-asset-storage.service';
+import { UploadUserDocumentDto } from './dto/upload-user-document.dto';
 
 const AVATAR_ALLOWED_MIME_TYPES = new Set([
   'image/png',
@@ -26,6 +27,18 @@ const AVATAR_ALLOWED_MIME_TYPES = new Set([
   'image/webp',
 ]);
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+
+const DOCUMENT_ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
 @Injectable()
 export class UsersService {
@@ -683,5 +696,109 @@ export class UsersService {
       );
     }
     return false;
+  }
+
+  async listDocuments(tenantId: string, userId: string) {
+    const documents = await this.prisma.userDocument.findMany({
+      where: { tenantId, userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return Promise.all(
+      documents.map(async (doc) => {
+        const signed = await this.storage.createSignedReadUrl({
+          objectKey: doc.objectKey,
+          mimeType: doc.mimeType,
+          fileName: doc.fileName,
+        });
+        return { ...doc, url: signed.readUrl };
+      }),
+    );
+  }
+
+  async uploadDocument(
+    tenantId: string,
+    userId: string,
+    dto: UploadUserDocumentDto,
+    file: Express.Multer.File | undefined,
+  ) {
+    this.validateDocument(file);
+    const uploadedFile = file as Express.Multer.File;
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      include: { tenant: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const stored = await this.storage.storeUserDocument({
+      tenantId,
+      tenantSlug: user.tenant.slug,
+      userId,
+      body: uploadedFile.buffer,
+      contentType: uploadedFile.mimetype,
+      originalFileName: uploadedFile.originalname,
+    });
+
+    const document = await this.prisma.userDocument.create({
+      data: {
+        tenantId,
+        userId,
+        category: dto.category.trim(),
+        objectKey: stored.objectKey,
+        mimeType: stored.mimeType,
+        fileName: stored.fileName,
+        sizeBytes: stored.sizeBytes,
+      },
+    });
+
+    const signed = await this.storage.createSignedReadUrl({
+      objectKey: document.objectKey,
+      mimeType: document.mimeType,
+      fileName: document.fileName,
+    });
+
+    return { ...document, url: signed.readUrl };
+  }
+
+  async deleteDocument(
+    tenantId: string,
+    userId: string,
+    documentId: string,
+  ): Promise<void> {
+    const document = await this.prisma.userDocument.findFirst({
+      where: { id: documentId, tenantId, userId },
+    });
+    if (!document) throw new NotFoundException('Document not found');
+
+    await this.prisma.userDocument.delete({ where: { id: document.id } });
+
+    await this.storage
+      .delete(document.objectKey)
+      .catch((error) =>
+        this.logger.error(
+          `Failed to delete document object ${document.objectKey}`,
+          error,
+        ),
+      );
+  }
+
+  private validateDocument(file: Express.Multer.File | undefined): void {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('A document file is required.');
+    }
+    if (!DOCUMENT_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(
+        'Document must be a PDF, image, Word or Excel file.',
+      );
+    }
+    if (
+      file.size > DOCUMENT_MAX_BYTES ||
+      file.buffer.byteLength > DOCUMENT_MAX_BYTES
+    ) {
+      throw new BadRequestException(
+        `Document exceeds the ${DOCUMENT_MAX_BYTES / 1024 / 1024} MB limit.`,
+      );
+    }
   }
 }

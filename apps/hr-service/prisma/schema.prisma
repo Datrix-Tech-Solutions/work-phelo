@@ -744,8 +744,15 @@ model EmployeeDocument {
   tenantId   String
   employeeId String
   type       DocumentType
+  // Free-text label a user enters when `type` is 'OTHER', mirroring
+  // Asset.customType.
+  customType String?
   name       String
+  // Private object key resolved to a short-lived signed URL on read — not a
+  // public URL, despite the field name (kept for backward compatibility).
   url        String
+  mimeType   String       @default("application/octet-stream")
+  sizeBytes  Int          @default(0)
   uploadedBy String
   expiresAt  DateTime?
   createdAt  DateTime     @default(now())

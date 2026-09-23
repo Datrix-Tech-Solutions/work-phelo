@@ -6,6 +6,7 @@ import {
   ApiParam,
   ApiBody,
   ApiQuery,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import {
   Controller,
@@ -18,12 +19,16 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { CreateEmployeeDocumentDto } from './dto/create-employee-document.dto';
 import {
   InitiateOffboardDto,
   UpdateChecklistDto,
@@ -49,7 +54,6 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
-import { Prisma } from '../../prisma/generated/client';
 import {
   assertHrAccess,
   hasPermissionRule,
@@ -188,6 +192,19 @@ export class EmployeesController {
       req.user.tenantId,
       dto,
       req.user,
+    );
+  }
+
+  @Get('me/documents')
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
+  @ApiOperation({
+    summary: "List the logged-in user's own company documents",
+  })
+  @ApiResponse({ status: 200, description: 'Documents retrieved successfully' })
+  listMyDocuments(@Req() req: Request & { user: RequestUser }) {
+    return this.employeesService.listDocumentsForUser(
+      req.user.tenantId,
+      req.user.id,
     );
   }
 
@@ -552,26 +569,77 @@ export class EmployeesController {
     );
   }
 
+  @Get(':id/documents')
+  @RequirePermissions(Permission.MANAGE_DOCUMENTS)
+  @ApiOperation({ summary: "List an employee's company documents" })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Documents retrieved successfully' })
+  listDocuments(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.listDocuments(req.user.tenantId, id);
+  }
+
   @Post(':id/documents')
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions(Permission.MANAGE_DOCUMENTS)
-  @ApiOperation({ summary: 'Upload a document for an employee' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a company document for an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({
     schema: {
-      example: {
-        type: 'CONTRACT',
-        url: 'https://storage.example.com/contracts/employee-123.pdf',
-        name: 'Employment Contract 2026',
+      type: 'object',
+      required: ['file', 'type'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Document file, up to 15 MB.',
+        },
+        type: { type: 'string', example: 'CONTRACT' },
+        customType: { type: 'string', example: 'Reference Letter' },
+        expiresAt: { type: 'string', format: 'date' },
       },
     },
   })
   @ApiResponse({ status: 201, description: 'Document uploaded successfully' })
   uploadDocument(
     @Param('id') id: string,
-    @Body() dto: Prisma.EmployeeDocumentUncheckedCreateInput,
+    @Body() dto: CreateEmployeeDocumentDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @Req() req: Request & { user: RequestUser },
   ) {
-    return this.employeesService.uploadDocument(req.user.tenantId, id, dto);
+    return this.employeesService.uploadDocument(
+      req.user.tenantId,
+      id,
+      dto,
+      file,
+      req.user,
+    );
+  }
+
+  @Delete(':id/documents/:documentId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(Permission.MANAGE_DOCUMENTS)
+  @ApiOperation({ summary: "Delete an employee's company document" })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'documentId', description: 'EmployeeDocument UUID' })
+  @ApiResponse({ status: 204, description: 'Document deleted successfully' })
+  async deleteDocument(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    await this.employeesService.deleteDocument(
+      req.user.tenantId,
+      id,
+      documentId,
+    );
   }
 }

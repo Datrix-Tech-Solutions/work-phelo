@@ -12,6 +12,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -26,6 +27,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { InviteUserDto, UserSystemRole } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UploadUserDocumentDto } from './dto/upload-user-document.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -108,6 +110,78 @@ export class UsersController {
     @Req() req: Request & { user: RequestUser },
   ) {
     return this.usersService.uploadAvatar(req.user.tenantId, req.user.id, file);
+  }
+
+  @Get('me/documents')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "List the signed-in user's personal documents" })
+  @ApiResponse({ status: 200, description: 'Documents retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  listMyDocuments(@Req() req: Request & { user: RequestUser }) {
+    return this.usersService.listDocuments(req.user.tenantId, req.user.id);
+  }
+
+  @Post('me/documents')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload a personal document for the signed-in user',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'category'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Private document file, up to 15 MB.',
+        },
+        category: { type: 'string', example: 'Identification' },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Document uploaded successfully' })
+  @ApiResponse({ status: 400, description: 'Missing or oversized file' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  uploadMyDocument(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() dto: UploadUserDocumentDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.usersService.uploadDocument(
+      req.user.tenantId,
+      req.user.id,
+      dto,
+      file,
+    );
+  }
+
+  @Delete('me/documents/:documentId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: "Delete one of the signed-in user's personal documents",
+  })
+  @ApiParam({ name: 'documentId', description: 'UserDocument UUID' })
+  @ApiResponse({ status: 204, description: 'Document deleted successfully' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 404, description: 'Document not found' })
+  async deleteMyDocument(
+    @Param('documentId') documentId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    await this.usersService.deleteDocument(
+      req.user.tenantId,
+      req.user.id,
+      documentId,
+    );
   }
 
   @Post('assign-admin')

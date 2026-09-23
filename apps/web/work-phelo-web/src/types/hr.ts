@@ -154,8 +154,14 @@ export interface EmployeeDocument {
   id: string;
   employeeId: string;
   type: DocumentType;
+  customType?: string | null;
+  /** Short-lived signed read URL, resolved fresh on every fetch. */
   url: string;
   name: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedBy: string;
+  expiresAt?: string | null;
   createdAt: string;
 }
 
@@ -169,12 +175,6 @@ export interface UpdateAllowancePayload {
   type?: AllowanceType;
   amount?: number;
   name?: string;
-}
-
-export interface UploadDocumentPayload {
-  type: DocumentType;
-  url: string;
-  name: string;
 }
 
 export interface UpdateEmployeePayload {
