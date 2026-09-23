@@ -21,6 +21,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { AuthService } from './auth.service';
+import { TenantAssetStorageService } from '../tenants/tenant-asset-storage.service';
 import { LoginDto } from './dto/login.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -57,7 +58,10 @@ const OTP_SEND_THROTTLE = {
 @ApiTags('Auth')
 @Controller()
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly assetStorage: TenantAssetStorageService,
+  ) {}
 
   @Post('login')
   @Throttle(SENSITIVE_AUTH_THROTTLE)
@@ -221,11 +225,15 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current authenticated user' })
   @ApiResponse({ status: 200, description: 'Current user returned' })
-  me(
+  async me(
     @Req() req: Request & { user: RequestUser },
     @Res({ passthrough: true }) res: Response,
   ) {
     setAccessTokenCookie(res, this.authService.signAccessToken(req.user));
+
+    const avatarUrl = await this.assetStorage.resolveAvatarReadUrl(
+      req.user.avatarUrl,
+    );
 
     return {
       user: {
@@ -236,6 +244,7 @@ export class AuthController {
         tenantSlug: req.user.tenantSlug,
         tenantName: req.user.tenantName,
         firstName: req.user.firstName,
+        avatarUrl,
         moduleConfig: req.user.moduleConfig ?? {},
         featureConfig: req.user.featureConfig ?? {},
       },
