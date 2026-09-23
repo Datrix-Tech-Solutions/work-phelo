@@ -6,7 +6,12 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { GLAccount, GLAccountCategory } from '@/types/accounting';
+import {
+  CASH_FLOW_CATEGORY_OPTIONS,
+  CashFlowCategory,
+  GLAccount,
+  GLAccountCategory,
+} from '@/types/accounting';
 import { useAccountClassifications, useAccountGroups, useUpdateGLAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -25,6 +30,7 @@ type FormValues = {
   accountGroupId: string;
   description: string;
   allowPosting: boolean;
+  cashFlowCategory: CashFlowCategory | '';
 };
 
 const TYPE_OPTIONS: SearchSelectOption[] = [
@@ -77,6 +83,7 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
       accountGroupId: account.accountGroupId ?? '',
       description: account.description ?? '',
       allowPosting: account.allowPosting,
+      cashFlowCategory: account.cashFlowCategory ?? '',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, account.id, isLoadingAllGroups, reset]);
@@ -91,6 +98,7 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
         accountGroupId: data.accountGroupId || null,
         description: data.description,
         allowPosting: data.allowPosting,
+        cashFlowCategory: data.cashFlowCategory || undefined,
       });
       toast.success('Account updated');
       onClose();
@@ -199,6 +207,20 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
           registration={register('description')}
           error={errors.description}
           placeholder="Provide a brief description of this account…"
+        />
+
+        <Controller
+          name="cashFlowCategory"
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              label="Cash Flow Category (optional)"
+              placeholder="Defaults from the parent account or classification"
+              options={CASH_FLOW_CATEGORY_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
         />
 
         <label className="flex items-center gap-2 text-sm text-gray-700">

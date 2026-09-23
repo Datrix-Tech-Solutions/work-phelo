@@ -6,7 +6,12 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { GLAccount, GLAccountCategory } from '@/types/accounting';
+import {
+  CASH_FLOW_CATEGORY_OPTIONS,
+  CashFlowCategory,
+  GLAccount,
+  GLAccountCategory,
+} from '@/types/accounting';
 import { useAccountClassifications, useAccountGroups, useCreateGLAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -48,6 +53,7 @@ type FormValues = {
   classificationId: string;
   parentAccountId: string;
   description: string;
+  cashFlowCategory: CashFlowCategory | '';
 };
 
 const DEFAULTS: FormValues = {
@@ -57,6 +63,7 @@ const DEFAULTS: FormValues = {
   classificationId: '',
   parentAccountId: '',
   description: '',
+  cashFlowCategory: '',
 };
 
 const TYPE_OPTIONS: SearchSelectOption[] = [
@@ -142,6 +149,7 @@ export function AddLeafAccountPanel({
         classificationId: data.classificationId,
         accountGroupId: data.parentAccountId || undefined,
         description: data.description || undefined,
+        cashFlowCategory: data.cashFlowCategory || undefined,
       });
       toast.success('Account created successfully');
       onCreated?.(account);
@@ -205,6 +213,20 @@ export function AddLeafAccountPanel({
           registration={register('description')}
           error={errors.description}
           placeholder="Optional description"
+        />
+
+        <Controller
+          name="cashFlowCategory"
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              label="Cash Flow Category (optional)"
+              placeholder="Defaults from the parent account or classification"
+              options={CASH_FLOW_CATEGORY_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
         />
 
         {lockedScope ? (
