@@ -308,9 +308,7 @@ export class S3TenantAssetStorageProvider implements TenantAssetStorageProvider 
       'tenants',
       input.tenantId,
       namespace,
-      ...(isUserAvatar
-        ? ['users', (input as StoreUserAvatarAssetInput).userId]
-        : []),
+      ...(isUserAvatar ? ['users', input.userId] : []),
       input.assetType,
       `${randomUUID()}-${fileName}`,
     ]
@@ -326,9 +324,7 @@ export class S3TenantAssetStorageProvider implements TenantAssetStorageProvider 
         Metadata: {
           tenantId: input.tenantId,
           assetType: input.assetType,
-          ...(isUserAvatar
-            ? { userId: (input as StoreUserAvatarAssetInput).userId }
-            : {}),
+          ...(isUserAvatar ? { userId: input.userId } : {}),
         },
       }),
     );
@@ -423,7 +419,7 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
         namespace,
         input.assetType,
         namespace === 'user-avatar' && 'userId' in input
-          ? (input as StoreUserAvatarAssetInput).userId
+          ? input.userId
           : undefined,
       ),
       public_id: randomUUID(),
