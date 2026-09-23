@@ -12,7 +12,7 @@ import {
   UpdateAllowancePayload,
   CreateDeductionPayload,
   UpdateDeductionPayload,
-  UploadDocumentPayload,
+  DocumentType,
   EmployeeQuery,
   OffboardingRecord,
   InitiateOffboardDto,
@@ -366,18 +366,64 @@ export function useDeleteAllowance(employeeId: string) {
   });
 }
 
-export function useUploadDocument(employeeId: string) {
+export function useEmployeeDocuments(employeeId: string) {
+  return useQuery({
+    queryKey: ['employees', employeeId, 'documents'],
+    queryFn: async () => {
+      const res = await api.get<EmployeeDocument[]>(`/hr/employees/${employeeId}/documents`);
+      return res.data;
+    },
+    enabled: !!employeeId,
+  });
+}
+
+export function useMyEmployeeDocuments() {
+  return useQuery({
+    queryKey: ['employees', 'me', 'documents'],
+    queryFn: async () => {
+      const res = await api.get<EmployeeDocument[]>('/hr/employees/me/documents');
+      return res.data;
+    },
+  });
+}
+
+export interface UploadEmployeeDocumentInput {
+  file: File;
+  type: DocumentType;
+  customType?: string;
+  expiresAt?: string;
+}
+
+export function useUploadEmployeeDocument(employeeId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: UploadDocumentPayload) => {
-      const res = await api.post<EmployeeDocument>(
-        `/hr/employees/${employeeId}/documents`,
-        payload,
-      );
+    mutationFn: async ({ file, type, customType, expiresAt }: UploadEmployeeDocumentInput) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('type', type);
+      if (customType) form.append('customType', customType);
+      if (expiresAt) form.append('expiresAt', expiresAt);
+      const res = await api.post<EmployeeDocument>(`/hr/employees/${employeeId}/documents`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'documents'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'me', 'documents'] });
+    },
+  });
+}
+
+export function useDeleteEmployeeDocument(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (documentId: string) => {
+      await api.delete(`/hr/employees/${employeeId}/documents/${documentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'documents'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'me', 'documents'] });
     },
   });
 }
