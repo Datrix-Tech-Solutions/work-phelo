@@ -16,6 +16,7 @@ import {
   PasswordResetOtpEvent,
   SmsOtpEvent,
   EmployeeAvatarUpdatedEvent,
+  EmployeeAvatarUpdatedResult,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -220,8 +221,8 @@ export class RabbitMQPublisher {
   hrEmployeeAvatarUpdated(
     data: EmployeeAvatarUpdatedEvent,
     correlationId?: string,
-  ): Promise<void> {
-    return this.publish(
+  ): Promise<EmployeeAvatarUpdatedResult> {
+    return this.request(
       this.hrClient,
       EventPatterns.HR_EMPLOYEE_AVATAR_UPDATED,
       data,

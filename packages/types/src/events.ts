@@ -133,6 +133,10 @@ export interface EmployeeAvatarUpdatedEvent {
   avatarObjectKey: string;
 }
 
+export interface EmployeeAvatarUpdatedResult {
+  synced: boolean;
+}
+
 // ── HR → Auth Events ───────────────────────────────────────────────────────
 
 export interface InviteEmployeeEvent {

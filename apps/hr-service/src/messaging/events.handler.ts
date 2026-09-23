@@ -261,7 +261,7 @@ export class EventsHandler {
     }
   }
 
-  @EventPattern(EventPatterns.HR_EMPLOYEE_AVATAR_UPDATED)
+  @MessagePattern(EventPatterns.HR_EMPLOYEE_AVATAR_UPDATED)
   async handleEmployeeAvatarUpdated(
     @Payload() data: WithMeta<EmployeeAvatarUpdatedEvent>,
     @Ctx() context: RmqContext,
@@ -271,18 +271,20 @@ export class EventsHandler {
       `[hr.employee_avatar_updated] Received | userId=${userId} | corrId=${_meta?.correlationId}`,
     );
     try {
-      await this.prisma.employee.updateMany({
+      const result = await this.prisma.employee.updateMany({
         where: { tenantId, userId },
         data: { avatarUrl: avatarObjectKey },
       });
       this.ack(context);
+      return { synced: result.count > 0 };
     } catch (error) {
-      this.settleEventFailure(
+      this.settleRpcFailure(
         context,
         'hr.employee_avatar_updated',
         error,
         `userId=${userId} | corrId=${_meta?.correlationId}`,
       );
+      throw new RpcException(this.toRpcErrorPayload(error));
     }
   }
 
