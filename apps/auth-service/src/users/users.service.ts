@@ -616,6 +616,19 @@ export class UsersService {
         );
     }
 
+    void this.rabbitmq
+      .hrEmployeeAvatarUpdated({
+        tenantId,
+        userId,
+        avatarObjectKey: stored.objectKey,
+      })
+      .catch((error) =>
+        this.logger.error(
+          `Failed to notify hr-service of avatar update for user ${userId}`,
+          error,
+        ),
+      );
+
     const signed = await this.storage.createSignedReadUrl({
       objectKey: stored.objectKey,
       mimeType: stored.mimeType,

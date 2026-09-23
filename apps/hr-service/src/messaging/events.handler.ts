@@ -25,6 +25,7 @@ import {
   EmployeeActivatedEvent,
   ProvisionTenantWorkspaceCommand,
   LinkEmployeeIdentityCommand,
+  EmployeeAvatarUpdatedEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -256,6 +257,31 @@ export class EventsHandler {
         'hr.employee_activated',
         e,
         `email=${email} | corrId=${_meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern(EventPatterns.HR_EMPLOYEE_AVATAR_UPDATED)
+  async handleEmployeeAvatarUpdated(
+    @Payload() data: WithMeta<EmployeeAvatarUpdatedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    const { tenantId, userId, avatarObjectKey, _meta } = data;
+    this.logger.log(
+      `[hr.employee_avatar_updated] Received | userId=${userId} | corrId=${_meta?.correlationId}`,
+    );
+    try {
+      await this.prisma.employee.updateMany({
+        where: { tenantId, userId },
+        data: { avatarUrl: avatarObjectKey },
+      });
+      this.ack(context);
+    } catch (error) {
+      this.settleEventFailure(
+        context,
+        'hr.employee_avatar_updated',
+        error,
+        `userId=${userId} | corrId=${_meta?.correlationId}`,
       );
     }
   }
