@@ -10,6 +10,7 @@ import { useDeactivateGLAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { EditLeafAccountPanel } from '@/components/organisms/accounting/panels/EditLeafAccountPanel';
+import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
 import { GLAccountLedger } from '@/components/organisms/accounting/GLAccountLedger';
 import type { GLAccount } from '@/types/accounting';
 
@@ -27,7 +28,22 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
   const { mutateAsync: deactivateAccount, isPending: isDeactivating } = useDeactivateGLAccount();
   const [activeTab, setActiveTab] = useState('ledger');
   const [isEditing, setIsEditing] = useState(false);
+  const [isCreatingSibling, setIsCreatingSibling] = useState(false);
   const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false);
+
+  // "Create Account" here mirrors this account's own place in the hierarchy — same
+  // classification and parent account, if it has one. A leaf account always needs a
+  // classification, so this account has to have one too before it can be mirrored; a legacy
+  // account with neither just doesn't get the shortcut (the general "Add Account" still works).
+  const siblingScope = account.classification?.id
+    ? {
+        accountType: account.category,
+        classificationId: account.classification.id,
+        classificationName: account.classification.name,
+        groupId: account.accountGroup?.id,
+        groupName: account.accountGroup?.name,
+      }
+    : undefined;
 
   const deactivate = async () => {
     try {
@@ -53,6 +69,16 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
             label={account.status}
             variant={account.status === 'ACTIVE' ? 'success' : 'neutral'}
           />
+          {siblingScope && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCreatingSibling(true)}
+            >
+              Create Account
+            </Button>
+          )}
           {account.status === 'ACTIVE' && (
             <Button
               type="button"
@@ -114,6 +140,12 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
         isOpen={isEditing}
         onClose={() => setIsEditing(false)}
         account={account}
+      />
+
+      <AddLeafAccountPanel
+        isOpen={isCreatingSibling}
+        onClose={() => setIsCreatingSibling(false)}
+        lockedScope={siblingScope}
       />
 
       <Modal

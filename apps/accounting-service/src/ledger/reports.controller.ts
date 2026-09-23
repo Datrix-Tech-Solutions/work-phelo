@@ -15,6 +15,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
 import {
   BalanceSheetReportQueryDto,
+  CashFlowReportQueryDto,
   GeneralLedgerReportQueryDto,
   IncomeStatementReportQueryDto,
   TrialBalanceReportQueryDto,
@@ -84,5 +85,19 @@ export class ReportsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.balanceSheet(request.user.tenantId, query);
+  }
+
+  @Get('cash-flow-statement')
+  @ApiOperation({
+    summary: 'Run the Cash Flow Statement report (indirect method)',
+    description:
+      'Starts from Net Income and classifies every other account as Operating, Investing or Financing (defaulting asset/liability/equity accounts to Operating); Cash & Bank accounts are excluded and instead make up the opening/closing cash figures.',
+  })
+  @RequirePermissions(AccountingPermission.LEDGER_VIEW)
+  cashFlowStatement(
+    @Query() query: CashFlowReportQueryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.cashFlowStatement(request.user.tenantId, query);
   }
 }

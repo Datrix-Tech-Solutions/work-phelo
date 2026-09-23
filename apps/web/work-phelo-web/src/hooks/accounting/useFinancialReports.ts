@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
   BalanceSheetReport,
+  CashFlowStatementReport,
   GeneralLedgerReport,
   IncomeStatementReport,
   TrialBalanceReport,
@@ -31,4 +32,8 @@ export function useIncomeStatementReport(params: Params, enabled: boolean) {
 
 export function useBalanceSheetReport(params: Params, enabled: boolean) {
   return useReportQuery<BalanceSheetReport>('balance-sheet', params, enabled);
+}
+
+export function useCashFlowStatementReport(params: Params, enabled: boolean) {
+  return useReportQuery<CashFlowStatementReport>('cash-flow-statement', params, enabled);
 }

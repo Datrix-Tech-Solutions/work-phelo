@@ -6,7 +6,12 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { AccountClassification, GLAccountCategory } from '@/types/accounting';
+import {
+  AccountClassification,
+  CASH_FLOW_CATEGORY_OPTIONS,
+  CashFlowCategory,
+  GLAccountCategory,
+} from '@/types/accounting';
 import { useCreateAccountClassification, useUpdateAccountClassification } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -21,12 +26,14 @@ type FormValues = {
   accountName: string;
   accountType: GLAccountCategory | '';
   accountCode: string;
+  cashFlowCategory: CashFlowCategory | '';
 };
 
 const DEFAULTS: FormValues = {
   accountName: '',
   accountType: '',
   accountCode: '',
+  cashFlowCategory: '',
 };
 
 const TYPE_OPTIONS: SearchSelectOption[] = [
@@ -59,6 +66,7 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
       accountName: editing.name,
       accountType: editing.category,
       accountCode: editing.code,
+      cashFlowCategory: editing.cashFlowCategory ?? '',
     });
   }, [isOpen, editing, reset]);
 
@@ -75,6 +83,7 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
           name: data.accountName,
           category: data.accountType as GLAccountCategory,
           code: data.accountCode,
+          cashFlowCategory: data.cashFlowCategory || undefined,
         });
         toast.success('Classification updated successfully');
         handleClose();
@@ -84,6 +93,7 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
         name: data.accountName,
         category: data.accountType as GLAccountCategory,
         code: data.accountCode,
+        cashFlowCategory: data.cashFlowCategory || undefined,
       });
       toast.success('Classification created successfully');
       handleClose();
@@ -148,6 +158,20 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
           registration={register('accountCode', { required: 'Account code is required' })}
           error={errors.accountCode}
           placeholder="e.g. 1000"
+        />
+
+        <Controller
+          name="cashFlowCategory"
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              label="Cash Flow Category (optional)"
+              placeholder="Defaults per account — set here to apply to the whole classification"
+              options={CASH_FLOW_CATEGORY_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
         />
       </div>
     </SidePanel>

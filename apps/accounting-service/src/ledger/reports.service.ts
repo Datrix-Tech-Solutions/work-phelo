@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  CashFlowCategory,
   GLAccountCategory,
   JournalStatus,
   NormalBalance,
@@ -12,6 +13,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BalanceSheetReportQueryDto,
+  CashFlowReportQueryDto,
   GeneralLedgerReportQueryDto,
   IncomeStatementReportQueryDto,
   TrialBalanceReportQueryDto,
@@ -39,16 +41,30 @@ const reportLineInclude = {
       name: true,
       category: true,
       normalBalance: true,
+      cashFlowCategory: true,
       classification: {
-        select: { id: true, code: true, name: true, category: true },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          category: true,
+          cashFlowCategory: true,
+        },
       },
       accountGroup: {
         select: {
           id: true,
           code: true,
           name: true,
+          cashFlowCategory: true,
           classification: {
-            select: { id: true, code: true, name: true, category: true },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              category: true,
+              cashFlowCategory: true,
+            },
           },
         },
       },
@@ -328,6 +344,184 @@ export class ReportsService {
     };
   }
 
+  /**
+   * Indirect-method Cash Flow Statement. Net Income is the starting line; every other account
+   * resolves to Operating (the default for asset/liability/equity), Investing, Financing or
+   * Excluded — see resolveCashFlowCategory. Cash & Bank accounts are always Excluded and instead
+   * make up the opening/closing cash figures. A revenue/expense account is normally left out
+   * entirely (it's already inside Net Income); tagging one Investing/Financing/Excluded backs
+   * it out of Operating and shows its own cash effect in that section instead — e.g. a "Gain on
+   * Sale of Equipment" account tagged Investing.
+   */
+  async cashFlowStatement(tenantId: string, query: CashFlowReportQueryDto) {
+    const period = query.fiscalPeriodId
+      ? await this.findFiscalPeriod(tenantId, query.fiscalPeriodId)
+      : undefined;
+    const fromDate = this.startOfDay(query.fromDate ?? period?.startDate);
+    const toDate = this.endOfDay(query.toDate ?? period?.endDate);
+    if (!fromDate || !toDate) {
+      throw new BadRequestException('fromDate and toDate are required');
+    }
+
+    const [periodLines, openingCashLines, cashAccounts] = await Promise.all([
+      this.findReportLines(tenantId, {
+        fromDate,
+        toDate,
+        fiscalPeriodId: query.fiscalPeriodId,
+      }),
+      this.findReportLines(tenantId, { beforeDate: fromDate }),
+      this.prisma.accountingCashAccount.findMany({
+        where: { tenantId },
+        select: { glAccountId: true },
+      }),
+    ]);
+    const cashAccountIds = new Set(cashAccounts.map((a) => a.glAccountId));
+
+    const openingCash = this.sumIds(
+      this.movementByAccount(openingCashLines),
+      cashAccountIds,
+    );
+    const periodMovement = this.movementByAccount(periodLines);
+    const cashMovement = this.sumIds(periodMovement, cashAccountIds);
+    const closingCash = openingCash.plus(cashMovement);
+
+    const accounts = this.statementAccounts(periodLines);
+    let netIncome = zero;
+    let totalOperating = zero;
+    let totalInvesting = zero;
+    let totalFinancing = zero;
+    const operatingAdjustments: Array<{
+      account: AccountSummary;
+      amount: string;
+    }> = [];
+    const investingLines: Array<{ account: AccountSummary; amount: string }> =
+      [];
+    const financingLines: Array<{ account: AccountSummary; amount: string }> =
+      [];
+
+    for (const account of accounts.values()) {
+      if (cashAccountIds.has(account.id)) continue; // makes up opening/closing cash instead
+      const movement = account.debit.minus(account.credit);
+      if (movement.isZero()) continue;
+      const normalChange =
+        account.normalBalance === NormalBalance.DEBIT
+          ? movement
+          : movement.negated();
+      // Debit-normal (asset/expense) growth uses cash; credit-normal (liability/equity/revenue)
+      // growth is a source of it.
+      const cashEffect =
+        account.category === GLAccountCategory.ASSET ||
+        account.category === GLAccountCategory.EXPENSE
+          ? normalChange.negated()
+          : normalChange;
+      const isRevenueOrExpense =
+        account.category === GLAccountCategory.REVENUE ||
+        account.category === GLAccountCategory.EXPENSE;
+
+      if (isRevenueOrExpense) {
+        // Already fully inside Net Income (just computed); only pull it back out — with a
+        // matching line in its own section — if it's tagged as non-operating.
+        netIncome =
+          account.category === GLAccountCategory.REVENUE
+            ? netIncome.plus(normalChange)
+            : netIncome.minus(normalChange);
+        const category = this.resolveCashFlowCategory(account);
+        if (category === CashFlowCategory.OPERATING || !category) continue;
+        const row = {
+          account: this.accountSummary(account),
+          amount: this.money(cashEffect),
+        };
+        operatingAdjustments.push({
+          account: row.account,
+          amount: this.money(cashEffect.negated()),
+        });
+        totalOperating = totalOperating.minus(cashEffect);
+        if (category === CashFlowCategory.INVESTING) {
+          investingLines.push(row);
+          totalInvesting = totalInvesting.plus(cashEffect);
+        } else if (category === CashFlowCategory.FINANCING) {
+          financingLines.push(row);
+          totalFinancing = totalFinancing.plus(cashEffect);
+        }
+        continue;
+      }
+
+      const category =
+        this.resolveCashFlowCategory(account) ?? CashFlowCategory.OPERATING;
+      const row = {
+        account: this.accountSummary(account),
+        amount: this.money(cashEffect),
+      };
+      if (category === CashFlowCategory.OPERATING) {
+        operatingAdjustments.push(row);
+        totalOperating = totalOperating.plus(cashEffect);
+      } else if (category === CashFlowCategory.INVESTING) {
+        investingLines.push(row);
+        totalInvesting = totalInvesting.plus(cashEffect);
+      } else if (category === CashFlowCategory.FINANCING) {
+        financingLines.push(row);
+        totalFinancing = totalFinancing.plus(cashEffect);
+      }
+      // EXCLUDED (a non-cash-tagged balance sheet account): dropped entirely, on purpose.
+    }
+
+    totalOperating = totalOperating.plus(netIncome);
+    const netChangeInCash = totalOperating
+      .plus(totalInvesting)
+      .plus(totalFinancing);
+
+    return {
+      fromDate,
+      toDate,
+      operatingActivities: {
+        netIncome: this.money(netIncome),
+        adjustments: operatingAdjustments,
+        total: this.money(totalOperating),
+      },
+      investingActivities: {
+        lines: investingLines,
+        total: this.money(totalInvesting),
+      },
+      financingActivities: {
+        lines: financingLines,
+        total: this.money(totalFinancing),
+      },
+      netChangeInCash: this.money(netChangeInCash),
+      openingCash: this.money(openingCash),
+      closingCash: this.money(closingCash),
+    };
+  }
+
+  /** Cash accounts are always Excluded (handled by the caller, before this is reached). For
+   *  everything else: the account's own tag, then its group's, then its classification's —
+   *  the classification is read off the group when the account has one, off the account
+   *  directly otherwise. Revenue/expense accounts with no tag anywhere return null (see
+   *  cashFlowStatement's isRevenueOrExpense branch); asset/liability/equity default to
+   *  Operating instead, applied by the caller. */
+  private resolveCashFlowCategory(account: {
+    category: GLAccountCategory;
+    cashFlowCategory: CashFlowCategory | null;
+    classification?: { cashFlowCategory: CashFlowCategory | null } | null;
+    accountGroup?: {
+      cashFlowCategory: CashFlowCategory | null;
+      classification: { cashFlowCategory: CashFlowCategory | null };
+    } | null;
+  }): CashFlowCategory | null {
+    return (
+      account.cashFlowCategory ??
+      account.accountGroup?.cashFlowCategory ??
+      account.accountGroup?.classification.cashFlowCategory ??
+      account.classification?.cashFlowCategory ??
+      null
+    );
+  }
+
+  private sumIds(movements: Map<string, Prisma.Decimal>, ids: Set<string>) {
+    let total = zero;
+    for (const id of ids) total = total.plus(movements.get(id) ?? zero);
+    return total;
+  }
+
   private async findReportLines(
     tenantId: string,
     filters: {
@@ -422,21 +616,25 @@ export class ReportsService {
         name: string;
         category: GLAccountCategory;
         normalBalance: NormalBalance;
+        cashFlowCategory: CashFlowCategory | null;
         classification?: {
           id: string;
           code: string;
           name: string;
           category: GLAccountCategory;
+          cashFlowCategory: CashFlowCategory | null;
         } | null;
         accountGroup?: {
           id: string;
           code: string;
           name: string;
+          cashFlowCategory: CashFlowCategory | null;
           classification: {
             id: string;
             code: string;
             name: string;
             category: GLAccountCategory;
+            cashFlowCategory: CashFlowCategory | null;
           };
         } | null;
         debit: Prisma.Decimal;

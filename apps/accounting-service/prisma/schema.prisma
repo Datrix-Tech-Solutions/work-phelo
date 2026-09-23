@@ -317,6 +317,8 @@ model GLAccount {
   classificationId  String?
   accountGroupId    String?
   parentAccountId   String?
+  /// Overrides the group's (or classification's) cash-flow default for this one account.
+  cashFlowCategory  CashFlowCategory?
   allowPosting      Boolean                        @default(true)
   description       String?
   status            RecordStatus                   @default(ACTIVE)
@@ -352,6 +354,19 @@ model GLAccount {
   @@schema("accounting")
 }
 
+/// Which section of the Cash Flow Statement an account's balance change belongs in.
+/// EXCLUDED covers both non-flows (the Cash and Bank accounts themselves — always resolved
+/// automatically from AccountingCashAccount, never set here) and non-cash items that belong in
+/// the supplemental disclosure note rather than one of the three main sections.
+enum CashFlowCategory {
+  OPERATING
+  INVESTING
+  FINANCING
+  EXCLUDED
+
+  @@schema("accounting")
+}
+
 model AccountClassification {
   id               String            @id @default(uuid())
   tenantId         String
@@ -361,6 +376,9 @@ model AccountClassification {
   displayOrder     Int               @default(0)
   isSystemTemplate Boolean           @default(false)
   isActive         Boolean           @default(true)
+  /// Cash-flow default for accounts under this classification; a group or account below it
+  /// can override. Null falls back to the category-based default (see GLAccount).
+  cashFlowCategory CashFlowCategory?
   createdByUserId  String
   updatedByUserId  String
   createdAt        DateTime          @default(now())
@@ -382,6 +400,9 @@ model AccountGroup {
   name             String
   displayOrder     Int                   @default(0)
   isActive         Boolean               @default(true)
+  /// Overrides the classification's cash-flow default for every account in this group; an
+  /// account below it can still override further.
+  cashFlowCategory CashFlowCategory?
   createdByUserId  String
   updatedByUserId  String
   createdAt        DateTime              @default(now())

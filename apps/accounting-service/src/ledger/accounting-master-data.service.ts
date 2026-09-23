@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { runFiscalPeriodCloseChecks } from './fiscal-period-close-check';
 import { fiscalYearName, summarizeFiscalYear } from './fiscal-year';
 import {
+  BulkImportAccountsDto,
   CreateAccountClassificationDto,
   CreateAccountGroupDto,
   CreateAccountingCurrencyDto,
@@ -48,6 +50,15 @@ import {
 export enum FinancialStatement {
   BALANCE_SHEET = 'BALANCE_SHEET',
   INCOME_STATEMENT = 'INCOME_STATEMENT',
+}
+
+/** Per-row outcome of a bulk import. `skipped` means it was never attempted because a
+ *  dependency (its classification or parent account) failed or was never created. */
+export interface BulkImportRowResult {
+  code: string;
+  status: 'created' | 'skipped' | 'failed';
+  id?: string;
+  message?: string;
 }
 
 const MONTH_NAMES = [
@@ -129,7 +140,8 @@ const CATEGORY_CODE_RANGES: Record<
 // to point at. Nothing here is looked up by code elsewhere in the app (forms all pick
 // GL accounts by category, never by classification/group), so this is just enough
 // default organization to avoid ad hoc groups like a one-off "Bank Account" group that
-// don't match the intended Cash and Bank / Accounts Receivable / Accounts Payable setup.
+// don't match the intended Cash and Bank / Receivables / Payables setup. Revenue and
+// Expense have no group at all — those accounts post directly under the classification.
 // Sub-numbered within each category's reserved thousand-block (Asset 1000s, Liability
 // 2000s, Equity 3000s — unused here, Revenue 4000s, Expense 5000s): x100 for the
 // classification, x110/x120/... for its groups.
@@ -143,7 +155,7 @@ const STANDARD_ACCOUNT_HIERARCHY = [
       { code: '1110', name: 'Cash and Bank', displayOrder: 10 },
       {
         code: '1120',
-        name: 'Accounts Receivable',
+        name: 'Receivables',
         displayOrder: 20,
       },
     ],
@@ -156,24 +168,26 @@ const STANDARD_ACCOUNT_HIERARCHY = [
     groups: [
       {
         code: '2110',
-        name: 'Accounts Payable',
+        name: 'Payables',
         displayOrder: 10,
       },
     ],
   },
   {
     code: '4100',
-    name: 'Revenue',
+    name: 'Operating Revenue',
     category: GLAccountCategory.REVENUE,
     displayOrder: 30,
-    groups: [{ code: '4110', name: 'Revenue', displayOrder: 10 }],
+    // No group: revenue accounts post directly under the classification.
+    groups: [],
   },
   {
     code: '5100',
-    name: 'Expenses',
+    name: 'Operating Expense',
     category: GLAccountCategory.EXPENSE,
     displayOrder: 40,
-    groups: [{ code: '5110', name: 'Expenses', displayOrder: 10 }],
+    // No group: expense accounts post directly under the classification.
+    groups: [],
   },
 ] as const;
 
@@ -786,6 +800,7 @@ export class AccountingMasterDataService {
           classificationId: hierarchy.classificationId,
           accountGroupId: dto.accountGroupId,
           parentAccountId: dto.parentAccountId,
+          cashFlowCategory: dto.cashFlowCategory,
           allowPosting: dto.allowPosting ?? true,
           description: this.optional(dto.description),
           createdByUserId: user.id,
@@ -893,6 +908,9 @@ export class AccountingMasterDataService {
           ...(dto.parentAccountId !== undefined
             ? { parentAccountId: dto.parentAccountId || null }
             : {}),
+          ...(dto.cashFlowCategory !== undefined
+            ? { cashFlowCategory: dto.cashFlowCategory }
+            : {}),
           ...(dto.allowPosting !== undefined
             ? { allowPosting: dto.allowPosting }
             : {}),
@@ -989,6 +1007,7 @@ export class AccountingMasterDataService {
           category: dto.category,
           displayOrder: dto.displayOrder ?? 0,
           isSystemTemplate: dto.isSystemTemplate ?? false,
+          cashFlowCategory: dto.cashFlowCategory,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -1053,6 +1072,9 @@ export class AccountingMasterDataService {
             : {}),
           ...(dto.isSystemTemplate !== undefined
             ? { isSystemTemplate: dto.isSystemTemplate }
+            : {}),
+          ...(dto.cashFlowCategory !== undefined
+            ? { cashFlowCategory: dto.cashFlowCategory }
             : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
           updatedByUserId: user.id,
@@ -1150,6 +1172,7 @@ export class AccountingMasterDataService {
           code: dto.code,
           name: dto.name,
           displayOrder: dto.displayOrder ?? 0,
+          cashFlowCategory: dto.cashFlowCategory,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -1173,6 +1196,167 @@ export class AccountingMasterDataService {
     } catch (error) {
       this.rethrowUnique(error, 'Account group code already exists');
     }
+  }
+
+  /** Bulk-creates a classification/group/account hierarchy from a spreadsheet import.
+   *  Runs as three dependency-ordered passes — classifications, then groups, then leaf
+   *  accounts — rather than one all-or-nothing transaction: a failed classification or
+   *  group must block everything that depends on it (skipped, never attempted), but a
+   *  failed leaf account is independent of every other leaf account and must not block
+   *  them. Rows whose code already exists for the tenant are treated as a no-op — the
+   *  existing record's id is reused to resolve any row elsewhere in the file that
+   *  references it. */
+  async bulkImportAccounts(user: RequestUser, dto: BulkImportAccountsDto) {
+    const tenantId = user.tenantId;
+
+    const [existingClassifications, existingGroups] = await Promise.all([
+      this.prisma.accountClassification.findMany({
+        where: { tenantId },
+        select: { id: true, code: true },
+      }),
+      this.prisma.accountGroup.findMany({
+        where: { tenantId },
+        select: { id: true, code: true },
+      }),
+    ]);
+
+    const classificationIdByCode = new Map(
+      existingClassifications.map((c) => [c.code.toUpperCase(), c.id]),
+    );
+    const groupIdByCode = new Map(
+      existingGroups.map((g) => [g.code.toUpperCase(), g.id]),
+    );
+
+    const classifications: BulkImportRowResult[] = [];
+    for (const row of dto.classifications) {
+      const codeKey = row.code.toUpperCase();
+      if (classificationIdByCode.has(codeKey)) {
+        classifications.push({
+          code: row.code,
+          status: 'skipped',
+          message: 'Already exists',
+        });
+        continue;
+      }
+      try {
+        const created = await this.createAccountClassification(user, {
+          code: row.code,
+          name: row.name,
+          category: row.category,
+        });
+        classificationIdByCode.set(codeKey, created.id);
+        classifications.push({
+          code: row.code,
+          status: 'created',
+          id: created.id,
+        });
+      } catch (error) {
+        classifications.push({
+          code: row.code,
+          status: 'failed',
+          message: this.bulkImportErrorMessage(error),
+        });
+      }
+    }
+
+    const groups: BulkImportRowResult[] = [];
+    for (const row of dto.groups) {
+      const codeKey = row.code.toUpperCase();
+      if (groupIdByCode.has(codeKey)) {
+        groups.push({
+          code: row.code,
+          status: 'skipped',
+          message: 'Already exists',
+        });
+        continue;
+      }
+      const classificationId = classificationIdByCode.get(
+        row.classificationCode.toUpperCase(),
+      );
+      if (!classificationId) {
+        groups.push({
+          code: row.code,
+          status: 'skipped',
+          message: `Classification "${row.classificationCode}" was not created`,
+        });
+        continue;
+      }
+      try {
+        const created = await this.createAccountGroup(user, {
+          classificationId,
+          code: row.code,
+          name: row.name,
+        });
+        groupIdByCode.set(codeKey, created.id);
+        groups.push({ code: row.code, status: 'created', id: created.id });
+      } catch (error) {
+        groups.push({
+          code: row.code,
+          status: 'failed',
+          message: this.bulkImportErrorMessage(error),
+        });
+      }
+    }
+
+    const accounts: BulkImportRowResult[] = [];
+    for (const row of dto.accounts) {
+      const classificationId = classificationIdByCode.get(
+        row.classificationCode.toUpperCase(),
+      );
+      if (!classificationId) {
+        accounts.push({
+          code: row.code,
+          status: 'skipped',
+          message: `Classification "${row.classificationCode}" was not created`,
+        });
+        continue;
+      }
+      let accountGroupId: string | undefined;
+      if (row.parentAccountCode) {
+        accountGroupId = groupIdByCode.get(row.parentAccountCode.toUpperCase());
+        if (!accountGroupId) {
+          accounts.push({
+            code: row.code,
+            status: 'skipped',
+            message: `Parent account "${row.parentAccountCode}" was not created`,
+          });
+          continue;
+        }
+      }
+      try {
+        const created = await this.createGLAccount(user, {
+          code: row.code,
+          name: row.name,
+          category: row.category,
+          classificationId,
+          accountGroupId,
+          description: row.description,
+        });
+        accounts.push({ code: row.code, status: 'created', id: created.id });
+      } catch (error) {
+        accounts.push({
+          code: row.code,
+          status: 'failed',
+          message: this.bulkImportErrorMessage(error),
+        });
+      }
+    }
+
+    return { classifications, groups, accounts };
+  }
+
+  private bulkImportErrorMessage(error: unknown): string {
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      if (typeof response === 'string') return response;
+      if (response && typeof response === 'object' && 'message' in response) {
+        const message = (response as { message: unknown }).message;
+        if (Array.isArray(message)) return message.join('; ');
+        if (typeof message === 'string') return message;
+      }
+      return error.message;
+    }
+    return 'Unexpected error';
   }
 
   async getAccountGroup(user: RequestUser, groupId: string) {
@@ -1219,6 +1403,9 @@ export class AccountingMasterDataService {
           ...(dto.name ? { name: dto.name } : {}),
           ...(dto.displayOrder !== undefined
             ? { displayOrder: dto.displayOrder }
+            : {}),
+          ...(dto.cashFlowCategory !== undefined
+            ? { cashFlowCategory: dto.cashFlowCategory }
             : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
           updatedByUserId: user.id,
@@ -2027,15 +2214,28 @@ export class AccountingMasterDataService {
     return {
       parentAccount: { select: { id: true, code: true, name: true } },
       classification: {
-        select: { id: true, code: true, name: true, category: true },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          category: true,
+          cashFlowCategory: true,
+        },
       },
       accountGroup: {
         select: {
           id: true,
           code: true,
           name: true,
+          cashFlowCategory: true,
           classification: {
-            select: { id: true, code: true, name: true, category: true },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              category: true,
+              cashFlowCategory: true,
+            },
           },
         },
       },

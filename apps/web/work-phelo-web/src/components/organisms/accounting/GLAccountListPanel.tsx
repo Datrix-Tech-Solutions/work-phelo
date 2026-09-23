@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Pencil } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { TypeChip } from '@/components/atoms/TypeChip';
-import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
+import { DataTable, type Column, type SortState } from '@/components/organisms/shared/DataTable';
 import { CATEGORIES } from '@/components/organisms/accounting/ChartOfAccountsTree';
 import { GL_ACCOUNT_CATEGORY_CHIP_COLOR } from '@/lib/accounting/glAccountCategory';
 import { formatAccountBalance } from '@/lib/accounting/glAccountBalance';
@@ -29,6 +29,9 @@ interface GLAccountListPanelProps {
   groups?: AccountGroup[];
   onEdit?: () => void;
   editLabel?: string;
+  /** Creates a new account scoped to whatever's currently selected (a type, classification or
+   *  parent account) — hidden for the "all accounts" scope, where there's nothing to scope to. */
+  onCreateAccount?: () => void;
 }
 
 export function GLAccountListPanel({
@@ -41,10 +44,40 @@ export function GLAccountListPanel({
   groups = [],
   onEdit,
   editLabel,
+  onCreateAccount,
 }: GLAccountListPanelProps) {
   const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(accounts.length / PAGE_SIZE));
-  const paged = accounts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const [sortState, setSortState] = useState<SortState | undefined>();
+
+  const handleSort = (key: string) => {
+    setSortState((prev) =>
+      prev?.key === key
+        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' },
+    );
+    setPage(1);
+  };
+
+  const sortedAccounts = useMemo(() => {
+    if (!sortState) return accounts;
+    const direction = sortState.direction === 'asc' ? 1 : -1;
+    const sorted = [...accounts];
+    sorted.sort((a, b) => {
+      if (sortState.key === 'category') {
+        return CATEGORY_LABELS[a.category].localeCompare(CATEGORY_LABELS[b.category]) * direction;
+      }
+      if (sortState.key === 'balance') {
+        const balanceA = balanceByAccountId?.get(a.id) ?? 0;
+        const balanceB = balanceByAccountId?.get(b.id) ?? 0;
+        return (balanceA - balanceB) * direction;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [accounts, sortState, balanceByAccountId]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedAccounts.length / PAGE_SIZE));
+  const paged = sortedAccounts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const classificationByGroupId = useMemo(() => {
     const map = new Map<string, AccountGroup['classification']>();
@@ -74,6 +107,7 @@ export function GLAccountListPanel({
         key: 'category',
         label: 'Type',
         width: '80px',
+        sortable: true,
         render: (row) => (
           <TypeChip
             label={CATEGORY_LABELS[row.category]}
@@ -111,6 +145,7 @@ export function GLAccountListPanel({
         label: 'Balance',
         width: '120px',
         className: 'text-right',
+        sortable: true,
         render: (row) => (
           <span className="block text-right font-bold text-gray-700">
             {formatAccountBalance(balanceByAccountId?.get(row.id), baseCurrency)}
@@ -138,16 +173,28 @@ export function GLAccountListPanel({
             {accounts.length} account{accounts.length === 1 ? '' : 's'}
           </p>
         </div>
-        {onEdit && (
-          <Button
-            variant="outline"
-            size="sm"
-            icon={<Pencil className="h-3.5 w-3.5" />}
-            onClick={onEdit}
-          >
-            {editLabel ? `Edit ${editLabel}` : 'Edit'}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {onCreateAccount && (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Plus className="h-3.5 w-3.5" />}
+              onClick={onCreateAccount}
+            >
+              Create Account
+            </Button>
+          )}
+          {onEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Pencil className="h-3.5 w-3.5" />}
+              onClick={onEdit}
+            >
+              {editLabel ? `Edit ${editLabel}` : 'Edit'}
+            </Button>
+          )}
+        </div>
       </div>
 
       <DataTable
@@ -160,6 +207,8 @@ export function GLAccountListPanel({
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
+        sortState={sortState}
+        onSort={handleSort}
       />
     </div>
   );

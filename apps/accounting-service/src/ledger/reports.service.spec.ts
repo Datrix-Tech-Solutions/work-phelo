@@ -127,6 +127,9 @@ describe('ReportsService', () => {
       gLAccount: {
         findMany: jest.fn().mockResolvedValue(accounts),
       },
+      accountingCashAccount: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       fiscalPeriod: {
         findFirst: jest.fn().mockResolvedValue({
           id: 'period-1',
@@ -334,6 +337,250 @@ describe('ReportsService', () => {
         tenantId,
         transactionCurrency: 'GHS',
       },
+    });
+  });
+
+  describe('cashFlowStatement', () => {
+    const cashAccount = {
+      id: 'cash-account',
+      tenantId,
+      code: '1000',
+      name: 'Ecobank',
+      category: GLAccountCategory.ASSET,
+      normalBalance: NormalBalance.DEBIT,
+    };
+
+    function setupCashFlow(
+      periodLines: unknown[],
+      openingCashLines: unknown[] = [],
+    ) {
+      const { prisma, service } = setup();
+      prisma.journalLine.findMany
+        .mockResolvedValueOnce(periodLines)
+        .mockResolvedValueOnce(openingCashLines);
+      return { prisma, service };
+    }
+
+    it('requires fromDate and toDate (or a fiscal period)', async () => {
+      const { service } = setupCashFlow([]);
+
+      await expect(service.cashFlowStatement(tenantId, {})).rejects.toThrow(
+        'fromDate and toDate are required',
+      );
+    });
+
+    it('starts from Net Income and defaults untagged asset/liability accounts to Operating', async () => {
+      const { service } = setupCashFlow([
+        reportLine(revenueAccount, 0, 300),
+        reportLine(expenseAccount, 125, 0),
+        // A receivable increasing by 50 (an asset growing) is a use of cash.
+        reportLine(assetAccount, 50, 0),
+        // A payable increasing by 20 (a liability growing) is a source of cash.
+        reportLine(liabilityAccount, 0, 20),
+      ]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.operatingActivities.netIncome).toBe('175.00');
+      expect(result.operatingActivities.adjustments).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            account: expect.objectContaining({
+              id: assetAccount.id,
+            }) as unknown,
+            amount: '-50.00',
+          }),
+          expect.objectContaining({
+            account: expect.objectContaining({
+              id: liabilityAccount.id,
+            }) as unknown,
+            amount: '20.00',
+          }),
+        ]),
+      );
+      // 175 net income - 50 (receivable growth) + 20 (payable growth)
+      expect(result.operatingActivities.total).toBe('145.00');
+      expect(result.investingActivities.lines).toEqual([]);
+      expect(result.financingActivities.lines).toEqual([]);
+      expect(result.openingCash).toBe('0.00');
+      expect(result.closingCash).toBe('0.00');
+    });
+
+    it('excludes Cash & Bank accounts from every activity and uses them for opening/closing cash', async () => {
+      const { prisma, service } = setupCashFlow(
+        [reportLine(cashAccount, 500, 0), reportLine(revenueAccount, 0, 500)],
+        [
+          reportLine(cashAccount, 1000, 0, {
+            date: '2026-06-15T00:00:00.000Z',
+          }),
+        ],
+      );
+      prisma.accountingCashAccount.findMany.mockResolvedValue([
+        { glAccountId: cashAccount.id },
+      ]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      const allLines = [
+        ...result.operatingActivities.adjustments,
+        ...result.investingActivities.lines,
+        ...result.financingActivities.lines,
+      ];
+      expect(allLines.some((line) => line.account.id === cashAccount.id)).toBe(
+        false,
+      );
+      expect(result.openingCash).toBe('1000.00');
+      expect(result.closingCash).toBe('1500.00');
+      expect(result.netChangeInCash).toBe('500.00');
+    });
+
+    it('moves a directly tagged account to Investing instead of Operating', async () => {
+      const equipment = {
+        ...assetAccount,
+        id: 'equipment',
+        code: '1210',
+        name: 'Office Equipment',
+        cashFlowCategory: 'INVESTING',
+      };
+      const { service } = setupCashFlow([reportLine(equipment, 5000, 0)]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.operatingActivities.adjustments).toEqual([]);
+      expect(result.investingActivities.lines).toEqual([
+        expect.objectContaining({ amount: '-5000.00' }),
+      ]);
+      expect(result.investingActivities.total).toBe('-5000.00');
+    });
+
+    it("inherits the tag from the account's group when the account itself isn't tagged", async () => {
+      const loan = {
+        ...liabilityAccount,
+        id: 'loan',
+        code: '2200',
+        name: 'Bank Loan',
+        accountGroup: {
+          id: 'group-1',
+          code: '2200',
+          name: 'Loans',
+          cashFlowCategory: 'FINANCING',
+          classification: { cashFlowCategory: null },
+        },
+      };
+      const { service } = setupCashFlow([reportLine(loan, 0, 10000)]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.financingActivities.lines).toEqual([
+        expect.objectContaining({ amount: '10000.00' }),
+      ]);
+    });
+
+    it('falls back to the classification tag when neither the account nor its group is tagged', async () => {
+      const investment = {
+        ...assetAccount,
+        id: 'investment',
+        code: '1300',
+        name: 'Short-term Investment',
+        classification: { cashFlowCategory: 'INVESTING' },
+      };
+      const { service } = setupCashFlow([reportLine(investment, 2000, 0)]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.investingActivities.lines).toEqual([
+        expect.objectContaining({ amount: '-2000.00' }),
+      ]);
+    });
+
+    it('backs a tagged revenue account out of Operating and shows it under Investing', async () => {
+      const gainOnDisposal = {
+        ...revenueAccount,
+        id: 'gain-on-disposal',
+        code: '4900',
+        name: 'Gain on Sale of Equipment',
+        cashFlowCategory: 'INVESTING',
+      };
+      const { service } = setupCashFlow([
+        reportLine(revenueAccount, 0, 300),
+        reportLine(gainOnDisposal, 0, 40),
+      ]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      // Net Income includes the gain, same as the income statement would show it.
+      expect(result.operatingActivities.netIncome).toBe('340.00');
+      expect(result.operatingActivities.adjustments).toEqual([
+        expect.objectContaining({
+          account: expect.objectContaining({
+            id: gainOnDisposal.id,
+          }) as unknown,
+          amount: '-40.00',
+        }),
+      ]);
+      expect(result.investingActivities.lines).toEqual([
+        expect.objectContaining({
+          account: expect.objectContaining({
+            id: gainOnDisposal.id,
+          }) as unknown,
+          amount: '40.00',
+        }),
+      ]);
+      // Tagging only moves where the 40 shows up — the total change in cash is unaffected.
+      expect(result.operatingActivities.total).toBe('300.00');
+      expect(
+        new Prisma.Decimal(result.operatingActivities.total)
+          .plus(result.investingActivities.total)
+          .plus(result.financingActivities.total)
+          .toFixed(2),
+      ).toBe(result.netChangeInCash);
+    });
+
+    it('drops an Excluded-tagged revenue account out of Operating with no line elsewhere', async () => {
+      const fairValueGain = {
+        ...revenueAccount,
+        id: 'fair-value-gain',
+        code: '4950',
+        name: 'Unrealized Fair Value Gain',
+        cashFlowCategory: 'EXCLUDED',
+      };
+      const { service } = setupCashFlow([
+        reportLine(revenueAccount, 0, 300),
+        reportLine(fairValueGain, 0, 75),
+      ]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.operatingActivities.netIncome).toBe('375.00');
+      expect(result.operatingActivities.adjustments).toEqual([
+        expect.objectContaining({ amount: '-75.00' }),
+      ]);
+      expect(result.investingActivities.lines).toEqual([]);
+      expect(result.financingActivities.lines).toEqual([]);
+      // The non-cash gain is fully backed out and shown nowhere — the net change is genuinely
+      // less than net income by that amount, which is the point of tagging it Excluded.
+      expect(result.operatingActivities.total).toBe('300.00');
     });
   });
 });

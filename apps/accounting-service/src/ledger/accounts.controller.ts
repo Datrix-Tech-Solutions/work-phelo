@@ -26,6 +26,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingPermission } from './accounting.permissions';
 import {
+  BulkImportAccountsDto,
   CreateAccountClassificationDto,
   CreateAccountGroupDto,
   CreateCostCentreDto,
@@ -223,6 +224,26 @@ export class AccountsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.masterData.seedStandardAccountHierarchy(request.user);
+  }
+
+  @Post('accounts/bulk-import')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({
+    summary:
+      'Bulk-create classifications, account groups and GL accounts from a spreadsheet import',
+    description:
+      'Runs in three dependency-ordered passes (classifications, then groups, then accounts). Rows referencing a classification/group that failed to create are skipped, not attempted; a failed leaf account never blocks any other leaf account.',
+  })
+  @RequirePermissions(
+    AccountingPermission.ACCOUNT_CLASSIFICATIONS_CREATE,
+    AccountingPermission.ACCOUNT_GROUPS_CREATE,
+    AccountingPermission.ACCOUNTS_CREATE,
+  )
+  bulkImportAccounts(
+    @Body() dto: BulkImportAccountsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.bulkImportAccounts(request.user, dto);
   }
 
   @Get('accounts')
