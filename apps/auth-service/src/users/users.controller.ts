@@ -5,6 +5,7 @@ import {
   ApiResponse,
   ApiParam,
   ApiBody,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import {
   Controller,
@@ -14,11 +15,14 @@ import {
   Body,
   Param,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   Req,
   Res,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { InviteUserDto, UserSystemRole } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -68,6 +72,42 @@ export class UsersController {
     @Req() req: Request & { user: RequestUser },
   ) {
     return this.usersService.invite(req.user.tenantId, dto, req.user.id);
+  }
+
+  @Post('me/avatar')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: "Upload the signed-in user's avatar" })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Private PNG, JPEG or WEBP image, up to 5 MB.',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Avatar uploaded successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Missing, unsupported or oversized image',
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  uploadMyAvatar(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.usersService.uploadAvatar(req.user.tenantId, req.user.id, file);
   }
 
   @Post('assign-admin')

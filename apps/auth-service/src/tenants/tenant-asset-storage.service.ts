@@ -17,6 +17,7 @@ export type TenantBrandingAssetType =
   | 'sidebar-logo'
   | 'login-logo'
   | 'favicon';
+export type UserAvatarAssetType = 'avatar';
 
 export interface StoreTenantDocumentAssetInput {
   tenantId: string;
@@ -34,6 +35,16 @@ type StoreTenantBrandingAssetInput = Omit<
   assetType: TenantBrandingAssetType;
 };
 
+export interface StoreUserAvatarAssetInput {
+  tenantId: string;
+  tenantSlug: string;
+  userId: string;
+  assetType: UserAvatarAssetType;
+  body: Buffer;
+  contentType: string;
+  originalFileName: string;
+}
+
 export interface StoredTenantDocumentAsset {
   objectKey: string;
   mimeType: string;
@@ -47,13 +58,16 @@ export interface SignedTenantDocumentAsset {
 }
 
 type TenantAssetProviderName = 's3' | 'cloudinary';
-type TenantAssetNamespace = 'document-profile' | 'branding';
+type TenantAssetNamespace = 'document-profile' | 'branding' | 'user-avatar';
 type CloudinaryResourceType = 'image';
 type CloudinaryDeliveryType = 'authenticated';
 
 interface TenantAssetStorageProvider {
   store(
-    input: StoreTenantDocumentAssetInput | StoreTenantBrandingAssetInput,
+    input:
+      | StoreTenantDocumentAssetInput
+      | StoreTenantBrandingAssetInput
+      | StoreUserAvatarAssetInput,
     namespace: TenantAssetNamespace,
   ): Promise<StoredTenantDocumentAsset>;
   createSignedReadUrl(input: {
@@ -112,6 +126,15 @@ export class TenantAssetStorageService {
     return this.activeProvider().store(input, 'branding');
   }
 
+  async storeUserAvatar(
+    input: Omit<StoreUserAvatarAssetInput, 'assetType'>,
+  ): Promise<StoredTenantDocumentAsset> {
+    return this.activeProvider().store(
+      { ...input, assetType: 'avatar' },
+      'user-avatar',
+    );
+  }
+
   async createSignedReadUrl(input: {
     objectKey: string;
     mimeType: string;
@@ -124,6 +147,23 @@ export class TenantAssetStorageService {
 
   async delete(objectKey: string): Promise<void> {
     await this.providerForObjectKey(objectKey).delete(objectKey);
+  }
+
+  /**
+   * True when objectKey was produced by storeUserAvatar() for this exact
+   * tenant/user, so callers can safely delete a previous avatar without risk
+   * of touching an unrelated or legacy asset.
+   */
+  isUserAvatarObjectKey(
+    objectKey: string,
+    tenantId: string,
+    userId: string,
+  ): boolean {
+    const expectedSegment = `tenants/${tenantId}/user-avatar/users/${userId}/avatar/`;
+    const reference = this.parseReference(objectKey);
+    return reference.provider === 's3'
+      ? reference.objectKey.includes(expectedSegment)
+      : reference.publicId.includes(expectedSegment);
   }
 
   private activeProvider(): TenantAssetStorageProvider {
@@ -255,15 +295,20 @@ export class S3TenantAssetStorageProvider implements TenantAssetStorageProvider 
   ) {}
 
   async store(
-    input: StoreTenantDocumentAssetInput | StoreTenantBrandingAssetInput,
+    input:
+      | StoreTenantDocumentAssetInput
+      | StoreTenantBrandingAssetInput
+      | StoreUserAvatarAssetInput,
     namespace: TenantAssetNamespace,
   ): Promise<StoredTenantDocumentAsset> {
     const fileName = this.safeFileName(input.originalFileName);
+    const isUserAvatar = namespace === 'user-avatar' && 'userId' in input;
     const objectKey = [
       this.cleanPrefix(this.config.prefix),
       'tenants',
       input.tenantId,
       namespace,
+      ...(isUserAvatar ? ['users', input.userId] : []),
       input.assetType,
       `${randomUUID()}-${fileName}`,
     ]
@@ -279,6 +324,7 @@ export class S3TenantAssetStorageProvider implements TenantAssetStorageProvider 
         Metadata: {
           tenantId: input.tenantId,
           assetType: input.assetType,
+          ...(isUserAvatar ? { userId: input.userId } : {}),
         },
       }),
     );
@@ -356,7 +402,10 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
   ) {}
 
   async store(
-    input: StoreTenantDocumentAssetInput | StoreTenantBrandingAssetInput,
+    input:
+      | StoreTenantDocumentAssetInput
+      | StoreTenantBrandingAssetInput
+      | StoreUserAvatarAssetInput,
     namespace: TenantAssetNamespace,
   ): Promise<StoredTenantDocumentAsset> {
     this.configure();
@@ -369,6 +418,9 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
         input.tenantSlug,
         namespace,
         input.assetType,
+        namespace === 'user-avatar' && 'userId' in input
+          ? input.userId
+          : undefined,
       ),
       public_id: randomUUID(),
       overwrite: false,
@@ -474,7 +526,11 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
     tenantId: string,
     tenantSlug: string,
     namespace: TenantAssetNamespace,
-    assetType: TenantDocumentAssetType | TenantBrandingAssetType,
+    assetType:
+      | TenantDocumentAssetType
+      | TenantBrandingAssetType
+      | UserAvatarAssetType,
+    userId?: string,
   ): string {
     return [
       this.cleanPrefix(this.config.rootFolder),
@@ -482,6 +538,7 @@ export class CloudinaryTenantAssetStorageProvider implements TenantAssetStorageP
       'tenants',
       this.tenantFolderSegment(tenantId, tenantSlug),
       namespace,
+      ...(userId ? ['users', userId] : []),
       assetType,
     ]
       .filter(Boolean)

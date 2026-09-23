@@ -3,6 +3,7 @@ import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { AuditService } from '../audit/audit.service';
+import { TenantAssetStorageService } from '../tenants/tenant-asset-storage.service';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
@@ -42,6 +43,15 @@ function makeAudit() {
   };
 }
 
+function makeStorage() {
+  return {
+    storeUserAvatar: jest.fn() as MockFn,
+    createSignedReadUrl: jest.fn() as MockFn,
+    delete: jest.fn().mockResolvedValue(undefined) as MockFn,
+    isUserAvatarObjectKey: jest.fn().mockReturnValue(false),
+  };
+}
+
 function makeService(
   prisma = makePrisma(),
   rabbit = makeRabbit(),
@@ -52,12 +62,14 @@ function makeService(
       .mockReturnValueOnce('access-token')
       .mockReturnValueOnce('refresh-token'),
   },
+  storage = makeStorage(),
 ) {
   return new UsersService(
     prisma as unknown as PrismaService,
     rabbit as unknown as RabbitMQPublisher,
     jwtService as never,
     audit as unknown as AuditService,
+    storage as unknown as TenantAssetStorageService,
   );
 }
 
