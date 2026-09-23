@@ -616,7 +616,11 @@ export class UsersService {
         );
     }
 
-    void this.rabbitmq
+    // Awaited (not fire-and-forget) so the HTTP response — and the frontend's
+    // subsequent refetch of the employee record — only lands after hr-service
+    // has persisted the new avatar. A sync failure is logged, not fatal: the
+    // auth-service avatarUrl update above already succeeded.
+    await this.rabbitmq
       .hrEmployeeAvatarUpdated({
         tenantId,
         userId,
