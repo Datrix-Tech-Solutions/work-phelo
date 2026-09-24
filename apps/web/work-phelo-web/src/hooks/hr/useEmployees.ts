@@ -20,6 +20,7 @@ import {
   ResignationPayload,
   ResignationRecord,
 } from '@/types/hr';
+import type { EmployeeImportRow, BulkImportRowResult } from '@/lib/hr/bulkImportTypes';
 
 function normalizeDeduction(deduction: EmployeeDeduction): EmployeeDeduction {
   return {
@@ -127,6 +128,40 @@ export function useCreateEmployee() {
   return useMutation({
     mutationFn: async (payload: CreateEmployeePayload) => {
       const res = await api.post<Employee>('/hr/employees', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useBulkImportEmployees() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (rows: EmployeeImportRow[]) => {
+      const payload = rows.map((row) => ({
+        rowNumber: row.rowNumber,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email,
+        phone: row.phone,
+        gender: row.gender,
+        departmentName: row.departmentName,
+        branchName: row.branchName,
+        jobTitle: row.jobTitle,
+        managerName: row.managerName,
+        hireDate: row.hireDate,
+        employmentType: row.employmentType,
+        contractEndDate: row.contractEndDate,
+        compensationType: row.compensationType,
+        basicSalary: row.basicSalary,
+      }));
+      const res = await api.post<BulkImportRowResult[]>('/hr/employees/bulk-import', {
+        rows: payload,
+      });
       return res.data;
     },
     onSuccess: () => {

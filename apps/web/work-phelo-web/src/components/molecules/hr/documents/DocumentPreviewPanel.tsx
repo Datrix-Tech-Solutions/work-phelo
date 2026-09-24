@@ -1,4 +1,4 @@
-import { Download, Trash2 } from 'lucide-react';
+import { Download, Trash2, X } from 'lucide-react';
 import { cardClass } from '@/lib/utils';
 import { formatDate } from '@/lib/formatters';
 import { Button } from '@/components/atoms/Button';
@@ -10,6 +10,9 @@ interface Props {
   onDownload?: (doc: MyDocument) => void;
   onDelete?: (doc: MyDocument) => void;
   canDelete?: boolean;
+  /** Deselects the document without touching a sibling folder rail's
+   *  collapsed state — that only resets when the folder itself changes. */
+  onClose?: () => void;
 }
 
 function MetaRow({ label, value }: { label: string; value: string }) {
@@ -21,19 +24,35 @@ function MetaRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function DocumentPreviewPanel({ document, onDownload, onDelete, canDelete = true }: Props) {
+export function DocumentPreviewPanel({
+  document,
+  onDownload,
+  onDelete,
+  canDelete = true,
+  onClose,
+}: Props) {
   const canRenderInline = document.fileKind === 'pdf' || document.fileKind === 'image';
 
   return (
     <div className={cardClass('w-full lg:w-80 shrink-0 flex flex-col overflow-hidden')}>
-      <div className="aspect-4/3 bg-gray-100 flex items-center justify-center border-b border-gray-100">
+      <div className="relative h-64 shrink-0 overflow-hidden bg-gray-100 flex items-center justify-center">
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close preview"
+            className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
         {canRenderInline && document.previewUrl ? (
           document.fileKind === 'image' ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={document.previewUrl}
               alt={document.name}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-cover object-top"
             />
           ) : (
             <embed src={document.previewUrl} type="application/pdf" className="w-full h-full" />
@@ -44,6 +63,20 @@ export function DocumentPreviewPanel({ document, onDownload, onDelete, canDelete
             <span className="text-xs">No preview available</span>
           </div>
         )}
+
+        {/* Fades the cut-off preview into the card's surface color below, instead of a
+            hard edge — a plain color gradient, no glass/blur effect. */}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-6"
+          style={{
+            background:
+              'linear-gradient(to bottom,' +
+              ' transparent 0%,' +
+              ' color-mix(in oklab, var(--glass-solid, var(--background)) 15%, transparent) 40%,' +
+              ' color-mix(in oklab, var(--glass-solid, var(--background)) 60%, transparent) 70%,' +
+              ' var(--glass-solid, var(--background)) 100%)',
+          }}
+        />
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">

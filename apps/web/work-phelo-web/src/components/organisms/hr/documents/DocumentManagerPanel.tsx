@@ -170,6 +170,7 @@ export function DocumentManagerPanel({
           onDownload={handleDownload}
           onDelete={allowDelete ? handleDelete : undefined}
           canDelete={allowDelete}
+          onClose={() => selectDocument(null)}
         />
       )}
 

@@ -7,6 +7,12 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
+import { DepartmentImportRowDto } from './dto/bulk-import-departments.dto';
+import { BulkImportRowResult } from '../common/bulk-import.types';
+import {
+  matchByExactName,
+  matchEmployeeByFullName,
+} from '../common/name-match.util';
 
 @Injectable()
 export class DepartmentsService {
@@ -33,6 +39,83 @@ export class DepartmentsService {
       data: { tenantId, ...dto, branchId },
       include: { branch: true },
     });
+  }
+
+  /** Creates departments from bulk-import rows sequentially, one row at a time, so a later row
+   *  can already see departments/branches created earlier in the same request. Department Head
+   *  and Branch are optional name lookups — if they don't resolve, they're dropped with a warning
+   *  rather than failing the row (Branch then falls back to the create() head-office default). */
+  async bulkImport(
+    tenantId: string,
+    rows: DepartmentImportRowDto[],
+  ): Promise<BulkImportRowResult[]> {
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    const branches = await this.prisma.branch.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
+    });
+
+    const results: BulkImportRowResult[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNumber = row.rowNumber ?? i + 1;
+      const warnings: string[] = [];
+
+      let managerId: string | undefined;
+      if (row.managerName?.trim()) {
+        const match = matchEmployeeByFullName(row.managerName, employees);
+        if (match.status === 'found') {
+          managerId = match.id;
+        } else {
+          warnings.push(
+            match.status === 'ambiguous'
+              ? `Department Head "${row.managerName}" matches multiple employees — left blank.`
+              : `Department Head "${row.managerName}" not found — left blank.`,
+          );
+        }
+      }
+
+      let branchId: string | undefined;
+      if (row.branchName?.trim()) {
+        const branch = matchByExactName(row.branchName, branches);
+        if (branch) {
+          branchId = branch.id;
+        } else {
+          warnings.push(
+            `Branch "${row.branchName}" not found — left blank (defaults to head office).`,
+          );
+        }
+      }
+
+      try {
+        const department = await this.create(tenantId, {
+          name: row.name,
+          description: row.description,
+          managerId,
+          branchId,
+        });
+        results.push({
+          rowNumber,
+          status: 'created',
+          id: department.id,
+          warnings,
+        });
+      } catch (err) {
+        results.push({
+          rowNumber,
+          status: 'failed',
+          message:
+            err instanceof Error ? err.message : 'Failed to create department',
+          warnings,
+        });
+      }
+    }
+
+    return results;
   }
 
   async findAll(tenantId: string) {

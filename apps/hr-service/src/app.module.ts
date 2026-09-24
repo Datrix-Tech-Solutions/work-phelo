@@ -25,6 +25,7 @@ import { HealthModule } from './health/health.module';
 import { SettingsModule } from './settings/settings.module';
 import { ProjectsModule } from './projects/projects.module';
 import { HrImportsModule } from './imports/hr-imports.module';
+import { BulkImportModule } from './bulk-import/bulk-import.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { HrImportsModule } from './imports/hr-imports.module';
     SettingsModule,
     ProjectsModule,
     HrImportsModule,
+    BulkImportModule,
   ],
   providers: [
     RabbitMQSetupService,

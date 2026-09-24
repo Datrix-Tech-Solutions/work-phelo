@@ -52,13 +52,16 @@ function fromEmployeeDocument(doc: EmployeeDocument): MyDocument {
 // view only lets the employee view/download those, not add or remove them.
 export function MyDocumentsContent() {
   const [folder, setFolder] = useState<DocumentFolderKey>('personal');
-  const [hasSelection, setHasSelection] = useState(false);
+  // Sticky once a document's been selected — closing the preview (or
+  // deleting the selected doc) does not re-expand the rail. Only switching
+  // folders resets it.
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const toast = useToast();
 
   const handleFolderSelect = (next: DocumentFolderKey) => {
     setFolder(next);
-    setHasSelection(false);
+    setRailCollapsed(false);
   };
 
   const { data: personalDocsRaw, isLoading: personalLoading } = useMyDocuments();
@@ -108,7 +111,7 @@ export function MyDocumentsContent() {
         active={folder}
         onSelect={handleFolderSelect}
         counts={counts}
-        collapsed={hasSelection}
+        collapsed={railCollapsed}
       />
       <DocumentManagerPanel
         key={folder}
@@ -117,7 +120,9 @@ export function MyDocumentsContent() {
         allowUpload={folder === 'personal'}
         allowDelete={folder === 'personal'}
         onDelete={handleDelete}
-        onSelectionChange={(doc) => setHasSelection(doc !== null)}
+        onSelectionChange={(doc) => {
+          if (doc) setRailCollapsed(true);
+        }}
         renderUploadModal={({ isOpen, onClose }) => (
           <UploadPersonalDocumentModal
             isOpen={isOpen}
