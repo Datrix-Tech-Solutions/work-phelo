@@ -1243,6 +1243,7 @@ export class AccountingMasterDataService {
           code: row.code,
           name: row.name,
           category: row.category,
+          cashFlowCategory: row.cashFlowCategory,
         });
         classificationIdByCode.set(codeKey, created.id);
         classifications.push({
@@ -1286,6 +1287,7 @@ export class AccountingMasterDataService {
           classificationId,
           code: row.code,
           name: row.name,
+          cashFlowCategory: row.cashFlowCategory,
         });
         groupIdByCode.set(codeKey, created.id);
         groups.push({ code: row.code, status: 'created', id: created.id });
@@ -1331,6 +1333,7 @@ export class AccountingMasterDataService {
           classificationId,
           accountGroupId,
           description: row.description,
+          cashFlowCategory: row.cashFlowCategory,
         });
         accounts.push({ code: row.code, status: 'created', id: created.id });
       } catch (error) {

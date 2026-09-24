@@ -2,10 +2,14 @@ import type ExcelJS from 'exceljs';
 import type {
   AccountClassification,
   AccountGroup,
+  CashFlowCategory,
   GLAccount,
   GLAccountCategory,
 } from '@/types/accounting';
-import { CATEGORY_VALUE_BY_LABEL } from '@/lib/accounting/glAccountImportShared';
+import {
+  CASH_FLOW_VALUE_BY_LABEL,
+  CATEGORY_VALUE_BY_LABEL,
+} from '@/lib/accounting/glAccountImportShared';
 
 export type ImportRowStatus = 'existing' | 'new' | 'invalid';
 
@@ -15,6 +19,8 @@ export interface ParsedClassificationRow {
   name: string;
   categoryLabel: string;
   category?: GLAccountCategory;
+  cashFlowCategoryLabel: string;
+  cashFlowCategory?: CashFlowCategory;
   status: ImportRowStatus;
   errors: string[];
 }
@@ -24,6 +30,8 @@ export interface ParsedGroupRow {
   code: string;
   name: string;
   classificationCode: string;
+  cashFlowCategoryLabel: string;
+  cashFlowCategory?: CashFlowCategory;
   status: ImportRowStatus;
   errors: string[];
 }
@@ -37,6 +45,8 @@ export interface ParsedGLAccountRow {
   classificationCode: string;
   parentAccountCode: string;
   description: string;
+  cashFlowCategoryLabel: string;
+  cashFlowCategory?: CashFlowCategory;
   status: ImportRowStatus;
   errors: string[];
 }
@@ -72,6 +82,14 @@ function headerIndex(sheet: ExcelJS.Worksheet): Map<string, number> {
     if (text) map.set(text, colNumber);
   });
   return map;
+}
+
+/** Cash Flow Category is optional everywhere — blank means "inherit from the level above". */
+function resolveCashFlowCategory(label: string, errors: string[]): CashFlowCategory | undefined {
+  if (!label) return undefined;
+  const value = CASH_FLOW_VALUE_BY_LABEL[label.trim().toLowerCase()];
+  if (!value) errors.push(`Unknown cash flow category "${label}"`);
+  return value;
 }
 
 /** Reads a filled-in template and validates every row against the live classification/group/
@@ -111,12 +129,14 @@ export async function parseGLAccountImportFile(
       const code = cellText(row, columnIndexByHeader, 'Classification Code');
       const name = cellText(row, columnIndexByHeader, 'Classification Name');
       const categoryLabel = cellText(row, columnIndexByHeader, 'Account Type');
+      const cashFlowCategoryLabel = cellText(row, columnIndexByHeader, 'Cash Flow Category');
       if (!code && !name && !categoryLabel) return;
 
       const codeLower = code.trim().toLowerCase();
       const errors: string[] = [];
       let status: ImportRowStatus = 'new';
       let category: GLAccountCategory | undefined;
+      let cashFlowCategory: CashFlowCategory | undefined;
 
       if (code && existingClassificationByCode.has(codeLower)) {
         status = 'existing';
@@ -128,13 +148,24 @@ export async function parseGLAccountImportFile(
         category = CATEGORY_VALUE_BY_LABEL[categoryLabel.trim().toLowerCase()];
         if (!categoryLabel) errors.push('Account type is required');
         else if (!category) errors.push(`Unknown account type "${categoryLabel}"`);
+        cashFlowCategory = resolveCashFlowCategory(cashFlowCategoryLabel, errors);
         status = errors.length === 0 ? 'new' : 'invalid';
       }
 
       if (code) seenCodes.add(codeLower);
       if (status === 'new' && category) newClassificationByCode.set(codeLower, category);
 
-      classificationRows.push({ rowNumber, code, name, categoryLabel, category, status, errors });
+      classificationRows.push({
+        rowNumber,
+        code,
+        name,
+        categoryLabel,
+        category,
+        cashFlowCategoryLabel,
+        cashFlowCategory,
+        status,
+        errors,
+      });
     });
   }
 
@@ -160,11 +191,13 @@ export async function parseGLAccountImportFile(
       const code = cellText(row, columnIndexByHeader, 'Parent Account Code');
       const name = cellText(row, columnIndexByHeader, 'Parent Account Name');
       const classificationCode = cellText(row, columnIndexByHeader, 'Classification Code');
+      const cashFlowCategoryLabel = cellText(row, columnIndexByHeader, 'Cash Flow Category');
       if (!code && !name && !classificationCode) return;
 
       const codeLower = code.trim().toLowerCase();
       const errors: string[] = [];
       let status: ImportRowStatus;
+      let cashFlowCategory: CashFlowCategory | undefined;
 
       if (code && existingGroupByCode.has(codeLower)) {
         status = 'existing';
@@ -177,13 +210,23 @@ export async function parseGLAccountImportFile(
         else if (!classificationCodeIsKnown(classificationCode)) {
           errors.push(`Unknown classification code "${classificationCode}"`);
         }
+        cashFlowCategory = resolveCashFlowCategory(cashFlowCategoryLabel, errors);
         status = errors.length === 0 ? 'new' : 'invalid';
       }
 
       if (code) seenCodes.add(codeLower);
       if (status === 'new') newGroupCodes.add(codeLower);
 
-      groupRows.push({ rowNumber, code, name, classificationCode, status, errors });
+      groupRows.push({
+        rowNumber,
+        code,
+        name,
+        classificationCode,
+        cashFlowCategoryLabel,
+        cashFlowCategory,
+        status,
+        errors,
+      });
     });
   }
 
@@ -214,6 +257,7 @@ export async function parseGLAccountImportFile(
       const classificationCode = cellText(row, columnIndexByHeader, 'Classification Code');
       const parentAccountCode = cellText(row, columnIndexByHeader, 'Parent Account Code');
       const description = cellText(row, columnIndexByHeader, 'Description');
+      const cashFlowCategoryLabel = cellText(row, columnIndexByHeader, 'Cash Flow Category');
       if (!code && !name && !categoryLabel && !classificationCode && !parentAccountCode) return;
 
       const codeLower = code.trim().toLowerCase();
@@ -262,6 +306,8 @@ export async function parseGLAccountImportFile(
         }
       }
 
+      const cashFlowCategory = resolveCashFlowCategory(cashFlowCategoryLabel, errors);
+
       if (code) seenCodes.add(codeLower);
 
       accountRows.push({
@@ -273,6 +319,8 @@ export async function parseGLAccountImportFile(
         classificationCode,
         parentAccountCode,
         description,
+        cashFlowCategoryLabel,
+        cashFlowCategory,
         status: errors.length === 0 ? 'new' : 'invalid',
         errors,
       });
