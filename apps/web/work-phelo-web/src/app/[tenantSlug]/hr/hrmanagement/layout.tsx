@@ -57,6 +57,11 @@ export default function HRManagementLayout({ children }: { children: React.React
       ],
     },
     {
+      tabs: hasAnyManagementAccess
+        ? [{ key: 'bulk-upload', label: 'Bulk Upload', href: `${base}/bulk-upload` }]
+        : [],
+    },
+    {
       tabs: canViewAuditLogs
         ? [{ key: 'audit-logs', label: 'Audit Trail', href: `${base}/audit-logs` }]
         : [],

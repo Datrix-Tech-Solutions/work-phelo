@@ -12,6 +12,7 @@ import {
 } from '@/components/molecules/hr/departments/DepartmentFormFields';
 import { useDepartments, useUpdateDepartment } from '@/hooks/hr/useDepartments';
 import { useToast } from '@/hooks/useToast';
+import { BranchOption } from '@/hooks/hr/useBranches';
 
 interface Props {
   isOpen: boolean;
@@ -21,10 +22,12 @@ interface Props {
     name: string;
     description?: string;
     managerId?: string;
+    branchId?: string;
   } | null;
+  branches: BranchOption[];
 }
 
-export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
+export function EditDepartmentPanel({ isOpen, onClose, editTarget, branches }: Props) {
   const toast = useToast();
   const form = useForm<DeptForm>();
   const { mutateAsync: updateDepartmentAsync, isPending } = useUpdateDepartment();
@@ -39,6 +42,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
         name: editTarget.name,
         description: editTarget.description,
         managerId: editTarget.managerId,
+        branchId: editTarget.branchId,
       });
     }
   }, [editTarget, form, isOpen]);
@@ -64,6 +68,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
         name: data.name,
         description: data.description || undefined,
         managerId: newManagerId,
+        branchId: data.branchId || null,
       });
 
       // Auto-add the new manager as a member of this department
@@ -102,7 +107,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
         </div>
       }
     >
-      <DepartmentFormFields form={form} employees={employees} />
+      <DepartmentFormFields form={form} employees={employees} branches={branches} />
     </SidePanel>
   );
 }

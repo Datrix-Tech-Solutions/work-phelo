@@ -10,12 +10,14 @@ import {
 } from '@/components/molecules/hr/departments/DepartmentFormFields';
 import { useCreateDepartment } from '@/hooks/hr/useDepartments';
 import { EmployeeOption } from '@/types/hr';
+import { BranchOption } from '@/hooks/hr/useBranches';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   tenantSlug: string;
   employees: EmployeeOption[];
+  branches: BranchOption[];
   onSuccess?: (name: string) => void;
 }
 
@@ -24,6 +26,7 @@ function CreateDepartmentForm({
   onClose,
   onSuccess,
   employees,
+  branches,
 }: Omit<Props, 'tenantSlug'>) {
   const form = useForm<DeptForm>();
   const { mutate: createDepartment, isPending } = useCreateDepartment();
@@ -34,10 +37,14 @@ function CreateDepartmentForm({
 
   const handleSubmit = (data: DeptForm) => {
     createDepartment(
-      { name: data.name, description: data.description || undefined },
+      {
+        name: data.name,
+        description: data.description || undefined,
+        branchId: data.branchId || undefined,
+      },
       {
         onSuccess: () => {
-          form.reset({ name: '', description: '', managerId: undefined });
+          form.reset({ name: '', description: '', managerId: undefined, branchId: undefined });
           onSuccess?.(data.name);
           handleClose();
         },
@@ -66,18 +73,19 @@ function CreateDepartmentForm({
         </div>
       }
     >
-      <DepartmentFormFields form={form} employees={employees} />
+      <DepartmentFormFields form={form} employees={employees} branches={branches} />
     </SidePanel>
   );
 }
 
-export function CreateDepartmentPanel({ isOpen, onClose, onSuccess, employees }: Props) {
+export function CreateDepartmentPanel({ isOpen, onClose, onSuccess, employees, branches }: Props) {
   return (
     <CreateDepartmentForm
       isOpen={isOpen}
       onClose={onClose}
       onSuccess={onSuccess}
       employees={employees}
+      branches={branches}
     />
   );
 }

@@ -4,19 +4,22 @@ import { UseFormReturn } from 'react-hook-form';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { EmployeeOption } from '@/types/hr';
+import { BranchOption } from '@/hooks/hr/useBranches';
 
 export interface DeptForm {
   name: string;
   description?: string;
   managerId?: string;
+  branchId?: string;
 }
 
 interface DepartmentFormFieldsProps {
   form: UseFormReturn<DeptForm>;
   employees: EmployeeOption[];
+  branches: BranchOption[];
 }
 
-export function DepartmentFormFields({ form, employees }: DepartmentFormFieldsProps) {
+export function DepartmentFormFields({ form, employees, branches }: DepartmentFormFieldsProps) {
   const {
     register,
     watch,
@@ -25,6 +28,7 @@ export function DepartmentFormFields({ form, employees }: DepartmentFormFieldsPr
   } = form;
 
   const selectedManagerId = watch('managerId');
+  const selectedBranchId = watch('branchId');
 
   const managerOptions = employees.map((emp) => ({
     value: emp.id,
@@ -53,6 +57,14 @@ export function DepartmentFormFields({ form, employees }: DepartmentFormFieldsPr
         value={selectedManagerId || ''}
         onChange={(value) => setValue('managerId', value)}
         options={managerOptions}
+      />
+
+      <SearchSelect
+        label="Branch"
+        placeholder="Select branch (defaults to head office)"
+        value={selectedBranchId || ''}
+        onChange={(value) => setValue('branchId', value)}
+        options={branches.map((b) => ({ value: b.id, label: b.name }))}
       />
 
       {employees.length === 0 && (

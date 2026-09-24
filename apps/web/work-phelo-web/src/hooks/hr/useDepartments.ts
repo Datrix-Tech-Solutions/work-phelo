@@ -40,7 +40,7 @@ export function useCreateDepartment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: { name: string; description?: string }) => {
+    mutationFn: async (payload: { name: string; description?: string; branchId?: string }) => {
       const res = await api.post<Department>('/hr/departments', payload);
       return res.data;
     },
@@ -64,6 +64,7 @@ export function useUpdateDepartment() {
       name?: string;
       description?: string;
       managerId?: string | null;
+      branchId?: string | null;
       isActive?: boolean;
     }) => {
       const res = await api.patch<Department>(`/hr/departments/${id}`, payload);

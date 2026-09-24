@@ -21,15 +21,24 @@ export class DepartmentsService {
     if (existing)
       throw new ConflictException('A department with this name already exists');
 
+    let branchId = dto.branchId;
+    if (!branchId) {
+      const headOffice = await this.prisma.branch.findFirst({
+        where: { tenantId, isHeadOffice: true, isActive: true },
+      });
+      branchId = headOffice?.id;
+    }
+
     return this.prisma.department.create({
-      data: { tenantId, ...dto },
+      data: { tenantId, ...dto, branchId },
+      include: { branch: true },
     });
   }
 
   async findAll(tenantId: string) {
     return this.prisma.department.findMany({
       where: { tenantId, isActive: true },
-      include: { _count: { select: { employees: true } } },
+      include: { _count: { select: { employees: true } }, branch: true },
       orderBy: { name: 'asc' },
     });
   }
@@ -56,6 +65,7 @@ export class DepartmentsService {
           },
         },
         children: true,
+        branch: true,
       },
     });
     if (!dept) throw new NotFoundException('Department not found');
@@ -79,9 +89,17 @@ export class DepartmentsService {
       if (!parent) throw new NotFoundException('Parent department not found');
     }
 
+    if (dto.branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: dto.branchId, tenantId, isActive: true },
+      });
+      if (!branch) throw new NotFoundException('Branch not found');
+    }
+
     return this.prisma.department.update({
       where: { id },
       data: dto,
+      include: { branch: true },
     });
   }
 
