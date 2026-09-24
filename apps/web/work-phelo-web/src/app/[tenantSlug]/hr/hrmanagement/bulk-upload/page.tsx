@@ -8,6 +8,31 @@ import { Button } from '@/components/atoms/Button';
 import { frostedAvatarStyle, cardClass } from '@/lib/utils';
 import { Building2, Users, FolderTree, GitBranch } from 'lucide-react';
 import { BulkUploadImportDialog } from '@/components/organisms/hr/bulkUpload/BulkUploadImportDialog';
+import type { ImportSectionData } from '@/components/organisms/hr/bulkUpload/ImportPreviewSection';
+import {
+  downloadEmployeeImportTemplate,
+  downloadEmployeeAndDepartmentsImportTemplate,
+  downloadDepartmentImportTemplate,
+  downloadBranchImportTemplate,
+  downloadCompanyImportTemplate,
+} from '@/lib/hr/employeeImportTemplate';
+import {
+  parseBranchImportFile,
+  parseDepartmentImportFile,
+  parseEmployeeImportFile,
+  parseEmployeeAndDepartmentsImportFile,
+  parseCompanyImportFile,
+} from '@/lib/hr/bulkImportParser';
+import type {
+  BranchImportRow,
+  DepartmentImportRow,
+  EmployeeImportRow,
+  BulkImportRowResult,
+} from '@/lib/hr/bulkImportTypes';
+import { useBulkImportBranches } from '@/hooks/hr/useBranches';
+import { useBulkImportDepartments } from '@/hooks/hr/useDepartments';
+import { useBulkImportEmployees } from '@/hooks/hr/useEmployees';
+import { useBulkImportCompany } from '@/hooks/hr/useBulkImportCompany';
 
 type BulkUploadOption = {
   key: string;
@@ -34,31 +59,54 @@ const UPLOAD_SUB_OPTIONS: Record<string, { key: string; label: string }[]> = {
   branch: [{ key: 'branch', label: 'Branch Only' }],
 };
 
-const IMPORT_DIALOG_CONFIG: Record<string, { title: string; description: string }> = {
-  company: {
-    title: 'Import Company Data',
-    description:
-      'Download the template, fill it in, then upload it here to bulk-create your company data.',
-  },
-  'employee-only': {
-    title: 'Import Employees',
-    description: 'Download the template, fill it in, then upload it here to bulk-create employees.',
-  },
-  'employee-and-departments': {
-    title: 'Import Employees and Departments',
-    description:
-      'Download the template, fill it in, then upload it here to bulk-create employees along with their departments.',
-  },
-  department: {
-    title: 'Import Departments',
-    description:
-      'Download the template, fill it in, then upload it here to bulk-create departments.',
-  },
-  branch: {
-    title: 'Import Branches',
-    description: 'Download the template, fill it in, then upload it here to bulk-create branches.',
-  },
-};
+function branchSection(rows: BranchImportRow[]): ImportSectionData {
+  return {
+    key: 'branches',
+    title: 'Branches',
+    rows,
+    columns: [
+      { header: 'Name', render: (r: BranchImportRow) => r.name || '—' },
+      { header: 'Code', render: (r: BranchImportRow) => r.code || '—' },
+      { header: 'Manager', render: (r: BranchImportRow) => r.managerName || '—' },
+      { header: 'Head Office', render: (r: BranchImportRow) => (r.isHeadOffice ? 'Yes' : 'No') },
+    ],
+  };
+}
+
+function departmentSection(rows: DepartmentImportRow[]): ImportSectionData {
+  return {
+    key: 'departments',
+    title: 'Departments',
+    rows,
+    columns: [
+      { header: 'Name', render: (r: DepartmentImportRow) => r.name || '—' },
+      { header: 'Head', render: (r: DepartmentImportRow) => r.managerName || '—' },
+      { header: 'Branch', render: (r: DepartmentImportRow) => r.branchName || '—' },
+    ],
+  };
+}
+
+function employeeSection(rows: EmployeeImportRow[]): ImportSectionData {
+  return {
+    key: 'employees',
+    title: 'Employees',
+    rows,
+    columns: [
+      {
+        header: 'Name',
+        render: (r: EmployeeImportRow) => `${r.firstName} ${r.lastName}`.trim() || '—',
+      },
+      { header: 'Email', render: (r: EmployeeImportRow) => r.email || '—' },
+      { header: 'Department', render: (r: EmployeeImportRow) => r.departmentName || '—' },
+      { header: 'Job Title', render: (r: EmployeeImportRow) => r.jobTitle || '—' },
+      { header: 'Hire Date', render: (r: EmployeeImportRow) => r.hireDate || '—' },
+    ],
+  };
+}
+
+function newRows<Row extends { status: 'new' | 'invalid' }>(rows: Row[]): Row[] {
+  return rows.filter((r) => r.status === 'new');
+}
 
 export default function BulkUploadPage() {
   const router = useRouter();
@@ -69,6 +117,111 @@ export default function BulkUploadPage() {
   const [selectedSubOption, setSelectedSubOption] = useState<string | null>(null);
   const subOptions = selected ? UPLOAD_SUB_OPTIONS[selected] : undefined;
   const [importDialogKey, setImportDialogKey] = useState<string | null>(null);
+
+  const bulkImportBranches = useBulkImportBranches();
+  const bulkImportDepartments = useBulkImportDepartments();
+  const bulkImportEmployees = useBulkImportEmployees();
+  const bulkImportCompany = useBulkImportCompany();
+
+  const IMPORT_DIALOG_CONFIG: Record<
+    string,
+    {
+      title: string;
+      description: string;
+      onDownloadTemplate: () => void;
+      parseFile: (file: File) => Promise<ImportSectionData[]>;
+      onImport: (sections: ImportSectionData[]) => Promise<Record<string, BulkImportRowResult[]>>;
+    }
+  > = {
+    company: {
+      title: 'Import Company Data',
+      description:
+        'Download the template, fill it in, then upload it here to bulk-create your company data.',
+      onDownloadTemplate: downloadCompanyImportTemplate,
+      parseFile: async (file) => {
+        const { branches, departments, employees } = await parseCompanyImportFile(file);
+        return [
+          branchSection(branches),
+          departmentSection(departments),
+          employeeSection(employees),
+        ];
+      },
+      onImport: async (sections) => {
+        const branches = newRows(
+          (sections.find((s) => s.key === 'branches')?.rows ?? []) as BranchImportRow[],
+        );
+        const departments = newRows(
+          (sections.find((s) => s.key === 'departments')?.rows ?? []) as DepartmentImportRow[],
+        );
+        const employees = newRows(
+          (sections.find((s) => s.key === 'employees')?.rows ?? []) as EmployeeImportRow[],
+        );
+        const result = await bulkImportCompany.mutateAsync({ branches, departments, employees });
+        return {
+          branches: result.branches,
+          departments: result.departments,
+          employees: result.employees,
+        };
+      },
+    },
+    'employee-only': {
+      title: 'Import Employees',
+      description:
+        'Download the template, fill it in, then upload it here to bulk-create employees.',
+      onDownloadTemplate: downloadEmployeeImportTemplate,
+      parseFile: async (file) => [employeeSection(await parseEmployeeImportFile(file))],
+      onImport: async (sections) => {
+        const employees = newRows((sections[0]?.rows ?? []) as EmployeeImportRow[]);
+        const result = await bulkImportEmployees.mutateAsync(employees);
+        return { employees: result };
+      },
+    },
+    'employee-and-departments': {
+      title: 'Import Employees and Departments',
+      description:
+        'Download the template, fill it in, then upload it here to bulk-create employees along with their departments.',
+      onDownloadTemplate: downloadEmployeeAndDepartmentsImportTemplate,
+      parseFile: async (file) => {
+        const { departments, employees } = await parseEmployeeAndDepartmentsImportFile(file);
+        return [departmentSection(departments), employeeSection(employees)];
+      },
+      onImport: async (sections) => {
+        const departments = newRows(
+          (sections.find((s) => s.key === 'departments')?.rows ?? []) as DepartmentImportRow[],
+        );
+        const employees = newRows(
+          (sections.find((s) => s.key === 'employees')?.rows ?? []) as EmployeeImportRow[],
+        );
+        const result = await bulkImportCompany.mutateAsync({ departments, employees });
+        return { departments: result.departments, employees: result.employees };
+      },
+    },
+    department: {
+      title: 'Import Departments',
+      description:
+        'Download the template, fill it in, then upload it here to bulk-create departments.',
+      onDownloadTemplate: downloadDepartmentImportTemplate,
+      parseFile: async (file) => [departmentSection(await parseDepartmentImportFile(file))],
+      onImport: async (sections) => {
+        const departments = newRows((sections[0]?.rows ?? []) as DepartmentImportRow[]);
+        const result = await bulkImportDepartments.mutateAsync(departments);
+        return { departments: result };
+      },
+    },
+    branch: {
+      title: 'Import Branches',
+      description:
+        'Download the template, fill it in, then upload it here to bulk-create branches.',
+      onDownloadTemplate: downloadBranchImportTemplate,
+      parseFile: async (file) => [branchSection(await parseBranchImportFile(file))],
+      onImport: async (sections) => {
+        const branches = newRows((sections[0]?.rows ?? []) as BranchImportRow[]);
+        const result = await bulkImportBranches.mutateAsync(branches);
+        return { branches: result };
+      },
+    },
+  };
+
   const importDialogConfig = importDialogKey ? IMPORT_DIALOG_CONFIG[importDialogKey] : undefined;
 
   useEffect(() => {
@@ -153,6 +306,9 @@ export default function BulkUploadPage() {
         onClose={() => setImportDialogKey(null)}
         title={importDialogConfig?.title ?? ''}
         description={importDialogConfig?.description ?? ''}
+        onDownloadTemplate={importDialogConfig?.onDownloadTemplate}
+        parseFile={importDialogConfig?.parseFile}
+        onImport={importDialogConfig?.onImport}
       />
     </div>
   );

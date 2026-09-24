@@ -68,7 +68,7 @@ export function ProfileSummaryCard({ employee, managerName }: ProfileSummaryCard
     clauses.push(
       <>
         joined {strong(joinedDate)}
-        {tenure && <> ({strong(tenure)} of tenure)</>}
+        {tenure && <> ({strong(tenure)} of service)</>}
       </>,
     );
   }

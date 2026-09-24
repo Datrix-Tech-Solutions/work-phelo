@@ -12,6 +12,12 @@ import { PermissionRecipient, RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { EmployeeImportRowDto } from './dto/bulk-import-employees.dto';
+import { BulkImportRowResult } from '../common/bulk-import.types';
+import {
+  matchByExactName,
+  matchEmployeeByFullName,
+} from '../common/name-match.util';
 import { LeaveService } from '../leave/leave.service';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import {
@@ -570,6 +576,117 @@ export class EmployeesService {
     }
 
     return this.encryption.decryptEmployeeFields(employee);
+  }
+
+  /** Creates employees from bulk-import rows sequentially, one row at a time, via the same
+   *  create() used by the single-employee form — so invite emails, leave balance init, and
+   *  holiday seeding all happen exactly as they would for a manually created employee.
+   *  Department is a required lookup: an unresolved name fails the row. Branch and Reporting
+   *  Manager are optional lookups: unresolved/ambiguous values are dropped with a warning and
+   *  the row still proceeds. Newly created employees are added to the manager-lookup pool so a
+   *  later row in the same file can report to someone created earlier in it. */
+  async bulkImport(
+    tenantId: string,
+    rows: EmployeeImportRowDto[],
+  ): Promise<BulkImportRowResult[]> {
+    const departments = await this.prisma.department.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
+    });
+    const branches = await this.prisma.branch.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
+    });
+    const employeeCandidates = await this.prisma.employee.findMany({
+      where: { tenantId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+
+    const results: BulkImportRowResult[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNumber = row.rowNumber ?? i + 1;
+      const warnings: string[] = [];
+
+      const department = matchByExactName(row.departmentName, departments);
+      if (!department) {
+        results.push({
+          rowNumber,
+          status: 'failed',
+          message: `Department "${row.departmentName}" not found`,
+          warnings,
+        });
+        continue;
+      }
+
+      let branchId: string | undefined;
+      if (row.branchName?.trim()) {
+        const branch = matchByExactName(row.branchName, branches);
+        if (branch) {
+          branchId = branch.id;
+        } else {
+          warnings.push(`Branch "${row.branchName}" not found — left blank.`);
+        }
+      }
+
+      let managerId: string | undefined;
+      if (row.managerName?.trim()) {
+        const match = matchEmployeeByFullName(
+          row.managerName,
+          employeeCandidates,
+        );
+        if (match.status === 'found') {
+          managerId = match.id;
+        } else {
+          warnings.push(
+            match.status === 'ambiguous'
+              ? `Reporting Manager "${row.managerName}" matches multiple employees — left blank.`
+              : `Reporting Manager "${row.managerName}" not found — left blank.`,
+          );
+        }
+      }
+
+      try {
+        const employee = await this.create(tenantId, {
+          firstName: row.firstName,
+          lastName: row.lastName,
+          email: row.email,
+          phone: row.phone,
+          gender: row.gender,
+          departmentId: department.id,
+          branchId,
+          jobTitle: row.jobTitle,
+          managerId,
+          hireDate: row.hireDate,
+          employmentType: row.employmentType,
+          contractEndDate: row.contractEndDate,
+          compensationType: row.compensationType,
+          basicSalary: row.basicSalary,
+        });
+        employeeCandidates.push({
+          id: employee.id,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+        });
+        results.push({
+          rowNumber,
+          status: 'created',
+          id: employee.id,
+          warnings,
+        });
+      } catch (err) {
+        results.push({
+          rowNumber,
+          status: 'failed',
+          message:
+            err instanceof Error ? err.message : 'Failed to create employee',
+          warnings,
+        });
+      }
+    }
+
+    return results;
   }
 
   async findAll(

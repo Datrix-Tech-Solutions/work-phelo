@@ -27,6 +27,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { BulkImportEmployeesDto } from './dto/bulk-import-employees.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { CreateEmployeeDocumentDto } from './dto/create-employee-document.dto';
 import {
@@ -128,6 +129,17 @@ export class EmployeesController {
     @Req() req: Request & { user: RequestUser },
   ) {
     return this.employeesService.create(req.user.tenantId, dto);
+  }
+
+  @Post('bulk-import')
+  @RequirePermissions(Permission.CREATE_EMPLOYEE)
+  @ApiOperation({ summary: 'Bulk-create employees from parsed import rows' })
+  @ApiResponse({ status: 201, description: 'Per-row import results' })
+  bulkImport(
+    @Body() dto: BulkImportEmployeesDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.bulkImport(req.user.tenantId, dto.rows);
   }
 
   @Get()
