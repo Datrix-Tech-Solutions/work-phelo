@@ -7,6 +7,8 @@ import {
   House,
   Settings,
   UserCircle,
+  Megaphone,
+  Briefcase,
   // Wallet,
   // Trophy,
   // CalendarRange,
@@ -23,6 +25,8 @@ const SettingsIcon = () => <Settings className="w-5 h-5" />;
 const HrIcon = () => <Users className="w-5 h-5" />;
 const AccountingIcon = () => <DollarSign className="w-5 h-5" />;
 const OperationsIcon = () => <Handshake className="w-5 h-5" />;
+const MarketingIcon = () => <Megaphone className="w-5 h-5" />;
+const RecruitmentIcon = () => <Briefcase className="w-5 h-5" />;
 
 export const HR_NAV_GROUPS: NavGroup[] = [
   {
@@ -104,10 +108,26 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         active: true,
       },
       {
+        key: 'marketing',
+        label: 'Marketing',
+        icon: <MarketingIcon />,
+        href: '/marketing',
+        enabled: true,
+        active: true,
+      },
+      {
         key: 'accounting',
         label: 'Accounting',
         icon: <AccountingIcon />,
         href: '/accounting',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'recruitment',
+        label: 'Recruitment',
+        icon: <RecruitmentIcon />,
+        href: '/recruitment',
         enabled: true,
         active: true,
       },

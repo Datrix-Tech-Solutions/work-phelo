@@ -62,6 +62,8 @@ export function useHrSidebarGroups(tenantSlug: string, currentModuleKey: string)
     appraisal: canAccessAppraisal,
     accounting: moduleConfig.accounting ?? false,
     operations: (moduleConfig.operations ?? false) && canViewReinsuranceDashboard,
+    marketing: moduleConfig.marketing ?? false,
+    recruitment: moduleConfig.recruitment ?? false,
   };
 
   const resolveHref = (href: string) =>
