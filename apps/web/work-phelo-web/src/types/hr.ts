@@ -21,6 +21,8 @@ export interface Department {
   name: string;
   description?: string;
   managerId?: string;
+  branchId?: string;
+  branch?: Pick<Branch, 'id' | 'name'>;
   isActive: boolean;
   _count?: { employees: number };
 }

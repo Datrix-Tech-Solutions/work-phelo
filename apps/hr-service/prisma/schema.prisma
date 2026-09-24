@@ -382,8 +382,9 @@ model Branch {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  employees Employee[]
-  assets    Asset[]
+  employees   Employee[]
+  assets      Asset[]
+  departments Department[]
 
   @@unique([tenantId, name])
   @@schema("hr")
@@ -398,15 +399,18 @@ model Department {
   description String?
   managerId   String?
   parentId    String?
+  branchId    String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   parent    Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
   children  Department[] @relation("DepartmentHierarchy")
+  branch    Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
   employees Employee[]
 
   @@unique([tenantId, name])
+  @@index([tenantId, branchId])
   @@schema("hr")
 }
 

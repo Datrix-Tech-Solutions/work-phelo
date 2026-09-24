@@ -30,4 +30,13 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsUUID()
   parentId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional branch ID this department belongs to. Defaults to the head office branch when omitted.',
+    example: 'branch-123',
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 }

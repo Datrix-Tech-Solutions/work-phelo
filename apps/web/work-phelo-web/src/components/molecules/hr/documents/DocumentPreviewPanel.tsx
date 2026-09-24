@@ -1,4 +1,4 @@
-import { Download, Trash2, FolderOpen } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 import { cardClass } from '@/lib/utils';
 import { formatDate } from '@/lib/formatters';
 import { Button } from '@/components/atoms/Button';
@@ -6,7 +6,7 @@ import { DocumentFileIcon } from './DocumentFileIcon';
 import { formatFileSize, type MyDocument } from '@/components/organisms/hr/documents/types';
 
 interface Props {
-  document: MyDocument | null;
+  document: MyDocument;
   onDownload?: (doc: MyDocument) => void;
   onDelete?: (doc: MyDocument) => void;
   canDelete?: boolean;
@@ -22,24 +22,6 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 }
 
 export function DocumentPreviewPanel({ document, onDownload, onDelete, canDelete = true }: Props) {
-  if (!document) {
-    return (
-      <div
-        className={cardClass(
-          'w-full lg:w-80 shrink-0 flex flex-col items-center justify-center gap-3 p-8 text-center',
-        )}
-      >
-        <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center">
-          <FolderOpen className="w-6 h-6 text-gray-400" />
-        </div>
-        <p className="text-sm font-medium text-gray-500">Select a document to preview</p>
-        <p className="text-xs text-gray-400">
-          Its details, size, and upload history will show up here.
-        </p>
-      </div>
-    );
-  }
-
   const canRenderInline = document.fileKind === 'pdf' || document.fileKind === 'image';
 
   return (

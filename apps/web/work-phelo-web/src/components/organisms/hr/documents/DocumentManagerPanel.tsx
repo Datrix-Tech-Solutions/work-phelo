@@ -23,6 +23,10 @@ interface Props {
    *  documents ask for different fields) — DocumentManagerPanel just owns
    *  the open/close state and the button that triggers it. */
   renderUploadModal?: (props: { isOpen: boolean; onClose: () => void }) => React.ReactNode;
+  /** Fires whenever the selected document changes (including back to none) —
+   *  lets a caller react, e.g. collapsing a sibling folder rail once the
+   *  preview column appears. */
+  onSelectionChange?: (doc: MyDocument | null) => void;
 }
 
 export function DocumentManagerPanel({
@@ -32,6 +36,7 @@ export function DocumentManagerPanel({
   onDelete,
   isLoading,
   renderUploadModal,
+  onSelectionChange,
 }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [search, setSearch] = useState('');
@@ -48,6 +53,11 @@ export function DocumentManagerPanel({
 
   const selected = documents.find((d) => d.id === selectedId) ?? null;
 
+  const selectDocument = (doc: MyDocument | null) => {
+    setSelectedId(doc?.id ?? null);
+    onSelectionChange?.(doc);
+  };
+
   const handleDownload = (doc: MyDocument) => {
     if (!doc.previewUrl) return;
     const a = window.document.createElement('a');
@@ -58,7 +68,7 @@ export function DocumentManagerPanel({
 
   const handleDelete = (doc: MyDocument) => {
     onDelete?.(doc);
-    if (selectedId === doc.id) setSelectedId(null);
+    if (selectedId === doc.id) selectDocument(null);
   };
 
   const columns: Column<MyDocument>[] = [
@@ -128,7 +138,7 @@ export function DocumentManagerPanel({
             data={filtered}
             isLoading={isLoading}
             emptyMessage="No documents found"
-            onRowClick={(doc) => setSelectedId(doc.id)}
+            onRowClick={selectDocument}
             currentPage={1}
             totalPages={1}
             onPageChange={() => {}}
@@ -145,7 +155,7 @@ export function DocumentManagerPanel({
                     key={doc.id}
                     document={doc}
                     selected={doc.id === selectedId}
-                    onSelect={(d) => setSelectedId(d.id)}
+                    onSelect={selectDocument}
                   />
                 ))}
               </div>
@@ -154,12 +164,14 @@ export function DocumentManagerPanel({
         )}
       </div>
 
-      <DocumentPreviewPanel
-        document={selected}
-        onDownload={handleDownload}
-        onDelete={allowDelete ? handleDelete : undefined}
-        canDelete={allowDelete}
-      />
+      {selected && (
+        <DocumentPreviewPanel
+          document={selected}
+          onDownload={handleDownload}
+          onDelete={allowDelete ? handleDelete : undefined}
+          canDelete={allowDelete}
+        />
+      )}
 
       {allowUpload &&
         renderUploadModal?.({

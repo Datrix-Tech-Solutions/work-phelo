@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { DocumentManagerPanel } from '@/components/organisms/hr/documents/DocumentManagerPanel';
 import { UploadCompanyDocumentModal } from '@/components/organisms/hr/documents/UploadCompanyDocumentModal';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import {
   DOCUMENT_TYPE_LABELS,
   inferFileKind,
@@ -41,6 +42,7 @@ interface Props {
 // profile page (see MyDocumentsContent).
 export function EmployeeDocumentsTab({ employee }: Props) {
   const toast = useToast();
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const { data: documentsRaw, isLoading } = useEmployeeDocuments(employee.id);
   const { mutate: uploadDocument, isPending: isUploading } = useUploadEmployeeDocument(employee.id);
   const { mutate: deleteDocument } = useDeleteEmployeeDocument(employee.id);
@@ -55,26 +57,37 @@ export function EmployeeDocumentsTab({ employee }: Props) {
   };
 
   return (
-    <DocumentManagerPanel
-      documents={documents}
-      isLoading={isLoading}
-      allowUpload
-      allowDelete
-      onDelete={handleDelete}
-      renderUploadModal={({ isOpen, onClose }) => (
-        <UploadCompanyDocumentModal
-          isOpen={isOpen}
-          onClose={onClose}
-          isUploading={isUploading}
-          onUpload={(input) => {
-            uploadDocument(input, {
-              onSuccess: () => toast.success('Document uploaded'),
-              onError: (err) => toast.error(extractError(err, 'Failed to upload document')),
-            });
-            onClose();
-          }}
-        />
-      )}
-    />
+    <>
+      <DocumentManagerPanel
+        documents={documents}
+        isLoading={isLoading}
+        allowUpload
+        allowDelete
+        onDelete={handleDelete}
+        renderUploadModal={({ isOpen, onClose }) => (
+          <UploadCompanyDocumentModal
+            isOpen={isOpen}
+            onClose={onClose}
+            isUploading={isUploading}
+            onUpload={(input) => {
+              uploadDocument(input, {
+                onSuccess: () => {
+                  onClose();
+                  setUploadSuccess(true);
+                },
+                onError: (err) => toast.error(extractError(err, 'Failed to upload document')),
+              });
+            }}
+          />
+        )}
+      />
+
+      <SuccessModal
+        isOpen={uploadSuccess}
+        onClose={() => setUploadSuccess(false)}
+        title="Document Uploaded!"
+        message={`Document added to ${employee.firstName} ${employee.lastName}'s Company Documents.`}
+      />
+    </>
   );
 }

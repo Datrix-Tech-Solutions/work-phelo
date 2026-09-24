@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { DocumentFoldersRail } from '@/components/molecules/hr/documents/DocumentFoldersRail';
 import { DocumentManagerPanel } from './DocumentManagerPanel';
 import { UploadPersonalDocumentModal } from './UploadPersonalDocumentModal';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { useMyDocuments, useUploadMyDocument, useDeleteMyDocument } from '@/hooks/useMyDocuments';
 import { useMyEmployeeDocuments } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
@@ -51,7 +52,14 @@ function fromEmployeeDocument(doc: EmployeeDocument): MyDocument {
 // view only lets the employee view/download those, not add or remove them.
 export function MyDocumentsContent() {
   const [folder, setFolder] = useState<DocumentFolderKey>('personal');
+  const [hasSelection, setHasSelection] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const toast = useToast();
+
+  const handleFolderSelect = (next: DocumentFolderKey) => {
+    setFolder(next);
+    setHasSelection(false);
+  };
 
   const { data: personalDocsRaw, isLoading: personalLoading } = useMyDocuments();
   const { data: companyDocsRaw, isLoading: companyLoading } = useMyEmployeeDocuments();
@@ -71,11 +79,17 @@ export function MyDocumentsContent() {
   const documents = folder === 'personal' ? personalDocs : companyDocs;
   const isLoading = folder === 'personal' ? personalLoading : companyLoading;
 
-  const handleUpload = ({ file, category }: { file: File; category: string }) => {
+  const handleUpload = (
+    { file, category }: { file: File; category: string },
+    onUploaded: () => void,
+  ) => {
     uploadDocument(
       { file, category },
       {
-        onSuccess: () => toast.success('Document uploaded'),
+        onSuccess: () => {
+          onUploaded();
+          setUploadSuccess(true);
+        },
         onError: (err) => toast.error(extractError(err, 'Failed to upload document')),
       },
     );
@@ -90,24 +104,35 @@ export function MyDocumentsContent() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 items-start">
-      <DocumentFoldersRail active={folder} onSelect={setFolder} counts={counts} />
+      <DocumentFoldersRail
+        active={folder}
+        onSelect={handleFolderSelect}
+        counts={counts}
+        collapsed={hasSelection}
+      />
       <DocumentManagerPanel
+        key={folder}
         documents={documents}
         isLoading={isLoading}
         allowUpload={folder === 'personal'}
         allowDelete={folder === 'personal'}
         onDelete={handleDelete}
+        onSelectionChange={(doc) => setHasSelection(doc !== null)}
         renderUploadModal={({ isOpen, onClose }) => (
           <UploadPersonalDocumentModal
             isOpen={isOpen}
             onClose={onClose}
             isUploading={isUploading}
-            onUpload={(input) => {
-              handleUpload(input);
-              onClose();
-            }}
+            onUpload={(input) => handleUpload(input, onClose)}
           />
         )}
+      />
+
+      <SuccessModal
+        isOpen={uploadSuccess}
+        onClose={() => setUploadSuccess(false)}
+        title="Document Uploaded!"
+        message="Your document has been added to Personal Documents."
       />
     </div>
   );

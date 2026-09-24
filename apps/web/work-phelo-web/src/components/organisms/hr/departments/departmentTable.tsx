@@ -12,6 +12,7 @@ import {
   useDeleteDepartment,
 } from '@/hooks/hr/useDepartments';
 import { useEmployeeOptions, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useBranches, useBranchOptions } from '@/hooks/hr/useBranches';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
@@ -45,6 +46,8 @@ export function DepartmentsTable() {
 
   const { data: departments = [], isLoading } = useDepartments();
   const { data: employees = [] } = useEmployeeOptions();
+  const { data: branches = [] } = useBranchOptions();
+  const { data: allBranches = [] } = useBranches();
 
   const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
   const { mutateAsync: updateDepartmentAsync } = useUpdateDepartment();
@@ -54,6 +57,11 @@ export function DepartmentsTable() {
   const employeeMap = useMemo(
     () => new Map(employees.map((e) => [e.id, `${e.firstName} ${e.lastName}`])),
     [employees],
+  );
+
+  const headOfficeName = useMemo(
+    () => allBranches.find((b) => b.isHeadOffice)?.name,
+    [allBranches],
   );
 
   const filtered = useMemo(() => {
@@ -121,6 +129,14 @@ export function DepartmentsTable() {
         <span className="text-sm text-gray-500">
           {row.managerId ? (employeeMap.get(row.managerId) ?? '—') : '—'}
         </span>
+      ),
+    },
+    {
+      key: 'branch',
+      label: 'Branch',
+      width: 'minmax(160px, 1fr)',
+      render: (row) => (
+        <span className="text-sm text-gray-500">{row.branch?.name ?? headOfficeName ?? '—'}</span>
       ),
     },
     {
@@ -195,6 +211,7 @@ export function DepartmentsTable() {
           onClose={() => setCreateOpen(false)}
           tenantSlug={params.tenantSlug}
           employees={employees}
+          branches={branches}
           onSuccess={(name) => setSuccessName(name)}
         />
       )}
@@ -205,6 +222,7 @@ export function DepartmentsTable() {
             isOpen={!!editTarget}
             onClose={() => setEditTarget(null)}
             editTarget={editTarget}
+            branches={branches}
           />
           <AddMembersPanel
             isOpen={!!membersTarget}
