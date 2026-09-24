@@ -130,11 +130,13 @@ export function BulkImportGLAccountsDialog({
           code: row.code,
           name: row.name,
           category: row.category!,
+          cashFlowCategory: row.cashFlowCategory,
         })),
         groups: newGroups.map((row) => ({
           code: row.code,
           name: row.name,
           classificationCode: row.classificationCode,
+          cashFlowCategory: row.cashFlowCategory,
         })),
         accounts: newAccounts.map((row) => ({
           code: row.code,
@@ -143,6 +145,7 @@ export function BulkImportGLAccountsDialog({
           classificationCode: row.classificationCode,
           parentAccountCode: row.parentAccountCode || undefined,
           description: row.description || undefined,
+          cashFlowCategory: row.cashFlowCategory,
         })),
       });
 

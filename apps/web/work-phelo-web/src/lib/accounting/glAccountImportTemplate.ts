@@ -1,6 +1,7 @@
 import type { AccountClassification, AccountGroup } from '@/types/accounting';
 import {
   ACCOUNT_IMPORT_HEADERS,
+  CASH_FLOW_LABEL_BY_VALUE,
   CATEGORY_LABEL_BY_VALUE,
   CLASSIFICATION_IMPORT_HEADERS,
   GROUP_IMPORT_HEADERS,
@@ -34,6 +35,9 @@ export async function downloadGLAccountImportTemplate(
       'Classification Code': classification.code,
       'Classification Name': classification.name,
       'Account Type': CATEGORY_LABEL_BY_VALUE[classification.category] ?? classification.category,
+      'Cash Flow Category': classification.cashFlowCategory
+        ? CASH_FLOW_LABEL_BY_VALUE[classification.cashFlowCategory]
+        : '',
     });
     row.eachCell((cell) => (cell.fill = EXISTING_ROW_FILL));
   }
@@ -41,6 +45,7 @@ export async function downloadGLAccountImportTemplate(
     'Classification Code': '',
     'Classification Name': '',
     'Account Type': '',
+    'Cash Flow Category': '',
   });
 
   const groupsSheet = workbook.addWorksheet('Parent Accounts');
@@ -51,6 +56,9 @@ export async function downloadGLAccountImportTemplate(
       'Parent Account Code': group.code,
       'Parent Account Name': group.name,
       'Classification Code': group.classification.code,
+      'Cash Flow Category': group.cashFlowCategory
+        ? CASH_FLOW_LABEL_BY_VALUE[group.cashFlowCategory]
+        : '',
     });
     row.eachCell((cell) => (cell.fill = EXISTING_ROW_FILL));
   }
@@ -58,6 +66,7 @@ export async function downloadGLAccountImportTemplate(
     'Parent Account Code': '',
     'Parent Account Name': '',
     'Classification Code': '',
+    'Cash Flow Category': '',
   });
 
   const accountsSheet = workbook.addWorksheet('Accounts');
@@ -73,6 +82,7 @@ export async function downloadGLAccountImportTemplate(
     'Account Type': 'Asset',
     'Classification Code': classifications[0]?.code ?? '',
     'Parent Account Code': groups[0]?.code ?? '',
+    'Cash Flow Category': '',
     Description: '',
   });
 
@@ -84,6 +94,7 @@ export async function downloadGLAccountImportTemplate(
     'The "Classification Code" and "Parent Account Code" columns on the Accounts sheet can point at either an existing code or a new one you just added.',
     'Account Type must be one of: Asset, Liability, Equity, Revenue, Expense.',
     "A new parent account's classification must match the account type of the accounts filed under it.",
+    'Cash Flow Category is optional and must be one of: Operating, Investing, Financing, Excluded / Non-cash. Leave it blank to inherit from the level above (parent account, then classification, then the default for the account type).',
   ].forEach((note) => notes.addRow([note]));
 
   const buffer = await workbook.xlsx.writeBuffer();

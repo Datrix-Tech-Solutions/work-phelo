@@ -531,6 +531,11 @@ export class BulkImportClassificationDto {
   @ApiProperty({ enum: GLAccountCategory })
   @IsEnum(GLAccountCategory)
   category!: GLAccountCategory;
+
+  @ApiPropertyOptional({ enum: CashFlowCategory })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export class BulkImportAccountGroupDto {
@@ -555,6 +560,11 @@ export class BulkImportAccountGroupDto {
   @IsString()
   @MaxLength(50)
   classificationCode!: string;
+
+  @ApiPropertyOptional({ enum: CashFlowCategory })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export class BulkImportGLAccountDto {
@@ -601,6 +611,11 @@ export class BulkImportGLAccountDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiPropertyOptional({ enum: CashFlowCategory })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export class BulkImportAccountsDto {

@@ -59,12 +59,14 @@ export interface BulkImportClassificationPayload {
   code: string;
   name: string;
   category: GLAccountCategory;
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export interface BulkImportAccountGroupPayload {
   code: string;
   name: string;
   classificationCode: string;
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export interface BulkImportGLAccountPayload {
@@ -74,6 +76,7 @@ export interface BulkImportGLAccountPayload {
   classificationCode: string;
   parentAccountCode?: string;
   description?: string;
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export interface BulkImportAccountsPayload {
