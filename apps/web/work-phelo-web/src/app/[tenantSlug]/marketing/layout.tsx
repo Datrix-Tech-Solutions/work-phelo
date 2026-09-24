@@ -2,9 +2,12 @@
 
 import { use, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
+import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
+import { ModuleRail } from '@/components/organisms/shared/ModuleRail';
 import { MARKETING_NAV_GROUPS } from '@/config/marketing-nav';
+import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
 import { AppBackground } from '@/components/atoms/AppBackground';
 import { useModuleThemeScope } from '@/hooks';
 
@@ -40,6 +43,11 @@ export default function MarketingLayout({
     items: group.items.map(prefixItem),
   }));
 
+  // Parked, icon-only HR rail — shown once the user has visited HR, sitting
+  // next to Marketing's own sidebar (which behaves exactly as before).
+  const hasVisitedHr = useNavRailStore((s) => s.hasVisitedHr);
+  const parkedHrGroups = useHrSidebarGroups(tenantSlug, 'marketing');
+
   return (
     <AppBackground className="h-dvh overflow-hidden flex flex-col layout-marketing">
       <TopNav
@@ -49,6 +57,7 @@ export default function MarketingLayout({
         logoVariant="image"
       />
       <div className="flex flex-1 min-h-0 relative">
+        {hasVisitedHr && <ModuleRail groups={parkedHrGroups} />}
         <Sidebar groups={groups} collapsed={collapsed} />
         {!collapsed && (
           <div
