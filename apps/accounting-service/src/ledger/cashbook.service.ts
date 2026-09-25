@@ -338,6 +338,11 @@ export class CashbookService {
         'Cross-currency transfers require an agreed exchange rate',
       );
     }
+    if (dto.chargeAmount && !dto.chargeGlAccountId) {
+      throw new BadRequestException(
+        'chargeGlAccountId is required when chargeAmount is set',
+      );
+    }
 
     const transaction = await this.prisma.cashbookTransaction.create({
       data: {
@@ -352,6 +357,8 @@ export class CashbookService {
         settlementMethod: AccountingSettlementMethod.INTERNAL_TRANSFER,
         reference: this.optional(dto.reference),
         description: dto.description,
+        offsetGlAccountId: this.optional(dto.chargeGlAccountId),
+        chargeAmount: dto.chargeAmount,
         sourceModule: this.optional(dto.sourceModule),
         sourceRecordId: this.optional(dto.sourceRecordId),
         exchangeRate: dto.exchangeRate,
@@ -891,6 +898,14 @@ export class CashbookService {
           'Transfer is missing destination cash account',
         );
       }
+      const chargeAmount = transaction.chargeAmount
+        ? Number(transaction.chargeAmount.toString())
+        : 0;
+      if (chargeAmount > 0 && !offsetLine) {
+        throw new ConflictException(
+          'Transfer charge is missing a charges account',
+        );
+      }
       return [
         {
           glAccountId: transaction.destinationCashAccount.glAccountId,
@@ -898,7 +913,10 @@ export class CashbookService {
           debit: amount,
           credit: 0,
         },
-        { ...cashLine, debit: 0, credit: amount },
+        ...(chargeAmount > 0
+          ? [{ ...offsetLine!, debit: chargeAmount, credit: 0 }]
+          : []),
+        { ...cashLine, debit: 0, credit: amount + chargeAmount },
       ];
     }
 

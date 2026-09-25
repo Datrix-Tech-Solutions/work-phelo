@@ -6,6 +6,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FileUpload } from '@/components/atoms/FileUpload';
 import { downloadGLAccountImportTemplate } from '@/lib/accounting/glAccountImportTemplate';
+import { downloadGLAccountImportTemplateBasic } from '@/lib/accounting/glAccountImportTemplateBasic';
 import {
   parseGLAccountImportFile,
   type GLAccountImportResult,
@@ -185,18 +186,30 @@ export function BulkImportGLAccountsDialog({
       isOpen={isOpen}
       onClose={handleClose}
       title="Import Accounts"
-      description="Download the template, fill it in, then upload it here to bulk-create classifications, parent accounts and accounts."
+      description="Download a template (Basic for one simple sheet, Advanced for full control), fill it in, then upload it here to bulk-create classifications, parent accounts and accounts."
       width="max-w-3xl"
       footer={
         <div className="flex w-full items-center justify-between gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            icon={<Download className="h-3.5 w-3.5" />}
-            onClick={() => downloadGLAccountImportTemplate(classifications, groups)}
-          >
-            Download Template
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Download className="h-3.5 w-3.5" />}
+              onClick={() =>
+                downloadGLAccountImportTemplateBasic(classifications, groups, existingAccounts)
+              }
+            >
+              Basic Template
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Download className="h-3.5 w-3.5" />}
+              onClick={() => downloadGLAccountImportTemplate(classifications, groups)}
+            >
+              Advanced Template
+            </Button>
+          </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={handleClose} disabled={isImporting}>
               {result ? 'Close' : 'Cancel'}
