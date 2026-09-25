@@ -678,6 +678,7 @@ model AccountingCashAccount {
   transactions    CashbookTransaction[]     @relation("CashbookCashAccount")
   transferIns     CashbookTransaction[]     @relation("CashbookDestinationCashAccount")
   reconciliations BankReconciliation[]
+  defaultForRules TransactionTypeRule[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
@@ -830,6 +831,10 @@ model TransactionType {
   source          String?
   description     String?
   isSystemDefault Boolean                  @default(false)
+  /// When true, this Receivable/Payable type posts a single-line direct entry straight
+  /// to Cashbook (New Transaction opens the cash/bank + offset account form and calls
+  /// /cashbook/receipts or /cashbook/payments) instead of creating an Invoice/Bill.
+  postsToCashbook Boolean                  @default(false)
   createdByUserId String
   updatedByUserId String
   createdAt       DateTime                 @default(now())
@@ -871,19 +876,25 @@ model TaxType {
 /// is derived (sum of the other side) rather than entered, so it absorbs however many
 /// tax lines the other side carries. See AccountingMasterDataService for the posting math.
 model TransactionTypeRule {
-  id                String                    @id @default(uuid())
-  tenantId          String
-  transactionTypeId String
-  description       String?
-  createdByUserId   String
-  updatedByUserId   String
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
-  transactionType   TransactionType           @relation(fields: [transactionTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  lines             TransactionTypeRuleLine[]
+  id                    String                    @id @default(uuid())
+  tenantId              String
+  transactionTypeId     String
+  description           String?
+  /// Only meaningful for postsToCashbook types: the cash/bank account pre-selected on
+  /// the New Transaction form for this type, still changeable there. Null means the
+  /// form starts with no cash account chosen.
+  defaultCashAccountId  String?
+  createdByUserId       String
+  updatedByUserId       String
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  transactionType       TransactionType           @relation(fields: [transactionTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  defaultCashAccount    AccountingCashAccount?    @relation(fields: [defaultCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  lines                 TransactionTypeRuleLine[]
 
   @@unique([id, tenantId])
   @@unique([transactionTypeId, tenantId])
+  @@index([tenantId, defaultCashAccountId])
   @@schema("accounting")
 }
 

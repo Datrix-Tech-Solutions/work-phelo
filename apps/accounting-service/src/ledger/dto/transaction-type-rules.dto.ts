@@ -111,9 +111,22 @@ export class CreateTransactionTypeRuleDto {
   @MaxLength(500)
   description?: string;
 
-  @ApiProperty({ type: [TransactionTypeRuleLineDto] })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Cashbook-posted RCPT/PMNT types only: the cash/bank account pre-selected on the New Transaction form for this type, still changeable there.',
+  })
+  @IsOptional()
+  @IsUUID()
+  defaultCashAccountId?: string;
+
+  @ApiProperty({
+    type: [TransactionTypeRuleLineDto],
+    description:
+      'At least 2 lines (one debit, one credit) for a Receivable/Payable document rule; exactly 1 line for the RCPT/PMNT cashbook types.',
+  })
   @IsArray()
-  @ArrayMinSize(2)
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => TransactionTypeRuleLineDto)
   lines!: TransactionTypeRuleLineDto[];
@@ -128,12 +141,21 @@ export class UpdateTransactionTypeRuleDto {
   description?: string;
 
   @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Cashbook-posted RCPT/PMNT types only: the cash/bank account pre-selected on the New Transaction form for this type, still changeable there.',
+  })
+  @IsOptional()
+  @IsUUID()
+  defaultCashAccountId?: string;
+
+  @ApiPropertyOptional({
     type: [TransactionTypeRuleLineDto],
     description: 'When provided, replaces the rule’s lines entirely.',
   })
   @IsOptional()
   @IsArray()
-  @ArrayMinSize(2)
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => TransactionTypeRuleLineDto)
   lines?: TransactionTypeRuleLineDto[];

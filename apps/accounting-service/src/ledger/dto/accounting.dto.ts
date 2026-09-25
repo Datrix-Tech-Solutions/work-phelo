@@ -265,6 +265,15 @@ export class CreateTransactionTypeDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Receivable/Payable types only: when true, this type posts a single-line direct entry straight to Cashbook (via /cashbook/receipts or /cashbook/payments) instead of creating an Invoice/Bill.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  postsToCashbook?: boolean;
 }
 
 export class UpdateTransactionTypeDto extends PartialType(

@@ -203,12 +203,14 @@ const STANDARD_TRANSACTION_TYPES = [
     name: 'Receipt',
     category: TransactionTypeCategory.RECEIVABLE,
     description: 'Money received into a cash/bank account.',
+    postsToCashbook: true,
   },
   {
     code: 'PMNT',
     name: 'Payment',
     category: TransactionTypeCategory.PAYABLE,
     description: 'Money paid out of a cash/bank account.',
+    postsToCashbook: true,
   },
   {
     code: 'TRNSF',
@@ -1545,6 +1547,7 @@ export class AccountingMasterDataService {
           allowedDocument: this.optional(dto.allowedDocument),
           source: this.optional(dto.source),
           description: this.optional(dto.description),
+          postsToCashbook: dto.postsToCashbook ?? false,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -1591,6 +1594,9 @@ export class AccountingMasterDataService {
             : {}),
           ...(dto.description !== undefined
             ? { description: this.optional(dto.description) }
+            : {}),
+          ...(dto.postsToCashbook !== undefined
+            ? { postsToCashbook: dto.postsToCashbook }
             : {}),
           updatedByUserId: user.id,
         },
@@ -1645,6 +1651,8 @@ export class AccountingMasterDataService {
     allowedDocument: string | null;
     source: string | null;
     description: string | null;
+    postsToCashbook: boolean;
+    createdAt: Date;
     rule?: { lines: unknown[] } | null;
   }) {
     return {
@@ -1656,6 +1664,8 @@ export class AccountingMasterDataService {
       allowedDocument: transactionType.allowedDocument,
       source: transactionType.source,
       description: transactionType.description,
+      postsToCashbook: transactionType.postsToCashbook,
+      createdAt: transactionType.createdAt.toISOString(),
       rulesCount: transactionType.rule?.lines.length ?? 0,
     };
   }
@@ -1705,6 +1715,8 @@ export class AccountingMasterDataService {
           name: template.name,
           category: template.category,
           description: template.description,
+          postsToCashbook:
+            'postsToCashbook' in template ? template.postsToCashbook : false,
           isSystemDefault: true,
           createdByUserId: user.id,
           updatedByUserId: user.id,

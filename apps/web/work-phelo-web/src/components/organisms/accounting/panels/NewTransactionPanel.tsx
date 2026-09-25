@@ -10,19 +10,24 @@ import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
-import { TransactionTypeDefinition } from '@/types/accounting';
+import { AccountingCashbookSettlementMethod, TransactionTypeDefinition } from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
+  useCashAccountOptions,
   useCostCentres,
+  useCreateCashbookPayment,
+  useCreateCashbookReceipt,
   useCreatePayableBill,
   useCreateReceivableInvoice,
   useEntityTypes,
+  useGLAccountOptions,
   useGLAccounts,
   useSubledgers,
   useTransactionTypeRules,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { SETTLEMENT_METHOD_OPTIONS } from '@/lib/accounting/settlementMethod';
 
 function fmtAmount(value: number, currency: string) {
   const formatted = value.toLocaleString(undefined, {
@@ -41,6 +46,10 @@ type FormValues = {
   costCentreId: string;
   entryDate: string;
   dueDate: string;
+  cashAccountId: string;
+  offsetGlAccountId: string;
+  settlementMethod: AccountingCashbookSettlementMethod | '';
+  reference: string;
 };
 
 function today() {
@@ -56,6 +65,10 @@ const DEFAULTS: FormValues = {
   costCentreId: '',
   entryDate: '',
   dueDate: '',
+  cashAccountId: '',
+  offsetGlAccountId: '',
+  settlementMethod: '',
+  reference: '',
 };
 
 export function NewTransactionPanel({
@@ -70,13 +83,21 @@ export function NewTransactionPanel({
   const isPayable = transactionType?.category === 'PAYABLE';
   const isSupported = isReceivable || isPayable;
   const hasRule = (transactionType?.rulesCount ?? 0) > 0;
-  const canUse = isSupported && hasRule;
+  // A type flagged postsToCashbook (RCPT/PMNT by default, or any Receivable/Payable type
+  // opted into it) posts straight to Cashbook — no bill/invoice, no rule required (the
+  // offset account can always be picked by hand in the form if no rule set one as default).
+  const isCashbookType = transactionType?.postsToCashbook ?? false;
+  const isCashbookReceipt = isCashbookType && isReceivable;
+  const canUse = isCashbookType ? isSupported : isSupported && hasRule;
   const toast = useToast();
 
   const createInvoice = useCreateReceivableInvoice();
   const createBill = useCreatePayableBill();
   const createDocument = isPayable ? createBill : createInvoice;
-  const isSaving = createDocument.isPending;
+  const createCashbookReceipt = useCreateCashbookReceipt();
+  const createCashbookPayment = useCreateCashbookPayment();
+  const createCashbookEntry = isCashbookReceipt ? createCashbookReceipt : createCashbookPayment;
+  const isSaving = isCashbookType ? createCashbookEntry.isPending : createDocument.isPending;
 
   const {
     control,
@@ -109,6 +130,8 @@ export function NewTransactionPanel({
   );
   const { data: costCentres = [] } = useCostCentres();
   const { data: glAccounts = [] } = useGLAccounts();
+  const { options: glAccountOptions, isLoading: isLoadingGlAccounts } = useGLAccountOptions();
+  const { options: cashAccountOptions, isLoading: isLoadingCashAccounts } = useCashAccountOptions();
   const costCentreOptions = useMemo<SearchSelectOption[]>(
     () =>
       costCentres
@@ -163,6 +186,8 @@ export function NewTransactionPanel({
       ...DEFAULTS,
       businessRole: configuredRoles.length === 1 ? configuredRoles[0] : '',
       entryDate: today(),
+      cashAccountId: rule?.defaultCashAccountId ?? '',
+      offsetGlAccountId: rule?.lines?.[0]?.account.id ?? '',
     });
     setSelectedTaxTypeIds([]);
   }
@@ -188,12 +213,45 @@ export function NewTransactionPanel({
   };
 
   const submit = async (values: FormValues) => {
+    if (!transactionType) return;
+
+    if (isCashbookType) {
+      if (!values.cashAccountId) {
+        toast.error('Select a cash/bank account');
+        return;
+      }
+      if (!values.offsetGlAccountId) {
+        toast.error(`Select the account to ${isCashbookReceipt ? 'credit' : 'debit'}`);
+        return;
+      }
+      if (!values.settlementMethod) {
+        toast.error('Select a settlement method');
+        return;
+      }
+      try {
+        await createCashbookEntry.mutateAsync({
+          cashAccountId: values.cashAccountId,
+          offsetGlAccountId: values.offsetGlAccountId,
+          amount: Number(values.amount),
+          currency: values.currency,
+          transactionDate: values.entryDate || today(),
+          settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
+          reference: values.reference || undefined,
+          description: values.description || transactionType.name,
+        });
+        close();
+        setSuccessTransactionType(transactionType.name);
+      } catch (error) {
+        toast.error(extractError(error, 'Failed to save transaction'));
+      }
+      return;
+    }
+
     const entity = entities.find((e) => e.id === values.businessEntity);
     if (!entity) {
       toast.error('Select a business entity');
       return;
     }
-    if (!transactionType) return;
 
     const payload = {
       partyId: values.businessEntity,
@@ -251,11 +309,136 @@ export function NewTransactionPanel({
             Forms for {transactionType?.category.toLowerCase() ?? 'this'} transaction types are
             coming soon.
           </p>
-        ) : !hasRule ? (
+        ) : !isCashbookType && !hasRule ? (
           <p className="text-sm text-gray-500">
             {transactionType?.name} has no rule configured yet. Add one under Settings → Transaction
             Types before creating transactions of this type.
           </p>
+        ) : isCashbookType ? (
+          <div className="flex flex-col gap-4">
+            <Input
+              label="Transaction Type"
+              readOnly
+              value={transactionType ? `${transactionType.name} (${transactionType.code})` : ''}
+            />
+
+            {!hasRule && (
+              <p className="text-xs text-gray-500">
+                No rule configured for this type yet — pick the accounts below directly, or add a
+                default rule under Settings → Transaction Types.
+              </p>
+            )}
+
+            <Controller
+              name="cashAccountId"
+              control={control}
+              rules={{ required: 'Cash/bank account is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Cash/Bank Account"
+                  placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select cash/bank account…'}
+                  options={cashAccountOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.cashAccountId?.message}
+                />
+              )}
+            />
+
+            <Controller
+              name="offsetGlAccountId"
+              control={control}
+              rules={{ required: 'Account is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label={isCashbookReceipt ? 'Account to Credit' : 'Account to Debit'}
+                  placeholder={isLoadingGlAccounts ? 'Loading…' : 'Select account…'}
+                  options={glAccountOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.offsetGlAccountId?.message}
+                />
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <Controller
+                name="amount"
+                control={control}
+                rules={{
+                  required: 'Amount is required',
+                  min: { value: 0.01, message: 'Amount must be greater than 0' },
+                }}
+                render={({ field }) => (
+                  <NumberField
+                    label="Amount"
+                    value={Number(field.value) || 0}
+                    onChange={(value) => field.onChange(String(value))}
+                    error={errors.amount?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="currency"
+                control={control}
+                rules={{ required: 'Currency is required' }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Currency"
+                    placeholder="Select currency…"
+                    options={currencyOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.currency?.message}
+                  />
+                )}
+              />
+            </div>
+
+            <Controller
+              name="entryDate"
+              control={control}
+              rules={{ required: 'Date is required' }}
+              render={({ field }) => (
+                <DatePicker
+                  label={`${transactionType?.name ?? 'Transaction'} Date`}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.entryDate?.message}
+                />
+              )}
+            />
+
+            <Controller
+              name="settlementMethod"
+              control={control}
+              rules={{ required: 'Settlement method is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Settlement Method"
+                  placeholder="Select settlement method…"
+                  options={SETTLEMENT_METHOD_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.settlementMethod?.message}
+                />
+              )}
+            />
+
+            <FormField
+              label="Reference"
+              registration={register('reference')}
+              placeholder="Optional bank/cheque reference"
+            />
+
+            <FormField
+              label="Description"
+              type="textarea"
+              rows={3}
+              registration={register('description')}
+              placeholder={`What is this ${transactionType?.name.toLowerCase() ?? 'transaction'} for?`}
+            />
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             <Input

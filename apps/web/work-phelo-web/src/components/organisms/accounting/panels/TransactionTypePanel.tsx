@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
 import {
   useCreateTransactionType,
   useEntityTypes,
@@ -17,11 +18,11 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import type { TransactionTypeCategory, TransactionTypeDefinition } from '@/types/accounting';
 
+// Neutral/None types (Transfer, Bank Charge, Adjustment) have no working form yet —
+// only Receivable/Payable transaction types can be created or edited here.
 const CATEGORY_OPTIONS: SearchSelectOption[] = [
-  { value: 'NEUTRAL', label: 'Neutral' },
   { value: 'RECEIVABLE', label: 'Receivable' },
   { value: 'PAYABLE', label: 'Payable' },
-  { value: 'NONE', label: 'None' },
 ];
 
 const ALLOWED_DOCUMENT_OPTIONS: SearchSelectOption[] = [];
@@ -34,6 +35,7 @@ type FormValues = {
   allowedDocument: string;
   source: string;
   description: string;
+  postsToCashbook: boolean;
 };
 
 const DEFAULTS: FormValues = {
@@ -44,6 +46,7 @@ const DEFAULTS: FormValues = {
   allowedDocument: '',
   source: '',
   description: '',
+  postsToCashbook: false,
 };
 
 export function TransactionTypePanel({
@@ -76,6 +79,7 @@ export function TransactionTypePanel({
     reset,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
+  const category = useWatch({ control, name: 'category' });
 
   useEffect(() => {
     if (transactionType)
@@ -87,6 +91,7 @@ export function TransactionTypePanel({
         allowedDocument: transactionType.allowedDocument ?? '',
         source: transactionType.source ?? '',
         description: transactionType.description ?? '',
+        postsToCashbook: transactionType.postsToCashbook,
       });
     else reset(DEFAULTS);
   }, [transactionType, reset]);
@@ -106,6 +111,7 @@ export function TransactionTypePanel({
         allowedDocument: values.allowedDocument || undefined,
         source: values.source || undefined,
         description: values.description || undefined,
+        postsToCashbook: values.postsToCashbook,
       };
       if (transactionType) await update({ id: transactionType.id, ...payload });
       else await create(payload);
@@ -178,6 +184,20 @@ export function TransactionTypePanel({
             />
           )}
         />
+        {category && (
+          <Controller
+            name="postsToCashbook"
+            control={control}
+            render={({ field }) => (
+              <ToggleRow
+                label="Posts Directly to Cashbook"
+                description="Make direct payments to Cashbook, instead of creating an Invoice/Bill."
+                enabled={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+        )}
         <Controller
           name="businessRoles"
           control={control}
