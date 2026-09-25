@@ -8,7 +8,7 @@ import { ProspectingSettingsService } from './prospecting-settings.service';
 
 @Module({
   imports: [AuthModule, PrismaModule],
-  controllers: [PipelineStagesController, ProspectingSettingsController],
-  providers: [PipelineStagesService, ProspectingSettingsService],
+  controllers: [ProspectingSettingsController, PipelineStagesController],
+  providers: [ProspectingSettingsService, PipelineStagesService],
 })
 export class CrmSettingsModule {}

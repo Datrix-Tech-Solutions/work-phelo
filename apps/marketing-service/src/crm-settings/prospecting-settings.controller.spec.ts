@@ -32,7 +32,24 @@ describe('ProspectingSettingsController authorization contract', () => {
     ).toEqual({ module: 'marketing', feature: 'leads' });
   });
 
-  it('requires product read permissions on list/detail endpoints', () => {
+  it('requires read permissions on list/detail endpoints', () => {
+    const listPermissions = Reflect.getMetadata(
+      ANY_PERMISSIONS_KEY,
+      ProspectingSettingsController.prototype.listBusinessTypes,
+    );
+    const detailPermissions = Reflect.getMetadata(
+      ANY_PERMISSIONS_KEY,
+      ProspectingSettingsController.prototype.getSourceType,
+    );
+
+    expect(listPermissions).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+      MarketingCrmSettingsPermission.BUSINESS_TYPES_VIEW,
+    ]);
+    expect(detailPermissions).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+      MarketingCrmSettingsPermission.SOURCE_TYPES_VIEW,
+    ]);
     expect(
       Reflect.getMetadata(
         ANY_PERMISSIONS_KEY,
@@ -42,18 +59,9 @@ describe('ProspectingSettingsController authorization contract', () => {
       MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
       MarketingCrmSettingsPermission.PRODUCTS_VIEW,
     ]);
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectingSettingsController.prototype.getProduct,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
-      MarketingCrmSettingsPermission.PRODUCTS_VIEW,
-    ]);
   });
 
-  it('requires product manage permissions on create/update/archive endpoints', () => {
+  it('requires manage permissions on create/update/archive endpoints', () => {
     expect(
       Reflect.getMetadata(
         ANY_PERMISSIONS_KEY,
@@ -62,6 +70,15 @@ describe('ProspectingSettingsController authorization contract', () => {
     ).toEqual([
       MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
       MarketingCrmSettingsPermission.PRODUCTS_CREATE,
+    ]);
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.createInteractionMedium,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+      MarketingCrmSettingsPermission.INTERACTION_MEDIA_CREATE,
     ]);
     expect(
       Reflect.getMetadata(
@@ -80,6 +97,24 @@ describe('ProspectingSettingsController authorization contract', () => {
     ).toEqual([
       MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
       MarketingCrmSettingsPermission.PRODUCTS_DELETE,
+    ]);
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.updateDecisionMaker,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+      MarketingCrmSettingsPermission.DECISION_MAKERS_EDIT,
+    ]);
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.archiveBusinessType,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+      MarketingCrmSettingsPermission.BUSINESS_TYPES_DELETE,
     ]);
   });
 });
@@ -107,7 +142,7 @@ describe('Marketing authorization guards', () => {
         .mockImplementation((key: string) =>
           key === PERMISSIONS_KEY
             ? undefined
-            : [MarketingCrmSettingsPermission.PRODUCTS_VIEW],
+            : [MarketingCrmSettingsPermission.SOURCE_TYPES_VIEW],
         ),
     };
     const guard = new PermissionsGuard(reflector as unknown as Reflector);
@@ -122,7 +157,7 @@ describe('Marketing authorization guards', () => {
     ).toThrow(ForbiddenException);
   });
 
-  it('allows users with product-specific or broad CRM settings permissions', () => {
+  it('allows users with category-specific or broad CRM settings permissions', () => {
     const reflector = {
       getAllAndOverride: jest
         .fn()
@@ -131,7 +166,7 @@ describe('Marketing authorization guards', () => {
             ? undefined
             : [
                 MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
-                MarketingCrmSettingsPermission.PRODUCTS_VIEW,
+                MarketingCrmSettingsPermission.SOURCE_TYPES_VIEW,
               ],
         ),
     };
@@ -141,81 +176,9 @@ describe('Marketing authorization guards', () => {
       guard.canActivate(
         executionContextFor({
           role: 'EMPLOYEE',
-          permissions: [MarketingCrmSettingsPermission.PRODUCTS_VIEW],
+          permissions: [MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW],
         }) as never,
       ),
     ).toBe(true);
-  });
-});
-
-
-describe('Decision maker settings permissions', () => {
-  it('requires decision maker read and manage permissions', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectingSettingsController.prototype.listDecisionMakers,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
-      MarketingCrmSettingsPermission.DECISION_MAKERS_VIEW,
-    ]);
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectingSettingsController.prototype.updateDecisionMaker,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
-      MarketingCrmSettingsPermission.DECISION_MAKERS_EDIT,
-    ]);
-  });
-});
-
-
-describe('Prospect source type settings permissions', () => {
-  it('requires source type read and manage permissions', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectingSettingsController.prototype.listSourceTypes,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
-      MarketingCrmSettingsPermission.SOURCE_TYPES_VIEW,
-    ]);
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectingSettingsController.prototype.updateSourceType,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
-      MarketingCrmSettingsPermission.SOURCE_TYPES_EDIT,
-    ]);
-  });
-});
-
-
-describe('Interaction medium settings permissions', () => {
-  it('requires interaction medium read and manage permissions', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectingSettingsController.prototype.listInteractionMedia,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
-      MarketingCrmSettingsPermission.INTERACTION_MEDIA_VIEW,
-    ]);
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectingSettingsController.prototype.updateInteractionMedium,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
-      MarketingCrmSettingsPermission.INTERACTION_MEDIA_EDIT,
-    ]);
   });
 });
