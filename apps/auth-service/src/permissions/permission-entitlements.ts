@@ -23,6 +23,33 @@ type ResourceEntitlement = {
 const ALWAYS_ENABLED_MODULES = new Set(['AUTH']);
 
 const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
+  'marketing.crm-settings': {
+    moduleKey: 'marketing',
+  },
+  'marketing.pipeline-stages': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'pipeline'],
+  },
+  'marketing.products': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
+  'marketing.decision-makers': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
+  'marketing.source-types': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
+  'marketing.interaction-media': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
+  'marketing.business-types': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
   'operations.reinsurance.dashboard': {
     moduleKey: 'operations',
     featurePath: ['operations', 'reinsurance'],
