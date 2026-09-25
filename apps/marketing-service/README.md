@@ -85,3 +85,20 @@ not automatically granted to existing users or permission templates.
 
 Use `VIEW` for read endpoints and `CREATE`, `EDIT`, `DELETE` for management
 endpoints. `DELETE` represents soft-archive behavior in Marketing CRM settings.
+
+## Sales Pipeline Settings API
+
+Implemented configuration behavior:
+
+```text
+GET    /crm-settings/pipeline-stages
+POST   /crm-settings/pipeline-stages
+GET    /crm-settings/pipeline-stages/:id
+PATCH  /crm-settings/pipeline-stages/:id
+DELETE /crm-settings/pipeline-stages/:id
+```
+
+Sales stage settings support tenant isolation, authorization, normalized unique
+names, probability validation from 0 to 100, display ordering and soft archive.
+Prospect linkage, default stage provisioning and reporting calculations remain
+future Prospect workflow work.
