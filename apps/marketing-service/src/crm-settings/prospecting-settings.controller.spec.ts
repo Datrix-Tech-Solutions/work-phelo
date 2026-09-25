@@ -147,3 +147,27 @@ describe('Marketing authorization guards', () => {
     ).toBe(true);
   });
 });
+
+
+describe('Decision maker settings permissions', () => {
+  it('requires decision maker read and manage permissions', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.listDecisionMakers,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+      MarketingCrmSettingsPermission.DECISION_MAKERS_VIEW,
+    ]);
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.updateDecisionMaker,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+      MarketingCrmSettingsPermission.DECISION_MAKERS_EDIT,
+    ]);
+  });
+});

@@ -119,3 +119,21 @@ Product and service settings support tenant isolation, authorization, normalized
 unique names, deterministic ordering and soft archive. Prospect-product
 associations, reference-based delete restrictions and reporting calculations
 remain future Prospect workflow work.
+
+
+## Decision Maker Type Settings API
+
+Implemented configuration behavior:
+
+```text
+GET    /crm-settings/decision-makers
+POST   /crm-settings/decision-makers
+GET    /crm-settings/decision-makers/:id
+PATCH  /crm-settings/decision-makers/:id
+DELETE /crm-settings/decision-makers/:id
+```
+
+Decision maker settings support tenant isolation, authorization, normalized
+unique names, deterministic ordering and soft archive. Prospect references,
+reference-based delete restrictions and reporting/filtering behavior remain
+future Prospect workflow work.

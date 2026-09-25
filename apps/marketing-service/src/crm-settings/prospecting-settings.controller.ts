@@ -60,6 +60,13 @@ const PRODUCTS_PERMISSIONS: CategoryPermissions = {
   delete: MarketingCrmSettingsPermission.PRODUCTS_DELETE,
 };
 
+const DECISION_MAKERS_PERMISSIONS: CategoryPermissions = {
+  view: MarketingCrmSettingsPermission.DECISION_MAKERS_VIEW,
+  create: MarketingCrmSettingsPermission.DECISION_MAKERS_CREATE,
+  edit: MarketingCrmSettingsPermission.DECISION_MAKERS_EDIT,
+  delete: MarketingCrmSettingsPermission.DECISION_MAKERS_DELETE,
+};
+
 @Controller('crm-settings')
 @ApiTags('Marketing - CRM Settings')
 @ApiCookieAuth('access_token')
@@ -179,4 +186,107 @@ export class ProspectingSettingsController {
       id,
     );
   }
+
+  @Get('decision-makers')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    DECISION_MAKERS_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'List prospect decision makers' })
+  @ApiOkResponse({ type: ProspectingSettingsListResponseDto })
+  listDecisionMakers(
+    @Query() query: QueryProspectingSettingsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      query,
+    );
+  }
+
+  @Post('decision-makers')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+    DECISION_MAKERS_PERMISSIONS.create,
+  )
+  @ApiOperation({ summary: 'Create a prospect decision maker' })
+  @ApiCreatedResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  createDecisionMaker(
+    @Body() dto: CreateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.create(
+      request.user,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      dto,
+    );
+  }
+
+  @Get('decision-makers/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    DECISION_MAKERS_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'Get a prospect decision maker' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  getDecisionMaker(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      id,
+    );
+  }
+
+  @Patch('decision-makers/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+    DECISION_MAKERS_PERMISSIONS.edit,
+  )
+  @ApiOperation({ summary: 'Update a prospect decision maker' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  updateDecisionMaker(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(
+      request.user,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('decision-makers/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+    DECISION_MAKERS_PERMISSIONS.delete,
+  )
+  @ApiOperation({ summary: 'Archive a prospect decision maker' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  archiveDecisionMaker(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.archive(
+      request.user,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      id,
+    );
+  }
+
 }
