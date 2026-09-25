@@ -74,6 +74,13 @@ const SOURCE_TYPES_PERMISSIONS: CategoryPermissions = {
   delete: MarketingCrmSettingsPermission.SOURCE_TYPES_DELETE,
 };
 
+const INTERACTION_MEDIA_PERMISSIONS: CategoryPermissions = {
+  view: MarketingCrmSettingsPermission.INTERACTION_MEDIA_VIEW,
+  create: MarketingCrmSettingsPermission.INTERACTION_MEDIA_CREATE,
+  edit: MarketingCrmSettingsPermission.INTERACTION_MEDIA_EDIT,
+  delete: MarketingCrmSettingsPermission.INTERACTION_MEDIA_DELETE,
+};
+
 @Controller('crm-settings')
 @ApiTags('Marketing - CRM Settings')
 @ApiCookieAuth('access_token')
@@ -395,6 +402,109 @@ export class ProspectingSettingsController {
     return this.service.archive(
       request.user,
       MarketingCrmSettingCategory.SOURCE_TYPE,
+      id,
+    );
+  }
+
+
+  @Get('interaction-media')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    INTERACTION_MEDIA_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'List prospect interaction media' })
+  @ApiOkResponse({ type: ProspectingSettingsListResponseDto })
+  listInteractionMedia(
+    @Query() query: QueryProspectingSettingsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      query,
+    );
+  }
+
+  @Post('interaction-media')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+    INTERACTION_MEDIA_PERMISSIONS.create,
+  )
+  @ApiOperation({ summary: 'Create a prospect interaction medium' })
+  @ApiCreatedResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  createInteractionMedium(
+    @Body() dto: CreateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.create(
+      request.user,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      dto,
+    );
+  }
+
+  @Get('interaction-media/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    INTERACTION_MEDIA_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'Get a prospect interaction medium' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  getInteractionMedium(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      id,
+    );
+  }
+
+  @Patch('interaction-media/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+    INTERACTION_MEDIA_PERMISSIONS.edit,
+  )
+  @ApiOperation({ summary: 'Update a prospect interaction medium' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  updateInteractionMedium(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(
+      request.user,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('interaction-media/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+    INTERACTION_MEDIA_PERMISSIONS.delete,
+  )
+  @ApiOperation({ summary: 'Archive a prospect interaction medium' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  archiveInteractionMedium(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.archive(
+      request.user,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
       id,
     );
   }

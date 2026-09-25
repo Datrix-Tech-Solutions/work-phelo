@@ -155,3 +155,21 @@ Source type settings support tenant isolation, authorization, normalized unique
 names, deterministic ordering and soft archive. Prospect references,
 reference-based delete restrictions and source-based reporting/filtering remain
 future Prospect workflow work.
+
+
+## Interaction Medium Settings API
+
+Implemented configuration behavior:
+
+```text
+GET    /crm-settings/interaction-media
+POST   /crm-settings/interaction-media
+GET    /crm-settings/interaction-media/:id
+PATCH  /crm-settings/interaction-media/:id
+DELETE /crm-settings/interaction-media/:id
+```
+
+Interaction medium settings support tenant isolation, authorization, normalized
+unique names, deterministic ordering and soft archive. Prospect references,
+reference-based delete restrictions and interaction reporting/filtering remain
+future Prospect workflow work.

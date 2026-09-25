@@ -195,3 +195,27 @@ describe('Prospect source type settings permissions', () => {
     ]);
   });
 });
+
+
+describe('Interaction medium settings permissions', () => {
+  it('requires interaction medium read and manage permissions', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.listInteractionMedia,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+      MarketingCrmSettingsPermission.INTERACTION_MEDIA_VIEW,
+    ]);
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.updateInteractionMedium,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+      MarketingCrmSettingsPermission.INTERACTION_MEDIA_EDIT,
+    ]);
+  });
+});
