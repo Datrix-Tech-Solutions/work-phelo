@@ -102,3 +102,20 @@ Sales stage settings support tenant isolation, authorization, normalized unique
 names, probability validation from 0 to 100, display ordering and soft archive.
 Prospect linkage, default stage provisioning and reporting calculations remain
 future Prospect workflow work.
+
+## Products / Services Settings API
+
+Implemented configuration behavior:
+
+```text
+GET    /crm-settings/products
+POST   /crm-settings/products
+GET    /crm-settings/products/:id
+PATCH  /crm-settings/products/:id
+DELETE /crm-settings/products/:id
+```
+
+Product and service settings support tenant isolation, authorization, normalized
+unique names, deterministic ordering and soft archive. Prospect-product
+associations, reference-based delete restrictions and reporting calculations
+remain future Prospect workflow work.
