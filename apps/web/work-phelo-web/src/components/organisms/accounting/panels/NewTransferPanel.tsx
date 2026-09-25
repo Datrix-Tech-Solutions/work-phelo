@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
@@ -69,15 +69,15 @@ export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
-  // Reset whenever a fresh "open" happens (rather than in an effect) — see
-  // https://react.dev/learn/you-might-not-need-an-effect.
-  const [wasOpen, setWasOpen] = useState(false);
-  if (isOpen && !wasOpen) {
-    setWasOpen(true);
-    reset({ ...DEFAULTS, transactionDate: today() });
-  } else if (!isOpen && wasOpen) {
-    setWasOpen(false);
-  }
+  // Reset whenever the panel transitions to open. This has to be an effect, not an
+  // inline reset during render — react-hook-form's reset() updates Controller's
+  // internal subscription synchronously, and doing that while NewTransferPanel itself
+  // is still rendering trips React's "setState on a different component during
+  // render" warning.
+  useEffect(() => {
+    if (isOpen) reset({ ...DEFAULTS, transactionDate: today() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const cashAccountId = useWatch({ control, name: 'cashAccountId' });
   const destinationCashAccountId = useWatch({ control, name: 'destinationCashAccountId' });
