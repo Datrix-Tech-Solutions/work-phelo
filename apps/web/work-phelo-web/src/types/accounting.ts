@@ -269,6 +269,11 @@ export interface TransactionTypeDefinition {
   allowedDocument: string | null;
   source: string | null;
   description: string | null;
+  /** Receivable/Payable types only: when true, this type posts a single-line direct
+   *  entry straight to Cashbook (via the New Transaction form) instead of an
+   *  Invoice/Bill. */
+  postsToCashbook: boolean;
+  createdAt: string;
   rulesCount: number;
 }
 
@@ -280,6 +285,7 @@ export interface CreateTransactionTypePayload {
   allowedDocument?: string;
   source?: string;
   description?: string;
+  postsToCashbook?: boolean;
 }
 
 export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>;
@@ -336,6 +342,15 @@ export interface TransactionTypeRule {
   id: string;
   transactionTypeId: string;
   description: string | null;
+  /** Cashbook-posted RCPT/PMNT types only: the cash/bank account pre-selected on the
+   *  New Transaction form for this type, still changeable there. */
+  defaultCashAccountId: string | null;
+  defaultCashAccount: {
+    id: string;
+    name: string;
+    accountKind: AccountingCashAccountKind;
+    currency: string;
+  } | null;
   lines: TransactionTypeRuleLine[];
 }
 
@@ -350,11 +365,13 @@ export interface TransactionTypeRuleLineInput {
 export interface CreateTransactionTypeRulePayload {
   transactionTypeId: string;
   description?: string;
+  defaultCashAccountId?: string;
   lines: TransactionTypeRuleLineInput[];
 }
 
 export interface UpdateTransactionTypeRulePayload {
   description?: string;
+  defaultCashAccountId?: string;
   lines?: TransactionTypeRuleLineInput[];
 }
 

@@ -44,6 +44,7 @@ export function TransactionTypeRulesTable() {
   const query = search.trim().toLowerCase();
   const groups = useMemo(() => {
     return transactionTypes
+      .filter((type) => type.category === 'RECEIVABLE' || type.category === 'PAYABLE')
       .map((type) => ({ type, rule: ruleByType.get(type.id) ?? null }))
       .filter(({ type, rule }) => {
         if (!query) return true;
@@ -53,7 +54,8 @@ export function TransactionTypeRulesTable() {
             .toLowerCase()
             .includes(query),
         );
-      });
+      })
+      .sort((a, b) => new Date(b.type.createdAt).getTime() - new Date(a.type.createdAt).getTime());
   }, [transactionTypes, ruleByType, query]);
 
   const confirmDelete = () => {

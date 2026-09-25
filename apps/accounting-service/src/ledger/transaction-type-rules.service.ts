@@ -21,6 +21,21 @@ import {
   UpdateTransactionTypeRuleDto,
 } from './dto/transaction-type-rules.dto';
 
+/** A type flagged `postsToCashbook` (RCPT/PMNT by default, or any tenant-created
+ *  Receivable/Payable type opted into it) posts a single-line entry straight to
+ *  Cashbook rather than through Invoice/Bill creation — its rule is a single
+ *  offset-account line plus an optional default cash/bank account, not the usual
+ *  two-sided Receivable/Payable document rule. Receipt credits the offset account,
+ *  Payment debits it — the same side a Receivable/Payable rule's non-auto-balancing
+ *  line already uses, so direction still follows category alone. */
+function cashbookLineDirection(
+  category: TransactionTypeCategory,
+): PostingDirection {
+  return category === TransactionTypeCategory.RECEIVABLE
+    ? PostingDirection.CR
+    : PostingDirection.DR;
+}
+
 const ruleInclude = {
   lines: {
     orderBy: { sequence: 'asc' as const },
@@ -28,6 +43,9 @@ const ruleInclude = {
       account: { select: { id: true, code: true, name: true } },
       taxType: { select: { id: true, name: true, rate: true } },
     },
+  },
+  defaultCashAccount: {
+    select: { id: true, name: true, accountKind: true, currency: true },
   },
 } satisfies Prisma.TransactionTypeRuleInclude;
 
@@ -178,12 +196,15 @@ export class TransactionTypeRulesService {
       user.tenantId,
       dto.transactionTypeId,
     );
-    this.validateLines(transactionType.category, dto.lines);
+    this.validateLines(transactionType, dto.lines);
     await this.validateLineReferences(
       user.tenantId,
       transactionType,
       dto.lines,
     );
+    if (dto.defaultCashAccountId) {
+      await this.validateCashAccount(user.tenantId, dto.defaultCashAccountId);
+    }
 
     try {
       const rule = await this.prisma.transactionTypeRule.create({
@@ -191,6 +212,7 @@ export class TransactionTypeRulesService {
           tenantId: user.tenantId,
           transactionTypeId: transactionType.id,
           description: this.optional(dto.description),
+          defaultCashAccountId: dto.defaultCashAccountId ?? null,
           createdByUserId: user.id,
           updatedByUserId: user.id,
           lines: { create: this.lineWrites(dto.lines) },
@@ -226,12 +248,15 @@ export class TransactionTypeRulesService {
   ) {
     const rule = await this.findRule(user.tenantId, ruleId);
     if (dto.lines) {
-      this.validateLines(rule.transactionType.category, dto.lines);
+      this.validateLines(rule.transactionType, dto.lines);
       await this.validateLineReferences(
         user.tenantId,
         rule.transactionType,
         dto.lines,
       );
+    }
+    if (dto.defaultCashAccountId) {
+      await this.validateCashAccount(user.tenantId, dto.defaultCashAccountId);
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -245,6 +270,9 @@ export class TransactionTypeRulesService {
         data: {
           ...(dto.description !== undefined
             ? { description: this.optional(dto.description) }
+            : {}),
+          ...(dto.defaultCashAccountId !== undefined
+            ? { defaultCashAccountId: dto.defaultCashAccountId || null }
             : {}),
           updatedByUserId: user.id,
           ...(dto.lines
@@ -308,9 +336,17 @@ export class TransactionTypeRulesService {
   }
 
   private validateLines(
-    category: TransactionTypeCategory,
+    transactionType: {
+      postsToCashbook: boolean;
+      category: TransactionTypeCategory;
+    },
     lines: TransactionTypeRuleLineDto[],
   ) {
+    if (transactionType.postsToCashbook) {
+      this.validateCashbookLine(transactionType.category, lines);
+      return;
+    }
+
     const debitLines = lines.filter((l) => l.direction === PostingDirection.DR);
     const creditLines = lines.filter(
       (l) => l.direction === PostingDirection.CR,
@@ -321,7 +357,9 @@ export class TransactionTypeRulesService {
       );
     }
 
-    const autoBalanceDirection = this.autoBalanceDirection(category);
+    const autoBalanceDirection = this.autoBalanceDirection(
+      transactionType.category,
+    );
     if (!autoBalanceDirection) return;
 
     const balancingLines = lines.filter(
@@ -341,21 +379,54 @@ export class TransactionTypeRulesService {
     }
   }
 
+  /** A postsToCashbook type needs exactly one offset line — the other side of the
+   *  entry is always the cash/bank account chosen per-transaction (or defaulted from
+   *  the rule), not a GL line here. Receipt credits the offset account, Payment debits
+   *  it, matching CashbookEntryDto.offsetGlAccountId. */
+  private validateCashbookLine(
+    category: TransactionTypeCategory,
+    lines: TransactionTypeRuleLineDto[],
+  ) {
+    if (lines.length !== 1) {
+      throw new BadRequestException(
+        'This transaction type posts directly to Cashbook — exactly one offset account line is required.',
+      );
+    }
+    const expectedDirection = cashbookLineDirection(category);
+    if (lines[0].direction !== expectedDirection) {
+      throw new BadRequestException(
+        `The offset line for this type must be a ` +
+          `${expectedDirection === PostingDirection.CR ? 'credit' : 'debit'} line.`,
+      );
+    }
+  }
+
+  private async validateCashAccount(tenantId: string, id: string) {
+    const account = await this.prisma.accountingCashAccount.findFirst({
+      where: { id, tenantId },
+    });
+    if (!account) throw new NotFoundException('Cash account not found');
+    return account;
+  }
+
   private async validateLineReferences(
     tenantId: string,
     transactionType: {
+      postsToCashbook: boolean;
       businessRoles: string[];
       category: TransactionTypeCategory;
     },
     lines: TransactionTypeRuleLineDto[],
   ) {
-    const autoBalanceDirection = this.autoBalanceDirection(
-      transactionType.category,
-    );
+    const autoBalanceDirection = transactionType.postsToCashbook
+      ? null
+      : this.autoBalanceDirection(transactionType.category);
     const requiredCategory =
+      !transactionType.postsToCashbook &&
       transactionType.category === TransactionTypeCategory.RECEIVABLE
         ? GLAccountCategory.ASSET
-        : transactionType.category === TransactionTypeCategory.PAYABLE
+        : !transactionType.postsToCashbook &&
+            transactionType.category === TransactionTypeCategory.PAYABLE
           ? GLAccountCategory.LIABILITY
           : null;
     for (const line of lines) {
@@ -412,6 +483,8 @@ export class TransactionTypeRulesService {
       id: rule.id,
       transactionTypeId: rule.transactionTypeId,
       description: rule.description,
+      defaultCashAccountId: rule.defaultCashAccountId,
+      defaultCashAccount: rule.defaultCashAccount,
       lines: rule.lines.map((line) => ({
         id: line.id,
         sequence: line.sequence,

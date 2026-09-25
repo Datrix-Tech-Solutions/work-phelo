@@ -28,14 +28,20 @@ export function TransactionTypesTable() {
   const deleteTransactionType = useDeleteTransactionType();
   const toast = useToast();
 
+  // Only Receivable/Payable types are usable from New Transaction today — Neutral/None
+  // types (Transfer, Bank Charge, Adjustment) have no working form yet, so keep them out
+  // of this list rather than show entries that lead nowhere.
   const filtered = useMemo(() => {
     const query = search.toLowerCase();
-    return !query
-      ? data
-      : data.filter(
-          (item) =>
-            item.code.toLowerCase().includes(query) || item.name.toLowerCase().includes(query),
-        );
+    return data
+      .filter((item) => item.category === 'RECEIVABLE' || item.category === 'PAYABLE')
+      .filter(
+        (item) =>
+          !query ||
+          item.code.toLowerCase().includes(query) ||
+          item.name.toLowerCase().includes(query),
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [data, search]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -85,7 +91,9 @@ export function TransactionTypesTable() {
       label: 'Rules',
       width: '90px',
       render: (row) => (
-        <span className="text-sm text-gray-700">{row.rulesCount > 0 ? row.rulesCount : 'None'}</span>
+        <span className="text-sm text-gray-700">
+          {row.rulesCount > 0 ? row.rulesCount : 'None'}
+        </span>
       ),
     },
   ];
