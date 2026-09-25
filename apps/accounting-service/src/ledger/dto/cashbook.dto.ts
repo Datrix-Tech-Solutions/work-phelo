@@ -284,6 +284,27 @@ export class CreateCashbookTransferDto {
   @MaxLength(500)
   description!: string;
 
+  @ApiPropertyOptional({
+    example: 25,
+    minimum: 0.0001,
+    description:
+      'Optional bank charge deducted from the source account alongside the transfer. Requires chargeGlAccountId.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  chargeAmount?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Posting-enabled GL account (typically a bank charges expense account) debited for chargeAmount. Required when chargeAmount is set.',
+  })
+  @IsOptional()
+  @IsUUID()
+  chargeGlAccountId?: string;
+
   @ApiPropertyOptional({ example: 'TREASURY' })
   @IsOptional()
   @Transform(uppercase)

@@ -1165,6 +1165,7 @@ export interface CashbookTransaction {
   description: string;
   offsetGlAccountId: string | null;
   offsetSubledgerAccountId: string | null;
+  chargeAmount: string | null;
   sourceEventInboxId: string | null;
   sourceModule: string | null;
   sourceEventType: string | null;
@@ -1233,6 +1234,8 @@ export interface CreateCashbookTransferPayload {
   exchangeRate?: number;
   reference?: string;
   description: string;
+  chargeAmount?: number;
+  chargeGlAccountId?: string;
 }
 
 export interface ReverseCashbookTransactionPayload {

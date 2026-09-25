@@ -94,7 +94,9 @@ function resolveCashFlowCategory(label: string, errors: string[]): CashFlowCateg
 
 /** Reads a filled-in template and validates every row against the live classification/group/
  *  account lookups plus any new classifications/parent accounts defined earlier in the same file,
- *  without creating anything yet. */
+ *  without creating anything yet. Dispatches to the Advanced (3-sheet) or Basic (1-sheet) parser
+ *  based on which sheets are present, and both converge on the same result shape so the preview
+ *  UI never needs to know which template was used. */
 export async function parseGLAccountImportFile(
   file: File,
   options: {
@@ -107,6 +109,13 @@ export async function parseGLAccountImportFile(
   const workbook = new ExcelJSModule.Workbook();
   const buffer = await file.arrayBuffer();
   await workbook.xlsx.load(buffer);
+
+  const isAdvanced = Boolean(
+    workbook.getWorksheet('Classifications') || workbook.getWorksheet('Parent Accounts'),
+  );
+  if (!isAdvanced && workbook.getWorksheet('Accounts')) {
+    return parseBasicGLAccountWorkbook(workbook, options);
+  }
 
   const existingClassificationByCode = new Map(
     options.classifications.map((c) => [c.code.trim().toLowerCase(), c]),
@@ -324,6 +333,281 @@ export async function parseGLAccountImportFile(
         status: errors.length === 0 ? 'new' : 'invalid',
         errors,
       });
+    });
+  }
+
+  return { classifications: classificationRows, groups: groupRows, accounts: accountRows };
+}
+
+interface BasicRow {
+  rowNumber: number;
+  code: string;
+  name: string;
+  categoryLabel: string;
+  classificationCode: string;
+  classificationName: string;
+  parentAccountCode: string;
+  parentAccountName: string;
+  cashFlowCategoryLabel: string;
+  description: string;
+}
+
+/** One row per account; classifications/parent accounts are inferred from the first occurrence
+ *  of each code, so this walks the sheet twice — once to collect those definitions, once to
+ *  validate every account row against them — then hands back the same three arrays the Advanced
+ *  parser produces. */
+function parseBasicGLAccountWorkbook(
+  workbook: ExcelJS.Workbook,
+  options: {
+    classifications: AccountClassification[];
+    groups: AccountGroup[];
+    existingAccounts: GLAccount[];
+  },
+): GLAccountImportResult {
+  const existingClassificationByCode = new Map(
+    options.classifications.map((c) => [c.code.trim().toLowerCase(), c]),
+  );
+  const existingGroupByCode = new Map(options.groups.map((g) => [g.code.trim().toLowerCase(), g]));
+  const existingAccountCodes = new Set(
+    options.existingAccounts.map((a) => a.code.trim().toLowerCase()),
+  );
+
+  const sheet = workbook.getWorksheet('Accounts')!;
+  const columnIndexByHeader = headerIndex(sheet);
+  const rows: BasicRow[] = [];
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const code = cellText(row, columnIndexByHeader, 'Account Code');
+    const name = cellText(row, columnIndexByHeader, 'Account Name');
+    const categoryLabel = cellText(row, columnIndexByHeader, 'Account Type');
+    const classificationCode = cellText(row, columnIndexByHeader, 'Classification Code');
+    const classificationName = cellText(row, columnIndexByHeader, 'Classification Name');
+    const parentAccountCode = cellText(row, columnIndexByHeader, 'Parent Account Code');
+    const parentAccountName = cellText(row, columnIndexByHeader, 'Parent Account Name');
+    const cashFlowCategoryLabel = cellText(row, columnIndexByHeader, 'Cash Flow Category');
+    const description = cellText(row, columnIndexByHeader, 'Description');
+    if (!code && !name && !categoryLabel && !classificationCode && !parentAccountCode) return;
+    rows.push({
+      rowNumber,
+      code,
+      name,
+      categoryLabel,
+      classificationCode,
+      classificationName,
+      parentAccountCode,
+      parentAccountName,
+      cashFlowCategoryLabel,
+      description,
+    });
+  });
+
+  // Pass 1: derive classification/parent account definitions from first occurrence, and record
+  // conflicts where a later row repeats a code with a different, non-blank name.
+  interface ClassificationDef {
+    rowNumber: number;
+    name: string;
+    categoryLabel: string;
+    cashFlowCategoryLabel: string;
+  }
+  interface GroupDef {
+    rowNumber: number;
+    name: string;
+    classificationCode: string;
+    cashFlowCategoryLabel: string;
+  }
+  const classificationDefs = new Map<string, ClassificationDef>();
+  const groupDefs = new Map<string, GroupDef>();
+  const conflictErrorsByRowNumber = new Map<number, string[]>();
+  const addConflict = (rowNumber: number, message: string) => {
+    const list = conflictErrorsByRowNumber.get(rowNumber) ?? [];
+    list.push(message);
+    conflictErrorsByRowNumber.set(rowNumber, list);
+  };
+
+  for (const row of rows) {
+    if (row.classificationCode) {
+      const lower = row.classificationCode.trim().toLowerCase();
+      if (!existingClassificationByCode.has(lower)) {
+        const existingDef = classificationDefs.get(lower);
+        if (!existingDef) {
+          classificationDefs.set(lower, {
+            rowNumber: row.rowNumber,
+            name: row.classificationName,
+            categoryLabel: row.categoryLabel,
+            cashFlowCategoryLabel: '',
+          });
+        } else if (row.classificationName && row.classificationName !== existingDef.name) {
+          addConflict(
+            row.rowNumber,
+            `Classification Name "${row.classificationName}" for code "${row.classificationCode}" doesn't match its earlier definition "${existingDef.name}" (row ${existingDef.rowNumber})`,
+          );
+        }
+      }
+    }
+    if (row.parentAccountCode) {
+      const lower = row.parentAccountCode.trim().toLowerCase();
+      if (!existingGroupByCode.has(lower)) {
+        const existingDef = groupDefs.get(lower);
+        if (!existingDef) {
+          groupDefs.set(lower, {
+            rowNumber: row.rowNumber,
+            name: row.parentAccountName,
+            classificationCode: row.classificationCode,
+            cashFlowCategoryLabel: '',
+          });
+        } else if (row.parentAccountName && row.parentAccountName !== existingDef.name) {
+          addConflict(
+            row.rowNumber,
+            `Parent Account Name "${row.parentAccountName}" for code "${row.parentAccountCode}" doesn't match its earlier definition "${existingDef.name}" (row ${existingDef.rowNumber})`,
+          );
+        }
+      }
+    }
+  }
+
+  const resolveClassificationCategory = (code: string): GLAccountCategory | undefined => {
+    const lower = code.trim().toLowerCase();
+    const existing = existingClassificationByCode.get(lower)?.category;
+    if (existing) return existing;
+    const def = classificationDefs.get(lower);
+    return def ? CATEGORY_VALUE_BY_LABEL[def.categoryLabel.trim().toLowerCase()] : undefined;
+  };
+  const classificationCodeIsKnown = (code: string): boolean => {
+    const lower = code.trim().toLowerCase();
+    return existingClassificationByCode.has(lower) || classificationDefs.has(lower);
+  };
+  const groupCodeIsKnown = (code: string): boolean => {
+    const lower = code.trim().toLowerCase();
+    return existingGroupByCode.has(lower) || groupDefs.has(lower);
+  };
+  const groupClassificationCode = (code: string): string | undefined => {
+    const lower = code.trim().toLowerCase();
+    return (
+      existingGroupByCode.get(lower)?.classification.code ??
+      groupDefs.get(lower)?.classificationCode
+    );
+  };
+
+  // Classification rows: one per newly-defined code.
+  const classificationRows: ParsedClassificationRow[] = [];
+  for (const [lower, def] of classificationDefs) {
+    const errors: string[] = [...(conflictErrorsByRowNumber.get(def.rowNumber) ?? [])];
+    if (!def.name)
+      errors.push(
+        `Classification Name is required the first time code "${lower}" is used (row ${def.rowNumber})`,
+      );
+    const category = CATEGORY_VALUE_BY_LABEL[def.categoryLabel.trim().toLowerCase()];
+    if (!def.categoryLabel) errors.push('Account type is required');
+    else if (!category) errors.push(`Unknown account type "${def.categoryLabel}"`);
+    const cashFlowCategory = resolveCashFlowCategory(def.cashFlowCategoryLabel, errors);
+    classificationRows.push({
+      rowNumber: def.rowNumber,
+      code:
+        rows.find((r) => r.classificationCode.trim().toLowerCase() === lower)?.classificationCode ??
+        lower,
+      name: def.name,
+      categoryLabel: def.categoryLabel,
+      category,
+      cashFlowCategoryLabel: def.cashFlowCategoryLabel,
+      cashFlowCategory,
+      status: errors.length === 0 ? 'new' : 'invalid',
+      errors,
+    });
+  }
+
+  // Parent account rows: one per newly-defined code.
+  const groupRows: ParsedGroupRow[] = [];
+  for (const [lower, def] of groupDefs) {
+    const errors: string[] = [...(conflictErrorsByRowNumber.get(def.rowNumber) ?? [])];
+    if (!def.name)
+      errors.push(
+        `Parent Account Name is required the first time code "${lower}" is used (row ${def.rowNumber})`,
+      );
+    if (!def.classificationCode) errors.push('Classification code is required');
+    else if (!classificationCodeIsKnown(def.classificationCode))
+      errors.push(`Unknown classification code "${def.classificationCode}"`);
+    const cashFlowCategory = resolveCashFlowCategory(def.cashFlowCategoryLabel, errors);
+    groupRows.push({
+      rowNumber: def.rowNumber,
+      code:
+        rows.find((r) => r.parentAccountCode.trim().toLowerCase() === lower)?.parentAccountCode ??
+        lower,
+      name: def.name,
+      classificationCode: def.classificationCode,
+      cashFlowCategoryLabel: def.cashFlowCategoryLabel,
+      cashFlowCategory,
+      status: errors.length === 0 ? 'new' : 'invalid',
+      errors,
+    });
+  }
+
+  // Pass 2: account rows, validated the same way as the Advanced parser's Accounts sheet.
+  const accountRows: ParsedGLAccountRow[] = [];
+  const seenAccountCodes = new Set<string>();
+  for (const row of rows) {
+    const codeLower = row.code.trim().toLowerCase();
+    const errors: string[] = [...(conflictErrorsByRowNumber.get(row.rowNumber) ?? [])];
+
+    if (!row.code) errors.push('Account code is required');
+    else if (existingAccountCodes.has(codeLower))
+      errors.push(`Account code "${row.code}" already exists`);
+    else if (seenAccountCodes.has(codeLower))
+      errors.push(`Duplicate account code "${row.code}" in this file`);
+
+    if (!row.name) errors.push('Account name is required');
+
+    const category = CATEGORY_VALUE_BY_LABEL[row.categoryLabel.trim().toLowerCase()];
+    if (!row.categoryLabel) errors.push('Account type is required');
+    else if (!category) errors.push(`Unknown account type "${row.categoryLabel}"`);
+
+    if (!row.classificationCode) {
+      errors.push('Classification code is required');
+    } else if (!classificationCodeIsKnown(row.classificationCode)) {
+      errors.push(`Unknown classification code "${row.classificationCode}"`);
+    } else {
+      const classificationCategory = resolveClassificationCategory(row.classificationCode);
+      if (category && classificationCategory && classificationCategory !== category) {
+        errors.push(
+          `Classification "${row.classificationCode}" is ${classificationCategory}, not ${category}`,
+        );
+      }
+    }
+
+    if (row.parentAccountCode) {
+      if (!groupCodeIsKnown(row.parentAccountCode)) {
+        errors.push(`Unknown parent account code "${row.parentAccountCode}"`);
+      } else {
+        const parentClassificationCode = groupClassificationCode(row.parentAccountCode);
+        if (
+          parentClassificationCode &&
+          row.classificationCode &&
+          parentClassificationCode.trim().toLowerCase() !==
+            row.classificationCode.trim().toLowerCase()
+        ) {
+          errors.push(
+            `Parent account "${row.parentAccountCode}" belongs to classification "${parentClassificationCode}", not "${row.classificationCode}"`,
+          );
+        }
+      }
+    }
+
+    const cashFlowCategory = resolveCashFlowCategory(row.cashFlowCategoryLabel, errors);
+
+    if (row.code) seenAccountCodes.add(codeLower);
+
+    accountRows.push({
+      rowNumber: row.rowNumber,
+      code: row.code,
+      name: row.name,
+      categoryLabel: row.categoryLabel,
+      category,
+      classificationCode: row.classificationCode,
+      parentAccountCode: row.parentAccountCode,
+      description: row.description,
+      cashFlowCategoryLabel: row.cashFlowCategoryLabel,
+      cashFlowCategory,
+      status: errors.length === 0 ? 'new' : 'invalid',
+      errors,
     });
   }
 

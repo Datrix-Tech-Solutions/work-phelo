@@ -16,6 +16,7 @@ import { useToastStore } from '@/store/toast.store';
 import { AddCashAndBankAccountPanel } from '@/components/organisms/accounting/panels/AddCashAndBankAccountPanel';
 import { EditCashAccountPanel } from '@/components/organisms/accounting/panels/EditCashAccountPanel';
 import { CompleteCashAccountSetupPanel } from '@/components/organisms/accounting/panels/CompleteCashAccountSetupPanel';
+import { NewTransferPanel } from '@/components/organisms/accounting/panels/NewTransferPanel';
 
 const PAGE_SIZE = 10;
 
@@ -55,6 +56,7 @@ export function CashAccountsTable() {
   const [editTarget, setEditTarget] = useState<AccountingCashAccount | null>(null);
   const [setupTarget, setSetupTarget] = useState<GLAccount | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [transferPanelOpen, setTransferPanelOpen] = useState(false);
 
   const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts();
   const { data: glAccounts = [], isLoading: isLoadingGLAccounts } = useGLAccounts({
@@ -291,6 +293,10 @@ export function CashAccountsTable() {
           setSearch(q);
           setPage(1);
         }}
+        secondaryButton={{
+          label: 'New Transfer',
+          onClick: () => setTransferPanelOpen(true),
+        }}
         actionButton={{
           label: 'Add Cash/Bank Account',
           onClick: () => setAddPanelOpen(true),
@@ -333,6 +339,8 @@ export function CashAccountsTable() {
         onClose={() => setAddPanelOpen(false)}
         fixedGroup={fixedGroup}
       />
+
+      <NewTransferPanel isOpen={transferPanelOpen} onClose={() => setTransferPanelOpen(false)} />
 
       <EditCashAccountPanel account={editTarget} onClose={() => setEditTarget(null)} />
 

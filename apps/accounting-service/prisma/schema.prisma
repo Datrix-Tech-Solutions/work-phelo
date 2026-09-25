@@ -769,6 +769,7 @@ model CashbookTransaction {
   description              String
   offsetGlAccountId        String?
   offsetSubledgerAccountId String?
+  chargeAmount             Decimal?                     @db.Decimal(20, 4)
   sourceEventInboxId       String?
   sourceModule             String?
   sourceEventType          String?
