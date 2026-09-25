@@ -137,3 +137,21 @@ Decision maker settings support tenant isolation, authorization, normalized
 unique names, deterministic ordering and soft archive. Prospect references,
 reference-based delete restrictions and reporting/filtering behavior remain
 future Prospect workflow work.
+
+
+## Prospect Source Type Settings API
+
+Implemented configuration behavior:
+
+```text
+GET    /crm-settings/source-types
+POST   /crm-settings/source-types
+GET    /crm-settings/source-types/:id
+PATCH  /crm-settings/source-types/:id
+DELETE /crm-settings/source-types/:id
+```
+
+Source type settings support tenant isolation, authorization, normalized unique
+names, deterministic ordering and soft archive. Prospect references,
+reference-based delete restrictions and source-based reporting/filtering remain
+future Prospect workflow work.

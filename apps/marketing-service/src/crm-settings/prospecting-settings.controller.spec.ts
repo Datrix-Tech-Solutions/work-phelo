@@ -171,3 +171,27 @@ describe('Decision maker settings permissions', () => {
     ]);
   });
 });
+
+
+describe('Prospect source type settings permissions', () => {
+  it('requires source type read and manage permissions', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.listSourceTypes,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+      MarketingCrmSettingsPermission.SOURCE_TYPES_VIEW,
+    ]);
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectingSettingsController.prototype.updateSourceType,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+      MarketingCrmSettingsPermission.SOURCE_TYPES_EDIT,
+    ]);
+  });
+});

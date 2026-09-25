@@ -67,6 +67,13 @@ const DECISION_MAKERS_PERMISSIONS: CategoryPermissions = {
   delete: MarketingCrmSettingsPermission.DECISION_MAKERS_DELETE,
 };
 
+const SOURCE_TYPES_PERMISSIONS: CategoryPermissions = {
+  view: MarketingCrmSettingsPermission.SOURCE_TYPES_VIEW,
+  create: MarketingCrmSettingsPermission.SOURCE_TYPES_CREATE,
+  edit: MarketingCrmSettingsPermission.SOURCE_TYPES_EDIT,
+  delete: MarketingCrmSettingsPermission.SOURCE_TYPES_DELETE,
+};
+
 @Controller('crm-settings')
 @ApiTags('Marketing - CRM Settings')
 @ApiCookieAuth('access_token')
@@ -285,6 +292,109 @@ export class ProspectingSettingsController {
     return this.service.archive(
       request.user,
       MarketingCrmSettingCategory.DECISION_MAKER,
+      id,
+    );
+  }
+
+
+  @Get('source-types')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    SOURCE_TYPES_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'List prospect source types' })
+  @ApiOkResponse({ type: ProspectingSettingsListResponseDto })
+  listSourceTypes(
+    @Query() query: QueryProspectingSettingsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      query,
+    );
+  }
+
+  @Post('source-types')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+    SOURCE_TYPES_PERMISSIONS.create,
+  )
+  @ApiOperation({ summary: 'Create a prospect source type' })
+  @ApiCreatedResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  createSourceType(
+    @Body() dto: CreateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.create(
+      request.user,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      dto,
+    );
+  }
+
+  @Get('source-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    SOURCE_TYPES_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'Get a prospect source type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  getSourceType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      id,
+    );
+  }
+
+  @Patch('source-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+    SOURCE_TYPES_PERMISSIONS.edit,
+  )
+  @ApiOperation({ summary: 'Update a prospect source type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  updateSourceType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(
+      request.user,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('source-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+    SOURCE_TYPES_PERMISSIONS.delete,
+  )
+  @ApiOperation({ summary: 'Archive a prospect source type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  archiveSourceType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.archive(
+      request.user,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
       id,
     );
   }
