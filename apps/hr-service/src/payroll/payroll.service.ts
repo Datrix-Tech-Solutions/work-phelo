@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -1148,6 +1149,18 @@ export class PayrollService {
       );
     }
 
+    // When linked to accounting, posting the accrual must succeed BEFORE the run is marked
+    // APPROVED — the run stays PENDING_APPROVAL on failure, so the approver can retry (safe:
+    // the accounting call is idempotent per run) or just leave it and come back later, rather
+    // than the approval silently going through with no accounting record created.
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { linkedToAccounting: true, autoPostOnApproval: true },
+    });
+    if (config?.linkedToAccounting) {
+      await this.postPayrollAccrual(tenantId, run, config.autoPostOnApproval);
+    }
+
     const updatedRun = await this.prisma.payrollRun.update({
       where: { id },
       data: {
@@ -1167,38 +1180,25 @@ export class PayrollService {
       note,
     );
 
-    const accountingPosting = await this.postPayrollAccrualIfLinked(
-      tenantId,
-      updatedRun,
-    );
-
     return {
       ...updatedRun,
       notificationSummary,
-      accountingPosting,
+      accountingPosting: config?.linkedToAccounting
+        ? { posted: true as const }
+        : { posted: false as const, reason: 'not_linked' as const },
     };
   }
 
-  /** Posts (or drafts) the payroll accrual journal in accounting-service, if this tenant has
-   *  turned on "Link Payroll to Accounting". Never throws — an accounting-service outage or
-   *  misconfiguration (e.g. GL accounts not yet seeded) must not block the payroll approval
-   *  itself; the failure is returned in the response instead so the approver sees it. */
-  private async postPayrollAccrualIfLinked(
+  /** Posts (or drafts) the payroll accrual journal in accounting-service. Only called when
+   *  this tenant has turned on "Link Payroll to Accounting" — throws on any failure (an
+   *  accounting-service outage or misconfiguration, e.g. GL accounts not yet seeded), which
+   *  the controller surfaces as a distinguishable error the frontend offers to retry or stop
+   *  on, rather than letting the approval silently go through with nothing posted. */
+  private async postPayrollAccrual(
     tenantId: string,
     run: { id: string; month: number; year: number },
-  ): Promise<
-    | { posted: false; reason: 'not_linked' }
-    | { posted: true }
-    | { posted: false; reason: 'error'; message: string }
-  > {
-    const config = await this.prisma.tenantConfig.findUnique({
-      where: { tenantId },
-      select: { linkedToAccounting: true, autoPostOnApproval: true },
-    });
-    if (!config?.linkedToAccounting) {
-      return { posted: false, reason: 'not_linked' };
-    }
-
+    autoPost: boolean,
+  ): Promise<void> {
     try {
       const [totals, otherDeductions] = await Promise.all([
         this.prisma.payrollRun.findUniqueOrThrow({
@@ -1233,12 +1233,14 @@ export class PayrollService {
         totalTier3: Number(totals.totalTier3),
         totalEmployerCost: Number(totals.totalEmployerCost),
         totalOtherDeductions: Number(otherDeductions._sum.otherDeductions ?? 0),
-        autoPost: config.autoPostOnApproval,
+        autoPost,
       });
-      return { posted: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return { posted: false, reason: 'error', message };
+      throw new UnprocessableEntityException({
+        code: 'ACCOUNTING_POSTING_FAILED',
+        message: `Could not post the payroll accrual to accounting: ${message}`,
+      });
     }
   }
 
