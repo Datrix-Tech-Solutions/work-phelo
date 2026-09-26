@@ -1475,6 +1475,8 @@ model TenantConfig {
   payrollTier3Enabled          Boolean                        @default(false)
   payrollTier3Rate             Decimal?                       @db.Decimal(5, 2)
   payrollTier3SchemeName       String?
+  linkedToAccounting           Boolean                        @default(false)
+  autoPostOnApproval           Boolean                        @default(false)
   appraisalCycleRecipients     AppraisalCycleRecipientGroup[] @default([ALL])
   appraisalEligibleStatuses    EmploymentStatus[]             @default([ACTIVE, PROBATION])
   outstandingThreshold         Int                            @default(90)

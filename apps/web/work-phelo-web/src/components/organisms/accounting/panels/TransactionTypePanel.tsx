@@ -61,8 +61,13 @@ export function TransactionTypePanel({
   const { mutateAsync: create, isPending: isCreating } = useCreateTransactionType();
   const { mutateAsync: update, isPending: isUpdating } = useUpdateTransactionType();
   const { data: sourceTypes = [] } = useSourceTypes();
+  // Only offer sources a module has actually linked in — an unlinked one shouldn't be
+  // pickable here even though the row still exists for re-linking later.
   const sourceOptions = useMemo<SearchSelectOption[]>(
-    () => sourceTypes.map((s) => ({ value: s.name, label: s.name })),
+    () =>
+      sourceTypes
+        .filter((s) => s.isActive)
+        .map((s) => ({ value: s.name, label: `${s.module} — ${s.name}` })),
     [sourceTypes],
   );
   const { data: entityTypesData = [] } = useEntityTypes();

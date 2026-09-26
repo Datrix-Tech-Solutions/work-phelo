@@ -290,18 +290,41 @@ export interface CreateTransactionTypePayload {
 
 export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>;
 
+/** The module a source type belongs to. Fixed to real product modules — this is never a
+ *  free-text tag, since it's meant to reflect an actual integration, not an arbitrary label. */
+export type SourceModule = 'HR' | 'MARKETING' | 'ACCOUNTING' | 'RECRUITMENT' | 'OPERATIONS';
+
+/** A source type is never created from this side — it's populated automatically once a
+ *  module's own integration setup with Accounting is completed (e.g. HR's "Link Payroll to
+ *  Accounting" toggle is what creates the HR/Payroll entry). This side can only link/unlink it. */
 export interface SourceTypeDefinition {
   id: string;
+  module: SourceModule;
   name: string;
-  description: string | null;
+  isActive: boolean;
 }
 
-export interface CreateSourceTypePayload {
+export interface SeedPayrollAccountItem {
+  key: string;
   name: string;
-  description?: string;
+  include: boolean;
 }
 
-export type UpdateSourceTypePayload = Partial<CreateSourceTypePayload>;
+export interface SeedPayrollAccountsPayload {
+  items: SeedPayrollAccountItem[];
+}
+
+export interface SeedPayrollAccountsResult {
+  accounts: {
+    key: string;
+    code: string;
+    name: string;
+    status: 'created' | 'existing' | 'excluded';
+  }[];
+  entityType: { id: string; name: string };
+  entity: { id: string; code: string; name: string };
+  sourceType: { id: string; module: SourceModule; name: string };
+}
 
 export interface TaxType {
   id: string;

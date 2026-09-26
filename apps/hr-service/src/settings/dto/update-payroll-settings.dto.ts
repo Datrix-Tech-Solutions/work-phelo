@@ -67,4 +67,24 @@ export class UpdatePayrollSettingsDto {
   @IsOptional()
   @IsString()
   payrollTier3SchemeName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether payroll runs post accrual journal entries to the accounting module',
+    example: true,
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  linkedToAccounting?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether the accrual journal entry posts straight to the ledger on payroll approval, instead of as a draft awaiting manual review',
+    example: false,
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  autoPostOnApproval?: boolean;
 }

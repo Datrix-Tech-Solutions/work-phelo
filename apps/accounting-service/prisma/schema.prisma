@@ -1339,6 +1339,34 @@ model EntityType {
   @@schema("accounting")
 }
 
+enum SourceModule {
+  HR
+  MARKETING
+  ACCOUNTING
+  RECRUITMENT
+  OPERATIONS
+
+  @@schema("accounting")
+}
+
+// Never created directly from the accounting settings UI — a row only ever comes into
+// existence as a side effect of the owning module's own integration setup completing
+// (e.g. HR's payroll GL-account seed calls SourceTypesService.ensureExists('HR', 'Payroll')).
+// Accounting's Source Types page only lists/links/unlinks what's already here.
+model SourceType {
+  id        String       @id @default(uuid())
+  tenantId  String
+  module    SourceModule
+  name      String
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, module, name])
+  @@schema("accounting")
+}
+
 enum BudgetPeriod {
   MONTHLY
   QUARTERLY

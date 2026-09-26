@@ -9,7 +9,7 @@ import {
   UserCircle,
   Megaphone,
   Briefcase,
-  // Wallet,
+  Wallet,
   // Trophy,
   // CalendarRange,
 } from 'lucide-react';
@@ -19,7 +19,7 @@ const DashboardIcon = () => <House className="w-5 h-5" />;
 const ProfileIcon = () => <UserCircle className="w-5 h-5" />;
 const TeamIcon = () => <Users className="w-5 h-5" />;
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
-// const PayrollIcon = () => <Wallet className="w-5 h-5" />;
+const PayrollIcon = () => <Wallet className="w-5 h-5" />;
 // const AppraisalIcon = () => <Trophy className="w-5 h-5" />;
 // const LeaveIcon = () => <CalendarRange className="w-5 h-5" />;
 const HrIcon = () => <Users className="w-5 h-5" />;
@@ -70,14 +70,14 @@ export const HR_NAV_GROUPS: NavGroup[] = [
       //   enabled: true,
       //   active: true,
       // },
-      // {
-      //   key: 'payroll',
-      //   label: 'Payroll',
-      //   icon: <PayrollIcon />,
-      //   href: 'payroll',
-      //   enabled: true,
-      //   active: true,
-      // },
+      {
+        key: 'payroll',
+        label: 'Payroll',
+        icon: <PayrollIcon />,
+        href: 'payroll',
+        enabled: true,
+        active: true,
+      },
       // {
       //   key: 'appraisal',
       //   label: 'Performance',
