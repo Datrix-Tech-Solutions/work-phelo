@@ -13,6 +13,7 @@ import { BudgetsController } from './budgets.controller';
 import { BudgetsService } from './budgets.service';
 import { EntityTypesController } from './entity-types.controller';
 import { EntityTypesService } from './entity-types.service';
+import { InternalPayrollIntegrationController } from './internal-payroll-integration.controller';
 import { InternalSubledgersController } from './internal-subledgers.controller';
 import { JournalPolicy } from './journal.policy';
 import { JournalsController } from './journals.controller';
@@ -42,6 +43,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     BankReconciliationsController,
     BudgetsController,
     EntityTypesController,
+    InternalPayrollIntegrationController,
     InternalSubledgersController,
     JournalsController,
     PayablesController,

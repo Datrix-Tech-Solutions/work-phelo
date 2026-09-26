@@ -21,6 +21,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { FieldEncryptionService } from '../crypto/field-encryption.service';
+import { HrAccountingClient } from '../accounting-integration/client/accounting.client';
 import {
   EmploymentStatus,
   EmployeeCompensationType,
@@ -99,6 +100,7 @@ export class PayrollService {
     private readonly notificationsService: NotificationsService,
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly encryption: FieldEncryptionService,
+    private readonly accountingClient: HrAccountingClient,
   ) {}
 
   private canReadPayroll(actor: RequestUser) {
@@ -1165,10 +1167,79 @@ export class PayrollService {
       note,
     );
 
+    const accountingPosting = await this.postPayrollAccrualIfLinked(
+      tenantId,
+      updatedRun,
+    );
+
     return {
       ...updatedRun,
       notificationSummary,
+      accountingPosting,
     };
+  }
+
+  /** Posts (or drafts) the payroll accrual journal in accounting-service, if this tenant has
+   *  turned on "Link Payroll to Accounting". Never throws — an accounting-service outage or
+   *  misconfiguration (e.g. GL accounts not yet seeded) must not block the payroll approval
+   *  itself; the failure is returned in the response instead so the approver sees it. */
+  private async postPayrollAccrualIfLinked(
+    tenantId: string,
+    run: { id: string; month: number; year: number },
+  ): Promise<
+    | { posted: false; reason: 'not_linked' }
+    | { posted: true }
+    | { posted: false; reason: 'error'; message: string }
+  > {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { linkedToAccounting: true, autoPostOnApproval: true },
+    });
+    if (!config?.linkedToAccounting) {
+      return { posted: false, reason: 'not_linked' };
+    }
+
+    try {
+      const [totals, otherDeductions] = await Promise.all([
+        this.prisma.payrollRun.findUniqueOrThrow({
+          where: { id: run.id },
+          select: {
+            totalGross: true,
+            totalNet: true,
+            totalPAYE: true,
+            totalTier1: true,
+            totalTier2: true,
+            totalTier3: true,
+            totalEmployerCost: true,
+          },
+        }),
+        this.prisma.payrollItem.aggregate({
+          where: { payrollRunId: run.id },
+          _sum: { otherDeductions: true },
+        }),
+      ]);
+      const { end } = this.getMonthBounds(run.month, run.year);
+
+      await this.accountingClient.postPayrollAccrual({
+        tenantId,
+        payrollRunId: run.id,
+        periodLabel: `${run.month}/${run.year}`,
+        transactionDate: end.toISOString().slice(0, 10),
+        totalGross: Number(totals.totalGross),
+        totalNet: Number(totals.totalNet),
+        totalPAYE: Number(totals.totalPAYE),
+        totalTier1: Number(totals.totalTier1),
+        totalTier2: Number(totals.totalTier2),
+        totalTier3: Number(totals.totalTier3),
+        totalEmployerCost: Number(totals.totalEmployerCost),
+        totalOtherDeductions: Number(otherDeductions._sum.otherDeductions ?? 0),
+        autoPost: config.autoPostOnApproval,
+      });
+      return { posted: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { posted: false, reason: 'error', message };
+    }
   }
 
   private async applyPaidPayrollDeductions(

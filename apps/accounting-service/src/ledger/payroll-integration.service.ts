@@ -1,14 +1,44 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  AdjustmentCategory,
   GLAccountCategory,
+  JournalEntryType,
   NormalBalance,
   SourceModule,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountingMasterDataService } from './accounting-master-data.service';
-import { SeedPayrollAccountsDto } from './dto/payroll-integration.dto';
+import {
+  PostPayrollAccrualDto,
+  SeedPayrollAccountsDto,
+} from './dto/payroll-integration.dto';
+import { JournalLineDto } from './dto/accounting.dto';
+import { JournalsService } from './journals.service';
 import { SourceTypesService } from './source-types.service';
+
+const PAYROLL_LIABILITIES_GROUP_NAME = 'Payroll Liabilities';
+const PAYROLL_EXPENSE_GROUP_NAME = 'Payroll Expense';
+
+type PayrollGlAccountKey =
+  | 'salariesWagesExpense'
+  | 'employerSocialSecurityExpense'
+  | 'netPayPayable'
+  | 'incomeTaxPayable'
+  | 'socialSecurityPayable'
+  | 'statutoryPensionPayable'
+  | 'otherDeductionsPayable';
+
+const PAYROLL_GL_ACCOUNT_NAMES: Record<PayrollGlAccountKey, string> = {
+  salariesWagesExpense: 'Salaries and Wages Expense',
+  employerSocialSecurityExpense:
+    'Employer Social Security Contribution Expense',
+  netPayPayable: 'Net Pay Payable',
+  incomeTaxPayable: 'Income Tax Payable',
+  socialSecurityPayable: 'Social Security Payable',
+  statutoryPensionPayable: 'Statutory Pension Payable',
+  otherDeductionsPayable: 'Other Deductions Payable',
+};
 
 const NORMAL_BALANCE_BY_CATEGORY: Record<GLAccountCategory, NormalBalance> = {
   [GLAccountCategory.ASSET]: NormalBalance.DEBIT,
@@ -59,6 +89,7 @@ const PAYROLL_ACCOUNT_GROUPS: PayrollAccountGroupTemplate[] = [
       { key: 'income-tax-payable', name: 'Income Tax Payable' },
       { key: 'social-security-payable', name: 'Social Security Payable' },
       { key: 'statutory-pension-payable', name: 'Statutory Pension Payable' },
+      { key: 'other-deductions-payable', name: 'Other Deductions Payable' },
     ],
   },
   {
@@ -112,6 +143,7 @@ export class PayrollIntegrationService {
     private readonly prisma: PrismaService,
     private readonly masterData: AccountingMasterDataService,
     private readonly sourceTypes: SourceTypesService,
+    private readonly journals: JournalsService,
   ) {}
 
   /** Idempotent — safe to call every time the tenant clicks "Create Payroll GL Accounts".
@@ -271,6 +303,142 @@ export class PayrollIntegrationService {
         module: sourceType.module,
         name: sourceType.name,
       },
+    };
+  }
+
+  /** Called by hr-service (via the internal service-to-service auth surface) once a payroll
+   *  run is approved. Idempotent per run — a repeated call for the same `payrollRunId` is a
+   *  no-op if the journal already exists. Requires the payroll GL accounts to already be
+   *  seeded (via `seedAccounts` above); throws a clear error if they aren't. */
+  async postAccrual(callingService: string, dto: PostPayrollAccrualDto) {
+    const user = this.internalRequestUser(dto.tenantId, callingService);
+    const accounts = await this.findPayrollGlAccounts(dto.tenantId);
+
+    const employerSSNIT = dto.totalEmployerCost - dto.totalGross;
+    const socialSecurityPayable =
+      dto.totalTier1 + dto.totalTier2 + employerSSNIT;
+
+    const debitLines: { key: PayrollGlAccountKey; amount: number }[] = [
+      { key: 'salariesWagesExpense', amount: dto.totalGross },
+      { key: 'employerSocialSecurityExpense', amount: employerSSNIT },
+    ];
+    const creditLines: { key: PayrollGlAccountKey; amount: number }[] = [
+      { key: 'netPayPayable', amount: dto.totalNet },
+      { key: 'incomeTaxPayable', amount: dto.totalPAYE },
+      { key: 'socialSecurityPayable', amount: socialSecurityPayable },
+      { key: 'statutoryPensionPayable', amount: dto.totalTier3 },
+      { key: 'otherDeductionsPayable', amount: dto.totalOtherDeductions },
+    ];
+
+    const missing = [...debitLines, ...creditLines]
+      .filter((line) => line.amount > 0 && !accounts[line.key])
+      .map((line) => PAYROLL_GL_ACCOUNT_NAMES[line.key]);
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Payroll GL accounts are not set up (missing: ${missing.join(', ')}) — visit ` +
+          'Payroll Settings and click "Create Payroll GL Accounts" first.',
+      );
+    }
+
+    const lines: JournalLineDto[] = [
+      ...debitLines
+        .filter((line) => line.amount > 0)
+        .map((line) => ({
+          glAccountId: accounts[line.key]!.id,
+          debit: line.amount,
+        })),
+      ...creditLines
+        .filter((line) => line.amount > 0)
+        .map((line) => ({
+          glAccountId: accounts[line.key]!.id,
+          credit: line.amount,
+        })),
+    ];
+
+    const config = await this.masterData.getConfig(dto.tenantId);
+    if (!config.baseCurrency) {
+      throw new BadRequestException(
+        'Accounting is not configured for this tenant (no base currency set) — visit ' +
+          'Accounting Settings first.',
+      );
+    }
+    const fiscalPeriod = await this.prisma.fiscalPeriod.findFirst({
+      where: {
+        tenantId: dto.tenantId,
+        status: 'OPEN',
+        startDate: { lte: new Date(dto.transactionDate) },
+        endDate: { gte: new Date(dto.transactionDate) },
+      },
+    });
+    if (!fiscalPeriod) {
+      throw new BadRequestException(
+        `No open fiscal period covers ${dto.transactionDate} — payroll accrual cannot be posted.`,
+      );
+    }
+
+    const journal = await this.journals.create(user, {
+      transactionDate: dto.transactionDate,
+      fiscalPeriodId: fiscalPeriod.id,
+      transactionCurrency: config.baseCurrency,
+      entryType: JournalEntryType.ADJUSTING,
+      adjustmentCategory: AdjustmentCategory.ACCRUAL,
+      description: `Payroll accrual — ${dto.periodLabel}`,
+      idempotencyKey: `payroll-accrual:${dto.payrollRunId}`,
+      sourceModule: 'HR',
+      sourceRecordType: 'PAYROLL_RUN',
+      sourceRecordId: dto.payrollRunId,
+      lines,
+    });
+
+    if (dto.autoPost && journal.status !== 'POSTED') {
+      return this.journals.post(user, journal.id);
+    }
+    return journal;
+  }
+
+  private async findPayrollGlAccounts(
+    tenantId: string,
+  ): Promise<Record<PayrollGlAccountKey, { id: string } | null>> {
+    const accounts = await this.prisma.gLAccount.findMany({
+      where: {
+        tenantId,
+        accountGroup: {
+          name: {
+            in: [PAYROLL_LIABILITIES_GROUP_NAME, PAYROLL_EXPENSE_GROUP_NAME],
+          },
+        },
+      },
+      select: { id: true, name: true },
+    });
+    const byName = new Map(
+      accounts.map((a) => [a.name.trim().toLowerCase(), a]),
+    );
+
+    return Object.fromEntries(
+      (
+        Object.entries(PAYROLL_GL_ACCOUNT_NAMES) as [
+          PayrollGlAccountKey,
+          string,
+        ][]
+      ).map(([key, name]) => [key, byName.get(name.toLowerCase()) ?? null]),
+    ) as Record<PayrollGlAccountKey, { id: string } | null>;
+  }
+
+  private internalRequestUser(
+    tenantId: string,
+    callingService: string,
+  ): RequestUser {
+    return {
+      id: `service:${callingService.slice(0, 80)}`,
+      email: '',
+      role: 'SYSTEM',
+      tenantId,
+      tenantSlug: '',
+      tenantName: '',
+      firstName: callingService,
+      moduleConfig: {},
+      featureConfig: {},
+      permissions: [],
     };
   }
 
