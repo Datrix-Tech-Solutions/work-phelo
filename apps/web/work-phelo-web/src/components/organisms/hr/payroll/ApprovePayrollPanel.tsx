@@ -23,6 +23,7 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
   useTenantConfig();
   const [showConfirm, setShowConfirm] = useState(false);
   const [approvalNote, setApprovalNote] = useState('');
+  const [accountingError, setAccountingError] = useState<string | null>(null);
   const { mutate: approve, isPending } = useApprovePayroll();
 
   const isOpen = run !== null;
@@ -33,32 +34,36 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
   const handleClose = () => {
     setShowConfirm(false);
     setApprovalNote('');
+    setAccountingError(null);
     onClose();
   };
 
   const handleConfirm = () => {
     if (!run || !approvalNote.trim()) return;
+    setAccountingError(null);
     approve(
       { id: run.id, note: approvalNote.trim() },
       {
-        onSuccess: (data: {
-          accountingPosting?: { posted: boolean; reason?: string; message?: string };
-        }) => {
+        onSuccess: () => {
           toast.success(`${periodLabel} payroll approved`);
-          if (
-            data?.accountingPosting?.posted === false &&
-            data.accountingPosting.reason === 'error'
-          ) {
-            toast.error(
-              `Payroll accrual could not be posted to accounting: ${data.accountingPosting.message}`,
-            );
-          }
           setShowConfirm(false);
           setApprovalNote('');
           onClose();
           onApproved?.();
         },
-        onError: (err) => toast.error(extractError(err, 'Failed to approve payroll')),
+        onError: (err) => {
+          const code = (err as { response?: { data?: { code?: string; message?: string } } })
+            ?.response?.data?.code;
+          if (code === 'ACCOUNTING_POSTING_FAILED') {
+            // Approval did not go through — the run is still pending approval, so the same
+            // "Approve Payroll" click safely retries; "Cancel" leaves it pending to try later.
+            setAccountingError(
+              extractError(err, 'Could not post the payroll accrual to accounting'),
+            );
+            return;
+          }
+          toast.error(extractError(err, 'Failed to approve payroll'));
+        },
       },
     );
   };
@@ -142,16 +147,23 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
         hideClose={isPending}
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={isPending}>
-              Cancel
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowConfirm(false);
+                setAccountingError(null);
+              }}
+              disabled={isPending}
+            >
+              {accountingError ? 'Stop' : 'Cancel'}
             </Button>
             <Button
               onClick={handleConfirm}
               isLoading={isPending}
-              loadingText="Approving…"
+              loadingText={accountingError ? 'Retrying…' : 'Approving…'}
               disabled={!approvalNote.trim()}
             >
-              Approve Payroll
+              {accountingError ? 'Try Again' : 'Approve Payroll'}
             </Button>
           </>
         }
@@ -170,6 +182,12 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
           <p className="text-sm text-gray-500 leading-relaxed mt-3">
             Approval note: <span className="text-gray-700">{approvalNote.trim()}</span>
           </p>
+        )}
+        {accountingError && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+            <p className="text-sm font-medium text-red-800">Payroll was not approved</p>
+            <p className="text-sm text-red-700 mt-0.5">{accountingError}</p>
+          </div>
         )}
       </Modal>
     </>
