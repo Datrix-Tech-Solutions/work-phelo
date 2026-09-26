@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { FieldEncryptionService } from '../crypto/field-encryption.service';
+import { HrAccountingClient } from '../accounting-integration/client/accounting.client';
 import { RequestUser } from '@work-phelo/types';
 import {
   PayrollCountry,
@@ -111,6 +112,13 @@ describe('PayrollService', () => {
         },
         { provide: RabbitMQPublisher, useValue: { emit: jest.fn() } },
         { provide: FieldEncryptionService, useValue: encryption },
+        {
+          provide: HrAccountingClient,
+          useValue: {
+            postPayrollAccrual: jest.fn(),
+            configurationStatus: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
