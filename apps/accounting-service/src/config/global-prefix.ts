@@ -16,4 +16,8 @@ export const ACCOUNTING_GLOBAL_PREFIX_EXCLUSIONS: RouteInfo[] = [
     path: 'internal/reinsurance/accounting-readiness',
     method: RequestMethod.POST,
   },
+  {
+    path: 'internal/payroll-integration/post-accrual',
+    method: RequestMethod.POST,
+  },
 ];
