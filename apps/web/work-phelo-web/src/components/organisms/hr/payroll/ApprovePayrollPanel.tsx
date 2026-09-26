@@ -41,8 +41,18 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
     approve(
       { id: run.id, note: approvalNote.trim() },
       {
-        onSuccess: () => {
+        onSuccess: (data: {
+          accountingPosting?: { posted: boolean; reason?: string; message?: string };
+        }) => {
           toast.success(`${periodLabel} payroll approved`);
+          if (
+            data?.accountingPosting?.posted === false &&
+            data.accountingPosting.reason === 'error'
+          ) {
+            toast.error(
+              `Payroll accrual could not be posted to accounting: ${data.accountingPosting.message}`,
+            );
+          }
           setShowConfirm(false);
           setApprovalNote('');
           onClose();
