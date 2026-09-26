@@ -6,7 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { DetailField } from '@/components/atoms/DetailField';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { useDeactivateGLAccount } from '@/hooks';
+import { useDeactivateGLAccount, useDeleteGLAccount } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { EditLeafAccountPanel } from '@/components/organisms/accounting/panels/EditLeafAccountPanel';
@@ -16,6 +16,11 @@ import type { GLAccount } from '@/types/accounting';
 
 interface GLAccountDetailProps {
   account: GLAccount;
+  /** Computed by the caller from the full account list — this account can't be deleted while
+   *  another account is filed under it as a child. */
+  hasChildAccounts?: boolean;
+  /** Called after a successful delete, since this account no longer exists to show. */
+  onDeleted?: () => void;
 }
 
 const TABS = [
@@ -23,13 +28,15 @@ const TABS = [
   { key: 'details', label: 'Details' },
 ];
 
-export function GLAccountDetail({ account }: GLAccountDetailProps) {
+export function GLAccountDetail({ account, hasChildAccounts, onDeleted }: GLAccountDetailProps) {
   const toast = useToast();
   const { mutateAsync: deactivateAccount, isPending: isDeactivating } = useDeactivateGLAccount();
+  const { mutateAsync: deleteAccount, isPending: isDeleting } = useDeleteGLAccount();
   const [activeTab, setActiveTab] = useState('ledger');
   const [isEditing, setIsEditing] = useState(false);
   const [isCreatingSibling, setIsCreatingSibling] = useState(false);
   const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // "Create Account" here mirrors this account's own place in the hierarchy — same
   // classification and parent account, if it has one. A leaf account always needs a
@@ -52,6 +59,17 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
       setConfirmDeactivateOpen(false);
     } catch (error) {
       toast.error(extractError(error, 'Unable to deactivate account'));
+    }
+  };
+
+  const deleteThisAccount = async () => {
+    try {
+      await deleteAccount(account.id);
+      toast.success(`${account.name} deleted`);
+      setConfirmDeleteOpen(false);
+      onDeleted?.();
+    } catch (error) {
+      toast.error(extractError(error, 'Unable to delete account'));
     }
   };
 
@@ -87,6 +105,16 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
               onClick={() => setConfirmDeactivateOpen(true)}
             >
               Deactivate
+            </Button>
+          )}
+          {!hasChildAccounts && (
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              onClick={() => setConfirmDeleteOpen(true)}
+            >
+              Delete
             </Button>
           )}
         </div>
@@ -169,6 +197,32 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
               loadingText="Deactivating…"
             >
               Deactivate
+            </Button>
+          </>
+        }
+      />
+
+      <Modal
+        isOpen={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        title="Delete account?"
+        description={`"${account.name}" will be permanently removed. This only works if it has no posted activity — if it does, deactivate it instead.`}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDeleteOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={deleteThisAccount}
+              isLoading={isDeleting}
+              loadingText="Deleting…"
+            >
+              Delete
             </Button>
           </>
         }

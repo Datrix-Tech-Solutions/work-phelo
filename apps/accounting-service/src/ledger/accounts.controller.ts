@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -143,6 +144,24 @@ export class AccountsController {
     );
   }
 
+  @Delete('account-classifications/:classificationId')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({
+    summary: 'Delete an account classification',
+    description:
+      'Only allowed when the classification has no parent accounts or GL accounts linked to it.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNT_CLASSIFICATIONS_DELETE)
+  deleteAccountClassification(
+    @Param('classificationId', ParseUUIDPipe) classificationId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.deleteAccountClassification(
+      request.user,
+      classificationId,
+    );
+  }
+
   @Get('account-groups')
   @ApiTags('Accounting - Account Hierarchy')
   @ApiOperation({ summary: 'List tenant account groups' })
@@ -208,6 +227,20 @@ export class AccountsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.masterData.deactivateAccountGroup(request.user, groupId);
+  }
+
+  @Delete('account-groups/:groupId')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({
+    summary: 'Delete an account group (parent account)',
+    description: 'Only allowed when no GL accounts are linked to this group.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNT_GROUPS_DELETE)
+  deleteAccountGroup(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.deleteAccountGroup(request.user, groupId);
   }
 
   @Post('account-hierarchy/seed-standard')
@@ -289,6 +322,21 @@ export class AccountsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.masterData.deactivateGLAccount(request.user, accountId);
+  }
+
+  @Delete('accounts/:accountId')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({
+    summary: 'Delete a GL account',
+    description:
+      'Only allowed when the account has no child accounts and no journal activity — deactivate it instead if it has been used.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_DELETE)
+  deleteAccount(
+    @Param('accountId', ParseUUIDPipe) accountId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.deleteGLAccount(request.user, accountId);
   }
 
   @Get('accounts/:accountId/ledger')

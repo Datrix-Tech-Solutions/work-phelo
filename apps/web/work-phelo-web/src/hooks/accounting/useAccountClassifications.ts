@@ -60,7 +60,6 @@ export function useUpdateAccountClassification() {
   });
 }
 
-/** Backend has no delete route — activate/deactivate are the dedicated endpoints. */
 export function useActivateAccountClassification() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -80,6 +79,21 @@ export function useDeactivateAccountClassification() {
     mutationFn: async (id: string) => {
       const res = await api.post<AccountClassification>(`${BASE}/${id}/deactivate`);
       return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CLASSIFICATIONS_KEY });
+    },
+  });
+}
+
+/** Backend only allows this when the classification has no parent accounts or GL accounts
+ *  linked to it — otherwise it responds with a 409 explaining what to remove first. */
+export function useDeleteAccountClassification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`${BASE}/${id}`);
+      return id;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CLASSIFICATIONS_KEY });
