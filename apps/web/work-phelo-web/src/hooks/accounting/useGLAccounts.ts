@@ -10,7 +10,7 @@ import {
 } from '@/types/accounting';
 
 const BASE = '/accounting/accounts';
-const GL_ACCOUNTS_KEY = ['accounting', 'gl-accounts'] as const;
+export const GL_ACCOUNTS_KEY = ['accounting', 'gl-accounts'] as const;
 
 export function useGLAccounts(params: QueryGLAccountsParams = {}) {
   const { category, status } = params;

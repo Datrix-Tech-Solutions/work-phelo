@@ -1,97 +1,92 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Button } from '@/components/atoms/Button';
-import { Modal } from '@/components/organisms/shared/Modal';
-import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
-import { SourceTypePanel } from '@/components/organisms/accounting/panels/SourceTypePanel';
-import { useDeleteSourceType, useSourceTypes } from '@/hooks';
+import { useMemo } from 'react';
+import { Badge } from '@/components/atoms/Badge';
+import { Toggle } from '@/components/atoms/Toggle';
+import { useLinkSourceType, useSourceTypes, useUnlinkSourceType } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { SourceTypeDefinition } from '@/types/accounting';
+import type { SourceModule, SourceTypeDefinition } from '@/types/accounting';
 
-const PAGE_SIZE = 10;
+const MODULE_LABELS: Record<SourceModule, string> = {
+  HR: 'HR',
+  MARKETING: 'Marketing',
+  ACCOUNTING: 'Accounting',
+  RECRUITMENT: 'Recruitment',
+  OPERATIONS: 'Operations',
+};
 
 export function SourceTypesTable() {
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [panelTarget, setPanelTarget] = useState<SourceTypeDefinition | null | undefined>(
-    undefined,
-  );
-  const [deleteTarget, setDeleteTarget] = useState<SourceTypeDefinition | null>(null);
   const { data = [], isLoading } = useSourceTypes();
-  const deleteSourceType = useDeleteSourceType();
+  const { mutate: link } = useLinkSourceType();
+  const { mutate: unlink } = useUnlinkSourceType();
   const toast = useToast();
 
-  const filtered = useMemo(() => {
-    const query = search.toLowerCase();
-    return !query ? data : data.filter((item) => item.name.toLowerCase().includes(query));
-  }, [data, search]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const groups = useMemo(() => {
+    const byModule = new Map<SourceModule, SourceTypeDefinition[]>();
+    for (const item of data) {
+      const list = byModule.get(item.module) ?? [];
+      list.push(item);
+      byModule.set(item.module, list);
+    }
+    return [...byModule.entries()].sort((a, b) =>
+      MODULE_LABELS[a[0]].localeCompare(MODULE_LABELS[b[0]]),
+    );
+  }, [data]);
 
-  const columns: Column<SourceTypeDefinition>[] = [
-    {
-      key: 'name',
-      label: 'Name',
-      width: 'minmax(180px, 1fr)',
-      render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-    },
-    {
-      key: 'description',
-      label: 'Description',
-      width: 'minmax(240px, 2fr)',
-      render: (row) => <span className="text-sm text-gray-700">{row.description ?? '—'}</span>,
-    },
-  ];
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    deleteSourceType.mutate(deleteTarget.id, {
-      onSuccess: () => setDeleteTarget(null),
-      onError: (error) => toast.error(extractError(error, 'Unable to delete source type')),
+  const toggle = (item: SourceTypeDefinition) => {
+    const action = item.isActive ? unlink : link;
+    action(item.id, {
+      onError: (error) =>
+        toast.error(extractError(error, `Unable to ${item.isActive ? 'unlink' : 'link'}`)),
     });
   };
 
+  if (isLoading) {
+    return <p className="text-sm text-gray-500">Loading…</p>;
+  }
+
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-gray-200 px-6 py-10 text-center">
+        <p className="text-sm font-medium text-gray-900">No sources linked yet</p>
+        <p className="mt-1 text-sm text-gray-500">
+          Entries show up here automatically once another module (like Payroll) completes its own
+          accounting setup — there&apos;s nothing to create from this page.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <>
-      <DataTable
-        columns={columns}
-        data={paged}
-        isLoading={isLoading}
-        searchPlaceholder="Search source types…"
-        searchValue={search}
-        onSearch={(value) => {
-          setSearch(value);
-          setPage(1);
-        }}
-        actionButton={{ label: 'Add Source Type', onClick: () => setPanelTarget(null) }}
-        rowActions={(row) => [
-          { label: 'Update', onClick: () => setPanelTarget(row) },
-          { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
-        ]}
-        emptyMessage="No source types found"
-        currentPage={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-      />
-      <SourceTypePanel sourceType={panelTarget} onClose={() => setPanelTarget(undefined)} />
-      <Modal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete Source Type"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button variant="danger" isLoading={deleteSourceType.isPending} onClick={confirmDelete}>
-              Delete
-            </Button>
+    <div className="flex flex-col gap-6">
+      {groups.map(([module, items]) => (
+        <div key={module} className="flex flex-col gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            {MODULE_LABELS[module]}
+          </h3>
+          <div className="overflow-hidden rounded-lg border border-gray-100">
+            <table className="w-full text-left text-sm">
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id} className="border-t border-gray-100 first:border-t-0">
+                    <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
+                    <td className="px-4 py-3">
+                      <Badge
+                        label={item.isActive ? 'Linked' : 'Unlinked'}
+                        variant={item.isActive ? 'success' : 'neutral'}
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Toggle enabled={item.isActive} onChange={() => toggle(item)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        }
-      />
-    </>
+        </div>
+      ))}
+    </div>
   );
 }

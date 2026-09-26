@@ -1,4 +1,4 @@
-import { ClipboardList, Landmark, CheckCircle2, History } from 'lucide-react';
+import { ClipboardList, Landmark, CheckCircle2, History, Settings } from 'lucide-react';
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { usePayrollSettings } from '@/hooks';
@@ -10,6 +10,7 @@ const ManageIcon = () => <ClipboardList className="w-5 h-5" />;
 const ContributionsIcon = () => <Landmark className="w-5 h-5" />;
 const ApproveIcon = () => <CheckCircle2 className="w-5 h-5" />;
 const HistoryIcon = () => <History className="w-5 h-5" />;
+const SettingsIcon = () => <Settings className="w-5 h-5" />;
 
 /**
  * Payroll's own sidebar — management-side tabs it used to have on one page
@@ -72,6 +73,19 @@ export function usePayrollSidebarGroups(tenantSlug: string): {
           icon: <HistoryIcon />,
           href: `${base}/history`,
           enabled: canViewHistory,
+          active: true,
+        },
+      ],
+    },
+    {
+      label: 'Payroll Set-up',
+      items: [
+        {
+          key: 'settings',
+          label: 'Settings',
+          icon: <SettingsIcon />,
+          href: `${base}/settings`,
+          enabled: canManagePayroll,
           active: true,
         },
       ],

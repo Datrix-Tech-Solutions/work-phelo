@@ -170,6 +170,8 @@ export interface PayrollSettings {
   payrollTier3Enabled: boolean;
   payrollTier3Rate: number | null;
   payrollTier3SchemeName: string | null;
+  linkedToAccounting: boolean;
+  autoPostOnApproval: boolean;
 }
 
 export interface UpdatePayrollSettingsDto {
@@ -179,6 +181,8 @@ export interface UpdatePayrollSettingsDto {
   payrollTier3Enabled?: boolean;
   payrollTier3Rate?: number;
   payrollTier3SchemeName?: string;
+  linkedToAccounting?: boolean;
+  autoPostOnApproval?: boolean;
 }
 
 // ── Payslip display ────────────────────────────────────────────────────────────
