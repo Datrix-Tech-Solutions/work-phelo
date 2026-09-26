@@ -22,6 +22,8 @@ import {
   useEntityTypes,
   useGLAccountOptions,
   useGLAccounts,
+  useMakeSourceLedgerPayment,
+  useSourceLedger,
   useSubledgers,
   useTransactionTypeRules,
 } from '@/hooks';
@@ -48,6 +50,7 @@ type FormValues = {
   dueDate: string;
   cashAccountId: string;
   offsetGlAccountId: string;
+  sourceLedgerEntryId: string;
   settlementMethod: AccountingCashbookSettlementMethod | '';
   reference: string;
 };
@@ -67,6 +70,7 @@ const DEFAULTS: FormValues = {
   dueDate: '',
   cashAccountId: '',
   offsetGlAccountId: '',
+  sourceLedgerEntryId: '',
   settlementMethod: '',
   reference: '',
 };
@@ -97,7 +101,29 @@ export function NewTransactionPanel({
   const createCashbookReceipt = useCreateCashbookReceipt();
   const createCashbookPayment = useCreateCashbookPayment();
   const createCashbookEntry = isCashbookReceipt ? createCashbookReceipt : createCashbookPayment;
-  const isSaving = isCashbookType ? createCashbookEntry.isPending : createDocument.isPending;
+  const makeSourceLedgerPayment = useMakeSourceLedgerPayment();
+  const isSaving = isCashbookType
+    ? createCashbookEntry.isPending || makeSourceLedgerPayment.isPending
+    : createDocument.isPending;
+
+  // A type linked to a Source shows a dropdown of that source's still-unpaid open items —
+  // picking one settles it directly (creates the payment AND records the allocation in one
+  // action) instead of an untracked generic cashbook entry.
+  const { data: sourceLedgerEntries = [] } = useSourceLedger(
+    transactionType?.sourceTypeId ?? undefined,
+  );
+  const unpaidSourceLedgerEntries = useMemo(
+    () => sourceLedgerEntries.filter((entry) => entry.paymentState !== 'PAID'),
+    [sourceLedgerEntries],
+  );
+  const sourceLedgerOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      unpaidSourceLedgerEntries.map((entry) => ({
+        value: entry.id,
+        label: `${entry.description} — ${fmtAmount(entry.outstandingAmount, entry.currency)} outstanding`,
+      })),
+    [unpaidSourceLedgerEntries],
+  );
 
   const {
     control,
@@ -167,6 +193,7 @@ export function NewTransactionPanel({
   const businessRole = useWatch({ control, name: 'businessRole' });
   const amount = useWatch({ control, name: 'amount' });
   const currency = useWatch({ control, name: 'currency' });
+  const sourceLedgerEntryId = useWatch({ control, name: 'sourceLedgerEntryId' });
 
   const subtotal = Number(amount) || 0;
   const taxBreakdown = taxLines
@@ -229,16 +256,32 @@ export function NewTransactionPanel({
         return;
       }
       try {
-        await createCashbookEntry.mutateAsync({
-          cashAccountId: values.cashAccountId,
-          offsetGlAccountId: values.offsetGlAccountId,
-          amount: Number(values.amount),
-          currency: values.currency,
-          transactionDate: values.entryDate || today(),
-          settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
-          reference: values.reference || undefined,
-          description: values.description || transactionType.name,
-        });
+        // Settling a picked source ledger item creates the payment AND records the
+        // allocation against it in one call — a generic cashbook entry has no concept of
+        // "which open item this settles", so it can't be used once one is selected.
+        if (values.sourceLedgerEntryId) {
+          await makeSourceLedgerPayment.mutateAsync({
+            entryId: values.sourceLedgerEntryId,
+            payload: {
+              cashAccountId: values.cashAccountId,
+              amount: Number(values.amount),
+              transactionDate: values.entryDate || today(),
+              settlementMethod: values.settlementMethod,
+              description: values.description || undefined,
+            },
+          });
+        } else {
+          await createCashbookEntry.mutateAsync({
+            cashAccountId: values.cashAccountId,
+            offsetGlAccountId: values.offsetGlAccountId,
+            amount: Number(values.amount),
+            currency: values.currency,
+            transactionDate: values.entryDate || today(),
+            settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
+            reference: values.reference || undefined,
+            description: values.description || transactionType.name,
+          });
+        }
         close();
         setSuccessTransactionType(transactionType.name);
       } catch (error) {
@@ -322,11 +365,39 @@ export function NewTransactionPanel({
               value={transactionType ? `${transactionType.name} (${transactionType.code})` : ''}
             />
 
-            {!hasRule && (
+            {!hasRule && !transactionType?.sourceTypeId && (
               <p className="text-xs text-gray-500">
                 No rule configured for this type yet — pick the accounts below directly, or add a
                 default rule under Settings → Transaction Types.
               </p>
+            )}
+
+            {transactionType?.sourceTypeId && (
+              <Controller
+                name="sourceLedgerEntryId"
+                control={control}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Settle Item"
+                    placeholder={
+                      unpaidSourceLedgerEntries.length === 0
+                        ? 'No unpaid items right now'
+                        : 'Select an item to settle (optional)…'
+                    }
+                    options={sourceLedgerOptions}
+                    value={field.value}
+                    onChange={(value) => {
+                      field.onChange(value);
+                      const entry = unpaidSourceLedgerEntries.find((e) => e.id === value);
+                      if (entry) {
+                        setValue('offsetGlAccountId', entry.glAccount.id);
+                        setValue('amount', String(entry.outstandingAmount));
+                        setValue('currency', entry.currency);
+                      }
+                    }}
+                  />
+                )}
+              />
             )}
 
             <Controller
@@ -356,6 +427,7 @@ export function NewTransactionPanel({
                   options={glAccountOptions}
                   value={field.value}
                   onChange={field.onChange}
+                  disabled={!!sourceLedgerEntryId}
                   error={errors.offsetGlAccountId?.message}
                 />
               )}

@@ -832,7 +832,13 @@ model TransactionType {
   category        TransactionTypeCategory
   businessRoles   String[]                 @default([])
   allowedDocument String?
+  /// Legacy free-text tag — superseded by sourceTypeId below, kept only so existing rows
+  /// aren't silently dropped. Never read by the New Transaction source-picker dropdown.
   source          String?
+  /// A rule is not the only thing that makes a type usable on New Transaction — a type
+  /// linked to a source is usable too, since its offset account/amount come from picking
+  /// one of that source's open SourceLedgerEntry items instead of a preconfigured rule line.
+  sourceTypeId    String?
   description     String?
   isSystemDefault Boolean                  @default(false)
   /// When true, this Receivable/Payable type posts a single-line direct entry straight
@@ -844,10 +850,12 @@ model TransactionType {
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
   rule            TransactionTypeRule?
+  sourceType      SourceType?              @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
   @@index([tenantId, category])
+  @@index([tenantId, sourceTypeId])
   @@schema("accounting")
 }
 
@@ -1365,6 +1373,7 @@ model SourceType {
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
   ledgerEntries SourceLedgerEntry[]
+  transactionTypes TransactionType[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, module, name])

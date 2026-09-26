@@ -267,7 +267,12 @@ export interface TransactionTypeDefinition {
   category: TransactionTypeCategory;
   businessRoles: string[];
   allowedDocument: string | null;
+  /** Legacy free-text tag — superseded by sourceTypeId below. */
   source: string | null;
+  /** Links this type to a Source (Settings > Source Types) — a type with a source is
+   *  usable on New Transaction without a rule: its offset account/amount come from
+   *  picking one of that source's open items instead of a preconfigured rule line. */
+  sourceTypeId: string | null;
   description: string | null;
   /** Receivable/Payable types only: when true, this type posts a single-line direct
    *  entry straight to Cashbook (via the New Transaction form) instead of an

@@ -1733,6 +1733,7 @@ export class AccountingMasterDataService {
     businessRoles: string[];
     allowedDocument: string | null;
     source: string | null;
+    sourceTypeId?: string | null;
     description: string | null;
     postsToCashbook: boolean;
     createdAt: Date;
@@ -1746,6 +1747,7 @@ export class AccountingMasterDataService {
       businessRoles: transactionType.businessRoles,
       allowedDocument: transactionType.allowedDocument,
       source: transactionType.source,
+      sourceTypeId: transactionType.sourceTypeId ?? null,
       description: transactionType.description,
       postsToCashbook: transactionType.postsToCashbook,
       createdAt: transactionType.createdAt.toISOString(),

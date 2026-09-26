@@ -333,7 +333,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
               // own, since its offset account is picked per-transaction. Only block when
               // neither is present.
               const hasRule = type.rulesCount > 0;
-              const hasSource = Boolean(type.source && type.source.trim());
+              const hasSource = Boolean(type.sourceTypeId);
               const canSelect = hasRule || hasSource;
               return (
                 <button
