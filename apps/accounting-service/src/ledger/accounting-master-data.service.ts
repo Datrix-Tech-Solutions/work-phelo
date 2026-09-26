@@ -1119,6 +1119,54 @@ export class AccountingMasterDataService {
     );
   }
 
+  async deleteAccountClassification(
+    user: RequestUser,
+    classificationId: string,
+  ) {
+    const classification = await this.findAccountClassification(
+      user.tenantId,
+      classificationId,
+    );
+    const [groupCount, accountCount] = await Promise.all([
+      this.prisma.accountGroup.count({
+        where: { tenantId: user.tenantId, classificationId },
+      }),
+      this.prisma.gLAccount.count({
+        where: { tenantId: user.tenantId, classificationId },
+      }),
+    ]);
+    if (groupCount + accountCount > 0) {
+      throw new ConflictException(
+        'Delete the parent accounts and accounts under this classification before deleting it',
+      );
+    }
+    try {
+      await this.prisma.accountClassification.delete({
+        where: {
+          id_tenantId: { id: classification.id, tenantId: user.tenantId },
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This classification is referenced elsewhere and cannot be deleted',
+        );
+      }
+      throw error;
+    }
+    await this.recordAudit(
+      user,
+      'ACCOUNT_CLASSIFICATION_DELETE',
+      'AccountClassification',
+      classification.id,
+      { code: classification.code },
+    );
+    return { id: classification.id };
+  }
+
   async listAccountGroups(tenantId: string, query: QueryAccountGroupsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
@@ -1450,6 +1498,41 @@ export class AccountingMasterDataService {
       false,
       'ACCOUNT_GROUP_DEACTIVATE',
     );
+  }
+
+  async deleteAccountGroup(user: RequestUser, groupId: string) {
+    const group = await this.findAccountGroup(user.tenantId, groupId);
+    const accountCount = await this.prisma.gLAccount.count({
+      where: { tenantId: user.tenantId, accountGroupId: group.id },
+    });
+    if (accountCount > 0) {
+      throw new ConflictException(
+        'Delete or move the accounts under this parent account before deleting it',
+      );
+    }
+    try {
+      await this.prisma.accountGroup.delete({
+        where: { id_tenantId: { id: group.id, tenantId: user.tenantId } },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This parent account is referenced elsewhere and cannot be deleted',
+        );
+      }
+      throw error;
+    }
+    await this.recordAudit(
+      user,
+      'ACCOUNT_GROUP_DELETE',
+      'AccountGroup',
+      group.id,
+      { code: group.code },
+    );
+    return { id: group.id };
   }
 
   async seedStandardAccountHierarchy(user: RequestUser) {
@@ -1905,6 +1988,47 @@ export class AccountingMasterDataService {
       { status: updated.status, allowPosting: updated.allowPosting },
     );
     return updated;
+  }
+
+  async deleteGLAccount(user: RequestUser, accountId: string) {
+    const account = await this.findGLAccount(user.tenantId, accountId);
+    const [childCount, journalLineCount] = await Promise.all([
+      this.prisma.gLAccount.count({
+        where: { tenantId: user.tenantId, parentAccountId: account.id },
+      }),
+      this.prisma.journalLine.count({
+        where: { tenantId: user.tenantId, glAccountId: account.id },
+      }),
+    ]);
+    if (childCount > 0) {
+      throw new ConflictException(
+        'Delete the child accounts under this account before deleting it',
+      );
+    }
+    if (journalLineCount > 0) {
+      throw new ConflictException(
+        'This account has activity and cannot be deleted — deactivate it instead',
+      );
+    }
+    try {
+      await this.prisma.gLAccount.delete({
+        where: { id_tenantId: { id: account.id, tenantId: user.tenantId } },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This account is referenced elsewhere and cannot be deleted — deactivate it instead',
+        );
+      }
+      throw error;
+    }
+    await this.recordAudit(user, 'GL_ACCOUNT_DELETE', 'GLAccount', account.id, {
+      code: account.code,
+    });
+    return { id: account.id };
   }
 
   listCostCentres(tenantId: string) {
