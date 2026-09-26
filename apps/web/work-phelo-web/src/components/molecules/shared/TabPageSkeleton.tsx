@@ -2,7 +2,7 @@ import { Skeleton } from '@/components/atoms/Skeleton';
 
 export function TabPageSkeleton({ tabs = 3 }: { tabs?: number }) {
   return (
-    <div className="p-8 flex flex-col gap-6">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200 pb-0">
         {[...Array(tabs)].map((_, i) => (

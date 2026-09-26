@@ -1,4 +1,4 @@
-import { Controller, Logger } from '@nestjs/common';
+import { Controller, HttpException, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import type { Channel, ConsumeMessage } from 'amqplib';
 import { NotificationService } from './notification.service';
@@ -15,6 +15,7 @@ import {
   LeaveReviewedEvent,
   LeaveCancelledEvent,
   TimeCorrectionSubmittedEvent,
+  AppraisalCycleStartedEvent,
   AppraisalSelfSubmittedEvent,
   AppraisalManagerReviewedEvent,
   AppraisalSelfReminderEvent,
@@ -26,13 +27,22 @@ import {
   ShiftSwapApprovedEvent,
   ShiftSwapRejectedEvent,
   ShiftSwapExpiredEvent,
+  AnnouncementPublishedEvent,
+  PayrollApprovalRequestedEvent,
+  PayrollDecisionEvent,
+  InAppNotificationCreateEvent,
+  EventPatterns,
 } from '@work-phelo/types';
+import { InAppNotificationsService } from '../in-app-notifications/in-app-notifications.service';
 
 @Controller()
 export class NotificationHandler {
   private readonly logger = new Logger(NotificationHandler.name);
 
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly inAppNotifications: InAppNotificationsService,
+  ) {}
 
   private ack(context: RmqContext) {
     const channel = context.getChannelRef() as Channel;
@@ -44,17 +54,68 @@ export class NotificationHandler {
     return error instanceof Error ? error.message : String(error);
   }
 
+  private shouldRequeue(error: unknown) {
+    if (error instanceof HttpException) {
+      return false;
+    }
+
+    const code =
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string'
+        ? (error as { code: string }).code
+        : undefined;
+
+    return !['P2002', 'P2003', 'P2014', 'P2025'].includes(code ?? '');
+  }
+
   private settleFailure(
     context: RmqContext,
     pattern: string,
     error: unknown,
     details: string,
   ) {
-    this.logger.error(
-      `[${pattern}] Handler failed | ${details} | error=${this.formatError(error)}`,
-      error instanceof Error ? error.stack : undefined,
+    const channel = context.getChannelRef() as Channel;
+    const message = context.getMessage() as ConsumeMessage;
+
+    if (this.shouldRequeue(error)) {
+      this.logger.error(
+        `[${pattern}] Transient failure — requeueing | ${details} | error=${this.formatError(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      channel.nack(message, false, true);
+      return;
+    }
+
+    this.logger.warn(
+      `[${pattern}] Permanent failure — acknowledging | ${details} | error=${this.formatError(error)}`,
     );
-    this.ack(context);
+    channel.ack(message);
+  }
+
+  @EventPattern(EventPatterns.NOTIFICATION_IN_APP_CREATE)
+  async handleInAppCreate(
+    @Payload() data: WithMeta<InAppNotificationCreateEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[${EventPatterns.NOTIFICATION_IN_APP_CREATE}] Received | tenant=${data.tenantId} | recipient=${data.recipientUserId} | type=${data.type} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.inAppNotifications.create({
+        ...data,
+        eventId: data.eventId ?? data._meta?.messageId,
+      });
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        EventPatterns.NOTIFICATION_IN_APP_CREATE,
+        err,
+        `tenant=${data.tenantId} | recipient=${data.recipientUserId} | type=${data.type} | corrId=${data._meta?.correlationId}`,
+      );
+    }
   }
 
   @EventPattern('notification.email_verification')
@@ -343,6 +404,29 @@ export class NotificationHandler {
     }
   }
 
+  @EventPattern('notify.appraisal_cycle_started')
+  async handleAppraisalCycleStarted(
+    @Payload() data: WithMeta<AppraisalCycleStartedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.appraisal_cycle_started] Received | employeeEmail=${data.employeeEmail} | cycleId=${data.cycleId} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendAppraisalCycleStartedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.appraisal_cycle_started',
+        err,
+        `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
   @EventPattern('notify.appraisal_manager_reviewed')
   async handleAppraisalManagerReviewed(
     @Payload() data: WithMeta<AppraisalManagerReviewedEvent>,
@@ -557,6 +641,73 @@ export class NotificationHandler {
         'notify.shift_swap_expired',
         err,
         `shiftSwapId=${data.shiftSwapId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.announcement_published')
+  async handleAnnouncementPublished(
+    @Payload() data: WithMeta<AnnouncementPublishedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.announcement_published] Received | announcementId=${data.announcementId} | recipients=${data.recipients.length} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendAnnouncementPublishedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.announcement_published',
+        err,
+        `announcementId=${data.announcementId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.payroll_approval_requested')
+  async handlePayrollApprovalRequested(
+    @Payload() data: WithMeta<PayrollApprovalRequestedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.payroll_approval_requested] Received | payrollRunId=${data.payrollRunId} | recipients=${data.recipients.length} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendPayrollApprovalRequestedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.payroll_approval_requested',
+        err,
+        `payrollRunId=${data.payrollRunId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.payroll_decision')
+  async handlePayrollDecision(
+    @Payload() data: WithMeta<PayrollDecisionEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.payroll_decision] Received | payrollRunId=${data.payrollRunId} | decision=${data.decision} | recipients=${data.recipients.length} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendPayrollDecisionNotification(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.payroll_decision',
+        err,
+        `payrollRunId=${data.payrollRunId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }

@@ -31,4 +31,16 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({ example: '12 Independence Avenue, Accra' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  address?: string;
+
+  @ApiPropertyOptional({ example: 'GHS' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  currency?: string;
 }

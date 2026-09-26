@@ -1,17 +1,17 @@
 -- Ensure schema exists before creating enum/table objects in this namespace.
-CREATE SCHEMA IF NOT EXISTS "auth";
+CREATE SCHEMA IF NOT EXISTS "w_auth";
 
 -- CreateEnum
-CREATE TYPE "auth"."UserRole" AS ENUM ('SUPER_ADMIN', 'TENANT_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'EMPLOYEE', 'ACCOUNTANT', 'MARKETING_MANAGER', 'MARKETING_STAFF');
+CREATE TYPE "w_auth"."UserRole" AS ENUM ('SUPER_ADMIN', 'TENANT_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'EMPLOYEE', 'ACCOUNTANT', 'MARKETING_MANAGER', 'MARKETING_STAFF');
 
 -- CreateEnum
-CREATE TYPE "auth"."TenantStatus" AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED', 'CANCELLED');
+CREATE TYPE "w_auth"."TenantStatus" AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "auth"."UserStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION');
+CREATE TYPE "w_auth"."UserStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION');
 
 -- CreateTable
-CREATE TABLE "auth"."Tenant" (
+CREATE TABLE "w_auth"."Tenant" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE "auth"."Tenant" (
     "phone" TEXT,
     "address" TEXT,
     "country" TEXT NOT NULL DEFAULT 'GH',
-    "status" "auth"."TenantStatus" NOT NULL DEFAULT 'PENDING',
+    "status" "w_auth"."TenantStatus" NOT NULL DEFAULT 'PENDING',
     "logoUrl" TEXT,
     "website" TEXT,
     "industry" TEXT,
@@ -33,7 +33,7 @@ CREATE TABLE "auth"."Tenant" (
 );
 
 -- CreateTable
-CREATE TABLE "auth"."User" (
+CREATE TABLE "w_auth"."User" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -41,8 +41,8 @@ CREATE TABLE "auth"."User" (
     "firstName" TEXT NOT NULL,
     "lastName" TEXT NOT NULL,
     "phone" TEXT,
-    "role" "auth"."UserRole" NOT NULL DEFAULT 'EMPLOYEE',
-    "status" "auth"."UserStatus" NOT NULL DEFAULT 'PENDING_VERIFICATION',
+    "role" "w_auth"."UserRole" NOT NULL DEFAULT 'EMPLOYEE',
+    "status" "w_auth"."UserStatus" NOT NULL DEFAULT 'PENDING_VERIFICATION',
     "avatarUrl" TEXT,
     "isMfaEnabled" BOOLEAN NOT NULL DEFAULT false,
     "mfaSecret" TEXT,
@@ -56,7 +56,7 @@ CREATE TABLE "auth"."User" (
 );
 
 -- CreateTable
-CREATE TABLE "auth"."RefreshToken" (
+CREATE TABLE "w_auth"."RefreshToken" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "token" TEXT NOT NULL,
@@ -70,19 +70,19 @@ CREATE TABLE "auth"."RefreshToken" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Tenant_slug_key" ON "auth"."Tenant"("slug");
+CREATE UNIQUE INDEX "Tenant_slug_key" ON "w_auth"."Tenant"("slug");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Tenant_email_key" ON "auth"."Tenant"("email");
+CREATE UNIQUE INDEX "Tenant_email_key" ON "w_auth"."Tenant"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_tenantId_email_key" ON "auth"."User"("tenantId", "email");
+CREATE UNIQUE INDEX "User_tenantId_email_key" ON "w_auth"."User"("tenantId", "email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "RefreshToken_token_key" ON "auth"."RefreshToken"("token");
+CREATE UNIQUE INDEX "RefreshToken_token_key" ON "w_auth"."RefreshToken"("token");
 
 -- AddForeignKey
-ALTER TABLE "auth"."User" ADD CONSTRAINT "User_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "auth"."Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."User" ADD CONSTRAINT "User_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "w_auth"."Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."RefreshToken" ADD CONSTRAINT "RefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "auth"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."RefreshToken" ADD CONSTRAINT "RefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "w_auth"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

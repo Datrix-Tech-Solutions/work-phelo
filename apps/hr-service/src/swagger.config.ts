@@ -13,9 +13,9 @@ Handles all HR operations: employees, departments, leave, time tracking, payroll
 ### Base URL
 All requests go through the API Gateway at /api/v1/hr/...
 
-**Example (dev):** GET https://dev.workphelo.datrixtechsolutions.com/api/v1/hr/dashboard/summary
+**Example (dev):** GET https://dev-api.workphelo.com/api/v1/hr/dashboard/summary
 
-**Example (prod):** GET https://workphelo.datrixtechsolutions.com/api/v1/hr/dashboard/summary
+**Example (prod):** GET https://api.workphelo.com/api/v1/hr/dashboard/summary
 
 ### How to Authenticate in Swagger
 1. Login via POST /auth/login using your tenant credentials
@@ -74,8 +74,9 @@ All endpoints require a valid JWT token via:
 - **Bearer token**: \`Authorization: Bearer <token>\`
 
 ### Ghana Payroll Calculations
-- **SSNIT**: 5.5% employee, 13% employer contribution
-- **PAYE**: Ghana Revenue Authority 2024 tax bands
+- **Tier 1**: 0.5% employee, 13% employer contribution
+- **Tier 2**: 5% employee contribution on basic salary
+- **PAYE**: configured Ghana Revenue Authority tax bands
 - All monetary values use Decimal precision (no floating point)
 
 ### Response Format
@@ -89,15 +90,16 @@ All endpoints require a valid JWT token via:
     )
     .setVersion('1.0')
     .addServer(
-      'https://dev.workphelo.datrixtechsolutions.com/api/v1/hr',
+      'https://dev-api.workphelo.com/api/v1/hr',
       'Dev (via API Gateway)',
     )
     .addServer(
-      'https://workphelo.datrixtechsolutions.com/api/v1/hr',
+      'https://api.workphelo.com/api/v1/hr',
       'Production (via API Gateway)',
     )
     .addTag('Departments', 'Department management')
     .addTag('Employees', 'Employee profiles and documents')
+    .addTag('Imports', 'CSV import dry-runs and validation results')
     .addTag('Leave', 'Leave types, balances, requests and approvals')
     .addTag('Time', 'Clock-in/out, timesheets, corrections, schedules')
     .addTag('Payroll', 'Payroll processing with Ghana GRA calculations')
@@ -120,6 +122,7 @@ All endpoints require a valid JWT token via:
     swaggerOptions: {
       persistAuthorization: true,
       tagsSorter: 'alpha',
+      url: 'docs-json',
     },
   });
 

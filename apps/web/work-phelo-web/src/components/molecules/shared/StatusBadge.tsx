@@ -10,6 +10,8 @@ const statusMap: Record<
 > = {
   // Employee / tenant statuses
   ACTIVE: { label: 'Active', variant: 'success' },
+  ERROR: { label: 'Error', variant: 'danger' },
+  DISCONNECTED: { label: 'Disconnected', variant: 'neutral' },
   PENDING: { label: 'Pending', variant: 'warning' },
   PENDING_VERIFICATION: { label: 'Pending', variant: 'warning' },
   SUSPENDED: { label: 'Suspended', variant: 'danger' },

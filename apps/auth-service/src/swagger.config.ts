@@ -13,9 +13,9 @@ Handles all authentication, user management, tenant management, and RBAC.
 ### Base URL
 All requests go through the API Gateway at /api/v1/auth/...
 
-**Example (dev):** POST https://dev.workphelo.datrixtechsolutions.com/api/v1/auth/login
+**Example (dev):** POST https://dev-api.workphelo.com/api/v1/auth/login
 
-**Example (prod):** POST https://workphelo.datrixtechsolutions.com/api/v1/auth/login
+**Example (prod):** POST https://api.workphelo.com/api/v1/auth/login
 
 ### Sprint 1 — Key Flows
 
@@ -63,15 +63,19 @@ Use seeded local test accounts or your own tenant credentials. Avoid publishing 
     )
     .setVersion('1.0')
     .addServer(
-      'https://dev.workphelo.datrixtechsolutions.com/api/v1/auth',
+      'https://dev-api.workphelo.com/api/v1/auth',
       'Dev (via API Gateway)',
     )
     .addServer(
-      'https://workphelo.datrixtechsolutions.com/api/v1/auth',
+      'https://api.workphelo.com/api/v1/auth',
       'Production (via API Gateway)',
     )
     .addTag('Auth', 'Login, logout, token refresh, MFA, social auth')
     .addTag('Tenants', 'Tenant registration and management')
+    .addTag(
+      'Tenant Document Profile',
+      'Private document identity, branding assets, signatories and bank accounts',
+    )
     .addTag('Users', 'User management and invitations')
     .addTag('Company Roles', 'Company role management')
     .addTag('Permissions', 'Permission grants and revokes')
@@ -93,6 +97,7 @@ Use seeded local test accounts or your own tenant credentials. Avoid publishing 
     swaggerOptions: {
       persistAuthorization: true,
       tagsSorter: 'alpha',
+      url: 'docs-json',
     },
   });
 

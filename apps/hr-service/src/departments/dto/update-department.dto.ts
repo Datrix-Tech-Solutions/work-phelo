@@ -35,6 +35,14 @@ export class UpdateDepartmentDto {
   parentId?: string;
 
   @ApiPropertyOptional({
+    description: 'Updated branch ID this department belongs to',
+    example: 'branch-123',
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @ApiPropertyOptional({
     description: 'Set department active status',
     example: true,
   })

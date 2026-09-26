@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Tenant, RegisterTenantPayload } from '@/types/tenant';
+import { Tenant, RegisterTenantPayload, AuditData } from '@/types/tenant';
 
 export function useTenants() {
   return useQuery({
@@ -99,8 +99,8 @@ export function useAssignAdmin() {
 
 export function useResendInvite() {
   return useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await api.post(`/auth/users/${userId}/resend-invite`);
+    mutationFn: async (tenantId: string) => {
+      const res = await api.post(`/auth/tenants/${tenantId}/admin/resend-invite`);
       return res.data;
     },
   });
@@ -139,6 +139,14 @@ export function useTenantAudit(id: string) {
   });
 }
 
+export function useAuditLogs(page = 1) {
+  return useQuery({
+    queryKey: ['audit-logs', page],
+    queryFn: () =>
+      api.get<AuditData>('/auth/audit', { params: { page, limit: 10 } }).then((r) => r.data),
+  });
+}
+
 export function useUpdateTenant(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -163,6 +171,113 @@ export function useUpdateTenantAdmin(id: string) {
       api.patch(`/auth/tenants/${id}/admin`, payload).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant-users', id] });
+    },
+  });
+}
+
+export type TenantBrandingAssetType = 'app-logo' | 'sidebar-logo' | 'login-logo' | 'favicon';
+
+export interface TenantBrandingAsset {
+  mimeType: string | null;
+  fileName: string | null;
+  sizeBytes: number | null;
+  readUrl: string | null;
+  readUrlExpiresAt: string | null;
+}
+
+export interface TenantBranding {
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+  appName: string;
+  themeMode: 'LIGHT' | 'DARK' | 'SYSTEM';
+  appLogo: TenantBrandingAsset;
+  sidebarLogo: TenantBrandingAsset;
+  loginLogo: TenantBrandingAsset;
+  favicon: TenantBrandingAsset;
+  logoDisplayUrl: string | null;
+  faviconDisplayUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  sidebarColor: string;
+  emailHeaderColor: string;
+  documentHeaderColor: string;
+  defaultsApplied: boolean;
+}
+
+export function useTenantBranding(tenantId: string) {
+  return useQuery({
+    queryKey: ['tenant-branding', tenantId],
+    queryFn: () =>
+      api.get<TenantBranding>(`/auth/tenants/${tenantId}/branding`).then((r) => r.data),
+    enabled: !!tenantId,
+  });
+}
+
+export interface PublicTenantBranding {
+  tenantSlug: string;
+  tenantName: string;
+  appName: string;
+  themeMode: 'LIGHT' | 'DARK' | 'SYSTEM';
+  appLogoUrl: string | null;
+  sidebarLogoUrl: string | null;
+  loginLogoUrl: string | null;
+  faviconUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  sidebarColor: string;
+  emailHeaderColor: string;
+  documentHeaderColor: string;
+  defaultsApplied: boolean;
+}
+
+// Public, unauthenticated bootstrap endpoint — safe for any tenant user regardless of role.
+export function usePublicTenantBranding(tenantSlug?: string) {
+  return useQuery({
+    queryKey: ['tenant-branding-public', tenantSlug],
+    queryFn: () =>
+      api
+        .get<PublicTenantBranding>(`/auth/tenants/slug/${tenantSlug}/branding`)
+        .then((r) => r.data),
+    enabled: !!tenantSlug,
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateTenantBranding(tenantId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      primaryColor?: string | null;
+      secondaryColor?: string | null;
+      accentColor?: string | null;
+      sidebarColor?: string | null;
+      emailHeaderColor?: string | null;
+      documentHeaderColor?: string | null;
+    }) => api.patch(`/auth/tenants/${tenantId}/branding`, payload).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenant-branding', tenantId] });
+    },
+  });
+}
+
+export function useUploadTenantBrandingAsset(tenantId: string, assetType: TenantBrandingAssetType) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return api
+        .post<TenantBranding>(`/auth/tenants/${tenantId}/branding/assets/${assetType}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        .then((r) => r.data);
+    },
+    onSuccess: (branding) => {
+      queryClient.setQueryData(['tenant-branding', tenantId], branding);
+      queryClient.invalidateQueries({ queryKey: ['tenant-branding', tenantId] });
     },
   });
 }

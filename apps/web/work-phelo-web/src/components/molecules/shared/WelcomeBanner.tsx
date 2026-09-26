@@ -45,7 +45,7 @@ export function WelcomeBanner({ userName, companyName, stats, className }: Welco
         'w-full rounded-input px-6 py-4 flex items-center justify-between gap-6 overflow-hidden',
         className,
       )}
-      style={{ background: 'linear-gradient(to right, #0D1F44, #1E3A8A)' }}
+      style={{ background: 'linear-gradient(to right, var(--brand), var(--brand-gradient-end))' }}
     >
       <div className="flex flex-col gap-0.5">
         {companyName && (

@@ -2,16 +2,21 @@
 
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
+import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
-import { Sidebar } from '@/components/organisms/shared/Sidebar';
-import { HR_NAV_GROUPS } from '@/config/hr-nav';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
-import { usePermission } from '@/hooks/usePermission';
+import { HrSidebar } from '@/components/organisms/shared/HrSidebar';
+import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
+import { usePermission } from '@/hooks/hr/usePermission';
+import { useModuleThemeScope } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
-import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
-import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';
+import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
+import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
+import { LeaveReminderModal } from '@/components/organisms/hr/leave/LeaveReminderModal';
+import { TimeCorrectionReminderModal } from '@/components/organisms/hr/time-clock/TimeCorrectionReminderModal';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function HRLayout({
   children,
@@ -21,129 +26,57 @@ export default function HRLayout({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  const pathname = usePathname();
+  useModuleThemeScope('hr');
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
-  const [collapsed, setCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState('portal');
-
-  const { hasAnyManagementAccess } = useHrManagementAccess();
-  const canReadDepartments = usePermission(Permission.READ_DEPARTMENTS);
-  const canReadBranches = usePermission(Permission.READ_BRANCHES);
-  const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
-  const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
-  const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
-  const canReadAllLeaves = usePermission(Permission.READ_ALL_LEAVES);
-  const canRequestLeave = usePermission(Permission.REQUEST_LEAVE);
   const canApproveLeave = usePermission(Permission.APPROVE_LEAVE);
-  const canReadOwnReview = usePermission(Permission.READ_OWN_REVIEW);
-  const canReadAppraisals = usePermission(Permission.READ_APPRAISALS);
-  const canSubmitSelfAssessment = usePermission(Permission.SUBMIT_SELF_ASSESSMENT);
   const canSubmitManagerReview = usePermission(Permission.SUBMIT_MANAGER_REVIEW);
-  const canConfigureAppraisal = usePermission(Permission.CONFIGURE_APPRAISAL);
-  const canClockInOut = usePermission(Permission.CLOCK_IN_OUT);
-  const canReadAttendance = usePermission(Permission.READ_ATTENDANCE);
-  const canSubmitTimeCorrection = usePermission(Permission.SUBMIT_TIME_CORRECTION);
   const canApproveTimeCorrection = usePermission(Permission.APPROVE_TIME_CORRECTION);
-  const canReadSchedules = usePermission(Permission.READ_SCHEDULES);
-  const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
-  const canApproveShiftSwap = usePermission(Permission.APPROVE_SHIFT_SWAP);
-  const canReadProjects = usePermission(Permission.READ_PROJECTS);
-  const canCreateProject = usePermission(Permission.CREATE_PROJECT);
-  const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
-  const canAssignProject = usePermission(Permission.ASSIGN_PROJECT);
-  const canReadOwnPayslip = usePermission(Permission.READ_OWN_PAYSLIP);
-  const canReadPayroll = usePermission(Permission.READ_PAYROLL);
-  const canRunPayroll = usePermission(Permission.RUN_PAYROLL);
-  const canApprovePayroll = usePermission(Permission.APPROVE_PAYROLL);
-  const canManagePayrollSettings = usePermission(Permission.MANAGE_PAYROLL_SETTINGS);
-  const canReadAssets = usePermission(Permission.READ_ASSETS);
-  const canManageAssets = usePermission(Permission.MANAGE_ASSETS);
-  const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
-  const canAccessLeave = canReadOwnLeave || canReadAllLeaves || canRequestLeave || canApproveLeave;
-  const canAccessAppraisal =
-    canReadOwnReview ||
-    canReadAppraisals ||
-    canSubmitSelfAssessment ||
-    canSubmitManagerReview ||
-    canConfigureAppraisal;
-  const canAccessTimeClock =
-    canClockInOut || canReadAttendance || canSubmitTimeCorrection || canApproveTimeCorrection;
-  const canAccessScheduling = canReadSchedules || canManageSchedules || canApproveShiftSwap;
-  const canAccessProjects =
-    canReadProjects || canCreateProject || canUpdateProject || canAssignProject;
-  const canAccessPayroll =
-    canReadOwnPayslip ||
-    canReadPayroll ||
-    canRunPayroll ||
-    canApprovePayroll ||
-    canManagePayrollSettings;
-  const canAccessAssets = canReadAssets || canManageAssets || canAssignAsset;
+  const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
 
-  // Feature toggles from the user's tenant config
-  const hrFeatures = user?.featureConfig?.hr ?? {};
+  // Remember that HR has been visited so other modules can show a parked,
+  // icon-only HR rail alongside their own sidebar.
+  const markHrVisited = useNavRailStore((s) => s.markHrVisited);
+  useEffect(() => {
+    markHrVisited();
+  }, [markHrVisited]);
 
-  // Only dashboard and management are always active (no toggle exists for them)
-  const coreKeys = new Set(['dashboard', 'management']);
-  const navAccess: Record<string, boolean> = {
-    dashboard: true,
-    departments: canReadDepartments,
-    branches: canReadBranches,
-    employees: canReadEmployees || canReadOwnProfile,
-    leave: canAccessLeave,
-    appraisal: canAccessAppraisal,
-    timeclock: canAccessTimeClock,
-    scheduling: canAccessScheduling,
-    projects: canAccessProjects,
-    payroll: canAccessPayroll,
-    assets: canAccessAssets,
-    management: hasAnyManagementAccess,
-  };
+  const groups = useHrSidebarGroups(tenantSlug, 'hr');
 
-  const groups = HR_NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.map((item) => ({
-      ...item,
-      href: `/${tenantSlug}/hr${item.href ? `/${item.href}` : ''}`,
-      enabled: item.enabled !== false && (navAccess[item.key] ?? true),
-      active: coreKeys.has(item.key)
-        ? true
-        : item.key in hrFeatures
-          ? hrFeatures[item.key]
-          : item.active,
-    })),
-  }));
-  // const groups = HR_NAV_GROUPS.map((group) => ({
-  //   ...group,
-  //   items: group.items.map((item) => ({
-  //     ...item,
-  //     href: `/${tenantSlug}/hr${item.href ? `/${item.href}` : ''}`,
-  //     active: coreKeys.has(item.key)
-  //       ? true
-  //       : item.key in hrFeatures
-  //         ? hrFeatures[item.key]
-  //         : item.active,
-  //   })),
-  // }));
+  // Lets the sidebar be pinned open via TopNav's menu button, for anyone who
+  // doesn't want to rely on hover to see it expanded.
+  const [pinned, setPinned] = useState(false);
+
+  // Payroll, Appraisal and Leave each have their own dedicated navigation now
+  // (their own layout.tsx), same pattern as Accounting/Operations — hand off
+  // chrome entirely instead of nesting HR's sidebar/TopNav around them.
+  const SELF_CONTAINED_SECTIONS = ['payroll', 'appraisal', 'leave'];
+  if (
+    SELF_CONTAINED_SECTIONS.some((section) => pathname.startsWith(`/${tenantSlug}/hr/${section}`))
+  ) {
+    return <>{children}</>;
+  }
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+    <AppBackground className="h-dvh overflow-hidden flex flex-col layout-hr">
       <TopNav
         showMenuButton
-        onMenuClick={() => setCollapsed((v) => !v)}
+        onMenuClick={() => setPinned((v) => !v)}
         userInitials={initials}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        notificationCount={0}
+        logoVariant="image"
       />
-      <div className="flex flex-1 min-h-0">
-        <Sidebar groups={groups} collapsed={collapsed} />
-        <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
+      <div className="flex flex-1 min-h-0 relative">
+        <HrSidebar groups={groups} forceOpen={pinned} onRequestClose={() => setPinned(false)} />
+        <main className="flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col">{children}</main>
       </div>
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
-    </div>
+      {canApproveTimeCorrection && <TimeCorrectionReminderModal tenantSlug={tenantSlug} />}
+      {canReadOwnProfile && <AgreementGate />}
+    </AppBackground>
   );
 }

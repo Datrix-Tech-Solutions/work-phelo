@@ -2,12 +2,12 @@
 
 import { useForm, useWatch } from 'react-hook-form';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AppLogo } from '@/components/atoms/AppLogo';
 import { useResetPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { cn } from '@/lib/utils';
 import { extractError } from '@/lib/extractError';
+import { AuthCard } from '@/components/organisms/login/AuthCard';
 
 interface ResetPasswordForm {
   password: string;
@@ -64,19 +64,15 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
   };
 
   return (
-    <div className="w-full max-w-sm px-8 py-10">
-      <div className="flex justify-center mb-6">
-        <AppLogo />
-      </div>
-
-      <h1 className="text-2xl font-semibold text-gray-900 text-center mb-2">
-        Set Your New Password
-      </h1>
-      <p className="text-sm text-gray-500 text-center mb-6">
-        For security reasons, you must create a new password before accessing your workspace.
-      </p>
-
-      <form onSubmit={handleSubmit(handleReset)} className="flex flex-col gap-4">
+    <AuthCard
+      title="Set Your New Password"
+      tenantSlug={tenantSlug}
+      subtitle="For security reasons, you must create a new password before accessing your workspace."
+    >
+      <form
+        onSubmit={handleSubmit(handleReset)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <div>
           <FormField
             label="Password"
@@ -92,7 +88,7 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
                 key={label}
                 className={cn(
                   'flex items-center gap-1.5 text-xs',
-                  test(password) ? 'text-green-600' : 'text-gray-400',
+                  test(password) ? 'text-green-500' : 'text-foreground/55',
                 )}
               >
                 <span>{test(password) ? '✓' : '✗'}</span>
@@ -124,6 +120,6 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
           Update Password
         </Button>
       </form>
-    </div>
+    </AuthCard>
   );
 }

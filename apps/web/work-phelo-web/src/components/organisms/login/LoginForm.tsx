@@ -4,14 +4,12 @@ import { useForm } from 'react-hook-form';
 import { extractError } from '@/lib/extractError';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { AppLogo } from '@/components/atoms/AppLogo';
 import { LoginPayload } from '@/types/auth';
 import { useLogin, useSuperAdminLogin } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import { Button } from '@/components/atoms/Button';
-// import { GoogleButton } from '@/components/atoms/GoogleButton';
-// import { MicrosoftButton } from '@/components/atoms/MicrosoftButton';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { AuthCard } from '@/components/organisms/login/AuthCard';
 
 interface LoginFormProps {
   showSocialLogin?: boolean;
@@ -21,7 +19,6 @@ interface LoginFormProps {
 }
 
 export function LoginForm({
-  // showSocialLogin = false,
   tenantSlug,
   forgotPasswordHref = '/forgot-password',
   redirectTo = '/dashboard',
@@ -43,7 +40,7 @@ export function LoginForm({
 
   const onSubmit = (data: LoginPayload) => {
     const onSuccess = () => {
-      const destination = isTenantLogin ? `/${tenantSlug}/dashboard` : (redirectTo ?? '/dashboard');
+      const destination = isTenantLogin ? `/${tenantSlug}/hr` : (redirectTo ?? '/dashboard');
       router.push(destination);
     };
     const onError = (err: unknown) => {
@@ -58,14 +55,11 @@ export function LoginForm({
   };
 
   return (
-    <div className="w-full max-w-sm px-8 py-10">
-      <div className="flex justify-center mb-6">
-        <AppLogo />
-      </div>
-
-      <h1 className="text-2xl font-semibold text-gray-900 text-center mb-6">Sign in</h1>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <AuthCard title="Sign in" tenantSlug={tenantSlug}>
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <FormField
           label="Email"
           registration={register('email', { required: 'Email is required' })}
@@ -85,7 +79,7 @@ export function LoginForm({
           <div className="flex justify-end">
             <Link
               href={forgotPasswordHref}
-              className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
+              className="text-xs text-foreground/60 hover:text-foreground transition-colors"
             >
               Forgot your Password?
             </Link>
@@ -101,20 +95,6 @@ export function LoginForm({
           Sign in
         </Button>
       </form>
-
-      {/* {showSocialLogin && (
-        <>
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400">Sign in with</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
-          <div className="flex gap-3">
-            <GoogleButton className="flex-1" />
-            <MicrosoftButton className="flex-1" />
-          </div>
-        </>
-      )} */}
-    </div>
+    </AuthCard>
   );
 }

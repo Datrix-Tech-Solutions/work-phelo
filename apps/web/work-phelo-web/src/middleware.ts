@@ -5,6 +5,7 @@ const PUBLIC_ROUTES = ['/login', '/platform/login'];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const accessToken = request.cookies.get('access_token')?.value;
+  const refreshToken = request.cookies.get('refresh_token')?.value;
 
   // Allow public routes
   if (PUBLIC_ROUTES.some((r) => pathname.endsWith(r))) {
@@ -27,7 +28,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Redirect to login if no token
-  if (!accessToken) {
+  if (!accessToken && !refreshToken) {
     let loginPath = '/login';
 
     if (pathname.startsWith('/platform')) {

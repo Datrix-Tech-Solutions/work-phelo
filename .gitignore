@@ -40,12 +40,26 @@ Thumbs.db
 
 # Prisma generated
 prisma/migrations/
+# Compiled seed files (generated during build, not needed in repo)
+prisma/seed.js
+prisma/seed.d.ts*
+prisma/seed-resources.js
+prisma/seed-resources.d.ts*
 
 # Test coverage
 coverage/
-apps/*/test/
 **/*.spec.ts
+# Allow committed unit specs in service src/ directories
+!apps/*/src/**/*.spec.ts
+# Allow Jest configs and unit specs in test/ directories
+!apps/*/test/jest.unit.config.js
+!apps/*/test/jest.integration.config.js
+!apps/*/test/setup/**
+!apps/*/test/unit/**/*.spec.ts
+# Keep e2e and integration specs local — they require a live database
 **/*.e2e-spec.ts
+apps/*/test/integration/
+apps/*/test/e2e/
 prisma/generated/
 packages/*/src/*.js
 packages/*/src/*.js.map
@@ -60,9 +74,11 @@ HOME
 # Local UI specs / design references
 roles-ui-spec/
 
-# Local docs drafts
+# Local-only docs directories
 docs/
+**/docs/
 
 .compose.local.env
 .env.dev
 
+data_masking.md

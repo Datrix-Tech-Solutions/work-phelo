@@ -1,9 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
+import { AnnouncementsService } from '../announcements/announcements.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AvatarUrlResolverService } from '../common/avatar-url-resolver.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly announcementsService: AnnouncementsService,
+    private readonly avatarUrlResolver: AvatarUrlResolverService,
+  ) {}
 
   async getSummary(
     tenantId: string,
@@ -50,10 +57,10 @@ export class DashboardService {
     };
   }
 
-  async getEmployeeDashboard(tenantId: string, userId: string) {
+  async getEmployeeDashboard(tenantId: string, actor: RequestUser) {
     // Get employee profile
     const employee = await this.prisma.employee.findFirst({
-      where: { userId, tenantId },
+      where: { userId: actor.id, tenantId },
       include: { department: true },
     });
 
@@ -106,20 +113,14 @@ export class DashboardService {
       : 0;
 
     // Get last 3 announcements
-    const announcements = await this.prisma.announcement.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: 3,
-      select: {
-        id: true,
-        title: true,
-        body: true,
-        createdAt: true,
-      },
-    });
+    const announcements =
+      await this.announcementsService.findVisibleForDashboard(tenantId, actor);
 
     const isProfileIncomplete =
       employee && (!employee.jobTitle || !employee.departmentId);
+    const resolvedAvatarUrl = await this.avatarUrlResolver.resolve(
+      employee?.avatarUrl,
+    );
 
     return {
       profile: {
@@ -128,7 +129,7 @@ export class DashboardService {
           : 'Name not set',
         jobTitle: employee?.jobTitle ?? 'No title assigned',
         department: employee?.department?.name ?? 'No department assigned',
-        avatarUrl: employee?.avatarUrl ?? null,
+        avatarUrl: resolvedAvatarUrl,
         isProfileIncomplete: !!isProfileIncomplete,
       },
       attendance: {
@@ -161,7 +162,9 @@ export class DashboardService {
         title: a.title,
         preview: a.body.substring(0, 100),
         body: a.body,
-        publishedAt: a.createdAt,
+        publishedAt: a.publishedAt,
+        isRead: a.isRead,
+        readAt: a.readAt,
       })),
     };
   }
@@ -240,9 +243,6 @@ export class DashboardService {
       },
     });
 
-    const todayMonth = today.getMonth();
-    const todayDay = today.getDate();
-
     const upcoming = employees
       .filter((e) => {
         if (!e.dateOfBirth) return false;
@@ -281,7 +281,16 @@ export class DashboardService {
       )
       .slice(0, 5);
 
-    return { birthdays: upcoming };
+    const avatarUrls = await this.avatarUrlResolver.resolveMany(
+      upcoming.map((e) => e.avatarUrl),
+    );
+
+    return {
+      birthdays: upcoming.map((e, index) => ({
+        ...e,
+        avatarUrl: avatarUrls[index],
+      })),
+    };
   }
 
   async getRecentlyAdded(tenantId: string) {
@@ -300,14 +309,18 @@ export class DashboardService {
       },
     });
 
+    const avatarUrls = await this.avatarUrlResolver.resolveMany(
+      employees.map((e) => e.avatarUrl),
+    );
+
     return {
-      employees: employees.map((e) => ({
+      employees: employees.map((e, index) => ({
         id: e.id,
         name: `${e.firstName} ${e.lastName}`,
         jobTitle: e.jobTitle,
         department: e.department?.name ?? 'No department',
         dateAdded: e.createdAt,
-        avatarUrl: e.avatarUrl,
+        avatarUrl: avatarUrls[index],
       })),
     };
   }

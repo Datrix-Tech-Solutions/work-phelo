@@ -29,6 +29,8 @@ import {
   hasPermissionRule,
   isCompanyAdminUser,
 } from '../auth/access-scope';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
 import { AssignAssetDto } from './dto/assign-asset.dto';
@@ -41,7 +43,7 @@ import { AssignAssetDto } from './dto/assign-asset.dto';
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
 
-  private assertAssetReadAccess(user: any) {
+  private assertAssetReadAccess(user: RequestUser) {
     assertHrAccess(
       isCompanyAdminUser(user) ||
         hasPermissionRule(user, 'assets:VIEW') ||
@@ -54,7 +56,7 @@ export class AssetsController {
   @Get()
   @ApiOperation({ summary: 'List tenant assets' })
   @ApiResponse({ status: 200, description: 'Assets retrieved successfully' })
-  findAll(@Req() req: any) {
+  findAll(@Req() req: Request & { user: RequestUser }) {
     this.assertAssetReadAccess(req.user);
     return this.assetsService.findAll(req.user.tenantId);
   }
@@ -65,7 +67,7 @@ export class AssetsController {
     status: 200,
     description: 'Available assets retrieved successfully',
   })
-  findAvailable(@Req() req: any) {
+  findAvailable(@Req() req: Request & { user: RequestUser }) {
     this.assertAssetReadAccess(req.user);
     return this.assetsService.findAvailable(req.user.tenantId);
   }
@@ -74,7 +76,10 @@ export class AssetsController {
   @ApiOperation({ summary: 'Get a single asset by ID' })
   @ApiParam({ name: 'id', description: 'Asset UUID' })
   @ApiResponse({ status: 200, description: 'Asset retrieved successfully' })
-  findOne(@Param('id') id: string, @Req() req: any) {
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     this.assertAssetReadAccess(req.user);
     return this.assetsService.findById(req.user.tenantId, id);
   }
@@ -84,7 +89,10 @@ export class AssetsController {
   @ApiOperation({ summary: 'Register a new asset' })
   @ApiBody({ type: CreateAssetDto })
   @ApiResponse({ status: 201, description: 'Asset created successfully' })
-  create(@Body() dto: CreateAssetDto, @Req() req: any) {
+  create(
+    @Body() dto: CreateAssetDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.assetsService.create(req.user.tenantId, dto);
   }
 
@@ -97,7 +105,7 @@ export class AssetsController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateAssetDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.assetsService.update(req.user.tenantId, id, dto);
   }
@@ -111,7 +119,7 @@ export class AssetsController {
   assign(
     @Param('id') id: string,
     @Body() dto: AssignAssetDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.assetsService.assign(req.user.tenantId, id, dto.employeeId);
   }
@@ -121,7 +129,10 @@ export class AssetsController {
   @ApiOperation({ summary: 'Unassign an asset from its current employee' })
   @ApiParam({ name: 'id', description: 'Asset UUID' })
   @ApiResponse({ status: 200, description: 'Asset unassigned successfully' })
-  unassign(@Param('id') id: string, @Req() req: any) {
+  unassign(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.assetsService.unassign(req.user.tenantId, id);
   }
 
@@ -130,7 +141,7 @@ export class AssetsController {
   @ApiOperation({ summary: 'Retire an asset from active use' })
   @ApiParam({ name: 'id', description: 'Asset UUID' })
   @ApiResponse({ status: 200, description: 'Asset retired successfully' })
-  retire(@Param('id') id: string, @Req() req: any) {
+  retire(@Param('id') id: string, @Req() req: Request & { user: RequestUser }) {
     return this.assetsService.retire(req.user.tenantId, id);
   }
 
@@ -139,7 +150,7 @@ export class AssetsController {
   @ApiOperation({ summary: 'Delete an unassigned asset' })
   @ApiParam({ name: 'id', description: 'Asset UUID' })
   @ApiResponse({ status: 200, description: 'Asset deleted successfully' })
-  remove(@Param('id') id: string, @Req() req: any) {
+  remove(@Param('id') id: string, @Req() req: Request & { user: RequestUser }) {
     return this.assetsService.remove(req.user.tenantId, id);
   }
 }

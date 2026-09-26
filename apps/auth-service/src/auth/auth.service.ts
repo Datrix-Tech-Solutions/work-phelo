@@ -27,6 +27,7 @@ import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { RequestUser } from '@work-phelo/types';
 import { generateSecureToken } from '../common/otp.helper';
+import { normalizeEmail } from '../common/email.helper';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
@@ -42,41 +43,6 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
-  private async resolveEffectivePermissions(
-    userId: string,
-    tenantId: string,
-    role: string,
-  ): Promise<string[]> {
-    if (role !== 'EMPLOYEE') return [];
-
-    const [allDirectPerms, setAssignments] = await Promise.all([
-      this.prisma.userPermission.findMany({
-        where: { tenantId, userId },
-        include: { resource: true },
-      }),
-      this.prisma.userPermissionSet.findMany({
-        where: { userId },
-        include: {
-          permissionSet: {
-            include: { resources: { include: { resource: true } } },
-          },
-        },
-      }),
-    ]);
-
-    const direct = allDirectPerms
-      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-      .map((p) => `${p.resource.name}:${p.action}`);
-
-    const fromSets = setAssignments.flatMap((a) =>
-      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-    );
-
-    // Revoked direct permissions remain as audit history, but they do not act
-    // as hard denies against permissions granted via roles or permission sets.
-    return [...new Set([...direct, ...fromSets])];
-  }
-
   signAccessToken(user: RequestUser): string {
     return this.jwtService.sign(
       {
@@ -89,19 +55,32 @@ export class AuthService {
         firstName: user.firstName,
         moduleConfig: user.moduleConfig,
         featureConfig: user.featureConfig,
-        permissions: user.permissions ?? [],
+        integrationConfig: user.integrationConfig,
+        // Permissions omitted — gateway fetches them from /me on each request,
+        // keeping the JWT small regardless of how many permissions a user holds.
       },
       { expiresIn: '15m' },
     );
   }
 
   // ── Token Generation ────────────────────────────────────────────────────
-  private async generateTokens(user: any, tenant: any) {
-    const permissions = await this.resolveEffectivePermissions(
-      user.id,
-      tenant.id,
-      user.role,
-    );
+  private async generateTokens(
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      tenantId: string;
+      firstName: string;
+    },
+    tenant: {
+      id: string;
+      slug: string;
+      name: string;
+      moduleConfig: unknown;
+      featureConfig: unknown;
+      integrationConfig: unknown;
+    },
+  ) {
     const payload = {
       sub: user.id,
       email: user.email,
@@ -117,12 +96,14 @@ export class AuthService {
       },
       featureConfig:
         (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
-      permissions,
+      integrationConfig:
+        (tenant.integrationConfig as Record<string, boolean>) ?? {},
+      // Permissions omitted — gateway fetches them from /me on each request.
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
       { sub: user.id, type: 'refresh', jti: randomUUID() },
-      { expiresIn: '7d' },
+      { expiresIn: '8h' },
     );
     return { accessToken, refreshToken };
   }
@@ -136,14 +117,14 @@ export class AuthService {
     await this.prisma.refreshToken.upsert({
       where: { token },
       update: {
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
         ipAddress,
         userAgent,
       },
       create: {
         userId,
         token,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
         ipAddress,
         userAgent,
       },
@@ -188,7 +169,7 @@ export class AuthService {
     });
   }
 
-  private checkLockout(user: any) {
+  private checkLockout(user: { lockedUntil: Date | null }) {
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       const minutesLeft = Math.ceil(
         (user.lockedUntil.getTime() - Date.now()) / (1000 * 60),
@@ -201,6 +182,7 @@ export class AuthService {
 
   // ── Login ───────────────────────────────────────────────────────────────
   async login(dto: LoginDto, ipAddress?: string, userAgent?: string) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
     });
@@ -209,12 +191,21 @@ export class AuthService {
       throw new ForbiddenException('Tenant account is not active');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
 
-    if (!user || !user.password) {
+    if (!user) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.password) {
+      throw new ForbiddenException(
+        'Please accept your invite and set your password first.',
+      );
     }
 
     // Check lockout before verifying password
@@ -297,6 +288,8 @@ export class AuthService {
         featureConfig:
           (tenant.featureConfig as Record<string, Record<string, boolean>>) ??
           {},
+        integrationConfig:
+          (tenant.integrationConfig as Record<string, boolean>) ?? {},
       },
     };
   }
@@ -307,8 +300,12 @@ export class AuthService {
     ipAddress?: string,
     userAgent?: string,
   ) {
+    const normalizedEmail = normalizeEmail(email);
     const user = await this.prisma.user.findFirst({
-      where: { email, role: 'SUPER_ADMIN' },
+      where: {
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+        role: 'SUPER_ADMIN',
+      },
       include: { tenant: true },
     });
 
@@ -359,13 +356,17 @@ export class AuthService {
 
   // ── Email Verification ──────────────────────────────────────────────────
   async verifyEmail(dto: VerifyEmailDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
     if (!user) throw new NotFoundException('User not found');
 
@@ -395,6 +396,7 @@ export class AuthService {
   }
 
   async resendVerification(dto: ResendVerificationDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
     });
@@ -405,7 +407,10 @@ export class AuthService {
       };
 
     const user = await this.prisma.user.findFirst({
-      where: { tenantId: tenant.id, email: dto.email },
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
       include: { tenant: true },
     });
     if (!user)
@@ -457,6 +462,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
+    if (
+      storedToken.user.status !== 'ACTIVE' ||
+      storedToken.user.tenant.status !== 'ACTIVE'
+    ) {
+      await this.prisma.refreshToken.update({
+        where: { id: storedToken.id },
+        data: { isRevoked: true },
+      });
+      throw new UnauthorizedException('User or tenant is no longer active');
+    }
+
     await this.prisma.refreshToken.update({
       where: { id: storedToken.id },
       data: { isRevoked: true },
@@ -488,6 +504,7 @@ export class AuthService {
 
   // ── Password Reset ──────────────────────────────────────────────────────
   async forgotPassword(dto: ForgotPasswordDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     // Scope lookup to the tenant — prevents cross-tenant OTP token pollution
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
@@ -501,8 +518,11 @@ export class AuthService {
       };
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
 
     if (!user) {
@@ -540,7 +560,7 @@ export class AuthService {
           userId: user.id,
           type: 'PASSWORD_RESET',
           code,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+          expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 15 minutes
         },
       });
       void this.rabbitmq
@@ -551,7 +571,7 @@ export class AuthService {
         })
         .catch((err) =>
           this.logger.error(
-            `Failed to emit password_reset_otp for ${user.phone}`,
+            `Failed to emit password_reset_otp for user ${user.id}`,
             err,
           ),
         );
@@ -562,7 +582,7 @@ export class AuthService {
           userId: user.id,
           type: 'PASSWORD_RESET',
           code: resetToken,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+          expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 15 minutes
         },
       });
       const resetLink = WorkspaceUrl.resetPassword(tenant.slug, resetToken);
@@ -620,13 +640,18 @@ export class AuthService {
         );
       }
 
+      const normalizedEmail = normalizeEmail(dto.email);
+
       const tenant = await this.prisma.tenant.findUnique({
         where: { slug: dto.tenantSlug },
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
 
-      const user = await this.prisma.user.findUnique({
-        where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+      const user = await this.prisma.user.findFirst({
+        where: {
+          tenantId: tenant.id,
+          email: { equals: normalizedEmail, mode: 'insensitive' },
+        },
       });
       if (!user)
         throw new BadRequestException('Invalid or expired reset token');
@@ -635,7 +660,6 @@ export class AuthService {
         where: {
           userId: user.id,
           type: 'PASSWORD_RESET',
-          code: dto.otpCode,
           usedAt: null,
         },
         orderBy: { createdAt: 'desc' },
@@ -664,7 +688,9 @@ export class AuthService {
     // Check code correctness
     if (record.code !== credential) {
       const newAttempts = record.attempts + 1;
-      const updateData: any = { attempts: newAttempts };
+      const updateData: { attempts: number; lockedUntil?: Date } = {
+        attempts: newAttempts,
+      };
 
       if (newAttempts >= 5) {
         updateData.lockedUntil = new Date(Date.now() + 30 * 60 * 1000);
@@ -896,17 +922,20 @@ export class AuthService {
 
   // ── Social Login ────────────────────────────────────────────────────────
   async handleSocialLogin(
-    profile: any,
+    profile: Record<string, unknown>,
     provider: 'GOOGLE' | 'MICROSOFT',
     tenantSlug: string,
   ) {
+    const normalizedEmail = normalizeEmail(profile.email as string);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     const existing = await this.prisma.socialAccount.findUnique({
-      where: { provider_providerId: { provider, providerId: profile.id } },
+      where: {
+        provider_providerId: { provider, providerId: profile.id as string },
+      },
       include: { user: { include: { tenant: true } } },
     });
 
@@ -919,8 +948,11 @@ export class AuthService {
       return { accessToken, refreshToken };
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: profile.email } },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
 
     if (!user)
@@ -932,8 +964,8 @@ export class AuthService {
       data: {
         userId: user.id,
         provider,
-        providerId: profile.id,
-        email: profile.email,
+        providerId: profile.id as string,
+        email: normalizedEmail,
       },
     });
 
@@ -952,4 +984,3 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 }
-// Mon Apr  6 16:41:02 GMT 2026

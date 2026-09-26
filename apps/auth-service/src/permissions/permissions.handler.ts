@@ -22,7 +22,8 @@ export class PermissionsHandler {
   constructor(private readonly permissionsService: PermissionsService) {}
 
   private ack(context: RmqContext) {
-    context.getChannelRef().ack(context.getMessage());
+    const channel = context.getChannelRef() as { ack: (msg: unknown) => void };
+    channel.ack(context.getMessage());
   }
 
   private formatError(error: unknown) {

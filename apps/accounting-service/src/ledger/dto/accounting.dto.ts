@@ -1,0 +1,1169 @@
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Max,
+  MaxLength,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  CashFlowCategory,
+  FiscalPeriodStatus,
+  GLAccountCategory,
+  AdjustmentCategory,
+  JournalEntryType,
+  JournalStatus,
+  RecurrenceFrequency,
+  RecurringJournalStatus,
+  RecurringOnGeneration,
+  NormalBalance,
+  RecordStatus,
+  TransactionTypeCategory,
+} from '../../../prisma/generated/client';
+
+const uppercase = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim().toUpperCase() : value;
+
+const trimmed = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value;
+
+const optionalBoolean = ({ value }: { value: unknown }) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return value;
+};
+
+export class UpdateAccountingTenantConfigDto {
+  @ApiPropertyOptional({ example: 'GHS', minLength: 3, maxLength: 3 })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  baseCurrency?: string;
+
+  @ApiPropertyOptional({ example: 1, minimum: 1, maximum: 12 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  fiscalYearStartMonth?: number;
+
+  @ApiPropertyOptional({ example: 2, minimum: 0, maximum: 4 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(4)
+  decimalPlaces?: number;
+}
+
+export class CreateAccountingCurrencyDto {
+  @ApiProperty({ example: 'GHS', minLength: 3, maxLength: 3 })
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  code!: string;
+
+  @ApiProperty({ example: 'Ghana Cedi' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  name!: string;
+
+  @ApiPropertyOptional({ example: 'GH₵' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(10)
+  symbol?: string;
+
+  @ApiPropertyOptional({ example: 2, minimum: 0, maximum: 4 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(4)
+  decimalPlaces?: number;
+}
+
+export class UpdateAccountingCurrencyDto extends PartialType(
+  CreateAccountingCurrencyDto,
+) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class CreateExchangeRateDto {
+  @ApiProperty({ example: 'USD' })
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  fromCurrency!: string;
+
+  @ApiProperty({ example: 'GHS' })
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  toCurrency!: string;
+
+  @ApiProperty({ example: 15.45, minimum: 0.00000001 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.00000001)
+  rate!: number;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  @IsDateString()
+  effectiveAt!: string;
+}
+
+export class UpdateExchangeRateDto {
+  @ApiPropertyOptional({ example: 15.45, minimum: 0.00000001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.00000001)
+  rate?: number;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  @IsOptional()
+  @IsDateString()
+  effectiveAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class CreateFiscalPeriodDto {
+  /** Single-period mode only — omit both this and startDate/endDate when generateYear
+   *  is set, since the 12 monthly periods are named and dated automatically. */
+  @ApiPropertyOptional({ example: '2026-07' })
+  @ValidateIf((dto: CreateFiscalPeriodDto) => !dto.generateYear)
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(80)
+  name?: string;
+
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @ValidateIf((dto: CreateFiscalPeriodDto) => !dto.generateYear)
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @ValidateIf((dto: CreateFiscalPeriodDto) => !dto.generateYear)
+  @IsDateString()
+  endDate?: string;
+
+  /** Bulk mode: the calendar year the fiscal year starts in. The 12 monthly periods
+   *  are generated from the tenant's configured fiscalYearStartMonth, e.g. generateYear
+   *  2026 with a July start produces Jul 2026 – Jun 2027. Mutually exclusive with the
+   *  single-period fields above. */
+  @ApiPropertyOptional({ example: 2026 })
+  @IsOptional()
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  generateYear?: number;
+}
+
+export class GenerateFiscalYearDto {
+  @ApiProperty({
+    example: 2026,
+    description:
+      'The calendar year the fiscal year starts in. With a July start month, 2026 creates FY2026/27 (Jul 2026 – Jun 2027).',
+  })
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  year!: number;
+
+  @ApiPropertyOptional({
+    example: 7,
+    minimum: 1,
+    maximum: 12,
+    description:
+      "The month the fiscal year starts in. Defaults to the tenant's configured fiscal year start month.",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  startMonth?: number;
+}
+
+export class QueryFiscalPeriodsDto {
+  @ApiPropertyOptional({ enum: FiscalPeriodStatus })
+  @IsOptional()
+  @IsEnum(FiscalPeriodStatus)
+  status?: FiscalPeriodStatus;
+}
+
+export class CreateTransactionTypeDto {
+  @ApiProperty({ example: 'Customer Receipt' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ example: 'CUST-RCPT' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ enum: TransactionTypeCategory })
+  @IsEnum(TransactionTypeCategory)
+  category!: TransactionTypeCategory;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      "Party types (from the tenant's Entity Types list) this transaction type can post against.",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  businessRoles?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  allowedDocument?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  source?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Receivable/Payable types only: when true, this type posts a single-line direct entry straight to Cashbook (via /cashbook/receipts or /cashbook/payments) instead of creating an Invoice/Bill.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  postsToCashbook?: boolean;
+}
+
+export class UpdateTransactionTypeDto extends PartialType(
+  CreateTransactionTypeDto,
+) {}
+
+export class CreateGLAccountDto {
+  @ApiProperty({ example: '1100' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ example: 'Cash at Bank' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiPropertyOptional({
+    enum: GLAccountCategory,
+    description:
+      'Legacy/unclassified account category. Derived from accountGroupId or classificationId when provided.',
+  })
+  @IsOptional()
+  @IsEnum(GLAccountCategory)
+  category?: GLAccountCategory;
+
+  @ApiPropertyOptional({
+    enum: NormalBalance,
+    description:
+      'Optional override. Defaults from the derived category and must match it.',
+  })
+  @IsOptional()
+  @IsEnum(NormalBalance)
+  normalBalance?: NormalBalance;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Classification the account sits under. Required when accountGroupId is not provided; when a group is provided it must belong to this classification (and defaults from it).',
+  })
+  @IsOptional()
+  @IsUUID()
+  classificationId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Optional account group within the classification. Omit (or send null on update) to post the account directly under its classification.',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountGroupId?: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  parentAccountId?: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  allowPosting?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({
+    enum: CashFlowCategory,
+    description:
+      'Cash Flow Statement section this belongs to. Defaults from the level above (group, then classification, then Operating for asset/liability/equity accounts); Cash & Bank accounts are always excluded automatically regardless of this.',
+  })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export class UpdateGLAccountDto extends PartialType(CreateGLAccountDto) {}
+
+export class QueryGLAccountsDto {
+  @ApiPropertyOptional({ enum: GLAccountCategory })
+  @IsOptional()
+  @IsEnum(GLAccountCategory)
+  category?: GLAccountCategory;
+
+  @ApiPropertyOptional({ enum: RecordStatus })
+  @IsOptional()
+  @IsEnum(RecordStatus)
+  status?: RecordStatus;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  accountGroupId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  classificationId?: string;
+}
+
+export class QueryAccountHierarchyDto {
+  @ApiPropertyOptional({ enum: GLAccountCategory })
+  @IsOptional()
+  @IsEnum(GLAccountCategory)
+  category?: GLAccountCategory;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @Transform(optionalBoolean)
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ example: 'Current' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ example: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ example: 50, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({
+    enum: ['code', 'name', 'displayOrder', 'createdAt', 'updatedAt'],
+  })
+  @IsOptional()
+  @IsIn(['code', 'name', 'displayOrder', 'createdAt', 'updatedAt'])
+  sortBy?: 'code' | 'name' | 'displayOrder' | 'createdAt' | 'updatedAt';
+
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
+}
+
+export class QueryAccountGroupsDto extends QueryAccountHierarchyDto {
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  classificationId?: string;
+}
+
+export class CreateAccountClassificationDto {
+  @ApiProperty({ example: 'CURRENT_ASSET' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  code!: string;
+
+  @ApiProperty({ example: 'Current Assets' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ enum: GLAccountCategory })
+  @IsEnum(GLAccountCategory)
+  category!: GLAccountCategory;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  displayOrder?: number;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isSystemTemplate?: boolean;
+
+  @ApiPropertyOptional({
+    enum: CashFlowCategory,
+    description:
+      'Cash Flow Statement section this belongs to. Defaults from the level above (group, then classification, then Operating for asset/liability/equity accounts); Cash & Bank accounts are always excluded automatically regardless of this.',
+  })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export class UpdateAccountClassificationDto extends PartialType(
+  CreateAccountClassificationDto,
+) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class CreateAccountGroupDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  classificationId!: string;
+
+  @ApiProperty({ example: 'BANK_ACCOUNTS' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  code!: string;
+
+  @ApiProperty({ example: 'Bank Accounts' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  displayOrder?: number;
+
+  @ApiPropertyOptional({
+    enum: CashFlowCategory,
+    description:
+      'Cash Flow Statement section this belongs to. Defaults from the level above (group, then classification, then Operating for asset/liability/equity accounts); Cash & Bank accounts are always excluded automatically regardless of this.',
+  })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export class UpdateAccountGroupDto extends PartialType(CreateAccountGroupDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class BulkImportClassificationDto {
+  @ApiProperty({ example: 'CURRENT_ASSET' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  code!: string;
+
+  @ApiProperty({ example: 'Current Assets' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ enum: GLAccountCategory })
+  @IsEnum(GLAccountCategory)
+  category!: GLAccountCategory;
+
+  @ApiPropertyOptional({ enum: CashFlowCategory })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export class BulkImportAccountGroupDto {
+  @ApiProperty({ example: 'BANK_ACCOUNTS' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  code!: string;
+
+  @ApiProperty({ example: 'Bank Accounts' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({
+    example: 'CURRENT_ASSET',
+    description:
+      'Code of the classification this group belongs to — either an existing one or one included in this same request.',
+  })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  classificationCode!: string;
+
+  @ApiPropertyOptional({ enum: CashFlowCategory })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export class BulkImportGLAccountDto {
+  @ApiProperty({ example: '1101' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ example: 'Ecobank' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ enum: GLAccountCategory })
+  @IsEnum(GLAccountCategory)
+  category!: GLAccountCategory;
+
+  @ApiProperty({
+    example: 'CURRENT_ASSET',
+    description:
+      'Code of the classification this account belongs to — either an existing one or one included in this same request.',
+  })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  classificationCode!: string;
+
+  @ApiPropertyOptional({
+    example: 'CASH_AND_BANK',
+    description:
+      'Code of the parent account (group) this account belongs to — either an existing one or one included in this same request.',
+  })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  parentAccountCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ enum: CashFlowCategory })
+  @IsOptional()
+  @IsEnum(CashFlowCategory)
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export class BulkImportAccountsDto {
+  @ApiProperty({ type: [BulkImportClassificationDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BulkImportClassificationDto)
+  classifications!: BulkImportClassificationDto[];
+
+  @ApiProperty({ type: [BulkImportAccountGroupDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BulkImportAccountGroupDto)
+  groups!: BulkImportAccountGroupDto[];
+
+  @ApiProperty({ type: [BulkImportGLAccountDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BulkImportGLAccountDto)
+  accounts!: BulkImportGLAccountDto[];
+}
+
+export class CreateCostCentreDto {
+  @ApiProperty({ example: 'ACC' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ example: 'Accra Branch' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({
+    description: 'Source module branch or department ID.',
+  })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  externalRef?: string;
+}
+
+export class UpdateCostCentreDto extends PartialType(CreateCostCentreDto) {}
+
+export class CreateSubledgerAccountDto {
+  @ApiProperty({ example: 'CED-0001' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(40)
+  code!: string;
+
+  @ApiProperty({ example: 'Acme Insurance Company' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({
+    example: 'CUSTOMER',
+    description:
+      "One of the tenant's own Entity Types (Settings > Entities > Types) — validated against that list, not a fixed enum.",
+  })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(40)
+  type!: string;
+
+  @ApiPropertyOptional({ description: 'Tenant-owned source record ID.' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  externalRef?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only meaningful for a type with no accounting relation set (accountingRelation: NONE) — types marked Receivable/Payable/Both always resolve to the tenant’s configured AR/AP account automatically.',
+  })
+  @IsOptional()
+  @IsUUID()
+  controlAccountId?: string;
+
+  @ApiPropertyOptional({ example: 'GHS' })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  currency?: string;
+
+  @ApiPropertyOptional({ example: 'Jane Doe' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  contactName?: string;
+
+  @ApiPropertyOptional({ example: '12 Independence Ave, Accra' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  address?: string;
+}
+
+export class UpdateSubledgerAccountDto extends PartialType(
+  CreateSubledgerAccountDto,
+) {}
+
+export class QuerySubledgerAccountsDto {
+  @ApiPropertyOptional({ example: 'CUSTOMER' })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  type?: string;
+
+  @ApiPropertyOptional({ example: 'reinsurance-counterparty-id' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  externalRef?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Filters balances to the Accounting control account / obligation dimension.',
+  })
+  @IsOptional()
+  @IsUUID()
+  controlAccountId?: string;
+
+  @ApiPropertyOptional({ enum: RecordStatus })
+  @IsOptional()
+  @IsEnum(RecordStatus)
+  status?: RecordStatus;
+}
+
+export class EnsureInternalSubledgerDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  tenantId!: string;
+
+  @ApiProperty({
+    example: 'Cedant',
+    description:
+      'The name of a tenant-configured Entity Type (Settings > Entities > Types) — ' +
+      'not a fixed value. The tenant must have created it first, same as any other ' +
+      'entity type, with the accounting relation (Receivable/Payable) that decides ' +
+      'which control account it rolls up to.',
+  })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(80)
+  type!: string;
+
+  @ApiProperty({ example: 'reinsurance-counterparty-id' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  externalRef!: string;
+
+  @ApiProperty({ example: 'Acme Insurance Company' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiPropertyOptional({ example: 'GHS' })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  currency?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional source metadata retained by callers; not persisted in Phase 1.',
+  })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
+}
+
+export class JournalLineDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  glAccountId!: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  subledgerAccountId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  costCentreId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ example: 100, minimum: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  debit?: number;
+
+  @ApiPropertyOptional({ example: 0, minimum: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  credit?: number;
+}
+
+export class CreateJournalDto {
+  @ApiProperty({ type: String, format: 'date' })
+  @IsDateString()
+  transactionDate!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  fiscalPeriodId!: string;
+
+  @ApiProperty({ example: 'GHS' })
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  transactionCurrency!: string;
+
+  @ApiPropertyOptional({
+    enum: JournalEntryType,
+    default: JournalEntryType.STANDARD,
+    description:
+      'Kind of journal. Sets the number prefix (STN, ADJ, RVS, CLS, OPN, RCR). Fixed once created.',
+  })
+  @IsOptional()
+  @IsEnum(JournalEntryType)
+  entryType?: JournalEntryType;
+
+  @ApiPropertyOptional({
+    enum: AdjustmentCategory,
+    description:
+      'Only valid (and required) when entryType is ADJUSTING; rejected otherwise.',
+  })
+  @IsOptional()
+  @IsEnum(AdjustmentCategory)
+  adjustmentCategory?: AdjustmentCategory;
+
+  @ApiPropertyOptional({
+    example: 1,
+    minimum: 0.00000001,
+    description:
+      'Required when transaction currency differs from base currency.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.00000001)
+  exchangeRate?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  reference?: string;
+
+  @ApiProperty()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(1000)
+  description!: string;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  idempotencyKey?: string;
+
+  @ApiPropertyOptional({ maxLength: 80 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(80)
+  sourceModule?: string;
+
+  @ApiPropertyOptional({ maxLength: 80 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(80)
+  sourceRecordType?: string;
+
+  @ApiPropertyOptional({ maxLength: 100 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  sourceRecordId?: string;
+
+  @ApiProperty({ type: [JournalLineDto], minItems: 2 })
+  @IsArray()
+  @ArrayMinSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => JournalLineDto)
+  lines!: JournalLineDto[];
+}
+
+export class UpdateDraftJournalDto {
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  transactionDate?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  fiscalPeriodId?: string;
+
+  @ApiPropertyOptional({ example: 'GHS' })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  transactionCurrency?: string;
+
+  @ApiPropertyOptional({ example: 1, minimum: 0.00000001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.00000001)
+  exchangeRate?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  @ApiPropertyOptional({ type: [JournalLineDto], minItems: 2 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => JournalLineDto)
+  lines?: JournalLineDto[];
+}
+
+export class ReverseJournalDto {
+  @ApiProperty({ type: String, format: 'date' })
+  @IsDateString()
+  reversalDate!: string;
+
+  @ApiProperty()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason!: string;
+}
+
+export class QueryJournalsDto {
+  @ApiPropertyOptional({ enum: JournalStatus })
+  @IsOptional()
+  @IsEnum(JournalStatus)
+  status?: JournalStatus;
+
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 500,
+    description: 'Page size. Omit to return every journal.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
+
+  @ApiPropertyOptional({ minimum: 0, description: 'Journals to skip.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
+}
+
+export class RecurringJournalLineDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  glAccountId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ example: 100, minimum: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  debit?: number;
+
+  @ApiPropertyOptional({ example: 0, minimum: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  credit?: number;
+}
+
+export class CreateRecurringJournalDto {
+  @ApiProperty({ example: 'Monthly office rent' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ description: 'Memo copied onto every generated journal.' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(1000)
+  description!: string;
+
+  @ApiProperty({ enum: RecurrenceFrequency })
+  @IsEnum(RecurrenceFrequency)
+  frequency!: RecurrenceFrequency;
+
+  @ApiProperty({ type: String, format: 'date' })
+  @IsDateString()
+  startDate!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: 'Omit or send null to repeat forever.',
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string | null;
+
+  @ApiProperty({ enum: RecurringOnGeneration })
+  @IsEnum(RecurringOnGeneration)
+  onGeneration!: RecurringOnGeneration;
+
+  @ApiProperty({ type: [RecurringJournalLineDto], minItems: 2 })
+  @IsArray()
+  @ArrayMinSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => RecurringJournalLineDto)
+  lines!: RecurringJournalLineDto[];
+}
+
+export class UpdateRecurringJournalDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  @ApiPropertyOptional({ enum: RecurrenceFrequency })
+  @IsOptional()
+  @IsEnum(RecurrenceFrequency)
+  frequency?: RecurrenceFrequency;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: 'Send null to repeat forever.',
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string | null;
+
+  @ApiPropertyOptional({ enum: RecurringOnGeneration })
+  @IsOptional()
+  @IsEnum(RecurringOnGeneration)
+  onGeneration?: RecurringOnGeneration;
+
+  @ApiPropertyOptional({ type: [RecurringJournalLineDto], minItems: 2 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => RecurringJournalLineDto)
+  lines?: RecurringJournalLineDto[];
+}
+
+export class QueryRecurringJournalsDto {
+  @ApiPropertyOptional({ enum: RecurringJournalStatus })
+  @IsOptional()
+  @IsEnum(RecurringJournalStatus)
+  status?: RecurringJournalStatus;
+}

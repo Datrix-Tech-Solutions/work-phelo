@@ -190,45 +190,42 @@ INVITE=$(curl -s -X POST $GW/api/auth/users/invite \
   -d '{"email":"newinvite2@acmeghana.com","firstName":"New","lastName":"Invite"}')
 check "Invite user" "notnull" "$(jqr "$INVITE" '.message')"
 
-# ── 7. COMPANY ROLES ─────────────────────────────────────────────────────────
-section "7. COMPANY ROLES"
+# ── 7. PERMISSION SETS ───────────────────────────────────────────────────────
+section "7. PERMISSION SETS"
 
-ROLES=$(curl -s $GW/api/auth/company-roles -H "Authorization: Bearer $ACME_TOKEN")
-ROLES_COUNT=$(echo $ROLES | jq '. | length' 2>/dev/null | tr -d '\n\r')
-check "List company roles" "3" "$ROLES_COUNT"
-check "Manager has 24 permissions" "24" "$(echo $ROLES | jq -r '.[] | select(.name=="Manager") | .permissions | length' 2>/dev/null | tr -d '\n\r')"
-check "Employee has 10 permissions" "10" "$(echo $ROLES | jq -r '.[] | select(.name=="Employee") | .permissions | length' 2>/dev/null | tr -d '\n\r')"
+SETS=$(curl -s $GW/api/auth/permissions/sets -H "Authorization: Bearer $ACME_TOKEN")
+SETS_COUNT=$(echo $SETS | jq '. | length' 2>/dev/null | tr -d '\n\r')
+check "List permission sets" "notnull" "$SETS_COUNT"
+check "Company Admin Set exists" "Company Admin Set" "$(echo $SETS | jq -r '.[] | select(.name=="Company Admin Set") | .name' 2>/dev/null | tr -d '\n\r')"
+check "Employee Set not seeded by default" "" "$(echo $SETS | jq -r '.[] | select(.name=="Employee Set") | .name' 2>/dev/null | tr -d '\n\r')"
 
-ROLE_ID=$(echo $ROLES | jq -r '.[] | select(.name=="Manager") | .id' 2>/dev/null | tr -d '\n\r')
-ROLE_BY_ID=$(curl -s $GW/api/auth/company-roles/$ROLE_ID -H "Authorization: Bearer $ACME_TOKEN")
-check "Get role by ID" "Manager" "$(jqr "$ROLE_BY_ID" '.name')"
+SYSTEM_SET_ID=$(echo $SETS | jq -r '.[] | select(.name=="Company Admin Set") | .id' 2>/dev/null | tr -d '\n\r')
 
-# Use timestamp to avoid name conflicts
 TS=$(date +%s)
-CUSTOM=$(curl -s -X POST $GW/api/auth/company-roles \
+CUSTOM_SET=$(curl -s -X POST $GW/api/auth/permissions/sets \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ACME_TOKEN" \
-  -d "{\"name\":\"Test Role $TS\",\"description\":\"Test\",\"permissions\":[\"read:employees\",\"clock:in_out\"]}")
-check "Create custom role" "notnull" "$(jqr "$CUSTOM" '.id')"
-CUSTOM_ID=$(jqr "$CUSTOM" '.id')
+  -d "{\"name\":\"Test Permission Set $TS\",\"description\":\"Test\",\"resources\":[]}")
+check "Create custom permission set" "notnull" "$(jqr "$CUSTOM_SET" '.id')"
+CUSTOM_SET_ID=$(jqr "$CUSTOM_SET" '.id')
 
-if [ -n "$CUSTOM_ID" ] && [ "$CUSTOM_ID" != "null" ]; then
-  UPD=$(curl -s -X PATCH $GW/api/auth/company-roles/$CUSTOM_ID \
+if [ -n "$CUSTOM_SET_ID" ] && [ "$CUSTOM_SET_ID" != "null" ]; then
+  UPD_SET=$(curl -s -X PATCH $GW/api/auth/permissions/sets/$CUSTOM_SET_ID \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $ACME_TOKEN" \
-    -d '{"name":"Updated Test Role","permissions":["read:employees"]}')
-  UPD_NAME=$(jqr "$UPD" '.name')
-  [ -z "$UPD_NAME" ] && UPD_NAME=$(echo $UPD | jq -r '.name // .data.name // empty' 2>/dev/null | tr -d '\n\r')
-  check "Update custom role" "Updated Test Role" "$UPD_NAME"
+    -d '{"name":"Updated Test Permission Set","description":"Updated","resources":[]}')
+  check "Update custom permission set" "Updated Test Permission Set" "$(jqr "$UPD_SET" '.name')"
 
-  DEL=$(curl -s -X DELETE $GW/api/auth/company-roles/$CUSTOM_ID \
+  DEL_SET=$(curl -s -X DELETE $GW/api/auth/permissions/sets/$CUSTOM_SET_ID \
     -H "Authorization: Bearer $ACME_TOKEN")
-  check "Delete custom role" "notnull" "$(jqr "$DEL" '.message')"
+  check "Delete custom permission set" "notnull" "$(jqr "$DEL_SET" '.message')"
 fi
 
-SYS_DEL=$(curl -s -X DELETE $GW/api/auth/company-roles/$ROLE_ID \
-  -H "Authorization: Bearer $ACME_TOKEN")
-check "Cannot delete system role" "403" "$(jqr "$SYS_DEL" '.statusCode')"
+SYS_UPD=$(curl -s -X PATCH $GW/api/auth/permissions/sets/$SYSTEM_SET_ID \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACME_TOKEN" \
+  -d '{"name":"Renamed System Set","description":"Nope","resources":[]}')
+check "Cannot update system permission set" "403" "$(jqr "$SYS_UPD" '.statusCode')"
 
 # ── 8. PERMISSIONS ───────────────────────────────────────────────────────────
 section "8. PERMISSIONS"

@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 
 interface PaginationProps {
   currentPage: number;
@@ -12,8 +12,19 @@ function getPageNumbers(current: number, total: number): (number | '...')[] {
   if (total <= 6) return Array.from({ length: total }, (_, i) => i + 1);
 
   const pages: (number | '...')[] = [1, 2, 3];
-  if (current > 4) pages.push('...');
-  if (current > 3 && current < total - 1) pages.push(current);
+
+  const showCurrent = current > 3 && current < total - 1;
+  if (showCurrent) {
+    if (current > 4) pages.push('...');
+    pages.push(current);
+  }
+
+  // Ellipsis whenever there's an actual gap before the last page — not just when
+  // the current page happens to be past 4 (that left runs like [1, 2, 3, 20] with
+  // no separator whenever you were viewing an early page of a long list).
+  const lastShown = pages[pages.length - 1] as number;
+  if (total - lastShown > 1) pages.push('...');
+
   if (!pages.includes(total)) pages.push(total);
   return pages;
 }
@@ -22,13 +33,13 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
   const pages = getPageNumbers(currentPage, totalPages);
 
   return (
-    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+    <div className={cardClass('flex items-center justify-between px-4 py-2.5')}>
       {/* Left: prev + page numbers + next */}
       <div className="flex items-center gap-1">
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:border-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg,var(--color-brand)) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-colors"
         >
           Previous
         </button>
@@ -43,10 +54,10 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
               key={p}
               onClick={() => onPageChange(p)}
               className={cn(
-                'w-8 h-8 text-sm rounded-lg transition-colors',
+                'w-8 h-8 text-sm rounded-lg border transition-colors',
                 p === currentPage
-                  ? 'bg-brand text-white font-medium'
-                  : 'border border-gray-200 text-gray-600 hover:bg-gray-50',
+                  ? 'bg-(--module-btn-bg,var(--color-brand)) text-white font-medium border-(--module-btn-bg,var(--color-brand))'
+                  : 'border-gray-200 text-gray-600 hover:border-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg,var(--color-brand))',
               )}
             >
               {p}
@@ -57,7 +68,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:border-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg,var(--color-brand)) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-colors"
         >
           Next
         </button>

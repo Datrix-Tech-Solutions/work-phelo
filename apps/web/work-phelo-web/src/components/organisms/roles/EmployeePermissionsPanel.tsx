@@ -17,7 +17,7 @@ interface EmployeePermissionsPanelProps {
   availableSets: PermissionSet[];
   /** Permission sets already assigned to this user */
   assignedSets: { id: string; name: string }[];
-  /** The baseline system set name — shown but cannot be removed here */
+  /** Optional baseline set name when a user has non-removable system access */
   baseSetName?: string | null;
   onAssign: (permissionSetId: string) => void;
   onRemove: (permissionSetId: string) => void;
@@ -64,7 +64,7 @@ export function EmployeePermissionsPanel({
         <p className="text-sm font-bold text-gray-900">Assigned permission sets</p>
 
         {assignedSets.length === 0 ? (
-          <p className="text-sm text-gray-400 italic">No additional permission sets assigned.</p>
+          <p className="text-sm text-gray-400 italic">No permission sets assigned yet.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {assignedSets.map((set) => {
@@ -82,7 +82,7 @@ export function EmployeePermissionsPanel({
                       <p className="text-sm font-medium text-gray-900">{set.name}</p>
                       {isBase && (
                         <p className="text-xs text-gray-400">
-                          Baseline system access — cannot be removed here
+                          System access inherited from role — cannot be removed here
                         </p>
                       )}
                     </div>
@@ -91,7 +91,7 @@ export function EmployeePermissionsPanel({
                     <button
                       onClick={() => onRemove(set.id)}
                       disabled={isRemoving}
-                      className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                      className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
                       aria-label="Remove"
                     >
                       <X className="w-4 h-4" />

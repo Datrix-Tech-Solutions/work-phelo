@@ -8,15 +8,24 @@ import {
 } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
+import { Request } from 'express';
+import { QueryAuditDto } from './dto/query-audit.dto';
+
+type AuthenticatedRequest = Request & { user: RequestUser };
 
 @ApiTags('Audit Logs')
 @Controller('audit')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth('access-token')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @Get()
+  @RequirePermissions(Permission.VIEW_AUDIT_LOGS)
   @ApiOperation({
     summary: 'Query audit logs — TENANT_ADMIN and SUPER_ADMIN only',
   })
@@ -45,24 +54,7 @@ export class AuditController {
   @ApiResponse({ status: 200, description: 'Audit logs retrieved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  query(
-    @Req() req: any,
-    @Query('resource') resource?: string,
-    @Query('userId') userId?: string,
-    @Query('action') action?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.auditService.query(req.user.tenantId, {
-      resource,
-      userId,
-      action,
-      from,
-      to,
-      page,
-      limit,
-    });
+  query(@Req() req: AuthenticatedRequest, @Query() query: QueryAuditDto) {
+    return this.auditService.query(req.user.tenantId, query);
   }
 }

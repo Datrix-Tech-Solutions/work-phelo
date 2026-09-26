@@ -2,7 +2,7 @@ import { Skeleton } from '@/components/atoms/Skeleton';
 
 export function TablePageSkeleton() {
   return (
-    <div className="p-8 flex flex-col gap-6">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
       {/* Page header */}
       <div className="flex items-center justify-between">
         <Skeleton className="h-8 w-40" />

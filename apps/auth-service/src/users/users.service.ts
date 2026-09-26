@@ -17,6 +17,28 @@ import * as bcrypt from 'bcrypt';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { AuditService } from '../audit/audit.service';
 import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
+import { normalizeEmail } from '../common/email.helper';
+import { TenantAssetStorageService } from '../tenants/tenant-asset-storage.service';
+import { UploadUserDocumentDto } from './dto/upload-user-document.dto';
+
+const AVATAR_ALLOWED_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+]);
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+
+const DOCUMENT_ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
 @Injectable()
 export class UsersService {
@@ -27,9 +49,39 @@ export class UsersService {
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly jwtService: JwtService,
     private readonly audit: AuditService,
+    private readonly storage: TenantAssetStorageService,
   ) {}
 
-  async invite(tenantId: string, dto: InviteUserDto) {
+  private async validateInvitedEmployeePermissionSets(
+    tenantId: string,
+    permissionSetIds: string[],
+  ) {
+    if (permissionSetIds.length === 0) {
+      return [];
+    }
+
+    const uniquePermissionSetIds = Array.from(new Set(permissionSetIds));
+    const permissionSets = await this.prisma.permissionSet.findMany({
+      where: {
+        id: { in: uniquePermissionSetIds },
+        tenantId,
+        isActive: true,
+        isSystem: false,
+      },
+      select: { id: true, name: true },
+    });
+
+    if (permissionSets.length !== uniquePermissionSetIds.length) {
+      throw new BadRequestException(
+        'One or more selected permission sets are invalid for this tenant.',
+      );
+    }
+
+    return permissionSets;
+  }
+
+  async invite(tenantId: string, dto: InviteUserDto, invitedBy?: string) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
     });
@@ -38,43 +90,52 @@ export class UsersService {
     // Block superadmin email
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
     if (!superAdminEmail) throw new Error('SUPER_ADMIN_EMAIL is required');
-    if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
+    if (normalizedEmail === normalizeEmail(superAdminEmail)) {
       throw new ForbiddenException(
         'This email is reserved for the platform owner.',
       );
     }
 
-    const existing = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email: dto.email } },
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
     if (existing)
       throw new ConflictException('A user with this email already exists.');
 
     const userRole = dto.role ?? UserSystemRole.EMPLOYEE;
+    const permissionSetIds = dto.permissionSetIds ?? [];
 
-    // One Company Admin per tenant
+    // One Company Admin per tenant. Admin reassignment must go through the
+    // dedicated tenant-admin flow so we do not silently demote the current admin.
     if (userRole === UserSystemRole.TENANT_ADMIN) {
+      if (permissionSetIds.length > 0) {
+        throw new BadRequestException(
+          'Permission sets can only be selected for employee invites.',
+        );
+      }
+
       const existingAdmin = await this.prisma.user.findFirst({
         where: { tenantId, role: 'TENANT_ADMIN' },
+        select: { id: true },
       });
-      // Demote existing admin to EMPLOYEE before assigning new one
+
       if (existingAdmin) {
-        await this.prisma.user.update({
-          where: { id: existingAdmin.id },
-          data: { role: 'EMPLOYEE' },
-        });
-        await syncUserSystemPermissionSet(
-          this.prisma,
-          {
-            tenantId,
-            userId: existingAdmin.id,
-            role: 'EMPLOYEE',
-            grantedBy: existingAdmin.id,
-          },
-          this.logger,
+        throw new ConflictException(
+          'This company already has an administrator. Use the tenant admin update flow instead.',
         );
       }
     }
+
+    const selectedPermissionSets =
+      userRole === UserSystemRole.EMPLOYEE
+        ? await this.validateInvitedEmployeePermissionSets(
+            tenantId,
+            permissionSetIds,
+          )
+        : [];
 
     const inviteToken = generateSecureToken();
     const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
@@ -82,7 +143,7 @@ export class UsersService {
     const user = await this.prisma.user.create({
       data: {
         tenantId,
-        email: dto.email,
+        email: normalizedEmail,
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
@@ -104,6 +165,17 @@ export class UsersService {
       },
       this.logger,
     );
+
+    if (selectedPermissionSets.length > 0) {
+      await this.prisma.userPermissionSet.createMany({
+        data: selectedPermissionSets.map((permissionSet) => ({
+          userId: user.id,
+          permissionSetId: permissionSet.id,
+          grantedBy: invitedBy ?? user.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
@@ -137,12 +209,20 @@ export class UsersService {
           lastName: user.lastName,
           role: user.role,
           status: 'PENDING_VERIFICATION',
+          permissionSetIds: selectedPermissionSets.map(
+            (permissionSet) => permissionSet.id,
+          ),
         },
       },
       status: 'SUCCESS',
     });
 
-    const { password, mfaSecret, inviteToken: token, ...safeUser } = user;
+    const {
+      password: _password,
+      mfaSecret: _mfaSecret,
+      inviteToken: _token,
+      ...safeUser
+    } = user;
     return { user: safeUser, message: 'Invitation sent successfully' };
   }
 
@@ -176,7 +256,12 @@ export class UsersService {
           where: { id: dto.userId, tenantId },
         })
       : await this.prisma.user.findUnique({
-          where: { tenantId_email: { tenantId, email: dto.email } },
+          where: {
+            tenantId_email: {
+              tenantId,
+              email: normalizeEmail(dto.email),
+            },
+          },
         });
 
     if (!user) {
@@ -197,6 +282,20 @@ export class UsersService {
 
     await this.prisma.user.delete({ where: { id: user.id } });
     return { deleted: true };
+  }
+
+  async getUserStatuses(tenantId: string, userIds: string[]) {
+    if (userIds.length === 0) {
+      return [];
+    }
+
+    const uniqueUserIds = Array.from(new Set(userIds));
+    const users = await this.prisma.user.findMany({
+      where: { tenantId, id: { in: uniqueUserIds } },
+      select: { id: true, status: true },
+    });
+
+    return users.map((user) => ({ userId: user.id, status: user.status }));
   }
 
   async acceptInvite(dto: AcceptInviteDto) {
@@ -222,6 +321,8 @@ export class UsersService {
         tenantId: user.tenantId,
         adminEmail: user.tenant.email,
         adminUserId: user.id,
+        country: user.tenant.country,
+        currency: user.tenant.currency,
       });
     } else {
       await this.rabbitmq.hrLinkEmployeeIdentity({
@@ -254,12 +355,6 @@ export class UsersService {
       });
     }
 
-    const permissions = await this.resolveEffectivePermissions(
-      updated.id,
-      updated.tenantId,
-      updated.role,
-    );
-
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {
       sub: updated.id,
@@ -269,7 +364,7 @@ export class UsersService {
       tenantSlug: updated.tenant.slug,
       tenantName: updated.tenant.name,
       firstName: updated.firstName,
-      permissions,
+      // Permissions omitted — JwtStrategy.validate() fetches them from DB on each request.
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
@@ -302,54 +397,13 @@ export class UsersService {
     };
   }
 
-  private async resolveEffectivePermissions(
-    userId: string,
-    tenantId: string,
-    role: string,
-  ): Promise<string[]> {
-    if (role !== 'EMPLOYEE') return [];
-
-    const [allDirectPerms, setAssignments] = await Promise.all([
-      this.prisma.userPermission.findMany({
-        where: { tenantId, userId },
-        include: { resource: true },
-      }),
-      this.prisma.userPermissionSet.findMany({
-        where: { userId },
-        include: {
-          permissionSet: {
-            include: { resources: { include: { resource: true } } },
-          },
-        },
-      }),
-    ]);
-
-    const direct = allDirectPerms
-      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-      .map((p) => `${p.resource.name}:${p.action}`);
-
-    const explicitlyRevoked = new Set(
-      allDirectPerms
-        .filter((p) => !p.isActive)
-        .map((p) => `${p.resource.name}:${p.action}`),
-    );
-
-    const fromSets = setAssignments.flatMap((a) =>
-      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-    );
-
-    return [...new Set([...direct, ...fromSets])].filter(
-      (perm) => !explicitlyRevoked.has(perm),
-    );
-  }
-
   async resendInvite(tenantId: string, userId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
       include: { tenant: true },
     });
     if (!user) throw new NotFoundException('User not found');
-    if (user.status === 'ACTIVE' && !user.inviteToken) {
+    if (user.status !== 'PENDING_VERIFICATION') {
       throw new ForbiddenException('User has already accepted the invitation.');
     }
 
@@ -368,22 +422,51 @@ export class UsersService {
 
     void this.rabbitmq
       .notificationInviteUser({
+        userId: user.id,
+        tenantId,
         email: user.email,
         firstName: user.firstName,
+        inviteToken,
         tenantName: user.tenant.name,
         acceptInviteUrl,
         inviteKind: user.role === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : 'EMPLOYEE',
+        isResend: true,
       })
       .catch((err) =>
         this.logger.error(`Failed to resend invite for ${user.email}`, err),
       );
 
+    await this.audit.log({
+      tenantId,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: 'UPDATE',
+      resource: 'users',
+      resourceId: user.id,
+      changes: {
+        before: {
+          inviteExpiresAt: user.inviteExpiresAt?.toISOString(),
+          status: user.status,
+        },
+        after: {
+          resendInvite: true,
+          inviteExpiresAt: inviteExpiresAt.toISOString(),
+          status: user.status,
+        },
+      },
+      status: 'SUCCESS',
+    });
+
     return { message: 'Invitation resent successfully' };
   }
 
   async findByEmail(tenantId: string, email: string) {
-    return this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email } },
+    return this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        email: { equals: normalizeEmail(email), mode: 'insensitive' },
+      },
     });
   }
 
@@ -488,5 +571,234 @@ export class UsersService {
       where: { id },
       data: { forcePasswordReset: true },
     });
+  }
+
+  async uploadAvatar(
+    tenantId: string,
+    userId: string,
+    file: Express.Multer.File | undefined,
+  ): Promise<{ avatarUrl: string; user: { id: string; avatarUrl: string } }> {
+    this.validateAvatar(file);
+    const uploadedFile = file as Express.Multer.File;
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      include: { tenant: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const previousAvatarUrl = user.avatarUrl;
+
+    const stored = await this.storage.storeUserAvatar({
+      tenantId,
+      tenantSlug: user.tenant.slug,
+      userId,
+      body: uploadedFile.buffer,
+      contentType: uploadedFile.mimetype,
+      originalFileName: uploadedFile.originalname,
+    });
+
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl: stored.objectKey },
+      });
+    } catch (error) {
+      await this.storage
+        .delete(stored.objectKey)
+        .catch((cleanupError) =>
+          this.logger.error(
+            `Failed to clean up orphaned avatar object ${stored.objectKey}`,
+            cleanupError,
+          ),
+        );
+      throw error;
+    }
+
+    if (
+      previousAvatarUrl &&
+      this.storage.isUserAvatarObjectKey(previousAvatarUrl, tenantId, userId)
+    ) {
+      await this.storage
+        .delete(previousAvatarUrl)
+        .catch((error) =>
+          this.logger.error(
+            `Failed to delete previous avatar object ${previousAvatarUrl}`,
+            error,
+          ),
+        );
+    }
+
+    // Awaited (not fire-and-forget) so the HTTP response — and the frontend's
+    // subsequent refetch of the employee record — only lands after hr-service
+    // has persisted the new avatar. A sync failure is logged, not fatal: the
+    // auth-service avatarUrl update above already succeeded.
+    await this.rabbitmq
+      .hrEmployeeAvatarUpdated({
+        tenantId,
+        userId,
+        avatarObjectKey: stored.objectKey,
+      })
+      .catch((error) =>
+        this.logger.error(
+          `Failed to notify hr-service of avatar update for user ${userId}`,
+          error,
+        ),
+      );
+
+    const signed = await this.storage.createSignedReadUrl({
+      objectKey: stored.objectKey,
+      mimeType: stored.mimeType,
+      fileName: stored.fileName,
+    });
+
+    return {
+      avatarUrl: signed.readUrl,
+      user: { id: userId, avatarUrl: signed.readUrl },
+    };
+  }
+
+  private validateAvatar(file: Express.Multer.File | undefined): void {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Avatar image is required.');
+    }
+    if (!AVATAR_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Avatar must be PNG, JPEG or WEBP.');
+    }
+    if (!this.matchesImageSignature(file.buffer, file.mimetype)) {
+      throw new BadRequestException(
+        'Image content does not match its declared MIME type.',
+      );
+    }
+    if (
+      file.size > AVATAR_MAX_BYTES ||
+      file.buffer.byteLength > AVATAR_MAX_BYTES
+    ) {
+      throw new BadRequestException(
+        `Avatar image exceeds the ${AVATAR_MAX_BYTES / 1024 / 1024} MB limit.`,
+      );
+    }
+  }
+
+  private matchesImageSignature(buffer: Buffer, mimeType: string): boolean {
+    if (mimeType === 'image/png') {
+      return buffer
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    if (mimeType === 'image/jpeg') {
+      return buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
+    }
+    if (mimeType === 'image/webp') {
+      return (
+        buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+      );
+    }
+    return false;
+  }
+
+  async listDocuments(tenantId: string, userId: string) {
+    const documents = await this.prisma.userDocument.findMany({
+      where: { tenantId, userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return Promise.all(
+      documents.map(async (doc) => {
+        const signed = await this.storage.createSignedReadUrl({
+          objectKey: doc.objectKey,
+          mimeType: doc.mimeType,
+          fileName: doc.fileName,
+        });
+        return { ...doc, url: signed.readUrl };
+      }),
+    );
+  }
+
+  async uploadDocument(
+    tenantId: string,
+    userId: string,
+    dto: UploadUserDocumentDto,
+    file: Express.Multer.File | undefined,
+  ) {
+    this.validateDocument(file);
+    const uploadedFile = file as Express.Multer.File;
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      include: { tenant: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const stored = await this.storage.storeUserDocument({
+      tenantId,
+      tenantSlug: user.tenant.slug,
+      userId,
+      body: uploadedFile.buffer,
+      contentType: uploadedFile.mimetype,
+      originalFileName: uploadedFile.originalname,
+    });
+
+    const document = await this.prisma.userDocument.create({
+      data: {
+        tenantId,
+        userId,
+        category: dto.category.trim(),
+        objectKey: stored.objectKey,
+        mimeType: stored.mimeType,
+        fileName: stored.fileName,
+        sizeBytes: stored.sizeBytes,
+      },
+    });
+
+    const signed = await this.storage.createSignedReadUrl({
+      objectKey: document.objectKey,
+      mimeType: document.mimeType,
+      fileName: document.fileName,
+    });
+
+    return { ...document, url: signed.readUrl };
+  }
+
+  async deleteDocument(
+    tenantId: string,
+    userId: string,
+    documentId: string,
+  ): Promise<void> {
+    const document = await this.prisma.userDocument.findFirst({
+      where: { id: documentId, tenantId, userId },
+    });
+    if (!document) throw new NotFoundException('Document not found');
+
+    await this.prisma.userDocument.delete({ where: { id: document.id } });
+
+    await this.storage
+      .delete(document.objectKey)
+      .catch((error) =>
+        this.logger.error(
+          `Failed to delete document object ${document.objectKey}`,
+          error,
+        ),
+      );
+  }
+
+  private validateDocument(file: Express.Multer.File | undefined): void {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('A document file is required.');
+    }
+    if (!DOCUMENT_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(
+        'Document must be a PDF, image, Word or Excel file.',
+      );
+    }
+    if (
+      file.size > DOCUMENT_MAX_BYTES ||
+      file.buffer.byteLength > DOCUMENT_MAX_BYTES
+    ) {
+      throw new BadRequestException(
+        `Document exceeds the ${DOCUMENT_MAX_BYTES / 1024 / 1024} MB limit.`,
+      );
+    }
   }
 }

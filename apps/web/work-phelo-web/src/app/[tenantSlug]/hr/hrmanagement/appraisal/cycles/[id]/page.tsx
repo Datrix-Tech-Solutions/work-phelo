@@ -6,6 +6,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { useAppraisalCycles } from '@/hooks';
 import { formatDate } from '@/lib/formatters';
 import { Icons } from '@/components/atoms/icons';
+import { pageContent } from '@/lib/layout';
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -28,11 +29,11 @@ export default function CycleDetailPage({
   const { data: cycles = [], isLoading } = useAppraisalCycles();
   const cycle = cycles.find((c) => c.id === id);
 
-  if (isLoading) return <div className="p-8 text-sm text-gray-400">Loading...</div>;
-  if (!cycle) return <div className="p-8 text-sm text-red-400">Cycle not found.</div>;
+  if (isLoading) return <div className="p-4 sm:p-6 lg:p-8 text-sm text-gray-400">Loading...</div>;
+  if (!cycle) return <div className="p-4 sm:p-6 lg:p-8 text-sm text-red-400">Cycle not found.</div>;
 
   return (
-    <div className="px-8 pt-6 pb-8 flex flex-col gap-6">
+    <div className={`${pageContent} flex flex-col gap-6`}>
       <Link
         href={`/${tenantSlug}/hr/hrmanagement/appraisal/cycles`}
         className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors w-fit"
@@ -56,7 +57,7 @@ export default function CycleDetailPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-12 gap-y-6 max-w-2xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6 max-w-2xl">
         <DetailRow label="Frequency" value={cycle.frequency ?? '—'} />
         <DetailRow label="Appraisals" value={cycle._count?.appraisals ?? 0} />
         {cycle.selfAssessmentDeadline && (

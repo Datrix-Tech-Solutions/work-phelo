@@ -2,12 +2,12 @@
 
 import { useForm, useWatch } from 'react-hook-form';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { AppLogo } from '@/components/atoms/AppLogo';
 import { useAcceptInvite } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { cn } from '@/lib/utils';
 import { extractError } from '@/lib/errors';
+import { AuthCard } from '@/components/organisms/login/AuthCard';
 
 interface SetPasswordForm {
   password: string;
@@ -46,7 +46,7 @@ export default function SetPassword() {
       { inviteToken: token, password: data.password },
       {
         onSuccess: () => {
-          router.push(`/${tenantSlug}/dashboard`);
+          router.push(`/${tenantSlug}/hr`);
         },
         onError: (err) => {
           setError('root', { message: extractError(err) });
@@ -57,30 +57,24 @@ export default function SetPassword() {
 
   if (!token) {
     return (
-      <div className="w-full max-w-sm px-8 py-10 text-center">
-        <div className="flex justify-center mb-6">
-          <AppLogo />
-        </div>
-        <h1 className="text-xl font-semibold text-red-600">Invalid Link</h1>
-        <p className="text-gray-500 mt-2 text-sm">
+      <AuthCard title="Invalid Link" tenantSlug={tenantSlug}>
+        <p className="text-foreground/70 text-center text-sm">
           This invitation link is invalid or has expired.
         </p>
-      </div>
+      </AuthCard>
     );
   }
 
   return (
-    <div className="w-full max-w-sm px-8 py-10">
-      <div className="flex justify-center mb-6">
-        <AppLogo />
-      </div>
-
-      <h1 className="text-2xl font-semibold text-gray-900 text-center mb-2">Set Your Password</h1>
-      <p className="text-sm text-gray-500 text-center mb-6">
-        Create a password to access your WorkPhelo account.
-      </p>
-
-      <form onSubmit={handleSubmit(handleSetPassword)} className="flex flex-col gap-4">
+    <AuthCard
+      title="Set Your Password"
+      tenantSlug={tenantSlug}
+      subtitle="Create a password to access your WorkPhelo account."
+    >
+      <form
+        onSubmit={handleSubmit(handleSetPassword)}
+        className="flex flex-col gap-(--field-stack-gap,0.75rem)"
+      >
         <div>
           <FormField
             label="Password"
@@ -96,7 +90,7 @@ export default function SetPassword() {
                 key={label}
                 className={cn(
                   'flex items-center gap-1.5 text-xs',
-                  test(password) ? 'text-green-600' : 'text-gray-400',
+                  test(password) ? 'text-green-500' : 'text-foreground/55',
                 )}
               >
                 <span>{test(password) ? '✓' : '✗'}</span>
@@ -128,6 +122,6 @@ export default function SetPassword() {
           Set Password
         </Button>
       </form>
-    </div>
+    </AuthCard>
   );
 }

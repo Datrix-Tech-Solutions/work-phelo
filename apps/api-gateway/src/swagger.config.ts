@@ -11,7 +11,7 @@ export function setupSwagger(app: INestApplication) {
 All frontend requests go through this gateway at port **4000**.
 
 ### URL Convention
-\`/api/{service}/{path}\` → proxied to the service
+\`/api/v1/{service}/{path}\` → proxied to the owning service
 
 ### Service Routes
 | Prefix | Service | Port |
@@ -19,14 +19,19 @@ All frontend requests go through this gateway at port **4000**.
 | \`/api/v1/auth/*\` | Auth endpoints | 4001 |
 | \`/api/v1/auth/tenants/*\` | Tenant management | 4001 |
 | \`/api/v1/auth/users/*\` | User management | 4001 |
-| \`/api/v1/auth/company-roles/*\` | Company roles | 4001 |
 | \`/api/v1/auth/permissions/*\` | Permissions | 4001 |
-| \`/api/hr/employees/*\` | Employees | 4002 |
-| \`/api/hr/departments/*\` | Departments | 4002 |
-| \`/api/hr/leave/*\` | Leave management | 4002 |
-| \`/api/hr/time/*\` | Time tracking | 4002 |
-| \`/api/hr/payroll/*\` | Payroll | 4002 |
-| \`/api/hr/appraisals/*\` | Appraisals | 4002 |
+| \`/api/v1/hr/employees/*\` | Employees | 4002 |
+| \`/api/v1/hr/departments/*\` | Departments | 4002 |
+| \`/api/v1/hr/leave/*\` | Leave management | 4002 |
+| \`/api/v1/hr/time/*\` | Time tracking | 4002 |
+| \`/api/v1/hr/payroll/*\` | Payroll | 4002 |
+| \`/api/v1/hr/appraisals/*\` | Appraisals | 4002 |
+| \`/api/v1/hr/projects/*\` | Projects and tasks | 4002 |
+| \`/api/v1/notification/*\` | Notification endpoints | 4004 |
+| \`/api/v1/subscription/*\` | Development subscription scaffold | 4005 |
+| \`/api/v1/marketing/*\` | Development marketing scaffold | 4006 |
+| \`/api/v1/operations/reinsurance/*\` | Reinsurance operations | 4007 |
+| \`/api/v1/accounting/*\` | Accounting ledger | 4008 |
 
 ### Public Endpoints (no auth required)
 - \`POST /api/v1/auth/login\`
@@ -62,7 +67,11 @@ All frontend requests go through this gateway at port **4000**.
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
-    swaggerOptions: { persistAuthorization: true, tagsSorter: 'alpha' },
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      url: 'docs-json',
+    },
   });
 
   console.log(' API Gateway docs: http://localhost:4000/docs');

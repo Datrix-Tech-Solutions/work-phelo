@@ -30,6 +30,11 @@ import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { CreateShiftSwapDto } from './dto/create-shift-swap.dto';
 import { RespondShiftSwapDto } from './dto/respond-shift-swap.dto';
 import { ReviewShiftSwapDto } from './dto/review-shift-swap.dto';
+import { QueryAttendanceDto } from './dto/query-attendance.dto';
+import { QueryEligibleSwapColleaguesDto } from './dto/query-eligible-swap-colleagues.dto';
+import { QueryManagerShiftSwapsDto } from './dto/query-manager-shift-swaps.dto';
+import { QuerySchedulesDto } from './dto/query-schedules.dto';
+import { QueryTimeCorrectionsDto } from './dto/query-time-corrections.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -39,6 +44,9 @@ import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
 import { RequestUser } from '@work-phelo/types';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & { user: RequestUser };
 
 @ApiTags('Time')
 @Controller('time')
@@ -56,7 +64,7 @@ export class TimeController {
   @ApiBody({ type: ClockInDto })
   @ApiResponse({ status: 200, description: 'Clocked in successfully' })
   @ApiResponse({ status: 409, description: 'Already clocked in today' })
-  clockIn(@Body() dto: ClockInDto, @Req() req: any) {
+  clockIn(@Body() dto: ClockInDto, @Req() req: AuthenticatedRequest) {
     return this.timeService.clockIn(
       req.user.tenantId,
       req.user.id,
@@ -71,7 +79,7 @@ export class TimeController {
   @ApiOperation({ summary: 'Clock out for the day' })
   @ApiResponse({ status: 200, description: 'Clocked out successfully' })
   @ApiResponse({ status: 400, description: 'Not clocked in today' })
-  clockOut(@Req() req: any) {
+  clockOut(@Req() req: AuthenticatedRequest) {
     return this.timeService.clockOut(req.user.tenantId, req.user.id);
   }
 
@@ -81,7 +89,7 @@ export class TimeController {
     summary: "Get today's clock status for the logged-in employee",
   })
   @ApiResponse({ status: 200, description: "Today's clock status retrieved" })
-  getTodayStatus(@Req() req: any) {
+  getTodayStatus(@Req() req: AuthenticatedRequest) {
     return this.timeService.getTodayStatus(req.user.tenantId, req.user.id);
   }
 
@@ -89,11 +97,12 @@ export class TimeController {
   @RequirePermissions(Permission.CLOCK_IN_OUT)
   @ApiOperation({ summary: "Get current employee's own attendance history" })
   @ApiResponse({ status: 200, description: 'My attendance records' })
-  getMyAttendance(@Req() req: any) {
+  getMyAttendance(@Req() req: AuthenticatedRequest) {
     return this.timeService.getMyAttendance(req.user.tenantId, req.user.id);
   }
 
   @Get('attendance')
+  @RequirePermissions(Permission.READ_ATTENDANCE)
   @ApiOperation({ summary: 'Get attendance records with date range filter' })
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'from', required: false })
@@ -113,47 +122,41 @@ export class TimeController {
   })
   @ApiResponse({ status: 200, description: 'Attendance records retrieved' })
   async getAttendance(
-    @Query('employeeId') employeeId: string,
-    @Query('from') from: string,
-    @Query('to') to: string,
-    @Query('departmentId') departmentId: string,
-    @Query('status') status: string,
-    @Query('search') search: string,
-    @Query('page') page: string,
-    @Query('mine') mine: string,
-    @Req() req: any,
+    @Query() query: QueryAttendanceDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.timeService.getAttendance(
-      req.user.tenantId,
-      req.user as RequestUser,
-      {
-        employeeId,
-        from,
-        to,
-        departmentId,
-        status,
-        search,
-        page: page ? Number(page) : undefined,
-        mine: mine === 'true',
-      },
-    );
+    return this.timeService.getAttendance(req.user.tenantId, req.user, {
+      employeeId: query.employeeId,
+      from: query.from,
+      to: query.to,
+      departmentId: query.departmentId,
+      status: query.status,
+      search: query.search,
+      page: query.page,
+      mine: query.mine ?? false,
+    });
   }
 
   @Post('corrections')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions(Permission.SUBMIT_TIME_CORRECTION)
+  @RequirePermissions(Permission.CLOCK_IN_OUT)
   @ApiOperation({ summary: 'Submit a time correction request' })
   @ApiBody({ type: TimeCorrectionDto })
   @ApiResponse({ status: 201, description: 'Time correction submitted' })
-  submitCorrection(@Body() dto: TimeCorrectionDto, @Req() req: any) {
+  submitCorrection(
+    @Body() dto: TimeCorrectionDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.timeService.submitTimeCorrection(
       req.user.tenantId,
       req.user.id,
+      req.user.tenantSlug,
       dto,
     );
   }
 
   @Get('corrections')
+  @RequirePermissions(Permission.READ_ATTENDANCE)
   @ApiOperation({ summary: 'List time correction requests' })
   @ApiQuery({
     name: 'status',
@@ -161,11 +164,14 @@ export class TimeController {
     enum: ['PENDING', 'APPROVED', 'REJECTED'],
   })
   @ApiResponse({ status: 200, description: 'Corrections retrieved' })
-  getCorrections(@Query('status') status: string, @Req() req: any) {
+  getCorrections(
+    @Query() query: QueryTimeCorrectionsDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.timeService.getTimeCorrections(
       req.user.tenantId,
-      req.user as RequestUser,
-      { status },
+      req.user,
+      query,
     );
   }
 
@@ -178,62 +184,62 @@ export class TimeController {
   reviewCorrection(
     @Param('id') id: string,
     @Body() dto: ReviewCorrectionDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.timeService.reviewTimeCorrection(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
 
   @Get('live')
+  @RequirePermissions(Permission.READ_ATTENDANCE)
   @ApiOperation({ summary: 'Get all employees currently clocked in' })
   @ApiResponse({ status: 200, description: 'Live attendance list' })
-  getLiveAttendance(@Req() req: any) {
-    return this.timeService.getLiveAttendance(
-      req.user.tenantId,
-      req.user as RequestUser,
-    );
+  getLiveAttendance(@Req() req: AuthenticatedRequest) {
+    return this.timeService.getLiveAttendance(req.user.tenantId, req.user);
   }
 
   @Get('stats/today')
+  @RequirePermissions(Permission.READ_ATTENDANCE)
   @ApiOperation({ summary: "Get today's attendance stats" })
   @ApiResponse({ status: 200, description: 'Attendance stats' })
-  getAttendanceStats(@Req() req: any) {
-    return this.timeService.getAttendanceStats(
-      req.user.tenantId,
-      req.user as RequestUser,
-    );
+  getAttendanceStats(@Req() req: AuthenticatedRequest) {
+    return this.timeService.getAttendanceStats(req.user.tenantId, req.user);
   }
 
   @Post('schedules')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Create a shift schedule for an employee' })
   @ApiBody({ type: CreateScheduleDto })
   @ApiResponse({ status: 201, description: 'Schedule created' })
-  createSchedule(@Body() dto: CreateScheduleDto, @Req() req: any) {
-    return this.timeService.createSchedule(
-      req.user.tenantId,
-      req.user as RequestUser,
-      dto,
-    );
+  createSchedule(
+    @Body() dto: CreateScheduleDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.timeService.createSchedule(req.user.tenantId, req.user, dto);
   }
 
   @Get('schedules')
   @ApiOperation({ summary: 'Get shift schedules' })
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiResponse({ status: 200, description: 'Schedules retrieved' })
-  getSchedules(@Query('employeeId') employeeId: string, @Req() req: any) {
+  getSchedules(
+    @Query() query: QuerySchedulesDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.timeService.getSchedules(
       req.user.tenantId,
-      req.user as RequestUser,
-      employeeId,
+      req.user,
+      query.employeeId,
     );
   }
 
   @Patch('schedules/:id')
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Update a shift schedule' })
   @ApiParam({ name: 'id', description: 'Shift schedule UUID' })
   @ApiBody({ type: UpdateScheduleDto })
@@ -242,28 +248,25 @@ export class TimeController {
   updateSchedule(
     @Param('id') id: string,
     @Body() dto: UpdateScheduleDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.timeService.updateSchedule(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
 
   @Delete('schedules/:id')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Delete a shift schedule' })
   @ApiParam({ name: 'id', description: 'Shift schedule UUID' })
   @ApiResponse({ status: 200, description: 'Schedule deleted' })
   @ApiResponse({ status: 404, description: 'Schedule not found' })
-  deleteSchedule(@Param('id') id: string, @Req() req: any) {
-    return this.timeService.deleteSchedule(
-      req.user.tenantId,
-      id,
-      req.user as RequestUser,
-    );
+  deleteSchedule(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.timeService.deleteSchedule(req.user.tenantId, id, req.user);
   }
 
   @Get('shift-swaps/eligible-colleagues')
@@ -286,15 +289,13 @@ export class TimeController {
     description: 'Eligible colleague shift options retrieved',
   })
   getEligibleSwapColleagues(
-    @Query('scheduleId') scheduleId: string,
-    @Query('shiftDate') shiftDate: string,
-    @Query('search') search: string,
-    @Req() req: any,
+    @Query() query: QueryEligibleSwapColleaguesDto,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.timeService.getEligibleShiftSwapColleagues(
       req.user.tenantId,
-      req.user as RequestUser,
-      { scheduleId, shiftDate, search },
+      req.user,
+      query,
     );
   }
 
@@ -303,10 +304,13 @@ export class TimeController {
   @ApiOperation({ summary: 'Create a shift swap request' })
   @ApiBody({ type: CreateShiftSwapDto })
   @ApiResponse({ status: 201, description: 'Shift swap request created' })
-  createShiftSwap(@Body() dto: CreateShiftSwapDto, @Req() req: any) {
+  createShiftSwap(
+    @Body() dto: CreateShiftSwapDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.timeService.createShiftSwapRequest(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -316,11 +320,8 @@ export class TimeController {
     summary: 'List shift swap requests relevant to the current employee',
   })
   @ApiResponse({ status: 200, description: 'Shift swap requests retrieved' })
-  getMyShiftSwaps(@Req() req: any) {
-    return this.timeService.getMyShiftSwapRequests(
-      req.user.tenantId,
-      req.user as RequestUser,
-    );
+  getMyShiftSwaps(@Req() req: AuthenticatedRequest) {
+    return this.timeService.getMyShiftSwapRequests(req.user.tenantId, req.user);
   }
 
   @Get('shift-swaps/pending-manager')
@@ -338,13 +339,13 @@ export class TimeController {
     description: 'Approver shift swaps retrieved',
   })
   getPendingManagerShiftSwaps(
-    @Query('status') status: string,
-    @Req() req: any,
+    @Query() query: QueryManagerShiftSwapsDto,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.timeService.getPendingManagerShiftSwaps(
       req.user.tenantId,
-      req.user as RequestUser,
-      status,
+      req.user,
+      query.status,
     );
   }
 
@@ -352,10 +353,10 @@ export class TimeController {
   @ApiOperation({ summary: 'Get a single shift swap request' })
   @ApiParam({ name: 'id', description: 'Shift swap request UUID' })
   @ApiResponse({ status: 200, description: 'Shift swap request retrieved' })
-  getShiftSwap(@Param('id') id: string, @Req() req: any) {
+  getShiftSwap(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.timeService.getShiftSwapRequest(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       id,
     );
   }
@@ -370,17 +371,18 @@ export class TimeController {
   respondToShiftSwap(
     @Param('id') id: string,
     @Body() dto: RespondShiftSwapDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.timeService.respondToShiftSwap(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       id,
       dto,
     );
   }
 
   @Post('shift-swaps/:id/manager-decision')
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({
     summary: 'Approve or reject a shift swap request as an approver',
   })
@@ -393,11 +395,11 @@ export class TimeController {
   reviewShiftSwap(
     @Param('id') id: string,
     @Body() dto: ReviewShiftSwapDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.timeService.reviewShiftSwap(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       id,
       dto,
     );
@@ -423,12 +425,11 @@ export class TimeController {
   getMySchedule(
     @Query('from') from: string,
     @Query('to') to: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.timeService.getMySchedule(
-      req.user.tenantId,
-      req.user as RequestUser,
-      { from, to },
-    );
+    return this.timeService.getMySchedule(req.user.tenantId, req.user, {
+      from,
+      to,
+    });
   }
 }

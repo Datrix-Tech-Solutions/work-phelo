@@ -15,6 +15,8 @@ import {
   PasswordResetLinkEvent,
   PasswordResetOtpEvent,
   SmsOtpEvent,
+  EmployeeAvatarUpdatedEvent,
+  EmployeeAvatarUpdatedResult,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -32,7 +34,7 @@ export class RabbitMQPublisher {
     error?: string;
   } {
     if (err instanceof Error) {
-      return err as Error & { statusCode?: number; error?: string };
+      return err;
     }
 
     const remote =
@@ -81,6 +83,35 @@ export class RabbitMQPublisher {
     return wrapped;
   }
 
+  private formatPublishError(err: unknown): string {
+    if (err instanceof Error) {
+      return `${err.name}: ${err.message}`;
+    }
+
+    if (err && typeof err === 'object') {
+      const details = err as {
+        message?: unknown;
+        code?: unknown;
+        errno?: unknown;
+        syscall?: unknown;
+      };
+      const parts = [
+        typeof details.message === 'string' ? details.message : undefined,
+        typeof details.code === 'string' ? `code=${details.code}` : undefined,
+        typeof details.errno === 'string' || typeof details.errno === 'number'
+          ? `errno=${details.errno}`
+          : undefined,
+        typeof details.syscall === 'string'
+          ? `syscall=${details.syscall}`
+          : undefined,
+      ].filter(Boolean);
+
+      return parts.length > 0 ? parts.join(' | ') : JSON.stringify(err);
+    }
+
+    return String(err);
+  }
+
   // ── Internal publish ───────────────────────────────────────────────────────
 
   private publish<T extends object>(
@@ -107,7 +138,7 @@ export class RabbitMQPublisher {
         complete: () => resolve(),
         error: (err) => {
           this.logger.error(
-            `Failed to publish ${pattern} | corrId=${envelope._meta.correlationId}`,
+            `Failed to publish ${pattern} | corrId=${envelope._meta.correlationId} | error=${this.formatPublishError(err)}`,
             err,
           );
           reject(err instanceof Error ? err : new Error(String(err)));
@@ -182,6 +213,18 @@ export class RabbitMQPublisher {
     return this.request(
       this.hrClient,
       EventPatterns.HR_PROVISION_TENANT_WORKSPACE,
+      data,
+      correlationId,
+    );
+  }
+
+  hrEmployeeAvatarUpdated(
+    data: EmployeeAvatarUpdatedEvent,
+    correlationId?: string,
+  ): Promise<EmployeeAvatarUpdatedResult> {
+    return this.request(
+      this.hrClient,
+      EventPatterns.HR_EMPLOYEE_AVATAR_UPDATED,
       data,
       correlationId,
     );

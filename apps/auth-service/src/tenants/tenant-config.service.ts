@@ -5,6 +5,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+export const REINSURANCE_ACCOUNTING_INTEGRATION =
+  'operations.reinsurance->accounting';
+
 @Injectable()
 export class TenantConfigService {
   constructor(private readonly prisma: PrismaService) {}
@@ -53,6 +56,83 @@ export class TenantConfigService {
       message: 'Module configuration updated successfully',
       moduleConfig: updated.moduleConfig,
     };
+  }
+
+  async getReinsuranceAccountingIntegration(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        moduleConfig: true,
+        featureConfig: true,
+        integrationConfig: true,
+      },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const moduleConfig = (tenant.moduleConfig as Record<string, boolean>) ?? {};
+    const featureConfig =
+      (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {};
+    const integrationConfig =
+      (tenant.integrationConfig as Record<string, boolean>) ?? {};
+    const reinsuranceEnabled = Boolean(
+      moduleConfig.operations && featureConfig.operations?.reinsurance,
+    );
+    const accountingEnabled = Boolean(moduleConfig.accounting);
+    const integrationEnabled = Boolean(
+      integrationConfig[REINSURANCE_ACCOUNTING_INTEGRATION],
+    );
+
+    return {
+      reinsuranceEnabled,
+      accountingEnabled,
+      integrationEnabled,
+      active: reinsuranceEnabled && accountingEnabled && integrationEnabled,
+    };
+  }
+
+  async updateReinsuranceAccountingIntegration(
+    tenantId: string,
+    enabled: boolean,
+    actorId: string,
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { integrationConfig: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const current = (tenant.integrationConfig as Record<string, boolean>) ?? {};
+    const previousEnabled = Boolean(
+      current[REINSURANCE_ACCOUNTING_INTEGRATION],
+    );
+    const integrationConfig = {
+      ...current,
+      [REINSURANCE_ACCOUNTING_INTEGRATION]: enabled,
+    };
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { integrationConfig },
+    });
+
+    if (previousEnabled !== enabled) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actorId,
+          tenantId,
+          action: 'UPDATE',
+          resource: 'TenantModuleIntegration',
+          resourceId: `${tenantId}:${REINSURANCE_ACCOUNTING_INTEGRATION}`,
+          changes: {
+            type: 'REINSURANCE_ACCOUNTING_INTEGRATION_UPDATED',
+            integration: REINSURANCE_ACCOUNTING_INTEGRATION,
+            previousEnabled,
+            enabled,
+          },
+        },
+      });
+    }
+
+    return this.getReinsuranceAccountingIntegration(tenantId);
   }
 
   async updateFeatures(
@@ -139,14 +219,21 @@ export class TenantConfigService {
 
     return {
       history: logs
-        .filter((l) => (l.changes as any)?.type === 'FEATURE_CONFIG_UPDATED')
-        .map((l) => ({
-          id: l.id,
-          actorId: l.userId,
-          changes: (l.changes as any)?.changes ?? [],
-          module: (l.changes as any)?.module,
-          timestamp: l.createdAt,
-        })),
+        .filter(
+          (l) =>
+            (l.changes as Record<string, unknown> | null)?.type ===
+            'FEATURE_CONFIG_UPDATED',
+        )
+        .map((l) => {
+          const changes = l.changes as Record<string, unknown> | null;
+          return {
+            id: l.id,
+            actorId: l.userId,
+            changes: (changes?.changes as unknown[]) ?? [],
+            module: changes?.module,
+            timestamp: l.createdAt,
+          };
+        }),
     };
   }
 }
