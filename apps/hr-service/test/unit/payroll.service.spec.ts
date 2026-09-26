@@ -12,6 +12,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { RabbitMQPublisher } from '../../src/messaging/rabbitmq.publisher';
 import { NotificationsService } from '../../src/notifications/notifications.service';
 import { FieldEncryptionService } from '../../src/crypto/field-encryption.service';
+import { HrAccountingClient } from '../../src/accounting-integration/client/accounting.client';
 import { RequestUser } from '@work-phelo/types';
 import {
   EmployeeCompensationType,
@@ -93,6 +94,11 @@ describe('PayrollService', () => {
     mask: jest.fn((v: unknown) => v),
   };
 
+  const accountingClient: any = {
+    postPayrollAccrual: jest.fn(async () => undefined),
+    configurationStatus: jest.fn(),
+  };
+
   let service: PayrollService;
 
   beforeEach(async () => {
@@ -103,6 +109,7 @@ describe('PayrollService', () => {
         { provide: RabbitMQPublisher, useValue: rabbitmq },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: FieldEncryptionService, useValue: encryption },
+        { provide: HrAccountingClient, useValue: accountingClient },
       ],
     }).compile();
 
