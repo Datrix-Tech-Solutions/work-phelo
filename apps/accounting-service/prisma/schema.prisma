@@ -344,6 +344,7 @@ model GLAccount {
   payablePaymentApAccounts AccountingPayablePayment[] @relation("PayablePaymentApAccount")
   budgetLines       BudgetLine[]
   recurringLines    RecurringJournalLine[]
+  sourceLedgerEntries SourceLedgerEntry[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -646,6 +647,7 @@ model JournalEntry {
   receivableReversalDocument  AccountingReceivableDocument? @relation("ReceivableReversalJournal")
   payablePostedDocument       AccountingPayableDocument?    @relation("PayablePostedJournal")
   payableReversalDocument     AccountingPayableDocument?    @relation("PayableReversalJournal")
+  sourceLedgerEntries         SourceLedgerEntry[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, journalNumber])
@@ -800,6 +802,7 @@ model CashbookTransaction {
   bankStatementMatches     BankStatementLine[]          @relation("BankStatementLineMatchedCashbook")
   receivableReceipt        AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
   payablePayment           AccountingPayablePayment?    @relation("PayableCashbookTransaction")
+  sourceLedgerAllocations  SourceLedgerAllocation[]
 
   @@unique([id, tenantId])
   @@unique([sourceEventInboxId, tenantId])
@@ -1354,16 +1357,74 @@ enum SourceModule {
 // (e.g. HR's payroll GL-account seed calls SourceTypesService.ensureExists('HR', 'Payroll')).
 // Accounting's Source Types page only lists/links/unlinks what's already here.
 model SourceType {
-  id        String       @id @default(uuid())
-  tenantId  String
-  module    SourceModule
-  name      String
-  isActive  Boolean      @default(true)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id           String              @id @default(uuid())
+  tenantId     String
+  module       SourceModule
+  name         String
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  ledgerEntries SourceLedgerEntry[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, module, name])
+  @@schema("accounting")
+}
+
+/// A generic open item created alongside a journal a module integration already posted (e.g.
+/// payroll's accrual) — never generates its own journal. Settling it (SourceLedgerAllocation)
+/// reuses an ordinary cashbook Payment/Receipt, not a new posting mechanism. One entry per
+/// distinct thing the source wants tracked independently — e.g. payroll creates one per
+/// liability line (Net Pay, Income Tax, Social Security, ...) since each settles on its own
+/// schedule, not one lump entry per accrual journal.
+model SourceLedgerEntry {
+  id             String   @id @default(uuid())
+  tenantId       String
+  sourceTypeId   String
+  glAccountId    String
+  journalEntryId String
+  /// Traces back to the record that caused this entry to exist (e.g. a payroll run id) —
+  /// informational only, not a hard FK since it belongs to another service's data.
+  sourceRecordId String?
+  description    String
+  amount         Decimal  @db.Decimal(20, 4)
+  currency       String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sourceType  SourceType               @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  glAccount   GLAccount                @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  journalEntry JournalEntry            @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  allocations SourceLedgerAllocation[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, sourceTypeId])
+  @@index([tenantId, journalEntryId])
+  @@schema("accounting")
+}
+
+/// Links a SourceLedgerEntry to the ordinary cashbook Payment/Receipt that settled some or all
+/// of it — mirrors AccountingPayableAllocation/AccountingReceivableAllocation's pattern
+/// (balance always computed live as amount minus sum of non-reversed allocations, never
+/// stored), just scoped to source ledger items instead of AP/AR trade documents.
+model SourceLedgerAllocation {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  sourceLedgerEntryId   String
+  cashbookTransactionId String
+  amount                Decimal   @db.Decimal(20, 4)
+  allocatedAt           DateTime  @default(now())
+  allocatedByUserId     String
+  reversedAt            DateTime?
+  reversedByUserId      String?
+  reversalReason        String?
+
+  sourceLedgerEntry   SourceLedgerEntry   @relation(fields: [sourceLedgerEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  cashbookTransaction CashbookTransaction @relation(fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, sourceLedgerEntryId])
+  @@index([tenantId, cashbookTransactionId])
   @@schema("accounting")
 }
 

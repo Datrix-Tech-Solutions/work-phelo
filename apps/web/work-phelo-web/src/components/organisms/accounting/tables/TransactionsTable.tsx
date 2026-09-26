@@ -327,31 +327,44 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-2">
-            {selectableTypes.map((type) => (
-              <button
-                key={type.id}
-                type="button"
-                onClick={() => {
-                  setNewTransactionOpen(false);
-                  setSelectedType(type);
-                }}
-                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-semibold text-gray-900">{type.name}</span>
-                  {type.description && (
-                    <span className="text-xs text-gray-500">{type.description}</span>
-                  )}
-                  {type.rulesCount === 0 && (
-                    <span className="text-xs text-orange-600">Rule required to use</span>
-                  )}
-                </div>
-                <TypeChip
-                  label={TRANSACTION_TYPE_CATEGORY_LABEL[type.category]}
-                  color={TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[type.category]}
-                />
-              </button>
-            ))}
+            {selectableTypes.map((type) => {
+              // A rule and a source are each independently sufficient to use a type — a
+              // source-linked type (e.g. an integration's payment type) needs no rule of its
+              // own, since its offset account is picked per-transaction. Only block when
+              // neither is present.
+              const hasRule = type.rulesCount > 0;
+              const hasSource = Boolean(type.source && type.source.trim());
+              const canSelect = hasRule || hasSource;
+              return (
+                <button
+                  key={type.id}
+                  type="button"
+                  disabled={!canSelect}
+                  onClick={() => {
+                    if (!canSelect) return;
+                    setNewTransactionOpen(false);
+                    setSelectedType(type);
+                  }}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-gray-900">{type.name}</span>
+                    {type.description && (
+                      <span className="text-xs text-gray-500">{type.description}</span>
+                    )}
+                    {!canSelect && (
+                      <span className="text-xs text-orange-600">
+                        Rule or source required to use
+                      </span>
+                    )}
+                  </div>
+                  <TypeChip
+                    label={TRANSACTION_TYPE_CATEGORY_LABEL[type.category]}
+                    color={TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[type.category]}
+                  />
+                </button>
+              );
+            })}
           </div>
         )}
       </Modal>
