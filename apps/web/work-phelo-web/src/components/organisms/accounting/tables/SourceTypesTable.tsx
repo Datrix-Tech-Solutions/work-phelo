@@ -1,8 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Badge } from '@/components/atoms/Badge';
-import { Toggle } from '@/components/atoms/Toggle';
+import { useMemo, useState } from 'react';
+import { TableButton } from '@/components/atoms/TableButton';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
+import { SourceLedgerPanel } from '@/components/organisms/accounting/panels/SourceLedgerPanel';
 import { useLinkSourceType, useSourceTypes, useUnlinkSourceType } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -21,18 +23,18 @@ export function SourceTypesTable() {
   const { mutate: link } = useLinkSourceType();
   const { mutate: unlink } = useUnlinkSourceType();
   const toast = useToast();
+  const [manageTarget, setManageTarget] = useState<SourceTypeDefinition | null>(null);
+  const [ledgerTarget, setLedgerTarget] = useState<SourceTypeDefinition | null>(null);
 
-  const groups = useMemo(() => {
-    const byModule = new Map<SourceModule, SourceTypeDefinition[]>();
-    for (const item of data) {
-      const list = byModule.get(item.module) ?? [];
-      list.push(item);
-      byModule.set(item.module, list);
-    }
-    return [...byModule.entries()].sort((a, b) =>
-      MODULE_LABELS[a[0]].localeCompare(MODULE_LABELS[b[0]]),
-    );
-  }, [data]);
+  const sorted = useMemo(
+    () =>
+      [...data].sort(
+        (a, b) =>
+          MODULE_LABELS[a.module].localeCompare(MODULE_LABELS[b.module]) ||
+          a.name.localeCompare(b.name),
+      ),
+    [data],
+  );
 
   const toggle = (item: SourceTypeDefinition) => {
     const action = item.isActive ? unlink : link;
@@ -42,51 +44,87 @@ export function SourceTypesTable() {
     });
   };
 
-  if (isLoading) {
-    return <p className="text-sm text-gray-500">Loading…</p>;
-  }
-
-  if (groups.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-gray-200 px-6 py-10 text-center">
-        <p className="text-sm font-medium text-gray-900">No sources linked yet</p>
-        <p className="mt-1 text-sm text-gray-500">
-          Entries show up here automatically once another module (like Payroll) completes its own
-          accounting setup — there&apos;s nothing to create from this page.
-        </p>
-      </div>
-    );
-  }
+  const columns: Column<SourceTypeDefinition>[] = [
+    {
+      key: 'source',
+      label: 'Source',
+      width: 'minmax(140px, 1fr)',
+      render: (row) => (
+        <span className="font-medium text-gray-900">{MODULE_LABELS[row.module]}</span>
+      ),
+    },
+    {
+      key: 'service',
+      label: 'Service',
+      width: 'minmax(140px, 1fr)',
+      render: (row) => <span className="text-gray-700">{row.name}</span>,
+    },
+    {
+      key: 'journalEntries',
+      label: 'Journal Entries',
+      width: '140px',
+      className: 'text-right',
+      render: () => <span className="text-gray-400">—</span>,
+    },
+    {
+      key: 'payments',
+      label: 'Payments',
+      width: '120px',
+      className: 'text-right',
+      render: () => <span className="text-gray-400">—</span>,
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: '160px',
+      className: 'text-right',
+      render: (row) => (
+        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+          <TableButton variant="blue" onClick={() => setLedgerTarget(row)}>
+            View Ledger
+          </TableButton>
+          <TableButton variant="blue" onClick={() => setManageTarget(row)}>
+            Manage
+          </TableButton>
+          <TableButton variant={row.isActive ? 'red' : 'green'} onClick={() => toggle(row)}>
+            {row.isActive ? 'Unlink' : 'Link'}
+          </TableButton>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className="flex flex-col gap-6">
-      {groups.map(([module, items]) => (
-        <div key={module} className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            {MODULE_LABELS[module]}
-          </h3>
-          <div className="overflow-hidden rounded-lg border border-gray-100">
-            <table className="w-full text-left text-sm">
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className="border-t border-gray-100 first:border-t-0">
-                    <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
-                    <td className="px-4 py-3">
-                      <Badge
-                        label={item.isActive ? 'Linked' : 'Unlinked'}
-                        variant={item.isActive ? 'success' : 'neutral'}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Toggle enabled={item.isActive} onChange={() => toggle(item)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
-    </div>
+    <>
+      <DataTable
+        columns={columns}
+        data={sorted}
+        isLoading={isLoading}
+        emptyMessage="No sources linked yet — entries show up here automatically once another module (like Payroll) completes its own accounting setup."
+        noInternalScroll
+        currentPage={1}
+        totalPages={1}
+        onPageChange={() => {}}
+      />
+
+      <SidePanel
+        isOpen={!!manageTarget}
+        onClose={() => setManageTarget(null)}
+        title={manageTarget ? `Manage ${manageTarget.name}` : 'Manage'}
+        description={
+          manageTarget
+            ? `${MODULE_LABELS[manageTarget.module]} — ${manageTarget.name} integration`
+            : undefined
+        }
+      >
+        <p className="text-sm text-gray-500">
+          This will surface {manageTarget ? MODULE_LABELS[manageTarget.module] : 'the module'}
+          &apos;s own integration setup here — the same settings screen it manages from its own
+          module, opened in place instead of navigating away.
+        </p>
+      </SidePanel>
+
+      <SourceLedgerPanel sourceType={ledgerTarget} onClose={() => setLedgerTarget(null)} />
+    </>
   );
 }

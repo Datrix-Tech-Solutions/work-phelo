@@ -15,6 +15,7 @@ import {
 } from './dto/payroll-integration.dto';
 import { JournalLineDto } from './dto/accounting.dto';
 import { JournalsService } from './journals.service';
+import { SourceLedgerService } from './source-ledger.service';
 import { SourceTypesService } from './source-types.service';
 
 const PAYROLL_LIABILITIES_GROUP_NAME = 'Payroll Liabilities';
@@ -38,6 +39,19 @@ const PAYROLL_GL_ACCOUNT_NAMES: Record<PayrollGlAccountKey, string> = {
   socialSecurityPayable: 'Social Security Payable',
   statutoryPensionPayable: 'Statutory Pension Payable',
   otherDeductionsPayable: 'Other Deductions Payable',
+};
+
+// Short label for each liability's SourceLedgerEntry description — each settles on its own
+// schedule (net pay this week, tax remittance next month, ...), so every one gets its own
+// entry rather than one lump entry per accrual.
+const PAYROLL_LEDGER_ENTRY_LABELS: Partial<
+  Record<PayrollGlAccountKey, string>
+> = {
+  netPayPayable: 'Net Pay',
+  incomeTaxPayable: 'Income Tax',
+  socialSecurityPayable: 'Social Security',
+  statutoryPensionPayable: 'Statutory Pension',
+  otherDeductionsPayable: 'Other Deductions',
 };
 
 const NORMAL_BALANCE_BY_CATEGORY: Record<GLAccountCategory, NormalBalance> = {
@@ -152,6 +166,7 @@ export class PayrollIntegrationService {
     private readonly masterData: AccountingMasterDataService,
     private readonly sourceTypes: SourceTypesService,
     private readonly journals: JournalsService,
+    private readonly sourceLedger: SourceLedgerService,
   ) {}
 
   /** Idempotent — safe to call every time the tenant clicks "Create Payroll GL Accounts".
@@ -388,7 +403,7 @@ export class PayrollIntegrationService {
       );
     }
 
-    const journal = await this.journals.create(user, {
+    let journal = await this.journals.create(user, {
       transactionDate: dto.transactionDate,
       fiscalPeriodId: fiscalPeriod.id,
       transactionCurrency: config.baseCurrency,
@@ -403,8 +418,39 @@ export class PayrollIntegrationService {
     });
 
     if (dto.autoPost && journal.status !== 'POSTED') {
-      return this.journals.post(user, journal.id);
+      journal = await this.journals.post(user, journal.id);
     }
+
+    // One open item per liability line, not one lump entry — each settles independently, on
+    // its own schedule (net pay this week, tax remittance next month, ...). Idempotent: safe
+    // to call again for the same run since journals.create() above already short-circuited
+    // to the existing journal via its idempotency key, so re-running this would create
+    // duplicate ledger entries against that same journal — guard by checking none exist yet.
+    const existingEntries = await this.prisma.sourceLedgerEntry.count({
+      where: { tenantId: dto.tenantId, journalEntryId: journal.id },
+    });
+    if (existingEntries === 0) {
+      const sourceType = await this.sourceTypes.ensureExists(
+        dto.tenantId,
+        SOURCE_MODULE_HR,
+        SOURCE_TYPE_PAYROLL,
+      );
+      for (const line of creditLines) {
+        const label = PAYROLL_LEDGER_ENTRY_LABELS[line.key];
+        if (line.amount <= 0 || !label) continue;
+        await this.sourceLedger.createEntry({
+          tenantId: dto.tenantId,
+          sourceTypeId: sourceType.id,
+          glAccountId: accounts[line.key]!.id,
+          journalEntryId: journal.id,
+          sourceRecordId: dto.payrollRunId,
+          description: `${label} — ${dto.periodLabel}`,
+          amount: line.amount,
+          currency: config.baseCurrency,
+        });
+      }
+    }
+
     return journal;
   }
 

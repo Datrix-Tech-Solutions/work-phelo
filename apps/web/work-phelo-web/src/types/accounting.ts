@@ -326,6 +326,31 @@ export interface SeedPayrollAccountsResult {
   sourceType: { id: string; module: SourceModule; name: string };
 }
 
+export type SourceLedgerPaymentState = 'OPEN' | 'PARTIALLY_PAID' | 'PAID';
+
+/** An open item created alongside a journal a module integration already posted (e.g.
+ *  payroll's accrual) — never generates its own journal. Only ever appears here once its
+ *  linked journal is actually POSTED. */
+export interface SourceLedgerEntry {
+  id: string;
+  description: string;
+  amount: number;
+  outstandingAmount: number;
+  currency: string;
+  createdAt: string;
+  sourceType: { id: string; module: SourceModule; name: string };
+  glAccount: { id: string; code: string; name: string };
+  paymentState: SourceLedgerPaymentState;
+}
+
+export interface MakeSourceLedgerPaymentPayload {
+  cashAccountId: string;
+  amount: number;
+  transactionDate: string;
+  settlementMethod: string;
+  description?: string;
+}
+
 export interface TaxType {
   id: string;
   code: string;

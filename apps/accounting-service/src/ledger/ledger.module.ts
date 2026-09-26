@@ -29,6 +29,8 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { ReceivablesController } from './receivables.controller';
 import { ReceivablesService } from './receivables.service';
+import { SourceLedgerController } from './source-ledger.controller';
+import { SourceLedgerService } from './source-ledger.service';
 import { SourceTypesController } from './source-types.controller';
 import { SourceTypesService } from './source-types.service';
 import { TransactionTypeRulesController } from './transaction-type-rules.controller';
@@ -51,6 +53,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     RecurringJournalsController,
     ReceivablesController,
     ReportsController,
+    SourceLedgerController,
     SourceTypesController,
     TransactionTypeRulesController,
   ],
@@ -68,6 +71,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     RecurringJournalsService,
     ReceivablesService,
     ReportsService,
+    SourceLedgerService,
     SourceTypesService,
     TransactionTypeRulesService,
   ],
@@ -79,6 +83,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     PayablesService,
     ReceivablesService,
     ReportsService,
+    SourceLedgerService,
     SourceTypesService,
     TransactionTypeRulesService,
   ],
