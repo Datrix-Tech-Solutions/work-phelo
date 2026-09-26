@@ -335,7 +335,7 @@ export class PayrollService {
       payeTax: { toString(): string } | string | number;
     }>,
   ) {
-    return items.reduce(
+    const totals = items.reduce(
       (acc, item) => {
         acc.totalGross = acc.totalGross.plus(item.grossSalary.toString());
         acc.totalNet = acc.totalNet.plus(item.netSalary.toString());
@@ -362,6 +362,21 @@ export class PayrollService {
         totalEmployerCost: new Decimal(0),
       },
     );
+
+    // Round every total to 2 decimal places here, once, so every caller (initial run
+    // creation, later recalculation after an item edit) persists and reads back the exact
+    // same rounded value — summing per-employee Decimals can otherwise carry sub-cent
+    // residue that would round differently on each recalculation.
+    return {
+      totalGross: totals.totalGross.toDecimalPlaces(2),
+      totalNet: totals.totalNet.toDecimalPlaces(2),
+      totalSSNIT: totals.totalSSNIT.toDecimalPlaces(2),
+      totalTier1: totals.totalTier1.toDecimalPlaces(2),
+      totalTier2: totals.totalTier2.toDecimalPlaces(2),
+      totalTier3: totals.totalTier3.toDecimalPlaces(2),
+      totalPAYE: totals.totalPAYE.toDecimalPlaces(2),
+      totalEmployerCost: totals.totalEmployerCost.toDecimalPlaces(2),
+    };
   }
 
   private async getEditableRunOrThrow(tenantId: string, runId: string) {

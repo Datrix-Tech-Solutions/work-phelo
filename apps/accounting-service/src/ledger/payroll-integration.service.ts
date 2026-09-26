@@ -111,6 +111,14 @@ const PAYROLL_ACCOUNT_GROUPS: PayrollAccountGroupTemplate[] = [
   },
 ];
 
+// Money arrives as plain JS numbers (parsed from Decimal strings over HTTP) and gets summed/
+// subtracted to derive the employer-SSNIT and Social Security lines — floating-point drift
+// (e.g. 3740.0000000000005) must be rounded away before amounts are compared/posted, or the
+// journal's debit/credit totals can differ by a cent and get rejected as unbalanced.
+function round2(amount: number): number {
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+}
+
 // Mirrors AccountingMasterDataService's private codeBand check — band width is the code's
 // trailing zeros (1130 -> width 10, band 1130-1139; 1100 -> width 100, band 1100-1199).
 function codeBandWidth(code: number): number {
@@ -314,20 +322,24 @@ export class PayrollIntegrationService {
     const user = this.internalRequestUser(dto.tenantId, callingService);
     const accounts = await this.findPayrollGlAccounts(dto.tenantId);
 
-    const employerSSNIT = dto.totalEmployerCost - dto.totalGross;
-    const socialSecurityPayable =
-      dto.totalTier1 + dto.totalTier2 + employerSSNIT;
+    const employerSSNIT = round2(dto.totalEmployerCost - dto.totalGross);
+    const socialSecurityPayable = round2(
+      dto.totalTier1 + dto.totalTier2 + employerSSNIT,
+    );
 
     const debitLines: { key: PayrollGlAccountKey; amount: number }[] = [
-      { key: 'salariesWagesExpense', amount: dto.totalGross },
+      { key: 'salariesWagesExpense', amount: round2(dto.totalGross) },
       { key: 'employerSocialSecurityExpense', amount: employerSSNIT },
     ];
     const creditLines: { key: PayrollGlAccountKey; amount: number }[] = [
-      { key: 'netPayPayable', amount: dto.totalNet },
-      { key: 'incomeTaxPayable', amount: dto.totalPAYE },
+      { key: 'netPayPayable', amount: round2(dto.totalNet) },
+      { key: 'incomeTaxPayable', amount: round2(dto.totalPAYE) },
       { key: 'socialSecurityPayable', amount: socialSecurityPayable },
-      { key: 'statutoryPensionPayable', amount: dto.totalTier3 },
-      { key: 'otherDeductionsPayable', amount: dto.totalOtherDeductions },
+      { key: 'statutoryPensionPayable', amount: round2(dto.totalTier3) },
+      {
+        key: 'otherDeductionsPayable',
+        amount: round2(dto.totalOtherDeductions),
+      },
     ];
 
     const missing = [...debitLines, ...creditLines]
