@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from '../auth/auth.module';
+import { AccountingHrClient } from '../hr-integration/client/hr.client';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingSettingsController } from './accounting-settings.controller';
@@ -58,6 +59,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     TransactionTypeRulesController,
   ],
   providers: [
+    AccountingHrClient,
     AccountingMasterDataService,
     CashbookService,
     BankReconciliationsService,

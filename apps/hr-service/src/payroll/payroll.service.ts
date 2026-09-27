@@ -1309,6 +1309,18 @@ export class PayrollService {
   }
 
   async markAsPaid(tenantId: string, id: string) {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { linkedToAccounting: true },
+    });
+    if (config?.linkedToAccounting) {
+      throw new BadRequestException(
+        'This payroll is linked to Accounting — it is marked as paid automatically once ' +
+          'Net Pay, Income Tax, and Social Security are all settled there, rather than by a ' +
+          'manual action here.',
+      );
+    }
+
     const run = await this.prisma.payrollRun.findFirst({
       where: { id, tenantId },
       include: {
@@ -1327,7 +1339,11 @@ export class PayrollService {
     const paidRun = await this.prisma.$transaction(async (tx) => {
       const updatedRun = await tx.payrollRun.update({
         where: { id },
-        data: { status: 'PAID', paidAt: new Date() },
+        data: {
+          status: 'PAID',
+          paidAt: new Date(),
+          payslipsReleasedAt: new Date(),
+        },
       });
 
       await this.applyPaidPayrollDeductions(tx, tenantId, run.items);
@@ -1344,6 +1360,84 @@ export class PayrollService {
     );
 
     return paidRun;
+  }
+
+  /** Per-liability-line settlement status for a linked tenant's run — powers the settlement
+   *  progress view that replaces the manual Mark as Paid button once linked. Returns null
+   *  for an unlinked tenant, where the run's own `status` is the only signal that matters. */
+  async getSettlementStatusForRun(tenantId: string, id: string) {
+    const [run, config] = await Promise.all([
+      this.prisma.payrollRun.findFirst({ where: { id, tenantId } }),
+      this.prisma.tenantConfig.findUnique({
+        where: { tenantId },
+        select: { linkedToAccounting: true },
+      }),
+    ]);
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (!config?.linkedToAccounting) return null;
+
+    return this.accountingClient.getPayrollSettlementStatus(tenantId, id);
+  }
+
+  /** Called by accounting-service (internal, HMAC-signed) once the run's Net Pay source
+   *  ledger entry is fully paid — the employee-facing half of "paid": their wage has been
+   *  disbursed, so their loan/advance deductions are considered serviced and their payslip
+   *  is ready, independently of whether Income Tax and Social Security have been remitted
+   *  yet. Idempotent per payrollRunId. */
+  async releasePayslipsForSettlement(tenantId: string, payrollRunId: string) {
+    const run = await this.prisma.payrollRun.findFirst({
+      where: { id: payrollRunId, tenantId },
+      include: {
+        items: {
+          include: {
+            deductionItems: true,
+          },
+        },
+      },
+    });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.payslipsReleasedAt) return { alreadyReleased: true as const };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payrollRun.update({
+        where: { id: run.id },
+        data: { payslipsReleasedAt: new Date() },
+      });
+      await this.applyPaidPayrollDeductions(tx, tenantId, run.items);
+    });
+
+    await this.notifyPayslipsPaid(
+      tenantId,
+      run.id,
+      run.month,
+      run.year,
+      run.items,
+    );
+
+    return { released: true as const };
+  }
+
+  /** Called by accounting-service (internal, HMAC-signed) once every liability tied to the
+   *  run (Net Pay, Income Tax, Social Security, ...) is fully paid — the employer-facing
+   *  half of "paid": the run is completely settled. Idempotent per payrollRunId. */
+  async markFullySettledByAccounting(tenantId: string, payrollRunId: string) {
+    const run = await this.prisma.payrollRun.findFirst({
+      where: { id: payrollRunId, tenantId },
+    });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.status === 'PAID') return { alreadyPaid: true as const };
+    if (run.status !== 'APPROVED') {
+      throw new BadRequestException(
+        `Cannot settle a payroll run in status ${run.status}`,
+      );
+    }
+
+    await this.prisma.payrollRun.update({
+      where: { id: run.id },
+      data: { status: 'PAID', paidAt: new Date() },
+    });
+
+    return { paid: true as const };
   }
 
   private async notifyPayslipsPaid(

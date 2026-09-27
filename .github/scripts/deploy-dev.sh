@@ -193,6 +193,7 @@ write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
   "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema accounting)" \
   "JWT_SECRET=${JWT_SECRET}" \
+  "HR_SERVICE_URL=http://hr-service:4002" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 log "✓ Service env files written"

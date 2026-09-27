@@ -1,8 +1,19 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiHeader,
+  ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -12,7 +23,10 @@ import {
   INTERNAL_SERVICE_AUTH_HEADERS,
   InternalServiceAuthGuard,
 } from '../auth/guards/internal-service-auth.guard';
-import { PostPayrollAccrualDto } from './dto/payroll-integration.dto';
+import {
+  PostPayrollAccrualDto,
+  QueryPayrollSettlementStatusDto,
+} from './dto/payroll-integration.dto';
 import { PayrollIntegrationService } from './payroll-integration.service';
 
 @ApiTags('Internal Accounting Payroll Integration')
@@ -58,5 +72,22 @@ export class InternalPayrollIntegrationController {
     @Body() dto: PostPayrollAccrualDto,
   ) {
     return this.service.postAccrual(request.internalServiceName, dto);
+  }
+
+  @Get(':payrollRunId/settlement-status')
+  @ApiOperation({
+    summary:
+      "A payroll run's per-liability-line settlement status (Net Pay, Income Tax, Social Security)",
+  })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.service, required: true })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.timestamp, required: true })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.signature, required: true })
+  @ApiOkResponse({ description: 'Settlement status for each liability line.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid service credentials.' })
+  getSettlementStatus(
+    @Param('payrollRunId', ParseUUIDPipe) payrollRunId: string,
+    @Query() query: QueryPayrollSettlementStatusDto,
+  ) {
+    return this.service.getSettlementStatus(query.tenantId, payrollRunId);
   }
 }

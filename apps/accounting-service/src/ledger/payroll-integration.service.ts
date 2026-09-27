@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   AdjustmentCategory,
@@ -9,6 +9,7 @@ import {
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccountingHrClient } from '../hr-integration/client/hr.client';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import {
   PostPayrollAccrualDto,
@@ -170,12 +171,15 @@ function findAvailableGroupCode(
 
 @Injectable()
 export class PayrollIntegrationService {
+  private readonly logger = new Logger(PayrollIntegrationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly masterData: AccountingMasterDataService,
     private readonly sourceTypes: SourceTypesService,
     private readonly journals: JournalsService,
     private readonly sourceLedger: SourceLedgerService,
+    private readonly hrClient: AccountingHrClient,
   ) {}
 
   /** Idempotent — safe to call every time the tenant clicks "Create Payroll GL Accounts".
@@ -465,6 +469,77 @@ export class PayrollIntegrationService {
     }
 
     return journal;
+  }
+
+  /** Per-liability-line settlement status for one payroll run — used by hr-service to show
+   *  the employer a settlement progress view once the run is linked to Accounting. */
+  async getSettlementStatus(tenantId: string, payrollRunId: string) {
+    const accounts = await this.findPayrollGlAccounts(tenantId);
+    const entries = await this.sourceLedger.listBySourceRecord(
+      tenantId,
+      payrollRunId,
+    );
+    const byGlAccountId = new Map(entries.map((e) => [e.glAccount.id, e]));
+
+    const pick = (key: PayrollGlAccountKey) => {
+      const accountId = accounts[key]?.id;
+      const entry = accountId ? byGlAccountId.get(accountId) : undefined;
+      if (!entry) return null;
+      return {
+        paymentState: entry.paymentState,
+        amount: entry.amount,
+        outstandingAmount: entry.outstandingAmount,
+      };
+    };
+
+    return {
+      netPay: pick('netPayPayable'),
+      incomeTax: pick('incomeTaxPayable'),
+      socialSecurity: pick('socialSecurityPayable'),
+    };
+  }
+
+  /** Called (by the generic Source Ledger flow) right after a payment settles an entry
+   *  belonging to HR/Payroll — reacts only when that entry is this run's Net Pay line
+   *  (releases payslips) and/or when every liability line for the run is now settled
+   *  (marks the run fully paid). A notification failure is logged, not thrown — the
+   *  payment itself already succeeded and must not be rolled back over a side effect. */
+  async handleSourceLedgerEntrySettled(
+    tenantId: string,
+    entry: { sourceRecordId: string | null; glAccount: { id: string } },
+  ) {
+    const payrollRunId = entry.sourceRecordId;
+    if (!payrollRunId) return;
+
+    const accounts = await this.findPayrollGlAccounts(tenantId);
+    if (entry.glAccount.id === accounts.netPayPayable?.id) {
+      try {
+        await this.hrClient.notifyNetPaySettled(tenantId, payrollRunId);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Failed to notify HR of net pay settlement for payroll run ${payrollRunId}: ${reason}`,
+        );
+      }
+    }
+
+    const siblings = await this.sourceLedger.listBySourceRecord(
+      tenantId,
+      payrollRunId,
+    );
+    const allSettled =
+      siblings.length > 0 &&
+      siblings.every((sibling) => sibling.paymentState === 'PAID');
+    if (allSettled) {
+      try {
+        await this.hrClient.notifyFullySettled(tenantId, payrollRunId);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Failed to notify HR of full settlement for payroll run ${payrollRunId}: ${reason}`,
+        );
+      }
+    }
   }
 
   private async findPayrollGlAccounts(

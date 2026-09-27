@@ -130,3 +130,9 @@ export class PostPayrollAccrualDto {
   @IsBoolean()
   autoPost!: boolean;
 }
+
+export class QueryPayrollSettlementStatusDto {
+  @ApiProperty({ description: 'Tenant the payroll run belongs to' })
+  @IsUUID()
+  tenantId!: string;
+}

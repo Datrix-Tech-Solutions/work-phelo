@@ -1040,35 +1040,36 @@ model ShiftAssignmentOverride {
 // ── Payroll ───────────────────────────────────────────────────────────────
 
 model PayrollRun {
-  id                String         @id @default(uuid())
-  tenantId          String
-  month             Int
-  year              Int
-  status            PayrollStatus  @default(DRAFT)
-  totalGross        Decimal        @db.Decimal(15, 2)
-  totalNet          Decimal        @db.Decimal(15, 2)
-  totalSSNIT        Decimal        @db.Decimal(15, 2)
-  totalTier1        Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier2        Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier3        Decimal        @default(0) @db.Decimal(15, 2)
-  totalPAYE         Decimal        @db.Decimal(15, 2)
-  totalEmployerCost Decimal        @default(0) @db.Decimal(15, 2)
-  runBy             String
-  submittedBy       String?
-  submittedAt       DateTime?
-  approvedBy        String?
-  approvedAt        DateTime?
-  approvalNote      String?
-  returnToDraftNote String?
-  paidAt            DateTime?
-  notes             String?
-  payrollCountry    PayrollCountry @default(GH)
-  payrollCurrency   String         @default("GHS")
-  tier3Enabled      Boolean        @default(false)
-  tier3Rate         Decimal?       @db.Decimal(5, 2)
-  tier3SchemeName   String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  tenantId           String
+  month              Int
+  year               Int
+  status             PayrollStatus  @default(DRAFT)
+  totalGross         Decimal        @db.Decimal(15, 2)
+  totalNet           Decimal        @db.Decimal(15, 2)
+  totalSSNIT         Decimal        @db.Decimal(15, 2)
+  totalTier1         Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier2         Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier3         Decimal        @default(0) @db.Decimal(15, 2)
+  totalPAYE          Decimal        @db.Decimal(15, 2)
+  totalEmployerCost  Decimal        @default(0) @db.Decimal(15, 2)
+  runBy              String
+  submittedBy        String?
+  submittedAt        DateTime?
+  approvedBy         String?
+  approvedAt         DateTime?
+  approvalNote       String?
+  returnToDraftNote  String?
+  paidAt             DateTime?
+  payslipsReleasedAt DateTime?
+  notes              String?
+  payrollCountry     PayrollCountry @default(GH)
+  payrollCurrency    String         @default("GHS")
+  tier3Enabled       Boolean        @default(false)
+  tier3Rate          Decimal?       @db.Decimal(5, 2)
+  tier3SchemeName    String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   items PayrollItem[]
 

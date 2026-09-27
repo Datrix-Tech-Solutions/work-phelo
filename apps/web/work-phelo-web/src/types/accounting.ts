@@ -308,6 +308,10 @@ export interface SourceTypeDefinition {
   module: SourceModule;
   name: string;
   isActive: boolean;
+  /** Posted source ledger entries this source has ever had, and how many of those are
+   *  now fully paid. */
+  entryCount: number;
+  paidCount: number;
 }
 
 export interface SeedPayrollAccountItem {
@@ -333,20 +337,58 @@ export interface SeedPayrollAccountsResult {
 }
 
 export type SourceLedgerPaymentState = 'OPEN' | 'PARTIALLY_PAID' | 'PAID';
+export type SourceLedgerStatusFilter = 'ALL' | 'PAID' | 'UNPAID';
+export type SourceLedgerSortBy = 'eventDate' | 'paymentDate';
+
+export interface SourceLedgerAllocation {
+  id: string;
+  amount: number;
+  /** When this specific payment was made — not to be confused with the entry's own event
+   *  date (`createdAt`, when the accrual/liability was created). */
+  allocatedAt: string;
+  cashbookTransaction: {
+    id: string;
+    reference: string | null;
+    description: string;
+    transactionDate: string;
+  };
+}
 
 /** An open item created alongside a journal a module integration already posted (e.g.
  *  payroll's accrual) — never generates its own journal. Only ever appears here once its
  *  linked journal is actually POSTED. */
 export interface SourceLedgerEntry {
   id: string;
+  sourceRecordId: string | null;
   description: string;
   amount: number;
   outstandingAmount: number;
   currency: string;
   createdAt: string;
+  /** Most recent non-reversed payment against this entry, or null if it has none yet. */
+  lastPaymentAt: string | null;
   sourceType: { id: string; module: SourceModule; name: string };
   glAccount: { id: string; code: string; name: string };
+  journalEntry: { id: string; journalNumber: string };
   paymentState: SourceLedgerPaymentState;
+  allocations: SourceLedgerAllocation[];
+}
+
+export interface SourceLedgerQuery {
+  sourceTypeId?: string;
+  status?: SourceLedgerStatusFilter;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: SourceLedgerSortBy;
+  sortDir?: 'asc' | 'desc';
+  limit?: number;
+}
+
+export interface SourceLedgerSummary {
+  entryCount: number;
+  paidCount: number;
+  totalAmount: number;
+  totalOutstanding: number;
 }
 
 export interface MakeSourceLedgerPaymentPayload {

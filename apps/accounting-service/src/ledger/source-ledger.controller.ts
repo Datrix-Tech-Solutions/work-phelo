@@ -26,7 +26,9 @@ import { AccountingPermission } from './accounting.permissions';
 import {
   MakeSourceLedgerPaymentDto,
   QuerySourceLedgerDto,
+  QuerySourceLedgerSummaryDto,
 } from './dto/source-ledger.dto';
+import { PayrollIntegrationService } from './payroll-integration.service';
 import { SourceLedgerService } from './source-ledger.service';
 
 @Controller('source-ledger')
@@ -36,7 +38,10 @@ import { SourceLedgerService } from './source-ledger.service';
 @UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
 @RequireModule('accounting')
 export class SourceLedgerController {
-  constructor(private readonly service: SourceLedgerService) {}
+  constructor(
+    private readonly service: SourceLedgerService,
+    private readonly payrollIntegration: PayrollIntegrationService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -50,6 +55,22 @@ export class SourceLedgerController {
     return this.service.list(request.user, query);
   }
 
+  @Get('summary')
+  @ApiOperation({
+    summary:
+      "A source type's full-history summary (entry/paid counts, total amount/outstanding) — always unfiltered, independent of the list's own filters",
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_VIEW)
+  getSummary(
+    @Query() query: QuerySourceLedgerSummaryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.getSourceTypeSummary(
+      request.user.tenantId,
+      query.sourceTypeId,
+    );
+  }
+
   @Post(':entryId/payments')
   @ApiOperation({
     summary: 'Record a payment against a source ledger entry',
@@ -58,11 +79,18 @@ export class SourceLedgerController {
       'allocation against this entry in the same action.',
   })
   @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
-  makePayment(
+  async makePayment(
     @Param('entryId', ParseUUIDPipe) entryId: string,
     @Body() dto: MakeSourceLedgerPaymentDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.makePayment(request.user, entryId, dto);
+    const result = await this.service.makePayment(request.user, entryId, dto);
+    if (result.sourceType.module === 'HR' && result.paymentState === 'PAID') {
+      await this.payrollIntegration.handleSourceLedgerEntrySettled(
+        request.user.tenantId,
+        result,
+      );
+    }
+    return result;
   }
 }

@@ -1,24 +1,20 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { TableButton } from '@/components/atoms/TableButton';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
 import { SourceLedgerPanel } from '@/components/organisms/accounting/panels/SourceLedgerPanel';
+import { SourceTypeManagePanel } from '@/components/organisms/accounting/panels/SourceTypeManagePanel';
 import { useLinkSourceType, useSourceTypes, useUnlinkSourceType } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { SourceModule, SourceTypeDefinition } from '@/types/accounting';
-
-const MODULE_LABELS: Record<SourceModule, string> = {
-  HR: 'HR',
-  MARKETING: 'Marketing',
-  ACCOUNTING: 'Accounting',
-  RECRUITMENT: 'Recruitment',
-  OPERATIONS: 'Operations',
-};
+import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
+import type { SourceTypeDefinition } from '@/types/accounting';
 
 export function SourceTypesTable() {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const { data = [], isLoading } = useSourceTypes();
   const { mutate: link } = useLinkSourceType();
   const { mutate: unlink } = useUnlinkSourceType();
@@ -30,7 +26,7 @@ export function SourceTypesTable() {
     () =>
       [...data].sort(
         (a, b) =>
-          MODULE_LABELS[a.module].localeCompare(MODULE_LABELS[b.module]) ||
+          SOURCE_MODULE_LABELS[a.module].localeCompare(SOURCE_MODULE_LABELS[b.module]) ||
           a.name.localeCompare(b.name),
       ),
     [data],
@@ -50,7 +46,7 @@ export function SourceTypesTable() {
       label: 'Source',
       width: '200px',
       render: (row) => (
-        <span className="font-medium text-gray-900">{MODULE_LABELS[row.module]}</span>
+        <span className="font-medium text-gray-900">{SOURCE_MODULE_LABELS[row.module]}</span>
       ),
     },
     {
@@ -60,18 +56,29 @@ export function SourceTypesTable() {
       render: (row) => <span className="text-gray-700">{row.name}</span>,
     },
     {
-      key: 'journalEntries',
-      label: 'Journal Entries',
-      width: '140px',
+      key: 'entries',
+      label: 'Entries',
+      width: '100px',
       className: 'text-right',
-      render: () => <span className="text-gray-400">—</span>,
+      render: (row) => <span className="text-gray-700">{row.entryCount}</span>,
     },
     {
-      key: 'payments',
-      label: 'Payments',
+      key: 'paid',
+      label: 'Paid',
       width: '120px',
       className: 'text-right',
-      render: () => <span className="text-gray-400">—</span>,
+      render: (row) =>
+        row.entryCount === 0 ? (
+          <span className="text-gray-400">—</span>
+        ) : (
+          <span
+            className={
+              row.paidCount === row.entryCount ? 'text-emerald-600 font-medium' : 'text-gray-700'
+            }
+          >
+            {row.paidCount} / {row.entryCount}
+          </span>
+        ),
     },
     {
       key: 'actions',
@@ -80,7 +87,7 @@ export function SourceTypesTable() {
       className: 'text-right',
       render: (row) => (
         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-          <TableButton variant="blue" onClick={() => setLedgerTarget(row)}>
+          <TableButton variant="green" onClick={() => setLedgerTarget(row)}>
             View Ledger
           </TableButton>
           <TableButton variant="blue" onClick={() => setManageTarget(row)}>
@@ -102,27 +109,15 @@ export function SourceTypesTable() {
         isLoading={isLoading}
         emptyMessage="No sources linked yet — entries show up here automatically once another module (like Payroll) completes its own accounting setup."
         noInternalScroll
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/accounting/settings/source-types/${row.id}`)
+        }
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
       />
 
-      <SidePanel
-        isOpen={!!manageTarget}
-        onClose={() => setManageTarget(null)}
-        title={manageTarget ? `Manage ${manageTarget.name}` : 'Manage'}
-        description={
-          manageTarget
-            ? `${MODULE_LABELS[manageTarget.module]} — ${manageTarget.name} integration`
-            : undefined
-        }
-      >
-        <p className="text-sm text-gray-500">
-          This will surface {manageTarget ? MODULE_LABELS[manageTarget.module] : 'the module'}
-          &apos;s own integration setup here — the same settings screen it manages from its own
-          module, opened in place instead of navigating away.
-        </p>
-      </SidePanel>
+      <SourceTypeManagePanel sourceType={manageTarget} onClose={() => setManageTarget(null)} />
 
       <SourceLedgerPanel sourceType={ledgerTarget} onClose={() => setLedgerTarget(null)} />
     </>

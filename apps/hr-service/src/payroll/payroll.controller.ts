@@ -193,4 +193,22 @@ export class PayrollController {
   ) {
     return this.payrollService.markAsPaid(req.user.tenantId, id);
   }
+
+  @Get(':id/settlement-status')
+  @RequirePermissions(Permission.READ_PAYROLL)
+  @ApiOperation({
+    summary:
+      "A payroll run's per-liability-line settlement status, for tenants linked to Accounting",
+  })
+  @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Settlement status, or null if not linked to Accounting',
+  })
+  getSettlementStatus(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.payrollService.getSettlementStatusForRun(req.user.tenantId, id);
+  }
 }
