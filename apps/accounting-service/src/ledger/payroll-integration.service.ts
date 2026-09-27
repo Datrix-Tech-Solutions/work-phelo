@@ -6,11 +6,13 @@ import {
   JournalEntryType,
   NormalBalance,
   SourceModule,
+  TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import {
   PostPayrollAccrualDto,
+  SeedPayrollAccountItemDto,
   SeedPayrollAccountsDto,
 } from './dto/payroll-integration.dto';
 import { JournalLineDto } from './dto/accounting.dto';
@@ -67,6 +69,13 @@ const PAYROLL_ENTITY_CODE = 'PAYROLL-EMP';
 const PAYROLL_ENTITY_NAME = 'Employees (Payroll)';
 const SOURCE_MODULE_HR = SourceModule.HR;
 const SOURCE_TYPE_PAYROLL = 'Payroll';
+
+// A toggleable seed item alongside the GL accounts — same include/exclude pattern, just
+// creating a TransactionType instead of a GLAccount. Money out to settle a liability, so
+// PAYABLE, matching the existing generic "Payment" type's own categorization.
+const WAGE_PAYMENT_TYPE_KEY = 'wage-payment-transaction-type';
+const WAGE_PAYMENT_TYPE_CODE = 'PR-WAGE';
+const WAGE_PAYMENT_TYPE_NAME = 'Wage Payment';
 
 interface PayrollAccountGroupTemplate {
   classificationCode: string;
@@ -175,6 +184,11 @@ export class PayrollIntegrationService {
    *  aggregate entity of that type, and the "HR / Payroll" source type entry. */
   async seedAccounts(user: RequestUser, dto: SeedPayrollAccountsDto) {
     await this.masterData.seedStandardAccountHierarchy(user);
+    const sourceType = await this.sourceTypes.ensureExists(
+      user.tenantId,
+      SOURCE_MODULE_HR,
+      SOURCE_TYPE_PAYROLL,
+    );
 
     const itemByKey = new Map(dto.items.map((item) => [item.key, item]));
     const [existingGroups, existingAccounts] = await Promise.all([
@@ -309,13 +323,12 @@ export class PayrollIntegrationService {
       }
     }
 
+    accountResults.push(
+      await this.seedWagePaymentTransactionType(user, sourceType.id, itemByKey),
+    );
+
     const entityType = await this.ensureEmployeeEntityType(user);
     const entity = await this.ensureAggregatePayrollEntity(user);
-    const sourceType = await this.sourceTypes.ensureExists(
-      user.tenantId,
-      SOURCE_MODULE_HR,
-      SOURCE_TYPE_PAYROLL,
-    );
 
     return {
       accounts: accountResults,
@@ -497,6 +510,54 @@ export class PayrollIntegrationService {
       moduleConfig: {},
       featureConfig: {},
       permissions: [],
+    };
+  }
+
+  private async seedWagePaymentTransactionType(
+    user: RequestUser,
+    sourceTypeId: string,
+    itemByKey: Map<string, SeedPayrollAccountItemDto>,
+  ): Promise<{
+    key: string;
+    code: string;
+    name: string;
+    status: 'created' | 'existing' | 'excluded';
+  }> {
+    const requestItem = itemByKey.get(WAGE_PAYMENT_TYPE_KEY);
+    const name = requestItem?.name?.trim() || WAGE_PAYMENT_TYPE_NAME;
+    if (requestItem?.include === false) {
+      return { key: WAGE_PAYMENT_TYPE_KEY, code: '', name, status: 'excluded' };
+    }
+
+    const existing = await this.prisma.transactionType.findFirst({
+      where: { tenantId: user.tenantId, sourceTypeId },
+    });
+    if (existing) {
+      return {
+        key: WAGE_PAYMENT_TYPE_KEY,
+        code: existing.code,
+        name: existing.name,
+        status: 'existing',
+      };
+    }
+
+    const created = await this.prisma.transactionType.create({
+      data: {
+        tenantId: user.tenantId,
+        code: WAGE_PAYMENT_TYPE_CODE,
+        name,
+        category: TransactionTypeCategory.PAYABLE,
+        postsToCashbook: true,
+        sourceTypeId,
+        createdByUserId: user.id,
+        updatedByUserId: user.id,
+      },
+    });
+    return {
+      key: WAGE_PAYMENT_TYPE_KEY,
+      code: created.code,
+      name: created.name,
+      status: 'created',
     };
   }
 

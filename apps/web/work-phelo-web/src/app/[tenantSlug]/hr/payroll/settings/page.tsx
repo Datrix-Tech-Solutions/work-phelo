@@ -22,12 +22,30 @@ import { useSeedPayrollAccounts } from '@/hooks/accounting/usePayrollIntegration
 interface PayrollAccountRow {
   key: string;
   name: string;
+  kind: 'account';
   category: GLAccountCategory;
   groupCode: string;
   groupName: string;
   code: string;
   status: 'created' | 'existing' | 'not-created';
 }
+
+interface PayrollTransactionTypeRow {
+  key: string;
+  name: string;
+  kind: 'transactionType';
+  code: string;
+  status: 'created' | 'existing' | 'not-created';
+}
+
+type PayrollSeedRow = PayrollAccountRow | PayrollTransactionTypeRow;
+
+// Must match the backend's WAGE_PAYMENT_TYPE_KEY/NAME exactly (`payroll-integration.service.ts`)
+// — a "Wage Payment" transaction type (category PAYABLE), linked to the HR/Payroll source, so
+// it's usable on New Transaction without a rule: its offset account/amount come from picking
+// one of the source's open items instead of a preconfigured rule line.
+const WAGE_PAYMENT_TYPE_KEY = 'wage-payment-transaction-type';
+const WAGE_PAYMENT_TYPE_NAME = 'Wage Payment';
 
 const CATEGORY_LABELS: Record<GLAccountCategory, string> = {
   ASSET: 'Asset',
@@ -147,6 +165,7 @@ function buildPayrollAccountRows(
         return {
           key: child.key,
           name: seeded.name,
+          kind: 'account' as const,
           category: groupTemplate.category,
           groupCode,
           groupName: groupTemplate.groupName,
@@ -165,6 +184,7 @@ function buildPayrollAccountRows(
         return {
           key: child.key,
           name: reconciled.name,
+          kind: 'account' as const,
           category: groupTemplate.category,
           groupCode,
           groupName: groupTemplate.groupName,
@@ -175,6 +195,7 @@ function buildPayrollAccountRows(
       return {
         key: child.key,
         name: displayName,
+        kind: 'account' as const,
         category: groupTemplate.category,
         groupCode,
         groupName: groupTemplate.groupName,
@@ -183,6 +204,30 @@ function buildPayrollAccountRows(
       };
     });
   });
+}
+
+function buildWagePaymentTypeRow(
+  nameOverrides: Record<string, string>,
+  seedResult: SeedPayrollAccountsResult | null,
+): PayrollTransactionTypeRow {
+  const displayName = nameOverrides[WAGE_PAYMENT_TYPE_KEY] ?? WAGE_PAYMENT_TYPE_NAME;
+  const seeded = seedResult?.accounts.find((a) => a.key === WAGE_PAYMENT_TYPE_KEY);
+  if (seeded) {
+    return {
+      key: WAGE_PAYMENT_TYPE_KEY,
+      name: seeded.name,
+      kind: 'transactionType',
+      code: seeded.code,
+      status: seeded.status === 'excluded' ? 'not-created' : seeded.status,
+    };
+  }
+  return {
+    key: WAGE_PAYMENT_TYPE_KEY,
+    name: displayName,
+    kind: 'transactionType',
+    code: '—',
+    status: 'not-created',
+  };
 }
 
 export default function PayrollSettingsPage({
@@ -221,8 +266,11 @@ export default function PayrollSettingsPage({
   const { data: existingGlAccounts = [] } = useGLAccounts();
   const seedPayrollAccounts = useSeedPayrollAccounts();
 
-  const payrollAccountRows = useMemo(
-    () => buildPayrollAccountRows(existingGlAccounts, nameOverrides, seedResult),
+  const payrollSeedRows: PayrollSeedRow[] = useMemo(
+    () => [
+      ...buildPayrollAccountRows(existingGlAccounts, nameOverrides, seedResult),
+      buildWagePaymentTypeRow(nameOverrides, seedResult),
+    ],
     [existingGlAccounts, nameOverrides, seedResult],
   );
 
@@ -234,10 +282,10 @@ export default function PayrollSettingsPage({
 
   if (!canManagePayroll) return null;
 
-  const pendingAccounts = payrollAccountRows.filter(
+  const pendingAccounts = payrollSeedRows.filter(
     (row) => !excludedKeys.has(row.key) && row.status === 'not-created',
   );
-  const createdCount = payrollAccountRows.filter((row) => row.status !== 'not-created').length;
+  const createdCount = payrollSeedRows.filter((row) => row.status !== 'not-created').length;
 
   function toggleExcluded(key: string) {
     setExcludedKeys((prev) => {
@@ -255,7 +303,7 @@ export default function PayrollSettingsPage({
   function handleCreateAccounts() {
     seedPayrollAccounts.mutate(
       {
-        items: payrollAccountRows.map((row) => ({
+        items: payrollSeedRows.map((row) => ({
           key: row.key,
           name: row.name,
           include: !excludedKeys.has(row.key),
@@ -316,11 +364,12 @@ export default function PayrollSettingsPage({
             className={cn('flex flex-col', !linkedToAccounting && 'opacity-50 pointer-events-none')}
           >
             <p className="text-sm text-gray-500 mb-4">
-              Default accounts used to post payroll accruals: staff advances/loans, payroll
-              liabilities per obligation type, and payroll expense.
+              Default accounts used to post payroll accruals — staff advances/loans, payroll
+              liabilities per obligation type, and payroll expense — plus a &quot;Wage Payment&quot;
+              transaction type for settling them from New Transaction.
             </p>
             <div className="flex flex-col divide-y divide-gray-100">
-              {payrollAccountRows.map((row) => {
+              {payrollSeedRows.map((row) => {
                 const isCreated = row.status !== 'not-created';
                 const isExcluded = excludedKeys.has(row.key);
                 return (
@@ -358,13 +407,19 @@ export default function PayrollSettingsPage({
                       )}
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <TypeChip
-                        label={CATEGORY_LABELS[row.category]}
-                        color={GL_ACCOUNT_CATEGORY_CHIP_COLOR[row.category]}
-                      />
-                      <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">
-                        {row.groupCode} — {row.groupName}
-                      </span>
+                      {row.kind === 'account' ? (
+                        <>
+                          <TypeChip
+                            label={CATEGORY_LABELS[row.category]}
+                            color={GL_ACCOUNT_CATEGORY_CHIP_COLOR[row.category]}
+                          />
+                          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">
+                            {row.groupCode} — {row.groupName}
+                          </span>
+                        </>
+                      ) : (
+                        <TypeChip label="Transaction Type" color="teal" />
+                      )}
                       <Badge
                         label={isCreated ? 'Created' : isExcluded ? 'Excluded' : 'Not created'}
                         variant={isCreated ? 'success' : isExcluded ? 'warning' : 'neutral'}
