@@ -259,6 +259,15 @@ export class CreateTransactionTypeDto {
   @MaxLength(160)
   source?: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Links this type to a Source (Settings > Source Types) — lets it be used on New Transaction without a rule.',
+  })
+  @IsOptional()
+  @IsUUID()
+  sourceTypeId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(trimmed)

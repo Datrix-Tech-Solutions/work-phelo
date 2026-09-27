@@ -1619,6 +1619,9 @@ export class AccountingMasterDataService {
     user: RequestUser,
     dto: CreateTransactionTypeDto,
   ) {
+    if (dto.sourceTypeId) {
+      await this.assertSourceType(user.tenantId, dto.sourceTypeId);
+    }
     try {
       const transactionType = await this.prisma.transactionType.create({
         data: {
@@ -1629,6 +1632,7 @@ export class AccountingMasterDataService {
           businessRoles: dto.businessRoles ?? [],
           allowedDocument: this.optional(dto.allowedDocument),
           source: this.optional(dto.source),
+          sourceTypeId: dto.sourceTypeId ?? null,
           description: this.optional(dto.description),
           postsToCashbook: dto.postsToCashbook ?? false,
           createdByUserId: user.id,
@@ -1657,6 +1661,9 @@ export class AccountingMasterDataService {
       user.tenantId,
       transactionTypeId,
     );
+    if (dto.sourceTypeId) {
+      await this.assertSourceType(user.tenantId, dto.sourceTypeId);
+    }
     try {
       const updated = await this.prisma.transactionType.update({
         where: {
@@ -1674,6 +1681,9 @@ export class AccountingMasterDataService {
             : {}),
           ...(dto.source !== undefined
             ? { source: this.optional(dto.source) }
+            : {}),
+          ...(dto.sourceTypeId !== undefined
+            ? { sourceTypeId: dto.sourceTypeId ?? null }
             : {}),
           ...(dto.description !== undefined
             ? { description: this.optional(dto.description) }
@@ -2801,6 +2811,16 @@ export class AccountingMasterDataService {
       );
     }
     return currency;
+  }
+
+  private async assertSourceType(tenantId: string, sourceTypeId: string) {
+    const sourceType = await this.prisma.sourceType.findUnique({
+      where: { id_tenantId: { id: sourceTypeId, tenantId } },
+    });
+    if (!sourceType || !sourceType.isActive) {
+      throw new BadRequestException(`Active source type not found`);
+    }
+    return sourceType;
   }
 
   private async assertParentAccount(

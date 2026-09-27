@@ -33,7 +33,7 @@ type FormValues = {
   category: TransactionTypeCategory | '';
   businessRoles: string[];
   allowedDocument: string;
-  source: string;
+  sourceTypeId: string;
   description: string;
   postsToCashbook: boolean;
 };
@@ -44,7 +44,7 @@ const DEFAULTS: FormValues = {
   category: '',
   businessRoles: [],
   allowedDocument: '',
-  source: '',
+  sourceTypeId: '',
   description: '',
   postsToCashbook: false,
 };
@@ -67,7 +67,7 @@ export function TransactionTypePanel({
     () =>
       sourceTypes
         .filter((s) => s.isActive)
-        .map((s) => ({ value: s.name, label: `${s.module} — ${s.name}` })),
+        .map((s) => ({ value: s.id, label: `${s.module} — ${s.name}` })),
     [sourceTypes],
   );
   const { data: entityTypesData = [] } = useEntityTypes();
@@ -94,7 +94,7 @@ export function TransactionTypePanel({
         category: transactionType.category,
         businessRoles: transactionType.businessRoles,
         allowedDocument: transactionType.allowedDocument ?? '',
-        source: transactionType.source ?? '',
+        sourceTypeId: transactionType.sourceTypeId ?? '',
         description: transactionType.description ?? '',
         postsToCashbook: transactionType.postsToCashbook,
       });
@@ -114,7 +114,7 @@ export function TransactionTypePanel({
         category: values.category as TransactionTypeCategory,
         businessRoles: values.businessRoles,
         allowedDocument: values.allowedDocument || undefined,
-        source: values.source || undefined,
+        sourceTypeId: values.sourceTypeId || undefined,
         description: values.description || undefined,
         postsToCashbook: values.postsToCashbook,
       };
@@ -230,7 +230,7 @@ export function TransactionTypePanel({
           )}
         />
         <Controller
-          name="source"
+          name="sourceTypeId"
           control={control}
           render={({ field }) => (
             <SearchSelect

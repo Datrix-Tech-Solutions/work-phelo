@@ -48,7 +48,7 @@ export function SourceTypesTable() {
     {
       key: 'source',
       label: 'Source',
-      width: 'minmax(140px, 1fr)',
+      width: '200px',
       render: (row) => (
         <span className="font-medium text-gray-900">{MODULE_LABELS[row.module]}</span>
       ),
@@ -76,7 +76,7 @@ export function SourceTypesTable() {
     {
       key: 'actions',
       label: 'Actions',
-      width: '160px',
+      width: 'minmax(140px, 1fr)',
       className: 'text-right',
       render: (row) => (
         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>

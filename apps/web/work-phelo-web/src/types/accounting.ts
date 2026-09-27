@@ -289,6 +289,7 @@ export interface CreateTransactionTypePayload {
   businessRoles?: string[];
   allowedDocument?: string;
   source?: string;
+  sourceTypeId?: string;
   description?: string;
   postsToCashbook?: boolean;
 }
