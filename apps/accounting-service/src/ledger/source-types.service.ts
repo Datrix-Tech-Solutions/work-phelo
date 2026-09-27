@@ -2,17 +2,29 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { SourceModule } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SourceLedgerService } from './source-ledger.service';
 
 @Injectable()
 export class SourceTypesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sourceLedger: SourceLedgerService,
+  ) {}
 
   async list(user: RequestUser) {
-    const items = await this.prisma.sourceType.findMany({
-      where: { tenantId: user.tenantId },
-      orderBy: [{ module: 'asc' }, { name: 'asc' }],
-    });
-    return items.map((item) => this.toSourceTypeDto(item));
+    const [items, summaries] = await Promise.all([
+      this.prisma.sourceType.findMany({
+        where: { tenantId: user.tenantId },
+        orderBy: [{ module: 'asc' }, { name: 'asc' }],
+      }),
+      this.sourceLedger.getSettlementSummary(user.tenantId),
+    ]);
+    return items.map((item) =>
+      this.toSourceTypeDto(
+        item,
+        summaries.get(item.id) ?? { entryCount: 0, paidCount: 0 },
+      ),
+    );
   }
 
   link(user: RequestUser, id: string) {
@@ -62,17 +74,25 @@ export class SourceTypesService {
     }
   }
 
-  private toSourceTypeDto(sourceType: {
-    id: string;
-    module: SourceModule;
-    name: string;
-    isActive: boolean;
-  }) {
+  private toSourceTypeDto(
+    sourceType: {
+      id: string;
+      module: SourceModule;
+      name: string;
+      isActive: boolean;
+    },
+    summary: { entryCount: number; paidCount: number } = {
+      entryCount: 0,
+      paidCount: 0,
+    },
+  ) {
     return {
       id: sourceType.id,
       module: sourceType.module,
       name: sourceType.name,
       isActive: sourceType.isActive,
+      entryCount: summary.entryCount,
+      paidCount: summary.paidCount,
     };
   }
 }

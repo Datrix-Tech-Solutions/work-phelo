@@ -23,6 +23,7 @@ import {
   useGLAccountOptions,
   useGLAccounts,
   useMakeSourceLedgerPayment,
+  usePostCashbookTransaction,
   useSourceLedger,
   useSubledgers,
   useTransactionTypeRules,
@@ -102,20 +103,21 @@ export function NewTransactionPanel({
   const createCashbookPayment = useCreateCashbookPayment();
   const createCashbookEntry = isCashbookReceipt ? createCashbookReceipt : createCashbookPayment;
   const makeSourceLedgerPayment = useMakeSourceLedgerPayment();
+  const postCashbookTransaction = usePostCashbookTransaction();
   const isSaving = isCashbookType
-    ? createCashbookEntry.isPending || makeSourceLedgerPayment.isPending
+    ? createCashbookEntry.isPending ||
+      makeSourceLedgerPayment.isPending ||
+      postCashbookTransaction.isPending
     : createDocument.isPending;
+  const [pendingAction, setPendingAction] = useState<'draft' | 'post' | null>(null);
 
   // A type linked to a Source shows a dropdown of that source's still-unpaid open items —
   // picking one settles it directly (creates the payment AND records the allocation in one
   // action) instead of an untracked generic cashbook entry.
-  const { data: sourceLedgerEntries = [] } = useSourceLedger(
-    transactionType?.sourceTypeId ?? undefined,
-  );
-  const unpaidSourceLedgerEntries = useMemo(
-    () => sourceLedgerEntries.filter((entry) => entry.paymentState !== 'PAID'),
-    [sourceLedgerEntries],
-  );
+  const { data: unpaidSourceLedgerEntries = [] } = useSourceLedger({
+    sourceTypeId: transactionType?.sourceTypeId ?? undefined,
+    status: 'UNPAID',
+  });
   const sourceLedgerOptions = useMemo<SearchSelectOption[]>(
     () =>
       unpaidSourceLedgerEntries.map((entry) => ({
@@ -178,7 +180,7 @@ export function NewTransactionPanel({
     return !category || category === 'EXPENSE' || category === 'REVENUE';
   }, [rule, glAccounts, isReceivable]);
   const [selectedTaxTypeIds, setSelectedTaxTypeIds] = useState<string[]>([]);
-  const [successTransactionType, setSuccessTransactionType] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{ name: string; posted: boolean } | null>(null);
 
   // Only the roles actually configured on this transaction type — not the tenant's full
   // Entity Types list — and any of them works now, not just the old fixed enum names.
@@ -239,7 +241,12 @@ export function NewTransactionPanel({
     );
   };
 
-  const submit = async (values: FormValues) => {
+  // `post`: only meaningful for a plain direct entry (no Settle Item picked) — Submit for
+  // Review leaves it DRAFT (the normal process, matching Bills/Invoices/every other
+  // transaction), Post creates it and immediately posts it. Picking a Settle Item always
+  // posts regardless of which button was clicked — settling a specific open item only makes
+  // sense once the payment actually happens, so there's no meaningful "draft" version of it.
+  const submit = async (values: FormValues, post: boolean) => {
     if (!transactionType) return;
 
     if (isCashbookType) {
@@ -255,6 +262,8 @@ export function NewTransactionPanel({
         toast.error('Select a settlement method');
         return;
       }
+      const willPost = !!values.sourceLedgerEntryId || post;
+      setPendingAction(willPost ? 'post' : 'draft');
       try {
         // Settling a picked source ledger item creates the payment AND records the
         // allocation against it in one call — a generic cashbook entry has no concept of
@@ -271,7 +280,7 @@ export function NewTransactionPanel({
             },
           });
         } else {
-          await createCashbookEntry.mutateAsync({
+          const created = await createCashbookEntry.mutateAsync({
             cashAccountId: values.cashAccountId,
             offsetGlAccountId: values.offsetGlAccountId,
             amount: Number(values.amount),
@@ -281,11 +290,16 @@ export function NewTransactionPanel({
             reference: values.reference || undefined,
             description: values.description || transactionType.name,
           });
+          if (post) {
+            await postCashbookTransaction.mutateAsync(created.id);
+          }
         }
         close();
-        setSuccessTransactionType(transactionType.name);
+        setSuccessInfo({ name: transactionType.name, posted: willPost });
       } catch (error) {
         toast.error(extractError(error, 'Failed to save transaction'));
+      } finally {
+        setPendingAction(null);
       }
       return;
     }
@@ -313,7 +327,7 @@ export function NewTransactionPanel({
     try {
       await createDocument.mutateAsync(payload);
       close();
-      setSuccessTransactionType(transactionType.name);
+      setSuccessInfo({ name: transactionType.name, posted: false });
     } catch (error) {
       toast.error(extractError(error, 'Failed to save transaction'));
     }
@@ -333,15 +347,32 @@ export function NewTransactionPanel({
             <Button variant="outline" onClick={close} disabled={isSaving}>
               Cancel
             </Button>
+            {canUse && isCashbookType && !sourceLedgerEntryId && (
+              <Button
+                variant="outline"
+                isLoading={pendingAction === 'draft'}
+                loadingText="Submitting…"
+                disabled={isSaving}
+                onClick={handleSubmit((values) => submit(values, false))}
+              >
+                Submit for Review
+              </Button>
+            )}
             {canUse && (
               <Button
                 variant="secondary"
-                isLoading={isSaving}
-                loadingText="Submitting…"
+                isLoading={isCashbookType ? pendingAction === 'post' : isSaving}
+                loadingText={
+                  !isCashbookType ? 'Submitting…' : isCashbookReceipt ? 'Receiving…' : 'Paying…'
+                }
                 disabled={isSaving}
-                onClick={handleSubmit(submit)}
+                onClick={handleSubmit((values) => submit(values, true))}
               >
-                Submit for Review
+                {!isCashbookType
+                  ? 'Submit for Review'
+                  : isCashbookReceipt
+                    ? 'Receive Payment'
+                    : 'Make Payment'}
               </Button>
             )}
           </div>
@@ -694,10 +725,14 @@ export function NewTransactionPanel({
         )}
       </SidePanel>
       <SuccessModal
-        isOpen={!!successTransactionType}
-        onClose={() => setSuccessTransactionType(null)}
-        title="Transaction Submitted!"
-        message={`Your ${successTransactionType ?? ''} has been submitted for review.`}
+        isOpen={!!successInfo}
+        onClose={() => setSuccessInfo(null)}
+        title={successInfo?.posted ? 'Transaction Posted!' : 'Transaction Submitted!'}
+        message={
+          successInfo?.posted
+            ? `Your ${successInfo.name} has been posted.`
+            : `Your ${successInfo?.name ?? ''} has been submitted for review.`
+        }
       />
     </>
   );

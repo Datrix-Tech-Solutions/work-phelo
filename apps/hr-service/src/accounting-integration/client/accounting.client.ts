@@ -20,6 +20,18 @@ export interface PostPayrollAccrualRequest {
   autoPost: boolean;
 }
 
+export interface PayrollLedgerLineStatus {
+  paymentState: 'OPEN' | 'PARTIALLY_PAID' | 'PAID';
+  amount: number;
+  outstandingAmount: number;
+}
+
+export interface PayrollSettlementStatus {
+  netPay: PayrollLedgerLineStatus | null;
+  incomeTax: PayrollLedgerLineStatus | null;
+  socialSecurity: PayrollLedgerLineStatus | null;
+}
+
 export class HrAccountingClientError extends Error {
   constructor(
     message: string,
@@ -41,6 +53,16 @@ export class HrAccountingClient {
     payload: PostPayrollAccrualRequest,
   ): Promise<unknown> {
     return this.signedPost(POST_ACCRUAL_PATH, payload);
+  }
+
+  async getPayrollSettlementStatus(
+    tenantId: string,
+    payrollRunId: string,
+  ): Promise<PayrollSettlementStatus> {
+    return this.signedGet(
+      `/internal/payroll-integration/${payrollRunId}/settlement-status`,
+      { tenantId },
+    ) as Promise<PayrollSettlementStatus>;
   }
 
   configurationStatus() {
@@ -106,6 +128,75 @@ export class HrAccountingClient {
       const reason = error instanceof Error ? error.message : String(error);
       throw new HrAccountingClientError(
         `Accounting payroll-accrual delivery failed: ${reason}`,
+        true,
+      );
+    }
+
+    const body = await this.readJson(response);
+    if (!response.ok) {
+      throw new HrAccountingClientError(
+        this.errorMessage(body, response.status),
+        response.status >= 500 ||
+          response.status === 408 ||
+          response.status === 429,
+        response.status,
+      );
+    }
+    return body;
+  }
+
+  private async signedGet(
+    path: string,
+    query: Record<string, string>,
+  ): Promise<unknown> {
+    const baseUrl = process.env.ACCOUNTING_SERVICE_URL?.trim().replace(
+      /\/+$/,
+      '',
+    );
+    const secret = process.env.INTERNAL_SERVICE_AUTH_SECRET?.trim();
+    if (!baseUrl) {
+      throw new HrAccountingClientError(
+        'ACCOUNTING_SERVICE_URL is not configured',
+        false,
+      );
+    }
+    try {
+      new URL(baseUrl);
+    } catch {
+      throw new HrAccountingClientError(
+        'ACCOUNTING_SERVICE_URL is invalid',
+        false,
+      );
+    }
+    if (!secret || secret.length < 32) {
+      throw new HrAccountingClientError(
+        'INTERNAL_SERVICE_AUTH_SECRET is not configured or shorter than 32 characters',
+        false,
+      );
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = createHmac('sha256', secret)
+      .update(`${SERVICE_NAME}:${timestamp}:GET:${path}`)
+      .digest('hex');
+    const queryString = new URLSearchParams(query).toString();
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}${path}?${queryString}`, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          'x-workphelo-service': SERVICE_NAME,
+          'x-workphelo-timestamp': timestamp,
+          'x-workphelo-signature': signature,
+        },
+        signal: AbortSignal.timeout(this.timeoutMs()),
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new HrAccountingClientError(
+        `Accounting settlement-status lookup failed: ${reason}`,
         true,
       );
     }

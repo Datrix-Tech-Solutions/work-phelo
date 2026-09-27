@@ -6,10 +6,10 @@ import { Download, Loader2 } from 'lucide-react';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
-import { usePayrollRun, useMarkPayrollPaid } from '@/hooks';
+import { usePayrollRun, useMarkPayrollPaid, usePayrollSettlementStatus } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { PayrollItem, PayrollRunDetail } from '@/types/hr';
+import { PayrollItem, PayrollLedgerLineStatus, PayrollRunDetail } from '@/types/hr';
 import { useAuthStore } from '@/store/auth.store';
 import {
   payrollMonthLabel,
@@ -120,6 +120,59 @@ function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: s
   );
 }
 
+const SETTLEMENT_LINE_LABELS = {
+  netPay: 'Net Pay',
+  incomeTax: 'Income Tax',
+  socialSecurity: 'Social Security',
+} as const;
+
+function SettlementBadge({ line }: { line: PayrollLedgerLineStatus | null }) {
+  if (!line) {
+    return <span className="text-xs text-gray-400">Not yet posted</span>;
+  }
+  const styles: Record<string, string> = {
+    OPEN: 'bg-gray-100 text-gray-500',
+    PARTIALLY_PAID: 'bg-amber-100 text-amber-700',
+    PAID: 'bg-emerald-100 text-emerald-700',
+  };
+  const labels: Record<string, string> = {
+    OPEN: 'Awaiting payment',
+    PARTIALLY_PAID: 'Partially paid',
+    PAID: 'Paid',
+  };
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${styles[line.paymentState]}`}
+    >
+      {labels[line.paymentState]}
+    </span>
+  );
+}
+
+function SettlementProgress({
+  netPay,
+  incomeTax,
+  socialSecurity,
+}: {
+  netPay: PayrollLedgerLineStatus | null;
+  incomeTax: PayrollLedgerLineStatus | null;
+  socialSecurity: PayrollLedgerLineStatus | null;
+}) {
+  const lines = { netPay, incomeTax, socialSecurity };
+  return (
+    <div className="flex items-center gap-3 px-4 py-2 bg-white border border-gray-200 rounded-lg">
+      {(Object.keys(SETTLEMENT_LINE_LABELS) as Array<keyof typeof SETTLEMENT_LINE_LABELS>).map(
+        (key) => (
+          <div key={key} className="flex items-center gap-1.5">
+            <span className="text-xs text-gray-500">{SETTLEMENT_LINE_LABELS[key]}</span>
+            <SettlementBadge line={lines[key]} />
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
 function r2(n: number) {
   return Math.round(n * 100) / 100;
 }
@@ -193,6 +246,7 @@ export default function PayrollHistoryDetailPage({
   const toast = useToast();
   const { data: run, isLoading } = usePayrollRun(runId);
   const { mutate: markPaid, isPending: isMarkingPaid } = useMarkPayrollPaid();
+  const { data: settlementStatus } = usePayrollSettlementStatus(runId, run?.status);
 
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
   const fileLabel = periodLabel.replace(' ', '-');
@@ -375,6 +429,12 @@ export default function PayrollHistoryDetailPage({
         {run &&
           (isPaid ? (
             <DownloadAllMenu detail={run} label={fileLabel} />
+          ) : settlementStatus ? (
+            <SettlementProgress
+              netPay={settlementStatus.netPay}
+              incomeTax={settlementStatus.incomeTax}
+              socialSecurity={settlementStatus.socialSecurity}
+            />
           ) : (
             <Button onClick={handleMarkPaid} isLoading={isMarkingPaid} loadingText="Marking…">
               Mark as Paid

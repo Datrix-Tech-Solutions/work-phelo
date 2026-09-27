@@ -1,19 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { MakeSourceLedgerPaymentPayload, SourceLedgerEntry } from '@/types/accounting';
+import {
+  MakeSourceLedgerPaymentPayload,
+  SourceLedgerEntry,
+  SourceLedgerQuery,
+  SourceLedgerSummary,
+} from '@/types/accounting';
 
 const BASE = '/accounting/source-ledger';
 export const SOURCE_LEDGER_KEY = ['accounting', 'source-ledger'] as const;
 
-export function useSourceLedger(sourceTypeId?: string) {
+export function useSourceLedger(query: SourceLedgerQuery = {}) {
   return useQuery({
-    queryKey: [...SOURCE_LEDGER_KEY, sourceTypeId ?? null],
+    queryKey: [...SOURCE_LEDGER_KEY, query],
+    queryFn: async () => (await api.get<SourceLedgerEntry[]>(BASE, { params: query })).data,
+  });
+}
+
+export function useSourceLedgerSummary(sourceTypeId: string | undefined) {
+  return useQuery({
+    queryKey: [...SOURCE_LEDGER_KEY, 'summary', sourceTypeId ?? null],
     queryFn: async () =>
-      (
-        await api.get<SourceLedgerEntry[]>(BASE, {
-          params: sourceTypeId ? { sourceTypeId } : undefined,
-        })
-      ).data,
+      (await api.get<SourceLedgerSummary>(`${BASE}/summary`, { params: { sourceTypeId } })).data,
+    enabled: !!sourceTypeId,
   });
 }
 
