@@ -1,10 +1,65 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
   schemas  = ["marketing"]
+}
+
+enum MarketingCrmSettingCategory {
+  PRODUCT
+  DECISION_MAKER
+  SOURCE_TYPE
+  INTERACTION_MEDIUM
+  PROSPECT_BUSINESS_TYPE
+
+  @@schema("marketing")
+}
+
+model MarketingCrmSettingOption {
+  id              String                      @id @default(uuid())
+  tenantId        String
+  category        MarketingCrmSettingCategory
+  name            String
+  normalizedName  String
+  description     String?
+  displayOrder    Int                         @default(0)
+  isActive        Boolean                     @default(true)
+  archivedAt      DateTime?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+
+  @@index([tenantId, category, isActive])
+  @@index([tenantId, category, displayOrder])
+  @@index([tenantId, category, archivedAt])
+  @@index([tenantId, category, normalizedName])
+  @@schema("marketing")
+}
+
+model MarketingPipelineStage {
+  id              String    @id @default(uuid())
+  tenantId        String
+  name            String
+  normalizedName  String
+  probability     Int
+  description     String?
+  displayOrder    Int       @default(0)
+  isActive        Boolean   @default(true)
+  archivedAt      DateTime?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, displayOrder])
+  @@index([tenantId, archivedAt])
+  @@index([tenantId, normalizedName])
+  @@schema("marketing")
 }

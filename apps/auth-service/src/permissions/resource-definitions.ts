@@ -175,6 +175,42 @@ export const RESOURCES = [
   },
 
   {
+    name: 'marketing.crm-settings',
+    module: 'MARKETING',
+    description: 'Marketing CRM settings administration',
+  },
+  {
+    name: 'marketing.pipeline-stages',
+    module: 'MARKETING',
+    description: 'Marketing sales pipeline stage configuration',
+  },
+  {
+    name: 'marketing.products',
+    module: 'MARKETING',
+    description: 'Marketing product and service options',
+  },
+  {
+    name: 'marketing.decision-makers',
+    module: 'MARKETING',
+    description: 'Marketing decision maker and role title options',
+  },
+  {
+    name: 'marketing.source-types',
+    module: 'MARKETING',
+    description: 'Marketing prospect source type options',
+  },
+  {
+    name: 'marketing.interaction-media',
+    module: 'MARKETING',
+    description: 'Marketing prospect interaction medium options',
+  },
+  {
+    name: 'marketing.business-types',
+    module: 'MARKETING',
+    description: 'Marketing prospect business type options',
+  },
+
+  {
     name: 'operations.reinsurance.dashboard',
     module: 'OPERATIONS',
     description: 'Reinsurance operations dashboard',

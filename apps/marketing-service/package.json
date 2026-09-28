@@ -5,12 +5,15 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "prebuild": "npm run db:generate",
     "check-types": "tsc --noEmit -p tsconfig.build.json",
+    "precheck-types": "npm run db:generate",
     "start": "node dist/main",
     "lint": "eslint \"src/**/*.ts\"",
+    "prelint": "npm run db:generate",
     "test": "jest",
     "db:migrate": "prisma migrate dev",
-    "db:generate": "echo \"No Prisma models to generate for marketing-service\""
+    "db:generate": "prisma generate"
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",
