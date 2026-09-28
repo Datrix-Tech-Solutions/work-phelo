@@ -27,4 +27,8 @@ export const MarketingCrmSettingsPermission = {
   BUSINESS_TYPES_CREATE: 'marketing.business-types:CREATE',
   BUSINESS_TYPES_EDIT: 'marketing.business-types:EDIT',
   BUSINESS_TYPES_DELETE: 'marketing.business-types:DELETE',
+  PROSPECTS_VIEW: 'marketing.prospects:VIEW',
+  PROSPECTS_CREATE: 'marketing.prospects:CREATE',
+  PROSPECTS_EDIT: 'marketing.prospects:EDIT',
+  PROSPECTS_DELETE: 'marketing.prospects:DELETE',
 } as const;

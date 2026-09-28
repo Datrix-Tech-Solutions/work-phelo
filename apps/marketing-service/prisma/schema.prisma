@@ -63,3 +63,88 @@ model MarketingPipelineStage {
   @@index([tenantId, normalizedName])
   @@schema("marketing")
 }
+
+model MarketingProspect {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  companyName           String
+  normalizedCompanyName String
+  businessTypeId        String?
+  sourceTypeId          String?
+  pipelineStageId       String
+  assignedUserId        String
+  locationLabel         String
+  latitude              Decimal   @db.Decimal(9, 6)
+  longitude             Decimal   @db.Decimal(9, 6)
+  createdByUserId       String?
+  updatedByUserId       String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  contacts     MarketingProspectContact[]
+  products     MarketingProspectProduct[]
+  interactions MarketingProspectInteraction[]
+
+  @@index([tenantId, normalizedCompanyName])
+  @@index([tenantId, assignedUserId])
+  @@index([tenantId, pipelineStageId])
+  @@index([tenantId, createdAt])
+  @@schema("marketing")
+}
+
+model MarketingProspectContact {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  prospectId          String
+  name                String
+  phone               String?
+  email               String?
+  decisionMakerTypeId String?
+  isPrimary           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  prospect MarketingProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, prospectId])
+  @@index([tenantId, decisionMakerTypeId])
+  @@schema("marketing")
+}
+
+model MarketingProspectProduct {
+  id                String    @id @default(uuid())
+  tenantId          String
+  prospectId        String
+  productId         String
+  expectedValue     Decimal   @db.Decimal(18, 2)
+  achievedValue     Decimal?  @db.Decimal(18, 2)
+  commissionRate    Decimal?  @db.Decimal(7, 4)
+  commissionAmount  Decimal?  @db.Decimal(18, 2)
+  expectedCloseDate DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  prospect MarketingProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, prospectId])
+  @@index([tenantId, productId])
+  @@index([tenantId, expectedCloseDate])
+  @@schema("marketing")
+}
+
+model MarketingProspectInteraction {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  prospectId          String
+  interactionMediumId String?
+  occurredAt          DateTime
+  notes               String?
+  createdByUserId     String?
+  createdAt           DateTime @default(now())
+
+  prospect MarketingProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, prospectId, occurredAt])
+  @@index([tenantId, interactionMediumId])
+  @@schema("marketing")
+}
