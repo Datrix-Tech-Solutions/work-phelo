@@ -209,6 +209,11 @@ export const RESOURCES = [
     module: 'MARKETING',
     description: 'Marketing prospect business type options',
   },
+  {
+    name: 'marketing.prospects',
+    module: 'MARKETING',
+    description: 'Marketing prospect records and sales pipeline assignments',
+  },
 
   {
     name: 'operations.reinsurance.dashboard',

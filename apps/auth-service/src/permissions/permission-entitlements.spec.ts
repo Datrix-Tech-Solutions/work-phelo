@@ -1,6 +1,14 @@
 import { isResourceEnabledForTenant } from './permission-entitlements';
 
 describe('permission entitlements', () => {
+  const marketingEnabledConfig = {
+    moduleConfig: { marketing: true },
+    featureConfig: { marketing: { leads: true } },
+  };
+  const marketingDisabledFeatureConfig = {
+    moduleConfig: { marketing: true },
+    featureConfig: { marketing: { leads: false } },
+  };
   const enabledConfig = {
     moduleConfig: { operations: true },
     featureConfig: { operations: { reinsurance: true } },
@@ -32,5 +40,16 @@ describe('permission entitlements', () => {
     expect(isResourceEnabledForTenant(resource, disabledFeatureConfig)).toBe(
       false,
     );
+  });
+
+  it('scopes marketing.prospects to the Marketing leads feature entitlement', () => {
+    const resource = { name: 'marketing.prospects', module: 'MARKETING' };
+
+    expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
+      true,
+    );
+    expect(
+      isResourceEnabledForTenant(resource, marketingDisabledFeatureConfig),
+    ).toBe(false);
   });
 });
