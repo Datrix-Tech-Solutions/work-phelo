@@ -1,17 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { SourceTypeForm, SourceTypeFields } from '@/components/molecules/marketing/SourceTypeForm';
+import {
+  useCreateProspectingSetting,
+  useDeleteProspectingSetting,
+  useProspectingSettings,
+  useUpdateProspectingSetting,
+} from '@/hooks/marketing/useProspectingSettings';
+import { useToast } from '@/hooks/useToast';
+import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: SourceTypeFields = { name: '', description: '' };
 type PanelMode = 'add' | 'edit';
 
 export default function SourceTypePage() {
-  const [items, setItems] = useState<CardListItem[]>([]);
+  const toast = useToast();
+  const { data: itemData = [], isLoading, isError } = useProspectingSettings('source-types');
+  const createItem = useCreateProspectingSetting('source-types');
+  const updateItem = useUpdateProspectingSetting('source-types');
+  const deleteItem = useDeleteProspectingSetting('source-types');
+
+  const items: CardListItem[] = useMemo(
+    () => itemData.map((i) => ({ id: i.id, label: i.name, sublabel: i.description ?? undefined })),
+    [itemData],
+  );
   const [search, setSearch] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>('add');
@@ -31,9 +48,9 @@ export default function SourceTypePage() {
   }
 
   function openEdit(id: string) {
-    const item = items.find((i) => i.id === id);
+    const item = itemData.find((i) => i.id === id);
     if (!item) return;
-    setForm({ name: item.label, description: item.sublabel ?? '' });
+    setForm({ name: item.name, description: item.description ?? '' });
     setErrors({});
     setPanelMode('edit');
     setEditingId(id);
@@ -49,27 +66,53 @@ export default function SourceTypePage() {
 
   function handleSave() {
     if (!validate()) return;
+
+    const name = form.name.trim();
+    const description = form.description.trim();
+
     if (panelMode === 'add') {
-      setItems((prev) => [
-        ...prev,
-        { id: Date.now().toString(), label: form.name.trim(), sublabel: form.description.trim() },
-      ]);
+      createItem.mutate(
+        // Omit an empty description on create; on edit it is sent so the field can be cleared.
+        { name, ...(description ? { description } : {}), displayOrder: itemData.length },
+        {
+          onSuccess: () => {
+            toast.success('Source type added');
+            setPanelOpen(false);
+          },
+          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add source type')),
+        },
+      );
     } else if (editingId) {
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === editingId
-            ? { ...i, label: form.name.trim(), sublabel: form.description.trim() }
-            : i,
-        ),
+      updateItem.mutate(
+        { id: editingId, name, description },
+        {
+          onSuccess: () => {
+            toast.success('Source type updated');
+            setPanelOpen(false);
+          },
+          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update source type')),
+        },
       );
     }
-    setPanelOpen(false);
   }
 
   function handleDelete() {
     if (!deleteId) return;
-    setItems((prev) => prev.filter((i) => i.id !== deleteId));
-    setDeleteId(null);
+    deleteItem.mutate(deleteId, {
+      onSuccess: () => {
+        toast.success('Source type deleted');
+        setDeleteId(null);
+      },
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete source type')),
+    });
+  }
+
+  if (isLoading) {
+    return <p className="text-sm text-gray-400 text-center py-8">Loading source types...</p>;
+  }
+
+  if (isError) {
+    return <p className="text-sm text-red-500 text-center py-8">Failed to load source types.</p>;
   }
 
   return (
@@ -94,7 +137,7 @@ export default function SourceTypePage() {
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} isLoading={createItem.isPending || updateItem.isPending}>
               {panelMode === 'add' ? 'Add Source Type' : 'Save Changes'}
             </Button>
           </div>
@@ -115,7 +158,7 @@ export default function SourceTypePage() {
             <Button variant="outline" onClick={() => setDeleteId(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDelete}>
+            <Button variant="danger" onClick={handleDelete} isLoading={deleteItem.isPending}>
               Delete
             </Button>
           </>

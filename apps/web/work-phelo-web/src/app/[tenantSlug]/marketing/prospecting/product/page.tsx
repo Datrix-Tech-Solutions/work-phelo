@@ -1,18 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { ProductForm, ProductFields } from '@/components/molecules/marketing/ProductForm';
+import {
+  useCreateProspectingSetting,
+  useDeleteProspectingSetting,
+  useProspectingSettings,
+  useUpdateProspectingSetting,
+} from '@/hooks/marketing/useProspectingSettings';
+import { useToast } from '@/hooks/useToast';
+import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: ProductFields = { name: '', description: '' };
 
 type PanelMode = 'add' | 'edit';
 
 export default function ProductPage() {
-  const [products, setProducts] = useState<CardListItem[]>([]);
+  const toast = useToast();
+  const { data: productData = [], isLoading, isError } = useProspectingSettings('products');
+  const createProduct = useCreateProspectingSetting('products');
+  const updateProduct = useUpdateProspectingSetting('products');
+  const deleteProduct = useDeleteProspectingSetting('products');
+
+  const products: CardListItem[] = useMemo(
+    () =>
+      productData.map((p) => ({ id: p.id, label: p.name, sublabel: p.description ?? undefined })),
+    [productData],
+  );
   const [search, setSearch] = useState('');
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -34,9 +52,9 @@ export default function ProductPage() {
   }
 
   function openEdit(id: string) {
-    const product = products.find((p) => p.id === id);
+    const product = productData.find((p) => p.id === id);
     if (!product) return;
-    setForm({ name: product.label, description: product.sublabel ?? '' });
+    setForm({ name: product.name, description: product.description ?? '' });
     setErrors({});
     setPanelMode('edit');
     setEditingId(id);
@@ -53,28 +71,52 @@ export default function ProductPage() {
   function handleSave() {
     if (!validate()) return;
 
+    const name = form.name.trim();
+    const description = form.description.trim();
+
     if (panelMode === 'add') {
-      setProducts((prev) => [
-        ...prev,
-        { id: Date.now().toString(), label: form.name.trim(), sublabel: form.description.trim() },
-      ]);
+      createProduct.mutate(
+        // Omit an empty description on create; on edit it is sent so the field can be cleared.
+        { name, ...(description ? { description } : {}), displayOrder: productData.length },
+        {
+          onSuccess: () => {
+            toast.success('Product added');
+            setPanelOpen(false);
+          },
+          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add product')),
+        },
+      );
     } else if (editingId) {
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === editingId
-            ? { ...p, label: form.name.trim(), sublabel: form.description.trim() }
-            : p,
-        ),
+      updateProduct.mutate(
+        { id: editingId, name, description },
+        {
+          onSuccess: () => {
+            toast.success('Product updated');
+            setPanelOpen(false);
+          },
+          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update product')),
+        },
       );
     }
-
-    setPanelOpen(false);
   }
 
   function handleDelete() {
     if (!deleteId) return;
-    setProducts((prev) => prev.filter((p) => p.id !== deleteId));
-    setDeleteId(null);
+    deleteProduct.mutate(deleteId, {
+      onSuccess: () => {
+        toast.success('Product deleted');
+        setDeleteId(null);
+      },
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete product')),
+    });
+  }
+
+  if (isLoading) {
+    return <p className="text-sm text-gray-400 text-center py-8">Loading products...</p>;
+  }
+
+  if (isError) {
+    return <p className="text-sm text-red-500 text-center py-8">Failed to load products.</p>;
   }
 
   return (
@@ -100,7 +142,10 @@ export default function ProductPage() {
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button
+              onClick={handleSave}
+              isLoading={createProduct.isPending || updateProduct.isPending}
+            >
               {panelMode === 'add' ? 'Add Product' : 'Save Changes'}
             </Button>
           </div>
@@ -122,7 +167,7 @@ export default function ProductPage() {
             <Button variant="outline" onClick={() => setDeleteId(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDelete}>
+            <Button variant="danger" onClick={handleDelete} isLoading={deleteProduct.isPending}>
               Delete
             </Button>
           </>

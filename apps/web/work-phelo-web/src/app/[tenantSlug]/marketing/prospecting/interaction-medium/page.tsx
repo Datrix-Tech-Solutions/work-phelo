@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -9,12 +9,29 @@ import {
   InteractionMediumForm,
   InteractionMediumFields,
 } from '@/components/molecules/marketing/InteractionMediumForm';
+import {
+  useCreateProspectingSetting,
+  useDeleteProspectingSetting,
+  useProspectingSettings,
+  useUpdateProspectingSetting,
+} from '@/hooks/marketing/useProspectingSettings';
+import { useToast } from '@/hooks/useToast';
+import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: InteractionMediumFields = { name: '', description: '' };
 type PanelMode = 'add' | 'edit';
 
 export default function InteractionMediumPage() {
-  const [items, setItems] = useState<CardListItem[]>([]);
+  const toast = useToast();
+  const { data: itemData = [], isLoading, isError } = useProspectingSettings('interaction-media');
+  const createItem = useCreateProspectingSetting('interaction-media');
+  const updateItem = useUpdateProspectingSetting('interaction-media');
+  const deleteItem = useDeleteProspectingSetting('interaction-media');
+
+  const items: CardListItem[] = useMemo(
+    () => itemData.map((i) => ({ id: i.id, label: i.name, sublabel: i.description ?? undefined })),
+    [itemData],
+  );
   const [search, setSearch] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>('add');
@@ -34,9 +51,9 @@ export default function InteractionMediumPage() {
   }
 
   function openEdit(id: string) {
-    const item = items.find((i) => i.id === id);
+    const item = itemData.find((i) => i.id === id);
     if (!item) return;
-    setForm({ name: item.label, description: item.sublabel ?? '' });
+    setForm({ name: item.name, description: item.description ?? '' });
     setErrors({});
     setPanelMode('edit');
     setEditingId(id);
@@ -52,27 +69,58 @@ export default function InteractionMediumPage() {
 
   function handleSave() {
     if (!validate()) return;
+
+    const name = form.name.trim();
+    const description = form.description.trim();
+
     if (panelMode === 'add') {
-      setItems((prev) => [
-        ...prev,
-        { id: Date.now().toString(), label: form.name.trim(), sublabel: form.description.trim() },
-      ]);
+      createItem.mutate(
+        // Omit an empty description on create; on edit it is sent so the field can be cleared.
+        { name, ...(description ? { description } : {}), displayOrder: itemData.length },
+        {
+          onSuccess: () => {
+            toast.success('Interaction medium added');
+            setPanelOpen(false);
+          },
+          onError: (error) =>
+            toast.error(apiErrorMessage(error, 'Failed to add interaction medium')),
+        },
+      );
     } else if (editingId) {
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === editingId
-            ? { ...i, label: form.name.trim(), sublabel: form.description.trim() }
-            : i,
-        ),
+      updateItem.mutate(
+        { id: editingId, name, description },
+        {
+          onSuccess: () => {
+            toast.success('Interaction medium updated');
+            setPanelOpen(false);
+          },
+          onError: (error) =>
+            toast.error(apiErrorMessage(error, 'Failed to update interaction medium')),
+        },
       );
     }
-    setPanelOpen(false);
   }
 
   function handleDelete() {
     if (!deleteId) return;
-    setItems((prev) => prev.filter((i) => i.id !== deleteId));
-    setDeleteId(null);
+    deleteItem.mutate(deleteId, {
+      onSuccess: () => {
+        toast.success('Interaction medium deleted');
+        setDeleteId(null);
+      },
+      onError: (error) =>
+        toast.error(apiErrorMessage(error, 'Failed to delete interaction medium')),
+    });
+  }
+
+  if (isLoading) {
+    return <p className="text-sm text-gray-400 text-center py-8">Loading interaction mediums...</p>;
+  }
+
+  if (isError) {
+    return (
+      <p className="text-sm text-red-500 text-center py-8">Failed to load interaction mediums.</p>
+    );
   }
 
   return (
@@ -97,7 +145,7 @@ export default function InteractionMediumPage() {
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} isLoading={createItem.isPending || updateItem.isPending}>
               {panelMode === 'add' ? 'Add Interaction Medium' : 'Save Changes'}
             </Button>
           </div>
@@ -118,7 +166,7 @@ export default function InteractionMediumPage() {
             <Button variant="outline" onClick={() => setDeleteId(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDelete}>
+            <Button variant="danger" onClick={handleDelete} isLoading={deleteItem.isPending}>
               Delete
             </Button>
           </>
