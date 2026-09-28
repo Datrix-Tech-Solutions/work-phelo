@@ -42,14 +42,17 @@ describe('permission entitlements', () => {
     );
   });
 
-  it('scopes marketing.prospects to the Marketing leads feature entitlement', () => {
-    const resource = { name: 'marketing.prospects', module: 'MARKETING' };
+  it.each(['marketing.prospects', 'marketing.prospects.all'])(
+    'scopes %s to the Marketing leads feature entitlement',
+    (name) => {
+      const resource = { name, module: 'MARKETING' };
 
-    expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
-      true,
-    );
-    expect(
-      isResourceEnabledForTenant(resource, marketingDisabledFeatureConfig),
-    ).toBe(false);
-  });
+      expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
+        true,
+      );
+      expect(
+        isResourceEnabledForTenant(resource, marketingDisabledFeatureConfig),
+      ).toBe(false);
+    },
+  );
 });

@@ -41,6 +41,15 @@ describe('ProspectsController authorization contract', () => {
       ),
     ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_CREATE]);
   });
+
+  it('requires prospect view permission on list', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectsController.prototype.list,
+      ),
+    ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_VIEW]);
+  });
 });
 
 describe('Prospects authorization guards', () => {
@@ -116,6 +125,28 @@ describe('Prospects authorization guards', () => {
         executionContextFor({
           role: 'EMPLOYEE',
           permissions: [MarketingCrmSettingsPermission.PROSPECTS_CREATE],
+        }) as never,
+      ),
+    ).toBe(true);
+  });
+
+  it('allows users with prospect view permission', () => {
+    const reflector = {
+      getAllAndOverride: jest
+        .fn()
+        .mockImplementation((key: string) =>
+          key === PERMISSIONS_KEY
+            ? undefined
+            : [MarketingCrmSettingsPermission.PROSPECTS_VIEW],
+        ),
+    };
+    const guard = new PermissionsGuard(reflector as unknown as Reflector);
+
+    expect(
+      guard.canActivate(
+        executionContextFor({
+          role: 'EMPLOYEE',
+          permissions: [MarketingCrmSettingsPermission.PROSPECTS_VIEW],
         }) as never,
       ),
     ).toBe(true);

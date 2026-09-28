@@ -3,8 +3,12 @@ import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { RequestUser } from '@work-phelo/types';
-import { MarketingCrmSettingCategory } from '../../prisma/generated/client';
+import {
+  MarketingCrmSettingCategory,
+  Prisma,
+} from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { CreateProspectDto } from './dto/create-prospect.dto';
 import { ProspectsService } from './prospects.service';
 
@@ -60,19 +64,42 @@ describe('ProspectsService', () => {
     const tx = {
       marketingProspect: {
         create: jest.fn(),
+        count: jest.fn(),
+        findMany: jest.fn(),
+      },
+      marketingProspectProduct: {
+        findMany: jest.fn(),
+      },
+      marketingProspectContact: {
+        findMany: jest.fn(),
+      },
+      marketingProspectInteraction: {
+        groupBy: jest.fn(),
       },
     };
 
     return {
       marketingCrmSettingOption: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       marketingPipelineStage: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       marketingProspect: tx.marketingProspect,
-      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
-        Promise.resolve(callback(tx)),
+      marketingProspectProduct: tx.marketingProspectProduct,
+      marketingProspectContact: tx.marketingProspectContact,
+      marketingProspectInteraction: tx.marketingProspectInteraction,
+      $transaction: jest.fn(
+        (
+          input:
+            | Array<Promise<unknown>>
+            | ((transaction: typeof tx) => unknown),
+        ) => {
+          if (Array.isArray(input)) return Promise.all(input);
+          return Promise.resolve(input(tx));
+        },
       ),
     };
   };
@@ -96,6 +123,13 @@ describe('ProspectsService', () => {
         updatedAt: new Date('2026-09-28T00:00:00.000Z'),
       }),
     );
+    prisma.marketingProspect.count.mockResolvedValue(0);
+    prisma.marketingProspect.findMany.mockResolvedValue([]);
+    prisma.marketingProspectProduct.findMany.mockResolvedValue([]);
+    prisma.marketingProspectContact.findMany.mockResolvedValue([]);
+    prisma.marketingProspectInteraction.groupBy.mockResolvedValue([]);
+    prisma.marketingPipelineStage.findMany.mockResolvedValue([]);
+    prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
     service = new ProspectsService(prisma as unknown as PrismaService);
   });
 
@@ -219,6 +253,271 @@ describe('ProspectsService', () => {
       'child failed',
     );
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  describe('list', () => {
+    const prospectA = {
+      id: 'prospect-a',
+      companyName: 'Acme Manufacturing',
+      pipelineStageId: 'stage-proposal',
+      assignedUserId: 'user-1',
+      createdAt: new Date('2026-09-28T10:00:00.000Z'),
+    };
+    const prospectB = {
+      id: 'prospect-b',
+      companyName: 'Beta Logistics',
+      pipelineStageId: 'stage-qualified',
+      assignedUserId: 'user-2',
+      createdAt: new Date('2026-09-27T10:00:00.000Z'),
+    };
+
+    beforeEach(() => {
+      prisma.marketingProspect.count.mockResolvedValue(1);
+      prisma.marketingProspect.findMany.mockResolvedValue([prospectA]);
+      prisma.marketingProspectProduct.findMany.mockResolvedValue([
+        {
+          id: 'product-row-1',
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          productId: 'product-1',
+          expectedValue: new Prisma.Decimal('10000.00'),
+          achievedValue: new Prisma.Decimal('2500.00'),
+          commissionRate: null,
+          commissionAmount: null,
+          expectedCloseDate: new Date('2026-10-31T00:00:00.000Z'),
+          createdAt: new Date('2026-09-28T10:05:00.000Z'),
+          updatedAt: new Date('2026-09-28T10:05:00.000Z'),
+        },
+        {
+          id: 'product-row-2',
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          productId: 'product-2',
+          expectedValue: new Prisma.Decimal('5000.25'),
+          achievedValue: null,
+          commissionRate: null,
+          commissionAmount: null,
+          expectedCloseDate: new Date('2026-10-15T00:00:00.000Z'),
+          createdAt: new Date('2026-09-28T10:06:00.000Z'),
+          updatedAt: new Date('2026-09-28T10:06:00.000Z'),
+        },
+      ]);
+      prisma.marketingProspectContact.findMany.mockResolvedValue([
+        {
+          id: 'contact-1',
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          name: 'Ama Mensah',
+          phone: '+233201234567',
+          email: 'ama@example.com',
+          decisionMakerTypeId: 'decision-maker-1',
+          isPrimary: true,
+          createdAt: new Date('2026-09-28T10:05:00.000Z'),
+          updatedAt: new Date('2026-09-28T10:05:00.000Z'),
+        },
+      ]);
+      prisma.marketingProspectInteraction.groupBy.mockResolvedValue([
+        {
+          prospectId: 'prospect-a',
+          _max: {
+            occurredAt: new Date('2026-09-29T11:00:00.000Z'),
+          },
+        },
+      ]);
+      prisma.marketingPipelineStage.findMany.mockResolvedValue([
+        {
+          id: 'stage-proposal',
+          name: 'Proposal',
+          probability: 60,
+        },
+      ]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        { id: 'product-1', name: 'Product A' },
+        { id: 'product-2', name: 'Service B' },
+        { id: 'decision-maker-1', name: 'CEO' },
+      ]);
+    });
+
+    it('returns only assigned prospects for users with VIEW only', async () => {
+      await service.list(
+        {
+          ...user,
+          permissions: [MarketingCrmSettingsPermission.PROSPECTS_VIEW],
+        },
+        { assignedUserId: 'user-2' },
+      );
+
+      expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: 'tenant-1',
+            assignedUserId: 'user-1',
+          }),
+        }),
+      );
+    });
+
+    it('allows VIEW_ALL users to list tenant-wide prospects and filter by assigned user', async () => {
+      prisma.marketingProspect.count.mockResolvedValue(2);
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        prospectA,
+        prospectB,
+      ]);
+
+      await service.list(
+        {
+          ...user,
+          permissions: [
+            MarketingCrmSettingsPermission.PROSPECTS_VIEW,
+            MarketingCrmSettingsPermission.PROSPECTS_VIEW_ALL,
+          ],
+        },
+        { assignedUserId: 'user-2', page: 2, limit: 10 },
+      );
+
+      expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: 'tenant-1',
+            assignedUserId: 'user-2',
+          }),
+          skip: 10,
+          take: 10,
+        }),
+      );
+    });
+
+    it('applies tenant, company-name search, creation-date filters, pagination and deterministic ordering', async () => {
+      await service.list(user, {
+        search: '  ACME   Manu ',
+        createdFrom: '2026-09-01',
+        createdTo: '2026-09-30',
+        page: 3,
+        limit: 25,
+      });
+
+      expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'tenant-1',
+            assignedUserId: 'user-1',
+            normalizedCompanyName: { contains: 'acme manu' },
+            createdAt: {
+              gte: new Date('2026-09-01T00:00:00.000Z'),
+              lte: new Date('2026-09-30T23:59:59.999Z'),
+            },
+          },
+          orderBy: [
+            { createdAt: 'desc' },
+            { companyName: 'asc' },
+            { id: 'asc' },
+          ],
+          skip: 50,
+          take: 25,
+        }),
+      );
+    });
+
+    it('returns row-ready prospect data without per-prospect queries', async () => {
+      const result = await service.list(user, { page: 1, limit: 20 });
+
+      expect(result).toEqual({
+        data: [
+          {
+            id: 'prospect-a',
+            companyName: 'Acme Manufacturing',
+            expectedValue: '15000.25',
+            achievedValue: '2500.00',
+            products: [
+              { id: 'product-1', name: 'Product A' },
+              { id: 'product-2', name: 'Service B' },
+            ],
+            primaryContact: {
+              name: 'Ama Mensah',
+              phone: '+233201234567',
+              decisionMaker: { id: 'decision-maker-1', name: 'CEO' },
+            },
+            salesStage: {
+              id: 'stage-proposal',
+              name: 'Proposal',
+              probability: 60,
+            },
+            progress: 60,
+            lastInteractionDate: new Date('2026-09-29T11:00:00.000Z'),
+            expectedCloseDate: new Date('2026-10-15T00:00:00.000Z'),
+            assignedUserId: 'user-1',
+            createdAt: new Date('2026-09-28T10:00:00.000Z'),
+          },
+        ],
+        meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+      });
+
+      expect(prisma.marketingProspectProduct.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.marketingProspectContact.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.marketingProspectInteraction.groupBy).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(prisma.marketingPipelineStage.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.marketingCrmSettingOption.findMany).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          id: { in: ['product-1', 'product-2', 'decision-maker-1'] },
+        },
+        select: { id: true, name: true },
+      });
+    });
+
+    it('keeps archived referenced settings displayable by not filtering archivedAt on list references', async () => {
+      await service.list(user, {});
+
+      expect(prisma.marketingCrmSettingOption.findMany).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          where: expect.objectContaining({ archivedAt: null }),
+        }),
+      );
+      expect(prisma.marketingPipelineStage.findMany).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          where: expect.objectContaining({ archivedAt: null }),
+        }),
+      );
+    });
+
+    it('returns null values for optional row fields when a prospect has no primary contact, products or interactions', async () => {
+      prisma.marketingProspectProduct.findMany.mockResolvedValue([]);
+      prisma.marketingProspectContact.findMany.mockResolvedValue([]);
+      prisma.marketingProspectInteraction.groupBy.mockResolvedValue([]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
+
+      const result = await service.list(user, {});
+
+      expect(result.data[0]).toEqual(
+        expect.objectContaining({
+          expectedValue: '0.00',
+          achievedValue: '0.00',
+          products: [],
+          primaryContact: null,
+          lastInteractionDate: null,
+          expectedCloseDate: null,
+        }),
+      );
+    });
+
+    it('short-circuits related lookups when the page is empty', async () => {
+      prisma.marketingProspect.count.mockResolvedValue(0);
+      prisma.marketingProspect.findMany.mockResolvedValue([]);
+
+      const result = await service.list(user, {});
+
+      expect(result).toEqual({
+        data: [],
+        meta: { page: 1, limit: 20, total: 0, totalPages: 1 },
+      });
+      expect(prisma.marketingProspectProduct.findMany).not.toHaveBeenCalled();
+      expect(prisma.marketingProspectContact.findMany).not.toHaveBeenCalled();
+      expect(
+        prisma.marketingProspectInteraction.groupBy,
+      ).not.toHaveBeenCalled();
+    });
   });
 
   describe('CreateProspectDto validation', () => {

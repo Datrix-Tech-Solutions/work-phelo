@@ -1,4 +1,12 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -6,6 +14,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiOperation,
+  ApiOkResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -21,6 +30,10 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import { CreateProspectDto } from './dto/create-prospect.dto';
+import {
+  ProspectListResponseDto,
+  QueryProspectsDto,
+} from './dto/query-prospects.dto';
 import { ProspectResponseDto } from './dto/prospect-response.dto';
 import { ProspectsService } from './prospects.service';
 
@@ -42,6 +55,21 @@ import { ProspectsService } from './prospects.service';
 @RequireFeature('marketing', 'leads')
 export class ProspectsController {
   constructor(private readonly service: ProspectsService) {}
+
+  @Get()
+  @RequireAnyPermission(MarketingCrmSettingsPermission.PROSPECTS_VIEW)
+  @ApiOperation({
+    summary: 'List marketing prospects',
+    description:
+      'Users with marketing.prospects:VIEW see their assigned prospects. Users with marketing.prospects.all:VIEW may list tenant-wide prospects and filter by Sales Representative.',
+  })
+  @ApiOkResponse({ type: ProspectListResponseDto })
+  list(
+    @Query() query: QueryProspectsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(request.user, query);
+  }
 
   @Post()
   @RequireAnyPermission(MarketingCrmSettingsPermission.PROSPECTS_CREATE)
