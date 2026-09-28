@@ -143,6 +143,8 @@ describe('EmployeesService', () => {
     expect(employee.id).toBe('emp-1');
     expect(rabbitmq.authProvisionEmployeeInvite).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: 'tenant-1', email: dto.email }),
+      undefined,
+      undefined,
     );
     expect(leaveService.initializeLeaveBalances).toHaveBeenCalledWith(
       'tenant-1',
