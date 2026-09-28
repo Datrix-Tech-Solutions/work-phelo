@@ -224,6 +224,11 @@ export const RESOURCES = [
     module: 'MARKETING',
     description: 'Marketing prospect records and sales pipeline assignments',
   },
+  {
+    name: 'marketing.prospects.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect list visibility',
+  },
 
   // ── OPERATIONS / REINSURANCE module ───────────────────────────
   {
