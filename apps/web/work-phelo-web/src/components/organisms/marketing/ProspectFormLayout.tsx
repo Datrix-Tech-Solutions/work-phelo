@@ -36,7 +36,7 @@ export function ProspectFormLayout({
   return (
     <div className="flex-1 min-h-0 flex flex-col relative">
       {/* Pinned header */}
-      <div className={`shrink-0 bg-gray-50 flex flex-col gap-4 ${pagePx} pt-4 pb-4`}>
+      <div className={`shrink-0 flex flex-col gap-4 ${pagePx} pt-4 pb-4`}>
         <ProspectBreadcrumb tenantSlug={tenantSlug} prospectName={prospectName} />
         <StepProgressBar steps={steps} currentStep={currentStep} />
       </div>

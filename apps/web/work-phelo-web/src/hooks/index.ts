@@ -25,6 +25,8 @@ export * from './hr/useProjects';
 export * from './useModuleTransition';
 export * from './useDropdownPosition';
 export * from './marketing/useGeocode';
+export * from './marketing/usePipelineStages';
+export * from './marketing/useProspectingSettings';
 
 // Reinsurance hooks
 export * from './reinsurance/useFacultatives';

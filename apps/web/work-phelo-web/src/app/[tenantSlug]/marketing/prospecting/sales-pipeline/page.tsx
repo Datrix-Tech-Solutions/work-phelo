@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { SortableList, SortableListItem } from '@/components/organisms/shared/SortableList';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -9,15 +9,35 @@ import {
   SalesPipelineStageForm,
   SalesPipelineStageFields,
 } from '@/components/molecules/marketing/SalesPipelineStageForm';
-
-const INITIAL_STAGES: SortableListItem[] = [];
+import {
+  useCreatePipelineStage,
+  useDeletePipelineStage,
+  usePipelineStages,
+  useUpdatePipelineStage,
+} from '@/hooks/marketing/usePipelineStages';
+import { useToast } from '@/hooks/useToast';
+import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: SalesPipelineStageFields = { name: '', probability: '' };
 
 type ModalMode = 'add' | 'edit';
 
 export default function SalesPipelinePage() {
-  const [stages, setStages] = useState<SortableListItem[]>(INITIAL_STAGES);
+  const toast = useToast();
+  const { data: stageData = [], isLoading, isError } = usePipelineStages();
+  const createStage = useCreatePipelineStage();
+  const updateStage = useUpdatePipelineStage();
+  const deleteStage = useDeletePipelineStage();
+
+  const stages: SortableListItem[] = useMemo(
+    () =>
+      stageData.map((s) => ({
+        id: s.id,
+        label: s.name,
+        sublabel: `${s.probability}% Probability of achieving sales`,
+      })),
+    [stageData],
+  );
   const [search, setSearch] = useState('');
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -39,10 +59,9 @@ export default function SalesPipelinePage() {
   }
 
   function openEdit(id: string) {
-    const stage = stages.find((s) => s.id === id);
+    const stage = stageData.find((s) => s.id === id);
     if (!stage) return;
-    const prob = stage.sublabel.match(/^(\d+)%/)?.[1] ?? '';
-    setForm({ name: stage.label, probability: prob });
+    setForm({ name: stage.name, probability: String(stage.probability) });
     setErrors({});
     setModalMode('edit');
     setEditingId(id);
@@ -61,35 +80,54 @@ export default function SalesPipelinePage() {
   function handleSave() {
     if (!validate()) return;
 
-    const sublabel = `${form.probability}% Probability of achieving sales`;
+    const name = form.name.trim();
+    const probability = Number(form.probability);
 
     if (modalMode === 'add') {
-      const newStage: SortableListItem = {
-        id: Date.now().toString(),
-        label: form.name.trim(),
-        sublabel,
-      };
-      setStages((prev) => [...prev, newStage]);
+      createStage.mutate(
+        { name, probability, displayOrder: stageData.length },
+        {
+          onSuccess: () => {
+            toast.success('Stage added');
+            setModalOpen(false);
+          },
+          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add stage')),
+        },
+      );
     } else if (editingId) {
-      setStages((prev) =>
-        prev.map((s) => (s.id === editingId ? { ...s, label: form.name.trim(), sublabel } : s)),
+      updateStage.mutate(
+        { id: editingId, name, probability },
+        {
+          onSuccess: () => {
+            toast.success('Stage updated');
+            setModalOpen(false);
+          },
+          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update stage')),
+        },
       );
     }
-
-    setModalOpen(false);
   }
 
   function handleDelete() {
     if (!deleteId) return;
-    setStages((prev) => prev.filter((s) => s.id !== deleteId));
-    setDeleteId(null);
+    deleteStage.mutate(deleteId, {
+      onSuccess: () => {
+        toast.success('Stage deleted');
+        setDeleteId(null);
+      },
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete stage')),
+    });
   }
 
-  function handleReorder(orderedIds: string[]) {
-    setStages((prev) => {
-      const map = Object.fromEntries(prev.map((s) => [s.id, s]));
-      return orderedIds.map((id) => map[id]).filter(Boolean);
-    });
+  // TODO: persist reordering (on hold) — until then a drag snaps back to the server order.
+  function handleReorder() {}
+
+  if (isLoading) {
+    return <p className="text-sm text-gray-400 text-center py-8">Loading pipeline stages...</p>;
+  }
+
+  if (isError) {
+    return <p className="text-sm text-red-500 text-center py-8">Failed to load pipeline stages.</p>;
   }
 
   return (
@@ -116,7 +154,7 @@ export default function SalesPipelinePage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} isLoading={createStage.isPending || updateStage.isPending}>
               {modalMode === 'add' ? 'Add Stage' : 'Save Changes'}
             </Button>
           </div>
@@ -138,7 +176,7 @@ export default function SalesPipelinePage() {
             <Button variant="outline" onClick={() => setDeleteId(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDelete}>
+            <Button variant="danger" onClick={handleDelete} isLoading={deleteStage.isPending}>
               Delete
             </Button>
           </>
