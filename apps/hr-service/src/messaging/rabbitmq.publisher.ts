@@ -47,6 +47,9 @@ export class RabbitMQPublisher {
   private readonly rmqTimeoutMs = Number(
     process.env.RABBITMQ_RPC_TIMEOUT_MS ?? 10000,
   );
+  readonly bulkRmqTimeoutMs = Number(
+    process.env.RABBITMQ_BULK_RPC_TIMEOUT_MS ?? 30000,
+  );
 
   constructor(
     @Inject('NOTIFICATION_SERVICE')
@@ -169,6 +172,7 @@ export class RabbitMQPublisher {
     pattern: string,
     data: T,
     correlationId?: string,
+    timeoutMs: number = this.rmqTimeoutMs,
   ): Promise<TResult> {
     const envelope: WithMeta<T> = {
       ...data,
@@ -221,13 +225,13 @@ export class RabbitMQPublisher {
         settled = true;
         subscription.unsubscribe();
         const error = new Error(
-          `Timed out requesting ${pattern} after ${this.rmqTimeoutMs}ms`,
+          `Timed out requesting ${pattern} after ${timeoutMs}ms`,
         );
         this.logger.error(
           `${error.message} | corrId=${envelope._meta.correlationId}`,
         );
         reject(error);
-      }, this.rmqTimeoutMs);
+      }, timeoutMs);
     });
   }
 
@@ -272,12 +276,14 @@ export class RabbitMQPublisher {
   authProvisionEmployeeInvite(
     data: ProvisionEmployeeInviteCommand,
     correlationId?: string,
+    timeoutMs?: number,
   ): Promise<ProvisionEmployeeInviteResult> {
     return this.request(
       this.authClient,
       EventPatterns.AUTH_PROVISION_EMPLOYEE_INVITE,
       data,
       correlationId,
+      timeoutMs,
     );
   }
 
