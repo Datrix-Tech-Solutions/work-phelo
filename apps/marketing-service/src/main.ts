@@ -2,9 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { isSwaggerEnabled } from '@work-phelo/config';
 import { AppModule } from './app.module';
+import { assertMarketingRuntimeEnv } from './config/runtime-env';
 import { setupSwagger } from './swagger.config';
 
 async function bootstrap() {
+  assertMarketingRuntimeEnv();
+
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.setGlobalPrefix('api');
