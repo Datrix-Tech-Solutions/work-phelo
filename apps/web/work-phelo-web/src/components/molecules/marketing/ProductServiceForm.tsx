@@ -3,6 +3,9 @@
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
+import { useCreateProspectingSetting } from '@/hooks/marketing/useProspectingSettings';
+import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
 
 export interface ProductServiceRow {
@@ -30,6 +33,9 @@ interface Props {
 }
 
 export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: Props) {
+  const toast = useToast();
+  const createProduct = useCreateProspectingSetting('products');
+
   function update(index: number, key: keyof ProductServiceRow, value: string) {
     const next = [...rows];
     next[index] = { ...next[index], [key]: value };
@@ -51,10 +57,16 @@ export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: 
       width: '2fr',
       renderField: (i) => (
         <SearchSelect
-          placeholder="Select product"
+          placeholder="Select or type to add new"
           options={productTypeOptions}
           value={rows[i].productType}
           onChange={(v) => update(i, 'productType', v)}
+          emptyState={buildCreateOptionEmptyState(
+            'product',
+            createProduct,
+            (id) => update(i, 'productType', id),
+            toast,
+          )}
         />
       ),
     },

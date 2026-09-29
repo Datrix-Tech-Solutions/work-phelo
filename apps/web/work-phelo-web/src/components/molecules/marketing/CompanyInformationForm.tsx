@@ -21,6 +21,8 @@ export interface CompanyInformationFields {
 
 export type CompanyInformationErrors = Partial<Record<keyof CompanyInformationFields, string>>;
 
+type EmptyState = (ctx: { query: string; close: () => void }) => React.ReactNode;
+
 interface Props {
   values: CompanyInformationFields;
   onChange: (values: CompanyInformationFields) => void;
@@ -29,6 +31,12 @@ interface Props {
   interactionTypeOptions?: { value: string; label: string }[];
   roleOptions?: { value: string; label: string }[];
   sourceTypeOptions?: { value: string; label: string }[];
+  /** Lets the user create a new option inline when nothing matches what they typed —
+   *  see components/molecules/marketing/CreateOptionEmptyState.tsx. */
+  businessTypeEmptyState?: EmptyState;
+  interactionTypeEmptyState?: EmptyState;
+  roleEmptyState?: EmptyState;
+  sourceTypeEmptyState?: EmptyState;
 }
 
 export function CompanyInformationForm({
@@ -39,6 +47,10 @@ export function CompanyInformationForm({
   interactionTypeOptions = [],
   roleOptions = [],
   sourceTypeOptions = [],
+  businessTypeEmptyState,
+  interactionTypeEmptyState,
+  roleEmptyState,
+  sourceTypeEmptyState,
 }: Props) {
   function set<K extends keyof CompanyInformationFields>(key: K, val: CompanyInformationFields[K]) {
     onChange({ ...values, [key]: val });
@@ -62,11 +74,12 @@ export function CompanyInformationForm({
 
         <SearchSelect
           label="Type of Business"
-          placeholder="Select option"
+          placeholder="Select or type to add new"
           options={businessTypeOptions}
           value={values.businessType}
           onChange={(v) => set('businessType', v)}
           error={errors?.businessType}
+          emptyState={businessTypeEmptyState}
         />
       </ProspectFormSection>
 
@@ -101,29 +114,32 @@ export function CompanyInformationForm({
 
         <SearchSelect
           label="Interaction Type"
-          placeholder="Select option"
+          placeholder="Select or type to add new"
           options={interactionTypeOptions}
           value={values.interactionType}
           onChange={(v) => set('interactionType', v)}
           error={errors?.interactionType}
+          emptyState={interactionTypeEmptyState}
         />
 
         <SearchSelect
           label="Role / Job Title"
-          placeholder="Select option"
+          placeholder="Select or type to add new"
           options={roleOptions}
           value={values.roleJobTitle}
           onChange={(v) => set('roleJobTitle', v)}
           error={errors?.roleJobTitle}
+          emptyState={roleEmptyState}
         />
 
         <SearchSelect
           label="Source Type"
-          placeholder="Select option"
+          placeholder="Select or type to add new"
           options={sourceTypeOptions}
           value={values.sourceType}
           onChange={(v) => set('sourceType', v)}
           error={errors?.sourceType}
+          emptyState={sourceTypeEmptyState}
         />
 
         <DatePicker
