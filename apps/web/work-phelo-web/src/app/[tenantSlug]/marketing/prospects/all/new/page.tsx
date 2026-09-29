@@ -18,11 +18,16 @@ import {
 } from '@/components/molecules/marketing/CompanyLocationForm';
 import { SaleStageForm, SaleStageFields } from '@/components/molecules/marketing/SaleStageForm';
 import { ProspectPreview } from '@/components/molecules/marketing/ProspectPreview';
+import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
 import { usePipelineStages } from '@/hooks/marketing/usePipelineStages';
-import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
+import {
+  useCreateProspectingSetting,
+  useProspectingSettings,
+} from '@/hooks/marketing/useProspectingSettings';
 import { useCreateProspect } from '@/hooks/marketing/useProspects';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
+import { isValidEmail } from '@/lib/utils';
 import { CreateProspectPayload, ProspectingSetting } from '@/types/marketing';
 
 const STEPS = [
@@ -96,6 +101,12 @@ export default function NewProspectPage() {
   const interactionTypeOptions = useMemo(() => toOptions(interactionMedia), [interactionMedia]);
   const roleOptions = useMemo(() => toOptions(decisionMakers), [decisionMakers]);
   const productTypeOptions = useMemo(() => toOptions(products), [products]);
+
+  const createBusinessType = useCreateProspectingSetting('business-types');
+  const createSourceType = useCreateProspectingSetting('source-types');
+  const createInteractionMedium = useCreateProspectingSetting('interaction-media');
+  const createDecisionMaker = useCreateProspectingSetting('decision-makers');
+
   const pipelineStageOptions = useMemo(
     () => pipelineStages.map((stage) => ({ value: stage.id, label: stage.name })),
     [pipelineStages],
@@ -109,6 +120,7 @@ export default function NewProspectPage() {
       if (!companyForm.companyName.trim()) next.companyName = 'Company name is required.';
       if (!companyForm.contactName.trim()) next.contactName = 'Contact name is required.';
       if (!companyForm.email.trim()) next.email = 'Email is required.';
+      else if (!isValidEmail(companyForm.email)) next.email = 'Enter a valid email address.';
       setCompanyErrors(next);
       return Object.keys(next).length === 0;
     }
@@ -225,6 +237,30 @@ export default function NewProspectPage() {
             interactionTypeOptions={interactionTypeOptions}
             roleOptions={roleOptions}
             sourceTypeOptions={sourceTypeOptions}
+            businessTypeEmptyState={buildCreateOptionEmptyState(
+              'business type',
+              createBusinessType,
+              (id) => setCompanyForm((f) => ({ ...f, businessType: id })),
+              toast,
+            )}
+            interactionTypeEmptyState={buildCreateOptionEmptyState(
+              'interaction type',
+              createInteractionMedium,
+              (id) => setCompanyForm((f) => ({ ...f, interactionType: id })),
+              toast,
+            )}
+            roleEmptyState={buildCreateOptionEmptyState(
+              'decision maker',
+              createDecisionMaker,
+              (id) => setCompanyForm((f) => ({ ...f, roleJobTitle: id })),
+              toast,
+            )}
+            sourceTypeEmptyState={buildCreateOptionEmptyState(
+              'source type',
+              createSourceType,
+              (id) => setCompanyForm((f) => ({ ...f, sourceType: id })),
+              toast,
+            )}
           />
         </div>
       )}
