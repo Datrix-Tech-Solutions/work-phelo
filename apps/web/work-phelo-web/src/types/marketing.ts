@@ -138,9 +138,13 @@ export interface CreateProspectLocationPayload {
 
 export interface CreateProspectInitialInteractionPayload {
   interactionMediumId?: string;
+  decisionMakerTypeId?: string;
+  decisionMakerName?: string;
   occurredAt: string;
   notes?: string;
 }
+
+export type CreateProspectInteractionPayload = CreateProspectInitialInteractionPayload;
 
 export interface CreateProspectPayload {
   companyName: string;
@@ -169,4 +173,99 @@ export interface ProspectResponse {
   interactions: unknown[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Prospect details / update ────────────────────────────────────────────────
+
+export interface ProspectReference {
+  id: string;
+  name: string;
+}
+
+export interface ProspectDetailContact {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  isPrimary: boolean;
+  decisionMaker: ProspectReference | null;
+}
+
+export interface ProspectDetailProduct {
+  id: string;
+  product: ProspectReference;
+  expectedValue: string;
+  achievedValue: string | null;
+  commissionRate: string | null;
+  commissionAmount: string | null;
+  expectedCloseDate: string | null;
+}
+
+export interface ProspectDetailLocation {
+  label: string;
+  latitude: string;
+  longitude: string;
+}
+
+export interface ProspectDetailSalesStage {
+  id: string;
+  name: string;
+  probability: number;
+  displayOrder: number;
+}
+
+export interface ProspectDetailInteraction {
+  id: string;
+  occurredAt: string;
+  interactionMedium: ProspectReference | null;
+  decisionMaker: ProspectReference | null;
+  decisionMakerName: string | null;
+  notes: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+}
+
+export interface ProspectDetail {
+  id: string;
+  companyName: string;
+  businessType: ProspectReference | null;
+  sourceType: ProspectReference | null;
+  assignedUserId: string;
+  location: ProspectDetailLocation;
+  salesStage: ProspectDetailSalesStage;
+  progress: number;
+  contacts: ProspectDetailContact[];
+  products: ProspectDetailProduct[];
+  totalExpectedValue: string;
+  totalAchievedValue: string;
+  interactions: ProspectDetailInteraction[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateProspectProductPayload {
+  /** Existing association id; omit to add a new product/service. */
+  id?: string;
+  productId?: string;
+  expectedValue?: number;
+  achievedValue?: number | null;
+  commissionRate?: number | null;
+  commissionAmount?: number | null;
+  expectedCloseDate?: string | null;
+}
+
+export interface UpdateProspectPayload {
+  companyName?: string;
+  businessTypeId?: string | null;
+  sourceTypeId?: string | null;
+  pipelineStageId?: string;
+  primaryContact?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    decisionMakerTypeId?: string | null;
+  };
+  /** The complete desired set — existing rows left out are removed. */
+  products?: UpdateProspectProductPayload[];
+  location?: Partial<CreateProspectLocationPayload>;
 }

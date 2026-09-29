@@ -31,6 +31,8 @@ interface Props {
   interactionTypeOptions?: { value: string; label: string }[];
   roleOptions?: { value: string; label: string }[];
   sourceTypeOptions?: { value: string; label: string }[];
+  /** Hides interaction type and date contacted (not editable after creation). */
+  hideInteraction?: boolean;
   /** Lets the user create a new option inline when nothing matches what they typed —
    *  see components/molecules/marketing/CreateOptionEmptyState.tsx. */
   businessTypeEmptyState?: EmptyState;
@@ -47,6 +49,7 @@ export function CompanyInformationForm({
   interactionTypeOptions = [],
   roleOptions = [],
   sourceTypeOptions = [],
+  hideInteraction = false,
   businessTypeEmptyState,
   interactionTypeEmptyState,
   roleEmptyState,
@@ -112,15 +115,17 @@ export function CompanyInformationForm({
           />
         </div>
 
-        <SearchSelect
-          label="Interaction Type"
-          placeholder="Select or type to add new"
-          options={interactionTypeOptions}
-          value={values.interactionType}
-          onChange={(v) => set('interactionType', v)}
-          error={errors?.interactionType}
-          emptyState={interactionTypeEmptyState}
-        />
+        {!hideInteraction && (
+          <SearchSelect
+            label="Interaction Type"
+            placeholder="Select or type to add new"
+            options={interactionTypeOptions}
+            value={values.interactionType}
+            onChange={(v) => set('interactionType', v)}
+            error={errors?.interactionType}
+            emptyState={interactionTypeEmptyState}
+          />
+        )}
 
         <SearchSelect
           label="Role / Job Title"
@@ -142,12 +147,14 @@ export function CompanyInformationForm({
           emptyState={sourceTypeEmptyState}
         />
 
-        <DatePicker
-          label="Date Contacted"
-          value={values.dateContacted}
-          onChange={(v) => set('dateContacted', v)}
-          error={errors?.dateContacted}
-        />
+        {!hideInteraction && (
+          <DatePicker
+            label="Date Contacted"
+            value={values.dateContacted}
+            onChange={(v) => set('dateContacted', v)}
+            error={errors?.dateContacted}
+          />
+        )}
       </ProspectFormSection>
     </div>
   );

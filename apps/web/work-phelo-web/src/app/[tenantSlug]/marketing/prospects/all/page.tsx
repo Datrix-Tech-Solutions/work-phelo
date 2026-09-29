@@ -3,8 +3,11 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { useProspects } from '@/hooks/marketing/useProspects';
+import { useDeleteProspect, useProspects } from '@/hooks/marketing/useProspects';
 import { AllProspectsTable, Prospect } from '@/components/molecules/marketing/AllProspectsTable';
+import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
+import { useToast } from '@/hooks/useToast';
+import { apiErrorMessage } from '@/lib/apiError';
 import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import { ProspectListItem } from '@/types/marketing';
@@ -19,6 +22,7 @@ function toRow(item: ProspectListItem): Prospect {
     product: item.products.map((p) => p.name).join(', ') || '—',
     contactNo: item.primaryContact?.phone ?? '',
     salesStage: item.salesStage.name,
+    salesStageProgress: item.salesStage.probability,
     decisionMaker: item.primaryContact?.decisionMaker?.name ?? '',
     lastInteraction: item.lastInteractionDate ?? '',
   };
@@ -30,6 +34,9 @@ export default function AllProspectsPage() {
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [pendingDelete, setPendingDelete] = useState<Prospect | null>(null);
+  const toast = useToast();
+  const deleteProspect = useDeleteProspect();
 
   const { data, isLoading, isError } = useProspects({
     page,
@@ -41,9 +48,20 @@ export default function AllProspectsPage() {
   const totalPages = Math.max(1, data?.meta.totalPages ?? 1);
 
   function handleRowClick(row: Prospect) {
-    router.push(
-      `/${tenantSlug}/marketing/prospects/all/${row.id}?name=${encodeURIComponent(row.prospectName)}`,
-    );
+    router.push(`/${tenantSlug}/marketing/prospects/all/${row.id}`);
+  }
+
+  function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    deleteProspect.mutate(pendingDelete.id, {
+      onSuccess: () => {
+        toast.success('Prospect deleted');
+        // Deleting the last row on a page would otherwise leave us on an empty page.
+        if (rows.length === 1 && page > 1) setPage(page - 1);
+      },
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete prospect')),
+      onSettled: () => setPendingDelete(null),
+    });
   }
 
   if (isError) {
@@ -67,9 +85,19 @@ export default function AllProspectsPage() {
         totalPages={totalPages}
         onPageChange={setPage}
         onRowClick={handleRowClick}
+        onEdit={(row) => router.push(`/${tenantSlug}/marketing/prospects/all/${row.id}/edit`)}
+        onDelete={setPendingDelete}
         onAdd={() => router.push(`/${tenantSlug}/marketing/prospects/all/new`)}
         isLoading={isLoading}
       />
+      {pendingDelete && (
+        <ConfirmDeleteProspectModal
+          name={pendingDelete.prospectName}
+          isDeleting={deleteProspect.isPending}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }
