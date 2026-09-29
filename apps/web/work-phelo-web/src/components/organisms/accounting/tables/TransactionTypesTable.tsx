@@ -64,10 +64,12 @@ export function TransactionTypesTable() {
       label: 'Category',
       width: '140px',
       render: (row) => (
-        <TypeChip
-          label={TRANSACTION_TYPE_CATEGORY_LABEL[row.category]}
-          color={TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[row.category]}
-        />
+        <div className="flex flex-col items-start gap-0.5">
+          <TypeChip
+            label={TRANSACTION_TYPE_CATEGORY_LABEL[row.category]}
+            color={TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[row.category]}
+          />
+        </div>
       ),
     },
     {
@@ -85,16 +87,6 @@ export function TransactionTypesTable() {
       label: 'Source',
       width: '120px',
       render: (row) => <span className="text-sm text-gray-700">{row.source ?? 'Manual'}</span>,
-    },
-    {
-      key: 'linked',
-      label: 'Linked',
-      width: '90px',
-      render: (row) => (
-        <span className="text-sm text-gray-700">
-          {row.isLinked ? (row.category === 'RECEIVABLE' ? 'Credit note' : 'Debit note') : '—'}
-        </span>
-      ),
     },
     {
       key: 'rules',

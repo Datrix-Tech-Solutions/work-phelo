@@ -94,6 +94,7 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     status: raw.status,
     paymentState: raw.paymentState,
     outstandingAmount: raw.outstandingAmount ?? null,
+    creditedAmount: raw.creditedAmount ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,
@@ -266,6 +267,11 @@ function usePostDocument(side: AccountingTradeSide, segment: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: documentsKey(side, segment) });
+      // Posting a credit/debit note reduces its original invoice/bill, so that list (and its
+      // balance) is stale too.
+      if (segment === CREDIT_NOTE_SEGMENT) {
+        queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
+      }
     },
   });
 }
@@ -283,6 +289,10 @@ function useReverseDocument(side: AccountingTradeSide, segment: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: documentsKey(side, segment) });
+      // Reversing a credit/debit note gives its original invoice/bill its balance back.
+      if (segment === CREDIT_NOTE_SEGMENT) {
+        queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
+      }
     },
   });
 }

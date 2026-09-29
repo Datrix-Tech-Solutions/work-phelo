@@ -58,6 +58,16 @@ const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> =
   OPEN: 'Unpaid',
 };
 
+// A credit/debit note is never "paid" — its state is how much of it has been applied
+// against the invoice/bill it reduces.
+const CREDIT_NOTE_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
+  DRAFT: 'Draft',
+  REVERSED: 'Reversed',
+  PAID: 'Applied',
+  PARTIALLY_PAID: 'Partly Applied',
+  OPEN: 'Unapplied',
+};
+
 const CASHBOOK_TYPE_LABEL: Record<CashbookTransactionType, string> = {
   RECEIPT: 'Receipt',
   PAYMENT: 'Payment',
@@ -136,6 +146,20 @@ interface UnifiedTransactionRow {
   cashbook?: CashbookTransaction;
 }
 
+/** Payment state for an invoice/bill, or "applied" state for a credit/debit note. An invoice
+ *  reduced only by credit notes reads "Credited" rather than "Partially Paid", since nothing
+ *  was actually paid on it. */
+function documentStateLabel(doc: AccountingTradeDocument): string | null {
+  if (doc.status === 'DRAFT') return null;
+  if (doc.documentType === 'CREDIT_NOTE') return CREDIT_NOTE_STATE_LABEL[doc.paymentState];
+  const credited = Number(doc.creditedAmount ?? 0);
+  const applied = Number(doc.totalAmount) - Number(doc.outstandingAmount ?? doc.totalAmount);
+  const isCreditedOnly = credited > 0 && applied - credited <= 0;
+  if (isCreditedOnly && doc.paymentState === 'PAID') return 'Credited';
+  if (isCreditedOnly && doc.paymentState === 'PARTIALLY_PAID') return 'Partially Credited';
+  return PAYMENT_STATE_LABEL[doc.paymentState];
+}
+
 function toDocumentRow(doc: AccountingTradeDocument): UnifiedTransactionRow {
   return {
     id: doc.id,
@@ -152,7 +176,7 @@ function toDocumentRow(doc: AccountingTradeDocument): UnifiedTransactionRow {
     typeColor: TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[doc.side],
     filterSide: doc.side,
     status: doc.status,
-    paymentStateLabel: doc.status !== 'DRAFT' ? PAYMENT_STATE_LABEL[doc.paymentState] : null,
+    paymentStateLabel: documentStateLabel(doc),
     createdAt: doc.createdAt,
     document: doc,
   };
@@ -227,13 +251,6 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       ...(bills.data?.items ?? []).map(toDocumentRow),
       ...(receivableCreditNotes.data?.items ?? []).map(toDocumentRow),
       ...(payableCreditNotes.data?.items ?? []).map(toDocumentRow),
-      // Only direct cashbook entries belong here — one made straight from a "posts to
-      // cashbook" transaction type (a plain Receipt/Payment/Charge/Adjustment, or settling a
-      // Source Ledger item) rather than paying off a Bill/Invoice. A bill/invoice payment
-      // also creates a CashbookTransaction under the hood, but it's tagged
-      // sourceModule: 'ACCOUNTING' by payables/receivables.service.ts — that one's already
-      // represented here by its Bill/Invoice row, and its actual payment lives in Journal
-      // Entries, not duplicated into this list.
       ...(!partyId
         ? (cashbookTransactions.data?.items ?? [])
             .filter((cb) => cb.sourceModule !== 'ACCOUNTING')
@@ -282,9 +299,16 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         label: 'Transaction ID',
         width: '160px',
         render: (row) => (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-            {row.transactionNumber}
-          </span>
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
+              {row.transactionNumber}
+            </span>
+            {row.linkedTo && (
+              <span className="max-w-full truncate text-xs text-gray-500">
+                Linked to {row.linkedTo}
+              </span>
+            )}
+          </div>
         ),
       },
       {
@@ -300,19 +324,6 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         render: (row) => (
           <span className="text-sm text-gray-800 font-medium truncate">{row.entityLabel}</span>
         ),
-      },
-      {
-        key: 'linkedTo',
-        label: 'Linked To',
-        width: '150px',
-        render: (row) =>
-          row.linkedTo ? (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-              {row.linkedTo}
-            </span>
-          ) : (
-            <span className="text-sm text-gray-400">—</span>
-          ),
       },
       {
         key: 'subtotalAmount',
@@ -377,7 +388,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
                 <TableButton variant="green" onClick={() => setDetailTarget(row.document!)}>
                   Post
                 </TableButton>
-              ) : row.document!.status === 'POSTED' && row.document!.paymentState !== 'PAID' ? (
+              ) : row.document!.status === 'POSTED' &&
+                row.document!.documentType !== 'CREDIT_NOTE' &&
+                row.document!.paymentState !== 'PAID' ? (
                 <TableButton variant="green" onClick={() => setPaymentTarget(row.document!)}>
                   {row.document!.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
                 </TableButton>
