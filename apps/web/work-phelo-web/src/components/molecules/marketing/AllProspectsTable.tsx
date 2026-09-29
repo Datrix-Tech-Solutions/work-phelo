@@ -45,6 +45,7 @@ interface Props {
   onPageChange: (page: number) => void;
   onRowClick: (row: Prospect) => void;
   onAdd: () => void;
+  isLoading?: boolean;
 }
 
 export function AllProspectsTable({
@@ -56,6 +57,7 @@ export function AllProspectsTable({
   onPageChange,
   onRowClick,
   onAdd,
+  isLoading,
 }: Props) {
   return (
     <DataTable
@@ -71,6 +73,7 @@ export function AllProspectsTable({
       onRowClick={onRowClick}
       actionButton={{ label: 'Add Prospect', onClick: onAdd }}
       noInternalScroll
+      isLoading={isLoading}
     />
   );
 }

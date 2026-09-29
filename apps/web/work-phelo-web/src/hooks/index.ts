@@ -27,6 +27,7 @@ export * from './useDropdownPosition';
 export * from './marketing/useGeocode';
 export * from './marketing/usePipelineStages';
 export * from './marketing/useProspectingSettings';
+export * from './marketing/useProspects';
 
 // Reinsurance hooks
 export * from './reinsurance/useFacultatives';
