@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { useDeleteProspect, useProspects } from '@/hooks/marketing/useProspects';
+import { useDeleteProspect, useProspect, useProspects } from '@/hooks/marketing/useProspects';
 import { AllProspectsTable, Prospect } from '@/components/molecules/marketing/AllProspectsTable';
+import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -35,6 +36,7 @@ export default function AllProspectsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState<Prospect | null>(null);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
   const toast = useToast();
   const deleteProspect = useDeleteProspect();
 
@@ -43,6 +45,9 @@ export default function AllProspectsPage() {
     limit: PAGE_SIZE,
     ...(search.trim() ? { search: search.trim() } : {}),
   });
+
+  // The list row doesn't carry the full contact/location details the modal shows.
+  const { data: convertingProspect } = useProspect(convertingId ?? '');
 
   const rows = useMemo(() => (data?.data ?? []).map(toRow), [data]);
   const totalPages = Math.max(1, data?.meta.totalPages ?? 1);
@@ -87,9 +92,17 @@ export default function AllProspectsPage() {
         onRowClick={handleRowClick}
         onEdit={(row) => router.push(`/${tenantSlug}/marketing/prospects/all/${row.id}/edit`)}
         onDelete={setPendingDelete}
+        onConvertToClient={(row) => setConvertingId(row.id)}
         onAdd={() => router.push(`/${tenantSlug}/marketing/prospects/all/new`)}
         isLoading={isLoading}
       />
+      {convertingId && convertingProspect && (
+        <ConvertToClientModal
+          prospect={convertingProspect}
+          isOpen
+          onClose={() => setConvertingId(null)}
+        />
+      )}
       {pendingDelete && (
         <ConfirmDeleteProspectModal
           name={pendingDelete.prospectName}
