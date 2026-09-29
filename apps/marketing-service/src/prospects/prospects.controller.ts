@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -17,6 +20,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiNoContentResponse,
   ApiOperation,
   ApiOkResponse,
   ApiParam,
@@ -117,6 +121,27 @@ export class ProspectsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.update(request.user, id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.PROSPECTS_DELETE,
+    MarketingCrmSettingsPermission.PROSPECTS_DELETE_ALL,
+  )
+  @ApiOperation({
+    summary: 'Delete a marketing prospect',
+    description:
+      'Permanently deletes a prospect aggregate. Users with marketing.prospects:DELETE can delete assigned prospects. Users with marketing.prospects.all:DELETE can delete any prospect within their tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiNoContentResponse({ description: 'Prospect deleted.' })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.remove(request.user, id);
   }
 
   @Post()

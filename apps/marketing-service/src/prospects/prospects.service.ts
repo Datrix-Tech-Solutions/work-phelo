@@ -227,6 +227,26 @@ export class ProspectsService {
     return this.findProspectDetail(user, id, canEditAll);
   }
 
+  async remove(user: RequestUser, id: string): Promise<void> {
+    const canDeleteAll = this.canDeleteAllProspects(user);
+    const existing = await this.prisma.marketingProspect.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        ...this.visibilityWhere(user, canDeleteAll),
+      },
+      select: { id: true },
+    });
+
+    if (!existing) throw new NotFoundException('Prospect not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.marketingProspect.delete({
+        where: { id: existing.id },
+      });
+    });
+  }
+
   async list(user: RequestUser, query: QueryProspectsDto = {}) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -566,6 +586,16 @@ export class ProspectsService {
 
     return user.permissions.includes(
       MarketingCrmSettingsPermission.PROSPECTS_EDIT_ALL,
+    );
+  }
+
+  private canDeleteAllProspects(user: RequestUser): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
+
+    return user.permissions.includes(
+      MarketingCrmSettingsPermission.PROSPECTS_DELETE_ALL,
     );
   }
 
