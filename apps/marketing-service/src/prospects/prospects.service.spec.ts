@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { CreateProspectDto } from './dto/create-prospect.dto';
+import { UpdateProspectDto } from './dto/update-prospect.dto';
 import { ProspectsService } from './prospects.service';
 
 describe('ProspectsService', () => {
@@ -60,6 +61,67 @@ describe('ProspectsService', () => {
     },
   });
 
+  const makeExistingProspect = () => ({
+    id: 'prospect-a',
+    tenantId: 'tenant-1',
+    companyName: 'Acme Manufacturing',
+    normalizedCompanyName: 'acme manufacturing',
+    businessTypeId: 'business-type-1',
+    sourceTypeId: 'source-type-1',
+    pipelineStageId: 'stage-proposal',
+    assignedUserId: 'user-1',
+    locationLabel: 'Accra, Ghana',
+    latitude: new Prisma.Decimal('5.603700'),
+    longitude: new Prisma.Decimal('-0.187000'),
+    createdByUserId: 'user-1',
+    updatedByUserId: 'user-1',
+    createdAt: new Date('2026-09-28T10:00:00.000Z'),
+    updatedAt: new Date('2026-09-29T10:00:00.000Z'),
+    contacts: [
+      {
+        id: 'contact-primary',
+        tenantId: 'tenant-1',
+        prospectId: 'prospect-a',
+        name: 'Ama Mensah',
+        phone: '+233201234567',
+        email: 'ama@example.com',
+        decisionMakerTypeId: 'decision-maker-1',
+        isPrimary: true,
+        createdAt: new Date('2026-09-28T10:05:00.000Z'),
+        updatedAt: new Date('2026-09-28T10:05:00.000Z'),
+      },
+    ],
+    products: [
+      {
+        id: 'product-row-1',
+        tenantId: 'tenant-1',
+        prospectId: 'prospect-a',
+        productId: 'product-1',
+        expectedValue: new Prisma.Decimal('10000.00'),
+        achievedValue: new Prisma.Decimal('2500.00'),
+        commissionRate: new Prisma.Decimal('10.5'),
+        commissionAmount: new Prisma.Decimal('1000.00'),
+        expectedCloseDate: new Date('2026-10-31T00:00:00.000Z'),
+        createdAt: new Date('2026-09-28T10:05:00.000Z'),
+        updatedAt: new Date('2026-09-28T10:05:00.000Z'),
+      },
+      {
+        id: 'product-row-2',
+        tenantId: 'tenant-1',
+        prospectId: 'prospect-a',
+        productId: 'product-2',
+        expectedValue: new Prisma.Decimal('5000.00'),
+        achievedValue: null,
+        commissionRate: null,
+        commissionAmount: null,
+        expectedCloseDate: null,
+        createdAt: new Date('2026-09-28T10:06:00.000Z'),
+        updatedAt: new Date('2026-09-28T10:06:00.000Z'),
+      },
+    ],
+    interactions: [],
+  });
+
   const makePrisma = () => {
     const tx = {
       marketingProspect: {
@@ -67,12 +129,18 @@ describe('ProspectsService', () => {
         count: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
       },
       marketingProspectProduct: {
+        create: jest.fn(),
+        deleteMany: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
       },
       marketingProspectContact: {
+        create: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
       },
       marketingProspectInteraction: {
         groupBy: jest.fn(),
@@ -127,8 +195,14 @@ describe('ProspectsService', () => {
     prisma.marketingProspect.count.mockResolvedValue(0);
     prisma.marketingProspect.findFirst.mockResolvedValue(null);
     prisma.marketingProspect.findMany.mockResolvedValue([]);
+    prisma.marketingProspect.update.mockResolvedValue({});
+    prisma.marketingProspectProduct.create.mockResolvedValue({});
+    prisma.marketingProspectProduct.deleteMany.mockResolvedValue({ count: 0 });
     prisma.marketingProspectProduct.findMany.mockResolvedValue([]);
+    prisma.marketingProspectProduct.update.mockResolvedValue({});
+    prisma.marketingProspectContact.create.mockResolvedValue({});
     prisma.marketingProspectContact.findMany.mockResolvedValue([]);
+    prisma.marketingProspectContact.update.mockResolvedValue({});
     prisma.marketingProspectInteraction.groupBy.mockResolvedValue([]);
     prisma.marketingPipelineStage.findMany.mockResolvedValue([]);
     prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
@@ -579,6 +653,313 @@ describe('ProspectsService', () => {
     });
   });
 
+  describe('update', () => {
+    it('updates an assigned prospect aggregate and returns the detail response shape', async () => {
+      const existing = makeExistingProspect();
+      prisma.marketingProspect.findFirst
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce({
+          ...existing,
+          companyName: 'Beta Industries',
+          normalizedCompanyName: 'beta industries',
+          businessTypeId: 'business-type-2',
+          sourceTypeId: null,
+          pipelineStageId: 'stage-negotiation',
+          locationLabel: 'Kumasi, Ghana',
+          latitude: new Prisma.Decimal('6.6885'),
+          longitude: new Prisma.Decimal('-1.6244'),
+          contacts: [
+            {
+              ...existing.contacts[0],
+              name: 'Akua Boateng',
+              phone: null,
+              email: 'akua@example.com',
+              decisionMakerTypeId: 'decision-maker-2',
+            },
+          ],
+          products: [
+            {
+              ...existing.products[0],
+              productId: 'product-3',
+              expectedValue: new Prisma.Decimal('20000.00'),
+              achievedValue: null,
+              commissionRate: null,
+              commissionAmount: new Prisma.Decimal('1500.00'),
+              expectedCloseDate: null,
+            },
+            {
+              id: 'product-row-3',
+              tenantId: 'tenant-1',
+              prospectId: 'prospect-a',
+              productId: 'product-4',
+              expectedValue: new Prisma.Decimal('5000.00'),
+              achievedValue: null,
+              commissionRate: null,
+              commissionAmount: null,
+              expectedCloseDate: new Date('2026-11-01T00:00:00.000Z'),
+              createdAt: new Date('2026-09-30T10:00:00.000Z'),
+              updatedAt: new Date('2026-09-30T10:00:00.000Z'),
+            },
+          ],
+        });
+      prisma.marketingPipelineStage.findFirst.mockResolvedValue({
+        id: 'stage-negotiation',
+        name: 'Negotiation',
+        probability: 80,
+        displayOrder: 4,
+      });
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        { id: 'business-type-2', name: 'Corporate' },
+        { id: 'decision-maker-2', name: 'CFO' },
+        { id: 'product-3', name: 'Product C' },
+        { id: 'product-4', name: 'Service D' },
+      ]);
+
+      const result = await service.update(user, 'prospect-a', {
+        companyName: '  Beta   Industries ',
+        businessTypeId: 'business-type-2',
+        sourceTypeId: null,
+        pipelineStageId: 'stage-negotiation',
+        primaryContact: {
+          name: ' Akua  Boateng ',
+          phone: ' ',
+          email: 'akua@example.com',
+          decisionMakerTypeId: 'decision-maker-2',
+        },
+        products: [
+          {
+            id: 'product-row-1',
+            productId: 'product-3',
+            expectedValue: 20000,
+            achievedValue: null,
+            commissionRate: null,
+            commissionAmount: 1500,
+            expectedCloseDate: null,
+          },
+          {
+            productId: 'product-4',
+            expectedValue: 5000,
+            expectedCloseDate: '2026-11-01',
+          },
+        ],
+        location: {
+          label: ' Kumasi,  Ghana ',
+          latitude: 6.6885,
+          longitude: -1.6244,
+        },
+      });
+
+      expect(prisma.marketingProspect.findFirst).toHaveBeenNthCalledWith(1, {
+        where: {
+          id: 'prospect-a',
+          tenantId: 'tenant-1',
+          assignedUserId: 'user-1',
+        },
+        include: {
+          contacts: true,
+          products: true,
+        },
+      });
+      expect(prisma.marketingProspect.update).toHaveBeenCalledWith({
+        where: { id: 'prospect-a' },
+        data: expect.objectContaining({
+          companyName: 'Beta Industries',
+          normalizedCompanyName: 'beta industries',
+          businessTypeId: 'business-type-2',
+          sourceTypeId: null,
+          pipelineStageId: 'stage-negotiation',
+          locationLabel: 'Kumasi, Ghana',
+          latitude: 6.6885,
+          longitude: -1.6244,
+          updatedByUserId: 'user-1',
+        }),
+      });
+      expect(prisma.marketingProspectContact.update).toHaveBeenCalledWith({
+        where: { id: 'contact-primary' },
+        data: {
+          name: 'Akua Boateng',
+          phone: null,
+          email: 'akua@example.com',
+          decisionMakerTypeId: 'decision-maker-2',
+        },
+      });
+      expect(prisma.marketingProspectProduct.deleteMany).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          id: { notIn: ['product-row-1'] },
+        },
+      });
+      expect(prisma.marketingProspectProduct.update).toHaveBeenCalledWith({
+        where: { id: 'product-row-1' },
+        data: {
+          productId: 'product-3',
+          expectedValue: 20000,
+          achievedValue: null,
+          commissionRate: null,
+          commissionAmount: 1500,
+          expectedCloseDate: null,
+        },
+      });
+      expect(prisma.marketingProspectProduct.create).toHaveBeenCalledWith({
+        data: {
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          productId: 'product-4',
+          expectedValue: 5000,
+          achievedValue: null,
+          commissionRate: null,
+          commissionAmount: null,
+          expectedCloseDate: new Date('2026-11-01'),
+        },
+      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: 'prospect-a',
+          companyName: 'Beta Industries',
+          totalExpectedValue: '25000.00',
+          totalAchievedValue: '0.00',
+        }),
+      );
+    });
+
+    it('allows EDIT_ALL users to update another user prospect within the same tenant', async () => {
+      const existing = {
+        ...makeExistingProspect(),
+        assignedUserId: 'user-2',
+      };
+      prisma.marketingProspect.findFirst
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(existing);
+
+      await service.update(
+        {
+          ...user,
+          permissions: [
+            MarketingCrmSettingsPermission.PROSPECTS_EDIT,
+            MarketingCrmSettingsPermission.PROSPECTS_EDIT_ALL,
+          ],
+        },
+        'prospect-a',
+        { companyName: 'Updated Prospect' },
+      );
+
+      expect(prisma.marketingProspect.findFirst).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: {
+            id: 'prospect-a',
+            tenantId: 'tenant-1',
+          },
+        }),
+      );
+    });
+
+    it('returns non-disclosing not found for missing, cross-tenant or unassigned prospects', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update(user, 'prospect-other', { companyName: 'Updated' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects empty patches, empty product sets and unknown product association ids', async () => {
+      const existing = makeExistingProspect();
+      prisma.marketingProspect.findFirst.mockResolvedValue(existing);
+
+      await expect(service.update(user, 'prospect-a', {})).rejects.toThrow(
+        'At least one field is required',
+      );
+      await expect(
+        service.update(user, 'prospect-a', { products: [] }),
+      ).rejects.toThrow('A prospect must have at least one product');
+      await expect(
+        service.update(user, 'prospect-a', {
+          products: [{ id: 'missing-row', expectedValue: 100 }],
+        }),
+      ).rejects.toThrow('Invalid prospect product reference');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects inactive, archived, cross-tenant or wrong-category changed references before updating', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue(
+        makeExistingProspect(),
+      );
+      prisma.marketingCrmSettingOption.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update(user, 'prospect-a', {
+          businessTypeId: 'missing-business-type',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('does not revalidate unchanged archived references when explicitly submitted', async () => {
+      const existing = {
+        ...makeExistingProspect(),
+        businessTypeId: 'archived-business-type',
+        sourceTypeId: 'archived-source-type',
+        pipelineStageId: 'archived-stage',
+        contacts: [
+          {
+            ...makeExistingProspect().contacts[0],
+            decisionMakerTypeId: 'archived-decision-maker',
+          },
+        ],
+        products: [
+          {
+            ...makeExistingProspect().products[0],
+            productId: 'archived-product',
+          },
+        ],
+      };
+      prisma.marketingProspect.findFirst
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(existing);
+
+      await service.update(user, 'prospect-a', {
+        businessTypeId: 'archived-business-type',
+        sourceTypeId: 'archived-source-type',
+        pipelineStageId: 'archived-stage',
+        primaryContact: {
+          decisionMakerTypeId: 'archived-decision-maker',
+        },
+        products: [
+          {
+            id: 'product-row-1',
+            productId: 'archived-product',
+            expectedValue: 10000,
+          },
+        ],
+      });
+
+      expect(prisma.marketingCrmSettingOption.findFirst).not.toHaveBeenCalled();
+      expect(prisma.marketingPipelineStage.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates transaction failures so aggregate child updates roll back', async () => {
+      const existing = makeExistingProspect();
+      prisma.marketingProspect.findFirst.mockResolvedValue(existing);
+      prisma.marketingProspectProduct.update.mockRejectedValue(
+        new Error('child update failed'),
+      );
+
+      await expect(
+        service.update(user, 'prospect-a', {
+          products: [
+            {
+              id: 'product-row-1',
+              expectedValue: 12500,
+            },
+          ],
+        }),
+      ).rejects.toThrow('child update failed');
+      expect(prisma.marketingProspect.update).toHaveBeenCalled();
+    });
+  });
+
   describe('list', () => {
     const prospectA = {
       id: 'prospect-a',
@@ -898,6 +1279,60 @@ describe('ProspectsService', () => {
           'products',
         ]),
       );
+    });
+  });
+
+  describe('UpdateProspectDto validation', () => {
+    async function validateDto(payload: unknown) {
+      return validate(plainToInstance(UpdateProspectDto, payload));
+    }
+
+    it('allows sparse valid patches', async () => {
+      const errors = await validateDto({
+        primaryContact: {
+          email: 'ama@example.com',
+        },
+        products: [
+          {
+            id: '77777777-7777-4777-8777-777777777777',
+            expectedValue: 12000,
+            expectedCloseDate: null,
+          },
+        ],
+      });
+
+      expect(errors).toEqual([]);
+    });
+
+    it('validates changed UUIDs, email format, product money fields and dates', async () => {
+      const errors = await validateDto({
+        businessTypeId: 'not-a-uuid',
+        primaryContact: {
+          email: 'not-an-email',
+        },
+        products: [
+          {
+            productId: 'not-a-uuid',
+            expectedValue: -1,
+            expectedCloseDate: 'not-a-date',
+          },
+        ],
+      });
+      const properties = errors.map((error) => error.property);
+
+      expect(properties).toEqual(
+        expect.arrayContaining([
+          'businessTypeId',
+          'primaryContact',
+          'products',
+        ]),
+      );
+    });
+
+    it('rejects empty product arrays when product replacement is submitted', async () => {
+      const errors = await validateDto({ products: [] });
+
+      expect(errors.some((error) => error.property === 'products')).toBe(true);
     });
   });
 });

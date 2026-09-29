@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -42,6 +43,7 @@ import {
   ProspectDetailResponseDto,
   ProspectResponseDto,
 } from './dto/prospect-response.dto';
+import { UpdateProspectDto } from './dto/update-prospect.dto';
 import { ProspectsService } from './prospects.service';
 
 @Controller('prospects')
@@ -93,6 +95,28 @@ export class ProspectsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.findOne(request.user, id);
+  }
+
+  @Patch(':id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.PROSPECTS_EDIT,
+    MarketingCrmSettingsPermission.PROSPECTS_EDIT_ALL,
+  )
+  @ApiOperation({
+    summary: 'Update a marketing prospect',
+    description:
+      'Users with marketing.prospects:EDIT can update assigned prospects. Users with marketing.prospects.all:EDIT can update any prospect within their tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectDetailResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(request.user, id, dto);
   }
 
   @Post()
