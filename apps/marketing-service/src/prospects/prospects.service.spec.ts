@@ -127,6 +127,7 @@ describe('ProspectsService', () => {
       marketingProspect: {
         create: jest.fn(),
         count: jest.fn(),
+        delete: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
@@ -193,6 +194,7 @@ describe('ProspectsService', () => {
       }),
     );
     prisma.marketingProspect.count.mockResolvedValue(0);
+    prisma.marketingProspect.delete.mockResolvedValue({});
     prisma.marketingProspect.findFirst.mockResolvedValue(null);
     prisma.marketingProspect.findMany.mockResolvedValue([]);
     prisma.marketingProspect.update.mockResolvedValue({});
@@ -957,6 +959,141 @@ describe('ProspectsService', () => {
         }),
       ).rejects.toThrow('child update failed');
       expect(prisma.marketingProspect.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('remove', () => {
+    it('allows the owner to permanently delete an assigned prospect', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce({
+        id: 'prospect-a',
+      });
+
+      await expect(
+        service.remove(
+          {
+            ...user,
+            permissions: [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
+          },
+          'prospect-a',
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'prospect-a',
+          tenantId: 'tenant-1',
+          assignedUserId: 'user-1',
+        },
+        select: { id: true },
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.marketingProspect.delete).toHaveBeenCalledWith({
+        where: { id: 'prospect-a' },
+      });
+      expect(prisma.marketingCrmSettingOption.findFirst).not.toHaveBeenCalled();
+      expect(prisma.marketingCrmSettingOption.findMany).not.toHaveBeenCalled();
+    });
+
+    it('allows DELETE_ALL users to delete another user prospect within the same tenant', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce({
+        id: 'prospect-a',
+      });
+
+      await service.remove(
+        {
+          ...user,
+          permissions: [
+            MarketingCrmSettingsPermission.PROSPECTS_DELETE,
+            MarketingCrmSettingsPermission.PROSPECTS_DELETE_ALL,
+          ],
+        },
+        'prospect-a',
+      );
+
+      expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'prospect-a',
+          tenantId: 'tenant-1',
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingProspect.delete).toHaveBeenCalledWith({
+        where: { id: 'prospect-a' },
+      });
+    });
+
+    it('returns non-disclosing not found for missing, cross-tenant or unassigned prospects', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.remove(
+          {
+            ...user,
+            permissions: [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
+          },
+          'prospect-other',
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.marketingProspect.delete).not.toHaveBeenCalled();
+    });
+
+    it('uses the root prospect delete so database cascades remove contacts, products and interactions', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce({
+        id: 'prospect-a',
+      });
+
+      await service.remove(
+        {
+          ...user,
+          permissions: [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
+        },
+        'prospect-a',
+      );
+
+      expect(prisma.marketingProspect.delete).toHaveBeenCalledWith({
+        where: { id: 'prospect-a' },
+      });
+      expect(prisma.marketingProspectProduct.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('propagates transaction failures so the aggregate is not partially deleted', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspect.delete.mockRejectedValue(
+        new Error('delete failed'),
+      );
+
+      await expect(
+        service.remove(
+          {
+            ...user,
+            permissions: [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
+          },
+          'prospect-a',
+        ),
+      ).rejects.toThrow('delete failed');
+    });
+
+    it('returns not found from details after a deleted prospect is absent', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.findOne(user, 'prospect-a')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('excludes deleted prospects from list results once they are absent from the table', async () => {
+      prisma.marketingProspect.count.mockResolvedValueOnce(0);
+      prisma.marketingProspect.findMany.mockResolvedValueOnce([]);
+
+      const result = await service.list(user, {});
+
+      expect(result).toEqual({
+        data: [],
+        meta: { page: 1, limit: 20, total: 0, totalPages: 1 },
+      });
     });
   });
 

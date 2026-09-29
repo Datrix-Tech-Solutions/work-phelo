@@ -71,6 +71,18 @@ describe('ProspectsController authorization contract', () => {
       MarketingCrmSettingsPermission.PROSPECTS_EDIT_ALL,
     ]);
   });
+
+  it('requires assigned or tenant-wide prospect delete permission on remove', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectsController.prototype.remove,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.PROSPECTS_DELETE,
+      MarketingCrmSettingsPermission.PROSPECTS_DELETE_ALL,
+    ]);
+  });
 });
 
 describe('Prospects authorization guards', () => {
@@ -190,6 +202,50 @@ describe('Prospects authorization guards', () => {
         executionContextFor({
           role: 'EMPLOYEE',
           permissions: [MarketingCrmSettingsPermission.PROSPECTS_EDIT],
+        }) as never,
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects users without prospect delete permission', () => {
+    const reflector = {
+      getAllAndOverride: jest
+        .fn()
+        .mockImplementation((key: string) =>
+          key === PERMISSIONS_KEY
+            ? undefined
+            : [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
+        ),
+    };
+    const guard = new PermissionsGuard(reflector as unknown as Reflector);
+
+    expect(() =>
+      guard.canActivate(
+        executionContextFor({
+          role: 'EMPLOYEE',
+          permissions: [MarketingCrmSettingsPermission.PROSPECTS_VIEW],
+        }) as never,
+      ),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('allows users with prospect delete permission', () => {
+    const reflector = {
+      getAllAndOverride: jest
+        .fn()
+        .mockImplementation((key: string) =>
+          key === PERMISSIONS_KEY
+            ? undefined
+            : [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
+        ),
+    };
+    const guard = new PermissionsGuard(reflector as unknown as Reflector);
+
+    expect(
+      guard.canActivate(
+        executionContextFor({
+          role: 'EMPLOYEE',
+          permissions: [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
         }) as never,
       ),
     ).toBe(true);
