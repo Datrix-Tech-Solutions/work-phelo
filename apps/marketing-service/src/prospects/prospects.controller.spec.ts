@@ -50,6 +50,15 @@ describe('ProspectsController authorization contract', () => {
       ),
     ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_VIEW]);
   });
+
+  it('requires prospect view permission on detail', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectsController.prototype.findOne,
+      ),
+    ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_VIEW]);
+  });
 });
 
 describe('Prospects authorization guards', () => {

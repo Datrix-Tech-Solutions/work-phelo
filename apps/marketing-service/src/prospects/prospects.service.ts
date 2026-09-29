@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   MarketingCrmSettingCategory,
@@ -25,6 +29,146 @@ type SettingReference = {
 @Injectable()
 export class ProspectsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async findOne(user: RequestUser, id: string) {
+    const prospect = await this.prisma.marketingProspect.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        ...this.visibilityWhere(user, this.canViewAllProspects(user)),
+      },
+      include: {
+        contacts: {
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
+        },
+        products: {
+          orderBy: [
+            { expectedCloseDate: 'asc' },
+            { createdAt: 'asc' },
+            { id: 'asc' },
+          ],
+        },
+        interactions: {
+          orderBy: [
+            { occurredAt: 'desc' },
+            { createdAt: 'desc' },
+            { id: 'asc' },
+          ],
+        },
+      },
+    });
+
+    if (!prospect) throw new NotFoundException('Prospect not found');
+
+    const [stage, settings] = await Promise.all([
+      this.prisma.marketingPipelineStage.findFirst({
+        where: {
+          id: prospect.pipelineStageId,
+          tenantId: user.tenantId,
+        },
+        select: {
+          id: true,
+          name: true,
+          probability: true,
+          displayOrder: true,
+        },
+      }),
+      this.findSettingsByIds(user.tenantId, [
+        prospect.businessTypeId,
+        prospect.sourceTypeId,
+        ...prospect.contacts.map((contact) => contact.decisionMakerTypeId),
+        ...prospect.products.map((product) => product.productId),
+        ...prospect.interactions.map(
+          (interaction) => interaction.interactionMediumId,
+        ),
+      ]),
+    ]);
+
+    const settingsById = new Map(
+      settings.map((setting) => [setting.id, setting]),
+    );
+
+    return {
+      id: prospect.id,
+      companyName: prospect.companyName,
+      businessType: prospect.businessTypeId
+        ? this.namedReference(
+            prospect.businessTypeId,
+            settingsById,
+            'Unknown business type',
+          )
+        : null,
+      sourceType: prospect.sourceTypeId
+        ? this.namedReference(
+            prospect.sourceTypeId,
+            settingsById,
+            'Unknown source type',
+          )
+        : null,
+      assignedUserId: prospect.assignedUserId,
+      location: {
+        label: prospect.locationLabel,
+        latitude: prospect.latitude.toString(),
+        longitude: prospect.longitude.toString(),
+      },
+      salesStage: {
+        id: prospect.pipelineStageId,
+        name: stage?.name ?? 'Unknown stage',
+        probability: stage?.probability ?? 0,
+        displayOrder: stage?.displayOrder ?? 0,
+      },
+      progress: stage?.probability ?? 0,
+      contacts: prospect.contacts.map((contact) => ({
+        id: contact.id,
+        name: contact.name,
+        phone: contact.phone,
+        email: contact.email,
+        isPrimary: contact.isPrimary,
+        decisionMaker: contact.decisionMakerTypeId
+          ? this.namedReference(
+              contact.decisionMakerTypeId,
+              settingsById,
+              'Unknown decision maker',
+            )
+          : null,
+      })),
+      products: prospect.products.map((product) => ({
+        id: product.id,
+        product: this.namedReference(
+          product.productId,
+          settingsById,
+          'Unknown product',
+        ),
+        expectedValue: this.decimalToFixed(product.expectedValue),
+        achievedValue: this.decimalToFixed(product.achievedValue),
+        commissionRate: this.decimalToString(product.commissionRate),
+        commissionAmount: this.decimalToFixed(product.commissionAmount),
+        expectedCloseDate: product.expectedCloseDate,
+      })),
+      totalExpectedValue: this.sumDecimal(
+        prospect.products.map((product) => product.expectedValue),
+      ),
+      totalAchievedValue: this.sumDecimal(
+        prospect.products.map((product) => product.achievedValue),
+      ),
+      interactions: prospect.interactions.map((interaction) => ({
+        id: interaction.id,
+        occurredAt: interaction.occurredAt,
+        interactionMedium: interaction.interactionMediumId
+          ? this.namedReference(
+              interaction.interactionMediumId,
+              settingsById,
+              'Unknown interaction medium',
+            )
+          : null,
+        notes: interaction.notes,
+        createdByUserId: interaction.createdByUserId,
+        createdAt: interaction.createdAt,
+      })),
+      createdAt: prospect.createdAt,
+      updatedAt: prospect.updatedAt,
+    };
+  }
 
   async list(user: RequestUser, query: QueryProspectsDto = {}) {
     const page = query.page ?? 1;
@@ -359,11 +503,7 @@ export class ProspectsService {
   ): Prisma.MarketingProspectWhereInput {
     return {
       tenantId: user.tenantId,
-      ...(canViewAll
-        ? query.assignedUserId
-          ? { assignedUserId: query.assignedUserId }
-          : {}
-        : { assignedUserId: user.id }),
+      ...this.visibilityWhere(user, canViewAll, query.assignedUserId),
       ...(query.search
         ? {
             normalizedCompanyName: {
@@ -384,6 +524,15 @@ export class ProspectsService {
           }
         : {}),
     };
+  }
+
+  private visibilityWhere(
+    user: RequestUser,
+    canViewAll: boolean,
+    assignedUserId?: string,
+  ): Prisma.MarketingProspectWhereInput {
+    if (!canViewAll) return { assignedUserId: user.id };
+    return assignedUserId ? { assignedUserId } : {};
   }
 
   private parseDateBound(value: string, bound: 'from' | 'to'): Date {
@@ -435,9 +584,7 @@ export class ProspectsService {
     id: string,
     settingsById: Map<string, { id: string; name: string }>,
   ) {
-    const setting = settingsById.get(id);
-    if (!setting) return { id, name: 'Unknown decision maker' };
-    return { id: setting.id, name: setting.name };
+    return this.namedReference(id, settingsById, 'Unknown decision maker');
   }
 
   private pageMeta(page: number, limit: number, total: number) {
@@ -447,5 +594,38 @@ export class ProspectsService {
       total,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  private async findSettingsByIds(tenantId: string, ids: Array<string | null>) {
+    const uniqueIds = [
+      ...new Set(ids.filter((id): id is string => Boolean(id))),
+    ];
+    if (uniqueIds.length === 0) return [];
+
+    return this.prisma.marketingCrmSettingOption.findMany({
+      where: {
+        tenantId,
+        id: { in: uniqueIds },
+      },
+      select: { id: true, name: true },
+    });
+  }
+
+  private namedReference(
+    id: string,
+    settingsById: Map<string, { id: string; name: string }>,
+    fallbackName: string,
+  ) {
+    const setting = settingsById.get(id);
+    if (!setting) return { id, name: fallbackName };
+    return { id: setting.id, name: setting.name };
+  }
+
+  private decimalToString(value: Prisma.Decimal | null): string | null {
+    return value === null ? null : value.toString();
+  }
+
+  private decimalToFixed(value: Prisma.Decimal | null): string | null {
+    return value === null ? null : value.toFixed(2);
   }
 }
