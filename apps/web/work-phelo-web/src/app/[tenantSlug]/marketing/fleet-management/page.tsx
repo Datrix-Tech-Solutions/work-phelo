@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 10;
 
-export default function FleetsPage() {
+export default function FleetManagementPage() {
   const [fleets] = useState<Fleet[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);

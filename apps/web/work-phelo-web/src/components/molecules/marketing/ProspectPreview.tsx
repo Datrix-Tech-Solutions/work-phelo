@@ -19,6 +19,7 @@ interface Props {
   sourceTypeOptions: Option[];
   productTypeOptions: Option[];
   pipelineStageOptions: Option[];
+  hideInteraction?: boolean;
 }
 
 function labelFor(options: Option[], value: string): string {
@@ -46,6 +47,7 @@ export function ProspectPreview({
   sourceTypeOptions,
   productTypeOptions,
   pipelineStageOptions,
+  hideInteraction = false,
 }: Props) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 px-8">
@@ -65,12 +67,14 @@ export function ProspectPreview({
           <Field label="Phone" value={company.phone} />
           <Field label="Email" value={company.email} />
           <Field label="Role / Job Title" value={labelFor(roleOptions, company.roleJobTitle)} />
-          <Field
-            label="Interaction Type"
-            value={labelFor(interactionTypeOptions, company.interactionType)}
-          />
+          {!hideInteraction && (
+            <Field
+              label="Interaction Type"
+              value={labelFor(interactionTypeOptions, company.interactionType)}
+            />
+          )}
           <Field label="Source Type" value={labelFor(sourceTypeOptions, company.sourceType)} />
-          <Field label="Date Contacted" value={company.dateContacted} />
+          {!hideInteraction && <Field label="Date Contacted" value={company.dateContacted} />}
         </div>
       </ProspectFormSection>
 

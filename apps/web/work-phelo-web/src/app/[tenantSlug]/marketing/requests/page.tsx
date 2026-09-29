@@ -3,12 +3,12 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-export default function NavigatePage() {
+export default function RequestsPage() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(`/${tenantSlug}/marketing/navigate/all-requests`);
+    router.replace(`/${tenantSlug}/marketing/requests/all-requests`);
   }, [tenantSlug, router]);
 
   return null;

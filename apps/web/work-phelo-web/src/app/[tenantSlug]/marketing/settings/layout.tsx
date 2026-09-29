@@ -5,9 +5,9 @@ import { cn } from '@/lib/utils';
 import { pageHeader, pageContent, pagePx } from '@/lib/layout';
 import { ProspectingTabs } from '@/components/molecules/marketing/ProspectingTabs';
 
-export default function ProspectingLayout({ children }: { children: React.ReactNode }) {
+export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const base = `/${tenantSlug}/marketing/prospecting`;
+  const base = `/${tenantSlug}/marketing/settings`;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
