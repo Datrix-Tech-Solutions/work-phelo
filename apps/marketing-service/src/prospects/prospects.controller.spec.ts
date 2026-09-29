@@ -59,6 +59,18 @@ describe('ProspectsController authorization contract', () => {
       ),
     ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_VIEW]);
   });
+
+  it('requires assigned or tenant-wide prospect edit permission on update', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectsController.prototype.update,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.PROSPECTS_EDIT,
+      MarketingCrmSettingsPermission.PROSPECTS_EDIT_ALL,
+    ]);
+  });
 });
 
 describe('Prospects authorization guards', () => {
@@ -156,6 +168,28 @@ describe('Prospects authorization guards', () => {
         executionContextFor({
           role: 'EMPLOYEE',
           permissions: [MarketingCrmSettingsPermission.PROSPECTS_VIEW],
+        }) as never,
+      ),
+    ).toBe(true);
+  });
+
+  it('allows users with prospect edit permission', () => {
+    const reflector = {
+      getAllAndOverride: jest
+        .fn()
+        .mockImplementation((key: string) =>
+          key === PERMISSIONS_KEY
+            ? undefined
+            : [MarketingCrmSettingsPermission.PROSPECTS_EDIT],
+        ),
+    };
+    const guard = new PermissionsGuard(reflector as unknown as Reflector);
+
+    expect(
+      guard.canActivate(
+        executionContextFor({
+          role: 'EMPLOYEE',
+          permissions: [MarketingCrmSettingsPermission.PROSPECTS_EDIT],
         }) as never,
       ),
     ).toBe(true);

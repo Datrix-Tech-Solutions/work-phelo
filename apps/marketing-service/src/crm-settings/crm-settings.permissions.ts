@@ -31,5 +31,6 @@ export const MarketingCrmSettingsPermission = {
   PROSPECTS_VIEW_ALL: 'marketing.prospects.all:VIEW',
   PROSPECTS_CREATE: 'marketing.prospects:CREATE',
   PROSPECTS_EDIT: 'marketing.prospects:EDIT',
+  PROSPECTS_EDIT_ALL: 'marketing.prospects.all:EDIT',
   PROSPECTS_DELETE: 'marketing.prospects:DELETE',
 } as const;
