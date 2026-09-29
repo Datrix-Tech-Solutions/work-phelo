@@ -133,6 +133,7 @@ const setup = () => {
         tenantId: actor.tenantId,
         code: 'INV',
         category: TransactionTypeCategory.RECEIVABLE,
+        isLinked: false,
       }),
     },
     transactionTypeRule: {
@@ -375,6 +376,139 @@ describe('ReceivablesService', () => {
         }) as unknown,
       }),
     );
+  });
+
+  describe('linked transaction types (credit notes)', () => {
+    const linkedType = {
+      id: transactionTypeId,
+      tenantId: actor.tenantId,
+      name: 'Credit Note',
+      code: 'CN',
+      category: TransactionTypeCategory.RECEIVABLE,
+      isLinked: true,
+    };
+    // Written in the credit note's own direction: AR credited, revenue debited.
+    const linkedRule = (arAccountId = arControlAccountId) => ({
+      id: 'rule-cn',
+      tenantId: actor.tenantId,
+      transactionTypeId,
+      lines: [
+        {
+          id: 'l1',
+          direction: PostingDirection.DR,
+          accountId: offsetAccountId,
+          taxTypeId: null,
+          taxType: null,
+        },
+        {
+          id: 'l2',
+          direction: PostingDirection.CR,
+          accountId: arAccountId,
+          taxTypeId: null,
+          taxType: null,
+        },
+      ],
+    });
+    const dto = {
+      customerId: customer.id,
+      documentDate: '2026-08-12',
+      currency: 'GHS',
+      amount: 200,
+      quantity: 2,
+      unitPrice: 100,
+      transactionTypeId,
+      originalInvoiceId: 'invoice-1',
+    };
+    const linkedSetup = (arAccountId?: string) => {
+      const ctx = setup();
+      ctx.prisma.transactionType.findFirst.mockResolvedValue(linkedType);
+      ctx.prisma.transactionTypeRule.findFirst.mockResolvedValue(
+        linkedRule(arAccountId),
+      );
+      return ctx;
+    };
+
+    it('creates a credit note from the rule, linked to the original invoice', async () => {
+      const { prisma, service } = linkedSetup();
+
+      await service.createCreditNote(actor, dto);
+
+      expect(prisma.accountingReceivableDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            documentType: AccountingReceivableDocumentType.CREDIT_NOTE,
+            originalInvoiceId: 'invoice-1',
+            transactionTypeId,
+            arAccountId: arControlAccountId,
+            offsetGlAccountId: offsetAccountId,
+            subtotalAmount: new Prisma.Decimal(200),
+            totalAmount: new Prisma.Decimal(200),
+            quantity: 2,
+            unitPrice: 100,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('requires an original invoice', async () => {
+      const { service } = linkedSetup();
+
+      await expect(
+        service.createCreditNote(actor, {
+          ...dto,
+          originalInvoiceId: undefined,
+        }),
+      ).rejects.toThrow('must reference an original invoice');
+    });
+
+    it('rejects a credit note larger than the invoice outstanding balance', async () => {
+      const { prisma, service } = linkedSetup();
+      prisma.accountingReceivableAllocation.aggregate.mockResolvedValue({
+        _sum: { amount: new Prisma.Decimal(900) },
+      });
+
+      await expect(service.createCreditNote(actor, dto)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('rejects an invoice that uses a different receivable account', async () => {
+      const { service } = linkedSetup('other-ar-account');
+
+      await expect(service.createCreditNote(actor, dto)).rejects.toThrow(
+        'different receivable account',
+      );
+    });
+
+    it('rejects an amount that does not match quantity × unit price', async () => {
+      const { service } = linkedSetup();
+
+      await expect(
+        service.createCreditNote(actor, { ...dto, amount: 250 }),
+      ).rejects.toThrow('amount must equal quantity');
+    });
+
+    it('does not let a linked type create a plain invoice', async () => {
+      const { service } = linkedSetup();
+
+      await expect(
+        service.createInvoice(actor, {
+          customerId: customer.id,
+          documentDate: '2026-08-12',
+          currency: 'GHS',
+          amount: 200,
+          transactionTypeId,
+        }),
+      ).rejects.toThrow('must reference an original invoice');
+    });
+
+    it('does not let a plain type create a credit note', async () => {
+      const { service } = setup();
+
+      await expect(service.createCreditNote(actor, dto)).rejects.toThrow(
+        'not a linked transaction type',
+      );
+    });
   });
 
   it('posts an invoice as Dr AR control and Cr offset account', async () => {

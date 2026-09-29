@@ -368,12 +368,21 @@ export class ReceivablesService {
     user: RequestUser,
     dto: CreateReceivableCreditNoteDto,
   ) {
+    if (dto.transactionTypeId) {
+      return this.createRuleCreditNote(user, dto, dto.transactionTypeId);
+    }
+    if (!dto.offsetGlAccountId || !dto.arAccountId) {
+      throw new BadRequestException(
+        'offsetGlAccountId and arAccountId are required unless a transactionTypeId is given',
+      );
+    }
+    const { offsetGlAccountId, arAccountId } = dto;
     const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
       this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
-      this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
-      this.assertArAccount(user.tenantId, dto.arAccountId),
+      this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId),
+      this.assertArAccount(user.tenantId, arAccountId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
     if (dto.originalInvoiceId) {
@@ -433,10 +442,132 @@ export class ReceivablesService {
             externalReference: this.optional(dto.externalReference),
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId: dto.offsetGlAccountId,
+            offsetGlAccountId,
             costCentreId: this.optional(dto.costCentreId),
-            arAccountId: dto.arAccountId,
+            arAccountId,
             originalInvoiceId: this.optional(dto.originalInvoiceId),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: receivableDocumentInclude,
+        });
+      },
+    );
+    await this.recordAudit(
+      user,
+      'RECEIVABLE_CREDIT_NOTE_CREATED',
+      'AccountingReceivableDocument',
+      document.id,
+      { documentNumber: document.documentNumber, totalAmount },
+    );
+    return document;
+  }
+
+  /** Rule-driven credit note: created from a linked Receivable transaction type. The
+   *  accounts and tax lines come from the type's rule (written in the note's own direction)
+   *  and it must reference an original posted invoice, which it reduces once posted. */
+  private async createRuleCreditNote(
+    user: RequestUser,
+    dto: CreateReceivableCreditNoteDto,
+    transactionTypeId: string,
+  ) {
+    const [customer] = await Promise.all([
+      this.resolveCustomer(user.tenantId, dto.customerId),
+      this.assertActiveCurrency(user.tenantId, dto.currency),
+      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
+    ]);
+    this.assertCustomerCurrency(customer.currency, dto.currency);
+    assertQuantityPriceMatchesAmount(dto);
+    if (!dto.originalInvoiceId) {
+      throw new BadRequestException(
+        'A linked transaction must reference an original invoice',
+      );
+    }
+
+    const subtotalAmount = new Prisma.Decimal(dto.amount);
+    const {
+      arAccountId,
+      offsetGlAccountId,
+      taxAmount,
+      taxBreakdown,
+      transactionTypeCode,
+    } = await this.resolveRulePosting(
+      user.tenantId,
+      transactionTypeId,
+      TransactionTypeCategory.RECEIVABLE,
+      subtotalAmount,
+      dto.selectedTaxTypeIds,
+      true,
+    );
+    await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
+    const totalAmount = subtotalAmount.plus(taxAmount);
+
+    const original = await this.getDocumentForTenant(
+      user.tenantId,
+      dto.originalInvoiceId,
+    );
+    if (
+      original.documentType !== AccountingReceivableDocumentType.INVOICE ||
+      original.customerId !== customer.id ||
+      original.status !== AccountingReceivableStatus.POSTED
+    ) {
+      throw new BadRequestException(
+        'Credit notes can only reference a posted invoice for the same customer',
+      );
+    }
+    if (original.currency !== dto.currency) {
+      throw new BadRequestException(
+        'Cross-currency invoice credit allocation is not supported in Phase 1',
+      );
+    }
+    if (original.arAccountId !== arAccountId) {
+      throw new BadRequestException(
+        'This credit note type posts to a different receivable account than the invoice — use a rule with the same receivable account',
+      );
+    }
+    const outstanding = await this.invoiceOutstandingAmount(
+      user.tenantId,
+      original.id,
+    );
+    if (totalAmount.greaterThan(outstanding)) {
+      throw new ConflictException(
+        'Credit note cannot exceed the invoice outstanding balance',
+      );
+    }
+
+    const document = await this.withDocumentNumberLock(
+      user.tenantId,
+      `credit-note:${transactionTypeCode}`,
+      async (tx) => {
+        const documentNumber = await this.nextRuleDocumentNumber(
+          tx,
+          user.tenantId,
+          transactionTypeCode,
+        );
+        return tx.accountingReceivableDocument.create({
+          data: {
+            tenantId: user.tenantId,
+            customerId: customer.id,
+            documentType: AccountingReceivableDocumentType.CREDIT_NOTE,
+            documentNumber,
+            documentDate: new Date(dto.documentDate),
+            currency: dto.currency,
+            exchangeRate: dto.exchangeRate,
+            subtotalAmount,
+            quantity: dto.quantity,
+            unitPrice: dto.unitPrice,
+            taxAmount,
+            totalAmount,
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            offsetGlAccountId,
+            costCentreId: this.optional(dto.costCentreId),
+            arAccountId,
+            transactionTypeId,
+            taxBreakdown,
+            originalInvoiceId: original.id,
             createdByUserId: user.id,
             updatedByUserId: user.id,
           },
@@ -1463,6 +1594,7 @@ export class ReceivablesService {
       return {
         ...document,
         paymentState: this.paymentState(document, outstanding),
+        outstandingAmount: this.money(outstanding),
       };
     });
   }
@@ -1665,6 +1797,7 @@ export class ReceivablesService {
     expectedCategory: TransactionTypeCategory,
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
+    expectLinked = false,
   ): Promise<{
     arAccountId: string;
     offsetGlAccountId: string;
@@ -1689,6 +1822,14 @@ export class ReceivablesService {
       );
     }
 
+    if (transactionType.isLinked !== expectLinked) {
+      throw new BadRequestException(
+        expectLinked
+          ? `${transactionType.name} is not a linked transaction type`
+          : `${transactionType.name} is a linked transaction type — it must reference an original invoice`,
+      );
+    }
+
     const rule = await this.prisma.transactionTypeRule.findFirst({
       where: { tenantId, transactionTypeId },
       include: { lines: { include: { taxType: true } } },
@@ -1699,8 +1840,12 @@ export class ReceivablesService {
       );
     }
 
+    // A linked type (credit / debit note) reverses its original, so its control line — and
+    // the rule that describes it — is on the opposite side to a plain invoice/bill.
+    const isReceivable =
+      expectedCategory === TransactionTypeCategory.RECEIVABLE;
     const autoBalanceDirection =
-      expectedCategory === TransactionTypeCategory.RECEIVABLE
+      isReceivable !== transactionType.isLinked
         ? PostingDirection.DR
         : PostingDirection.CR;
     // The auto-balance (AR) line is never a tax line — checking direction alone isn't

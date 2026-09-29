@@ -182,11 +182,18 @@ export function TransactionTypeRulePanel({
   // input tax is a recoverable asset) — the only direction the backend can actually
   // resolve correctly, so it's fixed rather than asked. Neutral/None types have no
   // auto-balancing side to be opposite of, so those still ask.
+  // A linked type (credit / debit note) is written in its own direction, so its control line
+  // and therefore its deductions are on the opposite side to a plain invoice/bill.
+  const isLinkedType = selectedType?.isLinked ?? false;
   const fixedDeductionDirection: PostingLineDirection | null =
     selectedType?.category === 'RECEIVABLE'
-      ? 'CR'
-      : selectedType?.category === 'PAYABLE'
+      ? isLinkedType
         ? 'DR'
+        : 'CR'
+      : selectedType?.category === 'PAYABLE'
+        ? isLinkedType
+          ? 'CR'
+          : 'DR'
         : null;
 
   useEffect(() => {
@@ -407,6 +414,17 @@ export function TransactionTypeRulePanel({
                 Add Line
               </Button>
             </div>
+            {isLinkedType && (
+              <p className="text-xs text-gray-500">
+                This is a linked type, so write the rule from the{' '}
+                {selectedType?.category === 'RECEIVABLE' ? 'credit note' : 'debit note'}&apos;s
+                point of view:{' '}
+                {selectedType?.category === 'RECEIVABLE'
+                  ? 'credit the Receivable account and debit the revenue account'
+                  : 'debit the Payable account and credit the expense account'}
+                .
+              </p>
+            )}
 
             {fields.map((field, index) => (
               <RuleLineEditor

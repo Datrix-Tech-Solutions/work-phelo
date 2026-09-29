@@ -278,6 +278,10 @@ export interface TransactionTypeDefinition {
    *  entry straight to Cashbook (via the New Transaction form) instead of an
    *  Invoice/Bill. */
   postsToCashbook: boolean;
+  /** Receivable/Payable types only: a linked type is a credit note (receivable) or debit
+   *  note (payable) — it must reference an original posted invoice/bill and reduces its
+   *  outstanding balance. Its rule is written in the note's own direction. */
+  isLinked: boolean;
   createdAt: string;
   rulesCount: number;
 }
@@ -292,6 +296,7 @@ export interface CreateTransactionTypePayload {
   sourceTypeId?: string;
   description?: string;
   postsToCashbook?: boolean;
+  isLinked?: boolean;
 }
 
 export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>;
@@ -957,6 +962,9 @@ export interface AccountingTradeDocument {
   originalDocumentId: string | null;
   status: AccountingTradeDocumentStatus;
   paymentState: AccountingTradeDocumentPaymentState;
+  /** What is still owed on a posted document, after payments and credit/debit notes.
+   *  Only present on list rows. */
+  outstandingAmount: string | null;
   createdAt: string;
   updatedAt: string;
   postedAt: string | null;
@@ -1053,10 +1061,18 @@ export interface CreateTradeCreditNotePayload {
   documentDate: string;
   currency: string;
   amount: number;
-  offsetGlAccountId: string;
+  /** Manual path only — omitted when a linked `transactionTypeId` drives the posting. */
+  offsetGlAccountId?: string;
   /** Posts to the AR (Receivable) or AP (Payable) account, whichever this side is —
-   *  manually picked here since credit notes are not yet Rule-driven. */
-  controlAccountId: string;
+   *  manually picked on the manual path only. */
+  controlAccountId?: string;
+  /** A linked Receivable/Payable Transaction Type: the rule resolves the accounts and tax
+   *  lines, and `originalDocumentId` is then required. */
+  transactionTypeId?: string;
+  quantity?: number;
+  unitPrice?: number;
+  selectedTaxTypeIds?: string[];
+  costCentreId?: string;
   originalDocumentId?: string;
   description?: string;
   externalReference?: string;

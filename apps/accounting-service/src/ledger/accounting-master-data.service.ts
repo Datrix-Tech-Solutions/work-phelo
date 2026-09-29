@@ -1622,6 +1622,10 @@ export class AccountingMasterDataService {
     if (dto.sourceTypeId) {
       await this.assertSourceType(user.tenantId, dto.sourceTypeId);
     }
+    this.assertLinkedTypeCombination(
+      dto.isLinked ?? false,
+      dto.postsToCashbook ?? false,
+    );
     try {
       const transactionType = await this.prisma.transactionType.create({
         data: {
@@ -1635,6 +1639,7 @@ export class AccountingMasterDataService {
           sourceTypeId: dto.sourceTypeId ?? null,
           description: this.optional(dto.description),
           postsToCashbook: dto.postsToCashbook ?? false,
+          isLinked: dto.isLinked ?? false,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -1664,6 +1669,24 @@ export class AccountingMasterDataService {
     if (dto.sourceTypeId) {
       await this.assertSourceType(user.tenantId, dto.sourceTypeId);
     }
+    const isLinked = dto.isLinked ?? transactionType.isLinked;
+    this.assertLinkedTypeCombination(
+      isLinked,
+      dto.postsToCashbook ?? transactionType.postsToCashbook,
+    );
+    if (isLinked !== transactionType.isLinked) {
+      // The rule's control line direction depends on this flag, so an existing rule would
+      // silently become invalid — make the user re-create it instead.
+      const rule = await this.prisma.transactionTypeRule.findFirst({
+        where: { tenantId: user.tenantId, transactionTypeId },
+        select: { id: true },
+      });
+      if (rule) {
+        throw new ConflictException(
+          "Delete this transaction type's rule before changing whether it is linked — the rule is written in a different direction for linked types",
+        );
+      }
+    }
     try {
       const updated = await this.prisma.transactionType.update({
         where: {
@@ -1691,6 +1714,7 @@ export class AccountingMasterDataService {
           ...(dto.postsToCashbook !== undefined
             ? { postsToCashbook: dto.postsToCashbook }
             : {}),
+          ...(dto.isLinked !== undefined ? { isLinked: dto.isLinked } : {}),
           updatedByUserId: user.id,
         },
       });
@@ -1726,6 +1750,17 @@ export class AccountingMasterDataService {
     );
   }
 
+  private assertLinkedTypeCombination(
+    isLinked: boolean,
+    postsToCashbook: boolean,
+  ) {
+    if (isLinked && postsToCashbook) {
+      throw new BadRequestException(
+        'A linked transaction type cannot also post directly to Cashbook',
+      );
+    }
+  }
+
   private async findTransactionType(tenantId: string, id: string) {
     const transactionType = await this.prisma.transactionType.findFirst({
       where: { id, tenantId },
@@ -1746,6 +1781,7 @@ export class AccountingMasterDataService {
     sourceTypeId?: string | null;
     description: string | null;
     postsToCashbook: boolean;
+    isLinked: boolean;
     createdAt: Date;
     rule?: { lines: unknown[] } | null;
   }) {
@@ -1760,6 +1796,7 @@ export class AccountingMasterDataService {
       sourceTypeId: transactionType.sourceTypeId ?? null,
       description: transactionType.description,
       postsToCashbook: transactionType.postsToCashbook,
+      isLinked: transactionType.isLinked,
       createdAt: transactionType.createdAt.toISOString(),
       rulesCount: transactionType.rule?.lines.length ?? 0,
     };

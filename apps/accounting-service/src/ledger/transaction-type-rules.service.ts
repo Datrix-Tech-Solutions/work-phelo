@@ -321,16 +321,18 @@ export class TransactionTypeRulesService {
   }
 
   /** Debit for RECEIVABLE, Credit for PAYABLE — the side whose lone line's amount is
-   *  derived (sum of the other side) rather than entered. NEUTRAL/NONE types have no
-   *  such side; a plain two-line rule (one debit, one credit) is enough for those. */
+   *  derived (sum of the other side) rather than entered. A linked type (credit / debit
+   *  note) reverses its original, so its control line is the opposite side. NEUTRAL/NONE
+   *  types have no such side; a plain two-line rule (one debit, one credit) is enough. */
   private autoBalanceDirection(
     category: TransactionTypeCategory,
+    isLinked = false,
   ): PostingDirection | null {
     if (category === TransactionTypeCategory.RECEIVABLE) {
-      return PostingDirection.DR;
+      return isLinked ? PostingDirection.CR : PostingDirection.DR;
     }
     if (category === TransactionTypeCategory.PAYABLE) {
-      return PostingDirection.CR;
+      return isLinked ? PostingDirection.DR : PostingDirection.CR;
     }
     return null;
   }
@@ -338,6 +340,7 @@ export class TransactionTypeRulesService {
   private validateLines(
     transactionType: {
       postsToCashbook: boolean;
+      isLinked: boolean;
       category: TransactionTypeCategory;
     },
     lines: TransactionTypeRuleLineDto[],
@@ -359,6 +362,7 @@ export class TransactionTypeRulesService {
 
     const autoBalanceDirection = this.autoBalanceDirection(
       transactionType.category,
+      transactionType.isLinked,
     );
     if (!autoBalanceDirection) return;
 
@@ -413,6 +417,7 @@ export class TransactionTypeRulesService {
     tenantId: string,
     transactionType: {
       postsToCashbook: boolean;
+      isLinked: boolean;
       businessRoles: string[];
       category: TransactionTypeCategory;
     },
@@ -420,7 +425,10 @@ export class TransactionTypeRulesService {
   ) {
     const autoBalanceDirection = transactionType.postsToCashbook
       ? null
-      : this.autoBalanceDirection(transactionType.category);
+      : this.autoBalanceDirection(
+          transactionType.category,
+          transactionType.isLinked,
+        );
     const requiredCategory =
       !transactionType.postsToCashbook &&
       transactionType.category === TransactionTypeCategory.RECEIVABLE

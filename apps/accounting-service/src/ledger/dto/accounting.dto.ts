@@ -283,6 +283,15 @@ export class CreateTransactionTypeDto {
   @IsOptional()
   @IsBoolean()
   postsToCashbook?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      "Receivable/Payable types only, not combinable with postsToCashbook: a linked type creates a credit note (receivable) or debit note (payable) that must reference an original posted invoice/bill for the same entity and reduces its outstanding balance. The type's rule is written in the note's own direction (control line credit for receivable, debit for payable).",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isLinked?: boolean;
 }
 
 export class UpdateTransactionTypeDto extends PartialType(

@@ -120,6 +120,8 @@ interface UnifiedTransactionRow {
   transactionNumber: string;
   date: string;
   entityLabel: string;
+  /** The original invoice/bill a credit/debit note reduces, when it has one. */
+  linkedTo: string | null;
   subtotalAmount: string | null;
   taxAmount: string | null;
   totalAmount: string;
@@ -141,6 +143,7 @@ function toDocumentRow(doc: AccountingTradeDocument): UnifiedTransactionRow {
     transactionNumber: doc.documentNumber,
     date: doc.documentDate,
     entityLabel: doc.party.name,
+    linkedTo: doc.originalDocument?.documentNumber ?? null,
     subtotalAmount: doc.subtotalAmount,
     taxAmount: doc.taxAmount,
     totalAmount: doc.totalAmount,
@@ -162,6 +165,7 @@ function toCashbookRow(cb: CashbookTransaction): UnifiedTransactionRow {
     transactionNumber: cb.transactionNumber || cb.reference || cb.id.slice(0, 8).toUpperCase(),
     date: cb.transactionDate,
     entityLabel: cb.description,
+    linkedTo: null,
     // Direct cashbook entries have no tax field yet — subtotal is the full entered amount
     // and tax is a fixed 0 until that's built, so total = subtotal (+ 0) still adds up.
     subtotalAmount: cb.amount,
@@ -296,6 +300,19 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         render: (row) => (
           <span className="text-sm text-gray-800 font-medium truncate">{row.entityLabel}</span>
         ),
+      },
+      {
+        key: 'linkedTo',
+        label: 'Linked To',
+        width: '150px',
+        render: (row) =>
+          row.linkedTo ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
+              {row.linkedTo}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-400">—</span>
+          ),
       },
       {
         key: 'subtotalAmount',
