@@ -3,6 +3,7 @@
 import { inputClass } from '@/lib/utils';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { EmailField } from '@/components/atoms/EmailField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { ProspectFormSection } from '@/components/molecules/marketing/ProspectFormSection';
 
@@ -90,17 +91,12 @@ export function CompanyInformationForm({
             onChange={(v) => set('phone', v)}
             error={errors?.phone}
           />
-          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-            <label className="text-sm font-bold text-gray-900">Email</label>
-            <input
-              type="email"
-              placeholder="email@example.com"
-              value={values.email}
-              onChange={(e) => set('email', e.target.value.toLowerCase())}
-              className={inputClass(errors?.email)}
-            />
-            {errors?.email && <p className="text-xs text-red-500">{errors.email}</p>}
-          </div>
+          <EmailField
+            label="Email"
+            value={values.email}
+            onChange={(v) => set('email', v)}
+            error={errors?.email}
+          />
         </div>
 
         <SearchSelect

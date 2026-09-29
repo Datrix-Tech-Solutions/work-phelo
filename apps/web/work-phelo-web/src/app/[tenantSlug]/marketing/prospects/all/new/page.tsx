@@ -23,6 +23,7 @@ import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings
 import { useCreateProspect } from '@/hooks/marketing/useProspects';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
+import { isValidEmail } from '@/lib/utils';
 import { CreateProspectPayload, ProspectingSetting } from '@/types/marketing';
 
 const STEPS = [
@@ -109,6 +110,7 @@ export default function NewProspectPage() {
       if (!companyForm.companyName.trim()) next.companyName = 'Company name is required.';
       if (!companyForm.contactName.trim()) next.contactName = 'Contact name is required.';
       if (!companyForm.email.trim()) next.email = 'Email is required.';
+      else if (!isValidEmail(companyForm.email)) next.email = 'Enter a valid email address.';
       setCompanyErrors(next);
       return Object.keys(next).length === 0;
     }

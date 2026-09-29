@@ -17,6 +17,15 @@ export function toDateOnly(date?: string | null): string {
   return date ? date.split('T')[0] : '';
 }
 
+// Deliberately simple (no full RFC 5322 support) — good enough to reject "not an email" typos
+// and stray text without over-engineering. Mirrors the backend's class-validator @IsEmail check
+// closely enough that anything this accepts, the API accepts too.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isValidEmail(value: string): boolean {
+  return EMAIL_PATTERN.test(value.trim());
+}
+
 export function inputClass(error?: string, extra?: string) {
   return cn(
     'w-full px-2 py-2 border rounded-input text-sm bg-transparent text-gray-900',

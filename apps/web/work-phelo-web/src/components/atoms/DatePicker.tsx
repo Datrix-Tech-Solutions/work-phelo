@@ -9,6 +9,11 @@ import { Calendar } from '@/components/atoms/Calendar';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// Fixed, independent of the trigger's own width — a full-width field would otherwise stretch
+// the calendar grid across the same width, which looks broken since the grid's own content
+// (7 day columns) only ever needs about this much room.
+const CALENDAR_WIDTH = 300;
+
 interface DatePickerProps {
   label?: string;
   value?: string; // ISO: YYYY-MM-DD
@@ -199,8 +204,11 @@ export function DatePicker({
               position: 'fixed',
               top: dropdownPos.top,
               bottom: dropdownPos.bottom,
-              left: dropdownPos.left,
-              width: dropdownPos.width,
+              // Right-align to the trigger's own right edge rather than its left — with a fixed
+              // width narrower than a full-width field, left-aligning would open the popup over
+              // the start of the field instead of tucking it under where the user is looking.
+              left: dropdownPos.left + dropdownPos.width - CALENDAR_WIDTH,
+              width: CALENDAR_WIDTH,
               gridTemplateRows: expanded ? '1fr' : '0fr',
               opacity: expanded ? 1 : 0,
             }}
