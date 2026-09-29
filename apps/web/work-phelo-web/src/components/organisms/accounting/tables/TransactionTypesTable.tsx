@@ -87,6 +87,16 @@ export function TransactionTypesTable() {
       render: (row) => <span className="text-sm text-gray-700">{row.source ?? 'Manual'}</span>,
     },
     {
+      key: 'linked',
+      label: 'Linked',
+      width: '90px',
+      render: (row) => (
+        <span className="text-sm text-gray-700">
+          {row.isLinked ? (row.category === 'RECEIVABLE' ? 'Credit note' : 'Debit note') : '—'}
+        </span>
+      ),
+    },
+    {
       key: 'rules',
       label: 'Rules',
       width: '90px',

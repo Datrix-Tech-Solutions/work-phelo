@@ -359,12 +359,21 @@ export class PayablesService {
   }
 
   async createCreditNote(user: RequestUser, dto: CreatePayableCreditNoteDto) {
+    if (dto.transactionTypeId) {
+      return this.createRuleCreditNote(user, dto, dto.transactionTypeId);
+    }
+    if (!dto.offsetGlAccountId || !dto.apAccountId) {
+      throw new BadRequestException(
+        'offsetGlAccountId and apAccountId are required unless a transactionTypeId is given',
+      );
+    }
+    const { offsetGlAccountId, apAccountId } = dto;
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
       this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
-      this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
-      this.assertApAccount(user.tenantId, dto.apAccountId),
+      this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId),
+      this.assertApAccount(user.tenantId, apAccountId),
     ]);
     this.assertVendorCurrency(vendor.currency, dto.currency);
     if (dto.originalBillId) {
@@ -424,10 +433,132 @@ export class PayablesService {
             externalReference: this.optional(dto.externalReference),
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId: dto.offsetGlAccountId,
+            offsetGlAccountId,
             costCentreId: this.optional(dto.costCentreId),
-            apAccountId: dto.apAccountId,
+            apAccountId,
             originalBillId: this.optional(dto.originalBillId),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: payableDocumentInclude,
+        });
+      },
+    );
+    await this.recordAudit(
+      user,
+      'PAYABLE_CREDIT_NOTE_CREATED',
+      'AccountingPayableDocument',
+      document.id,
+      { documentNumber: document.documentNumber, totalAmount },
+    );
+    return document;
+  }
+
+  /** Rule-driven debit note: created from a linked Payable transaction type. The
+   *  accounts and tax lines come from the type's rule (written in the note's own direction)
+   *  and it must reference an original posted bill, which it reduces once posted. */
+  private async createRuleCreditNote(
+    user: RequestUser,
+    dto: CreatePayableCreditNoteDto,
+    transactionTypeId: string,
+  ) {
+    const [vendor] = await Promise.all([
+      this.resolveVendor(user.tenantId, dto.vendorId),
+      this.assertActiveCurrency(user.tenantId, dto.currency),
+      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
+    ]);
+    this.assertVendorCurrency(vendor.currency, dto.currency);
+    assertQuantityPriceMatchesAmount(dto);
+    if (!dto.originalBillId) {
+      throw new BadRequestException(
+        'A linked transaction must reference an original bill',
+      );
+    }
+
+    const subtotalAmount = new Prisma.Decimal(dto.amount);
+    const {
+      apAccountId,
+      offsetGlAccountId,
+      taxAmount,
+      taxBreakdown,
+      transactionTypeCode,
+    } = await this.resolveRulePosting(
+      user.tenantId,
+      transactionTypeId,
+      TransactionTypeCategory.PAYABLE,
+      subtotalAmount,
+      dto.selectedTaxTypeIds,
+      true,
+    );
+    await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
+    const totalAmount = subtotalAmount.plus(taxAmount);
+
+    const original = await this.getDocumentForTenant(
+      user.tenantId,
+      dto.originalBillId,
+    );
+    if (
+      original.documentType !== AccountingPayableDocumentType.BILL ||
+      original.vendorId !== vendor.id ||
+      original.status !== AccountingPayableStatus.POSTED
+    ) {
+      throw new BadRequestException(
+        'Debit notes can only reference a posted bill for the same vendor',
+      );
+    }
+    if (original.currency !== dto.currency) {
+      throw new BadRequestException(
+        'Cross-currency bill credit allocation is not supported in Phase 1',
+      );
+    }
+    if (original.apAccountId !== apAccountId) {
+      throw new BadRequestException(
+        'This debit note type posts to a different payable account than the bill — use a rule with the same payable account',
+      );
+    }
+    const outstanding = await this.billOutstandingAmount(
+      user.tenantId,
+      original.id,
+    );
+    if (totalAmount.greaterThan(outstanding)) {
+      throw new ConflictException(
+        'Debit note cannot exceed the bill outstanding balance',
+      );
+    }
+
+    const document = await this.withDocumentNumberLock(
+      user.tenantId,
+      `credit-note:${transactionTypeCode}`,
+      async (tx) => {
+        const documentNumber = await this.nextRuleDocumentNumber(
+          tx,
+          user.tenantId,
+          transactionTypeCode,
+        );
+        return tx.accountingPayableDocument.create({
+          data: {
+            tenantId: user.tenantId,
+            vendorId: vendor.id,
+            documentType: AccountingPayableDocumentType.CREDIT_NOTE,
+            documentNumber,
+            documentDate: new Date(dto.documentDate),
+            currency: dto.currency,
+            exchangeRate: dto.exchangeRate,
+            subtotalAmount,
+            quantity: dto.quantity,
+            unitPrice: dto.unitPrice,
+            taxAmount,
+            totalAmount,
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            offsetGlAccountId,
+            costCentreId: this.optional(dto.costCentreId),
+            apAccountId,
+            transactionTypeId,
+            taxBreakdown,
+            originalBillId: original.id,
             createdByUserId: user.id,
             updatedByUserId: user.id,
           },
@@ -1422,6 +1553,7 @@ export class PayablesService {
       return {
         ...document,
         paymentState: this.paymentState(document, outstanding),
+        outstandingAmount: this.money(outstanding),
       };
     });
   }
@@ -1624,6 +1756,7 @@ export class PayablesService {
     expectedCategory: TransactionTypeCategory,
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
+    expectLinked = false,
   ): Promise<{
     apAccountId: string;
     offsetGlAccountId: string;
@@ -1648,6 +1781,14 @@ export class PayablesService {
       );
     }
 
+    if (transactionType.isLinked !== expectLinked) {
+      throw new BadRequestException(
+        expectLinked
+          ? `${transactionType.name} is not a linked transaction type`
+          : `${transactionType.name} is a linked transaction type — it must reference an original bill`,
+      );
+    }
+
     const rule = await this.prisma.transactionTypeRule.findFirst({
       where: { tenantId, transactionTypeId },
       include: { lines: { include: { taxType: true } } },
@@ -1658,8 +1799,12 @@ export class PayablesService {
       );
     }
 
+    // A linked type (credit / debit note) reverses its original, so its control line — and
+    // the rule that describes it — is on the opposite side to a plain invoice/bill.
+    const isReceivable =
+      expectedCategory === TransactionTypeCategory.RECEIVABLE;
     const autoBalanceDirection =
-      expectedCategory === TransactionTypeCategory.RECEIVABLE
+      isReceivable !== transactionType.isLinked
         ? PostingDirection.DR
         : PostingDirection.CR;
     // The auto-balance (AP) line is never a tax line — checking direction alone isn't

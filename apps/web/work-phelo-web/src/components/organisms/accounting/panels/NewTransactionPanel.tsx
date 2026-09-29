@@ -18,12 +18,16 @@ import {
   useCreateCashbookPayment,
   useCreateCashbookReceipt,
   useCreatePayableBill,
+  useCreatePayableCreditNote,
+  useCreateReceivableCreditNote,
   useCreateReceivableInvoice,
   useEntityTypes,
   useGLAccountOptions,
   useGLAccounts,
   useMakeSourceLedgerPayment,
+  usePayableBills,
   usePostCashbookTransaction,
+  useReceivableInvoices,
   useSourceLedger,
   useSubledgers,
   useTransactionTypeRules,
@@ -43,6 +47,7 @@ function fmtAmount(value: number, currency: string) {
 type FormValues = {
   businessRole: string;
   businessEntity: string;
+  originalDocumentId: string;
   description: string;
   quantity: string;
   unitPrice: string;
@@ -71,6 +76,7 @@ function today() {
 const DEFAULTS: FormValues = {
   businessRole: '',
   businessEntity: '',
+  originalDocumentId: '',
   description: '',
   quantity: '',
   unitPrice: '',
@@ -103,12 +109,17 @@ export function NewTransactionPanel({
   // offset account can always be picked by hand in the form if no rule set one as default).
   const isCashbookType = transactionType?.postsToCashbook ?? false;
   const isCashbookReceipt = isCashbookType && isReceivable;
+  // A linked type is a credit note (receivable) / debit note (payable): it must reference
+  // an original posted invoice/bill and reduces what is owed on it.
+  const isLinked = !isCashbookType && (transactionType?.isLinked ?? false);
   const canUse = isCashbookType ? isSupported : isSupported && hasRule;
   const toast = useToast();
 
   const createInvoice = useCreateReceivableInvoice();
   const createBill = useCreatePayableBill();
   const createDocument = isPayable ? createBill : createInvoice;
+  const createCreditNote = useCreateReceivableCreditNote();
+  const createDebitNote = useCreatePayableCreditNote();
   const createCashbookReceipt = useCreateCashbookReceipt();
   const createCashbookPayment = useCreateCashbookPayment();
   const createCashbookEntry = isCashbookReceipt ? createCashbookReceipt : createCashbookPayment;
@@ -118,7 +129,7 @@ export function NewTransactionPanel({
     ? createCashbookEntry.isPending ||
       makeSourceLedgerPayment.isPending ||
       postCashbookTransaction.isPending
-    : createDocument.isPending;
+    : createDocument.isPending || createCreditNote.isPending || createDebitNote.isPending;
   const [pendingAction, setPendingAction] = useState<'draft' | 'post' | null>(null);
 
   // A type linked to a Source shows a dropdown of that source's still-unpaid open items —
@@ -182,13 +193,14 @@ export function NewTransactionPanel({
   // when that account is a balance-sheet one (e.g. an asset purchase), since there is no
   // P&L cost to attribute. While accounts are still loading, err on the side of showing it.
   const showCostCentre = useMemo(() => {
-    const controlDirection = isReceivable ? 'DR' : 'CR';
+    // A linked type's rule is written in the note's own direction, so its control line flips.
+    const controlDirection = isReceivable !== isLinked ? 'DR' : 'CR';
     const mainLine = (rule?.lines ?? []).find(
       (l) => !l.taxType && l.direction !== controlDirection,
     );
     const category = glAccounts.find((a) => a.id === mainLine?.account.id)?.category;
     return !category || category === 'EXPENSE' || category === 'REVENUE';
-  }, [rule, glAccounts, isReceivable]);
+  }, [rule, glAccounts, isReceivable, isLinked]);
   const [selectedTaxTypeIds, setSelectedTaxTypeIds] = useState<string[]>([]);
   const [successInfo, setSuccessInfo] = useState<{ name: string; posted: boolean } | null>(null);
 
@@ -203,6 +215,7 @@ export function NewTransactionPanel({
   }, [transactionType, entityTypesData]);
 
   const businessRole = useWatch({ control, name: 'businessRole' });
+  const businessEntity = useWatch({ control, name: 'businessEntity' });
   const manualAmount = useWatch({ control, name: 'amount' });
   const quantity = useWatch({ control, name: 'quantity' });
   const unitPrice = useWatch({ control, name: 'unitPrice' });
@@ -245,6 +258,34 @@ export function NewTransactionPanel({
     () => entities.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}` })),
     [entities],
   );
+
+  // A linked type picks the entity's open, posted invoice (receivable) / bill (payable) it
+  // reduces. Only fetched once an entity is chosen; the backend re-checks everything.
+  const originalDocumentsEnabled = isOpen && isLinked && !!businessEntity;
+  const originalInvoices = useReceivableInvoices(
+    { status: 'POSTED', partyId: businessEntity || undefined, limit: 100 },
+    { enabled: originalDocumentsEnabled && isReceivable },
+  );
+  const originalBills = usePayableBills(
+    { status: 'POSTED', partyId: businessEntity || undefined, limit: 100 },
+    { enabled: originalDocumentsEnabled && isPayable },
+  );
+  const originalDocuments = useMemo(
+    () =>
+      ((isPayable ? originalBills.data?.items : originalInvoices.data?.items) ?? []).filter(
+        (doc) => doc.party.id === businessEntity && Number(doc.outstandingAmount ?? 0) > 0,
+      ),
+    [isPayable, originalBills.data, originalInvoices.data, businessEntity],
+  );
+  const originalDocumentOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      originalDocuments.map((doc) => ({
+        value: doc.id,
+        label: `${doc.documentNumber} — ${fmtAmount(Number(doc.outstandingAmount), doc.currency)} outstanding`,
+      })),
+    [originalDocuments],
+  );
+  const isLoadingOriginals = isPayable ? originalBills.isLoading : originalInvoices.isLoading;
 
   const close = () => {
     reset(DEFAULTS);
@@ -329,6 +370,40 @@ export function NewTransactionPanel({
     const entity = entities.find((e) => e.id === values.businessEntity);
     if (!entity) {
       toast.error('Select a business entity');
+      return;
+    }
+
+    if (isLinked) {
+      const original = originalDocuments.find((doc) => doc.id === values.originalDocumentId);
+      if (!original) {
+        toast.error(`Select the original ${isPayable ? 'bill' : 'invoice'}`);
+        return;
+      }
+      if (subtotal + taxAmount > Number(original.outstandingAmount)) {
+        toast.error(
+          `Total exceeds the ${isPayable ? 'bill' : 'invoice'}'s outstanding balance (${fmtAmount(Number(original.outstandingAmount), original.currency)})`,
+        );
+        return;
+      }
+      try {
+        await (isPayable ? createDebitNote : createCreditNote).mutateAsync({
+          partyId: values.businessEntity,
+          documentDate: values.entryDate || today(),
+          currency: values.currency,
+          amount: resolveAmount(values),
+          quantity: Number(values.quantity),
+          unitPrice: Number(values.unitPrice),
+          transactionTypeId: transactionType.id,
+          originalDocumentId: values.originalDocumentId,
+          selectedTaxTypeIds: selectedTaxTypeIds.length ? selectedTaxTypeIds : undefined,
+          costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
+          description: values.description || undefined,
+        });
+        close();
+        setSuccessInfo({ name: transactionType.name, posted: false });
+      } catch (error) {
+        toast.error(extractError(error, 'Failed to save transaction'));
+      }
       return;
     }
 
@@ -671,6 +746,7 @@ export function NewTransactionPanel({
                   value={field.value}
                   onChange={(value) => {
                     field.onChange(value);
+                    setValue('originalDocumentId', '');
                     const entity = entities.find((e) => e.id === value);
                     if (entity?.currency) setValue('currency', entity.currency);
                   }}
@@ -678,6 +754,37 @@ export function NewTransactionPanel({
                 />
               )}
             />
+
+            {isLinked && (
+              <Controller
+                name="originalDocumentId"
+                control={control}
+                rules={{ required: `Original ${isPayable ? 'bill' : 'invoice'} is required` }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label={`Original ${isPayable ? 'Bill' : 'Invoice'}`}
+                    placeholder={
+                      !businessEntity
+                        ? 'Select a business entity first…'
+                        : isLoadingOriginals
+                          ? 'Loading…'
+                          : originalDocumentOptions.length === 0
+                            ? `No open ${isPayable ? 'bills' : 'invoices'} for this entity`
+                            : `Select the ${isPayable ? 'bill' : 'invoice'} this reduces…`
+                    }
+                    options={originalDocumentOptions}
+                    value={field.value}
+                    onChange={(value) => {
+                      field.onChange(value);
+                      const original = originalDocuments.find((doc) => doc.id === value);
+                      if (original) setValue('currency', original.currency);
+                    }}
+                    disabled={!businessEntity}
+                    error={errors.originalDocumentId?.message}
+                  />
+                )}
+              />
+            )}
 
             {showCostCentre && (
               <Controller
@@ -759,18 +866,20 @@ export function NewTransactionPanel({
                   />
                 )}
               />
-              <Controller
-                name="dueDate"
-                control={control}
-                render={({ field }) => (
-                  <DatePicker
-                    label="Due Date"
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.dueDate?.message}
-                  />
-                )}
-              />
+              {!isLinked && (
+                <Controller
+                  name="dueDate"
+                  control={control}
+                  render={({ field }) => (
+                    <DatePicker
+                      label="Due Date"
+                      value={field.value}
+                      onChange={field.onChange}
+                      error={errors.dueDate?.message}
+                    />
+                  )}
+                />
+              )}
             </div>
           </div>
         )}

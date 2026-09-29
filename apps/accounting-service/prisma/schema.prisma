@@ -855,6 +855,11 @@ model TransactionType {
   /// to Cashbook (New Transaction opens the cash/bank + offset account form and calls
   /// /cashbook/receipts or /cashbook/payments) instead of creating an Invoice/Bill.
   postsToCashbook Boolean                  @default(false)
+  /// Receivable/Payable types only (never cashbook-posted): a linked type creates a Credit
+  /// Note (receivable) / Debit Note (payable) that must reference an original posted
+  /// invoice/bill and reduces its outstanding balance. Its rule is written in the note's own
+  /// direction, so the control (AR/AP) line is the opposite side to a normal invoice/bill.
+  isLinked        Boolean                  @default(false)
   createdByUserId String
   updatedByUserId String
   createdAt       DateTime                 @default(now())

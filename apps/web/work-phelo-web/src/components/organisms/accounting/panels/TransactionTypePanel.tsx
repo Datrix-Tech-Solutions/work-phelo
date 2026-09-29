@@ -36,6 +36,7 @@ type FormValues = {
   sourceTypeId: string;
   description: string;
   postsToCashbook: boolean;
+  isLinked: boolean;
 };
 
 const DEFAULTS: FormValues = {
@@ -47,6 +48,7 @@ const DEFAULTS: FormValues = {
   sourceTypeId: '',
   description: '',
   postsToCashbook: false,
+  isLinked: false,
 };
 
 export function TransactionTypePanel({
@@ -82,6 +84,7 @@ export function TransactionTypePanel({
     control,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
   const category = useWatch({ control, name: 'category' });
@@ -97,6 +100,7 @@ export function TransactionTypePanel({
         sourceTypeId: transactionType.sourceTypeId ?? '',
         description: transactionType.description ?? '',
         postsToCashbook: transactionType.postsToCashbook,
+        isLinked: transactionType.isLinked,
       });
     else reset(DEFAULTS);
   }, [transactionType, reset]);
@@ -117,6 +121,7 @@ export function TransactionTypePanel({
         sourceTypeId: values.sourceTypeId || undefined,
         description: values.description || undefined,
         postsToCashbook: values.postsToCashbook,
+        isLinked: values.isLinked,
       };
       if (transactionType) await update({ id: transactionType.id, ...payload });
       else await create(payload);
@@ -198,7 +203,31 @@ export function TransactionTypePanel({
                 label="Posts Directly to Cashbook"
                 description="Make direct payments to Cashbook, instead of creating an Invoice/Bill."
                 enabled={field.value}
-                onChange={field.onChange}
+                onChange={(value) => {
+                  field.onChange(value);
+                  if (value) setValue('isLinked', false);
+                }}
+              />
+            )}
+          />
+        )}
+        {category && (
+          <Controller
+            name="isLinked"
+            control={control}
+            render={({ field }) => (
+              <ToggleRow
+                label="Linked Transaction"
+                description={`Creates a ${
+                  category === 'RECEIVABLE'
+                    ? 'credit note against an invoice'
+                    : 'debit note against a bill'
+                } used to reduce what is owed on the linked transaction.`}
+                enabled={field.value}
+                onChange={(value) => {
+                  field.onChange(value);
+                  if (value) setValue('postsToCashbook', false);
+                }}
               />
             )}
           />

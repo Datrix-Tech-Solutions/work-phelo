@@ -93,6 +93,7 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     originalDocumentId: raw[config.originalIdField] ?? null,
     status: raw.status,
     paymentState: raw.paymentState,
+    outstandingAmount: raw.outstandingAmount ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,
@@ -154,10 +155,12 @@ function useDocuments(
   side: AccountingTradeSide,
   segment: string,
   params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
 ) {
   const config = SIDE_CONFIG[side];
   const { partyId, ...rest } = params;
   return useQuery({
+    enabled: options.enabled ?? true,
     queryKey: [...documentsKey(side, segment), 'list', params],
     queryFn: async () => {
       const res = await api.get<PaginatedResult<RawTradeDocument>>(`${config.base}/${segment}`, {
@@ -286,8 +289,11 @@ function useReverseDocument(side: AccountingTradeSide, segment: string) {
 
 // ---- Invoices (AR) / Bills (AP) ----
 
-export function useReceivableInvoices(params: QueryTradeDocumentsParams = {}) {
-  return useDocuments('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment, params);
+export function useReceivableInvoices(
+  params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useDocuments('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment, params, options);
 }
 export function useReceivableInvoice(invoiceId: string | undefined) {
   return useDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment, invoiceId);
@@ -305,8 +311,11 @@ export function useReverseReceivableInvoice() {
   return useReverseDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment);
 }
 
-export function usePayableBills(params: QueryTradeDocumentsParams = {}) {
-  return useDocuments('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment, params);
+export function usePayableBills(
+  params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useDocuments('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment, params, options);
 }
 export function usePayableBill(billId: string | undefined) {
   return useDocument('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment, billId);

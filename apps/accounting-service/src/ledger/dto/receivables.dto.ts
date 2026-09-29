@@ -170,27 +170,29 @@ export class CreateReceivableCreditNoteDto extends PartialType(
   @Min(0)
   taxAmount?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
       'Posting-enabled revenue or other offset account debited when the credit note is posted.',
   })
+  @IsOptional()
   @IsUUID()
-  offsetGlAccountId!: string;
+  offsetGlAccountId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
       'Posting-enabled asset account credited when the credit note is posted — picked ' +
       'manually here since credit notes are not yet Rule-driven.',
   })
+  @IsOptional()
   @IsUUID()
-  arAccountId!: string;
+  arAccountId?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Optional posted invoice this credit note applies to. Invoice-specific credits cannot exceed invoice outstanding.',
+      'Optional posted invoice this credit note applies to. Invoice-specific credits cannot exceed invoice outstanding. Required when the credit note is created from a linked transactionTypeId.',
   })
   @IsOptional()
   @IsUUID()

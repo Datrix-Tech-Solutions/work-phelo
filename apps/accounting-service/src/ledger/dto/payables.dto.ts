@@ -170,27 +170,29 @@ export class CreatePayableCreditNoteDto extends PartialType(
   @Min(0)
   taxAmount?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
       'Posting-enabled expense, asset or other offset account credited when the vendor credit is posted.',
   })
+  @IsOptional()
   @IsUUID()
-  offsetGlAccountId!: string;
+  offsetGlAccountId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
       'Posting-enabled liability account debited when the vendor credit is posted — ' +
       'picked manually here since credit notes are not yet Rule-driven.',
   })
+  @IsOptional()
   @IsUUID()
-  apAccountId!: string;
+  apAccountId?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Optional posted bill this credit note applies to. Bill-specific credits cannot exceed bill outstanding.',
+      'Optional posted bill this credit note applies to. Bill-specific credits cannot exceed bill outstanding. Required when the debit note is created from a linked transactionTypeId.',
   })
   @IsOptional()
   @IsUUID()
