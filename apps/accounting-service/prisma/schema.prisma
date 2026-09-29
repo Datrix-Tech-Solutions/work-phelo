@@ -475,7 +475,9 @@ model SubledgerAccount {
   controlAccountId String?
   currency         String?
   contactName      String?
+  phone            String?
   address          String?
+  description      String?
   status           RecordStatus          @default(ACTIVE)
   createdByUserId  String
   updatedByUserId  String
@@ -1339,6 +1341,9 @@ model EntityType {
   id                String   @id @default(uuid())
   tenantId          String
   name              String
+  /// Short ID/prefix (e.g. "SUP") the entity form builds Entity Codes from. Null for types
+  /// that predate it (e.g. auto-created Employee) until someone sets one.
+  code              String?
   isSystem          Boolean  @default(false)
   createdByUserId   String
   updatedByUserId   String
@@ -1347,6 +1352,7 @@ model EntityType {
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
+  @@unique([tenantId, code])
   @@schema("accounting")
 }
 

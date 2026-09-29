@@ -46,7 +46,7 @@ export function EntityTypesTable() {
       render: (row) => (
         <span className="inline-flex items-center gap-2">
           <span className="font-medium text-gray-900">{row.name}</span>
-          {row.isSystem && <Badge label="System" variant="neutral" />}
+          {row.isSystem && <Badge label="Default" variant="neutral" />}
         </span>
       ),
     },
@@ -62,7 +62,7 @@ export function EntityTypesTable() {
       label: '',
       width: '160px',
       render: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <TableButton onClick={() => setPanelTarget(row)}>Update</TableButton>
           <TableButton
             variant="red"

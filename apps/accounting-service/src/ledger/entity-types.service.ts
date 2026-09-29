@@ -14,7 +14,10 @@ import {
 
 // The two the Entities page always starts with — matches the two-only default we settled
 // on (everything else must be created here first before it's usable elsewhere).
-const DEFAULT_ENTITY_TYPES = ['Customer', 'Vendor'] as const;
+const DEFAULT_ENTITY_TYPES = [
+  { name: 'Customer', code: 'CUS' },
+  { name: 'Vendor', code: 'VEN' },
+] as const;
 
 @Injectable()
 export class EntityTypesService {
@@ -43,6 +46,7 @@ export class EntityTypesService {
         data: {
           tenantId: user.tenantId,
           name: dto.name,
+          code: dto.code,
           isSystem: false,
           createdByUserId: user.id,
           updatedByUserId: user.id,
@@ -50,10 +54,11 @@ export class EntityTypesService {
       });
       await this.recordAudit(user, 'ENTITY_TYPE_CREATE', entityType.id, {
         name: entityType.name,
+        code: entityType.code,
       });
       return this.toEntityTypeDto(entityType, new Map());
     } catch (error) {
-      this.rethrowUnique(error, 'Entity type name already exists');
+      this.rethrowUnique(error, 'Entity type name or ID already exists');
     }
   }
 
@@ -69,16 +74,18 @@ export class EntityTypesService {
         where: { id_tenantId: { id: entityType.id, tenantId: user.tenantId } },
         data: {
           ...(dto.name ? { name: dto.name } : {}),
+          ...(dto.code ? { code: dto.code } : {}),
           updatedByUserId: user.id,
         },
       });
       await this.recordAudit(user, 'ENTITY_TYPE_UPDATE', updated.id, {
         name: updated.name,
+        code: updated.code,
       });
       const countByType = await this.countsByType(user.tenantId);
       return this.toEntityTypeDto(updated, countByType);
     } catch (error) {
-      this.rethrowUnique(error, 'Entity type name already exists');
+      this.rethrowUnique(error, 'Entity type name or ID already exists');
     }
   }
 
@@ -110,12 +117,13 @@ export class EntityTypesService {
   }
 
   private async seedDefaultEntityTypes(user: RequestUser) {
-    for (const name of DEFAULT_ENTITY_TYPES) {
+    for (const { name, code } of DEFAULT_ENTITY_TYPES) {
       try {
         await this.prisma.entityType.create({
           data: {
             tenantId: user.tenantId,
             name,
+            code,
             isSystem: true,
             createdByUserId: user.id,
             updatedByUserId: user.id,
@@ -157,6 +165,7 @@ export class EntityTypesService {
     entityType: {
       id: string;
       name: string;
+      code: string | null;
       isSystem: boolean;
       createdAt: Date;
       updatedAt: Date;
@@ -166,6 +175,7 @@ export class EntityTypesService {
     return {
       id: entityType.id,
       name: entityType.name,
+      code: entityType.code,
       isSystem: entityType.isSystem,
       entityCount: countByType.get(entityType.name.trim().toUpperCase()) ?? 0,
       createdAt: entityType.createdAt.toISOString(),

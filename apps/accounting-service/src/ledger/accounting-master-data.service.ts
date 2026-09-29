@@ -2185,7 +2185,9 @@ export class AccountingMasterDataService {
           controlAccountId: dto.controlAccountId,
           currency: dto.currency,
           contactName: this.optional(dto.contactName),
+          phone: this.optional(dto.phone),
           address: this.optional(dto.address),
+          description: this.optional(dto.description),
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -2244,8 +2246,14 @@ export class AccountingMasterDataService {
           ...(dto.contactName !== undefined
             ? { contactName: this.optional(dto.contactName) }
             : {}),
+          ...(dto.phone !== undefined
+            ? { phone: this.optional(dto.phone) }
+            : {}),
           ...(dto.address !== undefined
             ? { address: this.optional(dto.address) }
+            : {}),
+          ...(dto.description !== undefined
+            ? { description: this.optional(dto.description) }
             : {}),
           updatedByUserId: user.id,
         },
