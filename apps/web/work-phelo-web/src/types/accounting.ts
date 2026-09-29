@@ -996,8 +996,11 @@ export interface CreateTradeInvoicePayload {
   documentDate: string;
   dueDate?: string;
   currency: string;
-  /** The subtotal, before any tax lines the rule adds on top. */
+  /** The subtotal (quantity × unitPrice, rounded to 2 decimals), before any tax lines the
+   *  rule adds on top. */
   amount: number;
+  quantity?: number;
+  unitPrice?: number;
   exchangeRate?: number;
   /** The Receivable/Payable-category Transaction Type driving this document — its
    *  Rule resolves the offset account and any tax lines. A Rule must exist for it. */
@@ -1303,7 +1306,10 @@ export interface QueryCashbookParams {
 
 export interface CreateCashbookEntryPayload {
   cashAccountId: string;
+  /** quantity × unitPrice, rounded to 2 decimals. */
   amount: number;
+  quantity?: number;
+  unitPrice?: number;
   currency: string;
   transactionDate: string;
   settlementMethod: AccountingCashbookSettlementMethod;
@@ -1377,6 +1383,8 @@ export const SUBLEDGER_TYPE_LABELS: Record<SubledgerType, string> = {
 export interface EntityType {
   id: string;
   name: string;
+  /** Short ID/prefix (e.g. "SUP") used to build the Entity ID on the entity form. */
+  code: string | null;
   isSystem: boolean;
   entityCount: number;
   createdAt: string;
@@ -1385,6 +1393,7 @@ export interface EntityType {
 
 export interface CreateEntityTypePayload {
   name: string;
+  code: string;
 }
 
 export type UpdateEntityTypePayload = Partial<CreateEntityTypePayload>;
@@ -1409,7 +1418,9 @@ export interface SubledgerAccount {
   } | null;
   currency: string | null;
   contactName: string | null;
+  phone: string | null;
   address: string | null;
+  description: string | null;
   status: GLAccountStatus;
   balance: AccountingSubledgerBalance;
   createdAt: string;
@@ -1426,7 +1437,9 @@ export interface CreateSubledgerAccountPayload {
   controlAccountId?: string;
   currency?: string;
   contactName?: string;
+  phone?: string;
   address?: string;
+  description?: string;
 }
 
 export type UpdateSubledgerAccountPayload = Partial<CreateSubledgerAccountPayload>;

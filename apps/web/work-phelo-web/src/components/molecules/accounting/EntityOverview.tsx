@@ -61,8 +61,10 @@ export function EntityOverview({ entity }: EntityOverviewProps) {
           label="Outstanding Balance"
           value={fmtBalance(entity.balance.baseBalance, baseCurrency)}
         />
-        {entity.contactName && <DetailField label="Contact" value={entity.contactName} />}
+        {entity.contactName && <DetailField label="Contact Person" value={entity.contactName} />}
+        {entity.phone && <DetailField label="Contact" value={entity.phone} />}
         {entity.address && <DetailField label="Address" value={entity.address} />}
+        {entity.description && <DetailField label="Description" value={entity.description} />}
         {entity.externalRef && (
           <DetailField label="External Reference" value={entity.externalRef} />
         )}

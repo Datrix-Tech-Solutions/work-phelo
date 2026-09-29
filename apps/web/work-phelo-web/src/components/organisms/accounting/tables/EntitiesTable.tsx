@@ -12,7 +12,10 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { AddEntityPanel } from '@/components/organisms/accounting/panels/AddEntityPanel';
 import { SUBLEDGER_TYPE_LABELS, SubledgerAccount } from '@/types/accounting';
-import { SUBLEDGER_TYPE_CHIP_COLOR, type SubledgerTypeChipColor } from '@/lib/accounting/subledgerType';
+import {
+  SUBLEDGER_TYPE_CHIP_COLOR,
+  type SubledgerTypeChipColor,
+} from '@/lib/accounting/subledgerType';
 import {
   useAccountingConfig,
   useActivateSubledger,
@@ -115,8 +118,10 @@ export function EntitiesTable() {
         label: '',
         width: '180px',
         render: (row) => (
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            <TableButton variant="blue" onClick={() => setPanelTarget(row)}>Update</TableButton>
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <TableButton variant="blue" onClick={() => setPanelTarget(row)}>
+              Update
+            </TableButton>
             {row.status === 'ACTIVE' ? (
               <TableButton variant="red" onClick={() => setDeactivateTarget(row)}>
                 Deactivate

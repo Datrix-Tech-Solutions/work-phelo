@@ -741,12 +741,26 @@ export class CreateSubledgerAccountDto {
   @MaxLength(160)
   contactName?: string;
 
+  @ApiPropertyOptional({ example: '+233301234567' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
   @ApiPropertyOptional({ example: '12 Independence Ave, Accra' })
   @IsOptional()
   @Transform(trimmed)
   @IsString()
   @MaxLength(500)
   address?: string;
+
+  @ApiPropertyOptional({ example: 'Main packaging supplier' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
 }
 
 export class UpdateSubledgerAccountDto extends PartialType(

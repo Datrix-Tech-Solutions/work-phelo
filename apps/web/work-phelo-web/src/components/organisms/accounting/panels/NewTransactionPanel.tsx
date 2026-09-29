@@ -44,6 +44,8 @@ type FormValues = {
   businessRole: string;
   businessEntity: string;
   description: string;
+  quantity: string;
+  unitPrice: string;
   amount: string;
   currency: string;
   costCentreId: string;
@@ -56,6 +58,12 @@ type FormValues = {
   reference: string;
 };
 
+/** quantity × unit price, rounded half-up to 2 decimals (EPSILON guards float artefacts like 1.005). */
+function computeAmount(quantity: string, unitPrice: string) {
+  const product = (Number(quantity) || 0) * (Number(unitPrice) || 0);
+  return Math.round((product + Number.EPSILON) * 100) / 100;
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -64,6 +72,8 @@ const DEFAULTS: FormValues = {
   businessRole: '',
   businessEntity: '',
   description: '',
+  quantity: '',
+  unitPrice: '',
   amount: '',
   currency: '',
   costCentreId: '',
@@ -193,11 +203,19 @@ export function NewTransactionPanel({
   }, [transactionType, entityTypesData]);
 
   const businessRole = useWatch({ control, name: 'businessRole' });
-  const amount = useWatch({ control, name: 'amount' });
+  const manualAmount = useWatch({ control, name: 'amount' });
+  const quantity = useWatch({ control, name: 'quantity' });
+  const unitPrice = useWatch({ control, name: 'unitPrice' });
   const currency = useWatch({ control, name: 'currency' });
   const sourceLedgerEntryId = useWatch({ control, name: 'sourceLedgerEntryId' });
 
-  const subtotal = Number(amount) || 0;
+  // Source-linked types (e.g. payroll) settle an existing open item, so the amount is keyed in
+  // directly; everything else derives it from quantity × unit price.
+  const hasSource = !!transactionType?.sourceTypeId;
+  const derivedAmount = computeAmount(quantity, unitPrice);
+  const subtotal = hasSource ? Number(manualAmount) || 0 : derivedAmount;
+  const resolveAmount = (values: FormValues) =>
+    hasSource ? Number(values.amount) : computeAmount(values.quantity, values.unitPrice);
   const taxBreakdown = taxLines
     .filter((line) => selectedTaxTypeIds.includes(line.taxTypeId))
     .map((line) => ({ ...line, amount: (subtotal * line.rate) / 100 }));
@@ -205,7 +223,6 @@ export function NewTransactionPanel({
   const total = subtotal + taxAmount;
 
   // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
-  // an extra commit — see https://react.dev/learn/you-might-not-need-an-effect).
   const openKey = isOpen ? (transactionType?.id ?? 'unknown') : null;
   const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
   if (openKey !== null && openKey !== lastOpenKey) {
@@ -273,7 +290,7 @@ export function NewTransactionPanel({
             entryId: values.sourceLedgerEntryId,
             payload: {
               cashAccountId: values.cashAccountId,
-              amount: Number(values.amount),
+              amount: resolveAmount(values),
               transactionDate: values.entryDate || today(),
               settlementMethod: values.settlementMethod,
               description: values.description || undefined,
@@ -283,7 +300,10 @@ export function NewTransactionPanel({
           const created = await createCashbookEntry.mutateAsync({
             cashAccountId: values.cashAccountId,
             offsetGlAccountId: values.offsetGlAccountId,
-            amount: Number(values.amount),
+            amount: resolveAmount(values),
+            ...(hasSource
+              ? {}
+              : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
             currency: values.currency,
             transactionDate: values.entryDate || today(),
             settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
@@ -315,7 +335,10 @@ export function NewTransactionPanel({
       documentDate: values.entryDate || today(),
       dueDate: values.dueDate || undefined,
       currency: values.currency,
-      amount: Number(values.amount),
+      amount: resolveAmount(values),
+      ...(hasSource
+        ? {}
+        : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
       transactionTypeId: transactionType.id,
       selectedTaxTypeIds: selectedTaxTypeIds.length ? selectedTaxTypeIds : undefined,
       costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
@@ -332,6 +355,98 @@ export function NewTransactionPanel({
       toast.error(extractError(error, 'Failed to save transaction'));
     }
   };
+
+  const amountFields = hasSource ? (
+    <div className="grid grid-cols-2 gap-3">
+      <Controller
+        name="amount"
+        control={control}
+        rules={{
+          required: 'Amount is required',
+          min: { value: 0.01, message: 'Amount must be greater than 0' },
+        }}
+        render={({ field }) => (
+          <NumberField
+            label="Amount"
+            value={Number(field.value) || 0}
+            onChange={(value) => field.onChange(String(value))}
+            error={errors.amount?.message}
+          />
+        )}
+      />
+      <Controller
+        name="currency"
+        control={control}
+        rules={{ required: 'Currency is required' }}
+        render={({ field }) => (
+          <SearchSelect
+            label="Currency"
+            placeholder="Select currency…"
+            options={currencyOptions}
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.currency?.message}
+          />
+        )}
+      />
+    </div>
+  ) : (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <Controller
+          name="quantity"
+          control={control}
+          rules={{
+            required: 'Quantity is required',
+            validate: (v) => Number(v) > 0 || 'Quantity must be greater than 0',
+          }}
+          render={({ field }) => (
+            <NumberField
+              label="Quantity"
+              placeholder="0"
+              value={Number(field.value) || 0}
+              onChange={(value) => field.onChange(String(value))}
+              error={errors.quantity?.message}
+            />
+          )}
+        />
+        <Controller
+          name="unitPrice"
+          control={control}
+          rules={{
+            required: 'Unit price is required',
+            validate: (v) => Number(v) > 0 || 'Unit price must be greater than 0',
+          }}
+          render={({ field }) => (
+            <NumberField
+              label="Unit Price"
+              value={Number(field.value) || 0}
+              onChange={(value) => field.onChange(String(value))}
+              error={errors.unitPrice?.message}
+            />
+          )}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField label="Amount" value={derivedAmount} onChange={() => {}} disabled />
+        <Controller
+          name="currency"
+          control={control}
+          rules={{ required: 'Currency is required' }}
+          render={({ field }) => (
+            <SearchSelect
+              label="Currency"
+              placeholder="Select currency…"
+              options={currencyOptions}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.currency?.message}
+            />
+          )}
+        />
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -360,7 +475,7 @@ export function NewTransactionPanel({
             )}
             {canUse && (
               <Button
-                variant="secondary"
+                variant="primary"
                 isLoading={isCashbookType ? pendingAction === 'post' : isSaving}
                 loadingText={
                   !isCashbookType ? 'Submitting…' : isCashbookReceipt ? 'Receiving…' : 'Paying…'
@@ -464,39 +579,7 @@ export function NewTransactionPanel({
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
-              <Controller
-                name="amount"
-                control={control}
-                rules={{
-                  required: 'Amount is required',
-                  min: { value: 0.01, message: 'Amount must be greater than 0' },
-                }}
-                render={({ field }) => (
-                  <NumberField
-                    label="Amount"
-                    value={Number(field.value) || 0}
-                    onChange={(value) => field.onChange(String(value))}
-                    error={errors.amount?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="currency"
-                control={control}
-                rules={{ required: 'Currency is required' }}
-                render={({ field }) => (
-                  <SearchSelect
-                    label="Currency"
-                    placeholder="Select currency…"
-                    options={currencyOptions}
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.currency?.message}
-                  />
-                )}
-              />
-            </div>
+            {amountFields}
 
             <Controller
               name="entryDate"
@@ -537,13 +620,12 @@ export function NewTransactionPanel({
             <FormField
               label="Description"
               type="textarea"
-              rows={3}
               registration={register('description')}
               placeholder={`What is this ${transactionType?.name.toLowerCase() ?? 'transaction'} for?`}
             />
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             <Input
               label="Transaction Type"
               readOnly
@@ -614,45 +696,12 @@ export function NewTransactionPanel({
             <FormField
               label="Description"
               type="textarea"
-              rows={3}
               registration={register('description')}
               error={errors.description}
               placeholder="Optional description"
             />
 
-            <div className="grid grid-cols-2 gap-4">
-              <Controller
-                name="amount"
-                control={control}
-                rules={{
-                  required: 'Amount is required',
-                  min: { value: 0.01, message: 'Amount must be greater than 0' },
-                }}
-                render={({ field }) => (
-                  <NumberField
-                    label="Amount"
-                    value={Number(field.value) || 0}
-                    onChange={(value) => field.onChange(String(value))}
-                    error={errors.amount?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="currency"
-                control={control}
-                rules={{ required: 'Currency is required' }}
-                render={({ field }) => (
-                  <SearchSelect
-                    label="Currency"
-                    placeholder="Select currency…"
-                    options={currencyOptions}
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.currency?.message}
-                  />
-                )}
-              />
-            </div>
+            {amountFields}
 
             {taxLines.length > 0 && (
               <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
