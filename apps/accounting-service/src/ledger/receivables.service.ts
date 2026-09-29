@@ -35,6 +35,7 @@ import {
   ReverseReceivableDto,
 } from './dto/receivables.dto';
 import { JournalsService } from './journals.service';
+import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
 
 const zero = new Prisma.Decimal(0);
 // SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
@@ -291,6 +292,7 @@ export class ReceivablesService {
       this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
+    assertQuantityPriceMatchesAmount(dto);
 
     const subtotalAmount = new Prisma.Decimal(dto.amount);
     const {
@@ -332,6 +334,8 @@ export class ReceivablesService {
             currency: dto.currency,
             exchangeRate: dto.exchangeRate,
             subtotalAmount,
+            quantity: dto.quantity,
+            unitPrice: dto.unitPrice,
             taxAmount,
             totalAmount,
             description: this.optional(dto.description),

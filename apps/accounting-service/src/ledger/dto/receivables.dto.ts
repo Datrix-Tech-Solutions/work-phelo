@@ -54,6 +54,25 @@ export class CreateReceivableInvoiceDto {
   @Min(0.0001)
   amount!: number;
 
+  @ApiPropertyOptional({
+    example: 2,
+    minimum: 0.0001,
+    description:
+      'Optional descriptive quantity. Sent together with unitPrice; amount must equal quantity × unitPrice rounded to 2 decimals.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  quantity?: number;
+
+  @ApiPropertyOptional({ example: 13.69, minimum: 0.0001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  unitPrice?: number;
+
   @ApiPropertyOptional({ example: 1.25, minimum: 0.00000001 })
   @IsOptional()
   @Type(() => Number)
