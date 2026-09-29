@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   AccountingSettlementMethod,
@@ -16,6 +17,7 @@ import {
   NormalBalance,
   Prisma,
   RecordStatus,
+  TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -691,8 +693,8 @@ export class CashbookService {
         fiscalPeriodId: period.id,
         transactionCurrency: originalJournal.transactionCurrency,
         exchangeRate: Number(originalJournal.exchangeRate.toString()),
-        reference: `REVERSAL-${transaction.reference ?? transaction.id}`,
-        description: `Cashbook reversal of ${transaction.reference ?? transaction.id}: ${dto.reason}`,
+        reference: `REVERSAL-${transaction.reference ?? transaction.transactionNumber ?? transaction.id}`,
+        description: `Cashbook reversal of ${transaction.reference ?? transaction.transactionNumber ?? transaction.id}: ${dto.reason}`,
         idempotencyKey: `cashbook:${transaction.id}:reversal:v1`,
         sourceModule: 'ACCOUNTING',
         sourceRecordType: 'CASHBOOK_REVERSAL',
@@ -739,7 +741,7 @@ export class CashbookService {
         currency: transaction.currency,
         transactionDate: reversalDate,
         settlementMethod: transaction.settlementMethod,
-        reference: `REVERSAL-${transaction.reference ?? transaction.id}`,
+        reference: `REVERSAL-${transaction.reference ?? transaction.transactionNumber ?? transaction.id}`,
         counterpartyType: transaction.counterpartyType,
         counterpartyId: transaction.counterpartyId,
         externalReference: transaction.externalReference,
@@ -796,6 +798,53 @@ export class CashbookService {
     return reversal;
   }
 
+  /** The Transaction Type a direct entry is made under must be a cashbook-posting
+   *  Receivable (for a receipt) or Payable (for a payment) type of this tenant. */
+  private async resolveDirectTransactionTypeCode(
+    tenantId: string,
+    transactionTypeId: string,
+    cashbookType: CashbookTransactionType,
+  ) {
+    const type = await this.prisma.transactionType.findFirst({
+      where: { id: transactionTypeId, tenantId },
+    });
+    if (!type) throw new NotFoundException('Transaction type not found');
+    const expected =
+      cashbookType === CashbookTransactionType.RECEIPT
+        ? TransactionTypeCategory.RECEIVABLE
+        : cashbookType === CashbookTransactionType.PAYMENT
+          ? TransactionTypeCategory.PAYABLE
+          : null;
+    if (!type.postsToCashbook || type.category !== expected) {
+      throw new BadRequestException(
+        `${type.name} cannot be used for a direct cashbook ${cashbookType.toLowerCase()}`,
+      );
+    }
+    return type.code;
+  }
+
+  /** <TransactionType code><YY>-<00001>, e.g. RCPT26-00001 — resets each calendar year per
+   *  type. Uses the same gapless counter table as journal numbers (key namespaced with
+   *  `TXN-` so it can't collide with a journal key); the counter row stays locked until the
+   *  surrounding transaction commits, so concurrent creates are serialised. */
+  private async nextTransactionNumber(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    transactionTypeCode: string,
+  ) {
+    const prefix = `${transactionTypeCode}${String(new Date().getUTCFullYear()).slice(-2)}`;
+    const rows = await tx.$queryRaw<Array<{ lastNumber: number }>>`
+      INSERT INTO "accounting"."JournalNumberSequence"
+        ("id", "tenantId", "key", "lastNumber", "updatedAt")
+      VALUES (${randomUUID()}, ${tenantId}, ${'TXN-' + prefix}, 1, NOW())
+      ON CONFLICT ("tenantId", "key") DO UPDATE
+        SET "lastNumber" = "JournalNumberSequence"."lastNumber" + 1,
+            "updatedAt" = NOW()
+      RETURNING "lastNumber"
+    `;
+    return `${prefix}-${String(rows[0].lastNumber).padStart(5, '0')}`;
+  }
+
   private async createCashbookEntry(
     user: RequestUser,
     dto: CashbookEntryDto & {
@@ -813,32 +862,51 @@ export class CashbookService {
         'Cashbook transaction currency must match the cash account currency',
       );
     }
-    const transaction = await this.prisma.cashbookTransaction.create({
-      data: {
-        tenantId: user.tenantId,
-        cashAccountId: cashAccount.id,
-        transactionType: dto.transactionType,
-        direction: dto.direction,
-        amount: dto.amount,
-        quantity: dto.quantity,
-        unitPrice: dto.unitPrice,
-        currency: dto.currency,
-        transactionDate: new Date(dto.transactionDate),
-        settlementMethod: dto.settlementMethod,
-        reference: this.optional(dto.reference),
-        counterpartyType: this.optional(dto.counterpartyType),
-        counterpartyId: this.optional(dto.counterpartyId),
-        externalReference: this.optional(dto.externalReference),
-        description: dto.description,
-        offsetGlAccountId: dto.offsetGlAccountId,
-        offsetSubledgerAccountId: dto.offsetSubledgerAccountId,
-        sourceModule: this.optional(dto.sourceModule),
-        sourceRecordId: this.optional(dto.sourceRecordId),
-        exchangeRate: dto.exchangeRate,
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
-      },
-      include: cashbookInclude,
+    const transactionTypeCode = dto.transactionTypeId
+      ? await this.resolveDirectTransactionTypeCode(
+          user.tenantId,
+          dto.transactionTypeId,
+          dto.transactionType,
+        )
+      : null;
+    // The number is drawn in the same DB transaction as the insert, so a failed create
+    // frees it again instead of leaving a gap.
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      const transactionNumber = transactionTypeCode
+        ? await this.nextTransactionNumber(
+            tx,
+            user.tenantId,
+            transactionTypeCode,
+          )
+        : null;
+      return tx.cashbookTransaction.create({
+        data: {
+          tenantId: user.tenantId,
+          cashAccountId: cashAccount.id,
+          transactionType: dto.transactionType,
+          direction: dto.direction,
+          transactionNumber,
+          amount: dto.amount,
+          quantity: dto.quantity,
+          unitPrice: dto.unitPrice,
+          currency: dto.currency,
+          transactionDate: new Date(dto.transactionDate),
+          settlementMethod: dto.settlementMethod,
+          reference: this.optional(dto.reference),
+          counterpartyType: this.optional(dto.counterpartyType),
+          counterpartyId: this.optional(dto.counterpartyId),
+          externalReference: this.optional(dto.externalReference),
+          description: dto.description,
+          offsetGlAccountId: dto.offsetGlAccountId,
+          offsetSubledgerAccountId: dto.offsetSubledgerAccountId,
+          sourceModule: this.optional(dto.sourceModule),
+          sourceRecordId: this.optional(dto.sourceRecordId),
+          exchangeRate: dto.exchangeRate,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+        include: cashbookInclude,
+      });
     });
     await this.recordAudit(
       user,
@@ -847,6 +915,7 @@ export class CashbookService {
       transaction.id,
       {
         transactionType: transaction.transactionType,
+        transactionNumber: transaction.transactionNumber,
         amount: dto.amount,
         currency: dto.currency,
       },
@@ -872,7 +941,10 @@ export class CashbookService {
       exchangeRate: transaction.exchangeRate
         ? Number(transaction.exchangeRate.toString())
         : undefined,
-      reference: transaction.reference ?? transaction.id,
+      reference:
+        transaction.reference ??
+        transaction.transactionNumber ??
+        transaction.id,
       description: transaction.description,
       idempotencyKey: `cashbook:${transaction.id}:posted:v1`,
       sourceModule: transaction.sourceModule ?? 'ACCOUNTING',

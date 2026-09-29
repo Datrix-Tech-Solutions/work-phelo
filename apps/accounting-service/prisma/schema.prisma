@@ -774,6 +774,10 @@ model CashbookTransaction {
   counterpartyId           String?
   externalReference        String?
   description              String
+  /// Set only for direct entries made from the Transactions page (Receipt/Payment types):
+  /// <TransactionType code><YY>-<00001>, e.g. RCPT26-00001. Null for transfers, charges,
+  /// adjustments, reversals, integration-event postings and rows created before it existed.
+  transactionNumber        String?
   offsetGlAccountId        String?
   offsetSubledgerAccountId String?
   chargeAmount             Decimal?                     @db.Decimal(20, 4)
@@ -809,6 +813,7 @@ model CashbookTransaction {
   payablePayment           AccountingPayablePayment?    @relation("PayableCashbookTransaction")
   sourceLedgerAllocations  SourceLedgerAllocation[]
 
+  @@unique([tenantId, transactionNumber])
   @@unique([id, tenantId])
   @@unique([sourceEventInboxId, tenantId])
   @@unique([postedJournalEntryId, tenantId])

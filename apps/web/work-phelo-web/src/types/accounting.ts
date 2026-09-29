@@ -393,6 +393,7 @@ export interface SourceLedgerSummary {
 
 export interface MakeSourceLedgerPaymentPayload {
   cashAccountId: string;
+  transactionTypeId?: string;
   amount: number;
   transactionDate: string;
   settlementMethod: string;
@@ -1253,6 +1254,9 @@ export interface CashbookTransaction {
   destinationCashAccountId: string | null;
   transactionType: CashbookTransactionType;
   direction: CashbookDirection;
+  /** Generated ID for a direct Receipt/Payment made from the Transactions page
+   *  (e.g. RCPT26-00001). Null for older rows and non-transaction cashbook entries. */
+  transactionNumber: string | null;
   amount: string;
   currency: string;
   transactionDate: string;
@@ -1306,6 +1310,8 @@ export interface QueryCashbookParams {
 
 export interface CreateCashbookEntryPayload {
   cashAccountId: string;
+  /** The Transaction Type the entry is made under — its code builds the transaction number. */
+  transactionTypeId?: string;
   /** quantity × unitPrice, rounded to 2 decimals. */
   amount: number;
   quantity?: number;

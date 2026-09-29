@@ -290,6 +290,7 @@ export function NewTransactionPanel({
             entryId: values.sourceLedgerEntryId,
             payload: {
               cashAccountId: values.cashAccountId,
+              transactionTypeId: transactionType.id,
               amount: resolveAmount(values),
               transactionDate: values.entryDate || today(),
               settlementMethod: values.settlementMethod,
@@ -299,6 +300,7 @@ export function NewTransactionPanel({
         } else {
           const created = await createCashbookEntry.mutateAsync({
             cashAccountId: values.cashAccountId,
+            transactionTypeId: transactionType.id,
             offsetGlAccountId: values.offsetGlAccountId,
             amount: resolveAmount(values),
             ...(hasSource

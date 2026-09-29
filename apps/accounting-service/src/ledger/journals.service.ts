@@ -69,6 +69,7 @@ const journalSourceInclude = {
     select: {
       id: true,
       transactionType: true,
+      transactionNumber: true,
       reference: true,
       receivableReceipt: { select: { id: true, receiptNumber: true } },
       payablePayment: { select: { id: true, paymentNumber: true } },
@@ -78,6 +79,7 @@ const journalSourceInclude = {
     select: {
       id: true,
       transactionType: true,
+      transactionNumber: true,
       reference: true,
       receivableReceipt: { select: { id: true, receiptNumber: true } },
       payablePayment: { select: { id: true, paymentNumber: true } },
@@ -1117,7 +1119,9 @@ export class JournalsService {
         category: 'CASH_AND_BANK',
         kind:
           CASHBOOK_KIND[cashbookTransaction.transactionType] ?? 'Transaction',
-        number: cashbookTransaction.reference,
+        number:
+          cashbookTransaction.transactionNumber ??
+          cashbookTransaction.reference,
       };
     }
     if (links.sourceEvent) {
