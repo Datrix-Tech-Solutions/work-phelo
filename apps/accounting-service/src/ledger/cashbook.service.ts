@@ -33,6 +33,7 @@ import {
 } from './dto/cashbook.dto';
 import { CreateJournalDto, JournalLineDto } from './dto/accounting.dto';
 import { JournalsService } from './journals.service';
+import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
 
 const cashAccountInclude = {
   glAccount: {
@@ -802,6 +803,7 @@ export class CashbookService {
       direction: CashbookDirection;
     },
   ) {
+    assertQuantityPriceMatchesAmount(dto);
     const [cashAccount] = await Promise.all([
       this.resolveActiveCashAccount(user.tenantId, dto.cashAccountId),
       this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
@@ -818,6 +820,8 @@ export class CashbookService {
         transactionType: dto.transactionType,
         direction: dto.direction,
         amount: dto.amount,
+        quantity: dto.quantity,
+        unitPrice: dto.unitPrice,
         currency: dto.currency,
         transactionDate: new Date(dto.transactionDate),
         settlementMethod: dto.settlementMethod,
