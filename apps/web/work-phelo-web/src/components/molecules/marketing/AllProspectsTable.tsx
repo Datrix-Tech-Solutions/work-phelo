@@ -65,6 +65,7 @@ interface Props {
   onRowClick: (row: Prospect) => void;
   onEdit: (row: Prospect) => void;
   onDelete: (row: Prospect) => void;
+  onConvertToClient: (row: Prospect) => void;
   onAdd: () => void;
   isLoading?: boolean;
 }
@@ -79,6 +80,7 @@ export function AllProspectsTable({
   onRowClick,
   onEdit,
   onDelete,
+  onConvertToClient,
   onAdd,
   isLoading,
 }: Props) {
@@ -95,6 +97,9 @@ export function AllProspectsTable({
       onPageChange={onPageChange}
       onRowClick={onRowClick}
       rowActions={(row) => [
+        ...(row.salesStageProgress >= 100
+          ? [{ label: 'Convert to Client', onClick: () => onConvertToClient(row) }]
+          : []),
         { label: 'Edit', onClick: () => onEdit(row) },
         { label: 'Delete', onClick: () => onDelete(row), danger: true },
       ]}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, UserCheck } from 'lucide-react';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ProspectBreadcrumb } from '@/components/molecules/marketing/ProspectBreadcrumb';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
@@ -14,6 +14,7 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
+import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { InteractionDetailPanel } from '@/components/organisms/marketing/InteractionDetailPanel';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import type { ProspectDetailInteraction, ProspectDetailProduct } from '@/types/marketing';
@@ -95,6 +96,7 @@ export default function ProspectDetailPage() {
   const [viewingInteraction, setViewingInteraction] = useState<ProspectDetailInteraction | null>(
     null,
   );
+  const [convertingToClient, setConvertingToClient] = useState(false);
   const [addingInteraction, setAddingInteraction] = useState(false);
   const [activeTab, setActiveTab] = useState<ProspectTab>('products');
 
@@ -143,6 +145,15 @@ export default function ProspectDetailPage() {
       <div className="flex items-center justify-between gap-4">
         <ProspectBreadcrumb tenantSlug={tenantSlug} prospectName={prospect.companyName} />
         <div className="flex items-center gap-3">
+          {prospect.progress >= 100 && (
+            <Button
+              variant="outline"
+              icon={<UserCheck className="w-4 h-4" />}
+              onClick={() => setConvertingToClient(true)}
+            >
+              Convert to Client
+            </Button>
+          )}
           <Button
             variant="outline"
             icon={<Trash2 className="w-4 h-4" />}
@@ -218,6 +229,12 @@ export default function ProspectDetailPage() {
           noInternalScroll
         />
       )}
+
+      <ConvertToClientModal
+        prospect={prospect}
+        isOpen={convertingToClient}
+        onClose={() => setConvertingToClient(false)}
+      />
 
       <InteractionDetailPanel
         interaction={viewingInteraction}
