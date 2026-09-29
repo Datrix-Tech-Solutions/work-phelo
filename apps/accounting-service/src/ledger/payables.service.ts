@@ -1530,22 +1530,63 @@ export class PayablesService {
     tenantId: string,
     documents: T[],
   ) {
-    const postedIds = documents
-      .filter((doc) => doc.status === AccountingPayableStatus.POSTED)
+    const isCreditNote = (doc: PayableDocument) =>
+      doc.documentType === AccountingPayableDocumentType.CREDIT_NOTE;
+    const posted = documents.filter(
+      (doc) => doc.status === AccountingPayableStatus.POSTED,
+    );
+    const postedIds = posted
+      .filter((doc) => !isCreditNote(doc))
       .map((doc) => doc.id);
+    const postedCreditNoteIds = posted
+      .filter(isCreditNote)
+      .map((doc) => doc.id);
+    // A debit note (vendor credit) is never "paid" — what matters is how much of it has
+    // been applied against bills, so its outstanding is the part still unapplied.
+    const appliedByCreditNoteId = new Map<string, Prisma.Decimal>();
+    if (postedCreditNoteIds.length > 0) {
+      const grouped = await this.prisma.accountingPayableAllocation.groupBy({
+        by: ['creditNoteId'],
+        where: {
+          tenantId,
+          reversedAt: null,
+          creditNoteId: { in: postedCreditNoteIds },
+        },
+        _sum: { amount: true },
+      });
+      for (const row of grouped) {
+        if (row.creditNoteId) {
+          appliedByCreditNoteId.set(row.creditNoteId, row._sum.amount ?? zero);
+        }
+      }
+    }
     const appliedByBillId = new Map<string, Prisma.Decimal>();
+    const creditedByBillId = new Map<string, Prisma.Decimal>();
     if (postedIds.length > 0) {
       const grouped = await this.prisma.accountingPayableAllocation.groupBy({
-        by: ['billId'],
+        by: ['billId', 'sourceType'],
         where: { tenantId, reversedAt: null, billId: { in: postedIds } },
         _sum: { amount: true },
       });
       for (const row of grouped) {
-        appliedByBillId.set(row.billId, row._sum.amount ?? zero);
+        const amount = row._sum.amount ?? zero;
+        appliedByBillId.set(
+          row.billId,
+          (appliedByBillId.get(row.billId) ?? zero).plus(amount),
+        );
+        if (row.sourceType === AccountingPayableAllocationSource.CREDIT_NOTE) {
+          creditedByBillId.set(
+            row.billId,
+            (creditedByBillId.get(row.billId) ?? zero).plus(amount),
+          );
+        }
       }
     }
     return documents.map((document) => {
-      const applied = appliedByBillId.get(document.id) ?? zero;
+      const applied =
+        (isCreditNote(document)
+          ? appliedByCreditNoteId.get(document.id)
+          : appliedByBillId.get(document.id)) ?? zero;
       const outstanding =
         document.status === AccountingPayableStatus.POSTED
           ? document.totalAmount.minus(applied)
@@ -1554,6 +1595,9 @@ export class PayablesService {
         ...document,
         paymentState: this.paymentState(document, outstanding),
         outstandingAmount: this.money(outstanding),
+        // The part of what's been applied that came from debit notes (not payments), so the
+        // UI can tell "Credited" from "Partially Paid".
+        creditedAmount: this.money(creditedByBillId.get(document.id) ?? zero),
       };
     });
   }

@@ -1571,22 +1571,65 @@ export class ReceivablesService {
     tenantId: string,
     documents: T[],
   ) {
-    const postedIds = documents
-      .filter((doc) => doc.status === AccountingReceivableStatus.POSTED)
+    const isCreditNote = (doc: ReceivableDocument) =>
+      doc.documentType === AccountingReceivableDocumentType.CREDIT_NOTE;
+    const posted = documents.filter(
+      (doc) => doc.status === AccountingReceivableStatus.POSTED,
+    );
+    const postedIds = posted
+      .filter((doc) => !isCreditNote(doc))
       .map((doc) => doc.id);
+    const postedCreditNoteIds = posted
+      .filter(isCreditNote)
+      .map((doc) => doc.id);
+    // A credit note is never "paid" — what matters is how much of it has been applied
+    // against invoices, so its outstanding is the part still unapplied.
+    const appliedByCreditNoteId = new Map<string, Prisma.Decimal>();
+    if (postedCreditNoteIds.length > 0) {
+      const grouped = await this.prisma.accountingReceivableAllocation.groupBy({
+        by: ['creditNoteId'],
+        where: {
+          tenantId,
+          reversedAt: null,
+          creditNoteId: { in: postedCreditNoteIds },
+        },
+        _sum: { amount: true },
+      });
+      for (const row of grouped) {
+        if (row.creditNoteId) {
+          appliedByCreditNoteId.set(row.creditNoteId, row._sum.amount ?? zero);
+        }
+      }
+    }
     const appliedByInvoiceId = new Map<string, Prisma.Decimal>();
+    const creditedByInvoiceId = new Map<string, Prisma.Decimal>();
     if (postedIds.length > 0) {
       const grouped = await this.prisma.accountingReceivableAllocation.groupBy({
-        by: ['invoiceId'],
+        by: ['invoiceId', 'sourceType'],
         where: { tenantId, reversedAt: null, invoiceId: { in: postedIds } },
         _sum: { amount: true },
       });
       for (const row of grouped) {
-        appliedByInvoiceId.set(row.invoiceId, row._sum.amount ?? zero);
+        const amount = row._sum.amount ?? zero;
+        appliedByInvoiceId.set(
+          row.invoiceId,
+          (appliedByInvoiceId.get(row.invoiceId) ?? zero).plus(amount),
+        );
+        if (
+          row.sourceType === AccountingReceivableAllocationSource.CREDIT_NOTE
+        ) {
+          creditedByInvoiceId.set(
+            row.invoiceId,
+            (creditedByInvoiceId.get(row.invoiceId) ?? zero).plus(amount),
+          );
+        }
       }
     }
     return documents.map((document) => {
-      const applied = appliedByInvoiceId.get(document.id) ?? zero;
+      const applied =
+        (isCreditNote(document)
+          ? appliedByCreditNoteId.get(document.id)
+          : appliedByInvoiceId.get(document.id)) ?? zero;
       const outstanding =
         document.status === AccountingReceivableStatus.POSTED
           ? document.totalAmount.minus(applied)
@@ -1595,6 +1638,11 @@ export class ReceivablesService {
         ...document,
         paymentState: this.paymentState(document, outstanding),
         outstandingAmount: this.money(outstanding),
+        // The part of what's been applied that came from credit notes (not payments), so the
+        // UI can tell "Credited" from "Partially Paid".
+        creditedAmount: this.money(
+          creditedByInvoiceId.get(document.id) ?? zero,
+        ),
       };
     });
   }

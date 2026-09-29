@@ -965,6 +965,9 @@ export interface AccountingTradeDocument {
   /** What is still owed on a posted document, after payments and credit/debit notes.
    *  Only present on list rows. */
   outstandingAmount: string | null;
+  /** The part of what's been applied to this document that came from credit/debit notes
+   *  rather than payments. Only present on list rows. */
+  creditedAmount: string | null;
   createdAt: string;
   updatedAt: string;
   postedAt: string | null;
