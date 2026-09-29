@@ -120,6 +120,17 @@ export class CashbookEntryDto {
   @IsUUID()
   cashAccountId!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The Receivable/Payable Transaction Type (flagged postsToCashbook) this direct ' +
+      'transaction is made under. Its code drives the generated transaction number ' +
+      '(e.g. RCPT26-00001); omit it and the entry gets no number.',
+  })
+  @IsOptional()
+  @IsUUID()
+  transactionTypeId?: string;
+
   @ApiProperty({ example: 1000, minimum: 0.0001 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })

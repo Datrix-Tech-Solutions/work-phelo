@@ -252,6 +252,7 @@ export class SourceLedgerService {
       settlementMethod: dto.settlementMethod,
       description: dto.description?.trim() || `Payment: ${entry.description}`,
       offsetGlAccountId: entry.glAccountId,
+      transactionTypeId: dto.transactionTypeId,
     });
     const posted = await this.cashbook.postTransaction(user, draft.id);
 

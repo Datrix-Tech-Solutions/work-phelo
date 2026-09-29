@@ -159,7 +159,7 @@ function toCashbookRow(cb: CashbookTransaction): UnifiedTransactionRow {
   return {
     id: cb.id,
     kind: 'cashbook',
-    transactionNumber: cb.reference || cb.id.slice(0, 8).toUpperCase(),
+    transactionNumber: cb.transactionNumber || cb.reference || cb.id.slice(0, 8).toUpperCase(),
     date: cb.transactionDate,
     entityLabel: cb.description,
     // Direct cashbook entries have no tax field yet — subtotal is the full entered amount
