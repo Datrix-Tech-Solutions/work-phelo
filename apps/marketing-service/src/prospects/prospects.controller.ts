@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -13,8 +15,10 @@ import {
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOperation,
   ApiOkResponse,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -34,7 +38,10 @@ import {
   ProspectListResponseDto,
   QueryProspectsDto,
 } from './dto/query-prospects.dto';
-import { ProspectResponseDto } from './dto/prospect-response.dto';
+import {
+  ProspectDetailResponseDto,
+  ProspectResponseDto,
+} from './dto/prospect-response.dto';
 import { ProspectsService } from './prospects.service';
 
 @Controller('prospects')
@@ -69,6 +76,23 @@ export class ProspectsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.list(request.user, query);
+  }
+
+  @Get(':id')
+  @RequireAnyPermission(MarketingCrmSettingsPermission.PROSPECTS_VIEW)
+  @ApiOperation({
+    summary: 'Get marketing prospect details',
+    description:
+      'Users with marketing.prospects:VIEW can view assigned prospects. Users with marketing.prospects.all:VIEW can view any prospect within their tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectDetailResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(request.user, id);
   }
 
   @Post()
