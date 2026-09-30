@@ -254,31 +254,36 @@ describe('ProspectingSettingsService', () => {
       category: MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
       model: 'marketingProspect',
       field: 'businessTypeId',
-      message: 'This business type is currently in use',
+      message:
+        'This business type is in use by one or more prospects and cannot be deleted',
     },
     {
       category: MarketingCrmSettingCategory.SOURCE_TYPE,
       model: 'marketingProspect',
       field: 'sourceTypeId',
-      message: 'This source type is currently in use',
+      message:
+        'This source type is in use by one or more prospects and cannot be deleted',
     },
     {
       category: MarketingCrmSettingCategory.PRODUCT,
       model: 'marketingProspectProduct',
       field: 'productId',
-      message: 'This product/service is currently in use',
+      message:
+        'This product/service is in use by one or more prospects and cannot be deleted',
     },
     {
       category: MarketingCrmSettingCategory.DECISION_MAKER,
       model: 'marketingProspectContact',
       field: 'decisionMakerTypeId',
-      message: 'This decision-maker type is currently in use',
+      message:
+        'This decision-maker type is in use by one or more prospects and cannot be deleted',
     },
     {
       category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
       model: 'marketingProspectInteraction',
       field: 'interactionMediumId',
-      message: 'This interaction medium is currently in use',
+      message:
+        'This interaction medium is in use by one or more prospects and cannot be deleted',
     },
   ] as const)(
     'blocks archiving referenced $category settings',

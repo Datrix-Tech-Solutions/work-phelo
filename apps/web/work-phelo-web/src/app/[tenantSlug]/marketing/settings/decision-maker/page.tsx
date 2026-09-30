@@ -1,5 +1,6 @@
 'use client';
 
+import { isAxiosError } from 'axios';
 import { useMemo, useState } from 'react';
 import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -42,6 +43,7 @@ export default function DecisionMakerPage() {
   const [errors, setErrors] = useState<Partial<DecisionMakerFields>>({});
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [inUseMessage, setInUseMessage] = useState<string | null>(null);
 
   const filtered = items.filter((i) => i.label.toLowerCase().includes(search.toLowerCase()));
 
@@ -66,6 +68,12 @@ export default function DecisionMakerPage() {
   function validate(): boolean {
     const next: Partial<DecisionMakerFields> = {};
     if (!form.name.trim()) next.name = 'Name is required.';
+    else if (
+      itemData.some(
+        (i) => i.id !== editingId && i.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
+      )
+    )
+      next.name = 'This decision maker already exists. Please enter a different name.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -103,6 +111,11 @@ export default function DecisionMakerPage() {
     }
   }
 
+  function closeDelete() {
+    setDeleteId(null);
+    setInUseMessage(null);
+  }
+
   function handleDelete() {
     if (!deleteId) return;
     deleteItem.mutate(deleteId, {
@@ -110,7 +123,13 @@ export default function DecisionMakerPage() {
         toast.success('Decision maker deleted');
         setDeleteId(null);
       },
-      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete decision maker')),
+      onError: (error) => {
+        if (isAxiosError(error) && error.response?.status === 409) {
+          setInUseMessage(apiErrorMessage(error, 'This item is in use and cannot be deleted.'));
+          return;
+        }
+        toast.error(apiErrorMessage(error, 'Failed to delete decision maker'));
+      },
     });
   }
 
@@ -155,19 +174,24 @@ export default function DecisionMakerPage() {
 
       <Modal
         isOpen={!!deleteId}
-        onClose={() => setDeleteId(null)}
+        onClose={closeDelete}
         title="Delete Decision Maker"
-        description="Are you sure you want to delete this decision maker? This action cannot be undone."
+        description={
+          inUseMessage ??
+          'Are you sure you want to delete this decision maker? This action cannot be undone.'
+        }
         width="max-w-sm"
         height="max-h-fit"
         footer={
           <>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>
+            <Button variant="outline" onClick={closeDelete}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDelete} isLoading={deleteItem.isPending}>
-              Delete
-            </Button>
+            {!inUseMessage && (
+              <Button variant="danger" onClick={handleDelete} isLoading={deleteItem.isPending}>
+                Delete
+              </Button>
+            )}
           </>
         }
       />

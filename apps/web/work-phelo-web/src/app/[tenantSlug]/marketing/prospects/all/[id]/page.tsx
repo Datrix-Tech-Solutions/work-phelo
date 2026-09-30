@@ -42,20 +42,30 @@ function formatDate(value: string | null): string {
 }
 
 const PRODUCT_COLUMNS: Column<ProspectDetailProduct>[] = [
-  { key: 'product', label: 'Product', render: (row) => row.product.name },
+  {
+    key: 'product',
+    label: 'Product',
+    width: 'minmax(100px, 1fr)',
+    render: (row) => row.product.name,
+  },
   {
     key: 'expectedValue',
     label: 'Expected Revenue',
+    width: '150px',
+    className: 'text-right',
     render: (row) => formatMoney(row.expectedValue),
   },
   {
     key: 'achievedValue',
     label: 'Achieved Revenue',
+    className: 'text-right',
+    width: '150px',
     render: (row) => formatMoney(row.achievedValue),
   },
   {
     key: 'expectedCloseDate',
     label: 'Expected Close Date',
+    width: '150px',
     render: (row) => formatDate(row.expectedCloseDate),
   },
 ];
@@ -65,22 +75,22 @@ const INTERACTION_COLUMNS: Column<ProspectDetailInteraction>[] = [
   {
     key: 'interactionMedium',
     label: 'Medium',
-    width: '200px',
+    width: '160px',
     render: (row) => row.interactionMedium?.name ?? '—',
   },
   {
-    key: 'decisionMaker',
+    key: 'decisionMakerInvolved',
     label: 'Decision Maker Met',
-    width: '200px',
-    render: (row) => row.decisionMaker?.name ?? '—',
+    width: '160px',
+    render: (row) => (row.decisionMakerInvolved ? 'Yes' : 'No'),
   },
   {
-    key: 'decisionMakerName',
-    label: 'Decision Maker Name',
-    width: 'minmax(200px, 1fr)',
-    render: (row) => row.decisionMakerName || '—',
+    key: 'participants',
+    label: 'Participants',
+    width: 'minmax(160px, 0.7fr)',
+    render: (row) => row.participants.map((p) => p.fullName).join(', ') || '—',
   },
-  { key: 'notes', label: 'Notes', width: 'minmax(200px, 1fr)', render: (row) => row.notes || '—' },
+  { key: 'notes', label: 'Notes', width: 'minmax(160px, 1fr)', render: (row) => row.notes || '—' },
 ];
 
 type ProspectTab = 'products' | 'interactions';
@@ -179,8 +189,8 @@ export default function ProspectDetailPage() {
           <DetailField label="Type of Business" value={prospect.businessType?.name} />
           <DetailField label="Source Type" value={prospect.sourceType?.name} />
           <DetailField label="Location" value={prospect.location.label} />
-          <DetailField label="Contact Person" value={primaryContact?.name} />
-          <DetailField label="Role / Job Title" value={primaryContact?.decisionMaker?.name} />
+          <DetailField label="Decision Maker" value={primaryContact?.name} />
+          <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Phone" value={primaryContact?.phone} />
           <DetailField label="Email" value={primaryContact?.email} />
           <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
@@ -246,7 +256,8 @@ export default function ProspectDetailPage() {
         primaryContact={
           primaryContact && {
             name: primaryContact.name,
-            decisionMakerId: primaryContact.decisionMaker?.id,
+            phone: primaryContact.phone,
+            role: primaryContact.decisionMaker?.name,
           }
         }
         isOpen={addingInteraction}

@@ -9,8 +9,8 @@ interface Props {
 
 export function TransportOfficersTabs({ base, className }: Props) {
   const tabs = [
+    { key: 'details', label: 'Officers', href: `${base}/details` },
     { key: 'location', label: 'Location', href: `${base}/location` },
-    { key: 'details', label: 'Details', href: `${base}/details` },
   ];
 
   return <TabBar tabs={tabs} className={className} />;

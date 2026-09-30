@@ -39,6 +39,7 @@ const EMPTY_COMPANY: CompanyInformationFields = {
   companyName: '',
   businessType: '',
   contactName: '',
+  contactPerson: '',
   phone: '',
   email: '',
   interactionType: '',

@@ -11,6 +11,7 @@ export interface CompanyInformationFields {
   companyName: string;
   businessType: string;
   contactName: string;
+  contactPerson: string;
   phone: string;
   email: string;
   interactionType: string;
@@ -84,6 +85,30 @@ export function CompanyInformationForm({
           error={errors?.businessType}
           emptyState={businessTypeEmptyState}
         />
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+            <label className="text-sm font-bold text-gray-900">Decision Maker</label>
+            <input
+              type="text"
+              placeholder="Decision maker full name"
+              value={values.contactName}
+              onChange={(e) => set('contactName', e.target.value)}
+              className={inputClass(errors?.contactName)}
+            />
+            {errors?.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
+          </div>
+
+          <SearchSelect
+            label="Decision Maker Role"
+            placeholder="Select or type to add new"
+            options={roleOptions}
+            value={values.roleJobTitle}
+            onChange={(v) => set('roleJobTitle', v)}
+            error={errors?.roleJobTitle}
+            emptyState={roleEmptyState}
+          />
+        </div>
       </ProspectFormSection>
 
       {/* Section 2 — Contact Person Data */}
@@ -93,11 +118,11 @@ export function CompanyInformationForm({
           <input
             type="text"
             placeholder="Contact person's full name"
-            value={values.contactName}
-            onChange={(e) => set('contactName', e.target.value)}
-            className={inputClass(errors?.contactName)}
+            value={values.contactPerson}
+            onChange={(e) => set('contactPerson', e.target.value)}
+            className={inputClass(errors?.contactPerson)}
           />
-          {errors?.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
+          {errors?.contactPerson && <p className="text-xs text-red-500">{errors.contactPerson}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -126,16 +151,6 @@ export function CompanyInformationForm({
             emptyState={interactionTypeEmptyState}
           />
         )}
-
-        <SearchSelect
-          label="Role / Job Title"
-          placeholder="Select or type to add new"
-          options={roleOptions}
-          value={values.roleJobTitle}
-          onChange={(v) => set('roleJobTitle', v)}
-          error={errors?.roleJobTitle}
-          emptyState={roleEmptyState}
-        />
 
         <SearchSelect
           label="Source Type"

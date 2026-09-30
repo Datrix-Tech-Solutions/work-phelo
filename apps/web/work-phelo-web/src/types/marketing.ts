@@ -136,15 +136,27 @@ export interface CreateProspectLocationPayload {
   longitude: number;
 }
 
-export interface CreateProspectInitialInteractionPayload {
-  interactionMediumId?: string;
-  decisionMakerTypeId?: string;
-  decisionMakerName?: string;
-  occurredAt: string;
-  notes?: string;
+export interface ProspectInteractionParticipantPayload {
+  fullName: string;
+  phone: string;
+  role: string;
 }
 
-export type CreateProspectInteractionPayload = CreateProspectInitialInteractionPayload;
+export interface CreateProspectInitialInteractionPayload {
+  interactionMediumId?: string;
+  occurredAt: string;
+  notes?: string;
+  decisionMakerInvolved?: boolean;
+  participants?: ProspectInteractionParticipantPayload[];
+}
+
+export interface CreateProspectInteractionPayload {
+  interactionMediumId: string;
+  occurredAt: string;
+  notes?: string;
+  decisionMakerInvolved: boolean;
+  participants?: ProspectInteractionParticipantPayload[];
+}
 
 export interface CreateProspectPayload {
   companyName: string;
@@ -214,13 +226,21 @@ export interface ProspectDetailSalesStage {
   displayOrder: number;
 }
 
+export interface ProspectInteractionParticipant {
+  id: string;
+  fullName: string;
+  phone: string;
+  role: string;
+  createdAt: string;
+}
+
 export interface ProspectDetailInteraction {
   id: string;
   occurredAt: string;
   interactionMedium: ProspectReference | null;
-  decisionMaker: ProspectReference | null;
-  decisionMakerName: string | null;
   notes: string | null;
+  decisionMakerInvolved: boolean;
+  participants: ProspectInteractionParticipant[];
   createdByUserId: string | null;
   createdAt: string;
 }

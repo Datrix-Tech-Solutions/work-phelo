@@ -81,7 +81,7 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
       },
       {
         key: 'settings',
-        label: 'Settings',
+        label: 'CRM Configuration',
         icon: <ProspectingIcon />,
         href: 'settings',
         enabled: true,
@@ -93,6 +93,14 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Transport',
     items: [
+      {
+        key: 'fleet-management',
+        label: 'Fleet Management',
+        icon: <FleetIcon />,
+        href: 'fleet-management',
+        enabled: true,
+        active: true,
+      },
       {
         key: 'requests',
         label: 'Requests',
@@ -106,14 +114,6 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
         label: 'Transport Officers',
         icon: <TransportOfficersIcon />,
         href: 'transport-officers',
-        enabled: true,
-        active: true,
-      },
-      {
-        key: 'fleet-management',
-        label: 'Fleet Management',
-        icon: <FleetIcon />,
-        href: 'fleet-management',
         enabled: true,
         active: true,
       },

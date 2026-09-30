@@ -21,15 +21,15 @@ const DUPLICATE_MESSAGE =
   'A setting with this name already exists for this category';
 const REFERENCED_MESSAGES: Record<MarketingCrmSettingCategory, string> = {
   [MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE]:
-    'This business type is currently in use by one or more prospects and cannot be archived.',
+    'This business type is in use by one or more prospects and cannot be deleted',
   [MarketingCrmSettingCategory.SOURCE_TYPE]:
-    'This source type is currently in use by one or more prospects and cannot be archived.',
+    'This source type is in use by one or more prospects and cannot be deleted.',
   [MarketingCrmSettingCategory.INTERACTION_MEDIUM]:
-    'This interaction medium is currently in use by one or more prospects and cannot be archived.',
+    'This interaction medium is in use by one or more prospects and cannot be deleted.',
   [MarketingCrmSettingCategory.DECISION_MAKER]:
-    'This decision-maker type is currently in use by one or more prospects and cannot be archived.',
+    'This decision-maker type is in use by one or more prospects and cannot be deleted.',
   [MarketingCrmSettingCategory.PRODUCT]:
-    'This product/service is currently in use by one or more prospects and cannot be archived.',
+    'This product/service is in use by one or more prospects and cannot be deleted.',
 };
 
 @Injectable()

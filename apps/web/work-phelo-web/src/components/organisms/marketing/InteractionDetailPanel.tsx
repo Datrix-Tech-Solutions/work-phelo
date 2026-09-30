@@ -36,8 +36,17 @@ export function InteractionDetailPanel({ interaction, onClose }: InteractionDeta
         <div className="flex flex-col gap-5">
           <DetailField label="Date Contacted" value={formatDate(interaction.occurredAt)} />
           <DetailField label="Interaction Type" value={interaction.interactionMedium?.name} />
-          <DetailField label="Decision Maker Met" value={interaction.decisionMaker?.name} />
-          <DetailField label="Decision Maker Name" value={interaction.decisionMakerName} />
+          <DetailField
+            label="Decision Maker Met"
+            value={interaction.decisionMakerInvolved ? 'Yes' : 'No'}
+          />
+          {interaction.participants.map((participant) => (
+            <DetailField
+              key={participant.id}
+              label="Participant"
+              value={`${participant.fullName} · ${participant.role} · ${participant.phone}`}
+            />
+          ))}
           <DetailField
             label="Notes"
             value={
