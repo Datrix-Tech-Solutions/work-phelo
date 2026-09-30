@@ -65,7 +65,7 @@ model MarketingPipelineStage {
 }
 
 model MarketingProspect {
-  id                    String    @id @default(uuid())
+  id                    String   @id @default(uuid())
   tenantId              String
   companyName           String
   normalizedCompanyName String
@@ -74,12 +74,12 @@ model MarketingProspect {
   pipelineStageId       String
   assignedUserId        String
   locationLabel         String
-  latitude              Decimal   @db.Decimal(9, 6)
-  longitude             Decimal   @db.Decimal(9, 6)
+  latitude              Decimal  @db.Decimal(9, 6)
+  longitude             Decimal  @db.Decimal(9, 6)
   createdByUserId       String?
   updatedByUserId       String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   contacts     MarketingProspectContact[]
   products     MarketingProspectProduct[]
@@ -133,18 +133,35 @@ model MarketingProspectProduct {
 }
 
 model MarketingProspectInteraction {
-  id                  String   @id @default(uuid())
-  tenantId            String
-  prospectId          String
-  interactionMediumId String?
-  occurredAt          DateTime
-  notes               String?
-  createdByUserId     String?
-  createdAt           DateTime @default(now())
+  id                    String   @id @default(uuid())
+  tenantId              String
+  prospectId            String
+  interactionMediumId   String?
+  occurredAt            DateTime
+  notes                 String?
+  decisionMakerInvolved Boolean  @default(false)
+  createdByUserId       String?
+  createdAt             DateTime @default(now())
 
-  prospect MarketingProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospect     MarketingProspect                         @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  participants MarketingProspectInteractionParticipant[]
 
   @@index([tenantId, prospectId, occurredAt])
   @@index([tenantId, interactionMediumId])
+  @@schema("marketing")
+}
+
+model MarketingProspectInteractionParticipant {
+  id            String   @id @default(uuid())
+  tenantId      String
+  interactionId String
+  fullName      String
+  phone         String
+  role          String
+  createdAt     DateTime @default(now())
+
+  interaction MarketingProspectInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, interactionId])
   @@schema("marketing")
 }

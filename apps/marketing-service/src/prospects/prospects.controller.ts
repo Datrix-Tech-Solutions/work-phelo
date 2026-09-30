@@ -38,13 +38,16 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
+import { CreateProspectInteractionDto } from './dto/create-prospect-interaction.dto';
 import { CreateProspectDto } from './dto/create-prospect.dto';
 import {
   ProspectListResponseDto,
   QueryProspectsDto,
 } from './dto/query-prospects.dto';
 import {
+  ProspectDetailInteractionDto,
   ProspectDetailResponseDto,
+  ProspectInteractionHistoryResponseDto,
   ProspectResponseDto,
 } from './dto/prospect-response.dto';
 import { UpdateProspectDto } from './dto/update-prospect.dto';
@@ -82,6 +85,48 @@ export class ProspectsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.list(request.user, query);
+  }
+
+  @Get(':prospectId/interactions')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW,
+    MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW_ALL,
+  )
+  @ApiOperation({
+    summary: 'List marketing prospect interaction history',
+    description:
+      'Users with marketing.prospects.interactions:VIEW can view interaction history for assigned prospects. Users with marketing.prospects.interactions.all:VIEW can view interaction history for any prospect within their tenant.',
+  })
+  @ApiParam({ name: 'prospectId', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectInteractionHistoryResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  listInteractions(
+    @Param('prospectId', ParseUUIDPipe) prospectId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.listInteractions(request.user, prospectId);
+  }
+
+  @Post(':prospectId/interactions')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE,
+    MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE_ALL,
+  )
+  @ApiOperation({
+    summary: 'Record a marketing prospect interaction',
+    description:
+      'Users with marketing.prospects.interactions:CREATE can record interactions for assigned prospects. Users with marketing.prospects.interactions.all:CREATE can record interactions for any prospect within their tenant.',
+  })
+  @ApiParam({ name: 'prospectId', format: 'uuid' })
+  @ApiCreatedResponse({ type: ProspectDetailInteractionDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  createInteraction(
+    @Param('prospectId', ParseUUIDPipe) prospectId: string,
+    @Body() dto: CreateProspectInteractionDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.createInteraction(request.user, prospectId, dto);
   }
 
   @Get(':id')

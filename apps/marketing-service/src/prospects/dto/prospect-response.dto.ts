@@ -43,6 +43,23 @@ export class ProspectProductResponseDto {
   expectedCloseDate!: Date | null;
 }
 
+export class ProspectInteractionParticipantResponseDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  fullName!: string;
+
+  @ApiProperty()
+  phone!: string;
+
+  @ApiProperty()
+  role!: string;
+
+  @ApiProperty()
+  createdAt!: Date;
+}
+
 export class ProspectInteractionResponseDto {
   @ApiProperty()
   id!: string;
@@ -55,6 +72,12 @@ export class ProspectInteractionResponseDto {
 
   @ApiPropertyOptional({ nullable: true })
   notes!: string | null;
+
+  @ApiProperty()
+  decisionMakerInvolved!: boolean;
+
+  @ApiProperty({ type: [ProspectInteractionParticipantResponseDto] })
+  participants!: ProspectInteractionParticipantResponseDto[];
 }
 
 export class ProspectResponseDto {
@@ -193,11 +216,22 @@ export class ProspectDetailInteractionDto {
   @ApiPropertyOptional({ nullable: true })
   notes!: string | null;
 
+  @ApiProperty()
+  decisionMakerInvolved!: boolean;
+
+  @ApiProperty({ type: [ProspectInteractionParticipantResponseDto] })
+  participants!: ProspectInteractionParticipantResponseDto[];
+
   @ApiPropertyOptional({ nullable: true })
   createdByUserId!: string | null;
 
   @ApiProperty()
   createdAt!: Date;
+}
+
+export class ProspectInteractionHistoryResponseDto {
+  @ApiProperty({ type: [ProspectDetailInteractionDto] })
+  items!: ProspectDetailInteractionDto[];
 }
 
 export class ProspectDetailResponseDto {

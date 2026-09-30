@@ -83,6 +83,30 @@ describe('ProspectsController authorization contract', () => {
       MarketingCrmSettingsPermission.PROSPECTS_DELETE_ALL,
     ]);
   });
+
+  it('requires assigned or tenant-wide prospect interaction view permission on history', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectsController.prototype.listInteractions,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW,
+      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW_ALL,
+    ]);
+  });
+
+  it('requires assigned or tenant-wide prospect interaction create permission on create interaction', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectsController.prototype.createInteraction,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE,
+      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE_ALL,
+    ]);
+  });
 });
 
 describe('Prospects authorization guards', () => {
@@ -246,6 +270,30 @@ describe('Prospects authorization guards', () => {
         executionContextFor({
           role: 'EMPLOYEE',
           permissions: [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
+        }) as never,
+      ),
+    ).toBe(true);
+  });
+
+  it('allows users with prospect interaction create permission', () => {
+    const reflector = {
+      getAllAndOverride: jest
+        .fn()
+        .mockImplementation((key: string) =>
+          key === PERMISSIONS_KEY
+            ? undefined
+            : [MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE],
+        ),
+    };
+    const guard = new PermissionsGuard(reflector as unknown as Reflector);
+
+    expect(
+      guard.canActivate(
+        executionContextFor({
+          role: 'EMPLOYEE',
+          permissions: [
+            MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE,
+          ],
         }) as never,
       ),
     ).toBe(true);
