@@ -511,6 +511,39 @@ describe('ReceivablesService', () => {
     });
   });
 
+  describe('payment state with credit notes', () => {
+    const balanceWith = async (receipts: number, credits: number) => {
+      const { prisma, service } = setup();
+      prisma.accountingReceivableAllocation.aggregate
+        .mockResolvedValueOnce({
+          _sum: { amount: new Prisma.Decimal(receipts) },
+        })
+        .mockResolvedValueOnce({
+          _sum: { amount: new Prisma.Decimal(credits) },
+        });
+      return service.invoiceBalance(actor.tenantId, 'invoice-1');
+    };
+
+    it('leaves an invoice Unpaid when only a credit note has been applied', async () => {
+      const balance = await balanceWith(0, 400);
+
+      expect(balance.outstandingAmount).toBe('600.0000');
+      expect(balance.paymentState).toBe('OPEN');
+    });
+
+    it('is Partially Paid once a real receipt has been applied', async () => {
+      const balance = await balanceWith(300, 400);
+
+      expect(balance.paymentState).toBe('PARTIALLY_PAID');
+    });
+
+    it('is Paid when credit notes and receipts clear the whole invoice', async () => {
+      const balance = await balanceWith(600, 400);
+
+      expect(balance.paymentState).toBe('PAID');
+    });
+  });
+
   it('posts an invoice as Dr AR control and Cr offset account', async () => {
     const { journals, prisma, service } = setup();
     prisma.accountingReceivableDocument.findFirst.mockResolvedValueOnce(

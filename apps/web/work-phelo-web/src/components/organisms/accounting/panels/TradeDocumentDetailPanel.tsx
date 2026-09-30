@@ -117,6 +117,15 @@ export function TradeDocumentDetailPanel({
     !isReceivable && !isCreditNote ? document?.id : undefined,
   );
   const balance = isReceivable ? receivableBalance.data : payableBalance.data;
+  // Credit/debit notes applied to this invoice/bill are shown beside its payment state, not
+  // folded into it — a credited invoice has not been paid.
+  const credited = Number(balance?.appliedCreditNotes ?? 0);
+  const creditStatus =
+    credited <= 0
+      ? null
+      : credited >= Number(balance?.originalAmount ?? 0)
+        ? 'Fully Credited'
+        : 'Partially Credited';
 
   const postReceivableInvoice = usePostReceivableInvoice();
   const postPayableBill = usePostPayableBill();
@@ -287,6 +296,7 @@ export function TradeDocumentDetailPanel({
                   variant={PAYMENT_STATE_VARIANT[balance.paymentState]}
                 />
               )}
+              {balance && creditStatus && <Badge label={creditStatus} variant="info" />}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

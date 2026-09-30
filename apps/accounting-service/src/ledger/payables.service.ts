@@ -1561,7 +1561,8 @@ export class PayablesService {
       }
     }
     const appliedByBillId = new Map<string, Prisma.Decimal>();
-    const creditedByBillId = new Map<string, Prisma.Decimal>();
+    // Only real payments, not debit notes — a credited bill hasn't been paid.
+    const paymentsByBillId = new Map<string, Prisma.Decimal>();
     if (postedIds.length > 0) {
       const grouped = await this.prisma.accountingPayableAllocation.groupBy({
         by: ['billId', 'sourceType'],
@@ -1574,10 +1575,10 @@ export class PayablesService {
           row.billId,
           (appliedByBillId.get(row.billId) ?? zero).plus(amount),
         );
-        if (row.sourceType === AccountingPayableAllocationSource.CREDIT_NOTE) {
-          creditedByBillId.set(
+        if (row.sourceType === AccountingPayableAllocationSource.PAYMENT) {
+          paymentsByBillId.set(
             row.billId,
-            (creditedByBillId.get(row.billId) ?? zero).plus(amount),
+            (paymentsByBillId.get(row.billId) ?? zero).plus(amount),
           );
         }
       }
@@ -1593,11 +1594,14 @@ export class PayablesService {
           : zero;
       return {
         ...document,
-        paymentState: this.paymentState(document, outstanding),
+        paymentState: this.paymentState(
+          document,
+          outstanding,
+          isCreditNote(document)
+            ? undefined
+            : (paymentsByBillId.get(document.id) ?? zero),
+        ),
         outstandingAmount: this.money(outstanding),
-        // The part of what's been applied that came from debit notes (not payments), so the
-        // UI can tell "Credited" from "Partially Paid".
-        creditedAmount: this.money(creditedByBillId.get(document.id) ?? zero),
       };
     });
   }
@@ -1648,7 +1652,7 @@ export class PayablesService {
       appliedPayments: this.money(paymentApplied),
       appliedCreditNotes: this.money(creditApplied),
       outstandingAmount: this.money(outstanding),
-      paymentState: this.paymentState(document, outstanding),
+      paymentState: this.paymentState(document, outstanding, paymentApplied),
     };
   }
 
@@ -2006,11 +2010,21 @@ export class PayablesService {
     };
   }
 
-  private paymentState(document: PayableDocument, outstanding: Prisma.Decimal) {
+  /** `paidApplied` is the part of the reduction that came from real payments. A document
+   *  reduced only by debit notes is still Unpaid; without it (debit notes themselves) any
+   *  reduction counts as partly applied. */
+  private paymentState(
+    document: PayableDocument,
+    outstanding: Prisma.Decimal,
+    paidApplied?: Prisma.Decimal,
+  ) {
     if (document.status === AccountingPayableStatus.REVERSED) return 'REVERSED';
     if (document.status === AccountingPayableStatus.DRAFT) return 'DRAFT';
     if (outstanding.lte(0)) return 'PAID';
-    if (outstanding.lessThan(document.totalAmount)) return 'PARTIALLY_PAID';
+    const partlySettled = paidApplied
+      ? paidApplied.greaterThan(0)
+      : outstanding.lessThan(document.totalAmount);
+    if (partlySettled) return 'PARTIALLY_PAID';
     return 'OPEN';
   }
 

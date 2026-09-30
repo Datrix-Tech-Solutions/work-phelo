@@ -1,5 +1,6 @@
 import {
   // Navigation & UI
+  Link2,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -86,6 +87,7 @@ import {
 /** General-purpose icon map used throughout the app */
 export const Icons = {
   // Navigation
+  Link2,
   ChevronLeft,
   ChevronRight,
   ChevronDown,

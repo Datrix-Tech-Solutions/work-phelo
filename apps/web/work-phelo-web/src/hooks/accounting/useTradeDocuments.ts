@@ -94,7 +94,6 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     status: raw.status,
     paymentState: raw.paymentState,
     outstandingAmount: raw.outstandingAmount ?? null,
-    creditedAmount: raw.creditedAmount ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,

@@ -146,20 +146,6 @@ interface UnifiedTransactionRow {
   cashbook?: CashbookTransaction;
 }
 
-/** Payment state for an invoice/bill, or "applied" state for a credit/debit note. An invoice
- *  reduced only by credit notes reads "Credited" rather than "Partially Paid", since nothing
- *  was actually paid on it. */
-function documentStateLabel(doc: AccountingTradeDocument): string | null {
-  if (doc.status === 'DRAFT') return null;
-  if (doc.documentType === 'CREDIT_NOTE') return CREDIT_NOTE_STATE_LABEL[doc.paymentState];
-  const credited = Number(doc.creditedAmount ?? 0);
-  const applied = Number(doc.totalAmount) - Number(doc.outstandingAmount ?? doc.totalAmount);
-  const isCreditedOnly = credited > 0 && applied - credited <= 0;
-  if (isCreditedOnly && doc.paymentState === 'PAID') return 'Credited';
-  if (isCreditedOnly && doc.paymentState === 'PARTIALLY_PAID') return 'Partially Credited';
-  return PAYMENT_STATE_LABEL[doc.paymentState];
-}
-
 function toDocumentRow(doc: AccountingTradeDocument): UnifiedTransactionRow {
   return {
     id: doc.id,
@@ -176,7 +162,12 @@ function toDocumentRow(doc: AccountingTradeDocument): UnifiedTransactionRow {
     typeColor: TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[doc.side],
     filterSide: doc.side,
     status: doc.status,
-    paymentStateLabel: documentStateLabel(doc),
+    paymentStateLabel:
+      doc.status !== 'DRAFT'
+        ? (doc.documentType === 'CREDIT_NOTE' ? CREDIT_NOTE_STATE_LABEL : PAYMENT_STATE_LABEL)[
+            doc.paymentState
+          ]
+        : null,
     createdAt: doc.createdAt,
     document: doc,
   };
@@ -304,8 +295,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
               {row.transactionNumber}
             </span>
             {row.linkedTo && (
-              <span className="max-w-full truncate text-xs text-gray-500">
-                Linked to {row.linkedTo}
+              <span
+                className="inline-flex max-w-full items-center gap-1 text-[10px] text-gray-500"
+                title={`Linked to ${row.linkedTo}`}
+              >
+                <Icons.Link2 className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{row.linkedTo}</span>
               </span>
             )}
           </div>

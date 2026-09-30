@@ -1602,7 +1602,8 @@ export class ReceivablesService {
       }
     }
     const appliedByInvoiceId = new Map<string, Prisma.Decimal>();
-    const creditedByInvoiceId = new Map<string, Prisma.Decimal>();
+    // Only real receipts, not credit notes — a credited invoice hasn't been paid.
+    const receiptsByInvoiceId = new Map<string, Prisma.Decimal>();
     if (postedIds.length > 0) {
       const grouped = await this.prisma.accountingReceivableAllocation.groupBy({
         by: ['invoiceId', 'sourceType'],
@@ -1615,12 +1616,10 @@ export class ReceivablesService {
           row.invoiceId,
           (appliedByInvoiceId.get(row.invoiceId) ?? zero).plus(amount),
         );
-        if (
-          row.sourceType === AccountingReceivableAllocationSource.CREDIT_NOTE
-        ) {
-          creditedByInvoiceId.set(
+        if (row.sourceType === AccountingReceivableAllocationSource.RECEIPT) {
+          receiptsByInvoiceId.set(
             row.invoiceId,
-            (creditedByInvoiceId.get(row.invoiceId) ?? zero).plus(amount),
+            (receiptsByInvoiceId.get(row.invoiceId) ?? zero).plus(amount),
           );
         }
       }
@@ -1636,13 +1635,14 @@ export class ReceivablesService {
           : zero;
       return {
         ...document,
-        paymentState: this.paymentState(document, outstanding),
-        outstandingAmount: this.money(outstanding),
-        // The part of what's been applied that came from credit notes (not payments), so the
-        // UI can tell "Credited" from "Partially Paid".
-        creditedAmount: this.money(
-          creditedByInvoiceId.get(document.id) ?? zero,
+        paymentState: this.paymentState(
+          document,
+          outstanding,
+          isCreditNote(document)
+            ? undefined
+            : (receiptsByInvoiceId.get(document.id) ?? zero),
         ),
+        outstandingAmount: this.money(outstanding),
       };
     });
   }
@@ -1693,7 +1693,7 @@ export class ReceivablesService {
       appliedReceipts: this.money(receiptApplied),
       appliedCreditNotes: this.money(creditApplied),
       outstandingAmount: this.money(outstanding),
-      paymentState: this.paymentState(document, outstanding),
+      paymentState: this.paymentState(document, outstanding, receiptApplied),
     };
   }
 
@@ -2051,15 +2051,22 @@ export class ReceivablesService {
     };
   }
 
+  /** `paidApplied` is the part of the reduction that came from real receipts. A document
+   *  reduced only by credit notes is still Unpaid; without it (credit notes themselves) any
+   *  reduction counts as partly applied. */
   private paymentState(
     document: ReceivableDocument,
     outstanding: Prisma.Decimal,
+    paidApplied?: Prisma.Decimal,
   ) {
     if (document.status === AccountingReceivableStatus.REVERSED)
       return 'REVERSED';
     if (document.status === AccountingReceivableStatus.DRAFT) return 'DRAFT';
     if (outstanding.lte(0)) return 'PAID';
-    if (outstanding.lessThan(document.totalAmount)) return 'PARTIALLY_PAID';
+    const partlySettled = paidApplied
+      ? paidApplied.greaterThan(0)
+      : outstanding.lessThan(document.totalAmount);
+    if (partlySettled) return 'PARTIALLY_PAID';
     return 'OPEN';
   }
 

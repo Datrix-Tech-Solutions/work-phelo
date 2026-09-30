@@ -505,6 +505,39 @@ describe('PayablesService', () => {
     });
   });
 
+  describe('payment state with credit notes', () => {
+    const balanceWith = async (payments: number, credits: number) => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableAllocation.aggregate
+        .mockResolvedValueOnce({
+          _sum: { amount: new Prisma.Decimal(payments) },
+        })
+        .mockResolvedValueOnce({
+          _sum: { amount: new Prisma.Decimal(credits) },
+        });
+      return service.billBalance(actor.tenantId, 'bill-1');
+    };
+
+    it('leaves a bill Unpaid when only a debit note has been applied', async () => {
+      const balance = await balanceWith(0, 400);
+
+      expect(balance.outstandingAmount).toBe('600.0000');
+      expect(balance.paymentState).toBe('OPEN');
+    });
+
+    it('is Partially Paid once a real payment has been applied', async () => {
+      const balance = await balanceWith(300, 400);
+
+      expect(balance.paymentState).toBe('PARTIALLY_PAID');
+    });
+
+    it('is Paid when debit notes and payments clear the whole bill', async () => {
+      const balance = await balanceWith(600, 400);
+
+      expect(balance.paymentState).toBe('PAID');
+    });
+  });
+
   it('posts a bill as Dr offset account and Cr AP control', async () => {
     const { journals, prisma, service } = setup();
     prisma.accountingPayableDocument.findFirst.mockResolvedValueOnce(bill());
