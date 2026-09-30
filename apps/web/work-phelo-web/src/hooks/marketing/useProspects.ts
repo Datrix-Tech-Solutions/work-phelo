@@ -74,6 +74,10 @@ export function useAddProspectInteraction(id: string) {
       const res = await api.post(`${ENDPOINT}/${id}/interactions`, payload);
       return res.data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PROSPECTS_KEY }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROSPECTS_KEY });
+      // A new interaction moves the automatic follow-up date.
+      queryClient.invalidateQueries({ queryKey: ['marketing', 'follow-ups'] });
+    },
   });
 }

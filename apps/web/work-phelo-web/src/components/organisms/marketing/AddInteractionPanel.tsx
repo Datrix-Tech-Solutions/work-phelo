@@ -20,10 +20,18 @@ import { apiErrorMessage } from '@/lib/apiError';
 
 interface AddInteractionPanelProps {
   prospectId: string;
+  /** Pending follow-up this interaction completes, when recorded from the follow-ups page. */
+  followUpId?: string | null;
   isOpen: boolean;
   onClose: () => void;
   /** The prospect's decision maker — marking them as met prefills the contact person with their details. */
   primaryContact?: { name: string; phone?: string | null; role?: string | null };
+}
+
+/** Today's date (YYYY-MM-DD) in the user's local time. */
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function fieldError(message?: string) {
@@ -34,6 +42,7 @@ type FormValues = { contactPersonName: string; contactRole: string; notes: strin
 
 export function AddInteractionPanel({
   prospectId,
+  followUpId,
   isOpen,
   onClose,
   primaryContact,
@@ -47,7 +56,9 @@ export function AddInteractionPanel({
   const [mediumId, setMediumId] = useState('');
   const [decisionMakerMet, setDecisionMakerMet] = useState(false);
   const [contactPhone, setContactPhone] = useState('');
-  const [occurredAt, setOccurredAt] = useState('');
+  // Until the user picks a date it follows today, so a panel left open overnight isn't stale.
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const occurredAt = pickedDate ?? today();
   const [dateError, setDateError] = useState<string>();
   const [mediumError, setMediumError] = useState<string>();
   const [participantErrors, setParticipantErrors] = useState<
@@ -84,7 +95,7 @@ export function AddInteractionPanel({
     setMediumId('');
     setDecisionMakerMet(false);
     setContactPhone('');
-    setOccurredAt('');
+    setPickedDate(null);
     setDateError(undefined);
     setMediumError(undefined);
     setParticipantErrors({});
@@ -116,6 +127,7 @@ export function AddInteractionPanel({
         occurredAt,
         interactionMediumId: mediumId,
         decisionMakerInvolved: decisionMakerMet,
+        ...(followUpId ? { followUpId } : {}),
         ...(hasParticipant ? { participants: [{ fullName, phone, role }] } : {}),
         ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
       },
@@ -190,7 +202,7 @@ export function AddInteractionPanel({
           label="Date Contacted"
           value={occurredAt}
           onChange={(v) => {
-            setOccurredAt(v);
+            setPickedDate(v);
             setDateError(undefined);
           }}
           error={dateError}

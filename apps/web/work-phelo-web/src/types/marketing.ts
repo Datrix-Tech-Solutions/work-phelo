@@ -156,6 +156,8 @@ export interface CreateProspectInteractionPayload {
   notes?: string;
   decisionMakerInvolved: boolean;
   participants?: ProspectInteractionParticipantPayload[];
+  /** A pending follow-up of this prospect that the interaction completes. */
+  followUpId?: string;
 }
 
 export interface CreateProspectPayload {
@@ -288,4 +290,49 @@ export interface UpdateProspectPayload {
   /** The complete desired set — existing rows left out are removed. */
   products?: UpdateProspectProductPayload[];
   location?: Partial<CreateProspectLocationPayload>;
+}
+
+export type FollowUpStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED';
+export type FollowUpSource = 'EXPLICIT' | 'DEFAULT';
+export type FollowUpUrgency = 'OVERDUE' | 'UPCOMING' | 'FUTURE';
+
+export interface FollowUpWorklistItem {
+  prospectId: string;
+  companyName: string;
+  assignedUserId: string;
+  /** Null for a default (latest interaction + 7 days) follow-up, which can't be edited or cancelled. */
+  followUpId: string | null;
+  dueAt: string;
+  note: string | null;
+  followUpSource: FollowUpSource;
+  urgency: FollowUpUrgency;
+  lastInteractionDate: string | null;
+}
+
+export interface FollowUpWorklistResponse {
+  items: FollowUpWorklistItem[];
+}
+
+export interface ProspectFollowUp {
+  id: string;
+  prospectId: string;
+  dueAt: string;
+  note: string | null;
+  status: FollowUpStatus;
+  createdByUserId: string | null;
+  completedByUserId: string | null;
+  completedAt: string | null;
+  completedInteractionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProspectFollowUpPayload {
+  dueAt: string;
+  note?: string;
+}
+
+export interface UpdateProspectFollowUpPayload {
+  dueAt?: string;
+  note?: string;
 }

@@ -74,4 +74,13 @@ export class CreateProspectInteractionDto {
   @ValidateNested({ each: true })
   @Type(() => ProspectInteractionParticipantDto)
   participants?: ProspectInteractionParticipantDto[];
+
+  @ApiPropertyOptional({
+    example: '5f01c5e7-4f1b-4e47-9b69-8ecf18bc6585',
+    description:
+      'Pending follow-up of this prospect that this interaction completes. It is marked COMPLETED and linked to the new interaction in the same transaction.',
+  })
+  @IsOptional()
+  @IsUUID()
+  followUpId?: string;
 }
