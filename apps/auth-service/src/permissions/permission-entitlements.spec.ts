@@ -47,6 +47,8 @@ describe('permission entitlements', () => {
     'marketing.prospects.all',
     'marketing.prospects.interactions',
     'marketing.prospects.interactions.all',
+    'marketing.follow-ups',
+    'marketing.follow-ups.all',
   ])('scopes %s to the Marketing leads feature entitlement', (name) => {
     const resource = { name, module: 'MARKETING' };
 

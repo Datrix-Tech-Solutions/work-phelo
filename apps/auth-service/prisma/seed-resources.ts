@@ -239,6 +239,16 @@ export const RESOURCES = [
     module: 'MARKETING',
     description: 'Tenant-wide Marketing prospect interaction history access',
   },
+  {
+    name: 'marketing.follow-ups',
+    module: 'MARKETING',
+    description: 'Marketing prospect follow-up scheduling and worklists',
+  },
+  {
+    name: 'marketing.follow-ups.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect follow-up scheduling access',
+  },
 
   // ── OPERATIONS / REINSURANCE module ───────────────────────────
   {

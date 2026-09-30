@@ -1,16 +1,25 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { RequestUser } from '@work-phelo/types';
 import {
   MarketingCrmSettingCategory,
+  MarketingProspectFollowUpStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { CreateProspectDto } from './dto/create-prospect.dto';
 import { CreateProspectInteractionDto } from './dto/create-prospect-interaction.dto';
+import {
+  CreateProspectFollowUpDto,
+  UpdateProspectFollowUpDto,
+} from './dto/prospect-follow-up.dto';
 import { UpdateProspectDto } from './dto/update-prospect.dto';
 import { ProspectsService } from './prospects.service';
 
@@ -149,6 +158,12 @@ describe('ProspectsService', () => {
         findMany: jest.fn(),
         groupBy: jest.fn(),
       },
+      marketingProspectFollowUp: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
     };
 
     return {
@@ -164,6 +179,7 @@ describe('ProspectsService', () => {
       marketingProspectProduct: tx.marketingProspectProduct,
       marketingProspectContact: tx.marketingProspectContact,
       marketingProspectInteraction: tx.marketingProspectInteraction,
+      marketingProspectFollowUp: tx.marketingProspectFollowUp,
       $transaction: jest.fn(
         (
           input:
@@ -211,9 +227,17 @@ describe('ProspectsService', () => {
     prisma.marketingProspectInteraction.groupBy.mockResolvedValue([]);
     prisma.marketingProspectInteraction.create.mockResolvedValue({});
     prisma.marketingProspectInteraction.findMany.mockResolvedValue([]);
+    prisma.marketingProspectFollowUp.create.mockResolvedValue({});
+    prisma.marketingProspectFollowUp.findFirst.mockResolvedValue(null);
+    prisma.marketingProspectFollowUp.findMany.mockResolvedValue([]);
+    prisma.marketingProspectFollowUp.update.mockResolvedValue({});
     prisma.marketingPipelineStage.findMany.mockResolvedValue([]);
     prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
     service = new ProspectsService(prisma as unknown as PrismaService);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('creates a tenant-scoped prospect aggregate in one transaction', async () => {
@@ -1436,6 +1460,290 @@ describe('ProspectsService', () => {
     });
   });
 
+  describe('follow-ups', () => {
+    const followUpDto = (): CreateProspectFollowUpDto => ({
+      dueAt: '2026-10-07T09:00:00.000Z',
+      note: ' Call  Ama  about documents ',
+    });
+
+    const pendingFollowUp = {
+      id: 'follow-up-1',
+      tenantId: 'tenant-1',
+      prospectId: 'prospect-a',
+      dueAt: new Date('2026-10-07T09:00:00.000Z'),
+      note: 'Call Ama about documents',
+      status: MarketingProspectFollowUpStatus.PENDING,
+      createdByUserId: 'user-1',
+      completedByUserId: null,
+      completedAt: null,
+      completedInteractionId: null,
+      createdAt: new Date('2026-09-30T09:00:00.000Z'),
+      updatedAt: new Date('2026-09-30T09:00:00.000Z'),
+    };
+
+    it('creates one tenant-scoped pending explicit follow-up for an assigned prospect', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectFollowUp.create.mockResolvedValueOnce(
+        pendingFollowUp,
+      );
+
+      const result = await service.createFollowUp(
+        {
+          ...user,
+          permissions: [MarketingCrmSettingsPermission.FOLLOW_UPS_CREATE],
+        },
+        'prospect-a',
+        followUpDto(),
+      );
+
+      expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'prospect-a',
+          tenantId: 'tenant-1',
+          assignedUserId: 'user-1',
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingProspectFollowUp.findFirst).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          status: MarketingProspectFollowUpStatus.PENDING,
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingProspectFollowUp.create).toHaveBeenCalledWith({
+        data: {
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          dueAt: new Date('2026-10-07T09:00:00.000Z'),
+          note: 'Call Ama about documents',
+          status: MarketingProspectFollowUpStatus.PENDING,
+          createdByUserId: 'user-1',
+        },
+      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: 'follow-up-1',
+          status: MarketingProspectFollowUpStatus.PENDING,
+        }),
+      );
+    });
+
+    it('rejects a second pending explicit follow-up for the same prospect', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce({
+        id: 'follow-up-existing',
+      });
+
+      await expect(
+        service.createFollowUp(user, 'prospect-a', followUpDto()),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.marketingProspectFollowUp.create).not.toHaveBeenCalled();
+    });
+
+    it('returns non-disclosing not found for cross-tenant or unassigned prospect follow-up creation', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.createFollowUp(user, 'prospect-other', followUpDto()),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.marketingProspectFollowUp.findFirst).not.toHaveBeenCalled();
+      expect(prisma.marketingProspectFollowUp.create).not.toHaveBeenCalled();
+    });
+
+    it('lists follow-up history including cancelled and completed rows', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectFollowUp.findMany.mockResolvedValueOnce([
+        {
+          ...pendingFollowUp,
+          status: MarketingProspectFollowUpStatus.CANCELLED,
+        },
+        {
+          ...pendingFollowUp,
+          id: 'follow-up-2',
+          status: MarketingProspectFollowUpStatus.COMPLETED,
+          completedByUserId: 'user-1',
+          completedAt: new Date('2026-10-07T12:00:00.000Z'),
+          completedInteractionId: 'interaction-1',
+        },
+      ]);
+
+      const result = await service.listFollowUps(user, 'prospect-a');
+
+      expect(prisma.marketingProspectFollowUp.findMany).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+        },
+        orderBy: [{ createdAt: 'desc' }, { dueAt: 'desc' }, { id: 'asc' }],
+      });
+      expect(result.items.map((item) => item.status)).toEqual([
+        MarketingProspectFollowUpStatus.CANCELLED,
+        MarketingProspectFollowUpStatus.COMPLETED,
+      ]);
+    });
+
+    it('updates due date and note only for an accessible pending follow-up', async () => {
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce({
+        id: 'follow-up-1',
+      });
+      prisma.marketingProspectFollowUp.update.mockResolvedValueOnce({
+        ...pendingFollowUp,
+        dueAt: new Date('2026-10-08T09:00:00.000Z'),
+        note: null,
+      });
+
+      await service.updateFollowUp(user, 'follow-up-1', {
+        dueAt: '2026-10-08T09:00:00.000Z',
+        note: '',
+      });
+
+      expect(prisma.marketingProspectFollowUp.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'follow-up-1',
+          tenantId: 'tenant-1',
+          status: MarketingProspectFollowUpStatus.PENDING,
+          prospect: {
+            tenantId: 'tenant-1',
+            assignedUserId: 'user-1',
+          },
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingProspectFollowUp.update).toHaveBeenCalledWith({
+        where: { id: 'follow-up-1' },
+        data: {
+          dueAt: new Date('2026-10-08T09:00:00.000Z'),
+          note: null,
+        },
+      });
+    });
+
+    it('rejects empty follow-up updates and inaccessible follow-ups', async () => {
+      await expect(
+        service.updateFollowUp(user, 'follow-up-1', {}),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        service.updateFollowUp(user, 'follow-up-1', {
+          dueAt: '2026-10-08T09:00:00.000Z',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('cancels pending explicit follow-ups so they remain historical but leave the worklist', async () => {
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce({
+        id: 'follow-up-1',
+      });
+      prisma.marketingProspectFollowUp.update.mockResolvedValueOnce({
+        ...pendingFollowUp,
+        status: MarketingProspectFollowUpStatus.CANCELLED,
+      });
+
+      const result = await service.cancelFollowUp(user, 'follow-up-1');
+
+      expect(prisma.marketingProspectFollowUp.update).toHaveBeenCalledWith({
+        where: { id: 'follow-up-1' },
+        data: { status: MarketingProspectFollowUpStatus.CANCELLED },
+      });
+      expect(result.status).toBe(MarketingProspectFollowUpStatus.CANCELLED);
+    });
+
+    it('uses explicit pending follow-ups before default latest-interaction plus seven days in the worklist', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-10-01T00:00:00.000Z'));
+      prisma.marketingProspect.findMany.mockResolvedValueOnce([
+        {
+          id: 'prospect-explicit',
+          companyName: 'Beta Limited',
+          assignedUserId: 'user-1',
+        },
+        {
+          id: 'prospect-default',
+          companyName: 'Acme Manufacturing',
+          assignedUserId: 'user-1',
+        },
+      ]);
+      prisma.marketingProspectFollowUp.findMany.mockResolvedValueOnce([
+        {
+          ...pendingFollowUp,
+          id: 'follow-up-explicit',
+          prospectId: 'prospect-explicit',
+          dueAt: new Date('2026-10-03T09:00:00.000Z'),
+        },
+      ]);
+      prisma.marketingProspectInteraction.groupBy.mockResolvedValueOnce([
+        {
+          prospectId: 'prospect-explicit',
+          _max: { occurredAt: new Date('2026-09-29T10:00:00.000Z') },
+        },
+        {
+          prospectId: 'prospect-default',
+          _max: { occurredAt: new Date('2026-09-30T10:00:00.000Z') },
+        },
+      ]);
+
+      const result = await service.listFollowUpWorklist(user);
+
+      expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          assignedUserId: 'user-1',
+        },
+        select: {
+          id: true,
+          companyName: true,
+          assignedUserId: true,
+        },
+        orderBy: [{ companyName: 'asc' }, { id: 'asc' }],
+      });
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          prospectId: 'prospect-explicit',
+          followUpId: 'follow-up-explicit',
+          dueAt: new Date('2026-10-03T09:00:00.000Z'),
+          followUpSource: 'EXPLICIT',
+          urgency: 'UPCOMING',
+          lastInteractionDate: new Date('2026-09-29T10:00:00.000Z'),
+        }),
+        expect.objectContaining({
+          prospectId: 'prospect-default',
+          followUpId: null,
+          dueAt: new Date('2026-10-07T10:00:00.000Z'),
+          followUpSource: 'DEFAULT',
+          urgency: 'UPCOMING',
+          lastInteractionDate: new Date('2026-09-30T10:00:00.000Z'),
+        }),
+      ]);
+      jest.useRealTimers();
+    });
+
+    it('returns tenant-wide follow-up worklist rows for users with FOLLOW_UPS_VIEW_ALL', async () => {
+      prisma.marketingProspect.findMany.mockResolvedValueOnce([]);
+
+      await service.listFollowUpWorklist({
+        ...user,
+        permissions: [
+          MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW,
+          MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW_ALL,
+        ],
+      });
+
+      expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: 'tenant-1' },
+        }),
+      );
+    });
+  });
+
   describe('list', () => {
     const prospectA = {
       id: 'prospect-a',
@@ -1846,6 +2154,30 @@ describe('ProspectsService', () => {
       expect(errors.some((error) => error.property === 'participants')).toBe(
         true,
       );
+    });
+  });
+
+  describe('ProspectFollowUpDto validation', () => {
+    it('requires a valid ISO due date when creating follow-ups', async () => {
+      const errors = await validate(
+        plainToInstance(CreateProspectFollowUpDto, {
+          dueAt: 'not-a-date',
+          note: 'Call client',
+        }),
+      );
+
+      expect(errors.map((error) => error.property)).toContain('dueAt');
+    });
+
+    it('allows sparse valid follow-up updates', async () => {
+      const errors = await validate(
+        plainToInstance(UpdateProspectFollowUpDto, {
+          dueAt: '2026-10-08T09:00:00.000Z',
+          note: 'Updated follow-up note',
+        }),
+      );
+
+      expect(errors).toEqual([]);
     });
   });
 });

@@ -20,6 +20,14 @@ enum MarketingCrmSettingCategory {
   @@schema("marketing")
 }
 
+enum MarketingProspectFollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+
+  @@schema("marketing")
+}
+
 model MarketingCrmSettingOption {
   id              String                      @id @default(uuid())
   tenantId        String
@@ -84,6 +92,7 @@ model MarketingProspect {
   contacts     MarketingProspectContact[]
   products     MarketingProspectProduct[]
   interactions MarketingProspectInteraction[]
+  followUps    MarketingProspectFollowUp[]
 
   @@index([tenantId, normalizedCompanyName])
   @@index([tenantId, assignedUserId])
@@ -163,5 +172,27 @@ model MarketingProspectInteractionParticipant {
   interaction MarketingProspectInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, interactionId])
+  @@schema("marketing")
+}
+
+model MarketingProspectFollowUp {
+  id                     String                          @id @default(uuid())
+  tenantId               String
+  prospectId             String
+  dueAt                  DateTime
+  note                   String?
+  status                 MarketingProspectFollowUpStatus @default(PENDING)
+  createdByUserId        String?
+  completedByUserId      String?
+  completedAt            DateTime?
+  completedInteractionId String?
+  createdAt              DateTime                        @default(now())
+  updatedAt              DateTime                        @updatedAt
+
+  prospect MarketingProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, prospectId])
+  @@index([tenantId, prospectId, status])
   @@schema("marketing")
 }

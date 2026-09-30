@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   MarketingCrmSettingCategory,
+  MarketingProspectFollowUpStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,6 +19,12 @@ import {
   CreateProspectInteractionDto,
   ProspectInteractionParticipantDto,
 } from './dto/create-prospect-interaction.dto';
+import {
+  CreateProspectFollowUpDto,
+  ProspectFollowUpSourceDto,
+  ProspectFollowUpUrgencyDto,
+  UpdateProspectFollowUpDto,
+} from './dto/prospect-follow-up.dto';
 import { QueryProspectsDto } from './dto/query-prospects.dto';
 import {
   UpdateProspectDto,
@@ -32,7 +40,11 @@ const INVALID_PRODUCT_REFERENCE_MESSAGE = 'Invalid prospect product reference';
 const REQUIRED_PRODUCT_FIELDS_MESSAGE =
   'New prospect products require productId and expectedValue';
 const EMPTY_PRODUCTS_MESSAGE = 'A prospect must have at least one product';
+const DUPLICATE_PENDING_FOLLOW_UP_MESSAGE =
+  'A pending follow-up already exists for this prospect';
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_FOLLOW_UP_DELAY_DAYS = 7;
+const UPCOMING_FOLLOW_UP_WINDOW_DAYS = 7;
 
 type SettingReference = {
   id: string | undefined;
@@ -346,6 +358,211 @@ export class ProspectsService {
         this.toInteractionResponse(interaction, settingsById),
       ),
     };
+  }
+
+  async createFollowUp(
+    user: RequestUser,
+    prospectId: string,
+    dto: CreateProspectFollowUpDto,
+  ) {
+    const canCreateAll = this.canCreateAllFollowUps(user);
+    await this.assertProspectAccessible(user, prospectId, canCreateAll);
+
+    const existing = await this.prisma.marketingProspectFollowUp.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        prospectId,
+        status: MarketingProspectFollowUpStatus.PENDING,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException(DUPLICATE_PENDING_FOLLOW_UP_MESSAGE);
+    }
+
+    try {
+      const followUp = await this.prisma.marketingProspectFollowUp.create({
+        data: {
+          tenantId: user.tenantId,
+          prospectId,
+          dueAt: new Date(dto.dueAt),
+          note: this.formatOptionalText(dto.note),
+          status: MarketingProspectFollowUpStatus.PENDING,
+          createdByUserId: user.id,
+        },
+      });
+
+      return this.toFollowUpResponse(followUp);
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException(DUPLICATE_PENDING_FOLLOW_UP_MESSAGE);
+      }
+      throw error;
+    }
+  }
+
+  async listFollowUps(user: RequestUser, prospectId: string) {
+    const canViewAll = this.canViewAllFollowUps(user);
+    await this.assertProspectAccessible(user, prospectId, canViewAll);
+
+    const followUps = await this.prisma.marketingProspectFollowUp.findMany({
+      where: {
+        tenantId: user.tenantId,
+        prospectId,
+      },
+      orderBy: [{ createdAt: 'desc' }, { dueAt: 'desc' }, { id: 'asc' }],
+    });
+
+    return {
+      items: followUps.map((followUp) => this.toFollowUpResponse(followUp)),
+    };
+  }
+
+  async listFollowUpWorklist(user: RequestUser) {
+    const canViewAll = this.canViewAllFollowUps(user);
+    const prospects = await this.prisma.marketingProspect.findMany({
+      where: {
+        tenantId: user.tenantId,
+        ...this.visibilityWhere(user, canViewAll),
+      },
+      select: {
+        id: true,
+        companyName: true,
+        assignedUserId: true,
+      },
+      orderBy: [{ companyName: 'asc' }, { id: 'asc' }],
+    });
+
+    if (prospects.length === 0) {
+      return { items: [] };
+    }
+
+    const prospectIds = prospects.map((prospect) => prospect.id);
+    const [pendingFollowUps, latestInteractions] = await Promise.all([
+      this.prisma.marketingProspectFollowUp.findMany({
+        where: {
+          tenantId: user.tenantId,
+          prospectId: { in: prospectIds },
+          status: MarketingProspectFollowUpStatus.PENDING,
+        },
+        orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.marketingProspectInteraction.groupBy({
+        by: ['prospectId'],
+        where: {
+          tenantId: user.tenantId,
+          prospectId: { in: prospectIds },
+        },
+        _max: { occurredAt: true },
+      }),
+    ]);
+
+    const followUpByProspect = new Map(
+      pendingFollowUps.map((followUp) => [followUp.prospectId, followUp]),
+    );
+    const interactionByProspect = new Map(
+      latestInteractions.map((interaction) => [
+        interaction.prospectId,
+        interaction._max.occurredAt,
+      ]),
+    );
+
+    const items = prospects
+      .map((prospect) => {
+        const explicitFollowUp = followUpByProspect.get(prospect.id);
+        const lastInteractionDate = interactionByProspect.get(prospect.id);
+
+        if (explicitFollowUp) {
+          return {
+            prospectId: prospect.id,
+            companyName: prospect.companyName,
+            assignedUserId: prospect.assignedUserId,
+            followUpId: explicitFollowUp.id,
+            dueAt: explicitFollowUp.dueAt,
+            note: explicitFollowUp.note,
+            followUpSource: ProspectFollowUpSourceDto.EXPLICIT,
+            urgency: this.followUpUrgency(explicitFollowUp.dueAt),
+            lastInteractionDate: lastInteractionDate ?? null,
+          };
+        }
+
+        if (!lastInteractionDate) return null;
+
+        const dueAt = this.addDays(
+          lastInteractionDate,
+          DEFAULT_FOLLOW_UP_DELAY_DAYS,
+        );
+
+        return {
+          prospectId: prospect.id,
+          companyName: prospect.companyName,
+          assignedUserId: prospect.assignedUserId,
+          followUpId: null,
+          dueAt,
+          note: null,
+          followUpSource: ProspectFollowUpSourceDto.DEFAULT,
+          urgency: this.followUpUrgency(dueAt),
+          lastInteractionDate,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .sort((left, right) => {
+        const dueComparison = left.dueAt.getTime() - right.dueAt.getTime();
+        if (dueComparison !== 0) return dueComparison;
+        const nameComparison = left.companyName.localeCompare(
+          right.companyName,
+        );
+        if (nameComparison !== 0) return nameComparison;
+        return left.prospectId.localeCompare(right.prospectId);
+      });
+
+    return { items };
+  }
+
+  async updateFollowUp(
+    user: RequestUser,
+    id: string,
+    dto: UpdateProspectFollowUpDto,
+  ) {
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException(EMPTY_PATCH_MESSAGE);
+    }
+
+    const existing = await this.findAccessiblePendingFollowUp(
+      user,
+      id,
+      this.canEditAllFollowUps(user),
+    );
+
+    const followUp = await this.prisma.marketingProspectFollowUp.update({
+      where: { id: existing.id },
+      data: {
+        ...(dto.dueAt !== undefined ? { dueAt: new Date(dto.dueAt) } : {}),
+        ...(dto.note !== undefined
+          ? { note: this.formatOptionalText(dto.note) }
+          : {}),
+      },
+    });
+
+    return this.toFollowUpResponse(followUp);
+  }
+
+  async cancelFollowUp(user: RequestUser, id: string) {
+    const existing = await this.findAccessiblePendingFollowUp(
+      user,
+      id,
+      this.canCancelAllFollowUps(user),
+    );
+
+    const followUp = await this.prisma.marketingProspectFollowUp.update({
+      where: { id: existing.id },
+      data: {
+        status: MarketingProspectFollowUpStatus.CANCELLED,
+      },
+    });
+
+    return this.toFollowUpResponse(followUp);
   }
 
   async list(user: RequestUser, query: QueryProspectsDto = {}) {
@@ -736,6 +953,68 @@ export class ProspectsService {
     );
   }
 
+  private canViewAllFollowUps(user: RequestUser): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
+
+    return user.permissions.includes(
+      MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW_ALL,
+    );
+  }
+
+  private canCreateAllFollowUps(user: RequestUser): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
+
+    return user.permissions.includes(
+      MarketingCrmSettingsPermission.FOLLOW_UPS_CREATE_ALL,
+    );
+  }
+
+  private canEditAllFollowUps(user: RequestUser): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
+
+    return user.permissions.includes(
+      MarketingCrmSettingsPermission.FOLLOW_UPS_EDIT_ALL,
+    );
+  }
+
+  private canCancelAllFollowUps(user: RequestUser): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
+
+    return user.permissions.includes(
+      MarketingCrmSettingsPermission.FOLLOW_UPS_CANCEL_ALL,
+    );
+  }
+
+  private async findAccessiblePendingFollowUp(
+    user: RequestUser,
+    id: string,
+    canAccessAll: boolean,
+  ) {
+    const followUp = await this.prisma.marketingProspectFollowUp.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        status: MarketingProspectFollowUpStatus.PENDING,
+        prospect: {
+          tenantId: user.tenantId,
+          ...this.visibilityWhere(user, canAccessAll),
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!followUp) throw new NotFoundException('Follow-up not found');
+    return followUp;
+  }
+
   private async assertProspectAccessible(
     user: RequestUser,
     prospectId: string,
@@ -752,6 +1031,61 @@ export class ProspectsService {
 
     if (!prospect) throw new NotFoundException('Prospect not found');
     return prospect;
+  }
+
+  private toFollowUpResponse(followUp: {
+    id: string;
+    prospectId: string;
+    dueAt: Date;
+    note: string | null;
+    status: MarketingProspectFollowUpStatus;
+    createdByUserId: string | null;
+    completedByUserId: string | null;
+    completedAt: Date | null;
+    completedInteractionId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: followUp.id,
+      prospectId: followUp.prospectId,
+      dueAt: followUp.dueAt,
+      note: followUp.note,
+      status: followUp.status,
+      createdByUserId: followUp.createdByUserId,
+      completedByUserId: followUp.completedByUserId,
+      completedAt: followUp.completedAt,
+      completedInteractionId: followUp.completedInteractionId,
+      createdAt: followUp.createdAt,
+      updatedAt: followUp.updatedAt,
+    };
+  }
+
+  private followUpUrgency(dueAt: Date): ProspectFollowUpUrgencyDto {
+    const now = new Date();
+    if (dueAt.getTime() < now.getTime()) {
+      return ProspectFollowUpUrgencyDto.OVERDUE;
+    }
+
+    const upcomingBoundary = this.addDays(now, UPCOMING_FOLLOW_UP_WINDOW_DAYS);
+    if (dueAt.getTime() <= upcomingBoundary.getTime()) {
+      return ProspectFollowUpUrgencyDto.UPCOMING;
+    }
+
+    return ProspectFollowUpUrgencyDto.FUTURE;
+  }
+
+  private addDays(date: Date, days: number): Date {
+    const result = new Date(date);
+    result.setUTCDate(result.getUTCDate() + days);
+    return result;
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
   }
 
   private async assertUpdateReferences(
