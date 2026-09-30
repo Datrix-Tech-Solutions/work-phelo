@@ -81,6 +81,8 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     currency: raw.currency,
     exchangeRate: raw.exchangeRate ?? null,
     subtotalAmount: raw.subtotalAmount,
+    quantity: raw.quantity ?? null,
+    unitPrice: raw.unitPrice ?? null,
     taxAmount: raw.taxAmount,
     totalAmount: raw.totalAmount,
     description: raw.description ?? null,

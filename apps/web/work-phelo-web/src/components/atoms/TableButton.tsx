@@ -62,12 +62,17 @@ export function TableButton({
   };
 
   return (
-    <span ref={wrapperRef} className="relative inline-flex">
+    // Hover is tracked on the wrapper, not the button — a disabled button swallows mouse
+    // events, and the tooltip is what explains why it's disabled.
+    <span
+      ref={wrapperRef}
+      className="relative inline-flex"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setTooltipPos(null)}
+    >
       <button
         type="button"
         disabled={disabled || isLoading}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={() => setTooltipPos(null)}
         className={cn(
           'text-xs font-medium border hover:text-white hover:scale-[1.2] active:scale-[0.97] rounded px-2 py-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100',
           VARIANT_CLASSES[variant],

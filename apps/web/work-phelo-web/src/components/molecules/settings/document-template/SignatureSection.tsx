@@ -6,8 +6,8 @@ import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { CollapsibleCard } from '@/components/atoms/CollapsibleCard';
 import { ImageUploadField } from '@/components/atoms/ImageUploadField';
 import { useToast } from '@/hooks/useToast';
+import { DOCUMENT_DEFINITIONS } from './documentRegistry';
 import {
-  PREVIEW_DOC_OPTIONS,
   SIGNATURE_POSITION_OPTIONS,
   type DocumentTemplate,
   type PreviewDoc,
@@ -78,15 +78,15 @@ export function SignatureSection({ template, onChange }: SignatureSectionProps) 
             <div>
               <span className="text-sm font-bold text-gray-900">Show on</span>
               <div className="mt-2 flex flex-col gap-2">
-                {PREVIEW_DOC_OPTIONS.map((option) => (
+                {DOCUMENT_DEFINITIONS.map((option) => (
                   <div
-                    key={option.value}
+                    key={option.key}
                     className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
                   >
                     <span className="text-sm text-gray-700">{option.label}</span>
                     <Toggle
-                      enabled={template.signatureRules[option.value]}
-                      onChange={(value) => toggleRule(option.value, value)}
+                      enabled={template.signatureRules[option.key]}
+                      onChange={(value) => toggleRule(option.key, value)}
                     />
                   </div>
                 ))}

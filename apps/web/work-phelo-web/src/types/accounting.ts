@@ -915,6 +915,11 @@ export interface AccountingTradePartyRef {
   code: string;
   name: string;
   currency: string;
+  /** Entity type key (e.g. "VENDOR"). Present on documents, not on every party ref. */
+  type?: string;
+  contactName?: string | null;
+  phone?: string | null;
+  address?: string | null;
 }
 
 interface AccountingTradeGLAccountRef {
@@ -947,6 +952,9 @@ export interface AccountingTradeDocument {
   currency: string;
   exchangeRate: string | null;
   subtotalAmount: string;
+  /** Present when the transaction was entered as quantity × unit price. */
+  quantity: string | null;
+  unitPrice: string | null;
   taxAmount: string;
   totalAmount: string;
   description: string | null;
