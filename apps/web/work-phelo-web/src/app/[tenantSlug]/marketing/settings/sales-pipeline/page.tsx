@@ -1,5 +1,6 @@
 'use client';
 
+import { isAxiosError } from 'axios';
 import { useMemo, useState } from 'react';
 import { SortableList, SortableListItem } from '@/components/organisms/shared/SortableList';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -47,6 +48,7 @@ export default function SalesPipelinePage() {
   const [errors, setErrors] = useState<Partial<SalesPipelineStageFields>>({});
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [inUseMessage, setInUseMessage] = useState<string | null>(null);
 
   const filtered = stages.filter((s) => s.label.toLowerCase().includes(search.toLowerCase()));
 
@@ -71,6 +73,12 @@ export default function SalesPipelinePage() {
   function validate(): boolean {
     const next: Partial<SalesPipelineStageFields> = {};
     if (!form.name.trim()) next.name = 'Stage name is required.';
+    else if (
+      stageData.some(
+        (i) => i.id !== editingId && i.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
+      )
+    )
+      next.name = 'This stage already exists. Please enter a different name.';
     if (form.probability === '' || Number(form.probability) < 0 || Number(form.probability) > 100)
       next.probability = 'Enter a value between 0 and 100.';
     setErrors(next);
@@ -108,6 +116,11 @@ export default function SalesPipelinePage() {
     }
   }
 
+  function closeDelete() {
+    setDeleteId(null);
+    setInUseMessage(null);
+  }
+
   function handleDelete() {
     if (!deleteId) return;
     deleteStage.mutate(deleteId, {
@@ -115,7 +128,13 @@ export default function SalesPipelinePage() {
         toast.success('Stage deleted');
         setDeleteId(null);
       },
-      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete stage')),
+      onError: (error) => {
+        if (isAxiosError(error) && error.response?.status === 409) {
+          setInUseMessage(apiErrorMessage(error, 'This item is in use and cannot be deleted.'));
+          return;
+        }
+        toast.error(apiErrorMessage(error, 'Failed to delete stage'));
+      },
     });
   }
 
@@ -166,19 +185,24 @@ export default function SalesPipelinePage() {
       {/* Delete confirmation modal */}
       <Modal
         isOpen={!!deleteId}
-        onClose={() => setDeleteId(null)}
+        onClose={closeDelete}
         title="Delete Stage"
-        description="Are you sure you want to delete this stage? This action cannot be undone."
+        description={
+          inUseMessage ??
+          'Are you sure you want to delete this stage? This action cannot be undone.'
+        }
         width="max-w-sm"
         height="max-h-fit"
         footer={
           <>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>
+            <Button variant="outline" onClick={closeDelete}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDelete} isLoading={deleteStage.isPending}>
-              Delete
-            </Button>
+            {!inUseMessage && (
+              <Button variant="danger" onClick={handleDelete} isLoading={deleteStage.isPending}>
+                Delete
+              </Button>
+            )}
           </>
         }
       />

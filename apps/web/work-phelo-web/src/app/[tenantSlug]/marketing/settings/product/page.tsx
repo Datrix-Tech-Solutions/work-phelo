@@ -1,5 +1,6 @@
 'use client';
 
+import { isAxiosError } from 'axios';
 import { useMemo, useState } from 'react';
 import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -40,6 +41,7 @@ export default function ProductPage() {
   const [errors, setErrors] = useState<Partial<ProductFields>>({});
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [inUseMessage, setInUseMessage] = useState<string | null>(null);
 
   const filtered = products.filter((p) => p.label.toLowerCase().includes(search.toLowerCase()));
 
@@ -64,6 +66,12 @@ export default function ProductPage() {
   function validate(): boolean {
     const next: Partial<ProductFields> = {};
     if (!form.name.trim()) next.name = 'Product name is required.';
+    else if (
+      productData.some(
+        (i) => i.id !== editingId && i.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
+      )
+    )
+      next.name = 'This product already exists. Please enter a different name.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -100,6 +108,11 @@ export default function ProductPage() {
     }
   }
 
+  function closeDelete() {
+    setDeleteId(null);
+    setInUseMessage(null);
+  }
+
   function handleDelete() {
     if (!deleteId) return;
     deleteProduct.mutate(deleteId, {
@@ -107,7 +120,13 @@ export default function ProductPage() {
         toast.success('Product deleted');
         setDeleteId(null);
       },
-      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete product')),
+      onError: (error) => {
+        if (isAxiosError(error) && error.response?.status === 409) {
+          setInUseMessage(apiErrorMessage(error, 'This item is in use and cannot be deleted.'));
+          return;
+        }
+        toast.error(apiErrorMessage(error, 'Failed to delete product'));
+      },
     });
   }
 
@@ -157,19 +176,24 @@ export default function ProductPage() {
       {/* Delete confirmation */}
       <Modal
         isOpen={!!deleteId}
-        onClose={() => setDeleteId(null)}
+        onClose={closeDelete}
         title="Delete Product"
-        description="Are you sure you want to delete this product? This action cannot be undone."
+        description={
+          inUseMessage ??
+          'Are you sure you want to delete this product? This action cannot be undone.'
+        }
         width="max-w-sm"
         height="max-h-fit"
         footer={
           <>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>
+            <Button variant="outline" onClick={closeDelete}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDelete} isLoading={deleteProduct.isPending}>
-              Delete
-            </Button>
+            {!inUseMessage && (
+              <Button variant="danger" onClick={handleDelete} isLoading={deleteProduct.isPending}>
+                Delete
+              </Button>
+            )}
           </>
         }
       />

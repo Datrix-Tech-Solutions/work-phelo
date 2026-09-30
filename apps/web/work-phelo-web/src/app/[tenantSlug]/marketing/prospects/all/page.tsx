@@ -10,6 +10,7 @@ import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/Con
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import { pageContent } from '@/lib/layout';
+import { formatMoney } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { ProspectListItem } from '@/types/marketing';
 
@@ -19,7 +20,7 @@ function toRow(item: ProspectListItem): Prospect {
   return {
     id: item.id,
     prospectName: item.companyName,
-    expectedRevenue: item.expectedValue,
+    expectedRevenue: formatMoney(item.expectedValue),
     product: item.products.map((p) => p.name).join(', ') || '—',
     contactNo: item.primaryContact?.phone ?? '',
     salesStage: item.salesStage.name,

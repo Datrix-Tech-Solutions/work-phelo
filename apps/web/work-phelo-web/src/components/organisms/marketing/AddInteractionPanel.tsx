@@ -6,6 +6,8 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { Toggle } from '@/components/atoms/Toggle';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
 import { useAddProspectInteraction } from '@/hooks/marketing/useProspects';
@@ -20,11 +22,15 @@ interface AddInteractionPanelProps {
   prospectId: string;
   isOpen: boolean;
   onClose: () => void;
-  /** The prospect's contact person — picking their role fills in their name. */
-  primaryContact?: { name: string; decisionMakerId?: string | null };
+  /** The prospect's decision maker — marking them as met prefills the contact person with their details. */
+  primaryContact?: { name: string; phone?: string | null; role?: string | null };
 }
 
-type FormValues = { decisionMakerName: string; notes: string };
+function fieldError(message?: string) {
+  return message ? { type: 'required', message } : undefined;
+}
+
+type FormValues = { contactPersonName: string; contactRole: string; notes: string };
 
 export function AddInteractionPanel({
   prospectId,
@@ -35,56 +41,83 @@ export function AddInteractionPanel({
   const toast = useToast();
   const addInteraction = useAddProspectInteraction(prospectId);
   const { data: media = [] } = useProspectingSettings('interaction-media');
-  const { data: decisionMakers = [] } = useProspectingSettings('decision-makers');
-  const decisionMakerOptions = useMemo(
-    () => decisionMakers.map((d) => ({ value: d.id, label: d.name })),
-    [decisionMakers],
-  );
   const createMedium = useCreateProspectingSetting('interaction-media');
-  const createDecisionMaker = useCreateProspectingSetting('decision-makers');
   const mediumOptions = useMemo(() => media.map((m) => ({ value: m.id, label: m.name })), [media]);
 
   const [mediumId, setMediumId] = useState('');
-  const [decisionMakerId, setDecisionMakerId] = useState('');
+  const [decisionMakerMet, setDecisionMakerMet] = useState(false);
+  const [contactPhone, setContactPhone] = useState('');
   const [occurredAt, setOccurredAt] = useState('');
   const [dateError, setDateError] = useState<string>();
+  const [mediumError, setMediumError] = useState<string>();
+  const [participantErrors, setParticipantErrors] = useState<
+    Partial<Record<'name' | 'phone' | 'role', string>>
+  >({});
 
   const { register, handleSubmit, reset, setValue, getValues } = useForm<FormValues>({
-    defaultValues: { decisionMakerName: '', notes: '' },
+    defaultValues: { contactPersonName: '', contactRole: '', notes: '' },
   });
 
-  function handleDecisionMakerChange(id: string) {
-    setDecisionMakerId(id);
+  function handleDecisionMakerMetChange(met: boolean) {
+    setDecisionMakerMet(met);
     if (!primaryContact) return;
-    if (id && id === primaryContact.decisionMakerId) {
-      setValue('decisionMakerName', primaryContact.name);
-    } else if (getValues('decisionMakerName') === primaryContact.name) {
-      // Only clear a name we filled in ourselves, never one the user typed.
-      setValue('decisionMakerName', '');
+    const dmPhone = primaryContact.phone ?? '';
+    const dmRole = primaryContact.role ?? '';
+    if (met) {
+      setValue('contactPersonName', primaryContact.name);
+      setValue('contactRole', dmRole);
+      setContactPhone(dmPhone);
+    } else if (
+      getValues('contactPersonName') === primaryContact.name &&
+      getValues('contactRole') === dmRole &&
+      contactPhone === dmPhone
+    ) {
+      // Only clear details we filled in ourselves, never ones the user typed.
+      setValue('contactPersonName', '');
+      setValue('contactRole', '');
+      setContactPhone('');
     }
   }
 
   function handleClose() {
-    reset({ decisionMakerName: '', notes: '' });
+    reset({ contactPersonName: '', contactRole: '', notes: '' });
     setMediumId('');
-    setDecisionMakerId('');
+    setDecisionMakerMet(false);
+    setContactPhone('');
     setOccurredAt('');
     setDateError(undefined);
+    setMediumError(undefined);
+    setParticipantErrors({});
     onClose();
   }
 
   function onSubmit(values: FormValues) {
-    if (!occurredAt) {
-      setDateError('Date is required');
-      return;
-    }
+    const fullName = values.contactPersonName.trim();
+    const phone = contactPhone.trim();
+    const role = values.contactRole.trim();
+    // A participant is optional, but the API needs all three of its fields when one is given.
+    const hasParticipant = !!(fullName || phone || role);
+
+    const nextParticipantErrors: typeof participantErrors = hasParticipant
+      ? {
+          ...(fullName ? {} : { name: 'Name is required' }),
+          ...(phone ? {} : { phone: 'Number is required' }),
+          ...(role ? {} : { role: 'Role is required' }),
+        }
+      : {};
+
+    setDateError(occurredAt ? undefined : 'Date is required');
+    setMediumError(mediumId ? undefined : 'Interaction type is required');
+    setParticipantErrors(nextParticipantErrors);
+    if (!occurredAt || !mediumId || Object.keys(nextParticipantErrors).length > 0) return;
+
     addInteraction.mutate(
       {
         occurredAt,
-        interactionMediumId: mediumId || undefined,
-        decisionMakerTypeId: decisionMakerId || undefined,
-        decisionMakerName: values.decisionMakerName.trim() || undefined,
-        notes: values.notes.trim() || undefined,
+        interactionMediumId: mediumId,
+        decisionMakerInvolved: decisionMakerMet,
+        ...(hasParticipant ? { participants: [{ fullName, phone, role }] } : {}),
+        ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
       },
       {
         onSuccess: () => {
@@ -119,7 +152,11 @@ export function AddInteractionPanel({
           placeholder="Select or type to add new"
           options={mediumOptions}
           value={mediumId}
-          onChange={setMediumId}
+          onChange={(v) => {
+            setMediumId(v);
+            setMediumError(undefined);
+          }}
+          error={mediumError}
           emptyState={buildCreateOptionEmptyState(
             'interaction type',
             createMedium,
@@ -127,23 +164,27 @@ export function AddInteractionPanel({
             toast,
           )}
         />
-        <SearchSelect
-          label="Decision Maker Met"
-          placeholder="Select or type to add new"
-          options={decisionMakerOptions}
-          value={decisionMakerId}
-          onChange={handleDecisionMakerChange}
-          emptyState={buildCreateOptionEmptyState(
-            'decision maker',
-            createDecisionMaker,
-            handleDecisionMakerChange,
-            toast,
-          )}
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-sm font-bold text-gray-900">Decision maker was met</span>
+          <Toggle enabled={decisionMakerMet} onChange={handleDecisionMakerMetChange} />
+        </div>
+        <FormField
+          label="Contact Person Name"
+          registration={register('contactPersonName')}
+          placeholder="Name of the person met"
+          error={fieldError(participantErrors.name)}
+        />
+        <PhoneInput
+          label="Contact Person Number"
+          value={contactPhone}
+          onChange={setContactPhone}
+          error={participantErrors.phone}
         />
         <FormField
-          label="Decision Maker Name"
-          registration={register('decisionMakerName')}
-          placeholder="Name of the person met"
+          label="Contact Person Role"
+          registration={register('contactRole')}
+          placeholder="e.g. Finance Director"
+          error={fieldError(participantErrors.role)}
         />
         <DatePicker
           label="Date Contacted"

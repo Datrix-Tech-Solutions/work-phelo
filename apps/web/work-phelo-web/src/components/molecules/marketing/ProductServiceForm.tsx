@@ -2,11 +2,11 @@
 
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
 import { useCreateProspectingSetting } from '@/hooks/marketing/useProspectingSettings';
 import { useToast } from '@/hooks/useToast';
-import { inputClass } from '@/lib/utils';
 
 export interface ProductServiceRow {
   id: string;
@@ -75,14 +75,11 @@ export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: 
       label: 'Expected Revenue',
       width: '1.5fr',
       renderField: (i) => (
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
+        <CurrencyInput
+          currency="GHS"
+          lockCurrency
           value={rows[i].expectedRevenue}
-          onChange={(e) => update(i, 'expectedRevenue', e.target.value)}
-          className={inputClass(undefined, 'text-right')}
+          onValueChange={(v) => update(i, 'expectedRevenue', v)}
         />
       ),
       renderFooter: () => (
@@ -94,14 +91,11 @@ export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: 
       label: 'Achieved Revenue',
       width: '1.5fr',
       renderField: (i) => (
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
+        <CurrencyInput
+          currency="GHS"
+          lockCurrency
           value={rows[i].achievedRevenue}
-          onChange={(e) => update(i, 'achievedRevenue', e.target.value)}
-          className={inputClass(undefined, 'text-right')}
+          onValueChange={(v) => update(i, 'achievedRevenue', v)}
         />
       ),
       renderFooter: () => (

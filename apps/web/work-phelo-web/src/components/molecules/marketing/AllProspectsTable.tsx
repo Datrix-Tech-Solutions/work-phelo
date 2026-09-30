@@ -27,7 +27,7 @@ function stageColor(progress: number): TypeChipColor {
 
 const COLUMNS: Column<Prospect>[] = [
   { key: 'prospectName', label: 'Prospect Name', width: 'minmax(100px, 1fr)' },
-  { key: 'expectedRevenue', label: 'Expected Revenue', width: '130px' },
+  { key: 'expectedRevenue', label: 'Expected Revenue', width: '130px', className: 'text-right' },
   { key: 'product', label: 'Product', width: 'minmax(100px, 1fr)' },
   { key: 'contactNo', label: 'Contact No', width: '100px' },
 

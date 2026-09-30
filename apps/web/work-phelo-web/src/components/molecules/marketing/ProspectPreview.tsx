@@ -1,5 +1,6 @@
 'use client';
 
+import { formatMoney } from '@/lib/formatMoney';
 import { ProspectFormSection } from '@/components/molecules/marketing/ProspectFormSection';
 import { CompanyInformationFields } from '@/components/molecules/marketing/CompanyInformationForm';
 import { ProductServiceRow } from '@/components/molecules/marketing/ProductServiceForm';
@@ -58,15 +59,16 @@ export function ProspectPreview({
             label="Type of Business"
             value={labelFor(businessTypeOptions, company.businessType)}
           />
+          <Field label="Decision Maker" value={company.contactName} />
+          <Field label="Decision Maker Role" value={labelFor(roleOptions, company.roleJobTitle)} />
         </div>
       </ProspectFormSection>
 
       <ProspectFormSection title="Contact Person">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Name" value={company.contactName} />
+          <Field label="Name" value={company.contactPerson} />
           <Field label="Phone" value={company.phone} />
           <Field label="Email" value={company.email} />
-          <Field label="Role / Job Title" value={labelFor(roleOptions, company.roleJobTitle)} />
           {!hideInteraction && (
             <Field
               label="Interaction Type"
@@ -86,8 +88,8 @@ export function ProspectPreview({
               className="grid grid-cols-4 gap-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5"
             >
               <Field label="Product" value={labelFor(productTypeOptions, row.productType)} />
-              <Field label="Expected Revenue" value={row.expectedRevenue} />
-              <Field label="Achieved Revenue" value={row.achievedRevenue} />
+              <Field label="Expected Revenue" value={formatMoney(row.expectedRevenue)} />
+              <Field label="Achieved Revenue" value={formatMoney(row.achievedRevenue)} />
               <Field label="Expected Close Date" value={row.expectedCloseDate} />
             </div>
           ))}

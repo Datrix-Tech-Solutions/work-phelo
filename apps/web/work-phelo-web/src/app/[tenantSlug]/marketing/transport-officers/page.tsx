@@ -8,7 +8,7 @@ export default function TransportOfficersPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(`/${tenantSlug}/marketing/transport-officers/location`);
+    router.replace(`/${tenantSlug}/marketing/transport-officers/details`);
   }, [tenantSlug, router]);
 
   return null;

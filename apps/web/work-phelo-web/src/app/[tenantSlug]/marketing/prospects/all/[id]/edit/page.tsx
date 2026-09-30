@@ -28,6 +28,7 @@ function toInitialValues(prospect: ProspectDetail): ProspectWizardValues {
       companyName: prospect.companyName,
       businessType: prospect.businessType?.id ?? '',
       contactName: contact?.name ?? '',
+      contactPerson: '',
       phone: contact?.phone ?? '',
       email: contact?.email ?? '',
       interactionType: '',
