@@ -36,6 +36,18 @@ describe('ProspectingSettingsService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
+    marketingProspect: {
+      findFirst: jest.fn(),
+    },
+    marketingProspectContact: {
+      findFirst: jest.fn(),
+    },
+    marketingProspectProduct: {
+      findFirst: jest.fn(),
+    },
+    marketingProspectInteraction: {
+      findFirst: jest.fn(),
+    },
   });
 
   let prisma: ReturnType<typeof makePrisma>;
@@ -215,6 +227,7 @@ describe('ProspectingSettingsService', () => {
     prisma.marketingCrmSettingOption.findFirst.mockResolvedValue({
       id: 'setting-1',
     });
+    prisma.marketingProspectInteraction.findFirst.mockResolvedValue(null);
     prisma.marketingCrmSettingOption.update.mockResolvedValue({
       id: 'setting-1',
       archivedAt: new Date('2026-09-24T00:00:00.000Z'),
@@ -234,6 +247,154 @@ describe('ProspectingSettingsService', () => {
         updatedByUserId: 'user-1',
       },
     });
+  });
+
+  it.each([
+    {
+      category: MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
+      model: 'marketingProspect',
+      field: 'businessTypeId',
+      message: 'This business type is currently in use',
+    },
+    {
+      category: MarketingCrmSettingCategory.SOURCE_TYPE,
+      model: 'marketingProspect',
+      field: 'sourceTypeId',
+      message: 'This source type is currently in use',
+    },
+    {
+      category: MarketingCrmSettingCategory.PRODUCT,
+      model: 'marketingProspectProduct',
+      field: 'productId',
+      message: 'This product/service is currently in use',
+    },
+    {
+      category: MarketingCrmSettingCategory.DECISION_MAKER,
+      model: 'marketingProspectContact',
+      field: 'decisionMakerTypeId',
+      message: 'This decision-maker type is currently in use',
+    },
+    {
+      category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      model: 'marketingProspectInteraction',
+      field: 'interactionMediumId',
+      message: 'This interaction medium is currently in use',
+    },
+  ] as const)(
+    'blocks archiving referenced $category settings',
+    async ({ category, model, field, message }) => {
+      prisma.marketingCrmSettingOption.findFirst.mockResolvedValue({
+        id: 'setting-1',
+      });
+      prisma[model].findFirst.mockResolvedValue({ id: 'reference-1' });
+
+      await expect(
+        service.archive(user, category, 'setting-1'),
+      ).rejects.toThrow(message);
+
+      expect(prisma[model].findFirst).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          [field]: 'setting-1',
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingCrmSettingOption.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    {
+      category: MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
+      model: 'marketingProspect',
+    },
+    {
+      category: MarketingCrmSettingCategory.SOURCE_TYPE,
+      model: 'marketingProspect',
+    },
+    {
+      category: MarketingCrmSettingCategory.PRODUCT,
+      model: 'marketingProspectProduct',
+    },
+    {
+      category: MarketingCrmSettingCategory.DECISION_MAKER,
+      model: 'marketingProspectContact',
+    },
+    {
+      category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      model: 'marketingProspectInteraction',
+    },
+  ] as const)(
+    'allows archiving unreferenced $category settings',
+    async ({ category, model }) => {
+      prisma.marketingCrmSettingOption.findFirst.mockResolvedValue({
+        id: 'setting-1',
+      });
+      prisma[model].findFirst.mockResolvedValue(null);
+      prisma.marketingCrmSettingOption.update.mockResolvedValue({
+        id: 'setting-1',
+        archivedAt: new Date('2026-09-24T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.archive(user, category, 'setting-1'),
+      ).resolves.toEqual({
+        id: 'setting-1',
+        archivedAt: new Date('2026-09-24T00:00:00.000Z'),
+      });
+    },
+  );
+
+  it('does not let cross-tenant prospect references block archive checks', async () => {
+    prisma.marketingCrmSettingOption.findFirst.mockResolvedValue({
+      id: 'setting-1',
+    });
+    prisma.marketingProspectProduct.findFirst.mockResolvedValue(null);
+    prisma.marketingCrmSettingOption.update.mockResolvedValue({
+      id: 'setting-1',
+      archivedAt: new Date('2026-09-24T00:00:00.000Z'),
+    });
+
+    await service.archive(
+      user,
+      MarketingCrmSettingCategory.PRODUCT,
+      'setting-1',
+    );
+
+    expect(prisma.marketingProspectProduct.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        productId: 'setting-1',
+      },
+      select: { id: true },
+    });
+    expect(prisma.marketingCrmSettingOption.update).toHaveBeenCalled();
+  });
+
+  it('allows archive once a referencing prospect has been permanently deleted', async () => {
+    prisma.marketingCrmSettingOption.findFirst.mockResolvedValue({
+      id: 'setting-1',
+    });
+    prisma.marketingProspect.findFirst.mockResolvedValue(null);
+    prisma.marketingCrmSettingOption.update.mockResolvedValue({
+      id: 'setting-1',
+      archivedAt: new Date('2026-09-24T00:00:00.000Z'),
+    });
+
+    await service.archive(
+      user,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      'setting-1',
+    );
+
+    expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        sourceTypeId: 'setting-1',
+      },
+      select: { id: true },
+    });
+    expect(prisma.marketingCrmSettingOption.update).toHaveBeenCalled();
   });
 
   it('allows name reuse when only archived matching records exist', async () => {

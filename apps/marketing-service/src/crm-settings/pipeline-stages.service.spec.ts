@@ -33,6 +33,9 @@ describe('PipelineStagesService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
+    marketingProspect: {
+      findFirst: jest.fn(),
+    },
   });
 
   let prisma: ReturnType<typeof makePrisma>;
@@ -204,6 +207,71 @@ describe('PipelineStagesService', () => {
     prisma.marketingPipelineStage.findFirst.mockResolvedValue({
       id: 'stage-1',
     });
+    prisma.marketingProspect.findFirst.mockResolvedValue(null);
+    prisma.marketingPipelineStage.update.mockResolvedValue({
+      id: 'stage-1',
+      archivedAt: new Date('2026-09-25T00:00:00.000Z'),
+    });
+
+    await service.archive(user, 'stage-1');
+
+    expect(prisma.marketingPipelineStage.update).toHaveBeenCalledWith({
+      where: { id: 'stage-1' },
+      data: {
+        archivedAt: expect.any(Date),
+        isActive: false,
+        updatedByUserId: 'user-1',
+      },
+    });
+  });
+
+  it('blocks archiving a pipeline stage referenced by prospects in the same tenant', async () => {
+    prisma.marketingPipelineStage.findFirst.mockResolvedValue({
+      id: 'stage-1',
+    });
+    prisma.marketingProspect.findFirst.mockResolvedValue({ id: 'prospect-1' });
+
+    await expect(service.archive(user, 'stage-1')).rejects.toThrow(
+      'This sales stage is currently in use',
+    );
+
+    expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        pipelineStageId: 'stage-1',
+      },
+      select: { id: true },
+    });
+    expect(prisma.marketingPipelineStage.update).not.toHaveBeenCalled();
+  });
+
+  it('does not let another tenant prospect reference block pipeline stage archive', async () => {
+    prisma.marketingPipelineStage.findFirst.mockResolvedValue({
+      id: 'stage-1',
+    });
+    prisma.marketingProspect.findFirst.mockResolvedValue(null);
+    prisma.marketingPipelineStage.update.mockResolvedValue({
+      id: 'stage-1',
+      archivedAt: new Date('2026-09-25T00:00:00.000Z'),
+    });
+
+    await service.archive(user, 'stage-1');
+
+    expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        pipelineStageId: 'stage-1',
+      },
+      select: { id: true },
+    });
+    expect(prisma.marketingPipelineStage.update).toHaveBeenCalled();
+  });
+
+  it('allows archiving a pipeline stage after referencing prospects are permanently deleted', async () => {
+    prisma.marketingPipelineStage.findFirst.mockResolvedValue({
+      id: 'stage-1',
+    });
+    prisma.marketingProspect.findFirst.mockResolvedValue(null);
     prisma.marketingPipelineStage.update.mockResolvedValue({
       id: 'stage-1',
       archivedAt: new Date('2026-09-25T00:00:00.000Z'),

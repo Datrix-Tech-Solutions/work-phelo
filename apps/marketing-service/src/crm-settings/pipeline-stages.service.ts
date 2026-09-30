@@ -15,6 +15,8 @@ import {
 
 const DUPLICATE_MESSAGE =
   'A pipeline stage with this name already exists for this company';
+const REFERENCED_STAGE_MESSAGE =
+  'This sales stage is currently in use by one or more prospects and cannot be archived.';
 
 @Injectable()
 export class PipelineStagesService {
@@ -127,6 +129,7 @@ export class PipelineStagesService {
     id: string,
   ): Promise<MarketingPipelineStage> {
     await this.findOne(user.tenantId, id);
+    await this.assertNotReferenced(user.tenantId, id);
 
     return this.prisma.marketingPipelineStage.update({
       where: { id },
@@ -136,6 +139,17 @@ export class PipelineStagesService {
         updatedByUserId: user.id,
       },
     });
+  }
+
+  private async assertNotReferenced(tenantId: string, id: string) {
+    const referenced = await this.prisma.marketingProspect.findFirst({
+      where: { tenantId, pipelineStageId: id },
+      select: { id: true },
+    });
+
+    if (referenced) {
+      throw new ConflictException(REFERENCED_STAGE_MESSAGE);
+    }
   }
 
   private async assertNameAvailable(
