@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, ButtonHTMLAttributes } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 
 export type TableButtonVariant = 'green' | 'blue' | 'orange' | 'red' | 'gray';
@@ -31,6 +32,8 @@ const SPINNER_INNER: Record<TableButtonVariant, string> = {
 
 const TOOLTIP_MAX_WIDTH = 240;
 const EDGE_GAP = 8;
+const ARROW_SIZE = 8;
+const ARROW_EDGE_GAP = 12;
 
 interface TableButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
@@ -47,7 +50,11 @@ export function TableButton({
   className,
   ...props
 }: TableButtonProps) {
-  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{
+    left: number;
+    top: number;
+    arrowLeft: number;
+  } | null>(null);
   const wrapperRef = useRef<HTMLSpanElement>(null);
 
   const handleMouseEnter = () => {
@@ -58,16 +65,28 @@ export function TableButton({
       EDGE_GAP,
       Math.min(idealLeft, window.innerWidth - TOOLTIP_MAX_WIDTH - EDGE_GAP),
     );
-    setTooltipPos({ left: clampedLeft, top: rect.top });
+    // The box is clamped to the screen, so near an edge it no longer sits centred over the
+    // button — the arrow has to move within the box to keep pointing at the button.
+    const buttonCentre = rect.left + rect.width / 2;
+    const arrowLeft = Math.max(
+      ARROW_EDGE_GAP,
+      Math.min(buttonCentre - clampedLeft, TOOLTIP_MAX_WIDTH - ARROW_EDGE_GAP),
+    );
+    setTooltipPos({ left: clampedLeft, top: rect.top, arrowLeft });
   };
 
   return (
-    <span ref={wrapperRef} className="relative inline-flex">
+    // Hover is tracked on the wrapper, not the button — a disabled button swallows mouse
+    // events, and the tooltip is what explains why it's disabled.
+    <span
+      ref={wrapperRef}
+      className="relative inline-flex"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setTooltipPos(null)}
+    >
       <button
         type="button"
         disabled={disabled || isLoading}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={() => setTooltipPos(null)}
         className={cn(
           'text-xs font-medium border hover:text-white hover:scale-[1.2] active:scale-[0.97] rounded px-2 py-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100',
           VARIANT_CLASSES[variant],
@@ -97,24 +116,33 @@ export function TableButton({
         )}
       </button>
 
-      {tooltipPos && tooltip && (
-        <span
-          style={{
-            position: 'fixed',
-            left: tooltipPos.left,
-            top: tooltipPos.top - 8,
-            width: TOOLTIP_MAX_WIDTH,
-            transform: 'translateY(-100%)',
-            zIndex: 9999,
-          }}
-          className="pointer-events-none"
-        >
-          <span className="block bg-(--chip-dark,#111827) text-white text-xs rounded-lg px-1 py-1.5 whitespace-nowrap shadow-lg text-center">
-            {tooltip}
-          </span>
-          <span className="block w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm mx-auto -mt-1" />
-        </span>
-      )}
+      {/* Portalled to the page body: a table sitting inside a blurred/transformed card makes
+          `position: fixed` relative to that card instead of the screen, which left the tooltip
+          floating away from its button. */}
+      {tooltipPos &&
+        tooltip &&
+        createPortal(
+          <span
+            style={{
+              position: 'fixed',
+              left: tooltipPos.left,
+              top: tooltipPos.top - 8,
+              width: TOOLTIP_MAX_WIDTH,
+              transform: 'translateY(-100%)',
+              zIndex: 9999,
+            }}
+            className="pointer-events-none"
+          >
+            <span className="block bg-(--chip-dark,#111827) text-white text-xs rounded-lg px-1 py-1.5 whitespace-nowrap shadow-lg text-center">
+              {tooltip}
+            </span>
+            <span
+              className="block w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm -mt-1"
+              style={{ marginLeft: tooltipPos.arrowLeft - ARROW_SIZE / 2 }}
+            />
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }

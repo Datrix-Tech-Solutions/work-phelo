@@ -10,6 +10,7 @@ import { WatermarkSection } from '@/components/molecules/settings/document-templ
 import { SignatureSection } from '@/components/molecules/settings/document-template/SignatureSection';
 import { FooterSection } from '@/components/molecules/settings/document-template/FooterSection';
 import { DocumentPaper } from '@/components/molecules/settings/document-template/DocumentPaper';
+import { DOCUMENT_DEFINITIONS } from '@/components/molecules/settings/document-template/documentRegistry';
 
 /**
  * Document template studio — collapsible form sections on the left, a live A4
@@ -37,6 +38,29 @@ export function DocumentTemplateStudio() {
             Not saved
           </span>
         </div>
+
+        {/* Pick which document the preview shows — sample data, just for previewing. */}
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {DOCUMENT_DEFINITIONS.map((doc) => {
+            const selected = template.previewDoc === doc.key;
+            return (
+              <button
+                key={doc.key}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => update('previewDoc', doc.key)}
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  selected
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {doc.label}
+              </button>
+            );
+          })}
+        </div>
+
         <DocumentPaper template={template} />
       </div>
     </div>

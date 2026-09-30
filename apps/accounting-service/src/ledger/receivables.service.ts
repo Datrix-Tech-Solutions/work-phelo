@@ -45,7 +45,16 @@ const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
 const receivableDocumentInclude = {
   customer: {
-    select: { id: true, code: true, name: true, currency: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      currency: true,
+      type: true,
+      contactName: true,
+      phone: true,
+      address: true,
+    },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
   costCentre: { select: { id: true, code: true, name: true } },

@@ -20,7 +20,7 @@ export function LetterheadSection({ template, onChange }: LetterheadSectionProps
   const toast = useToast();
 
   return (
-    <CollapsibleCard title="Letterhead">
+    <CollapsibleCard title="Document header">
       <div className="flex flex-col gap-3">
         <LetterheadElementRow
           label="Logo"

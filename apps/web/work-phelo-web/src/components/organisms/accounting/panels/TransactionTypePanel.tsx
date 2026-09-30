@@ -16,6 +16,7 @@ import {
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { ACCOUNTING_DOCUMENT_OPTIONS } from '@/lib/accounting/documents';
 import type { TransactionTypeCategory, TransactionTypeDefinition } from '@/types/accounting';
 
 // Neutral/None types (Transfer, Bank Charge, Adjustment) have no working form yet —
@@ -25,7 +26,10 @@ const CATEGORY_OPTIONS: SearchSelectOption[] = [
   { value: 'PAYABLE', label: 'Payable' },
 ];
 
-const ALLOWED_DOCUMENT_OPTIONS: SearchSelectOption[] = [];
+const ALLOWED_DOCUMENT_OPTIONS: SearchSelectOption[] = [
+  { value: '', label: 'None' },
+  ...ACCOUNTING_DOCUMENT_OPTIONS,
+];
 
 type FormValues = {
   name: string;
@@ -251,7 +255,7 @@ export function TransactionTypePanel({
           render={({ field }) => (
             <SearchSelect
               label="Allowed Document"
-              placeholder="No document types configured yet"
+              placeholder="Select a document…"
               options={ALLOWED_DOCUMENT_OPTIONS}
               value={field.value}
               onChange={field.onChange}

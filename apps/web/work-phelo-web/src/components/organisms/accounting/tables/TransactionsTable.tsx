@@ -7,6 +7,11 @@ import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
 import { TableButton } from '@/components/atoms/TableButton';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Icons } from '@/components/atoms/icons';
+import {
+  DocumentPreviewPanel,
+  type DocumentPreviewTarget,
+} from '@/components/organisms/accounting/panels/DocumentPreviewPanel';
+import { isAccountingDocumentKey, type AccountingDocumentKey } from '@/lib/accounting/documents';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
   AccountingTradeDocument,
@@ -141,12 +146,17 @@ interface UnifiedTransactionRow {
   filterSide: 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK';
   status: AccountingTradeDocumentStatus;
   paymentStateLabel: string | null;
+  /** The printable document this row's Transaction Type allows, if any. */
+  documentKey: AccountingDocumentKey | null;
   createdAt: string;
   document?: AccountingTradeDocument;
   cashbook?: CashbookTransaction;
 }
 
-function toDocumentRow(doc: AccountingTradeDocument): UnifiedTransactionRow {
+function toDocumentRow(
+  doc: AccountingTradeDocument,
+  documentKeyByTypeId: Map<string, AccountingDocumentKey>,
+): UnifiedTransactionRow {
   return {
     id: doc.id,
     kind: 'document',
@@ -168,6 +178,9 @@ function toDocumentRow(doc: AccountingTradeDocument): UnifiedTransactionRow {
             doc.paymentState
           ]
         : null,
+    documentKey: doc.transactionTypeId
+      ? (documentKeyByTypeId.get(doc.transactionTypeId) ?? null)
+      : null,
     createdAt: doc.createdAt,
     document: doc,
   };
@@ -192,6 +205,7 @@ function toCashbookRow(cb: CashbookTransaction): UnifiedTransactionRow {
     filterSide: 'CASHBOOK',
     status: cb.status,
     paymentStateLabel: null,
+    documentKey: null,
     createdAt: cb.createdAt,
     cashbook: cb,
   };
@@ -206,6 +220,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [cashbookDetailTarget, setCashbookDetailTarget] = useState<CashbookTransaction | null>(
     null,
   );
+  const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<AccountingTradeDocument | null>(null);
   const [newTransactionOpen, setNewTransactionOpen] = useState(false);
   const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
@@ -236,12 +251,21 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     payableCreditNotes.isLoading ||
     (!partyId && cashbookTransactions.isLoading);
 
+  const documentKeyByTypeId = useMemo(() => {
+    const map = new Map<string, AccountingDocumentKey>();
+    for (const type of transactionTypes) {
+      if (isAccountingDocumentKey(type.allowedDocument)) map.set(type.id, type.allowedDocument);
+    }
+    return map;
+  }, [transactionTypes]);
+
   const transactions = useMemo<UnifiedTransactionRow[]>(() => {
+    const toRow = (doc: AccountingTradeDocument) => toDocumentRow(doc, documentKeyByTypeId);
     const all = [
-      ...(invoices.data?.items ?? []).map(toDocumentRow),
-      ...(bills.data?.items ?? []).map(toDocumentRow),
-      ...(receivableCreditNotes.data?.items ?? []).map(toDocumentRow),
-      ...(payableCreditNotes.data?.items ?? []).map(toDocumentRow),
+      ...(invoices.data?.items ?? []).map(toRow),
+      ...(bills.data?.items ?? []).map(toRow),
+      ...(receivableCreditNotes.data?.items ?? []).map(toRow),
+      ...(payableCreditNotes.data?.items ?? []).map(toRow),
       ...(!partyId
         ? (cashbookTransactions.data?.items ?? [])
             .filter((cb) => cb.sourceModule !== 'ACCOUNTING')
@@ -256,6 +280,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     payableCreditNotes.data,
     cashbookTransactions.data,
     partyId,
+    documentKeyByTypeId,
   ]);
 
   // On an entity's page, "New Transaction" doesn't make sense — offer the payment
@@ -324,7 +349,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         key: 'subtotalAmount',
         label: 'Subtotal',
         width: '130px',
-        className: 'text-right pr-6',
+        className: 'text-right',
         render: (row) => (
           <span className="block text-right text-sm text-gray-700">
             {row.subtotalAmount === null ? '—' : fmtAmount(row.subtotalAmount, row.currency)}
@@ -334,8 +359,8 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'taxAmount',
         label: 'Tax',
-        width: '90px',
-        className: 'text-right pr-6',
+        width: '80px',
+        className: 'text-right',
         render: (row) => (
           <span className="block text-right text-sm text-gray-700">
             {row.taxAmount === null ? '—' : fmtAmount(row.taxAmount, row.currency)}
@@ -346,7 +371,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         key: 'totalAmount',
         label: 'Total',
         width: '130px',
-        className: 'text-right pr-6',
+        className: 'text-right',
         render: (row) => (
           <span className="block text-right text-sm font-medium text-gray-900">
             {fmtAmount(row.totalAmount, row.currency)}
@@ -356,13 +381,13 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'type',
         label: 'Type',
-        width: '90px',
+        width: '80px',
         render: (row) => <TypeChip label={row.typeLabel} color={row.typeColor} />,
       },
       {
         key: 'status',
         label: 'Status',
-        width: '90px',
+        width: '70px',
         render: (row) => (
           <div className="flex flex-col gap-0.5">
             <Badge label={STATUS_LABEL[row.status]} variant={STATUS_VARIANT[row.status]} />
@@ -375,7 +400,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'actions',
         label: '',
-        width: '170px',
+        width: '160px',
         render: (row) => (
           <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
             {row.kind === 'document' ? (
@@ -396,6 +421,22 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
               </TableButton>
             ) : null}
             <TableButton
+              variant="gray"
+              disabled={!row.documentKey || row.kind !== 'document'}
+              tooltip={
+                row.documentKey && row.kind === 'document'
+                  ? 'Preview document'
+                  : 'No document set for this transaction type'
+              }
+              onClick={() =>
+                row.documentKey &&
+                row.document &&
+                setPreviewTarget({ document: row.document, documentKey: row.documentKey })
+              }
+            >
+              <Icons.FileText className="w-4 h-4" />
+            </TableButton>
+            {/* <TableButton
               variant="blue"
               tooltip="View Details"
               onClick={() =>
@@ -405,7 +446,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
               }
             >
               <Icons.FileText className="w-3.5 h-3.5" />
-            </TableButton>
+            </TableButton> */}
           </div>
         ),
       },
@@ -544,6 +585,8 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           setPaymentTarget(document);
         }}
       />
+
+      <DocumentPreviewPanel target={previewTarget} onClose={() => setPreviewTarget(null)} />
 
       <MakePaymentPanel document={paymentTarget} onClose={() => setPaymentTarget(null)} />
 
