@@ -19,6 +19,18 @@ import {
 
 const DUPLICATE_MESSAGE =
   'A setting with this name already exists for this category';
+const REFERENCED_MESSAGES: Record<MarketingCrmSettingCategory, string> = {
+  [MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE]:
+    'This business type is currently in use by one or more prospects and cannot be archived.',
+  [MarketingCrmSettingCategory.SOURCE_TYPE]:
+    'This source type is currently in use by one or more prospects and cannot be archived.',
+  [MarketingCrmSettingCategory.INTERACTION_MEDIUM]:
+    'This interaction medium is currently in use by one or more prospects and cannot be archived.',
+  [MarketingCrmSettingCategory.DECISION_MAKER]:
+    'This decision-maker type is currently in use by one or more prospects and cannot be archived.',
+  [MarketingCrmSettingCategory.PRODUCT]:
+    'This product/service is currently in use by one or more prospects and cannot be archived.',
+};
 
 @Injectable()
 export class ProspectingSettingsService {
@@ -145,6 +157,7 @@ export class ProspectingSettingsService {
     id: string,
   ): Promise<MarketingCrmSettingOption> {
     await this.findOne(user.tenantId, category, id);
+    await this.assertNotReferenced(user.tenantId, category, id);
 
     return this.prisma.marketingCrmSettingOption.update({
       where: { id },
@@ -154,6 +167,51 @@ export class ProspectingSettingsService {
         updatedByUserId: user.id,
       },
     });
+  }
+
+  private async assertNotReferenced(
+    tenantId: string,
+    category: MarketingCrmSettingCategory,
+    id: string,
+  ) {
+    const referenced = await this.findReference(tenantId, category, id);
+    if (referenced) {
+      throw new ConflictException(REFERENCED_MESSAGES[category]);
+    }
+  }
+
+  private async findReference(
+    tenantId: string,
+    category: MarketingCrmSettingCategory,
+    id: string,
+  ) {
+    switch (category) {
+      case MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE:
+        return this.prisma.marketingProspect.findFirst({
+          where: { tenantId, businessTypeId: id },
+          select: { id: true },
+        });
+      case MarketingCrmSettingCategory.SOURCE_TYPE:
+        return this.prisma.marketingProspect.findFirst({
+          where: { tenantId, sourceTypeId: id },
+          select: { id: true },
+        });
+      case MarketingCrmSettingCategory.INTERACTION_MEDIUM:
+        return this.prisma.marketingProspectInteraction.findFirst({
+          where: { tenantId, interactionMediumId: id },
+          select: { id: true },
+        });
+      case MarketingCrmSettingCategory.DECISION_MAKER:
+        return this.prisma.marketingProspectContact.findFirst({
+          where: { tenantId, decisionMakerTypeId: id },
+          select: { id: true },
+        });
+      case MarketingCrmSettingCategory.PRODUCT:
+        return this.prisma.marketingProspectProduct.findFirst({
+          where: { tenantId, productId: id },
+          select: { id: true },
+        });
+    }
   }
 
   private async assertNameAvailable(
