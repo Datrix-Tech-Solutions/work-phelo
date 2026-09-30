@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { CreateProspectDto } from './dto/create-prospect.dto';
+import { CreateProspectInteractionDto } from './dto/create-prospect-interaction.dto';
 import { UpdateProspectDto } from './dto/update-prospect.dto';
 import { ProspectsService } from './prospects.service';
 
@@ -144,6 +145,8 @@ describe('ProspectsService', () => {
         update: jest.fn(),
       },
       marketingProspectInteraction: {
+        create: jest.fn(),
+        findMany: jest.fn(),
         groupBy: jest.fn(),
       },
     };
@@ -206,6 +209,8 @@ describe('ProspectsService', () => {
     prisma.marketingProspectContact.findMany.mockResolvedValue([]);
     prisma.marketingProspectContact.update.mockResolvedValue({});
     prisma.marketingProspectInteraction.groupBy.mockResolvedValue([]);
+    prisma.marketingProspectInteraction.create.mockResolvedValue({});
+    prisma.marketingProspectInteraction.findMany.mockResolvedValue([]);
     prisma.marketingPipelineStage.findMany.mockResolvedValue([]);
     prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
     service = new ProspectsService(prisma as unknown as PrismaService);
@@ -263,6 +268,7 @@ describe('ProspectsService', () => {
       interactionMediumId: '66666666-6666-4666-8666-666666666666',
       occurredAt: new Date('2026-09-28'),
       notes: 'Initial discovery call',
+      decisionMakerInvolved: false,
       createdByUserId: 'user-1',
     });
     expect(result.assignedUserId).toBe('user-1');
@@ -412,8 +418,20 @@ describe('ProspectsService', () => {
           interactionMediumId: 'interaction-medium-1',
           occurredAt: new Date('2026-09-29T11:00:00.000Z'),
           notes: 'Follow-up call',
+          decisionMakerInvolved: true,
           createdByUserId: 'user-1',
           createdAt: new Date('2026-09-29T11:05:00.000Z'),
+          participants: [
+            {
+              id: 'participant-1',
+              tenantId: 'tenant-1',
+              interactionId: 'interaction-new',
+              fullName: 'Ama Mensah',
+              phone: '+233201234567',
+              role: 'Finance Director',
+              createdAt: new Date('2026-09-29T11:06:00.000Z'),
+            },
+          ],
         },
         {
           id: 'interaction-old',
@@ -422,8 +440,10 @@ describe('ProspectsService', () => {
           interactionMediumId: null,
           occurredAt: new Date('2026-09-28T11:00:00.000Z'),
           notes: null,
+          decisionMakerInvolved: false,
           createdByUserId: null,
           createdAt: new Date('2026-09-28T11:05:00.000Z'),
+          participants: [],
         },
       ],
     };
@@ -476,6 +496,11 @@ describe('ProspectsService', () => {
               { createdAt: 'desc' },
               { id: 'asc' },
             ],
+            include: {
+              participants: {
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              },
+            },
           },
         },
       });
@@ -546,6 +571,16 @@ describe('ProspectsService', () => {
               name: 'Phone Call',
             },
             notes: 'Follow-up call',
+            decisionMakerInvolved: true,
+            participants: [
+              {
+                id: 'participant-1',
+                fullName: 'Ama Mensah',
+                phone: '+233201234567',
+                role: 'Finance Director',
+                createdAt: new Date('2026-09-29T11:06:00.000Z'),
+              },
+            ],
             createdByUserId: 'user-1',
             createdAt: new Date('2026-09-29T11:05:00.000Z'),
           },
@@ -554,6 +589,8 @@ describe('ProspectsService', () => {
             occurredAt: new Date('2026-09-28T11:00:00.000Z'),
             interactionMedium: null,
             notes: null,
+            decisionMakerInvolved: false,
+            participants: [],
             createdByUserId: null,
             createdAt: new Date('2026-09-28T11:05:00.000Z'),
           },
@@ -652,6 +689,308 @@ describe('ProspectsService', () => {
           interactions: [],
         }),
       );
+    });
+  });
+
+  describe('interactions', () => {
+    const interactionDto = (): CreateProspectInteractionDto => ({
+      occurredAt: '2026-09-30T10:30:00.000Z',
+      interactionMediumId: '66666666-6666-4666-8666-666666666666',
+      notes: ' Discussed   renewal requirements ',
+      decisionMakerInvolved: true,
+      participants: [
+        {
+          fullName: ' Ama  Mensah ',
+          phone: ' +233201234567 ',
+          role: ' Finance  Director ',
+        },
+        {
+          fullName: ' Kojo  Mensah ',
+          phone: '+233209876543',
+          role: 'Operations Lead',
+        },
+      ],
+    });
+
+    const recordedInteraction = {
+      id: 'interaction-1',
+      tenantId: 'tenant-1',
+      prospectId: 'prospect-a',
+      interactionMediumId: '66666666-6666-4666-8666-666666666666',
+      occurredAt: new Date('2026-09-30T10:30:00.000Z'),
+      notes: 'Discussed renewal requirements',
+      decisionMakerInvolved: true,
+      createdByUserId: 'user-1',
+      createdAt: new Date('2026-09-30T10:31:00.000Z'),
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          interactionId: 'interaction-1',
+          fullName: 'Ama Mensah',
+          phone: '+233201234567',
+          role: 'Finance Director',
+          createdAt: new Date('2026-09-30T10:32:00.000Z'),
+        },
+        {
+          id: 'participant-2',
+          tenantId: 'tenant-1',
+          interactionId: 'interaction-1',
+          fullName: 'Kojo Mensah',
+          phone: '+233209876543',
+          role: 'Operations Lead',
+          createdAt: new Date('2026-09-30T10:33:00.000Z'),
+        },
+      ],
+    };
+
+    it('records an assigned prospect interaction and participants transactionally', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectInteraction.create.mockResolvedValue(
+        recordedInteraction,
+      );
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        {
+          id: '66666666-6666-4666-8666-666666666666',
+          name: 'Phone Call',
+        },
+      ]);
+
+      const result = await service.createInteraction(
+        {
+          ...user,
+          permissions: [
+            MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE,
+          ],
+        },
+        'prospect-a',
+        interactionDto(),
+      );
+
+      expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'prospect-a',
+          tenantId: 'tenant-1',
+          assignedUserId: 'user-1',
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingCrmSettingOption.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: '66666666-6666-4666-8666-666666666666',
+          tenantId: 'tenant-1',
+          category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+          archivedAt: null,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingProspectInteraction.create).toHaveBeenCalledWith({
+        data: {
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          interactionMediumId: '66666666-6666-4666-8666-666666666666',
+          occurredAt: new Date('2026-09-30T10:30:00.000Z'),
+          notes: 'Discussed renewal requirements',
+          decisionMakerInvolved: true,
+          createdByUserId: 'user-1',
+          participants: {
+            create: [
+              {
+                tenantId: 'tenant-1',
+                fullName: 'Ama Mensah',
+                phone: '+233201234567',
+                role: 'Finance Director',
+              },
+              {
+                tenantId: 'tenant-1',
+                fullName: 'Kojo Mensah',
+                phone: '+233209876543',
+                role: 'Operations Lead',
+              },
+            ],
+          },
+        },
+        include: {
+          participants: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          },
+        },
+      });
+      expect(prisma.marketingProspect.update).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        id: 'interaction-1',
+        occurredAt: new Date('2026-09-30T10:30:00.000Z'),
+        interactionMedium: {
+          id: '66666666-6666-4666-8666-666666666666',
+          name: 'Phone Call',
+        },
+        notes: 'Discussed renewal requirements',
+        decisionMakerInvolved: true,
+        participants: [
+          {
+            id: 'participant-1',
+            fullName: 'Ama Mensah',
+            phone: '+233201234567',
+            role: 'Finance Director',
+            createdAt: new Date('2026-09-30T10:32:00.000Z'),
+          },
+          {
+            id: 'participant-2',
+            fullName: 'Kojo Mensah',
+            phone: '+233209876543',
+            role: 'Operations Lead',
+            createdAt: new Date('2026-09-30T10:33:00.000Z'),
+          },
+        ],
+        createdByUserId: 'user-1',
+        createdAt: new Date('2026-09-30T10:31:00.000Z'),
+      });
+    });
+
+    it('allows CREATE_ALL users to record interactions for another assigned user prospect', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectInteraction.create.mockResolvedValue({
+        ...recordedInteraction,
+        participants: [],
+      });
+
+      await service.createInteraction(
+        {
+          ...user,
+          permissions: [
+            MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE,
+            MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE_ALL,
+          ],
+        },
+        'prospect-a',
+        { ...interactionDto(), participants: [] },
+      );
+
+      expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'prospect-a',
+          tenantId: 'tenant-1',
+        },
+        select: { id: true },
+      });
+    });
+
+    it('rejects inaccessible, cross-tenant or missing prospects before interaction creation', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createInteraction(user, 'prospect-other', interactionDto()),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.marketingCrmSettingOption.findFirst).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects inactive, archived, wrong-category or cross-tenant interaction media', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue({
+        id: 'prospect-a',
+      });
+      prisma.marketingCrmSettingOption.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createInteraction(user, 'prospect-a', interactionDto()),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('propagates transaction failures so participants do not partially persist', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectInteraction.create.mockRejectedValue(
+        new Error('participant create failed'),
+      );
+
+      await expect(
+        service.createInteraction(user, 'prospect-a', interactionDto()),
+      ).rejects.toThrow('participant create failed');
+    });
+
+    it('returns interaction history with archived medium names and deterministic ordering', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectInteraction.findMany.mockResolvedValue([
+        recordedInteraction,
+        {
+          ...recordedInteraction,
+          id: 'interaction-older',
+          interactionMediumId: 'archived-medium',
+          occurredAt: new Date('2026-09-28T10:30:00.000Z'),
+          decisionMakerInvolved: false,
+          participants: [],
+        },
+      ]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        {
+          id: '66666666-6666-4666-8666-666666666666',
+          name: 'Phone Call',
+        },
+        { id: 'archived-medium', name: 'Archived Medium' },
+      ]);
+
+      const result = await service.listInteractions(user, 'prospect-a');
+
+      expect(prisma.marketingProspectInteraction.findMany).toHaveBeenCalledWith(
+        {
+          where: {
+            tenantId: 'tenant-1',
+            prospectId: 'prospect-a',
+          },
+          orderBy: [
+            { occurredAt: 'desc' },
+            { createdAt: 'desc' },
+            { id: 'asc' },
+          ],
+          include: {
+            participants: {
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            },
+          },
+        },
+      );
+      expect(prisma.marketingCrmSettingOption.findMany).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          id: {
+            in: ['66666666-6666-4666-8666-666666666666', 'archived-medium'],
+          },
+        },
+        select: { id: true, name: true },
+      });
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          id: 'interaction-1',
+          decisionMakerInvolved: true,
+          participants: expect.any(Array),
+        }),
+        expect.objectContaining({
+          id: 'interaction-older',
+          interactionMedium: { id: 'archived-medium', name: 'Archived Medium' },
+          decisionMakerInvolved: false,
+          participants: [],
+        }),
+      ]);
+    });
+
+    it('rejects interaction history for inaccessible prospects', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.listInteractions(user, 'prospect-other'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(
+        prisma.marketingProspectInteraction.findMany,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -1470,6 +1809,43 @@ describe('ProspectsService', () => {
       const errors = await validateDto({ products: [] });
 
       expect(errors.some((error) => error.property === 'products')).toBe(true);
+    });
+  });
+
+  describe('CreateProspectInteractionDto validation', () => {
+    async function validateDto(payload: unknown) {
+      return validate(plainToInstance(CreateProspectInteractionDto, payload));
+    }
+
+    it('requires occurredAt, interactionMediumId and decisionMakerInvolved', async () => {
+      const errors = await validateDto({});
+
+      expect(errors.map((error) => error.property)).toEqual(
+        expect.arrayContaining([
+          'occurredAt',
+          'interactionMediumId',
+          'decisionMakerInvolved',
+        ]),
+      );
+    });
+
+    it('validates participant details when participants are supplied', async () => {
+      const errors = await validateDto({
+        occurredAt: '2026-09-30T10:30:00.000Z',
+        interactionMediumId: '66666666-6666-4666-8666-666666666666',
+        decisionMakerInvolved: false,
+        participants: [
+          {
+            fullName: '',
+            phone: '',
+            role: '',
+          },
+        ],
+      });
+
+      expect(errors.some((error) => error.property === 'participants')).toBe(
+        true,
+      );
     });
   });
 });

@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsNotEmpty,
@@ -20,6 +21,7 @@ import {
   CollapseWhitespaceString,
   OptionalCollapseWhitespaceString,
 } from '../../crm-settings/dto/string.transforms';
+import { ProspectInteractionParticipantDto } from './create-prospect-interaction.dto';
 
 export class CreateProspectContactDto {
   @ApiProperty({ example: 'Ama Mensah', maxLength: 160 })
@@ -138,6 +140,21 @@ export class CreateProspectInitialInteractionDto {
   @IsString()
   @MaxLength(1000)
   notes?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Whether the initial interaction involved a decision maker.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  decisionMakerInvolved?: boolean;
+
+  @ApiPropertyOptional({ type: [ProspectInteractionParticipantDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProspectInteractionParticipantDto)
+  participants?: ProspectInteractionParticipantDto[];
 }
 
 export class CreateProspectDto {

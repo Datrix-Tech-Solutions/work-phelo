@@ -13,6 +13,10 @@ import {
   CreateProspectDto,
   CreateProspectProductDto,
 } from './dto/create-prospect.dto';
+import {
+  CreateProspectInteractionDto,
+  ProspectInteractionParticipantDto,
+} from './dto/create-prospect-interaction.dto';
 import { QueryProspectsDto } from './dto/query-prospects.dto';
 import {
   UpdateProspectDto,
@@ -33,6 +37,23 @@ const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 type SettingReference = {
   id: string | undefined;
   category: MarketingCrmSettingCategory;
+};
+
+type ProspectInteractionWithParticipants = {
+  id: string;
+  interactionMediumId: string | null;
+  occurredAt: Date;
+  notes: string | null;
+  decisionMakerInvolved: boolean;
+  createdByUserId: string | null;
+  createdAt: Date;
+  participants: Array<{
+    id: string;
+    fullName: string;
+    phone: string;
+    role: string;
+    createdAt: Date;
+  }>;
 };
 
 @Injectable()
@@ -71,6 +92,11 @@ export class ProspectsService {
             { createdAt: 'desc' },
             { id: 'asc' },
           ],
+          include: {
+            participants: {
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            },
+          },
         },
       },
     });
@@ -168,20 +194,9 @@ export class ProspectsService {
       totalAchievedValue: this.sumDecimal(
         prospect.products.map((product) => product.achievedValue),
       ),
-      interactions: prospect.interactions.map((interaction) => ({
-        id: interaction.id,
-        occurredAt: interaction.occurredAt,
-        interactionMedium: interaction.interactionMediumId
-          ? this.namedReference(
-              interaction.interactionMediumId,
-              settingsById,
-              'Unknown interaction medium',
-            )
-          : null,
-        notes: interaction.notes,
-        createdByUserId: interaction.createdByUserId,
-        createdAt: interaction.createdAt,
-      })),
+      interactions: prospect.interactions.map((interaction) =>
+        this.toInteractionResponse(interaction, settingsById),
+      ),
       createdAt: prospect.createdAt,
       updatedAt: prospect.updatedAt,
     };
@@ -245,6 +260,92 @@ export class ProspectsService {
         where: { id: existing.id },
       });
     });
+  }
+
+  async createInteraction(
+    user: RequestUser,
+    prospectId: string,
+    dto: CreateProspectInteractionDto,
+  ) {
+    const canCreateAll = this.canCreateAllInteractions(user);
+    await this.assertProspectAccessible(user, prospectId, canCreateAll);
+    await this.assertActiveSetting(user.tenantId, {
+      id: dto.interactionMediumId,
+      category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+    });
+
+    const interaction = await this.prisma.$transaction((tx) => {
+      return tx.marketingProspectInteraction.create({
+        data: {
+          tenantId: user.tenantId,
+          prospectId,
+          interactionMediumId: dto.interactionMediumId,
+          occurredAt: new Date(dto.occurredAt),
+          notes: this.formatOptionalText(dto.notes),
+          decisionMakerInvolved: dto.decisionMakerInvolved,
+          createdByUserId: user.id,
+          ...(dto.participants && dto.participants.length > 0
+            ? {
+                participants: {
+                  create: dto.participants.map((participant) =>
+                    this.toInteractionParticipantCreateInput(
+                      user.tenantId,
+                      participant,
+                    ),
+                  ),
+                },
+              }
+            : {}),
+        },
+        include: {
+          participants: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          },
+        },
+      });
+    });
+
+    const settings = await this.findSettingsByIds(user.tenantId, [
+      interaction.interactionMediumId,
+    ]);
+    const settingsById = new Map(
+      settings.map((setting) => [setting.id, setting]),
+    );
+
+    return this.toInteractionResponse(interaction, settingsById);
+  }
+
+  async listInteractions(user: RequestUser, prospectId: string) {
+    const canViewAll = this.canViewAllInteractions(user);
+    await this.assertProspectAccessible(user, prospectId, canViewAll);
+
+    const interactions =
+      await this.prisma.marketingProspectInteraction.findMany({
+        where: {
+          tenantId: user.tenantId,
+          prospectId,
+        },
+        orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
+        include: {
+          participants: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          },
+        },
+      });
+
+    const settings = await this.findSettingsByIds(
+      user.tenantId,
+      interactions.map((interaction) => interaction.interactionMediumId),
+    );
+    const settingsById = new Map(
+      settings.map((setting) => [setting.id, setting]),
+    );
+
+    return {
+      items: interactions.map((interaction) =>
+        this.toInteractionResponse(interaction, settingsById),
+      ),
+    };
   }
 
   async list(user: RequestUser, query: QueryProspectsDto = {}) {
@@ -439,7 +540,23 @@ export class ProspectsService {
                     notes: this.formatOptionalText(
                       dto.initialInteraction.notes,
                     ),
+                    decisionMakerInvolved:
+                      dto.initialInteraction.decisionMakerInvolved ?? false,
                     createdByUserId: user.id,
+                    ...(dto.initialInteraction.participants &&
+                    dto.initialInteraction.participants.length > 0
+                      ? {
+                          participants: {
+                            create: dto.initialInteraction.participants.map(
+                              (participant) =>
+                                this.toInteractionParticipantCreateInput(
+                                  user.tenantId,
+                                  participant,
+                                ),
+                            ),
+                          },
+                        }
+                      : {}),
                   },
                 },
               }
@@ -597,6 +714,44 @@ export class ProspectsService {
     return user.permissions.includes(
       MarketingCrmSettingsPermission.PROSPECTS_DELETE_ALL,
     );
+  }
+
+  private canViewAllInteractions(user: RequestUser): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
+
+    return user.permissions.includes(
+      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW_ALL,
+    );
+  }
+
+  private canCreateAllInteractions(user: RequestUser): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
+
+    return user.permissions.includes(
+      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE_ALL,
+    );
+  }
+
+  private async assertProspectAccessible(
+    user: RequestUser,
+    prospectId: string,
+    canAccessAll: boolean,
+  ) {
+    const prospect = await this.prisma.marketingProspect.findFirst({
+      where: {
+        id: prospectId,
+        tenantId: user.tenantId,
+        ...this.visibilityWhere(user, canAccessAll),
+      },
+      select: { id: true },
+    });
+
+    if (!prospect) throw new NotFoundException('Prospect not found');
+    return prospect;
   }
 
   private async assertUpdateReferences(
@@ -918,6 +1073,27 @@ export class ProspectsService {
     };
   }
 
+  private toInteractionParticipantCreateInput(
+    tenantId: string,
+    participant: ProspectInteractionParticipantDto,
+  ): Prisma.MarketingProspectInteractionParticipantCreateWithoutInteractionInput {
+    return {
+      tenantId,
+      fullName: this.formatRequiredText(
+        participant.fullName,
+        'Participant full name is required',
+      ),
+      phone: this.formatRequiredText(
+        participant.phone,
+        'Participant phone is required',
+      ),
+      role: this.formatRequiredText(
+        participant.role,
+        'Participant role is required',
+      ),
+    };
+  }
+
   private buildListWhere(
     user: RequestUser,
     query: QueryProspectsDto,
@@ -1041,6 +1217,34 @@ export class ProspectsService {
     const setting = settingsById.get(id);
     if (!setting) return { id, name: fallbackName };
     return { id: setting.id, name: setting.name };
+  }
+
+  private toInteractionResponse(
+    interaction: ProspectInteractionWithParticipants,
+    settingsById: Map<string, { id: string; name: string }>,
+  ) {
+    return {
+      id: interaction.id,
+      occurredAt: interaction.occurredAt,
+      interactionMedium: interaction.interactionMediumId
+        ? this.namedReference(
+            interaction.interactionMediumId,
+            settingsById,
+            'Unknown interaction medium',
+          )
+        : null,
+      notes: interaction.notes,
+      decisionMakerInvolved: interaction.decisionMakerInvolved,
+      participants: interaction.participants.map((participant) => ({
+        id: participant.id,
+        fullName: participant.fullName,
+        phone: participant.phone,
+        role: participant.role,
+        createdAt: participant.createdAt,
+      })),
+      createdByUserId: interaction.createdByUserId,
+      createdAt: interaction.createdAt,
+    };
   }
 
   private decimalToString(value: Prisma.Decimal | null): string | null {

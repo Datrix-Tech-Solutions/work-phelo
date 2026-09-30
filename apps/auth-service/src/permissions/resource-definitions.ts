@@ -219,6 +219,16 @@ export const RESOURCES = [
     module: 'MARKETING',
     description: 'Tenant-wide Marketing prospect list visibility',
   },
+  {
+    name: 'marketing.prospects.interactions',
+    module: 'MARKETING',
+    description: 'Marketing prospect interaction history records',
+  },
+  {
+    name: 'marketing.prospects.interactions.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect interaction history access',
+  },
 
   {
     name: 'operations.reinsurance.dashboard',
