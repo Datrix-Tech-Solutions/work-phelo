@@ -1,16 +1,20 @@
 'use client';
 
-import { Pencil, Trash2 } from 'lucide-react';
+import { Eye, Pencil, Trash2 } from 'lucide-react';
 import { TableButton } from '@/components/atoms/TableButton';
 
 interface Props {
   label: string;
   sublabel?: string;
-  onEdit: () => void;
-  onDelete: () => void;
+  /** Adds a View button before Edit. */
+  onView?: () => void;
+  /** Extra actions rendered after View, e.g. a primary workflow button. */
+  extraActions?: React.ReactNode;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
-export function CardListRow({ label, sublabel, onEdit, onDelete }: Props) {
+export function CardListRow({ label, sublabel, onView, extraActions, onEdit, onDelete }: Props) {
   return (
     <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
       {/* Text */}
@@ -21,14 +25,33 @@ export function CardListRow({ label, sublabel, onEdit, onDelete }: Props) {
 
       {/* Actions */}
       <div className="flex items-center gap-3.5 shrink-0">
-        <TableButton variant="blue" onClick={onEdit} className="inline-flex items-center gap-1.5">
-          <Pencil className="w-3.5 h-3.5" />
-          Edit
-        </TableButton>
-        <TableButton variant="red" onClick={onDelete} className="inline-flex items-center gap-1.5">
-          <Trash2 className="w-3.5 h-3.5" />
-          Delete
-        </TableButton>
+        {onView && (
+          <TableButton
+            variant="green"
+            onClick={onView}
+            className="inline-flex items-center gap-1.5"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            View
+          </TableButton>
+        )}
+        {extraActions}
+        {onEdit && (
+          <TableButton variant="blue" onClick={onEdit} className="inline-flex items-center gap-1.5">
+            <Pencil className="w-3.5 h-3.5" />
+            Edit
+          </TableButton>
+        )}
+        {onDelete && (
+          <TableButton
+            variant="red"
+            onClick={onDelete}
+            className="inline-flex items-center gap-1.5"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </TableButton>
+        )}
       </div>
     </div>
   );

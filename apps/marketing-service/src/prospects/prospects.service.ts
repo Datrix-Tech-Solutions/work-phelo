@@ -286,8 +286,24 @@ export class ProspectsService {
       category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
     });
 
-    const interaction = await this.prisma.$transaction((tx) => {
-      return tx.marketingProspectInteraction.create({
+    const interaction = await this.prisma.$transaction(async (tx) => {
+      // Checked before the interaction is written so a bad follow-up rolls everything back.
+      const followUp = dto.followUpId
+        ? await tx.marketingProspectFollowUp.findFirst({
+            where: {
+              id: dto.followUpId,
+              tenantId: user.tenantId,
+              prospectId,
+              status: MarketingProspectFollowUpStatus.PENDING,
+            },
+            select: { id: true },
+          })
+        : null;
+      if (dto.followUpId && !followUp) {
+        throw new NotFoundException('Follow-up not found');
+      }
+
+      const created = await tx.marketingProspectInteraction.create({
         data: {
           tenantId: user.tenantId,
           prospectId,
@@ -315,6 +331,20 @@ export class ProspectsService {
           },
         },
       });
+
+      if (followUp) {
+        await tx.marketingProspectFollowUp.update({
+          where: { id: followUp.id },
+          data: {
+            status: MarketingProspectFollowUpStatus.COMPLETED,
+            completedAt: new Date(),
+            completedByUserId: user.id,
+            completedInteractionId: created.id,
+          },
+        });
+      }
+
+      return created;
     });
 
     const settings = await this.findSettingsByIds(user.tenantId, [

@@ -939,6 +939,59 @@ describe('ProspectsService', () => {
       ).rejects.toThrow('participant create failed');
     });
 
+    it('completes the linked pending follow-up in the same transaction', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValue({
+        id: 'follow-up-1',
+      });
+      prisma.marketingProspectInteraction.create.mockResolvedValue({
+        ...recordedInteraction,
+        participants: [],
+      });
+
+      await service.createInteraction(user, 'prospect-a', {
+        ...interactionDto(),
+        followUpId: '77777777-7777-4777-8777-777777777777',
+      });
+
+      expect(prisma.marketingProspectFollowUp.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: '77777777-7777-4777-8777-777777777777',
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          status: MarketingProspectFollowUpStatus.PENDING,
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingProspectFollowUp.update).toHaveBeenCalledWith({
+        where: { id: 'follow-up-1' },
+        data: {
+          status: MarketingProspectFollowUpStatus.COMPLETED,
+          completedAt: expect.any(Date) as Date,
+          completedByUserId: 'user-1',
+          completedInteractionId: recordedInteraction.id,
+        },
+      });
+    });
+
+    it('rejects a follow-up that is not a pending follow-up of the prospect', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue({
+        id: 'prospect-a',
+      });
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createInteraction(user, 'prospect-a', {
+          ...interactionDto(),
+          followUpId: '77777777-7777-4777-8777-777777777777',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.marketingProspectInteraction.create).not.toHaveBeenCalled();
+      expect(prisma.marketingProspectFollowUp.update).not.toHaveBeenCalled();
+    });
+
     it('returns interaction history with archived medium names and deterministic ordering', async () => {
       prisma.marketingProspect.findFirst.mockResolvedValue({
         id: 'prospect-a',
