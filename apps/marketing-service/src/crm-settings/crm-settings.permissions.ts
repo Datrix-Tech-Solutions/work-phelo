@@ -39,4 +39,12 @@ export const MarketingCrmSettingsPermission = {
   PROSPECT_INTERACTIONS_CREATE: 'marketing.prospects.interactions:CREATE',
   PROSPECT_INTERACTIONS_CREATE_ALL:
     'marketing.prospects.interactions.all:CREATE',
+  FOLLOW_UPS_VIEW: 'marketing.follow-ups:VIEW',
+  FOLLOW_UPS_VIEW_ALL: 'marketing.follow-ups.all:VIEW',
+  FOLLOW_UPS_CREATE: 'marketing.follow-ups:CREATE',
+  FOLLOW_UPS_CREATE_ALL: 'marketing.follow-ups.all:CREATE',
+  FOLLOW_UPS_EDIT: 'marketing.follow-ups:EDIT',
+  FOLLOW_UPS_EDIT_ALL: 'marketing.follow-ups.all:EDIT',
+  FOLLOW_UPS_CANCEL: 'marketing.follow-ups:CANCEL',
+  FOLLOW_UPS_CANCEL_ALL: 'marketing.follow-ups.all:CANCEL',
 } as const;

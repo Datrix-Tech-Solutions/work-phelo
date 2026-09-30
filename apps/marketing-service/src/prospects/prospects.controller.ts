@@ -41,6 +41,11 @@ import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto
 import { CreateProspectInteractionDto } from './dto/create-prospect-interaction.dto';
 import { CreateProspectDto } from './dto/create-prospect.dto';
 import {
+  CreateProspectFollowUpDto,
+  ProspectFollowUpHistoryResponseDto,
+  ProspectFollowUpResponseDto,
+} from './dto/prospect-follow-up.dto';
+import {
   ProspectListResponseDto,
   QueryProspectsDto,
 } from './dto/query-prospects.dto';
@@ -127,6 +132,48 @@ export class ProspectsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.createInteraction(request.user, prospectId, dto);
+  }
+
+  @Get(':prospectId/follow-ups')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW,
+    MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW_ALL,
+  )
+  @ApiOperation({
+    summary: 'List marketing prospect follow-up history',
+    description:
+      'Users with marketing.follow-ups:VIEW can view follow-ups for assigned prospects. Users with marketing.follow-ups.all:VIEW can view follow-ups for any prospect within their tenant.',
+  })
+  @ApiParam({ name: 'prospectId', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectFollowUpHistoryResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  listFollowUps(
+    @Param('prospectId', ParseUUIDPipe) prospectId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.listFollowUps(request.user, prospectId);
+  }
+
+  @Post(':prospectId/follow-ups')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.FOLLOW_UPS_CREATE,
+    MarketingCrmSettingsPermission.FOLLOW_UPS_CREATE_ALL,
+  )
+  @ApiOperation({
+    summary: 'Schedule an explicit marketing prospect follow-up',
+    description:
+      'Creates one pending explicit follow-up for a prospect. This explicit follow-up overrides the default latest-interaction plus seven-day worklist fallback until cancelled or completed.',
+  })
+  @ApiParam({ name: 'prospectId', format: 'uuid' })
+  @ApiCreatedResponse({ type: ProspectFollowUpResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  createFollowUp(
+    @Param('prospectId', ParseUUIDPipe) prospectId: string,
+    @Body() dto: CreateProspectFollowUpDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.createFollowUp(request.user, prospectId, dto);
   }
 
   @Get(':id')
