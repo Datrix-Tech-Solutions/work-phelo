@@ -27,8 +27,8 @@ function toInitialValues(prospect: ProspectDetail): ProspectWizardValues {
     company: {
       companyName: prospect.companyName,
       businessType: prospect.businessType?.id ?? '',
-      contactName: contact?.name ?? '',
-      contactPerson: '',
+      contactName: '',
+      contactPerson: contact?.name ?? '',
       phone: contact?.phone ?? '',
       email: contact?.email ?? '',
       interactionType: '',
@@ -63,7 +63,7 @@ function buildPayload(
     sourceTypeId: company.sourceType || null,
     pipelineStageId: saleStage.pipelineStageId,
     primaryContact: {
-      name: company.contactName.trim(),
+      name: company.contactPerson.trim(),
       ...(company.phone.trim() ? { phone: company.phone.trim() } : {}),
       ...(company.email.trim() ? { email: company.email.trim() } : {}),
       decisionMakerTypeId: company.roleJobTitle || null,

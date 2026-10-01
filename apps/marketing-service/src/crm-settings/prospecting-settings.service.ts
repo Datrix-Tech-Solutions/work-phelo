@@ -69,6 +69,16 @@ export class ProspectingSettingsService {
     return setting;
   }
 
+  async getUsage(
+    tenantId: string,
+    category: MarketingCrmSettingCategory,
+    id: string,
+  ): Promise<{ inUse: boolean }> {
+    await this.findOne(tenantId, category, id);
+    const referenced = await this.findReference(tenantId, category, id);
+    return { inUse: !!referenced };
+  }
+
   async create(
     user: RequestUser,
     category: MarketingCrmSettingCategory,

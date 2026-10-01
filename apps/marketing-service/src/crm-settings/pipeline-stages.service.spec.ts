@@ -203,6 +203,22 @@ describe('PipelineStagesService', () => {
     expect(prisma.marketingPipelineStage.update).not.toHaveBeenCalled();
   });
 
+  it('reports whether a stage is in use without archiving it', async () => {
+    prisma.marketingPipelineStage.findFirst.mockResolvedValue({
+      id: 'stage-1',
+    });
+    prisma.marketingProspect.findFirst.mockResolvedValueOnce({ id: 'p-1' });
+    await expect(service.getUsage('tenant-1', 'stage-1')).resolves.toEqual({
+      inUse: true,
+    });
+
+    prisma.marketingProspect.findFirst.mockResolvedValueOnce(null);
+    await expect(service.getUsage('tenant-1', 'stage-1')).resolves.toEqual({
+      inUse: false,
+    });
+    expect(prisma.marketingPipelineStage.update).not.toHaveBeenCalled();
+  });
+
   it('archives stages instead of deleting them', async () => {
     prisma.marketingPipelineStage.findFirst.mockResolvedValue({
       id: 'stage-1',

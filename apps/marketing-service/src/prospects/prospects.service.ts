@@ -1473,6 +1473,9 @@ export class ProspectsService {
             },
           }
         : {}),
+      ...(query.pipelineStageId
+        ? { pipelineStageId: query.pipelineStageId }
+        : {}),
       ...(query.createdFrom || query.createdTo
         ? {
             createdAt: {

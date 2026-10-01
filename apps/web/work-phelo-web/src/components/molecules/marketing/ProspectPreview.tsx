@@ -59,7 +59,7 @@ export function ProspectPreview({
             label="Type of Business"
             value={labelFor(businessTypeOptions, company.businessType)}
           />
-          <Field label="Decision Maker" value={company.contactName} />
+          {/* <Field label="Decision Maker" value={company.contactName} /> */}
           <Field label="Decision Maker Role" value={labelFor(roleOptions, company.roleJobTitle)} />
         </div>
       </ProspectFormSection>

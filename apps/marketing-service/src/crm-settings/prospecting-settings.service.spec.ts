@@ -376,6 +376,34 @@ describe('ProspectingSettingsService', () => {
     expect(prisma.marketingCrmSettingOption.update).toHaveBeenCalled();
   });
 
+  it('reports whether a product is in use without archiving it', async () => {
+    prisma.marketingCrmSettingOption.findFirst.mockResolvedValue({
+      id: 'setting-1',
+    });
+    prisma.marketingProspectProduct.findFirst.mockResolvedValueOnce({
+      id: 'link-1',
+    });
+
+    await expect(
+      service.getUsage(
+        'tenant-1',
+        MarketingCrmSettingCategory.PRODUCT,
+        'setting-1',
+      ),
+    ).resolves.toEqual({ inUse: true });
+
+    prisma.marketingProspectProduct.findFirst.mockResolvedValueOnce(null);
+
+    await expect(
+      service.getUsage(
+        'tenant-1',
+        MarketingCrmSettingCategory.PRODUCT,
+        'setting-1',
+      ),
+    ).resolves.toEqual({ inUse: false });
+    expect(prisma.marketingCrmSettingOption.update).not.toHaveBeenCalled();
+  });
+
   it('allows archive once a referencing prospect has been permanently deleted', async () => {
     prisma.marketingCrmSettingOption.findFirst.mockResolvedValue({
       id: 'setting-1',

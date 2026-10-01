@@ -1,6 +1,7 @@
 'use client';
 
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 
 export interface Prospect {
@@ -96,6 +97,9 @@ interface Props {
   onDelete: (row: Prospect) => void;
   onConvertToClient: (row: Prospect) => void;
   onAdd: () => void;
+  stageOptions: { value: string; label: string }[];
+  stageFilter: string;
+  onStageFilter: (stageId: string) => void;
   isLoading?: boolean;
 }
 
@@ -112,6 +116,9 @@ export function AllProspectsTable({
   onDelete,
   onConvertToClient,
   onAdd,
+  stageOptions,
+  stageFilter,
+  onStageFilter,
   isLoading,
 }: Props) {
   return (
@@ -122,6 +129,17 @@ export function AllProspectsTable({
       searchPlaceholder="Search prospects..."
       searchValue={searchValue}
       onSearch={onSearch}
+      extraFilters={
+        <SearchSelect
+          size="sm"
+          placeholder="Sales Stage"
+          allLabel="All stages"
+          options={stageOptions}
+          value={stageFilter}
+          showAllOption
+          onChange={onStageFilter}
+        />
+      }
       currentPage={currentPage}
       totalPages={totalPages}
       onPageChange={onPageChange}

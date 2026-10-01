@@ -1929,6 +1929,21 @@ describe('ProspectsService', () => {
       );
     });
 
+    it('filters by sales pipeline stage', async () => {
+      await service.list(user, {
+        pipelineStageId: '5f01c5e7-4f1b-4e47-9b69-8ecf18bc6585',
+      });
+
+      expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: 'tenant-1',
+            pipelineStageId: '5f01c5e7-4f1b-4e47-9b69-8ecf18bc6585',
+          }),
+        }),
+      );
+    });
+
     it('applies tenant, company-name search, creation-date filters, pagination and deterministic ordering', async () => {
       await service.list(user, {
         search: '  ACME   Manu ',

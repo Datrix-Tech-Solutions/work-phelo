@@ -9,7 +9,8 @@ import {
   Handshake,
   LayoutDashboard,
   Truck,
-  UserRoundCog,
+  SquareUser,
+  UserKey,
 } from 'lucide-react';
 
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
@@ -17,11 +18,13 @@ const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
 const ProspectIcon = () => <Handshake className="w-5 h-5" />;
 const AppointmentIcon = () => <ClipboardClock className="w-5 h-5" />;
 const RequestsIcon = () => <ClipboardList className="w-5 h-5" />;
-const TransportOfficersIcon = () => <UserRoundCog className="w-5 h-5" />;
+const TransportOfficersIcon = () => <SquareUser className="w-5 h-5" />;
 const FleetIcon = () => <Truck className="w-5 h-5" />;
 
 const ClientsIcon = () => <Users className="w-5 h-5" />;
 const CampaignsIcon = () => <Megaphone className="w-5 h-5" />;
+
+const UserManagementIcon = () => <UserKey className="w-5 h-5" />;
 
 const ProspectingIcon = () => <BookSearch className="w-5 h-5" />;
 
@@ -114,6 +117,19 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
         label: 'Transport Officers',
         icon: <TransportOfficersIcon />,
         href: 'transport-officers',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
+    label: 'Administration',
+    items: [
+      {
+        key: 'user-management',
+        label: 'User Management',
+        icon: <UserManagementIcon />,
+        href: 'user-management',
         enabled: true,
         active: true,
       },

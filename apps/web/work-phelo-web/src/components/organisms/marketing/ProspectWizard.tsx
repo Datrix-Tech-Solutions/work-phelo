@@ -150,9 +150,10 @@ export function ProspectWizard({
     if (currentStep === 0) {
       const next: CompanyInformationErrors = {};
       if (!companyForm.companyName.trim()) next.companyName = 'Company name is required.';
-      if (!companyForm.contactName.trim()) next.contactName = 'Contact name is required.';
-      if (!companyForm.email.trim()) next.email = 'Email is required.';
-      else if (!isValidEmail(companyForm.email)) next.email = 'Enter a valid email address.';
+      if (!companyForm.businessType) next.businessType = 'Type of business is required.';
+      if (!companyForm.contactPerson.trim()) next.contactPerson = 'Contact name is required.';
+      if (companyForm.email.trim() && !isValidEmail(companyForm.email))
+        next.email = 'Enter a valid email address.';
       setCompanyErrors(next);
       return Object.keys(next).length === 0;
     }
@@ -211,7 +212,9 @@ export function ProspectWizard({
       onNext={handleNext}
       onBack={handleBack}
       onCancel={onCancel}
-      nextLabel={currentStep === STEPS.length - 1 ? (isEdit ? 'Save Changes' : 'Submit') : 'Next'}
+      nextLabel={
+        currentStep === STEPS.length - 1 ? (isEdit ? 'Save Changes' : 'Save Prospect') : 'Next'
+      }
       isLoading={isSubmitting}
     >
       {currentStep === 0 && (
