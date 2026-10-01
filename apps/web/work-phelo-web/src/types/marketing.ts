@@ -112,6 +112,7 @@ export interface ProspectsQuery {
   createdFrom?: string;
   createdTo?: string;
   assignedUserId?: string;
+  pipelineStageId?: string;
 }
 
 export interface CreateProspectContactPayload {
@@ -325,6 +326,10 @@ export interface ProspectFollowUp {
   completedInteractionId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProspectFollowUpHistoryResponse {
+  items: ProspectFollowUp[];
 }
 
 export interface CreateProspectFollowUpPayload {

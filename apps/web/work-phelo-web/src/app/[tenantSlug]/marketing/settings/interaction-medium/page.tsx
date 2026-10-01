@@ -6,6 +6,8 @@ import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { RenameInUseModal } from '@/components/organisms/marketing/RenameInUseModal';
+import { useRenameInUseGuard } from '@/hooks/marketing/useRenameInUseGuard';
 import {
   InteractionMediumForm,
   InteractionMediumFields,
@@ -27,6 +29,7 @@ export default function InteractionMediumPage() {
   const { data: itemData = [], isLoading, isError } = useProspectingSettings('interaction-media');
   const createItem = useCreateProspectingSetting('interaction-media');
   const updateItem = useUpdateProspectingSetting('interaction-media');
+  const renameGuard = useRenameInUseGuard('interaction-media');
   const deleteItem = useDeleteProspectingSetting('interaction-media');
 
   const items: CardListItem[] = useMemo(
@@ -95,18 +98,33 @@ export default function InteractionMediumPage() {
         },
       );
     } else if (editingId) {
-      updateItem.mutate(
-        { id: editingId, name, description },
-        {
-          onSuccess: () => {
-            toast.success('Interaction medium updated');
-            setPanelOpen(false);
-          },
-          onError: (error) =>
-            toast.error(apiErrorMessage(error, 'Failed to update interaction medium')),
-        },
-      );
+      const original = itemData.find((i) => i.id === editingId);
+      if (original && original.name !== name) {
+        void renameGuard.guardRename(editingId).then((needsConfirm) => {
+          if (!needsConfirm) saveUpdate();
+        });
+        return;
+      }
+      saveUpdate();
     }
+  }
+
+  function saveUpdate() {
+    if (!editingId) return;
+    const name = form.name.trim();
+    const description = form.description.trim();
+    updateItem.mutate(
+      { id: editingId, name, description },
+      {
+        onSuccess: () => {
+          toast.success('Interaction medium updated');
+          renameGuard.closeConfirm();
+          setPanelOpen(false);
+        },
+        onError: (error) =>
+          toast.error(apiErrorMessage(error, 'Failed to update interaction medium')),
+      },
+    );
   }
 
   function closeDelete() {
@@ -163,7 +181,10 @@ export default function InteractionMediumPage() {
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} isLoading={createItem.isPending || updateItem.isPending}>
+            <Button
+              onClick={handleSave}
+              isLoading={createItem.isPending || updateItem.isPending || renameGuard.isChecking}
+            >
               {panelMode === 'add' ? 'Add Interaction Medium' : 'Save Changes'}
             </Button>
           </div>
@@ -171,6 +192,14 @@ export default function InteractionMediumPage() {
       >
         <InteractionMediumForm values={form} onChange={setForm} errors={errors} />
       </SidePanel>
+
+      <RenameInUseModal
+        isOpen={renameGuard.confirmOpen}
+        itemLabel="Interaction medium"
+        isLoading={updateItem.isPending}
+        onConfirm={saveUpdate}
+        onClose={renameGuard.closeConfirm}
+      />
 
       <Modal
         isOpen={!!deleteId}

@@ -6,6 +6,8 @@ import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { RenameInUseModal } from '@/components/organisms/marketing/RenameInUseModal';
+import { useRenameInUseGuard } from '@/hooks/marketing/useRenameInUseGuard';
 import {
   ProspectBusinessTypeForm,
   ProspectBusinessTypeFields,
@@ -27,6 +29,7 @@ export default function ProspectBusinessTypePage() {
   const { data: itemData = [], isLoading, isError } = useProspectingSettings('business-types');
   const createItem = useCreateProspectingSetting('business-types');
   const updateItem = useUpdateProspectingSetting('business-types');
+  const renameGuard = useRenameInUseGuard('business-types');
   const deleteItem = useDeleteProspectingSetting('business-types');
 
   const items: CardListItem[] = useMemo(
@@ -94,17 +97,32 @@ export default function ProspectBusinessTypePage() {
         },
       );
     } else if (editingId) {
-      updateItem.mutate(
-        { id: editingId, name, description },
-        {
-          onSuccess: () => {
-            toast.success('Business type updated');
-            setPanelOpen(false);
-          },
-          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update business type')),
-        },
-      );
+      const original = itemData.find((i) => i.id === editingId);
+      if (original && original.name !== name) {
+        void renameGuard.guardRename(editingId).then((needsConfirm) => {
+          if (!needsConfirm) saveUpdate();
+        });
+        return;
+      }
+      saveUpdate();
     }
+  }
+
+  function saveUpdate() {
+    if (!editingId) return;
+    const name = form.name.trim();
+    const description = form.description.trim();
+    updateItem.mutate(
+      { id: editingId, name, description },
+      {
+        onSuccess: () => {
+          toast.success('Business type updated');
+          renameGuard.closeConfirm();
+          setPanelOpen(false);
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update business type')),
+      },
+    );
   }
 
   function closeDelete() {
@@ -159,7 +177,10 @@ export default function ProspectBusinessTypePage() {
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} isLoading={createItem.isPending || updateItem.isPending}>
+            <Button
+              onClick={handleSave}
+              isLoading={createItem.isPending || updateItem.isPending || renameGuard.isChecking}
+            >
               {panelMode === 'add' ? 'Add Business Type' : 'Save Changes'}
             </Button>
           </div>
@@ -167,6 +188,14 @@ export default function ProspectBusinessTypePage() {
       >
         <ProspectBusinessTypeForm values={form} onChange={setForm} errors={errors} />
       </SidePanel>
+
+      <RenameInUseModal
+        isOpen={renameGuard.confirmOpen}
+        itemLabel="Business type"
+        isLoading={updateItem.isPending}
+        onConfirm={saveUpdate}
+        onClose={renameGuard.closeConfirm}
+      />
 
       <Modal
         isOpen={!!deleteId}

@@ -6,6 +6,8 @@ import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { RenameInUseModal } from '@/components/organisms/marketing/RenameInUseModal';
+import { useRenameInUseGuard } from '@/hooks/marketing/useRenameInUseGuard';
 import { ProductForm, ProductFields } from '@/components/molecules/marketing/ProductForm';
 import {
   useCreateProspectingSetting,
@@ -25,6 +27,7 @@ export default function ProductPage() {
   const { data: productData = [], isLoading, isError } = useProspectingSettings('products');
   const createProduct = useCreateProspectingSetting('products');
   const updateProduct = useUpdateProspectingSetting('products');
+  const renameGuard = useRenameInUseGuard('products');
   const deleteProduct = useDeleteProspectingSetting('products');
 
   const products: CardListItem[] = useMemo(
@@ -95,17 +98,32 @@ export default function ProductPage() {
         },
       );
     } else if (editingId) {
-      updateProduct.mutate(
-        { id: editingId, name, description },
-        {
-          onSuccess: () => {
-            toast.success('Product updated');
-            setPanelOpen(false);
-          },
-          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update product')),
-        },
-      );
+      const original = productData.find((i) => i.id === editingId);
+      if (original && original.name !== name) {
+        void renameGuard.guardRename(editingId).then((needsConfirm) => {
+          if (!needsConfirm) saveUpdate();
+        });
+        return;
+      }
+      saveUpdate();
     }
+  }
+
+  function saveUpdate() {
+    if (!editingId) return;
+    const name = form.name.trim();
+    const description = form.description.trim();
+    updateProduct.mutate(
+      { id: editingId, name, description },
+      {
+        onSuccess: () => {
+          toast.success('Product updated');
+          renameGuard.closeConfirm();
+          setPanelOpen(false);
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update product')),
+      },
+    );
   }
 
   function closeDelete() {
@@ -163,7 +181,9 @@ export default function ProductPage() {
             </Button>
             <Button
               onClick={handleSave}
-              isLoading={createProduct.isPending || updateProduct.isPending}
+              isLoading={
+                createProduct.isPending || updateProduct.isPending || renameGuard.isChecking
+              }
             >
               {panelMode === 'add' ? 'Add Product' : 'Save Changes'}
             </Button>
@@ -172,6 +192,14 @@ export default function ProductPage() {
       >
         <ProductForm values={form} onChange={setForm} errors={errors} />
       </SidePanel>
+
+      <RenameInUseModal
+        isOpen={renameGuard.confirmOpen}
+        itemLabel="Product"
+        isLoading={updateProduct.isPending}
+        onConfirm={saveUpdate}
+        onClose={renameGuard.closeConfirm}
+      />
 
       {/* Delete confirmation */}
       <Modal

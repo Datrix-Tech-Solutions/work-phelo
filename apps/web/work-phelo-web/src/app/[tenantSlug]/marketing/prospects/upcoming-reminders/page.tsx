@@ -199,10 +199,10 @@ export default function UpcomingFollowUpsPage() {
     if (!cancelId) return;
     cancelFollowUp.mutate(cancelId, {
       onSuccess: () => {
-        toast.success('Follow up cancelled');
+        toast.success('Reminder cancelled');
         setCancelId(null);
       },
-      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to cancel follow up')),
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to cancel reminder')),
     });
   }
 
@@ -213,7 +213,7 @@ export default function UpcomingFollowUpsPage() {
     <>
       <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto')}>
         <CardList
-          addLabel="Add Follow Up"
+          addLabel="Add Reminder"
           items={isLoading ? [] : items}
           onAdd={openAdd}
           onView={setViewingProspectId}
@@ -230,7 +230,7 @@ export default function UpcomingFollowUpsPage() {
                     className="inline-flex items-center gap-1.5"
                   >
                     <ClipboardPlus className="w-3.5 h-3.5" />
-                    Record Interaction
+                    Record Reminder
                   </TableButton>
                 )}
                 {/* Automatic follow-ups have no record to cancel or reschedule. */}

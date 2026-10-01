@@ -8,6 +8,7 @@ import { ProspectBreadcrumb } from '@/components/molecules/marketing/ProspectBre
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
+import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { TabBar } from '@/components/molecules/shared/TabBar';
@@ -21,7 +22,13 @@ import { UpdateProspectStageModal } from '@/components/organisms/marketing/Updat
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { InteractionDetailPanel } from '@/components/organisms/marketing/InteractionDetailPanel';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import type { ProspectDetailInteraction, ProspectDetailProduct } from '@/types/marketing';
+import type {
+  FollowUpStatus,
+  ProspectDetailInteraction,
+  ProspectDetailProduct,
+  ProspectFollowUp,
+} from '@/types/marketing';
+import { useProspectFollowUps } from '@/hooks/marketing/useFollowUps';
 import { useDeleteProspect, useProspect } from '@/hooks/marketing/useProspects';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -113,7 +120,51 @@ const INTERACTION_COLUMNS: Column<ProspectDetailInteraction>[] = [
   },
 ];
 
-type ProspectTab = 'products' | 'interactions';
+const FOLLOW_UP_STATUS: Record<FollowUpStatus, { label: string; color: TypeChipColor }> = {
+  PENDING: { label: 'Pending', color: 'amber' },
+  COMPLETED: { label: 'Completed', color: 'green' },
+  CANCELLED: { label: 'Cancelled', color: 'gray' },
+};
+
+const FOLLOW_UP_COLUMNS: Column<ProspectFollowUp>[] = [
+  {
+    key: 'dueAt',
+    label: 'Due Date',
+    width: '160px',
+    render: (row) => <span className="font-semibold">{formatDate(row.dueAt)}</span>,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    width: '140px',
+    render: (row) => (
+      <TypeChip
+        label={FOLLOW_UP_STATUS[row.status].label}
+        color={FOLLOW_UP_STATUS[row.status].color}
+      />
+    ),
+  },
+  {
+    key: 'note',
+    label: 'Note',
+    width: 'minmax(160px, 1fr)',
+    render: (row) => <span className="font-semibold">{row.note || '—'}</span>,
+  },
+  {
+    key: 'completedAt',
+    label: 'Completed On',
+    width: '160px',
+    render: (row) => <span className="font-semibold">{formatDate(row.completedAt)}</span>,
+  },
+  {
+    key: 'createdAt',
+    label: 'Scheduled On',
+    width: '160px',
+    render: (row) => <span className="font-semibold">{formatDate(row.createdAt)}</span>,
+  },
+];
+
+type ProspectTab = 'products' | 'interactions' | 'follow-ups';
 
 export default function ProspectDetailPage() {
   const { tenantSlug, id } = useParams<{ tenantSlug: string; id: string }>();
@@ -122,6 +173,7 @@ export default function ProspectDetailPage() {
 
   const { data: prospect, isLoading, isError } = useProspect(id);
   const deleteProspect = useDeleteProspect();
+  const { data: followUps = [], isLoading: followUpsLoading } = useProspectFollowUps(id);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [viewingInteraction, setViewingInteraction] = useState<ProspectDetailInteraction | null>(
     null,
@@ -219,10 +271,12 @@ export default function ProspectDetailPage() {
           <DetailField label="Type of Business" value={prospect.businessType?.name} />
           <DetailField label="Source Type" value={prospect.sourceType?.name} />
           <DetailField label="Location" value={prospect.location.label} />
-          <DetailField label="Decision Maker" value={primaryContact?.name} />
+          {/* <DetailField label="Decision Maker" value={primaryContact?.name} /> */}
           <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
-          <DetailField label="Phone" value={primaryContact?.phone} />
-          <DetailField label="Email" value={primaryContact?.email} />
+          <DetailField label="Primary Contact" value={primaryContact?.name} />
+          <DetailField label="Primary Contact Phone" value={primaryContact?.phone} />
+          <DetailField label="Primary Contact Email" value={primaryContact?.email} />
+          <DetailField label="Date Created" value={formatDate(prospect.createdAt)} />
           <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
           <DetailField label="Total Expected" value={formatMoney(prospect.totalExpectedValue)} />
           <DetailField label="Total Achieved" value={formatMoney(prospect.totalAchievedValue)} />
@@ -238,7 +292,8 @@ export default function ProspectDetailPage() {
       <TabBar
         tabs={[
           { key: 'products', label: 'Products / Services' },
-          { key: 'interactions', label: 'Interactions' },
+          { key: 'interactions', label: 'Follow ups' },
+          // { key: 'follow-ups', label: 'Follow-ups' },
         ]}
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as ProspectTab)}
@@ -260,9 +315,22 @@ export default function ProspectDetailPage() {
         <DataTable
           columns={INTERACTION_COLUMNS}
           data={prospect.interactions}
-          emptyMessage="No interactions yet"
+          emptyMessage="No follow ups yet"
           onRowClick={setViewingInteraction}
-          actionButton={{ label: 'Add Interaction', onClick: () => setAddingInteraction(true) }}
+          actionButton={{ label: 'Add Follow ups', onClick: () => setAddingInteraction(true) }}
+          currentPage={1}
+          totalPages={0}
+          onPageChange={() => {}}
+          noInternalScroll
+        />
+      )}
+
+      {activeTab === 'follow-ups' && (
+        <DataTable
+          columns={FOLLOW_UP_COLUMNS}
+          data={followUps}
+          emptyMessage="No follow-ups yet"
+          isLoading={followUpsLoading}
           currentPage={1}
           totalPages={0}
           onPageChange={() => {}}

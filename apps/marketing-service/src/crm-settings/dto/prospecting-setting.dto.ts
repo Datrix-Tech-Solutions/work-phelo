@@ -134,6 +134,14 @@ export class ProspectingSettingsListResponseDto {
   items!: ProspectingSettingResponseDto[];
 }
 
+export class ProspectingSettingUsageResponseDto {
+  @ApiProperty({
+    example: true,
+    description: 'Whether any prospect currently references this setting.',
+  })
+  inUse!: boolean;
+}
+
 export class ApiErrorResponseDto {
   @ApiProperty({ example: 400 })
   statusCode!: number;

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
+import { usePipelineStages } from '@/hooks/marketing/usePipelineStages';
 import { useDeleteProspect, useProspect, useProspects } from '@/hooks/marketing/useProspects';
 import { AllProspectsTable, Prospect } from '@/components/molecules/marketing/AllProspectsTable';
 import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
@@ -38,6 +39,7 @@ export default function AllProspectsPage() {
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [stageFilter, setStageFilter] = useState('');
   const [pendingDelete, setPendingDelete] = useState<Prospect | null>(null);
   const [stageProspect, setStageProspect] = useState<Prospect | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
@@ -48,7 +50,14 @@ export default function AllProspectsPage() {
     page,
     limit: PAGE_SIZE,
     ...(search.trim() ? { search: search.trim() } : {}),
+    ...(stageFilter ? { pipelineStageId: stageFilter } : {}),
   });
+
+  const { data: pipelineStages = [] } = usePipelineStages();
+  const stageOptions = useMemo(
+    () => pipelineStages.map((s) => ({ value: s.id, label: s.name })),
+    [pipelineStages],
+  );
 
   // The list row doesn't carry the full contact/location details the modal shows.
   const { data: convertingProspect } = useProspect(convertingId ?? '');
@@ -99,6 +108,12 @@ export default function AllProspectsPage() {
         onDelete={setPendingDelete}
         onConvertToClient={(row) => setConvertingId(row.id)}
         onAdd={() => router.push(`/${tenantSlug}/marketing/prospects/all/new`)}
+        stageOptions={stageOptions}
+        stageFilter={stageFilter}
+        onStageFilter={(id) => {
+          setStageFilter(id);
+          setPage(1);
+        }}
         isLoading={isLoading}
       />
       {convertingId && convertingProspect && (

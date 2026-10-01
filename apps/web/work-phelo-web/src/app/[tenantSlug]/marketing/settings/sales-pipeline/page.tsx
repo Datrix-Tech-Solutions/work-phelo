@@ -6,6 +6,8 @@ import { SortableList, SortableListItem } from '@/components/organisms/shared/So
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { RenameInUseModal } from '@/components/organisms/marketing/RenameInUseModal';
+import { useRenameInUseGuard } from '@/hooks/marketing/useRenameInUseGuard';
 import {
   SalesPipelineStageForm,
   SalesPipelineStageFields,
@@ -14,6 +16,7 @@ import {
   useCreatePipelineStage,
   useDeletePipelineStage,
   usePipelineStages,
+  useReorderPipelineStages,
   useUpdatePipelineStage,
 } from '@/hooks/marketing/usePipelineStages';
 import { useToast } from '@/hooks/useToast';
@@ -28,7 +31,9 @@ export default function SalesPipelinePage() {
   const { data: stageData = [], isLoading, isError } = usePipelineStages();
   const createStage = useCreatePipelineStage();
   const updateStage = useUpdatePipelineStage();
+  const renameGuard = useRenameInUseGuard('pipeline-stages');
   const deleteStage = useDeletePipelineStage();
+  const reorderStages = useReorderPipelineStages();
 
   const stages: SortableListItem[] = useMemo(
     () =>
@@ -103,17 +108,32 @@ export default function SalesPipelinePage() {
         },
       );
     } else if (editingId) {
-      updateStage.mutate(
-        { id: editingId, name, probability },
-        {
-          onSuccess: () => {
-            toast.success('Stage updated');
-            setModalOpen(false);
-          },
-          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update stage')),
-        },
-      );
+      const original = stageData.find((i) => i.id === editingId);
+      if (original && original.name !== name) {
+        void renameGuard.guardRename(editingId).then((needsConfirm) => {
+          if (!needsConfirm) saveUpdate();
+        });
+        return;
+      }
+      saveUpdate();
     }
+  }
+
+  function saveUpdate() {
+    if (!editingId) return;
+    const name = form.name.trim();
+    const probability = Number(form.probability);
+    updateStage.mutate(
+      { id: editingId, name, probability },
+      {
+        onSuccess: () => {
+          toast.success('Stage updated');
+          renameGuard.closeConfirm();
+          setModalOpen(false);
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update stage')),
+      },
+    );
   }
 
   function closeDelete() {
@@ -138,8 +158,19 @@ export default function SalesPipelinePage() {
     });
   }
 
-  // TODO: persist reordering (on hold) — until then a drag snaps back to the server order.
-  function handleReorder() {}
+  function handleReorder(orderedIds: string[]) {
+    // While searching, the list shows only a subset; merge it back into the full order.
+    const visible = new Set(orderedIds);
+    let next = 0;
+    const fullOrder = stageData.map((s) => (visible.has(s.id) ? orderedIds[next++] : s.id));
+    const changes = fullOrder
+      .map((id, displayOrder) => ({ id, displayOrder }))
+      .filter((c) => stageData.find((s) => s.id === c.id)?.displayOrder !== c.displayOrder);
+    if (changes.length === 0) return;
+    reorderStages.mutate(changes, {
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to reorder stages')),
+    });
+  }
 
   if (isLoading) {
     return <p className="text-sm text-gray-400 text-center py-8">Loading pipeline stages...</p>;
@@ -173,7 +204,10 @@ export default function SalesPipelinePage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} isLoading={createStage.isPending || updateStage.isPending}>
+            <Button
+              onClick={handleSave}
+              isLoading={createStage.isPending || updateStage.isPending || renameGuard.isChecking}
+            >
               {modalMode === 'add' ? 'Add Stage' : 'Save Changes'}
             </Button>
           </div>
@@ -181,6 +215,14 @@ export default function SalesPipelinePage() {
       >
         <SalesPipelineStageForm values={form} onChange={setForm} errors={errors} />
       </SidePanel>
+
+      <RenameInUseModal
+        isOpen={renameGuard.confirmOpen}
+        itemLabel="Sales stage"
+        isLoading={updateStage.isPending}
+        onConfirm={saveUpdate}
+        onClose={renameGuard.closeConfirm}
+      />
 
       {/* Delete confirmation modal */}
       <Modal

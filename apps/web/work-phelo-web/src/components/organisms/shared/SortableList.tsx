@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DndContext,
   DragEndEvent,
@@ -128,18 +129,22 @@ export function SortableList({
                 ))}
               </SortableContext>
 
-              <DragOverlay>
-                {activeItem && (
-                  <SortableListRow
-                    id={activeItem.id}
-                    index={activeIndex}
-                    label={activeItem.label}
-                    sublabel={activeItem.sublabel}
-                    onEdit={() => {}}
-                    onDelete={() => {}}
-                  />
+              {typeof document !== 'undefined' &&
+                createPortal(
+                  <DragOverlay>
+                    {activeItem && (
+                      <SortableListRow
+                        id={activeItem.id}
+                        index={activeIndex}
+                        label={activeItem.label}
+                        sublabel={activeItem.sublabel}
+                        onEdit={() => {}}
+                        onDelete={() => {}}
+                      />
+                    )}
+                  </DragOverlay>,
+                  document.body,
                 )}
-              </DragOverlay>
             </DndContext>
           )}
         </div>

@@ -4,6 +4,7 @@ import {
   CreateProspectFollowUpPayload,
   FollowUpWorklistResponse,
   ProspectFollowUp,
+  ProspectFollowUpHistoryResponse,
   UpdateProspectFollowUpPayload,
 } from '@/types/marketing';
 
@@ -20,6 +21,20 @@ export function useFollowUpWorklist() {
     },
     // Urgency is worked out by the API at request time, so re-check so newly due items appear.
     refetchInterval: 60_000,
+  });
+}
+
+/** Every follow-up (pending, completed, cancelled) ever scheduled for one prospect. */
+export function useProspectFollowUps(prospectId: string) {
+  return useQuery({
+    queryKey: [...FOLLOW_UPS_KEY, 'prospect', prospectId] as const,
+    queryFn: async () => {
+      const res = await api.get<ProspectFollowUpHistoryResponse>(
+        `${PROSPECTS_ENDPOINT}/${prospectId}/follow-ups`,
+      );
+      return res.data.items;
+    },
+    enabled: !!prospectId,
   });
 }
 

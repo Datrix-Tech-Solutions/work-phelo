@@ -6,6 +6,8 @@ import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { RenameInUseModal } from '@/components/organisms/marketing/RenameInUseModal';
+import { useRenameInUseGuard } from '@/hooks/marketing/useRenameInUseGuard';
 import { SourceTypeForm, SourceTypeFields } from '@/components/molecules/marketing/SourceTypeForm';
 import {
   useCreateProspectingSetting,
@@ -24,6 +26,7 @@ export default function SourceTypePage() {
   const { data: itemData = [], isLoading, isError } = useProspectingSettings('source-types');
   const createItem = useCreateProspectingSetting('source-types');
   const updateItem = useUpdateProspectingSetting('source-types');
+  const renameGuard = useRenameInUseGuard('source-types');
   const deleteItem = useDeleteProspectingSetting('source-types');
 
   const items: CardListItem[] = useMemo(
@@ -91,17 +94,32 @@ export default function SourceTypePage() {
         },
       );
     } else if (editingId) {
-      updateItem.mutate(
-        { id: editingId, name, description },
-        {
-          onSuccess: () => {
-            toast.success('Source type updated');
-            setPanelOpen(false);
-          },
-          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update source type')),
-        },
-      );
+      const original = itemData.find((i) => i.id === editingId);
+      if (original && original.name !== name) {
+        void renameGuard.guardRename(editingId).then((needsConfirm) => {
+          if (!needsConfirm) saveUpdate();
+        });
+        return;
+      }
+      saveUpdate();
     }
+  }
+
+  function saveUpdate() {
+    if (!editingId) return;
+    const name = form.name.trim();
+    const description = form.description.trim();
+    updateItem.mutate(
+      { id: editingId, name, description },
+      {
+        onSuccess: () => {
+          toast.success('Source type updated');
+          renameGuard.closeConfirm();
+          setPanelOpen(false);
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update source type')),
+      },
+    );
   }
 
   function closeDelete() {
@@ -156,7 +174,10 @@ export default function SourceTypePage() {
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} isLoading={createItem.isPending || updateItem.isPending}>
+            <Button
+              onClick={handleSave}
+              isLoading={createItem.isPending || updateItem.isPending || renameGuard.isChecking}
+            >
               {panelMode === 'add' ? 'Add Source Type' : 'Save Changes'}
             </Button>
           </div>
@@ -164,6 +185,14 @@ export default function SourceTypePage() {
       >
         <SourceTypeForm values={form} onChange={setForm} errors={errors} />
       </SidePanel>
+
+      <RenameInUseModal
+        isOpen={renameGuard.confirmOpen}
+        itemLabel="Source type"
+        isLoading={updateItem.isPending}
+        onConfirm={saveUpdate}
+        onClose={renameGuard.closeConfirm}
+      />
 
       <Modal
         isOpen={!!deleteId}

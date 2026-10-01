@@ -13,10 +13,10 @@ export function ProspectsTabs({ base, className }: Props) {
   const tabs = [
     { key: 'all', label: 'All Prospects', href: `${base}/all` },
     {
-      key: 'upcoming-follow-ups',
-      label: 'Upcoming Follow Ups',
+      key: 'upcoming-reminders',
+      label: 'Reminders',
       count: dueFollowUps.length,
-      href: `${base}/upcoming-follow-ups`,
+      href: `${base}/upcoming-reminders`,
     },
   ];
 

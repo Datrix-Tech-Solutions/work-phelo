@@ -52,3 +52,37 @@ export function useDeletePipelineStage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: PIPELINE_STAGES_KEY }),
   });
 }
+
+export interface PipelineStageOrderChange {
+  id: string;
+  displayOrder: number;
+}
+
+export function useReorderPipelineStages() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (changes: PipelineStageOrderChange[]) => {
+      await Promise.all(
+        changes.map(({ id, displayOrder }) => api.patch(`${ENDPOINT}/${id}`, { displayOrder })),
+      );
+    },
+    onMutate: async (changes) => {
+      await queryClient.cancelQueries({ queryKey: PIPELINE_STAGES_KEY });
+      const previous = queryClient.getQueryData<PipelineStage[]>(PIPELINE_STAGES_KEY);
+      if (previous) {
+        const order = new Map(changes.map((c) => [c.id, c.displayOrder]));
+        queryClient.setQueryData<PipelineStage[]>(
+          PIPELINE_STAGES_KEY,
+          previous
+            .map((s) => ({ ...s, displayOrder: order.get(s.id) ?? s.displayOrder }))
+            .sort((a, b) => a.displayOrder - b.displayOrder),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _changes, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(PIPELINE_STAGES_KEY, ctx.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: PIPELINE_STAGES_KEY }),
+  });
+}

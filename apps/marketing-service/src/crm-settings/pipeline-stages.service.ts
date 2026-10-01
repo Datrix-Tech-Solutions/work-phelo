@@ -46,6 +46,15 @@ export class PipelineStagesService {
     return stage;
   }
 
+  async getUsage(tenantId: string, id: string): Promise<{ inUse: boolean }> {
+    await this.findOne(tenantId, id);
+    const referenced = await this.prisma.marketingProspect.findFirst({
+      where: { tenantId, pipelineStageId: id },
+      select: { id: true },
+    });
+    return { inUse: !!referenced };
+  }
+
   async create(
     user: RequestUser,
     dto: CreatePipelineStageDto,

@@ -63,6 +63,14 @@ export class QueryProspectsDto {
   @IsOptional()
   @IsUUID()
   assignedUserId?: string;
+
+  @ApiPropertyOptional({
+    example: '5f01c5e7-4f1b-4e47-9b69-8ecf18bc6585',
+    description: 'Only prospects currently in this sales pipeline stage.',
+  })
+  @IsOptional()
+  @IsUUID()
+  pipelineStageId?: string;
 }
 
 export class ProspectListProductDto {

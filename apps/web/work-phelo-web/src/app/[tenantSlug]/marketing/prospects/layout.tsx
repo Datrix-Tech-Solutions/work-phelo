@@ -9,7 +9,7 @@ export default function ProspectsLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const base = `/${tenantSlug}/marketing/prospects`;
 
-  const tabRoutes = [`${base}/all`, `${base}/upcoming-follow-ups`];
+  const tabRoutes = [`${base}/all`, `${base}/upcoming-reminders`];
   const showTabs = tabRoutes.some((r) => pathname === r);
 
   return (

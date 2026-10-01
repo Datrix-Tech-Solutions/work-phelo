@@ -86,8 +86,8 @@ export function CompanyInformationForm({
           emptyState={businessTypeEmptyState}
         />
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+        <div className="grid grid-cols-1 gap-4">
+          {/* <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-bold text-gray-900">Decision Maker</label>
             <input
               type="text"
@@ -97,7 +97,7 @@ export function CompanyInformationForm({
               className={inputClass(errors?.contactName)}
             />
             {errors?.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
-          </div>
+          </div> */}
 
           <SearchSelect
             label="Decision Maker Role"

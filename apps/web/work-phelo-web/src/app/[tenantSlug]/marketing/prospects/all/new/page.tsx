@@ -22,7 +22,7 @@ function buildPayload({
     ...(company.sourceType ? { sourceTypeId: company.sourceType } : {}),
     pipelineStageId: saleStage.pipelineStageId,
     primaryContact: {
-      name: company.contactName.trim(),
+      name: company.contactPerson.trim(),
       ...(company.phone.trim() ? { phone: company.phone.trim() } : {}),
       ...(company.email.trim() ? { email: company.email.trim() } : {}),
       ...(company.roleJobTitle ? { decisionMakerTypeId: company.roleJobTitle } : {}),
@@ -43,6 +43,8 @@ function buildPayload({
           initialInteraction: {
             occurredAt: company.dateContacted,
             ...(company.interactionType ? { interactionMediumId: company.interactionType } : {}),
+            // A named decision maker on the form means one was involved in this first contact.
+            decisionMakerInvolved: company.contactName.trim() !== '',
           },
         }
       : {}),
