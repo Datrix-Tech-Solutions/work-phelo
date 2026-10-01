@@ -33,20 +33,20 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
   const pages = getPageNumbers(currentPage, totalPages);
 
   return (
-    <div className={cardClass('flex items-center justify-between px-4 py-2.5')}>
+    <div className={cardClass('flex items-center justify-between px-4 py-1')}>
       {/* Left: prev + page numbers + next */}
       <div className="flex items-center gap-1">
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:border-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg,var(--color-brand)) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-colors"
+          className="px-3 py-1 text-sm border border-gray-200 rounded-lg text-gray-600 hover:border-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg,var(--color-brand)) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-colors"
         >
           Previous
         </button>
 
         {pages.map((p, i) =>
           p === '...' ? (
-            <span key={`ellipsis-${i}`} className="px-2 py-1.5 text-sm text-gray-400">
+            <span key={`ellipsis-${i}`} className="px-2 py-1 text-sm text-gray-400">
               ...
             </span>
           ) : (
@@ -68,7 +68,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:border-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg,var(--color-brand)) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-colors"
+          className="px-3 py-1 text-sm border border-gray-200 rounded-lg text-gray-600 hover:border-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg,var(--color-brand)) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-colors"
         >
           Next
         </button>

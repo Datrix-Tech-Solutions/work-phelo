@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Pencil, Trash2, UserCheck } from 'lucide-react';
+import { ArrowRightLeft, Pencil, UserCheck } from 'lucide-react';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ProspectBreadcrumb } from '@/components/molecules/marketing/ProspectBreadcrumb';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
@@ -14,6 +14,10 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
+import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
+import { ChangeProspectLocationModal } from '@/components/organisms/marketing/ChangeProspectLocationModal';
+import { ChangeProspectDecisionMakerModal } from '@/components/organisms/marketing/ChangeProspectDecisionMakerModal';
+import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { InteractionDetailPanel } from '@/components/organisms/marketing/InteractionDetailPanel';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -46,51 +50,67 @@ const PRODUCT_COLUMNS: Column<ProspectDetailProduct>[] = [
     key: 'product',
     label: 'Product',
     width: 'minmax(100px, 1fr)',
-    render: (row) => row.product.name,
+    render: (row) => <span className="font-semibold">{row.product.name}</span>,
   },
   {
     key: 'expectedValue',
     label: 'Expected Revenue',
     width: '150px',
     className: 'text-right',
-    render: (row) => formatMoney(row.expectedValue),
+    render: (row) => <span className="font-semibold">{formatMoney(row.expectedValue)}</span>,
   },
   {
     key: 'achievedValue',
     label: 'Achieved Revenue',
     className: 'text-right',
     width: '150px',
-    render: (row) => formatMoney(row.achievedValue),
+    render: (row) => <span className="font-semibold">{formatMoney(row.achievedValue)}</span>,
   },
   {
     key: 'expectedCloseDate',
     label: 'Expected Close Date',
     width: '150px',
-    render: (row) => formatDate(row.expectedCloseDate),
+    render: (row) => <span className="font-semibold">{formatDate(row.expectedCloseDate)}</span>,
   },
 ];
 
 const INTERACTION_COLUMNS: Column<ProspectDetailInteraction>[] = [
-  { key: 'occurredAt', label: 'Date', width: '160px', render: (row) => formatDate(row.occurredAt) },
+  {
+    key: 'occurredAt',
+    label: 'Date',
+    width: '160px',
+    render: (row) => <span className="font-semibold">{formatDate(row.occurredAt)}</span>,
+  },
   {
     key: 'interactionMedium',
     label: 'Medium',
     width: '160px',
-    render: (row) => row.interactionMedium?.name ?? '—',
+    render: (row) => <span className="font-semibold">{row.interactionMedium?.name ?? '—'}</span>,
   },
   {
     key: 'decisionMakerInvolved',
     label: 'Decision Maker Met',
     width: '160px',
-    render: (row) => (row.decisionMakerInvolved ? 'Yes' : 'No'),
+    render: (row) => (
+      <span className="font-semibold">{row.decisionMakerInvolved ? 'Yes' : 'No'}</span>
+    ),
   },
   {
     key: 'participants',
     label: 'Participants',
     width: 'minmax(160px, 0.7fr)',
-    render: (row) => row.participants.map((p) => p.fullName).join(', ') || '—',
+    render: (row) => (
+      <span className="font-semibold">
+        {row.participants.map((p) => p.fullName).join(', ') || '—'}
+      </span>
+    ),
   },
-  { key: 'notes', label: 'Notes', width: 'minmax(160px, 1fr)', render: (row) => row.notes || '—' },
+  {
+    key: 'notes',
+    label: 'Notes',
+    width: 'minmax(160px, 1fr)',
+    render: (row) => <span className="font-semibold">{row.notes || '—'}</span>,
+  },
 ];
 
 type ProspectTab = 'products' | 'interactions';
@@ -107,6 +127,9 @@ export default function ProspectDetailPage() {
     null,
   );
   const [convertingToClient, setConvertingToClient] = useState(false);
+  const [updatingStage, setUpdatingStage] = useState(false);
+  const [changingLocation, setChangingLocation] = useState(false);
+  const [changingDecisionMaker, setChangingDecisionMaker] = useState(false);
   const [addingInteraction, setAddingInteraction] = useState(false);
   const [activeTab, setActiveTab] = useState<ProspectTab>('products');
 
@@ -166,11 +189,18 @@ export default function ProspectDetailPage() {
           )}
           <Button
             variant="outline"
-            icon={<Trash2 className="w-4 h-4" />}
-            onClick={() => setConfirmingDelete(true)}
+            icon={<ArrowRightLeft className="w-4 h-4" />}
+            onClick={() => setUpdatingStage(true)}
           >
-            Delete
+            Update Stage
           </Button>
+          <ProspectManageMenu
+            items={[
+              { label: 'Change Location', onClick: () => setChangingLocation(true) },
+              { label: 'Change Decision Maker', onClick: () => setChangingDecisionMaker(true) },
+              { label: 'Delete Prospect', onClick: () => setConfirmingDelete(true), danger: true },
+            ]}
+          />
           <Button
             icon={<Pencil className="w-4 h-4" />}
             onClick={() => router.push(`${listHref}/${id}/edit`)}
@@ -237,6 +267,36 @@ export default function ProspectDetailPage() {
           totalPages={0}
           onPageChange={() => {}}
           noInternalScroll
+        />
+      )}
+
+      <UpdateProspectStageModal
+        key={prospect.salesStage.id}
+        prospectId={id}
+        prospectName={prospect.companyName}
+        currentStageId={prospect.salesStage.id}
+        isOpen={updatingStage}
+        onClose={() => setUpdatingStage(false)}
+      />
+
+      {changingLocation && (
+        <ChangeProspectLocationModal
+          prospectId={id}
+          prospectName={prospect.companyName}
+          currentLocation={prospect.location}
+          isOpen
+          onClose={() => setChangingLocation(false)}
+        />
+      )}
+
+      {changingDecisionMaker && (
+        <ChangeProspectDecisionMakerModal
+          prospectId={id}
+          prospectName={prospect.companyName}
+          currentName={primaryContact?.name ?? ''}
+          currentRoleId={primaryContact?.decisionMaker?.id ?? ''}
+          isOpen
+          onClose={() => setChangingDecisionMaker(false)}
         />
       )}
 

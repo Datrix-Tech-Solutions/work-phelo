@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { useDeleteProspect, useProspect, useProspects } from '@/hooks/marketing/useProspects';
 import { AllProspectsTable, Prospect } from '@/components/molecules/marketing/AllProspectsTable';
+import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { useToast } from '@/hooks/useToast';
@@ -24,6 +25,7 @@ function toRow(item: ProspectListItem): Prospect {
     product: item.products.map((p) => p.name).join(', ') || '—',
     contactNo: item.primaryContact?.phone ?? '',
     salesStage: item.salesStage.name,
+    salesStageId: item.salesStage.id,
     salesStageProgress: item.salesStage.probability,
     decisionMaker: item.primaryContact?.decisionMaker?.name ?? '',
     lastInteraction: item.lastInteractionDate ?? '',
@@ -37,6 +39,7 @@ export default function AllProspectsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState<Prospect | null>(null);
+  const [stageProspect, setStageProspect] = useState<Prospect | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const toast = useToast();
   const deleteProspect = useDeleteProspect();
@@ -92,6 +95,7 @@ export default function AllProspectsPage() {
         onPageChange={setPage}
         onRowClick={handleRowClick}
         onEdit={(row) => router.push(`/${tenantSlug}/marketing/prospects/all/${row.id}/edit`)}
+        onUpdateStage={setStageProspect}
         onDelete={setPendingDelete}
         onConvertToClient={(row) => setConvertingId(row.id)}
         onAdd={() => router.push(`/${tenantSlug}/marketing/prospects/all/new`)}
@@ -102,6 +106,15 @@ export default function AllProspectsPage() {
           prospect={convertingProspect}
           isOpen
           onClose={() => setConvertingId(null)}
+        />
+      )}
+      {stageProspect && (
+        <UpdateProspectStageModal
+          prospectId={stageProspect.id}
+          prospectName={stageProspect.prospectName}
+          currentStageId={stageProspect.salesStageId}
+          isOpen
+          onClose={() => setStageProspect(null)}
         />
       )}
       {pendingDelete && (

@@ -10,6 +10,7 @@ export interface Prospect {
   product: string;
   contactNo: string;
   salesStage: string;
+  salesStageId: string;
   /** Stage probability (0–100); drives the stage chip colour. */
   salesStageProgress: number;
   decisionMaker: string;
@@ -18,33 +19,60 @@ export interface Prospect {
 
 function stageColor(progress: number): TypeChipColor {
   if (progress >= 100) return 'green';
-  if (progress >= 75) return 'teal';
+  if (progress >= 75) return 'blue';
   if (progress >= 50) return 'purple';
   if (progress >= 25) return 'amber';
-  if (progress > 0) return 'blue';
-  return 'gray';
+  if (progress > 0) return 'gray';
+  return 'red';
 }
 
 const COLUMNS: Column<Prospect>[] = [
-  { key: 'prospectName', label: 'Prospect Name', width: 'minmax(100px, 1fr)' },
-  { key: 'expectedRevenue', label: 'Expected Revenue', width: '130px', className: 'text-right' },
-  { key: 'product', label: 'Product', width: 'minmax(100px, 1fr)' },
-  { key: 'contactNo', label: 'Contact No', width: '100px' },
-
-  { key: 'decisionMaker', label: 'Decision Maker', width: '150px' },
+  {
+    key: 'prospectName',
+    label: 'Prospect Name',
+    width: 'minmax(100px, 1fr)',
+    render: (row) => <span className="font-semibold ">{row.prospectName}</span>,
+  },
+  {
+    key: 'expectedRevenue',
+    label: 'Expected Revenue',
+    width: '130px',
+    className: 'text-right',
+    render: (row) => <span className="font-semibold text-gray-700">{row.expectedRevenue}</span>,
+  },
+  {
+    key: 'product',
+    label: 'Product',
+    width: 'minmax(100px, 1fr)',
+    render: (row) => <span className="font-semibold">{row.product}</span>,
+  },
+  {
+    key: 'contactNo',
+    label: 'Contact No',
+    width: '100px',
+    render: (row) => <span className="font-semibold text-gray-700">{row.contactNo}</span>,
+  },
+  {
+    key: 'decisionMaker',
+    label: 'Decision Maker',
+    width: '150px',
+    render: (row) => <span className="font-semibold">{row.decisionMaker}</span>,
+  },
   {
     key: 'lastInteraction',
     label: 'Last Interaction',
     width: '150px',
     render: (row) =>
       row.lastInteraction ? (
-        new Date(row.lastInteraction).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-        })
+        <span className="font-semibold">
+          {new Date(row.lastInteraction).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          })}
+        </span>
       ) : (
-        <span className="text-gray-400">—</span>
+        <span className="text-gray-400 font-semibold">—</span>
       ),
   },
   {
@@ -64,6 +92,7 @@ interface Props {
   onPageChange: (page: number) => void;
   onRowClick: (row: Prospect) => void;
   onEdit: (row: Prospect) => void;
+  onUpdateStage: (row: Prospect) => void;
   onDelete: (row: Prospect) => void;
   onConvertToClient: (row: Prospect) => void;
   onAdd: () => void;
@@ -79,6 +108,7 @@ export function AllProspectsTable({
   onPageChange,
   onRowClick,
   onEdit,
+  onUpdateStage,
   onDelete,
   onConvertToClient,
   onAdd,
@@ -101,6 +131,7 @@ export function AllProspectsTable({
           ? [{ label: 'Convert to Client', onClick: () => onConvertToClient(row) }]
           : []),
         { label: 'Edit', onClick: () => onEdit(row) },
+        { label: 'Update Stage', onClick: () => onUpdateStage(row) },
         { label: 'Delete', onClick: () => onDelete(row), danger: true },
       ]}
       actionButton={{ label: 'Add Prospect', onClick: onAdd }}
