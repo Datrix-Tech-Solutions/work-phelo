@@ -12,7 +12,7 @@ import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { Employee } from '@/types/hr';
+import type { DepartmentMember, Employee } from '@/types/hr';
 
 const PAGE_SIZE = 8;
 
@@ -28,27 +28,42 @@ interface Props {
   departmentId: string;
   departmentName: string;
   managerId?: string;
+  /** Trimmed members from the department endpoint, used when the user can't view employees. */
+  summaryMembers?: DepartmentMember[];
 }
 
-export function DepartmentMembersTable({ departmentId, departmentName, managerId }: Props) {
+export function DepartmentMembersTable({
+  departmentId,
+  departmentName,
+  managerId,
+  summaryMembers,
+}: Props) {
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
   const toast = useToast();
 
   const canUpdate = usePermission(Permission.UPDATE_DEPARTMENT);
+  const canViewEmployee = usePermission(Permission.READ_EMPLOYEES);
+  // Same rule as the employee directory cards: opening a profile needs edit or offboard rights.
+  const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
+  const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
+  const canViewDetail = canEditEmployee || canOffboardEmployee;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
 
-  const { data, isLoading } = useAllEmployees({ departmentId });
+  const { data, isLoading } = useAllEmployees({ departmentId }, { enabled: canViewEmployee });
   const { data: employeeOptions = [] } = useEmployeeOptions();
   const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return (data?.data ?? []).filter((e) => {
+    const source: Employee[] = canViewEmployee
+      ? (data?.data ?? [])
+      : ((summaryMembers ?? []) as Employee[]);
+    return source.filter((e) => {
       const matchesStatus = statusFilter
         ? e.employmentStatus === statusFilter
         : e.employmentStatus !== 'OFFBOARDED';
@@ -59,7 +74,7 @@ export function DepartmentMembersTable({ departmentId, departmentName, managerId
         e.email?.toLowerCase().includes(q);
       return matchesStatus && matchesSearch;
     });
-  }, [data, search, statusFilter]);
+  }, [data, summaryMembers, canViewEmployee, search, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const members = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -100,17 +115,21 @@ export function DepartmentMembersTable({ departmentId, departmentName, managerId
         </div>
       ),
     },
-    {
-      key: 'contact',
-      label: 'Contact',
-      width: 'minmax(150px, 1fr)',
-      render: (row) => (
-        <div className="flex flex-col gap-0.5">
-          <span className="text-sm text-gray-700">{row.email}</span>
-          {row.phone && <span className="text-xs text-gray-400">{row.phone}</span>}
-        </div>
-      ),
-    },
+    ...(canViewEmployee
+      ? [
+          {
+            key: 'contact',
+            label: 'Contact',
+            width: 'minmax(150px, 1fr)',
+            render: (row: Employee) => (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm text-gray-700">{row.email}</span>
+                {row.phone && <span className="text-xs text-gray-400">{row.phone}</span>}
+              </div>
+            ),
+          },
+        ]
+      : []),
     {
       key: 'status',
       label: 'Status',
@@ -136,7 +155,10 @@ export function DepartmentMembersTable({ departmentId, departmentName, managerId
           setStatusFilter(value);
           setPage(1);
         }}
-        onRowClick={(row) => router.push(`/${params.tenantSlug}/hr/employees/${row.id}`)}
+        {...(canViewDetail && {
+          onRowClick: (row: Employee) =>
+            router.push(`/${params.tenantSlug}/hr/employees/${row.id}`),
+        })}
         {...(canUpdate && {
           actionButton: { label: 'Add Members', onClick: () => setPanelOpen(true) },
         })}
