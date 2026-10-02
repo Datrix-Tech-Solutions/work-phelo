@@ -6,16 +6,19 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
 import { ProspectingSetting } from '@/types/marketing';
 
+export type CampaignChannel = 'sms' | 'email';
+
 export type CampaignDispatch = 'instant' | 'schedule';
 
 export interface CampaignForm {
   name: string;
-  outreachChannel: string;
+  outreachChannel: CampaignChannel[];
   targetSegment: string;
   subject: string;
   message: string;
@@ -25,7 +28,7 @@ export interface CampaignForm {
 
 const DEFAULT_VALUES: CampaignForm = {
   name: '',
-  outreachChannel: '',
+  outreachChannel: [],
   targetSegment: '',
   subject: '',
   message: '',
@@ -36,6 +39,11 @@ const DEFAULT_VALUES: CampaignForm = {
 const DISPATCH_OPTIONS: { label: string; value: CampaignDispatch }[] = [
   { label: 'Instant Send', value: 'instant' },
   { label: 'Schedule', value: 'schedule' },
+];
+
+const CHANNEL_OPTIONS: { label: string; value: CampaignChannel }[] = [
+  { label: 'SMS', value: 'sms' },
+  { label: 'Email', value: 'email' },
 ];
 
 function toOptions(items: ProspectingSetting[]) {
@@ -49,9 +57,7 @@ interface Props {
 }
 
 export function AddCampaignPanel({ isOpen, onClose, onSubmit }: Props) {
-  const { data: sourceTypes = [] } = useProspectingSettings('source-types');
   const { data: businessTypes = [] } = useProspectingSettings('business-types');
-  const channelOptions = useMemo(() => toOptions(sourceTypes), [sourceTypes]);
   const segmentOptions = useMemo(() => toOptions(businessTypes), [businessTypes]);
 
   const {
@@ -65,6 +71,9 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit }: Props) {
 
   const channelValue = useWatch({ control, name: 'outreachChannel' });
   const segmentValue = useWatch({ control, name: 'targetSegment' });
+  const subjectValue = useWatch({ control, name: 'subject' }) ?? '';
+  const messageValue = useWatch({ control, name: 'message' }) ?? '';
+  const characterCount = subjectValue.length + messageValue.length;
   const dispatchValue = useWatch({ control, name: 'dispatch' });
   const scheduledDateValue = useWatch({ control, name: 'scheduledDate' });
 
@@ -110,13 +119,20 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit }: Props) {
           placeholder="eg; Q4 Product Launch"
         />
 
-        <input type="hidden" {...register('outreachChannel', { required: 'Required' })} />
-        <SearchSelect
+        <input
+          type="hidden"
+          {...register('outreachChannel', {
+            validate: (v) => v.length > 0 || 'Select at least one channel',
+          })}
+        />
+        <MultiSelect
           label="Outreach Channel"
-          placeholder="Select outreach channel"
+          placeholder="Select outreach channels"
           value={channelValue}
-          onChange={(v) => setValue('outreachChannel', v, { shouldValidate: true })}
-          options={channelOptions}
+          onChange={(v) =>
+            setValue('outreachChannel', v as CampaignChannel[], { shouldValidate: true })
+          }
+          options={CHANNEL_OPTIONS}
           error={errors.outreachChannel?.message}
         />
 
@@ -150,6 +166,17 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit }: Props) {
             className="w-full border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand resize-none"
           />
           {errors.message && <p className="text-xs text-red-500">{errors.message.message}</p>}
+        </div>
+
+        <div className="flex items-center justify-between rounded-input bg-blue-50 px-4 py-2 text-sm">
+          <span className="font-bold text-gray-900">Total Characters</span>
+          <span className="text-gray-600">
+            {characterCount.toLocaleString()}
+            <span className="text-xs text-gray-400">
+              {' '}
+              (subject {subjectValue.length} + body {messageValue.length})
+            </span>
+          </span>
         </div>
 
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">

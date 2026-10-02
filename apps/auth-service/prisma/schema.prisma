@@ -69,6 +69,7 @@ enum PermissionAction {
   RUN
   EXPORT
   ASSIGN
+  CANCEL
 
   @@schema("w_auth")
 }

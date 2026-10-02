@@ -7,7 +7,8 @@ export type PermissionAction =
   | 'APPROVE'
   | 'RUN'
   | 'EXPORT'
-  | 'ASSIGN';
+  | 'ASSIGN'
+  | 'CANCEL';
 
 // ── Resource ──────────────────────────────────────────────
 export interface Resource {

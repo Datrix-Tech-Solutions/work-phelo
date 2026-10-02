@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import type { PermissionAction, PermissionSetResourceDto } from '@/types/roles';
 
 interface PermissionTag {
   key: string;
@@ -138,35 +138,71 @@ export const MARKETING_ADMIN_PERMISSIONS: PermissionPair[] = [
   ).values(),
 ];
 
-export function MarketingPermissionSections() {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+/** Turns the selected pills into the resource/action DTOs the permission-set API expects. */
+export function buildMarketingPermissionResources(
+  selectedKeys: string[],
+  resourceIdMap: Map<string, string>,
+): PermissionSetResourceDto[] {
+  const seen = new Set<string>();
+  const dtos: PermissionSetResourceDto[] = [];
+
+  for (const key of selectedKeys) {
+    for (const { resource, action } of MARKETING_PERMISSION_TAG_MAPPING[key] ?? []) {
+      const resourceId = resourceIdMap.get(resource);
+      if (!resourceId) continue;
+      const id = `${resourceId}:${action}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      dtos.push({ resourceId, action: action as PermissionAction });
+    }
+  }
+
+  return dtos;
+}
+
+/** Reverse-maps a set's existing resource:action pairs back to pill keys. */
+export function inferMarketingTagsFromResources(
+  resources: Array<{ resource: { name: string }; action: string }>,
+): string[] {
+  const has = new Set(resources.map((r) => `${r.resource.name}:${r.action}`));
+  return Object.entries(MARKETING_PERMISSION_TAG_MAPPING)
+    .filter(
+      ([, perms]) =>
+        perms.length > 0 && perms.every(({ resource, action }) => has.has(`${resource}:${action}`)),
+    )
+    .map(([key]) => key);
+}
+
+interface MarketingPermissionSectionsProps {
+  value: string[];
+  onChange: (value: string[]) => void;
+}
+
+export function MarketingPermissionSections({ value, onChange }: MarketingPermissionSectionsProps) {
+  const selected = new Set(value);
 
   const toggle = (section: PermissionSection, key: string) => {
     const detailKeys = sectionDetailKeys(section.key);
-    setSelected((prev) => {
-      const next = new Set(prev);
+    const next = new Set(selected);
 
-      if (key === section.umbrellaKey) {
-        // Umbrella selects or clears every pill in its section.
-        if (next.has(key)) {
-          detailKeys.forEach((k) => next.delete(k));
-          next.delete(key);
-        } else {
-          detailKeys.forEach((k) => next.add(k));
-          next.add(key);
-        }
-        return next;
-      }
-
+    if (key === section.umbrellaKey) {
+      // Umbrella selects or clears every pill in its section.
       if (next.has(key)) {
+        detailKeys.forEach((k) => next.delete(k));
         next.delete(key);
-        next.delete(section.umbrellaKey);
       } else {
+        detailKeys.forEach((k) => next.add(k));
         next.add(key);
-        if (detailKeys.every((k) => next.has(k))) next.add(section.umbrellaKey);
       }
-      return next;
-    });
+    } else if (next.has(key)) {
+      next.delete(key);
+      next.delete(section.umbrellaKey);
+    } else {
+      next.add(key);
+      if (detailKeys.every((k) => next.has(k))) next.add(section.umbrellaKey);
+    }
+
+    onChange(Array.from(next));
   };
 
   return (
