@@ -1,13 +1,13 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { MarketingPermissionSections } from '@/components/molecules/marketing/MarketingPermissionSections';
 import { RoleFormFields, RoleFormValues } from '@/components/molecules/roles/RoleFormFields';
-import { PermissionTagSelector } from '@/components/molecules/roles/PermissionTagSelector';
 
 export default function NewMarketingRolePage({
   params,
@@ -17,8 +17,6 @@ export default function NewMarketingRolePage({
   const { tenantSlug } = use(params);
   const router = useRouter();
   const base = `/${tenantSlug}/marketing/user-management/roles-permissions`;
-
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const {
     register,
@@ -63,7 +61,7 @@ export default function NewMarketingRolePage({
             <p className="text-sm font-semibold text-gray-900">Permissions</p>
             <p className="text-sm text-gray-400 mt-0.5">Select what this role can do.</p>
           </div>
-          <PermissionTagSelector value={selectedTags} onChange={setSelectedTags} />
+          <MarketingPermissionSections />
         </div>
       </div>
     </div>

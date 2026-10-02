@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
+import { MARKETING_ADMIN_PERMISSIONS } from '@/components/molecules/marketing/MarketingPermissionSections';
 import type { PermissionAction, PermissionSetResourceDto } from '@/types/roles';
 
 interface PermissionTag {
@@ -250,9 +251,10 @@ export const PERMISSION_TAG_MAPPING: Record<
     { resource: 'users', action: 'VIEW' },
   ],
 
+  marketing_module_admin: MARKETING_ADMIN_PERMISSIONS,
+
   // Other modules — UI-only for now, not yet linked to backend permissions
   accounting_module_admin: null,
-  marketing_module_admin: null,
   recruitment_module_admin: null,
 };
 
