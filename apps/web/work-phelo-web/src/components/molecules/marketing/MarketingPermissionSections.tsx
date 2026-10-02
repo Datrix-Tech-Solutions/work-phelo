@@ -44,6 +44,18 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     ],
   },
   {
+    key: 'fleet',
+    label: 'Fleet',
+    umbrellaKey: 'manage_fleet',
+    tags: [
+      { key: 'manage_fleet', label: 'Manage Fleet' },
+      { key: 'view_fleet', label: 'View Fleet' },
+      { key: 'create_fleet', label: 'Create Vehicles' },
+      { key: 'edit_fleet', label: 'Edit Vehicles' },
+      { key: 'delete_fleet', label: 'Delete Vehicles' },
+    ],
+  },
+  {
     key: 'crm-configuration',
     label: 'CRM Configuration',
     umbrellaKey: 'manage_crm_configuration',
@@ -110,6 +122,12 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
   edit_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['EDIT'])],
   delete_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['DELETE'])],
 
+  // Fleet — edit/delete imply view since the list is the entry point.
+  view_fleet: pairs('marketing.fleet', ['VIEW']),
+  create_fleet: pairs('marketing.fleet', ['VIEW', 'CREATE']),
+  edit_fleet: pairs('marketing.fleet', ['VIEW', 'EDIT']),
+  delete_fleet: pairs('marketing.fleet', ['VIEW', 'DELETE']),
+
   // CRM Configuration
   manage_pipelines: pairs('marketing.pipeline-stages', CRUD),
   manage_products: pairs('marketing.products', CRUD),
@@ -123,6 +141,7 @@ const UMBRELLA_EXTRAS: Record<string, PermissionPair[]> = {
   manage_crm_configuration: pairs('marketing.crm-settings', CRUD),
   manage_prospects: [],
   manage_clients: [],
+  manage_fleet: [],
 };
 
 /** Pill key → backend resource/action pairs it grants (umbrellas grant their section's union). */

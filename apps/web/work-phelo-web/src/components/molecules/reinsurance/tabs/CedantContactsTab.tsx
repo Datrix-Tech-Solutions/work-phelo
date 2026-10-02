@@ -12,6 +12,7 @@ import { useUpdateCounterpartyContact, useRemoveCounterpartyContact } from '@/ho
 import { useToast } from '@/hooks/useToast';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { extractError } from '@/lib/extractError';
+import { cardGrid } from '@/lib/layout';
 import { Counterparty, CounterpartyContact } from '@/types/reinsurance';
 
 interface CedantContactsTabProps {
@@ -93,7 +94,7 @@ export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
 
   return (
     <>
-      <div className="flex flex-wrap gap-4">
+      <div className={cardGrid}>
         {counterparty.contacts.map((c) => (
           <ContactCard
             key={c.id}

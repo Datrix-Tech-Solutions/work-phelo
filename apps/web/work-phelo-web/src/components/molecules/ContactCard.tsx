@@ -1,8 +1,9 @@
 'use client';
 
-import { MapPin, UserPlus, Trash2, Mail, Phone, Pencil } from 'lucide-react';
+import { MapPin, UserPlus, Trash2, Mail, Phone, Pencil, User } from 'lucide-react';
 import { cn, glassStrongClass } from '@/lib/utils';
 import { Avatar } from '@/components/atoms/Avatar';
+import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 
 const PILL_COLORS = {
   green: 'border-green-300 text-green-800',
@@ -51,10 +52,16 @@ interface ContactCardProps {
   location?: string;
   /** Pill in the top-right corner of the header row, same styling as the location pill. */
   statusPill?: { label: string; color: PillColor };
+  /** Same spot as `statusPill`, but as a TypeChip (small uppercase label). Wins if both are set. */
+  statusChip?: { label: string; color: TypeChipColor };
   /** Optional 2-column detail grid rendered between the header and the divider. */
   details?: ContactCardDetail[];
+  /** Contact person row (User icon) above the email — for organisations, where the card name is not a person. */
+  contactPerson?: string;
   email: string;
   phone: string;
+  /** Plain location row under the phone number (MapPin icon) — for cards that keep the header uncluttered. */
+  address?: string;
   /** Floating notification badge that straddles the top border — e.g. an outstanding count. */
   badge?: { count: number; label: string };
   onClick?: () => void;
@@ -70,9 +77,12 @@ export function ContactCard({
   subtitle,
   location,
   statusPill,
+  statusChip,
   details,
+  contactPerson,
   email,
   phone,
+  address,
   badge,
   onClick,
   onAddPerson,
@@ -86,7 +96,7 @@ export function ContactCard({
     <div
       className={glassStrongClass(
         cn(
-          'group relative rounded-xl p-4 w-80 h-full flex flex-col gap-4',
+          'group relative rounded-xl px-4 py-3 w-full h-full flex flex-col gap-2.5',
           'border border-gray-100 shadow-lg transition-all duration-200',
           'hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-1.5',
           onClick && 'cursor-pointer',
@@ -157,7 +167,7 @@ export function ContactCard({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <Avatar name={name} avatarUrl={avatarUrl} />
-          <div className="flex flex-col gap-2 mt-1">
+          <div className="flex flex-col gap-1">
             <span className="text-sm font-bold text-gray-900 leading-snug">{name}</span>
             {subtitle && <span className="text-sm text-gray-400">{subtitle}</span>}
             {location && (
@@ -167,16 +177,20 @@ export function ContactCard({
             )}
           </div>
         </div>
-        {statusPill && <Pill color={statusPill.color}>{statusPill.label}</Pill>}
+        {statusChip ? (
+          <TypeChip label={statusChip.label} color={statusChip.color} />
+        ) : (
+          statusPill && <Pill color={statusPill.color}>{statusPill.label}</Pill>
+        )}
       </div>
 
       {/* Optional detail grid — e.g. department + hire date */}
       {details && details.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
           {details.map((d) => (
             <div key={d.label}>
               <p className="text-xs text-gray-400">{d.label}</p>
-              <p className="text-sm font-semibold text-gray-900 mt-0.5 flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
                 {d.dotColor && (
                   <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', d.dotColor)} />
                 )}
@@ -190,15 +204,27 @@ export function ContactCard({
       <hr className="border-gray-100" />
 
       {/* Contact info */}
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-1.5">
+        {contactPerson && (
+          <div className="flex items-center gap-2 text-gray-600 text-sm">
+            <User size={14} className="shrink-0 text-indigo-500" />
+            <span>{contactPerson}</span>
+          </div>
+        )}
         <div className="flex items-center gap-2 text-gray-600 text-sm">
-          <Mail size={14} className="shrink-0 text-gray-400" />
+          <Mail size={14} className="shrink-0 text-blue-500" />
           <span>{email}</span>
         </div>
         <div className="flex items-center gap-2 text-gray-600 text-sm">
-          <Phone size={14} className="shrink-0 text-gray-400" />
+          <Phone size={14} className="shrink-0 text-emerald-500" />
           <span>{phone}</span>
         </div>
+        {address && (
+          <div className="flex items-start gap-2 text-gray-600 text-sm">
+            <MapPin size={14} className="shrink-0 text-rose-500 mt-0.5" />
+            <span>{address}</span>
+          </div>
+        )}
       </div>
     </div>
   );

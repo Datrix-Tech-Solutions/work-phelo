@@ -36,6 +36,31 @@ enum MarketingClientProductStatus {
   @@schema("marketing")
 }
 
+enum MarketingFleetVehicleType {
+  SEDAN
+  SUV
+  PICKUP
+  VAN
+  MINIBUS
+  BUS
+  MOTORCYCLE
+  TRUCK
+  OTHER
+
+  @@schema("marketing")
+}
+
+enum MarketingFleetFuelType {
+  PETROL
+  DIESEL
+  ELECTRIC
+  HYBRID
+  LPG
+  OTHER
+
+  @@schema("marketing")
+}
+
 model MarketingCrmSettingOption {
   id              String                      @id @default(uuid())
   tenantId        String
@@ -265,13 +290,17 @@ model MarketingClientContact {
 }
 
 model MarketingClientProduct {
-  id        String                       @id @default(uuid())
-  tenantId  String
-  clientId  String
-  productId String
-  status    MarketingClientProductStatus @default(PENDING)
-  createdAt DateTime                     @default(now())
-  updatedAt DateTime                     @updatedAt
+  id               String                       @id @default(uuid())
+  tenantId         String
+  clientId         String
+  productId        String
+  status           MarketingClientProductStatus @default(PENDING)
+  /// Carried over from the prospect product at conversion; null for products added directly.
+  expectedValue    Decimal?                     @db.Decimal(18, 2)
+  commissionRate   Decimal?                     @db.Decimal(7, 4)
+  commissionAmount Decimal?                     @db.Decimal(18, 2)
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
 
   client MarketingClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -279,5 +308,29 @@ model MarketingClientProduct {
   @@index([tenantId, clientId])
   @@index([tenantId, productId])
   @@index([tenantId, status])
+  @@schema("marketing")
+}
+
+/// Fleet-specific details for a vehicle. The vehicle itself is an HR Asset
+/// (type VEHICLE) that this row points at by assetId; identity, branch, driver
+/// and status stay in hr-service so both modules share one record.
+model MarketingFleetVehicle {
+  id                 String                    @id @default(uuid())
+  tenantId           String
+  assetId            String
+  vehicleType        MarketingFleetVehicleType
+  make               String
+  model              String
+  yearOfRegistration Int
+  fuelType           MarketingFleetFuelType
+  currentMileage     Int
+  createdByUserId    String?
+  updatedByUserId    String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@unique([tenantId, assetId])
+  @@index([tenantId, vehicleType])
+  @@index([tenantId, fuelType])
   @@schema("marketing")
 }

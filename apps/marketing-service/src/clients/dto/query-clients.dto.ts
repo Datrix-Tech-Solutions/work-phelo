@@ -7,6 +7,11 @@ import {
   ProspectListPrimaryContactDto,
 } from '../../prospects/dto/query-prospects.dto';
 
+export class ClientListPrimaryContactDto extends ProspectListPrimaryContactDto {
+  @ApiPropertyOptional({ nullable: true })
+  email!: string | null;
+}
+
 export class QueryClientsDto {
   @ApiPropertyOptional({ example: 1, minimum: 1, default: 1 })
   @IsOptional()
@@ -71,8 +76,8 @@ export class ClientListItemDto {
   @ApiProperty()
   isBillable!: boolean;
 
-  @ApiPropertyOptional({ nullable: true, type: ProspectListPrimaryContactDto })
-  primaryContact!: ProspectListPrimaryContactDto | null;
+  @ApiPropertyOptional({ nullable: true, type: ClientListPrimaryContactDto })
+  primaryContact!: ClientListPrimaryContactDto | null;
 
   @ApiProperty({ type: [ClientListProductDto] })
   products!: ClientListProductDto[];

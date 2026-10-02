@@ -114,6 +114,14 @@ export class ProspectListSalesStageDto {
   probability!: number;
 }
 
+export class ProspectListBusinessTypeDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  name!: string;
+}
+
 export class ProspectListItemDto {
   @ApiProperty()
   id!: string;
@@ -132,6 +140,9 @@ export class ProspectListItemDto {
     description: 'Sum of achieved values from prospect products/services.',
   })
   achievedValue!: string;
+
+  @ApiPropertyOptional({ nullable: true, type: ProspectListBusinessTypeDto })
+  businessType!: ProspectListBusinessTypeDto | null;
 
   @ApiProperty({ type: [ProspectListProductDto] })
   products!: ProspectListProductDto[];

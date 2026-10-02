@@ -29,3 +29,7 @@ export const pageContent = `${px} pt-4 ${pbLg}`;
 
 // Full-page wrapper with padding on all sides (e.g. project detail layout)
 export const pageWrapper = 'p-4 sm:p-6 lg:p-8';
+
+// Responsive card grid: as many columns as fit, each card stretching to fill its column.
+// Cards placed in it should be w-full (ContactCard and DataCard are).
+export const cardGrid = 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3';

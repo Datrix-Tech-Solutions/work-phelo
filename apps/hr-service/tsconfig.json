@@ -7,7 +7,8 @@
       "@work-phelo/types": ["../../packages/types/dist"],
       "@work-phelo/schemas": ["../../packages/schemas/dist"],
       "@work-phelo/config": ["../../packages/config/dist"],
-      "@work-phelo/utils": ["../../packages/utils/dist"]
+      "@work-phelo/utils": ["../../packages/utils/dist"],
+      "@work-phelo/internal-auth": ["../../packages/internal-auth/dist"]
     }
   },
   "include": ["src/**/*"],

@@ -8,8 +8,22 @@ export function ConfirmDeleteProspectModal({
   isDeleting,
   onConfirm,
   onCancel,
+  title = 'Delete Prospect',
+  consequence = 'also removes its contacts, products and interaction history',
+  confirmLabel = 'Delete',
+  confirmingLabel = 'Deleting…',
+  warning = 'This action cannot be undone.',
+  verb = 'Deleting',
 }: {
   name: string;
+  title?: string;
+  /** Completes "Deleting <name> …" in the body. */
+  consequence?: string;
+  confirmLabel?: string;
+  confirmingLabel?: string;
+  warning?: string;
+  /** Opens the body sentence, e.g. "Deleting" or "Retiring". */
+  verb?: string;
   isDeleting: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -23,13 +37,13 @@ export function ConfirmDeleteProspectModal({
             <AlertTriangle className="w-5 h-5 text-red-600" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-900">Delete Prospect</p>
-            <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone.</p>
+            <p className="text-sm font-semibold text-gray-900">{title}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{warning}</p>
           </div>
         </div>
         <p className="text-sm text-gray-600">
-          Deleting <span className="font-semibold text-gray-900">{name}</span> also removes its
-          contacts, products and interaction history. Continue?
+          {verb} <span className="font-semibold text-gray-900">{name}</span> {consequence}.
+          Continue?
         </p>
         <div className="flex justify-end gap-2 mt-1">
           <Button variant="outline" onClick={onCancel} disabled={isDeleting}>
@@ -38,10 +52,10 @@ export function ConfirmDeleteProspectModal({
           <Button
             onClick={onConfirm}
             isLoading={isDeleting}
-            loadingText="Deleting…"
+            loadingText={confirmingLabel}
             className="bg-red-600 hover:bg-red-700 text-white border-red-600"
           >
-            Delete
+            {confirmLabel}
           </Button>
         </div>
       </div>

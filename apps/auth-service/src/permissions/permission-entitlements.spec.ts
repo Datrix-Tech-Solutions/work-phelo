@@ -61,4 +61,21 @@ describe('permission entitlements', () => {
       isResourceEnabledForTenant(resource, marketingDisabledFeatureConfig),
     ).toBe(false);
   });
+
+  it('scopes marketing.fleet to the Marketing module only', () => {
+    const resource = { name: 'marketing.fleet', module: 'MARKETING' };
+
+    expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
+      true,
+    );
+    expect(
+      isResourceEnabledForTenant(resource, marketingDisabledFeatureConfig),
+    ).toBe(true);
+    expect(
+      isResourceEnabledForTenant(resource, {
+        moduleConfig: { marketing: false },
+        featureConfig: { marketing: { leads: true } },
+      }),
+    ).toBe(false);
+  });
 });

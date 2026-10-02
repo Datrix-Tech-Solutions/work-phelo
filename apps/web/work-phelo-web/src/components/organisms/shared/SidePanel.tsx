@@ -28,7 +28,7 @@ export function SidePanel({
   description,
   children,
   footer,
-  width = 'sm:w-[480px]',
+  width = 'sm:w-[520px]',
   glass = false,
   descriptionAction,
 }: SidePanelProps) {

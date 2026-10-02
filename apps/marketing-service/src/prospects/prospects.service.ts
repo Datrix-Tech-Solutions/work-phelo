@@ -695,6 +695,7 @@ export class ProspectsService {
         select: {
           id: true,
           companyName: true,
+          businessTypeId: true,
           pipelineStageId: true,
           assignedUserId: true,
           createdAt: true,
@@ -746,6 +747,9 @@ export class ProspectsService {
       ]);
 
     const settingIds = [
+      ...prospects
+        .map((prospect) => prospect.businessTypeId)
+        .filter((id): id is string => Boolean(id)),
       ...products.map((product) => product.productId),
       ...primaryContacts
         .map((contact) => contact.decisionMakerTypeId)
@@ -785,6 +789,13 @@ export class ProspectsService {
       return {
         id: prospect.id,
         companyName: prospect.companyName,
+        businessType: prospect.businessTypeId
+          ? this.namedReference(
+              prospect.businessTypeId,
+              settingsById,
+              'Unknown business type',
+            )
+          : null,
         expectedValue: this.sumDecimal(
           prospectProducts.map((product) => product.expectedValue),
         ),

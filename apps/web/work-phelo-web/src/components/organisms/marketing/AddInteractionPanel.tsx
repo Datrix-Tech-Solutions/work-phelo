@@ -11,6 +11,7 @@ import { Toggle } from '@/components/atoms/Toggle';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
 import { useAddProspectInteraction } from '@/hooks/marketing/useProspects';
+import { useAddClientInteraction } from '@/hooks/marketing/useClients';
 import { useCompleteFollowUp } from '@/hooks/marketing/useFollowUps';
 import {
   useCreateProspectingSetting,
@@ -20,7 +21,9 @@ import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 
 interface AddInteractionPanelProps {
-  prospectId: string;
+  /** Exactly one of prospectId / clientId — who the interaction is recorded against. */
+  prospectId?: string;
+  clientId?: string;
   /** Pending follow-up this interaction completes, when recorded from the follow-ups page. */
   followUpId?: string | null;
   isOpen: boolean;
@@ -43,15 +46,20 @@ type FormValues = { contactPersonName: string; contactRole: string; notes: strin
 
 export function AddInteractionPanel({
   prospectId,
+  clientId,
   followUpId,
   isOpen,
   onClose,
   primaryContact,
 }: AddInteractionPanelProps) {
   const toast = useToast();
-  const addInteraction = useAddProspectInteraction(prospectId);
+  const addInteraction = useAddProspectInteraction(prospectId ?? '');
+  const addClientInteraction = useAddClientInteraction(clientId ?? '');
+  // Clients call these "follow-ups"; prospects keep "interaction" in this panel.
+  const noun = clientId ? 'Follow-up' : 'Interaction';
   const completeFollowUp = useCompleteFollowUp();
-  const isSaving = addInteraction.isPending || completeFollowUp.isPending;
+  const isSaving =
+    addInteraction.isPending || addClientInteraction.isPending || completeFollowUp.isPending;
   const { data: media = [] } = useProspectingSettings('interaction-media');
   const createMedium = useCreateProspectingSetting('interaction-media');
   const mediumOptions = useMemo(() => media.map((m) => ({ value: m.id, label: m.name })), [media]);
@@ -134,15 +142,18 @@ export function AddInteractionPanel({
     };
     const callbacks = {
       onSuccess: () => {
-        toast.success('Interaction added');
+        toast.success(`${noun} added`);
         handleClose();
       },
-      onError: (error: unknown) => toast.error(apiErrorMessage(error, 'Failed to add interaction')),
+      onError: (error: unknown) =>
+        toast.error(apiErrorMessage(error, `Failed to add ${noun.toLowerCase()}`)),
     };
 
     // A follow-up is completed through its own endpoint, which records the interaction too.
     if (followUpId) {
       completeFollowUp.mutate({ id: followUpId, payload: { interaction } }, callbacks);
+    } else if (clientId) {
+      addClientInteraction.mutate(interaction, callbacks);
     } else {
       addInteraction.mutate(interaction, callbacks);
     }
@@ -152,15 +163,15 @@ export function AddInteractionPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Add Interaction"
-      description="Log a contact you had with this prospect."
+      title={`Add ${noun}`}
+      description={`Log a contact you had with this ${clientId ? 'client' : 'prospect'}.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
           <Button onClick={handleSubmit(onSubmit)} disabled={isSaving}>
-            Add Interaction
+            Add {noun}
           </Button>
         </div>
       }
