@@ -328,9 +328,25 @@ export class FleetService {
       if (passThrough) throw new HttpException(error.message, status);
 
       this.logger.error(`hr-service call failed: ${error.message}`);
-      throw new BadGatewayException(
-        'Fleet vehicles are temporarily unavailable. Please try again.',
-      );
+      throw new BadGatewayException({
+        statusCode: 502,
+        error: 'Bad Gateway',
+        message:
+          'Fleet vehicles are temporarily unavailable. Please try again.',
+        // Coarse, secret-free hint so a failure can be diagnosed without server logs.
+        reason: this.failureReason(error),
+      });
     }
+  }
+
+  private failureReason(error: InternalServiceClientError) {
+    const status = error.statusCode;
+    if (status === 401 || status === 403)
+      return 'HR_SERVICE_REJECTED_CREDENTIALS';
+    if (status !== undefined) return `HR_SERVICE_ERROR_${status}`;
+    // No HTTP status: either we never sent the request (config) or it never arrived.
+    return error.retryable
+      ? 'HR_SERVICE_UNREACHABLE'
+      : 'HR_SERVICE_NOT_CONFIGURED';
   }
 }
