@@ -112,7 +112,7 @@ export function ProfilePayslipTab() {
           <div className="flex flex-wrap items-center justify-end gap-2">
             {canManagePayroll && (
               <Button variant="outline" onClick={() => router.push(`/${tenantSlug}/hr/payroll`)}>
-                Manage
+                Manage Payroll
               </Button>
             )}
             {hasPayslips && (

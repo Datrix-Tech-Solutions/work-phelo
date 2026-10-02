@@ -18,6 +18,7 @@ export enum PermissionAction {
   RUN = 'RUN',
   EXPORT = 'EXPORT',
   ASSIGN = 'ASSIGN',
+  CANCEL = 'CANCEL',
 }
 
 export class GrantPermissionDto {

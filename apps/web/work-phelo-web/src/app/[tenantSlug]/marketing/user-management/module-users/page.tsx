@@ -3,26 +3,51 @@
 import { useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
+import { Badge } from '@/components/atoms/Badge';
 import { TableButton } from '@/components/atoms/TableButton';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { useRemovePermissionSet } from '@/hooks/hr/useRoles';
+import {
+  useMarketingModuleUsers,
+  type MarketingModuleUser,
+} from '@/hooks/marketing/useMarketingModuleUsers';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
-interface ModuleUserRow {
-  id: string;
-  name: string;
-  email: string;
-  department: string;
-  roles: string[];
-  status: string;
+const PAGE_SIZE = 10;
+
+function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
+  switch (status) {
+    case 'ACTIVE':
+      return 'success';
+    case 'PENDING_VERIFICATION':
+      return 'warning';
+    case 'SUSPENDED':
+    case 'INACTIVE':
+      return 'danger';
+    default:
+      return 'neutral';
+  }
 }
 
 export default function MarketingModuleUsersPage() {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [revokeTarget, setRevokeTarget] = useState<ModuleUserRow | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<MarketingModuleUser | null>(null);
+  const [isRevoking, setIsRevoking] = useState(false);
 
-  const rows: ModuleUserRow[] = [];
+  const { users, isLoading } = useMarketingModuleUsers();
+  const { mutateAsync: removePermissionSet } = useRemovePermissionSet();
 
-  const columns: Column<ModuleUserRow>[] = [
+  const term = search.trim().toLowerCase();
+  const filtered = users.filter(
+    (u) => !term || u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term),
+  );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const columns: Column<MarketingModuleUser>[] = [
     {
       key: 'name',
       label: 'Name',
@@ -32,8 +57,8 @@ export default function MarketingModuleUsersPage() {
     {
       key: 'email',
       label: 'Email',
-      width: '150px',
-      render: (row) => <span className="text-sm text-gray-600">{row.email}</span>,
+      width: 'minmax(180px, 1fr)',
+      render: (row) => <span className="text-sm text-gray-600 truncate">{row.email}</span>,
     },
     {
       key: 'department',
@@ -45,13 +70,15 @@ export default function MarketingModuleUsersPage() {
       key: 'roles',
       label: 'Roles',
       width: 'minmax(160px, 1.5fr)',
-      render: (row) => <span className="text-sm text-gray-600">{row.roles.join(', ') || '—'}</span>,
+      render: (row) => (
+        <span className="text-sm text-gray-600">{row.roles.map((r) => r.name).join(', ')}</span>
+      ),
     },
     {
       key: 'status',
       label: 'Status',
-      width: '120px',
-      render: (row) => <span className="text-sm text-gray-600">{row.status}</span>,
+      width: '140px',
+      render: (row) => <Badge variant={statusVariant(row.status)} label={row.status} />,
     },
     {
       key: 'actions',
@@ -67,16 +94,36 @@ export default function MarketingModuleUsersPage() {
     },
   ];
 
+  // Revoking access removes the user from every marketing role they hold.
+  const handleRevoke = async () => {
+    if (!revokeTarget) return;
+    setIsRevoking(true);
+    try {
+      await Promise.all(
+        revokeTarget.roles.map((role) =>
+          removePermissionSet({ userId: revokeTarget.id, permissionSetId: role.id }),
+        ),
+      );
+      toast.success('Marketing access revoked');
+      setRevokeTarget(null);
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to revoke access'));
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
   return (
     <>
       <div className="flex flex-col gap-2">
         <div className="shrink-0">
-          <p className="font-semibold text-gray-600">Users with module access</p>
+          <h2 className="text-base font-semibold text-gray-900">Module Users</h2>
         </div>
 
         <DataTable
           columns={columns}
           data={rows}
+          isLoading={isLoading}
           emptyMessage="No module users found"
           searchPlaceholder="Search users..."
           searchValue={search}
@@ -85,7 +132,7 @@ export default function MarketingModuleUsersPage() {
             setPage(1);
           }}
           currentPage={page}
-          totalPages={1}
+          totalPages={totalPages}
           onPageChange={setPage}
           noInternalScroll
         />
@@ -95,13 +142,18 @@ export default function MarketingModuleUsersPage() {
         isOpen={!!revokeTarget}
         onClose={() => setRevokeTarget(null)}
         title="Revoke Access"
-        description={`Are you sure you want to revoke ${revokeTarget?.name}'s marketing access?`}
+        description={`Revoke ${revokeTarget?.name}'s marketing access? They will be removed from: ${revokeTarget?.roles.map((r) => r.name).join(', ')}.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setRevokeTarget(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={() => setRevokeTarget(null)}>
+            <Button
+              variant="danger"
+              isLoading={isRevoking}
+              loadingText="Revoking..."
+              onClick={handleRevoke}
+            >
               Revoke
             </Button>
           </div>
