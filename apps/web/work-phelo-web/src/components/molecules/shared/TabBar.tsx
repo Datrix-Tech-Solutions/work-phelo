@@ -32,14 +32,19 @@ interface TabBarProps {
 function TabLink({
   tab,
   isActive,
+  isFirst,
   onTabChange,
 }: {
   tab: TabItem;
   isActive: boolean;
+  isFirst: boolean;
   onTabChange?: (tab: string) => void;
 }) {
   const cls = cn(
-    'relative px-6 py-2 text-sm transition-colors whitespace-nowrap flex items-center gap-2',
+    'relative py-2 text-sm transition-colors whitespace-nowrap flex items-center gap-2',
+    // First tab's left inset comes from --tab-first-pl (globals.css) so its label can line up
+    // with the page title in modules that zero --page-pl.
+    isFirst ? 'pr-6 pl-(--tab-first-pl,1.5rem)' : 'px-6',
     isActive ? TAB_ACTIVE : TAB_IDLE,
   );
 
@@ -81,12 +86,18 @@ export function TabBar({ tabs, groups, activeTab, onTabChange, className }: TabB
           {gi > 0 && (
             <div className="self-center mx-2 w-px h-4 rounded-full bg-(--module-accent,var(--color-gray-300)) shrink-0" />
           )}
-          {group.tabs.map((tab) => {
+          {group.tabs.map((tab, ti) => {
             const isActive = tab.href
               ? pathname === tab.href || pathname.startsWith(tab.href + '/')
               : activeTab === tab.key;
             return (
-              <TabLink key={tab.key} tab={tab} isActive={isActive} onTabChange={onTabChange} />
+              <TabLink
+                key={tab.key}
+                tab={tab}
+                isActive={isActive}
+                isFirst={gi === 0 && ti === 0}
+                onTabChange={onTabChange}
+              />
             );
           })}
         </div>

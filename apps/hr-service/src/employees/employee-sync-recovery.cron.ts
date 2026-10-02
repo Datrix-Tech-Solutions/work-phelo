@@ -149,6 +149,20 @@ export class EmployeeSyncRecoveryCronService {
 
     for (const task of rollbackTasks) {
       try {
+        // A later retry may have created a real employee for this email; never delete that invite.
+        const employee = await this.prisma.employee.findUnique({
+          where: {
+            tenantId_email: { tenantId: task.tenantId, email: task.email },
+          },
+          select: { id: true },
+        });
+        if (employee) {
+          await this.prisma.employeeInviteRollbackTask.delete({
+            where: { id: task.id },
+          });
+          continue;
+        }
+
         await this.rabbitmq.authDeletePendingEmployeeInvite({
           tenantId: task.tenantId,
           userId: task.userId ?? undefined,

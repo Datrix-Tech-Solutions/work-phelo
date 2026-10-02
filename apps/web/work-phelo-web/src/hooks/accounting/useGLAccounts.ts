@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
+  BulkImportAccountsPayload,
+  BulkImportAccountsResult,
   CreateGLAccountPayload,
   GLAccount,
   QueryGLAccountsParams,
@@ -8,7 +10,7 @@ import {
 } from '@/types/accounting';
 
 const BASE = '/accounting/accounts';
-const GL_ACCOUNTS_KEY = ['accounting', 'gl-accounts'] as const;
+export const GL_ACCOUNTS_KEY = ['accounting', 'gl-accounts'] as const;
 
 export function useGLAccounts(params: QueryGLAccountsParams = {}) {
   const { category, status } = params;
@@ -34,6 +36,21 @@ export function useCreateGLAccount() {
   });
 }
 
+export function useBulkImportGLAccounts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: BulkImportAccountsPayload) => {
+      const res = await api.post<BulkImportAccountsResult>(`${BASE}/bulk-import`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: GL_ACCOUNTS_KEY });
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'account-classifications'] });
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'account-groups'] });
+    },
+  });
+}
+
 export function useUpdateGLAccount() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -47,13 +64,27 @@ export function useUpdateGLAccount() {
   });
 }
 
-/** Backend has no delete route — deactivating a GL account is a dedicated endpoint, not a PATCH. */
 export function useDeactivateGLAccount() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
       const res = await api.post<GLAccount>(`${BASE}/${id}/deactivate`);
       return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: GL_ACCOUNTS_KEY });
+    },
+  });
+}
+
+/** Backend only allows this when the account has no child accounts and no journal activity —
+ *  otherwise it responds with a 409 telling the caller to deactivate it instead. */
+export function useDeleteGLAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`${BASE}/${id}`);
+      return id;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: GL_ACCOUNTS_KEY });

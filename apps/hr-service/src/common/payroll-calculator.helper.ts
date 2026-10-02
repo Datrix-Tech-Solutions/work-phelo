@@ -252,15 +252,30 @@ export function calculatePayrollForCountry(
     case PayrollCountry.GH:
     default: {
       const insurable = Decimal.min(basicSalary, GHANA.maxInsurableEarnings);
-      tier1Contribution = insurable.times(GHANA.employeeTier1Rate);
-      tier2Contribution = insurable.times(GHANA.employeeTier2Rate);
-      employeeStatutory = tier1Contribution.plus(tier2Contribution);
+      // Round each deduction component to 2dp as soon as it's computed, then chain the
+      // *rounded* value into taxableIncome/totalDeductions — matching the frontend preview's
+      // round-then-subtract order. Carrying unrounded Decimals through to the final
+      // netSalary subtraction can land on the other side of a rounding tie (e.g. an exact
+      // x.125 PAYE) than rounding early does, producing a genuine 1-cent mismatch between
+      // what the frontend previewed and what the backend actually persists.
+      tier1Contribution = new Decimal(
+        money(insurable.times(GHANA.employeeTier1Rate)),
+      );
+      tier2Contribution = new Decimal(
+        money(insurable.times(GHANA.employeeTier2Rate)),
+      );
+      employeeStatutory = new Decimal(
+        money(tier1Contribution.plus(tier2Contribution)),
+      );
       employerStatutory = insurable.times(GHANA.employerTier1Rate);
 
-      tier3Employee =
-        settings.tier3Enabled && settings.tier3Rate
-          ? basicSalary.times(new Decimal(settings.tier3Rate).div(100))
-          : new Decimal(0);
+      tier3Employee = new Decimal(
+        money(
+          settings.tier3Enabled && settings.tier3Rate
+            ? basicSalary.times(new Decimal(settings.tier3Rate).div(100))
+            : new Decimal(0),
+        ),
+      );
 
       // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base.
       // Transport allowance is PAYE-exempt so it is excluded from taxableIncome,
@@ -292,6 +307,10 @@ export function calculatePayrollForCountry(
   if (settings.taxPolicy === PayrollTaxPolicy.EXEMPT) {
     payeTax = new Decimal(0);
   }
+
+  // Round PAYE once, after every country/policy adjustment above, before it feeds into
+  // totalDeductions/netSalary — same reasoning as the GH deduction components above.
+  payeTax = new Decimal(money(payeTax));
 
   const totalDeductions = otherDeductions
     .plus(employeeStatutory)

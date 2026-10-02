@@ -12,6 +12,12 @@ import { PermissionRecipient, RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { EmployeeImportRowDto } from './dto/bulk-import-employees.dto';
+import { BulkImportRowResult } from '../common/bulk-import.types';
+import {
+  matchByExactName,
+  matchEmployeeByFullName,
+} from '../common/name-match.util';
 import { LeaveService } from '../leave/leave.service';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import {
@@ -37,6 +43,7 @@ import {
   AllowanceType,
   AssetStatus,
   EmploymentStatus,
+  EmployeeDocument,
   PayrollTaxPolicy,
   Prisma,
 } from '../../prisma/generated/client';
@@ -49,6 +56,9 @@ import {
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FieldEncryptionService } from '../crypto/field-encryption.service';
+import { AvatarUrlResolverService } from '../common/avatar-url-resolver.service';
+import { EmployeeDocumentStorageService } from '../common/employee-document-storage.service';
+import { CreateEmployeeDocumentDto } from './dto/create-employee-document.dto';
 import {
   RESIGNATION_QUEUE,
   RESIGNATION_NOTIFY_JOB,
@@ -56,6 +66,7 @@ import {
 } from './resignation-notification.processor';
 
 const RESIGNATION_NOTIFY_DELAY_MS = 30 * 60 * 1000;
+const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
 type ResignationNotificationRecipient = {
   userId: string | null;
@@ -83,6 +94,8 @@ export class EmployeesService {
     private readonly leaveService: LeaveService,
     private readonly notificationsService: NotificationsService,
     private readonly encryption: FieldEncryptionService,
+    private readonly avatarUrlResolver: AvatarUrlResolverService,
+    private readonly documentStorage: EmployeeDocumentStorageService,
     @InjectQueue(RESIGNATION_QUEUE)
     private readonly resignationQueue: Queue<ResignationNotifyPayload>,
   ) {}
@@ -205,6 +218,46 @@ export class EmployeesService {
         select: { id: true, managerId: true },
       });
     }
+  }
+
+  private async cleanUpUnconfirmedInvite(
+    tenantId: string,
+    email: string,
+    cause: unknown,
+  ) {
+    const lastError = cause instanceof Error ? cause.message : String(cause);
+    let deleted = false;
+    try {
+      const result = await this.rabbitmq.authDeletePendingEmployeeInvite({
+        tenantId,
+        email,
+      });
+      deleted = result.deleted;
+    } catch (rollbackErr) {
+      this.logger.error(
+        `Failed to clean up unconfirmed auth invite for ${email}`,
+        rollbackErr,
+      );
+    }
+
+    if (deleted) return;
+
+    // Auth may still be processing the original request, so let the recovery cron retry.
+    await this.prisma.employeeInviteRollbackTask.upsert({
+      where: { tenantId_email: { tenantId, email } },
+      update: {
+        attemptCount: { increment: 1 },
+        lastError,
+        lastAttemptAt: new Date(),
+      },
+      create: {
+        tenantId,
+        email,
+        attemptCount: 1,
+        lastError,
+        lastAttemptAt: new Date(),
+      },
+    });
   }
 
   private async createEmployeeWithUniqueNumber(
@@ -413,7 +466,11 @@ export class EmployeesService {
     });
   }
 
-  async create(tenantId: string, dto: CreateEmployeeDto) {
+  async create(
+    tenantId: string,
+    dto: CreateEmployeeDto,
+    options?: { rpcTimeoutMs?: number },
+  ) {
     // Enforce minimum one department before adding employees
     const deptCount = await this.prisma.department.count({
       where: { tenantId, isActive: true },
@@ -472,17 +529,25 @@ export class EmployeesService {
 
     let provisionedUser;
     try {
-      provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite({
-        tenantId,
-        email: dto.email,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        phone: dto.phone,
-      });
+      provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite(
+        {
+          tenantId,
+          email: dto.email,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          phone: dto.phone,
+        },
+        undefined,
+        options?.rpcTimeoutMs,
+      );
     } catch (error) {
       if (this.isDuplicateAuthUserError(error)) {
         throw new ConflictException('A user with this email already exists.');
       }
+      // The auth user may have been created even though the request failed or timed out
+      // (e.g. a late reply during a bulk import), so clean up by email rather than leaving
+      // a user with no employee profile.
+      await this.cleanUpUnconfirmedInvite(tenantId, dto.email, error);
       throw error;
     }
 
@@ -563,6 +628,121 @@ export class EmployeesService {
     }
 
     return this.encryption.decryptEmployeeFields(employee);
+  }
+
+  /** Creates employees from bulk-import rows sequentially, one row at a time, via the same
+   *  create() used by the single-employee form — so invite emails, leave balance init, and
+   *  holiday seeding all happen exactly as they would for a manually created employee.
+   *  Department is a required lookup: an unresolved name fails the row. Branch and Reporting
+   *  Manager are optional lookups: unresolved/ambiguous values are dropped with a warning and
+   *  the row still proceeds. Newly created employees are added to the manager-lookup pool so a
+   *  later row in the same file can report to someone created earlier in it. */
+  async bulkImport(
+    tenantId: string,
+    rows: EmployeeImportRowDto[],
+  ): Promise<BulkImportRowResult[]> {
+    const departments = await this.prisma.department.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
+    });
+    const branches = await this.prisma.branch.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
+    });
+    const employeeCandidates = await this.prisma.employee.findMany({
+      where: { tenantId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+
+    const results: BulkImportRowResult[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNumber = row.rowNumber ?? i + 1;
+      const warnings: string[] = [];
+
+      const department = matchByExactName(row.departmentName, departments);
+      if (!department) {
+        results.push({
+          rowNumber,
+          status: 'failed',
+          message: `Department "${row.departmentName}" not found`,
+          warnings,
+        });
+        continue;
+      }
+
+      let branchId: string | undefined;
+      if (row.branchName?.trim()) {
+        const branch = matchByExactName(row.branchName, branches);
+        if (branch) {
+          branchId = branch.id;
+        } else {
+          warnings.push(`Branch "${row.branchName}" not found — left blank.`);
+        }
+      }
+
+      let managerId: string | undefined;
+      if (row.managerName?.trim()) {
+        const match = matchEmployeeByFullName(
+          row.managerName,
+          employeeCandidates,
+        );
+        if (match.status === 'found') {
+          managerId = match.id;
+        } else {
+          warnings.push(
+            match.status === 'ambiguous'
+              ? `Reporting Manager "${row.managerName}" matches multiple employees — left blank.`
+              : `Reporting Manager "${row.managerName}" not found — left blank.`,
+          );
+        }
+      }
+
+      try {
+        const employee = await this.create(
+          tenantId,
+          {
+            firstName: row.firstName,
+            lastName: row.lastName,
+            email: row.email,
+            phone: row.phone,
+            gender: row.gender,
+            departmentId: department.id,
+            branchId,
+            jobTitle: row.jobTitle,
+            managerId,
+            hireDate: row.hireDate,
+            employmentType: row.employmentType,
+            contractEndDate: row.contractEndDate,
+            compensationType: row.compensationType,
+            basicSalary: row.basicSalary,
+          },
+          { rpcTimeoutMs: this.rabbitmq.bulkRmqTimeoutMs },
+        );
+        employeeCandidates.push({
+          id: employee.id,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+        });
+        results.push({
+          rowNumber,
+          status: 'created',
+          id: employee.id,
+          warnings,
+        });
+      } catch (err) {
+        results.push({
+          rowNumber,
+          status: 'failed',
+          message:
+            err instanceof Error ? err.message : 'Failed to create employee',
+          warnings,
+        });
+      }
+    }
+
+    return results;
   }
 
   async findAll(
@@ -657,9 +837,20 @@ export class EmployeesService {
     const userIds = employees
       .map((employee) => employee.userId)
       .filter((id): id is string => Boolean(id));
-    const statusMap = await this.getUserStatusMap(tenantId, userIds);
-    const employeesWithStatus = employees.map((employee) =>
-      this.withUserStatus(this.encryption.maskListFields(employee), statusMap),
+    const [statusMap, avatarUrls] = await Promise.all([
+      this.getUserStatusMap(tenantId, userIds),
+      this.avatarUrlResolver.resolveMany(
+        employees.map((employee) => employee.avatarUrl),
+      ),
+    ]);
+    const employeesWithStatus = employees.map((employee, index) =>
+      this.withUserStatus(
+        this.encryption.maskListFields({
+          ...employee,
+          avatarUrl: avatarUrls[index],
+        }),
+        statusMap,
+      ),
     );
 
     return {
@@ -725,10 +916,11 @@ export class EmployeesService {
     const decrypted = this.encryption.decryptEmployeeFields(employee);
     const employeeWithAssets = { ...decrypted, assignedAssets };
 
-    const statusMap = await this.getUserStatusMap(
-      tenantId,
-      employee.userId ? [employee.userId] : [],
-    );
+    const [statusMap, resolvedAvatarUrl] = await Promise.all([
+      this.getUserStatusMap(tenantId, employee.userId ? [employee.userId] : []),
+      this.avatarUrlResolver.resolve(employeeWithAssets.avatarUrl),
+    ]);
+    employeeWithAssets.avatarUrl = resolvedAvatarUrl;
 
     if (!actor) {
       return this.withUserStatus(
@@ -807,6 +999,9 @@ export class EmployeesService {
 
     const decrypted = this.encryption.decryptEmployeeFields(employee);
     const employeeWithAssets = { ...decrypted, assignedAssets };
+    employeeWithAssets.avatarUrl = await this.avatarUrlResolver.resolve(
+      employeeWithAssets.avatarUrl,
+    );
     return this.withUserStatus(
       this.mapEmployeeAssets(employeeWithAssets),
       statusMap,
@@ -1004,6 +1199,13 @@ export class EmployeesService {
         updated.id,
         [new Date().getFullYear(), new Date().getFullYear() + 1],
       );
+    }
+
+    if ('managerId' in rest) {
+      await this.prisma.appraisal.updateMany({
+        where: { tenantId, employeeId: id, status: 'IN_PROGRESS' },
+        data: { managerId: rest.managerId ?? null },
+      });
     }
 
     return this.encryption.decryptEmployeeFields(updated);
@@ -1746,7 +1948,10 @@ export class EmployeesService {
       data: {
         tenantId,
         employeeId,
-        name: this.allowanceNameFromType(dto.type),
+        name:
+          dto.type === 'OTHER' && dto.name?.trim()
+            ? dto.name.trim()
+            : this.allowanceNameFromType(dto.type),
         type: dto.type as AllowanceType,
         amount: dto.amount,
         effectiveFrom: new Date(),
@@ -1766,15 +1971,19 @@ export class EmployeesService {
     });
     if (!existing) throw new NotFoundException('Allowance not found');
 
+    const resolvedType = dto.type ?? existing.type;
+    const nameUpdate =
+      dto.type != null || dto.name != null
+        ? resolvedType === 'OTHER' && dto.name?.trim()
+          ? dto.name.trim()
+          : this.allowanceNameFromType(resolvedType)
+        : undefined;
+
     return this.prisma.employeeAllowance.update({
       where: { id: allowanceId },
       data: {
-        ...(dto.type != null
-          ? {
-              type: dto.type as AllowanceType,
-              name: this.allowanceNameFromType(dto.type),
-            }
-          : {}),
+        ...(dto.type != null ? { type: dto.type as AllowanceType } : {}),
+        ...(nameUpdate != null ? { name: nameUpdate } : {}),
         ...(dto.amount != null ? { amount: dto.amount } : {}),
       },
     });
@@ -1888,15 +2097,117 @@ export class EmployeesService {
     await this.prisma.employeeDeduction.delete({ where: { id: deductionId } });
   }
 
+  async listDocuments(tenantId: string, employeeId: string) {
+    await this.findById(tenantId, employeeId);
+    return this.resolveDocumentUrls(
+      await this.prisma.employeeDocument.findMany({
+        where: { tenantId, employeeId },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+  }
+
+  async listDocumentsForUser(tenantId: string, userId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId, tenantId },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Employee profile not found');
+    return this.listDocuments(tenantId, employee.id);
+  }
+
+  private async resolveDocumentUrls(documents: EmployeeDocument[]) {
+    return Promise.all(
+      documents.map(async (doc) => ({
+        ...doc,
+        url: await this.documentStorage
+          .createSignedReadUrl({
+            objectKey: doc.url,
+            mimeType: doc.mimeType,
+            fileName: doc.name,
+          })
+          .then((signed) => signed.readUrl),
+      })),
+    );
+  }
+
   async uploadDocument(
     tenantId: string,
     employeeId: string,
-    dto: Prisma.EmployeeDocumentUncheckedCreateInput,
+    dto: CreateEmployeeDocumentDto,
+    file: Express.Multer.File | undefined,
+    actor: RequestUser,
   ) {
     await this.findById(tenantId, employeeId);
-    return this.prisma.employeeDocument.create({
-      data: { ...dto, tenantId, employeeId },
+    this.validateDocumentFile(file);
+    const uploadedFile = file as Express.Multer.File;
+
+    const stored = await this.documentStorage.store({
+      tenantId,
+      employeeId,
+      body: uploadedFile.buffer,
+      contentType: uploadedFile.mimetype,
+      originalFileName: uploadedFile.originalname,
     });
+
+    const document = await this.prisma.employeeDocument.create({
+      data: {
+        tenantId,
+        employeeId,
+        type: dto.type,
+        customType:
+          dto.type === 'OTHER' ? dto.customType?.trim() || null : null,
+        name: stored.fileName,
+        url: stored.objectKey,
+        mimeType: stored.mimeType,
+        sizeBytes: stored.sizeBytes,
+        uploadedBy: actor.email ?? actor.id,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+      },
+    });
+
+    const signed = await this.documentStorage.createSignedReadUrl({
+      objectKey: document.url,
+      mimeType: stored.mimeType,
+      fileName: document.name,
+    });
+    return { ...document, url: signed.readUrl };
+  }
+
+  async deleteDocument(
+    tenantId: string,
+    employeeId: string,
+    documentId: string,
+  ): Promise<void> {
+    const document = await this.prisma.employeeDocument.findFirst({
+      where: { id: documentId, tenantId, employeeId },
+    });
+    if (!document) throw new NotFoundException('Document not found');
+
+    await this.prisma.employeeDocument.delete({ where: { id: document.id } });
+
+    await this.documentStorage
+      .delete(document.url)
+      .catch((error) =>
+        this.logger.error(
+          `Failed to delete employee document object ${document.url}`,
+          error,
+        ),
+      );
+  }
+
+  private validateDocumentFile(file: Express.Multer.File | undefined): void {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('A document file is required.');
+    }
+    if (
+      file.size > DOCUMENT_MAX_BYTES ||
+      file.buffer.byteLength > DOCUMENT_MAX_BYTES
+    ) {
+      throw new BadRequestException(
+        `Document exceeds the ${DOCUMENT_MAX_BYTES / 1024 / 1024} MB limit.`,
+      );
+    }
   }
 
   async resendInvite(tenantId: string, employeeId: string) {

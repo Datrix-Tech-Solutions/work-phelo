@@ -13,7 +13,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <AppBackground className="h-dvh overflow-hidden flex flex-col">
-      <TopNav userInitials={initials} notificationCount={0} logoVariant="image" />
+      <TopNav userInitials={initials} logoVariant="image" />
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
     </AppBackground>
   );

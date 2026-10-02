@@ -3,6 +3,7 @@
 import { inputClass } from '@/lib/utils';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { EmailField } from '@/components/atoms/EmailField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { ProspectFormSection } from '@/components/molecules/marketing/ProspectFormSection';
 
@@ -10,6 +11,7 @@ export interface CompanyInformationFields {
   companyName: string;
   businessType: string;
   contactName: string;
+  contactPerson: string;
   phone: string;
   email: string;
   interactionType: string;
@@ -20,6 +22,8 @@ export interface CompanyInformationFields {
 
 export type CompanyInformationErrors = Partial<Record<keyof CompanyInformationFields, string>>;
 
+type EmptyState = (ctx: { query: string; close: () => void }) => React.ReactNode;
+
 interface Props {
   values: CompanyInformationFields;
   onChange: (values: CompanyInformationFields) => void;
@@ -28,6 +32,14 @@ interface Props {
   interactionTypeOptions?: { value: string; label: string }[];
   roleOptions?: { value: string; label: string }[];
   sourceTypeOptions?: { value: string; label: string }[];
+  /** Hides interaction type and date contacted (not editable after creation). */
+  hideInteraction?: boolean;
+  /** Lets the user create a new option inline when nothing matches what they typed —
+   *  see components/molecules/marketing/CreateOptionEmptyState.tsx. */
+  businessTypeEmptyState?: EmptyState;
+  interactionTypeEmptyState?: EmptyState;
+  roleEmptyState?: EmptyState;
+  sourceTypeEmptyState?: EmptyState;
 }
 
 export function CompanyInformationForm({
@@ -38,6 +50,11 @@ export function CompanyInformationForm({
   interactionTypeOptions = [],
   roleOptions = [],
   sourceTypeOptions = [],
+  hideInteraction = false,
+  businessTypeEmptyState,
+  interactionTypeEmptyState,
+  roleEmptyState,
+  sourceTypeEmptyState,
 }: Props) {
   function set<K extends keyof CompanyInformationFields>(key: K, val: CompanyInformationFields[K]) {
     onChange({ ...values, [key]: val });
@@ -47,7 +64,7 @@ export function CompanyInformationForm({
     <div>
       {/* Section 1 — Company Data */}
       <ProspectFormSection title="Company Data">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Company Name</label>
           <input
             type="text"
@@ -61,26 +78,51 @@ export function CompanyInformationForm({
 
         <SearchSelect
           label="Type of Business"
-          placeholder="Select option"
+          placeholder="Select or type to add new"
           options={businessTypeOptions}
           value={values.businessType}
           onChange={(v) => set('businessType', v)}
           error={errors?.businessType}
+          emptyState={businessTypeEmptyState}
         />
+
+        <div className="grid grid-cols-1 gap-4">
+          {/* <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+            <label className="text-sm font-bold text-gray-900">Decision Maker</label>
+            <input
+              type="text"
+              placeholder="Decision maker full name"
+              value={values.contactName}
+              onChange={(e) => set('contactName', e.target.value)}
+              className={inputClass(errors?.contactName)}
+            />
+            {errors?.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
+          </div> */}
+
+          <SearchSelect
+            label="Decision Maker Role"
+            placeholder="Select or type to add new"
+            options={roleOptions}
+            value={values.roleJobTitle}
+            onChange={(v) => set('roleJobTitle', v)}
+            error={errors?.roleJobTitle}
+            emptyState={roleEmptyState}
+          />
+        </div>
       </ProspectFormSection>
 
       {/* Section 2 — Contact Person Data */}
       <ProspectFormSection title="Contact Person Data">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Name</label>
           <input
             type="text"
             placeholder="Contact person's full name"
-            value={values.contactName}
-            onChange={(e) => set('contactName', e.target.value)}
-            className={inputClass(errors?.contactName)}
+            value={values.contactPerson}
+            onChange={(e) => set('contactPerson', e.target.value)}
+            className={inputClass(errors?.contactPerson)}
           />
-          {errors?.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
+          {errors?.contactPerson && <p className="text-xs text-red-500">{errors.contactPerson}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -90,52 +132,44 @@ export function CompanyInformationForm({
             onChange={(v) => set('phone', v)}
             error={errors?.phone}
           />
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-900">Email</label>
-            <input
-              type="email"
-              placeholder="email@example.com"
-              value={values.email}
-              onChange={(e) => set('email', e.target.value.toLowerCase())}
-              className={inputClass(errors?.email)}
-            />
-            {errors?.email && <p className="text-xs text-red-500">{errors.email}</p>}
-          </div>
+          <EmailField
+            label="Email"
+            value={values.email}
+            onChange={(v) => set('email', v)}
+            error={errors?.email}
+          />
         </div>
 
-        <SearchSelect
-          label="Interaction Type"
-          placeholder="Select option"
-          options={interactionTypeOptions}
-          value={values.interactionType}
-          onChange={(v) => set('interactionType', v)}
-          error={errors?.interactionType}
-        />
-
-        <SearchSelect
-          label="Role / Job Title"
-          placeholder="Select option"
-          options={roleOptions}
-          value={values.roleJobTitle}
-          onChange={(v) => set('roleJobTitle', v)}
-          error={errors?.roleJobTitle}
-        />
+        {!hideInteraction && (
+          <SearchSelect
+            label="Interaction Type"
+            placeholder="Select or type to add new"
+            options={interactionTypeOptions}
+            value={values.interactionType}
+            onChange={(v) => set('interactionType', v)}
+            error={errors?.interactionType}
+            emptyState={interactionTypeEmptyState}
+          />
+        )}
 
         <SearchSelect
           label="Source Type"
-          placeholder="Select option"
+          placeholder="Select or type to add new"
           options={sourceTypeOptions}
           value={values.sourceType}
           onChange={(v) => set('sourceType', v)}
           error={errors?.sourceType}
+          emptyState={sourceTypeEmptyState}
         />
 
-        <DatePicker
-          label="Date Contacted"
-          value={values.dateContacted}
-          onChange={(v) => set('dateContacted', v)}
-          error={errors?.dateContacted}
-        />
+        {!hideInteraction && (
+          <DatePicker
+            label="Date Contacted"
+            value={values.dateContacted}
+            onChange={(v) => set('dateContacted', v)}
+            error={errors?.dateContacted}
+          />
+        )}
       </ProspectFormSection>
     </div>
   );

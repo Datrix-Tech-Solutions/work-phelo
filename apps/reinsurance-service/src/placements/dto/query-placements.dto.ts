@@ -1,8 +1,12 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
+  IsArray,
   IsString,
   IsUUID,
   Max,
@@ -31,6 +35,34 @@ export class QueryPlacementsDto {
   @IsOptional()
   @IsEnum(PlacementStatus)
   status?: PlacementStatus;
+
+  @ApiPropertyOptional({
+    enum: PlacementStatus,
+    isArray: true,
+    example: [
+      PlacementStatus.DRAFT,
+      PlacementStatus.MARKETING,
+      PlacementStatus.PARTIALLY_PLACED,
+      PlacementStatus.PLACED,
+    ],
+    description:
+      'Comma-separated placement lifecycle statuses. Applied before pagination.',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const rawValues = Array.isArray(value) ? value : [value];
+    const statuses = rawValues
+      .flatMap((item) => String(item).split(','))
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return statuses.length ? statuses : undefined;
+  })
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(8)
+  @IsEnum(PlacementStatus, { each: true })
+  statuses?: PlacementStatus[];
 
   @ApiPropertyOptional({
     enum: PlacementType,
@@ -68,6 +100,24 @@ export class QueryPlacementsDto {
   @IsString()
   @MaxLength(100)
   classOfBusiness?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    default: false,
+    description:
+      'When true, returns archived placements only. Defaults to active placements only.',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return String(value);
+    return '__invalid_boolean__';
+  })
+  @IsBoolean()
+  archived?: boolean = false;
 
   @ApiPropertyOptional({ example: 1, default: 1, minimum: 1 })
   @IsOptional()

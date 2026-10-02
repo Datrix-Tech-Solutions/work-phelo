@@ -113,7 +113,7 @@ function EmploymentTypeSelect({
     onChange(value.includes(v) ? value.filter((t) => t !== v) : [...value, v]);
 
   return (
-    <div className="flex flex-col gap-1.5 relative" ref={ref}>
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={ref}>
       <label className="text-sm font-medium text-gray-700">Employment Type</label>
       <button
         type="button"
@@ -221,7 +221,7 @@ function EmploymentStatusSelect({
     );
 
   return (
-    <div className="flex flex-col gap-1.5 relative" ref={ref}>
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={ref}>
       <label className="text-sm font-medium text-gray-700">Employment Status Eligibility</label>
       <button
         type="button"
@@ -335,7 +335,7 @@ function EmployeeSelect({
   const selectedEmployees = employees.filter((e) => value.includes(e.id));
 
   return (
-    <div className="flex flex-col gap-1.5 relative" ref={ref}>
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={ref}>
       <label className="text-sm font-medium text-gray-700">Specific Employees</label>
 
       {selectedEmployees.length > 0 && (

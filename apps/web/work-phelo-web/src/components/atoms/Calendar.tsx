@@ -12,6 +12,7 @@ export interface CalendarProps {
   disableFuture?: boolean;
   disablePast?: boolean;
   minDate?: string; // ISO: YYYY-MM-DD — disables all days before this date
+  maxDate?: string; // ISO: YYYY-MM-DD — disables all days after this date
   /** ISO dates (YYYY-MM-DD) to mark with a dot indicator — e.g. days that have appointments. */
   markedDates?: string[];
   className?: string;
@@ -27,6 +28,7 @@ export function Calendar({
   disableFuture = false,
   disablePast = false,
   minDate,
+  maxDate,
   markedDates,
   className,
 }: CalendarProps) {
@@ -41,12 +43,19 @@ export function Calendar({
         return new Date(d.getFullYear(), d.getMonth(), d.getDate());
       })()
     : null;
+  const maxDateNorm = maxDate
+    ? (() => {
+        const d = new Date(maxDate);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      })()
+    : null;
 
   const isDisabledDay = (day: number) => {
     const date = new Date(viewYear, viewMonth, day);
     if (disableFuture && date > todayNorm) return true;
     if (disablePast && date < todayNorm) return true;
     if (minDateNorm && date < minDateNorm) return true;
+    if (maxDateNorm && date > maxDateNorm) return true;
     return false;
   };
 

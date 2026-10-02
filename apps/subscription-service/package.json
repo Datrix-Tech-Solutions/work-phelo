@@ -10,7 +10,7 @@
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
     "db:migrate": "prisma migrate dev",
-    "db:generate": "prisma generate"
+    "db:generate": "echo \"No Prisma models to generate for subscription-service\""
   },
   "dependencies": {
     "@golevelup/nestjs-rabbitmq": "^4.0.0",

@@ -2,12 +2,12 @@ import { NavGroup } from '@/components/organisms/shared/Sidebar';
 
 import {
   LayoutDashboard,
-  ScrollText,
+  // ScrollText,
   BarChart3,
   ShieldCheck,
   Settings,
   BanknoteArrowDown,
-  BanknoteArrowUp,
+  // BanknoteArrowUp,
   AtSign,
   Landmark,
   Handshake,
@@ -16,12 +16,12 @@ import {
 
 /* ── Icons ── */
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
-const TreatyIcon = () => <ScrollText className="w-5 h-5" />;
+// const TreatyIcon = () => <ScrollText className="w-5 h-5" />;
 const FacultativeIcon = () => <ShieldCheck className="w-5 h-5" />;
 const EmailIcon = () => <AtSign className="w-5 h-5" />;
 const PaymentIcon = () => <BanknoteArrowDown className="w-5 h-5" />;
 const ClaimsIcon = () => <Banknote className="w-5 h-5" />;
-const RecoveriesIcon = () => <BanknoteArrowUp className="w-5 h-5" />;
+// const RecoveriesIcon = () => <BanknoteArrowUp className="w-5 h-5" />;
 const CedantIcon = () => <Landmark className="w-5 h-5" />;
 const ReinsurerIcon = () => <Handshake className="w-5 h-5" />;
 const ReportsIcon = () => <BarChart3 className="w-5 h-5" />;
@@ -55,14 +55,14 @@ export const REINSURANCE_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
-      {
-        key: 'treaty',
-        label: 'Treaty',
-        icon: <TreatyIcon />,
-        href: 'treaty',
-        enabled: true,
-        active: true,
-      },
+      // {
+      //   key: 'treaty',
+      //   label: 'Treaty',
+      //   icon: <TreatyIcon />,
+      //   href: 'treaty',
+      //   enabled: true,
+      //   active: true,
+      // },
       {
         key: 'facultative',
         label: 'Facultative',
@@ -92,14 +92,14 @@ export const REINSURANCE_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
-      {
-        key: 'recoveries',
-        label: 'Recoveries',
-        icon: <RecoveriesIcon />,
-        href: 'recoveries',
-        enabled: true,
-        active: true,
-      },
+      // {
+      //   key: 'recoveries',
+      //   label: 'Recoveries',
+      //   icon: <RecoveriesIcon />,
+      //   href: 'recoveries',
+      //   enabled: true,
+      //   active: true,
+      // },
     ],
   },
   {

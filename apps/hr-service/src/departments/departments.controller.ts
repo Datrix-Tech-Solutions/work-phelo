@@ -20,6 +20,7 @@ import {
 import { DepartmentsService } from './departments.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
+import { BulkImportDepartmentsDto } from './dto/bulk-import-departments.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -60,6 +61,17 @@ export class DepartmentsController {
     @Req() req: Request & { user: RequestUser },
   ) {
     return this.departmentsService.create(req.user.tenantId, dto);
+  }
+
+  @Post('bulk-import')
+  @RequirePermissions(Permission.CREATE_DEPARTMENT)
+  @ApiOperation({ summary: 'Bulk-create departments from parsed import rows' })
+  @ApiResponse({ status: 201, description: 'Per-row import results' })
+  bulkImport(
+    @Body() dto: BulkImportDepartmentsDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.departmentsService.bulkImport(req.user.tenantId, dto.rows);
   }
 
   @Get()

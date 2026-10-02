@@ -380,6 +380,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
         onClose={() => setPanelOpen(false)}
         onAdd={handleAdd}
         existingIds={placement.participants.map((p) => p.counterpartyId)}
+        excludeName={placement.cedant?.name ?? placement.cedantName}
       />
     </>
   );

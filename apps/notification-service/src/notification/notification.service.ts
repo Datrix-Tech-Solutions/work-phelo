@@ -91,13 +91,15 @@ export class NotificationService {
     acceptInviteUrl: string;
     tenantName: string;
     inviteKind?: InviteUserKind;
+    isResend?: boolean;
   }) {
     if (
-      await this.isDuplicate(
+      !data.isResend &&
+      (await this.isDuplicate(
         data.email,
         NotificationType.INVITE_USER,
         data.tenantId,
-      )
+      ))
     ) {
       this.logger.warn(`Duplicate INVITE_USER suppressed for ${data.email}`);
       return;

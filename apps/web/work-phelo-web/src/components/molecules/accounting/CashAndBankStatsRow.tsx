@@ -4,35 +4,35 @@ import { Icons } from '@/components/atoms/icons';
 interface CashAndBankStatsRowProps {
   isLoading: boolean;
   totalCashPosition: string;
-  cashInflowMtd: string;
-  cashOutflowMtd: string;
+  cashInflowYtd: string;
+  cashOutflowYtd: string;
 }
 
 export function CashAndBankStatsRow({
   isLoading,
   totalCashPosition,
-  cashInflowMtd,
-  cashOutflowMtd,
+  cashInflowYtd,
+  cashOutflowYtd,
 }: CashAndBankStatsRowProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0">
       <KpiCard
-        label="Total Cash Position"
+        label="Net Cash Position (Posted)"
         value={totalCashPosition}
         icon={Icons.CircleDollarSign}
         iconColor="var(--module-accounting, #2a78d6)"
         isLoading={isLoading}
       />
       <KpiCard
-        label="Cash Inflow (MTD)"
-        value={cashInflowMtd}
+        label="Cash Inflow (YTD)"
+        value={cashInflowYtd}
         icon={Icons.TrendingUp}
         iconColor="#1baf7a"
         isLoading={isLoading}
       />
       <KpiCard
-        label="Cash Outflow (MTD)"
-        value={cashOutflowMtd}
+        label="Cash Outflow (YTD)"
+        value={cashOutflowYtd}
         icon={Icons.TrendingDown}
         iconColor="#e34948"
         isLoading={isLoading}

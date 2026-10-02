@@ -12,7 +12,7 @@ import {
   UpdateAllowancePayload,
   CreateDeductionPayload,
   UpdateDeductionPayload,
-  UploadDocumentPayload,
+  DocumentType,
   EmployeeQuery,
   OffboardingRecord,
   InitiateOffboardDto,
@@ -20,6 +20,7 @@ import {
   ResignationPayload,
   ResignationRecord,
 } from '@/types/hr';
+import type { EmployeeImportRow, BulkImportRowResult } from '@/lib/hr/bulkImportTypes';
 
 function normalizeDeduction(deduction: EmployeeDeduction): EmployeeDeduction {
   return {
@@ -53,9 +54,13 @@ export function useEmployees(query?: EmployeeQuery) {
   });
 }
 
-export function useAllEmployees(query?: Omit<EmployeeQuery, 'page' | 'limit'>) {
+export function useAllEmployees(
+  query?: Omit<EmployeeQuery, 'page' | 'limit'>,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ['employees', 'all', query],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const pageSize = 100;
       const firstPage = await api.get<{
@@ -100,14 +105,14 @@ export function useEmployeeOptions() {
   });
 }
 
-export function useEmployee(id: string) {
+export function useEmployee(id: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['employees', id],
     queryFn: async () => {
       const res = await api.get<Employee>(`/hr/employees/${id}`);
       return res.data;
     },
-    enabled: !!id,
+    enabled: !!id && (options?.enabled ?? true),
   });
 }
 
@@ -127,6 +132,40 @@ export function useCreateEmployee() {
   return useMutation({
     mutationFn: async (payload: CreateEmployeePayload) => {
       const res = await api.post<Employee>('/hr/employees', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useBulkImportEmployees() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (rows: EmployeeImportRow[]) => {
+      const payload = rows.map((row) => ({
+        rowNumber: row.rowNumber,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email,
+        phone: row.phone,
+        gender: row.gender,
+        departmentName: row.departmentName,
+        branchName: row.branchName,
+        jobTitle: row.jobTitle,
+        managerName: row.managerName,
+        hireDate: row.hireDate,
+        employmentType: row.employmentType,
+        contractEndDate: row.contractEndDate,
+        compensationType: row.compensationType,
+        basicSalary: row.basicSalary,
+      }));
+      const res = await api.post<BulkImportRowResult[]>('/hr/employees/bulk-import', {
+        rows: payload,
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -366,18 +405,64 @@ export function useDeleteAllowance(employeeId: string) {
   });
 }
 
-export function useUploadDocument(employeeId: string) {
+export function useEmployeeDocuments(employeeId: string) {
+  return useQuery({
+    queryKey: ['employees', employeeId, 'documents'],
+    queryFn: async () => {
+      const res = await api.get<EmployeeDocument[]>(`/hr/employees/${employeeId}/documents`);
+      return res.data;
+    },
+    enabled: !!employeeId,
+  });
+}
+
+export function useMyEmployeeDocuments() {
+  return useQuery({
+    queryKey: ['employees', 'me', 'documents'],
+    queryFn: async () => {
+      const res = await api.get<EmployeeDocument[]>('/hr/employees/me/documents');
+      return res.data;
+    },
+  });
+}
+
+export interface UploadEmployeeDocumentInput {
+  file: File;
+  type: DocumentType;
+  customType?: string;
+  expiresAt?: string;
+}
+
+export function useUploadEmployeeDocument(employeeId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: UploadDocumentPayload) => {
-      const res = await api.post<EmployeeDocument>(
-        `/hr/employees/${employeeId}/documents`,
-        payload,
-      );
+    mutationFn: async ({ file, type, customType, expiresAt }: UploadEmployeeDocumentInput) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('type', type);
+      if (customType) form.append('customType', customType);
+      if (expiresAt) form.append('expiresAt', expiresAt);
+      const res = await api.post<EmployeeDocument>(`/hr/employees/${employeeId}/documents`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'documents'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'me', 'documents'] });
+    },
+  });
+}
+
+export function useDeleteEmployeeDocument(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (documentId: string) => {
+      await api.delete(`/hr/employees/${employeeId}/documents/${documentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'documents'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'me', 'documents'] });
     },
   });
 }

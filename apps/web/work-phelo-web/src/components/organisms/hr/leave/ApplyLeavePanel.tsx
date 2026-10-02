@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -21,6 +21,8 @@ interface ApplyLeavePanelProps {
   onClose: () => void;
   tenantSlug: string;
   balances: LeaveBalance[];
+  /** Preselect a leave type when the panel opens. */
+  initialLeaveTypeId?: string;
 }
 
 type FormValues = {
@@ -48,7 +50,13 @@ function calcWorkingDays(start: string, end: string, holidays: PublicHoliday[]):
   return count;
 }
 
-export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: ApplyLeavePanelProps) {
+export function ApplyLeavePanel({
+  isOpen,
+  onClose,
+  tenantSlug,
+  balances,
+  initialLeaveTypeId,
+}: ApplyLeavePanelProps) {
   const toast = useToast();
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentError, setDocumentError] = useState('');
@@ -101,6 +109,13 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
     setDocumentError('');
     onClose();
   }, [reset, onClose]);
+
+  // Sync the preselected leave type each time the panel opens.
+  useEffect(() => {
+    if (isOpen) {
+      reset({ leaveTypeId: initialLeaveTypeId ?? '', startDate: '', endDate: '', reason: '' });
+    }
+  }, [isOpen, initialLeaveTypeId, reset]);
 
   const leaveTypeId = useWatch({ control, name: 'leaveTypeId' });
   const startDate = useWatch({ control, name: 'startDate' });
@@ -249,7 +264,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
       )}
 
       {/* Reason / Notes */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">
           Reason <span className="text-gray-400 font-normal">(optional)</span>
         </label>

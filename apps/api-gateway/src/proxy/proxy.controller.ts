@@ -35,6 +35,7 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/users\/accept-invite$/,
   /^\/api\/v1\/auth\/mfa\/send-sms$/,
   /^\/api\/v1\/operations\/reinsurance\/health$/,
+  /^\/api\/v1\/accounting\/health$/,
 ];
 
 const SWAGGER_PUBLIC_PATTERNS = [
@@ -44,6 +45,7 @@ const SWAGGER_PUBLIC_PATTERNS = [
   /^\/api\/v1\/subscription\/docs(?:\/.*|-json|-yaml)?$/,
   /^\/api\/v1\/marketing\/docs(?:\/.*|-json|-yaml)?$/,
   /^\/api\/v1\/operations\/reinsurance\/docs(?:\/.*|-json|-yaml)?$/,
+  /^\/api\/v1\/accounting\/docs(?:\/.*|-json|-yaml)?$/,
 ];
 
 const FORWARDED_AUTH_CONTEXT_HEADERS = [
@@ -54,9 +56,13 @@ const FORWARDED_AUTH_CONTEXT_HEADERS = [
   'x-tenant-slug',
   'x-tenant-name',
   'x-user-first-name',
+  'x-company-role-id',
   'x-user-permissions',
   'x-gateway-permissions-signature',
 ] as const;
+
+const DEFAULT_PROXY_TIMEOUT_MS = 30_000;
+const MAX_PROXY_TIMEOUT_MS = 300_000;
 
 @Controller()
 export class ProxyController {
@@ -189,6 +195,9 @@ export class ProxyController {
         req.headers['x-tenant-slug'] = payload.tenantSlug;
         req.headers['x-tenant-name'] = payload.tenantName ?? '';
         req.headers['x-user-first-name'] = payload.firstName ?? '';
+        if (payload.companyRoleId) {
+          req.headers['x-company-role-id'] = payload.companyRoleId;
+        }
 
         // Resolve and forward permissions for non-auth-service requests.
         // The JWT no longer embeds permissions (removed to keep Set-Cookie small),
@@ -252,6 +261,15 @@ export class ProxyController {
       'content-type': req.headers['content-type'] || 'application/json',
     };
 
+    if (
+      service === 'accounting' &&
+      /^\/api\/v1\/accounting\/docs(?:\/.*|-json|-yaml)?$/.test(req.path)
+    ) {
+      forwardHeaders['x-workphelo-gateway-docs'] = 'accounting';
+      forwardHeaders['x-forwarded-host'] = req.headers.host;
+      forwardHeaders['x-forwarded-proto'] = req.protocol;
+    }
+
     if (req.headers.cookie) {
       forwardHeaders.cookie = req.headers.cookie;
     }
@@ -264,22 +282,63 @@ export class ProxyController {
       headers: forwardHeaders,
     };
 
-    const proxyReq = (isHttps ? https : http).request(options, (proxyRes) => {
+    const proxyTimeoutMs = this.proxyTimeoutMs();
+    let timedOut = false;
+    let clientAborted = false;
+
+    const cleanupProxyListeners = () => {
+      req.off('aborted', handleClientAbort);
+      res.off('close', cleanupProxyListeners);
+    };
+
+    const handleClientAbort = () => {
+      clientAborted = true;
+      cleanupProxyListeners();
+      proxyReq.destroy();
+    };
+
+    const proxyReq = this.createProxyRequest(isHttps, options, (proxyRes) => {
+      cleanupProxyListeners();
       res.status(proxyRes.statusCode || 200);
       Object.entries(proxyRes.headers).forEach(([key, value]) => {
         if (key.toLowerCase() === 'transfer-encoding') return;
         if (value !== undefined) {
-          res.setHeader(key, value as string | string[]);
+          res.setHeader(key, value);
         }
       });
       proxyRes.pipe(res, { end: true });
     });
 
+    req.on('aborted', handleClientAbort);
+    res.on('close', cleanupProxyListeners);
+
+    proxyReq.setTimeout(proxyTimeoutMs, () => {
+      timedOut = true;
+      cleanupProxyListeners();
+      this.logger.warn(
+        `Proxy timeout → ${serviceUrl}${targetPath} after ${proxyTimeoutMs}ms`,
+      );
+      proxyReq.destroy();
+      if (!res.headersSent && !res.writableEnded) {
+        res.status(504).json({
+          message: 'Gateway timeout while contacting downstream service',
+          statusCode: 504,
+        });
+      } else if (!res.writableEnded) {
+        res.end();
+      }
+    });
+
     proxyReq.on('error', (err) => {
+      cleanupProxyListeners();
+      if (timedOut || clientAborted) {
+        return;
+      }
+
       this.logger.error(
         `Proxy error → ${serviceUrl}${targetPath}: ${err.message}`,
       );
-      if (!res.headersSent) {
+      if (!res.headersSent && !res.writableEnded) {
         res.status(503).json({
           message: 'Service temporarily unavailable',
           statusCode: 503,
@@ -292,7 +351,7 @@ export class ProxyController {
       return;
     }
 
-    if (['POST', 'PUT', 'PATCH'].includes(req.method!) && req.body) {
+    if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
       const body = JSON.stringify(req.body);
       proxyReq.setHeader('Content-Type', 'application/json');
       proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
@@ -310,5 +369,27 @@ export class ProxyController {
     return createHmac('sha256', process.env.JWT_SECRET!)
       .update(`${userId}:${tenantId}:${serializedPermissions}`)
       .digest('hex');
+  }
+
+  private proxyTimeoutMs(): number {
+    const configured = Number(process.env.GATEWAY_PROXY_TIMEOUT_MS);
+
+    if (
+      Number.isInteger(configured) &&
+      configured > 0 &&
+      configured <= MAX_PROXY_TIMEOUT_MS
+    ) {
+      return configured;
+    }
+
+    return DEFAULT_PROXY_TIMEOUT_MS;
+  }
+
+  private createProxyRequest(
+    isHttps: boolean,
+    options: http.RequestOptions,
+    callback: (response: http.IncomingMessage) => void,
+  ): http.ClientRequest {
+    return (isHttps ? https : http).request(options, callback);
   }
 }

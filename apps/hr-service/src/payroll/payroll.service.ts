@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,6 +22,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { FieldEncryptionService } from '../crypto/field-encryption.service';
+import { HrAccountingClient } from '../accounting-integration/client/accounting.client';
 import {
   EmploymentStatus,
   EmployeeCompensationType,
@@ -99,6 +101,7 @@ export class PayrollService {
     private readonly notificationsService: NotificationsService,
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly encryption: FieldEncryptionService,
+    private readonly accountingClient: HrAccountingClient,
   ) {}
 
   private canReadPayroll(actor: RequestUser) {
@@ -332,7 +335,7 @@ export class PayrollService {
       payeTax: { toString(): string } | string | number;
     }>,
   ) {
-    return items.reduce(
+    const totals = items.reduce(
       (acc, item) => {
         acc.totalGross = acc.totalGross.plus(item.grossSalary.toString());
         acc.totalNet = acc.totalNet.plus(item.netSalary.toString());
@@ -359,6 +362,21 @@ export class PayrollService {
         totalEmployerCost: new Decimal(0),
       },
     );
+
+    // Round every total to 2 decimal places here, once, so every caller (initial run
+    // creation, later recalculation after an item edit) persists and reads back the exact
+    // same rounded value — summing per-employee Decimals can otherwise carry sub-cent
+    // residue that would round differently on each recalculation.
+    return {
+      totalGross: totals.totalGross.toDecimalPlaces(2),
+      totalNet: totals.totalNet.toDecimalPlaces(2),
+      totalSSNIT: totals.totalSSNIT.toDecimalPlaces(2),
+      totalTier1: totals.totalTier1.toDecimalPlaces(2),
+      totalTier2: totals.totalTier2.toDecimalPlaces(2),
+      totalTier3: totals.totalTier3.toDecimalPlaces(2),
+      totalPAYE: totals.totalPAYE.toDecimalPlaces(2),
+      totalEmployerCost: totals.totalEmployerCost.toDecimalPlaces(2),
+    };
   }
 
   private async getEditableRunOrThrow(tenantId: string, runId: string) {
@@ -1146,6 +1164,18 @@ export class PayrollService {
       );
     }
 
+    // When linked to accounting, posting the accrual must succeed BEFORE the run is marked
+    // APPROVED — the run stays PENDING_APPROVAL on failure, so the approver can retry (safe:
+    // the accounting call is idempotent per run) or just leave it and come back later, rather
+    // than the approval silently going through with no accounting record created.
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { linkedToAccounting: true, autoPostOnApproval: true },
+    });
+    if (config?.linkedToAccounting) {
+      await this.postPayrollAccrual(tenantId, run, config.autoPostOnApproval);
+    }
+
     const updatedRun = await this.prisma.payrollRun.update({
       where: { id },
       data: {
@@ -1168,7 +1198,65 @@ export class PayrollService {
     return {
       ...updatedRun,
       notificationSummary,
+      accountingPosting: config?.linkedToAccounting
+        ? { posted: true as const }
+        : { posted: false as const, reason: 'not_linked' as const },
     };
+  }
+
+  /** Posts (or drafts) the payroll accrual journal in accounting-service. Only called when
+   *  this tenant has turned on "Link Payroll to Accounting" — throws on any failure (an
+   *  accounting-service outage or misconfiguration, e.g. GL accounts not yet seeded), which
+   *  the controller surfaces as a distinguishable error the frontend offers to retry or stop
+   *  on, rather than letting the approval silently go through with nothing posted. */
+  private async postPayrollAccrual(
+    tenantId: string,
+    run: { id: string; month: number; year: number },
+    autoPost: boolean,
+  ): Promise<void> {
+    try {
+      const [totals, otherDeductions] = await Promise.all([
+        this.prisma.payrollRun.findUniqueOrThrow({
+          where: { id: run.id },
+          select: {
+            totalGross: true,
+            totalNet: true,
+            totalPAYE: true,
+            totalTier1: true,
+            totalTier2: true,
+            totalTier3: true,
+            totalEmployerCost: true,
+          },
+        }),
+        this.prisma.payrollItem.aggregate({
+          where: { payrollRunId: run.id },
+          _sum: { otherDeductions: true },
+        }),
+      ]);
+      const { end } = this.getMonthBounds(run.month, run.year);
+
+      await this.accountingClient.postPayrollAccrual({
+        tenantId,
+        payrollRunId: run.id,
+        periodLabel: `${run.month}/${run.year}`,
+        transactionDate: end.toISOString().slice(0, 10),
+        totalGross: Number(totals.totalGross),
+        totalNet: Number(totals.totalNet),
+        totalPAYE: Number(totals.totalPAYE),
+        totalTier1: Number(totals.totalTier1),
+        totalTier2: Number(totals.totalTier2),
+        totalTier3: Number(totals.totalTier3),
+        totalEmployerCost: Number(totals.totalEmployerCost),
+        totalOtherDeductions: Number(otherDeductions._sum.otherDeductions ?? 0),
+        autoPost,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new UnprocessableEntityException({
+        code: 'ACCOUNTING_POSTING_FAILED',
+        message: `Could not post the payroll accrual to accounting: ${message}`,
+      });
+    }
   }
 
   private async applyPaidPayrollDeductions(
@@ -1221,6 +1309,18 @@ export class PayrollService {
   }
 
   async markAsPaid(tenantId: string, id: string) {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { linkedToAccounting: true },
+    });
+    if (config?.linkedToAccounting) {
+      throw new BadRequestException(
+        'This payroll is linked to Accounting — it is marked as paid automatically once ' +
+          'Net Pay, Income Tax, and Social Security are all settled there, rather than by a ' +
+          'manual action here.',
+      );
+    }
+
     const run = await this.prisma.payrollRun.findFirst({
       where: { id, tenantId },
       include: {
@@ -1236,16 +1336,140 @@ export class PayrollService {
       throw new BadRequestException('Payroll must be approved first');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const paidRun = await this.prisma.$transaction(async (tx) => {
       const updatedRun = await tx.payrollRun.update({
         where: { id },
-        data: { status: 'PAID', paidAt: new Date() },
+        data: {
+          status: 'PAID',
+          paidAt: new Date(),
+          payslipsReleasedAt: new Date(),
+        },
       });
 
       await this.applyPaidPayrollDeductions(tx, tenantId, run.items);
 
       return updatedRun;
     });
+
+    await this.notifyPayslipsPaid(
+      tenantId,
+      run.id,
+      run.month,
+      run.year,
+      run.items,
+    );
+
+    return paidRun;
+  }
+
+  /** Per-liability-line settlement status for a linked tenant's run — powers the settlement
+   *  progress view that replaces the manual Mark as Paid button once linked. Returns null
+   *  for an unlinked tenant, where the run's own `status` is the only signal that matters. */
+  async getSettlementStatusForRun(tenantId: string, id: string) {
+    const [run, config] = await Promise.all([
+      this.prisma.payrollRun.findFirst({ where: { id, tenantId } }),
+      this.prisma.tenantConfig.findUnique({
+        where: { tenantId },
+        select: { linkedToAccounting: true },
+      }),
+    ]);
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (!config?.linkedToAccounting) return null;
+
+    return this.accountingClient.getPayrollSettlementStatus(tenantId, id);
+  }
+
+  /** Called by accounting-service (internal, HMAC-signed) once the run's Net Pay source
+   *  ledger entry is fully paid — the employee-facing half of "paid": their wage has been
+   *  disbursed, so their loan/advance deductions are considered serviced and their payslip
+   *  is ready, independently of whether Income Tax and Social Security have been remitted
+   *  yet. Idempotent per payrollRunId. */
+  async releasePayslipsForSettlement(tenantId: string, payrollRunId: string) {
+    const run = await this.prisma.payrollRun.findFirst({
+      where: { id: payrollRunId, tenantId },
+      include: {
+        items: {
+          include: {
+            deductionItems: true,
+          },
+        },
+      },
+    });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.payslipsReleasedAt) return { alreadyReleased: true as const };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payrollRun.update({
+        where: { id: run.id },
+        data: { payslipsReleasedAt: new Date() },
+      });
+      await this.applyPaidPayrollDeductions(tx, tenantId, run.items);
+    });
+
+    await this.notifyPayslipsPaid(
+      tenantId,
+      run.id,
+      run.month,
+      run.year,
+      run.items,
+    );
+
+    return { released: true as const };
+  }
+
+  /** Called by accounting-service (internal, HMAC-signed) once every liability tied to the
+   *  run (Net Pay, Income Tax, Social Security, ...) is fully paid — the employer-facing
+   *  half of "paid": the run is completely settled. Idempotent per payrollRunId. */
+  async markFullySettledByAccounting(tenantId: string, payrollRunId: string) {
+    const run = await this.prisma.payrollRun.findFirst({
+      where: { id: payrollRunId, tenantId },
+    });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.status === 'PAID') return { alreadyPaid: true as const };
+    if (run.status !== 'APPROVED') {
+      throw new BadRequestException(
+        `Cannot settle a payroll run in status ${run.status}`,
+      );
+    }
+
+    await this.prisma.payrollRun.update({
+      where: { id: run.id },
+      data: { status: 'PAID', paidAt: new Date() },
+    });
+
+    return { paid: true as const };
+  }
+
+  private async notifyPayslipsPaid(
+    tenantId: string,
+    payrollRunId: string,
+    month: number,
+    year: number,
+    items: { employeeId: string }[],
+  ) {
+    const employeeIds = [...new Set(items.map((item) => item.employeeId))];
+    if (employeeIds.length === 0) return;
+
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: employeeIds }, userId: { not: null } },
+      select: { id: true, userId: true },
+    });
+
+    if (employees.length === 0) return;
+
+    const periodLabel = `${month}/${year}`;
+    await this.notificationsService.createMany(
+      employees.map((employee) => ({
+        tenantId,
+        userId: employee.userId!,
+        type: 'PAYSLIP_PAID',
+        title: 'Payslip Available',
+        message: `Your payslip for ${periodLabel} is ready.`,
+        link: '/hr',
+        entityType: 'payrollRun',
+        entityId: payrollRunId,
+      })),
+    );
   }
 
   async getPayrollRuns(tenantId: string, actor: RequestUser) {

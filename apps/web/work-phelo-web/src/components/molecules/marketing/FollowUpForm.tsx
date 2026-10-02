@@ -5,8 +5,10 @@ import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelec
 import { DatePicker } from '@/components/atoms/DatePicker';
 
 export interface FollowUpFields {
-  prospectName: string;
+  /** The selected prospect's ID. */
+  prospectId: string;
   followUpDate: string;
+  followUpTime: string;
   notes: string;
 }
 
@@ -15,32 +17,56 @@ interface Props {
   onChange: (values: FollowUpFields) => void;
   errors?: Partial<FollowUpFields>;
   prospectOptions?: SearchSelectOption[];
+  onProspectSearch?: (query: string) => void;
+  /** A follow-up can't move to another prospect once it exists. */
+  prospectLocked?: boolean;
 }
 
-export function FollowUpForm({ values, onChange, errors, prospectOptions = [] }: Props) {
+export function FollowUpForm({
+  values,
+  onChange,
+  errors,
+  prospectOptions = [],
+  onProspectSearch,
+  prospectLocked = false,
+}: Props) {
   function set<K extends keyof FollowUpFields>(key: K, val: string) {
     onChange({ ...values, [key]: val });
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       <SearchSelect
         label="Prospect Name"
         placeholder="Select a prospect"
         options={prospectOptions}
-        value={values.prospectName}
-        onChange={(v) => set('prospectName', v)}
-        error={errors?.prospectName}
+        value={values.prospectId}
+        onChange={(v) => set('prospectId', v)}
+        onQueryChange={onProspectSearch}
+        error={errors?.prospectId}
+        disabled={prospectLocked}
       />
 
-      <DatePicker
-        label="Follow-up Date"
-        value={values.followUpDate}
-        onChange={(v) => set('followUpDate', v)}
-        error={errors?.followUpDate}
-      />
+      <div className="grid grid-cols-2 gap-3">
+        <DatePicker
+          label="Follow-up Date"
+          value={values.followUpDate}
+          onChange={(v) => set('followUpDate', v)}
+          error={errors?.followUpDate}
+        />
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+          <label className="text-sm font-bold text-gray-900">Time</label>
+          <input
+            type="time"
+            value={values.followUpTime}
+            onChange={(e) => set('followUpTime', e.target.value)}
+            className={inputClass(errors?.followUpTime)}
+          />
+          {errors?.followUpTime && <p className="text-xs text-red-500">{errors.followUpTime}</p>}
+        </div>
+      </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">Notes</label>
         <textarea
           rows={4}

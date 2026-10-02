@@ -17,9 +17,11 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { AuthService } from './auth.service';
+import { TenantAssetStorageService } from '../tenants/tenant-asset-storage.service';
 import { LoginDto } from './dto/login.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -43,12 +45,26 @@ interface OAuthCallbackUser {
   tenantSlug: string;
 }
 
+const SENSITIVE_AUTH_THROTTLE = {
+  short: { limit: 5, ttl: 60_000 },
+  medium: { limit: 20, ttl: 60_000 },
+};
+
+const OTP_SEND_THROTTLE = {
+  short: { limit: 3, ttl: 60_000 },
+  medium: { limit: 10, ttl: 60_000 },
+};
+
 @ApiTags('Auth')
 @Controller()
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly assetStorage: TenantAssetStorageService,
+  ) {}
 
   @Post('login')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({
@@ -92,6 +108,7 @@ export class AuthController {
   }
 
   @Post('admin/login')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'SuperAdmin login (platform owner only)' })
   @ApiBody({
@@ -125,6 +142,7 @@ export class AuthController {
   }
 
   @Post('verify-email')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email with OTP sent on registration' })
   @ApiResponse({ status: 200, description: 'Email verified' })
@@ -134,6 +152,7 @@ export class AuthController {
   }
 
   @Post('resend-verification')
+  @Throttle(OTP_SEND_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification OTP' })
   @ApiBody({
@@ -206,11 +225,15 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current authenticated user' })
   @ApiResponse({ status: 200, description: 'Current user returned' })
-  me(
+  async me(
     @Req() req: Request & { user: RequestUser },
     @Res({ passthrough: true }) res: Response,
   ) {
     setAccessTokenCookie(res, this.authService.signAccessToken(req.user));
+
+    const avatarUrl = await this.assetStorage.resolveAvatarReadUrl(
+      req.user.avatarUrl,
+    );
 
     return {
       user: {
@@ -221,6 +244,7 @@ export class AuthController {
         tenantSlug: req.user.tenantSlug,
         tenantName: req.user.tenantName,
         firstName: req.user.firstName,
+        avatarUrl,
         moduleConfig: req.user.moduleConfig ?? {},
         featureConfig: req.user.featureConfig ?? {},
       },
@@ -229,6 +253,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @Throttle(OTP_SEND_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset via email link or SMS OTP' })
   @ApiResponse({ status: 200, description: 'Reset instructions sent' })
@@ -238,6 +263,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password using email link token or SMS OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
@@ -265,6 +291,7 @@ export class AuthController {
   }
 
   @Post('force-reset-password')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
@@ -313,6 +340,7 @@ export class AuthController {
   }
 
   @Post('mfa/verify-totp')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify TOTP code and enable MFA' })
   @ApiBody({
@@ -330,6 +358,7 @@ export class AuthController {
   }
 
   @Post('mfa/send-sms')
+  @Throttle(OTP_SEND_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send SMS OTP to registered phone number' })
   @ApiBody({
@@ -346,6 +375,7 @@ export class AuthController {
   }
 
   @Post('mfa/verify-sms')
+  @Throttle(SENSITIVE_AUTH_THROTTLE)
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')

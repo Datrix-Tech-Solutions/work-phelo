@@ -1,88 +1,74 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { Modal } from '@/components/organisms/shared/Modal';
-import { Button } from '@/components/atoms/Button';
-import { AddAccountTypePanel } from '@/components/organisms/accounting/panels/AddAccountTypePanel';
-import { AccountTypeDefinition } from '@/types/accounting';
+import { useMemo, useState } from 'react';
+import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
+import { useAccountCategories } from '@/hooks';
+import type { AccountCategoryDefinition } from '@/types/accounting';
 
 const PAGE_SIZE = 10;
+type AccountCategoryRow = AccountCategoryDefinition & { id: string };
 
-// TODO: replace with useAccountTypeDefinitions() hook once API is ready
-const MOCK_DATA: AccountTypeDefinition[] = [];
-
-const COLUMNS: Column<AccountTypeDefinition>[] = [
+const columns: Column<AccountCategoryRow>[] = [
   {
     key: 'name',
-    label: 'Account Type Name',
-    width: 'minmax(150px, 1fr)',
+    label: 'Account Type',
+    width: 'minmax(180px, 1fr)',
     render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
   },
   {
-    key: 'description',
-    label: 'Description',
-    width: 'minmax(200px, 2fr)',
-    render: (row) => <span className="text-sm text-gray-700">{row.description ?? '—'}</span>,
+    key: 'code',
+    label: 'Code',
+    width: '150px',
+    render: (row) => <span className="text-sm text-gray-700">{row.code}</span>,
+  },
+  {
+    key: 'normalBalance',
+    label: 'Normal Balance',
+    width: '160px',
+    render: (row) => <span className="text-sm text-gray-700">{row.normalBalance}</span>,
+  },
+  {
+    key: 'financialStatement',
+    label: 'Financial Statement',
+    width: '210px',
+    render: (row) => (
+      <span className="text-sm text-gray-700">{row.financialStatement.replaceAll('_', ' ')}</span>
+    ),
   },
 ];
 
 export function AccountTypeDefinitionsTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<AccountTypeDefinition | null>(null);
-
+  const { data = [], isLoading } = useAccountCategories();
+  const rows = useMemo<AccountCategoryRow[]>(
+    () => data.map((category) => ({ ...category, id: category.code })),
+    [data],
+  );
   const filtered = useMemo(() => {
-    if (!search) return MOCK_DATA;
-    const q = search.toLowerCase();
-    return MOCK_DATA.filter((r) => r.name.toLowerCase().includes(q));
-  }, [search]);
-
+    const value = search.trim().toLowerCase();
+    if (!value) return rows;
+    return rows.filter((category) =>
+      `${category.name} ${category.code}`.toLowerCase().includes(value),
+    );
+  }, [rows, search]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <>
-      <DataTable
-        columns={COLUMNS}
-        data={paged}
-        isLoading={false}
-        searchPlaceholder="Search account types…"
-        searchValue={search}
-        onSearch={(q) => {
-          setSearch(q);
-          setPage(1);
-        }}
-        actionButton={{ label: 'Add Account Type', onClick: () => setPanelOpen(true) }}
-        rowActions={(row) => [
-          { label: 'Edit', onClick: () => {} },
-          { label: 'Delete', onClick: () => setDeleteTarget(row), danger: true },
-        ]}
-        emptyMessage="No account types found"
-        currentPage={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-      />
-
-      <AddAccountTypePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
-
-      <Modal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete Account Type"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={() => setDeleteTarget(null)}>
-              Delete
-            </Button>
-          </div>
-        }
-      />
-    </>
+    <DataTable
+      columns={columns}
+      data={filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)}
+      isLoading={isLoading}
+      searchPlaceholder="Search account types…"
+      searchValue={search}
+      onSearch={(value) => {
+        setSearch(value);
+        setPage(1);
+      }}
+      emptyMessage="No account types found"
+      currentPage={page}
+      totalPages={totalPages}
+      onPageChange={setPage}
+    />
   );
 }

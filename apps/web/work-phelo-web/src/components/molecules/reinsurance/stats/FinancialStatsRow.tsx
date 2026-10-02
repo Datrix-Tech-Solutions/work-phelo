@@ -6,10 +6,11 @@ import { useReinsuranceFinancialsByCurrency, useCurrencies } from '@/hooks';
 
 interface FinancialStatsRowProps {
   period: Period;
+  year: number;
 }
 
-export function FinancialStatsRow({ period }: FinancialStatsRowProps) {
-  const { data, isLoading } = useReinsuranceFinancialsByCurrency({ period });
+export function FinancialStatsRow({ period, year }: FinancialStatsRowProps) {
+  const { data, isLoading } = useReinsuranceFinancialsByCurrency({ period, year });
   const { data: currencies = [] } = useCurrencies();
 
   return (

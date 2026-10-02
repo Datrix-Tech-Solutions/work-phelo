@@ -1,21 +1,31 @@
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
+import { TableButton } from '@/components/atoms/TableButton';
 import { AssetCard } from '@/components/molecules/hr/employees/empAssetCard';
 import { EmployeeAsset } from '@/types/asset';
 
 interface Props {
   assets: EmployeeAsset[];
   onAssignAsset?: () => void;
+  onManage?: () => void;
+  onSelectAsset?: (asset: EmployeeAsset) => void;
 }
 
-export function AssetsSection({ assets, onAssignAsset }: Props) {
-  const headerAction = onAssignAsset ? (
-    <button
-      onClick={onAssignAsset}
-      className="text-xs font-medium text-brand hover:text-brand/80 transition-colors"
-    >
-      + Assign Asset
-    </button>
-  ) : undefined;
+export function AssetsSection({ assets, onAssignAsset, onManage, onSelectAsset }: Props) {
+  const headerAction =
+    onAssignAsset || onManage ? (
+      <div className="flex items-center gap-3">
+        {onAssignAsset && (
+          <TableButton variant="blue" onClick={onAssignAsset}>
+            Assign Asset
+          </TableButton>
+        )}
+        {onManage && (
+          <TableButton variant="blue" onClick={onManage}>
+            Manage
+          </TableButton>
+        )}
+      </div>
+    ) : undefined;
 
   if (assets.length === 0) {
     return (
@@ -31,7 +41,7 @@ export function AssetsSection({ assets, onAssignAsset }: Props) {
     <SectionCard title="Assets" scrollX headerAction={headerAction}>
       <div className="flex gap-2 px-3 py-0" style={{ width: 'max-content', minWidth: '100%' }}>
         {assets.map((asset) => (
-          <AssetCard key={asset.id} asset={asset} />
+          <AssetCard key={asset.id} asset={asset} onSelect={onSelectAsset} />
         ))}
       </div>
     </SectionCard>

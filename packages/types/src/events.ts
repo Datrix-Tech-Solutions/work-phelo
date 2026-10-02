@@ -24,6 +24,7 @@ export const EventPatterns = {
   HR_EMPLOYEE_ACTIVATED: 'hr.employee_activated',
   HR_PROVISION_TENANT_WORKSPACE: 'hr.provision_tenant_workspace',
   HR_LINK_EMPLOYEE_IDENTITY: 'hr.link_employee_identity',
+  HR_EMPLOYEE_AVATAR_UPDATED: 'hr.employee_avatar_updated',
 
   // HR → Auth
   AUTH_INVITE_EMPLOYEE: 'auth.invite_employee',
@@ -58,6 +59,7 @@ export const EventPatterns = {
   REINSURANCE_EMAIL_SENT: 'reinsurance.email.sent',
   REINSURANCE_EMAIL_LINKED: 'reinsurance.email.linked',
   REINSURANCE_CLAIM_CREATED: 'reinsurance.claim.created',
+  REINSURANCE_ACCOUNTING_OPERATION_EXECUTED: 'reinsurance.accounting-operation.executed',
 
   // HR → Notification
   NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
@@ -122,6 +124,17 @@ export interface LinkEmployeeIdentityCommand {
 export interface LinkEmployeeIdentityResult {
   linked: boolean;
   employeeId: string;
+}
+
+/** Object key for the newly stored avatar — private, resolved to a signed URL by the consuming service at read time. */
+export interface EmployeeAvatarUpdatedEvent {
+  tenantId: string;
+  userId: string;
+  avatarObjectKey: string;
+}
+
+export interface EmployeeAvatarUpdatedResult {
+  synced: boolean;
 }
 
 // ── HR → Auth Events ───────────────────────────────────────────────────────
@@ -234,6 +247,7 @@ export interface InviteUserEvent {
   acceptInviteUrl: string;
   tenantName: string;
   inviteKind?: InviteUserKind;
+  isResend?: boolean;
 }
 
 export interface PasswordResetLinkEvent {
@@ -363,6 +377,16 @@ export interface ReinsuranceEmailLinkAuditEvent {
     before?: Record<string, unknown>;
     after?: Record<string, unknown>;
   };
+}
+
+export interface ReinsuranceAccountingOperationAuditEvent {
+  tenantId: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  operation: string;
+  resourceId?: string;
+  changes?: Record<string, unknown>;
 }
 
 // ── HR → Notification Events ───────────────────────────────────────────────

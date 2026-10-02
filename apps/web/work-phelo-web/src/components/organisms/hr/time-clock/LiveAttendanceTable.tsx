@@ -104,7 +104,7 @@ export function LiveAttendanceTable() {
     {
       key: 'department',
       label: 'Department',
-      width: 'minmax(100px,1fr)',
+      width: 'minmax(100px,0.9fr)',
       render: (entry) => <span className="text-gray-600 truncate">{entry.department ?? '—'}</span>,
     },
     {

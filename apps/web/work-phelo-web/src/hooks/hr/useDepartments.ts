@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Department } from '@/types/hr';
+import type { DepartmentImportRow, BulkImportRowResult } from '@/lib/hr/bulkImportTypes';
 
 export type DepartmentOption = Pick<Department, 'id' | 'name'>;
 
@@ -40,7 +41,7 @@ export function useCreateDepartment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: { name: string; description?: string }) => {
+    mutationFn: async (payload: { name: string; description?: string; branchId?: string }) => {
       const res = await api.post<Department>('/hr/departments', payload);
       return res.data;
     },
@@ -64,9 +65,35 @@ export function useUpdateDepartment() {
       name?: string;
       description?: string;
       managerId?: string | null;
+      branchId?: string | null;
       isActive?: boolean;
     }) => {
       const res = await api.patch<Department>(`/hr/departments/${id}`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['department-options'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+  });
+}
+
+export function useBulkImportDepartments() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (rows: DepartmentImportRow[]) => {
+      const payload = rows.map((row) => ({
+        rowNumber: row.rowNumber,
+        name: row.name,
+        description: row.description,
+        managerName: row.managerName,
+        branchName: row.branchName,
+      }));
+      const res = await api.post<BulkImportRowResult[]>('/hr/departments/bulk-import', {
+        rows: payload,
+      });
       return res.data;
     },
     onSuccess: () => {

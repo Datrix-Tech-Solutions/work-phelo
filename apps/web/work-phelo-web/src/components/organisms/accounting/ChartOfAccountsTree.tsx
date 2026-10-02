@@ -1,9 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FileText } from 'lucide-react';
-import { cardClass, cn } from '@/lib/utils';
-import { useAccountClassifications, useAccountGroups, useGLAccounts } from '@/hooks';
+import { File, FileText, Folder, Layers } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { AllAccountsTreeRow } from '@/components/molecules/accounting/AllAccountsTreeRow';
+import { ExpandableTreeRow } from '@/components/molecules/accounting/ExpandableTreeRow';
+import { SelectableTreeRow } from '@/components/molecules/accounting/SelectableTreeRow';
+import { getSelectedRowTint } from '@/lib/accounting/treeRowColor';
 import {
   AccountClassification,
   AccountGroup,
@@ -11,7 +14,12 @@ import {
   GLAccountCategory,
 } from '@/types/accounting';
 
-const CATEGORIES: { value: GLAccountCategory; label: string; code: string; color: string }[] = [
+export const CATEGORIES: {
+  value: GLAccountCategory;
+  label: string;
+  code: string;
+  color: string;
+}[] = [
   { value: 'ASSET', label: 'Asset', code: '1000', color: 'text-blue-500' },
   { value: 'LIABILITY', label: 'Liability', code: '2000', color: 'text-red-500' },
   { value: 'EQUITY', label: 'Equity', code: '3000', color: 'text-purple-500' },
@@ -19,107 +27,130 @@ const CATEGORIES: { value: GLAccountCategory; label: string; code: string; color
   { value: 'EXPENSE', label: 'Expense', code: '5000', color: 'text-orange-500' },
 ];
 
-/** Selected-row tint, matching the color of the type folder a row lives under. */
-const SELECTED_TINTS: Record<string, string> = {
-  'text-blue-500': 'bg-blue-200',
-  'text-red-500': 'bg-red-200',
-  'text-purple-500': 'bg-purple-200',
-  'text-green-500': 'bg-green-200',
-  'text-orange-500': 'bg-orange-200',
-};
+/** What the right-hand panel is currently showing — a single account, or a scope
+ *  (everything, a type, a classification, or a group) whose leaf accounts get listed. */
+export type AccountScope =
+  | { kind: 'all' }
+  | { kind: 'category'; category: GLAccountCategory }
+  | { kind: 'classification'; classification: AccountClassification }
+  | { kind: 'group'; group: AccountGroup }
+  | { kind: 'account'; account: GLAccount };
 
-/** Same glass fade-in used for DataTable row hovers, scaled down to tree rows. */
-function RowHoverOverlay() {
-  return (
-    <div
-      className={cardClass(
-        'absolute inset-0.5 rounded-lg bg-(--table-header-bg,var(--color-gray-200)) opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 pointer-events-none',
-        'glass',
-      )}
-    />
-  );
+// Keys into the single flat `openKeys` set that drives expand/collapse at every level. One
+// flat set (rather than per-level state) is what lets a selection collapse siblings at every
+// level in one move — see `pathKeysForScope` below.
+const typeKey = (category: GLAccountCategory) => `type:${category}`;
+const classificationKey = (id: string) => `classification:${id}`;
+const groupKey = (id: string) => `group:${id}`;
+
+/** The ancestor-chain keys that must be open for the given scope to be visible. Selecting a
+ *  scope replaces `openKeys` with exactly this set, so every branch not on the path collapses
+ *  — at every level, in one move. */
+function pathKeysForScope(
+  scope: AccountScope,
+  groups: AccountGroup[],
+  classifications: AccountClassification[],
+): Set<string> {
+  switch (scope.kind) {
+    case 'all':
+      return new Set();
+    case 'category':
+      return new Set([typeKey(scope.category)]);
+    case 'classification':
+      return new Set([
+        typeKey(scope.classification.category),
+        classificationKey(scope.classification.id),
+      ]);
+    case 'group':
+      return new Set([
+        typeKey(scope.group.classification.category),
+        classificationKey(scope.group.classificationId),
+        groupKey(scope.group.id),
+      ]);
+    case 'account': {
+      const group = scope.account.accountGroupId
+        ? groups.find((g) => g.id === scope.account.accountGroupId)
+        : undefined;
+      if (!group) {
+        // No group: the account sits directly under its classification, if it has one.
+        const classification = classifications.find((c) => c.id === scope.account.classificationId);
+        if (!classification) return new Set([typeKey(scope.account.category)]);
+        return new Set([typeKey(classification.category), classificationKey(classification.id)]);
+      }
+      return new Set([
+        typeKey(group.classification.category),
+        classificationKey(group.classificationId),
+        groupKey(group.id),
+      ]);
+    }
+  }
 }
 
 interface GroupNodeProps {
   color: string;
   group: AccountGroup;
   glAccounts: GLAccount[];
+  selectedGroupId?: string;
   selectedAccountId?: string;
-  onSelectAccount?: (account: GLAccount) => void;
+  openKeys: Set<string>;
+  onToggleOpen: (key: string) => void;
+  onSelectScope: (scope: AccountScope) => void;
 }
 
 function GroupNode({
   color,
   group,
   glAccounts,
+  selectedGroupId,
   selectedAccountId,
-  onSelectAccount,
+  openKeys,
+  onToggleOpen,
+  onSelectScope,
 }: GroupNodeProps) {
-  const [open, setOpen] = useState(false);
+  const key = groupKey(group.id);
+  const open = openKeys.has(key);
   const hasAccounts = glAccounts.length > 0;
+  const isSelected = group.id === selectedGroupId;
 
   if (!hasAccounts) {
     return (
-      <div className="relative group/row rounded-lg">
-        <RowHoverOverlay />
-        <div className="relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600">
-          <File className={cn('w-4 h-4 shrink-0', color)} />
-          <span className="text-xs font-semibold text-gray-400 shrink-0">{group.code}</span>
-          <span className="truncate">{group.name}</span>
-        </div>
-      </div>
+      <SelectableTreeRow
+        onSelect={() => onSelectScope({ kind: 'group', group })}
+        isSelected={isSelected}
+        color={color}
+        code={group.code}
+        label={group.name}
+        icon={File}
+      />
     );
   }
 
   return (
     <div>
-      <div className="relative group/row rounded-lg">
-        <RowHoverOverlay />
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600"
-        >
-          {open ? (
-            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
-          )}
-          {open ? (
-            <FolderOpen className={cn('w-4 h-4 shrink-0', color)} />
-          ) : (
-            <Folder className={cn('w-4 h-4 shrink-0', color)} />
-          )}
-          <span className="text-xs font-semibold text-gray-400 shrink-0">{group.code}</span>
-          <span className="truncate">{group.name}</span>
-          <span className="ml-auto text-xs text-gray-400">{glAccounts.length}</span>
-        </button>
-      </div>
+      <ExpandableTreeRow
+        open={open}
+        onToggle={() => onToggleOpen(key)}
+        onSelect={() => onSelectScope({ kind: 'group', group })}
+        isSelected={isSelected}
+        color={color}
+        code={group.code}
+        label={group.name}
+        count={glAccounts.length}
+      />
 
       {open && (
         <div className="ml-6 border-l border-gray-100 pl-3 flex flex-col">
-          {glAccounts.map((account) => {
-            const isSelected = account.id === selectedAccountId;
-            return (
-              <div key={account.id} className="relative group/row rounded-lg">
-                <RowHoverOverlay />
-                <button
-                  type="button"
-                  onClick={() => onSelectAccount?.(account)}
-                  className={cn(
-                    'relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600',
-                    isSelected && (SELECTED_TINTS[color] ?? 'bg-gray-100'),
-                  )}
-                >
-                  <FileText className={cn('w-4 h-4 shrink-0', color)} />
-                  <span className="text-xs font-semibold text-gray-400 shrink-0">
-                    {account.code}
-                  </span>
-                  <span className="truncate">{account.name}</span>
-                </button>
-              </div>
-            );
-          })}
+          {glAccounts.map((account) => (
+            <SelectableTreeRow
+              key={account.id}
+              onSelect={() => onSelectScope({ kind: 'account', account })}
+              isSelected={account.id === selectedAccountId}
+              color={color}
+              code={account.code}
+              label={account.name}
+              icon={FileText}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -131,8 +162,12 @@ interface ClassificationNodeProps {
   classification: AccountClassification;
   groups: AccountGroup[];
   glAccounts: GLAccount[];
+  selectedClassificationId?: string;
+  selectedGroupId?: string;
   selectedAccountId?: string;
-  onSelectAccount?: (account: GLAccount) => void;
+  openKeys: Set<string>;
+  onToggleOpen: (key: string) => void;
+  onSelectScope: (scope: AccountScope) => void;
 }
 
 function ClassificationNode({
@@ -140,54 +175,48 @@ function ClassificationNode({
   classification,
   groups,
   glAccounts,
+  selectedClassificationId,
+  selectedGroupId,
   selectedAccountId,
-  onSelectAccount,
+  openKeys,
+  onToggleOpen,
+  onSelectScope,
 }: ClassificationNodeProps) {
-  const [open, setOpen] = useState(false);
-  const hasGroups = groups.length > 0;
+  const key = classificationKey(classification.id);
+  const open = openKeys.has(key);
+  // Accounts placed straight under the classification, with no group in between.
+  const directAccounts = glAccounts.filter(
+    (a) => a.classificationId === classification.id && !a.accountGroupId,
+  );
+  const hasChildren = groups.length > 0 || directAccounts.length > 0;
+  const isSelected = classification.id === selectedClassificationId;
 
-  if (!hasGroups) {
+  if (!hasChildren) {
     return (
-      <div className="relative group/row rounded-lg">
-        <RowHoverOverlay />
-        <div className="relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600">
-          <span className="w-4 h-4 shrink-0" />
-          <File className={cn('w-4 h-4 shrink-0', color)} />
-          <span className="text-xs font-semibold text-gray-400 shrink-0">
-            {classification.code}
-          </span>
-          <span className="truncate">{classification.name}</span>
-        </div>
-      </div>
+      <SelectableTreeRow
+        onSelect={() => onSelectScope({ kind: 'classification', classification })}
+        isSelected={isSelected}
+        color={color}
+        code={classification.code}
+        label={classification.name}
+        indent
+        icon={File}
+      />
     );
   }
 
   return (
     <div>
-      <div className="relative group/row rounded-lg">
-        <RowHoverOverlay />
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600"
-        >
-          {open ? (
-            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
-          )}
-          {open ? (
-            <FolderOpen className={cn('w-4 h-4 shrink-0', color)} />
-          ) : (
-            <Folder className={cn('w-4 h-4 shrink-0', color)} />
-          )}
-          <span className="text-xs font-semibold text-gray-400 shrink-0">
-            {classification.code}
-          </span>
-          <span className="truncate">{classification.name}</span>
-          <span className="ml-auto text-xs text-gray-400">{groups.length}</span>
-        </button>
-      </div>
+      <ExpandableTreeRow
+        open={open}
+        onToggle={() => onToggleOpen(key)}
+        onSelect={() => onSelectScope({ kind: 'classification', classification })}
+        isSelected={isSelected}
+        color={color}
+        code={classification.code}
+        label={classification.name}
+        count={groups.length + directAccounts.length}
+      />
 
       {open && (
         <div className="ml-6 border-l border-gray-100 pl-3 flex flex-col">
@@ -197,8 +226,22 @@ function ClassificationNode({
               color={color}
               group={group}
               glAccounts={glAccounts.filter((a) => a.accountGroupId === group.id)}
+              selectedGroupId={selectedGroupId}
               selectedAccountId={selectedAccountId}
-              onSelectAccount={onSelectAccount}
+              openKeys={openKeys}
+              onToggleOpen={onToggleOpen}
+              onSelectScope={onSelectScope}
+            />
+          ))}
+          {directAccounts.map((account) => (
+            <SelectableTreeRow
+              key={account.id}
+              onSelect={() => onSelectScope({ kind: 'account', account })}
+              isSelected={account.id === selectedAccountId}
+              color={color}
+              code={account.code}
+              label={account.name}
+              icon={FileText}
             />
           ))}
         </div>
@@ -211,57 +254,57 @@ interface TypeNodeProps {
   label: string;
   code: string;
   color: string;
-  open: boolean;
-  onToggle: () => void;
+  category: GLAccountCategory;
   classifications: AccountClassification[];
   groups: AccountGroup[];
   glAccounts: GLAccount[];
+  unclassifiedAccounts: GLAccount[];
+  selectedCategory?: GLAccountCategory;
+  selectedClassificationId?: string;
+  selectedGroupId?: string;
   selectedAccountId?: string;
-  onSelectAccount?: (account: GLAccount) => void;
+  openKeys: Set<string>;
+  onToggleOpen: (key: string) => void;
+  onSelectScope: (scope: AccountScope) => void;
 }
 
 function TypeNode({
   label,
   code,
   color,
-  open,
-  onToggle,
+  category,
   classifications,
   groups,
   glAccounts,
+  unclassifiedAccounts,
+  selectedCategory,
+  selectedClassificationId,
+  selectedGroupId,
   selectedAccountId,
-  onSelectAccount,
+  openKeys,
+  onToggleOpen,
+  onSelectScope,
 }: TypeNodeProps) {
+  const key = typeKey(category);
+  const open = openKeys.has(key);
+
   return (
     <div>
-      <div className="relative group/row rounded-lg">
-        <RowHoverOverlay />
-        <button
-          type="button"
-          onClick={onToggle}
-          className="relative w-full flex items-center gap-2 px-3 py-3 rounded-lg text-sm text-gray-700"
-        >
-          {open ? (
-            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
-          )}
-          {open ? (
-            <FolderOpen className={cn('w-5 h-5 shrink-0', color)} />
-          ) : (
-            <Folder className={cn('w-5 h-5 shrink-0', color)} />
-          )}
-          <span className="text-xs font-semibold text-gray-400 shrink-0">{code}</span>
-          <span className="font-medium">{label}</span>
-          <span className="ml-auto text-xs text-gray-400">{classifications.length}</span>
-        </button>
-      </div>
+      <ExpandableTreeRow
+        open={open}
+        onToggle={() => onToggleOpen(key)}
+        onSelect={() => onSelectScope({ kind: 'category', category })}
+        isSelected={category === selectedCategory}
+        color={color}
+        code={code}
+        label={label}
+        count={classifications.length + (unclassifiedAccounts.length > 0 ? 1 : 0)}
+        size="md"
+      />
 
       {open && (
         <div className="ml-6 border-l border-gray-100 pl-3 flex flex-col">
-          {classifications.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-gray-400">No classifications</p>
-          ) : (
+          {classifications.length > 0 &&
             classifications.map((classification) => (
               <ClassificationNode
                 key={classification.id}
@@ -269,10 +312,46 @@ function TypeNode({
                 classification={classification}
                 groups={groups.filter((g) => g.classificationId === classification.id)}
                 glAccounts={glAccounts}
+                selectedClassificationId={selectedClassificationId}
+                selectedGroupId={selectedGroupId}
                 selectedAccountId={selectedAccountId}
-                onSelectAccount={onSelectAccount}
+                openKeys={openKeys}
+                onToggleOpen={onToggleOpen}
+                onSelectScope={onSelectScope}
               />
-            ))
+            ))}
+          {unclassifiedAccounts.length > 0 && (
+            <div className="mt-1 rounded-lg bg-amber-50 px-3 py-2">
+              <p className="text-xs font-semibold text-amber-800">Unclassified accounts</p>
+              <p className="mt-0.5 text-xs text-amber-700">
+                Assign these accounts to a classification when their hierarchy is ready.
+              </p>
+              <div className="mt-2 flex flex-col">
+                {unclassifiedAccounts.map((account) => {
+                  const isSelected = account.id === selectedAccountId;
+                  return (
+                    <button
+                      key={account.id}
+                      type="button"
+                      onClick={() => onSelectScope({ kind: 'account', account })}
+                      className={cn(
+                        'flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-gray-600 hover:bg-amber-100',
+                        isSelected && getSelectedRowTint(color),
+                      )}
+                    >
+                      <FileText className={cn('h-4 w-4 shrink-0', color)} />
+                      <span className="shrink-0 text-xs font-semibold text-gray-400">
+                        {account.code}
+                      </span>
+                      <span className="truncate">{account.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {classifications.length === 0 && unclassifiedAccounts.length === 0 && (
+            <p className="px-3 py-2 text-xs text-gray-400">No accounts</p>
           )}
         </div>
       )}
@@ -281,51 +360,92 @@ function TypeNode({
 }
 
 interface ChartOfAccountsTreeProps {
-  /** When true, render a narrow icon-only rail instead of the full tree. */
+  // collapse the tree to a narrow rail.
   collapsed?: boolean;
-  /** Called when a rail icon is clicked, so the host panel can expand back to full width. */
   onExpand?: () => void;
-  selectedAccountId?: string;
-  onSelectAccount?: (account: GLAccount) => void;
+  classifications: AccountClassification[];
+  groups: AccountGroup[];
+  glAccounts: GLAccount[];
+  isLoading?: boolean;
+  hasAccountFilter?: boolean;
+  scope: AccountScope;
+  onSelectScope: (scope: AccountScope) => void;
 }
 
 export function ChartOfAccountsTree({
   collapsed = false,
   onExpand,
-  selectedAccountId,
-  onSelectAccount,
+  classifications,
+  groups,
+  glAccounts,
+  isLoading = false,
+  hasAccountFilter = false,
+  scope,
+  onSelectScope,
 }: ChartOfAccountsTreeProps) {
-  const { data: classificationsData, isLoading: isLoadingClassifications } =
-    useAccountClassifications();
-  const { data: groupsData, isLoading: isLoadingGroups } = useAccountGroups();
-  const { data: glAccountsData, isLoading: isLoadingGLAccounts } = useGLAccounts();
+  const visibleGroups = useMemo(
+    () =>
+      hasAccountFilter
+        ? groups.filter((group) =>
+            glAccounts.some((account) => account.accountGroupId === group.id),
+          )
+        : groups,
+    [glAccounts, groups, hasAccountFilter],
+  );
+  const visibleClassifications = useMemo(
+    () =>
+      hasAccountFilter
+        ? classifications.filter(
+            (classification) =>
+              visibleGroups.some((group) => group.classificationId === classification.id) ||
+              glAccounts.some((account) => account.classificationId === classification.id),
+          )
+        : classifications,
+    [classifications, glAccounts, hasAccountFilter, visibleGroups],
+  );
 
-  const classifications = useMemo(() => classificationsData?.items ?? [], [classificationsData]);
-  const groups = useMemo(() => groupsData?.items ?? [], [groupsData]);
-  const glAccounts = useMemo(() => glAccountsData ?? [], [glAccountsData]);
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
 
-  const isLoading = isLoadingClassifications || isLoadingGroups || isLoadingGLAccounts;
-
-  // Lifted so a rail click can force a specific type open once expanded.
-  const [openTypes, setOpenTypes] = useState<Set<GLAccountCategory>>(new Set());
-
-  const toggleType = (value: GLAccountCategory) => {
-    setOpenTypes((prev) => {
+  const toggleOpen = (key: string) => {
+    setOpenKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
+  const selectScope = (nextScope: AccountScope) => {
+    setOpenKeys(pathKeysForScope(nextScope, groups, classifications));
+    onSelectScope(nextScope);
+  };
+
   const jumpToType = (value: GLAccountCategory) => {
-    setOpenTypes((prev) => new Set(prev).add(value));
+    selectScope({ kind: 'category', category: value });
     onExpand?.();
   };
+
+  const selectedCategory = scope.kind === 'category' ? scope.category : undefined;
+  const selectedClassificationId =
+    scope.kind === 'classification' ? scope.classification.id : undefined;
+  const selectedGroupId = scope.kind === 'group' ? scope.group.id : undefined;
+  const selectedAccountId = scope.kind === 'account' ? scope.account.id : undefined;
 
   if (collapsed) {
     return (
       <>
+        <button
+          type="button"
+          onClick={() => {
+            selectScope({ kind: 'all' });
+            onExpand?.();
+          }}
+          title="All Accounts"
+          aria-label="All Accounts"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <Layers className="w-4 h-4 text-gray-400" />
+        </button>
         {CATEGORIES.map((cat) => (
           <button
             key={cat.value}
@@ -347,21 +467,38 @@ export function ChartOfAccountsTree({
       {isLoading ? (
         <p className="px-3 py-2 text-xs text-gray-400">Loading…</p>
       ) : (
-        CATEGORIES.map((cat) => (
-          <TypeNode
-            key={cat.value}
-            label={cat.label}
-            code={cat.code}
-            color={cat.color}
-            open={openTypes.has(cat.value)}
-            onToggle={() => toggleType(cat.value)}
-            classifications={classifications.filter((c) => c.category === cat.value)}
-            groups={groups}
-            glAccounts={glAccounts}
-            selectedAccountId={selectedAccountId}
-            onSelectAccount={onSelectAccount}
+        <>
+          <AllAccountsTreeRow
+            isSelected={scope.kind === 'all'}
+            onSelect={() => selectScope({ kind: 'all' })}
+            onCollapseAll={openKeys.size > 0 ? () => setOpenKeys(new Set()) : undefined}
           />
-        ))
+          {CATEGORIES.map((cat) => (
+            <TypeNode
+              key={cat.value}
+              label={cat.label}
+              code={cat.code}
+              color={cat.color}
+              category={cat.value}
+              classifications={visibleClassifications.filter((c) => c.category === cat.value)}
+              groups={visibleGroups}
+              glAccounts={glAccounts}
+              unclassifiedAccounts={glAccounts.filter(
+                (account) =>
+                  account.category === cat.value &&
+                  !account.accountGroupId &&
+                  !account.classificationId,
+              )}
+              selectedCategory={selectedCategory}
+              selectedClassificationId={selectedClassificationId}
+              selectedGroupId={selectedGroupId}
+              selectedAccountId={selectedAccountId}
+              openKeys={openKeys}
+              onToggleOpen={toggleOpen}
+              onSelectScope={selectScope}
+            />
+          ))}
+        </>
       )}
     </div>
   );

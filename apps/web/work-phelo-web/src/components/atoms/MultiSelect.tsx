@@ -12,6 +12,9 @@ export interface MultiSelectOption {
   sublabel?: string;
 }
 
+/** Sentinel for the synthetic "All" row in inline (filter-bar) mode — real option values never use it. */
+const ALL_VALUE = '';
+
 interface MultiSelectProps {
   label?: string;
   placeholder?: string;
@@ -22,6 +25,14 @@ interface MultiSelectProps {
   hideChips?: boolean;
   /** 'md' (default) keeps the standard py-3 height; 'sm' matches the DataTable search input (py-2). */
   size?: 'sm' | 'md';
+  /** 'default' shows selected values as removable chips above the field. 'inline' (for filter bars)
+   *  keeps everything to a single row — no chips above, selections summarized inside the field itself. */
+  variant?: 'default' | 'inline';
+  /** Label for the inline variant's "All" row/empty state. Defaults to "All {placeholder}"
+   *  (e.g. "All Status") so the field names its own dimension rather than showing a bare "All". */
+  allLabel?: string;
+  /** Fires on every keystroke so callers can use bounded server-side option searches. */
+  onQueryChange?: (query: string) => void;
 }
 
 export function MultiSelect({
@@ -33,7 +44,11 @@ export function MultiSelect({
   error,
   hideChips = false,
   size = 'sm',
+  variant = 'default',
+  allLabel,
+  onQueryChange,
 }: MultiSelectProps) {
+  const resolvedAllLabel = allLabel ?? `All ${placeholder}`;
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   /* drives the actual grid-rows/opacity styles, one frame behind `open` on the
@@ -96,14 +111,27 @@ export function MultiSelect({
 
   const selected = options.filter((o) => value.includes(o.value));
 
+  /* Inline (filter-bar) mode gets a pinned "All" row — clicking it clears the selection rather
+   *  than toggling into it, since an empty value array already means "no filter, show everything". */
+  const effectiveOptions = useMemo(
+    () =>
+      variant === 'inline' ? [{ value: ALL_VALUE, label: resolvedAllLabel }, ...options] : options,
+    [options, variant, resolvedAllLabel],
+  );
+
+  const activateOption = (opt: MultiSelectOption) => {
+    if (variant === 'inline' && opt.value === ALL_VALUE) onChange([]);
+    else toggle(opt.value);
+  };
+
   const filtered = useMemo(() => {
-    if (!query) return options;
+    if (!query) return effectiveOptions;
     const q = query.toLowerCase();
-    return options.filter(
+    return effectiveOptions.filter(
       (o) =>
         o.label.toLowerCase().includes(q) || (o.sublabel && o.sublabel.toLowerCase().includes(q)),
     );
-  }, [options, query]);
+  }, [effectiveOptions, query]);
 
   /* keep the highlighted option in range as the filtered list changes — adjusted during
      render (rather than an effect) per React's guidance for state that mirrors a prop/derived value */
@@ -152,7 +180,7 @@ export function MultiSelect({
       case 'Enter':
         e.preventDefault();
         if (highlightedIndex >= 0 && filtered[highlightedIndex]) {
-          toggle(filtered[highlightedIndex].value);
+          activateOption(filtered[highlightedIndex]);
         }
         break;
       case 'Escape':
@@ -177,11 +205,11 @@ export function MultiSelect({
   };
 
   return (
-    <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={containerRef}>
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
       {/* Selected chips */}
-      {!hideChips && selected.length > 0 && (
+      {!hideChips && variant !== 'inline' && selected.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {selected.map((opt) => (
             <span
@@ -219,11 +247,25 @@ export function MultiSelect({
               : 'bg-transparent border-(--input-border,var(--color-gray-400))',
         )}
       >
-        <span className={cn('text-sm', selected.length > 0 ? 'text-gray-900' : 'text-gray-400')}>
-          {selected.length > 0 ? 'Add more…' : placeholder}
+        <span
+          className={cn(
+            'text-sm truncate min-w-0',
+            selected.length > 0 || variant === 'inline' ? 'text-gray-900' : 'text-gray-400',
+          )}
+        >
+          {selected.length === 0
+            ? variant === 'inline'
+              ? resolvedAllLabel
+              : placeholder
+            : variant === 'inline'
+              ? selected.map((o) => o.label).join(', ')
+              : 'Add more…'}
         </span>
         <Icons.ChevronDown
-          className={cn('text-gray-400 transition-transform duration-150', open && 'rotate-180')}
+          className={cn(
+            'w-4 h-4 shrink-0 text-gray-400 transition-transform duration-150',
+            open && 'rotate-180',
+          )}
         />
       </button>
 
@@ -256,7 +298,10 @@ export function MultiSelect({
                     ref={searchRef}
                     type="text"
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      onQueryChange?.(e.target.value);
+                    }}
                     onMouseDown={(e) => e.stopPropagation()}
                     onKeyDown={handleSearchKeyDown}
                     placeholder="Search…"
@@ -292,7 +337,8 @@ export function MultiSelect({
                   <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
                 ) : (
                   filtered.map((opt, idx) => {
-                    const checked = value.includes(opt.value);
+                    const isAllOption = variant === 'inline' && opt.value === ALL_VALUE;
+                    const checked = isAllOption ? value.length === 0 : value.includes(opt.value);
                     return (
                       <button
                         key={opt.value}
@@ -305,7 +351,7 @@ export function MultiSelect({
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onMouseEnter={() => setHighlightedIndex(idx)}
-                        onClick={() => toggle(opt.value)}
+                        onClick={() => activateOption(opt)}
                         className={cn(
                           'w-full flex items-start gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-300 text-left transition-colors',
                           idx === highlightedIndex && 'bg-gray-300',

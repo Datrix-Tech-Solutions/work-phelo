@@ -17,7 +17,7 @@ export function FileUpload({ label, accept, value, onChange, error, hint }: File
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       {label && <span className="text-sm font-medium text-gray-700">{label}</span>}
 
       <div

@@ -1,20 +1,14 @@
 'use client';
 
-import { useFieldArray, useWatch, Controller, UseFormReturn } from 'react-hook-form';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { useFieldArray, useWatch, UseFormReturn } from 'react-hook-form';
 import { inputClass } from '@/lib/utils';
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
 import { InvoiceFormValues, InvoiceLine } from '@/types/accounting';
 
-// TODO: populate from chart of accounts API
-const GL_ACCOUNT_OPTIONS: SearchSelectOption[] = [];
-
 const EMPTY_LINE: InvoiceLine = {
   description: '',
-  glAccount: '',
   unitPrice: '',
   quantity: '',
-  tax: '',
 };
 
 function fmt(value: number) {
@@ -41,19 +35,13 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
     return (Number(l?.quantity) || 0) * (Number(l?.unitPrice) || 0);
   };
 
-  const getTotal = (index: number) => {
-    const amount = getAmount(index);
-    const tax = Number(lines?.[index]?.tax) || 0;
-    return amount + (amount * tax) / 100;
-  };
-
-  const grandTotal = (lines ?? []).reduce((sum, _, i) => sum + getTotal(i), 0);
+  const grandTotal = (lines ?? []).reduce((sum, _, i) => sum + getAmount(i), 0);
 
   const columns: InlineTableColumn[] = [
     {
       key: 'description',
       label: 'Description',
-      width: '2fr',
+      width: 'minmax(150px, 1fr)',
       renderField: (index) => (
         <input
           {...register(`lines.${index}.description`)}
@@ -63,34 +51,9 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
       ),
     },
     {
-      key: 'glAccount',
-      label: 'GL Account',
-      width: '1.5fr',
-      renderField: (index) => {
-        const err = errors.lines?.[index]?.glAccount;
-        return (
-          <Controller
-            name={`lines.${index}.glAccount`}
-            control={control}
-            rules={{ required: true }}
-            render={({ field }) => (
-              <SearchSelect
-                placeholder="Select account…"
-                options={GL_ACCOUNT_OPTIONS}
-                value={field.value}
-                onChange={field.onChange}
-                error={err ? '' : undefined}
-                size="sm"
-              />
-            )}
-          />
-        );
-      },
-    },
-    {
       key: 'unitPrice',
       label: 'Unit Price',
-      width: '110px',
+      width: '100px',
       align: 'right',
       renderField: (index) => {
         const err = errors.lines?.[index]?.unitPrice;
@@ -126,41 +89,13 @@ export function InvoiceLineDetailsSection({ form }: InvoiceLineDetailsSectionPro
       },
     },
     {
-      key: 'tax',
-      label: 'Tax (%)',
-      width: '90px',
-      align: 'right',
-      renderField: (index) => (
-        <input
-          {...register(`lines.${index}.tax`, { valueAsNumber: true })}
-          type="number"
-          min={0}
-          max={100}
-          step="0.1"
-          placeholder="0"
-          className={inputClass(undefined, 'py-2 text-sm text-right')}
-        />
-      ),
-    },
-    {
       key: 'amount',
-      label: 'Amount',
+      label: `Amount${currency ? ` (${currency})` : ''}`,
       width: '120px',
       align: 'right',
       renderField: (index) => (
-        <div className="py-2 px-1 text-sm text-right text-gray-700 font-medium">
-          {fmt(getAmount(index))}
-        </div>
-      ),
-    },
-    {
-      key: 'total',
-      label: `Total${currency ? ` (${currency})` : ''}`,
-      width: '140px',
-      align: 'right',
-      renderField: (index) => (
         <div className="py-2 px-1 text-sm text-right text-gray-900 font-semibold">
-          {fmt(getTotal(index))}
+          {fmt(getAmount(index))}
         </div>
       ),
       renderFooter: () => (currency ? `${currency} ` : '') + fmt(grandTotal),

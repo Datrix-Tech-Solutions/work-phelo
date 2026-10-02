@@ -6,6 +6,54 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Some pages (e.g. reinsurance claims) fan out one request per row via useQueries instead
+// of a single aggregate endpoint. Left unbounded, that can throw 50-200+ requests at the
+// browser at once, which pile up against its per-origin connection limit and stall
+// everything, including unrelated requests elsewhere on the page. Cap how many of this
+// client's requests are ever in flight at once and queue the rest — auth calls skip the
+// queue so a 401 refresh never waits behind a backlog of data fetches.
+const MAX_CONCURRENT_REQUESTS = 6;
+const NO_QUEUE = ['/auth/refresh', '/auth/admin/login', '/auth/login'];
+let activeRequestCount = 0;
+const pendingSlotRequests: Array<() => void> = [];
+
+function acquireRequestSlot(): Promise<void> {
+  if (activeRequestCount < MAX_CONCURRENT_REQUESTS) {
+    activeRequestCount++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    pendingSlotRequests.push(() => {
+      activeRequestCount++;
+      resolve();
+    });
+  });
+}
+
+function releaseRequestSlot() {
+  activeRequestCount--;
+  pendingSlotRequests.shift()?.();
+}
+
+api.interceptors.request.use(async (config) => {
+  if (NO_QUEUE.some((path) => config.url?.includes(path))) return config;
+  await acquireRequestSlot();
+  return config;
+});
+
+api.interceptors.response.use(
+  (res) => {
+    releaseRequestSlot();
+    return res;
+  },
+  (error) => {
+    if (!NO_QUEUE.some((path) => (error.config?.url ?? '').includes(path))) {
+      releaseRequestSlot();
+    }
+    return Promise.reject(error);
+  },
+);
+
 // Routes that should never trigger a token refresh attempt
 const SKIP_REFRESH = ['/auth/refresh', '/auth/admin/login', '/auth/login'];
 

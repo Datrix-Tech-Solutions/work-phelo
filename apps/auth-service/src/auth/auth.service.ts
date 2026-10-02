@@ -55,6 +55,7 @@ export class AuthService {
         firstName: user.firstName,
         moduleConfig: user.moduleConfig,
         featureConfig: user.featureConfig,
+        integrationConfig: user.integrationConfig,
         // Permissions omitted — gateway fetches them from /me on each request,
         // keeping the JWT small regardless of how many permissions a user holds.
       },
@@ -77,6 +78,7 @@ export class AuthService {
       name: string;
       moduleConfig: unknown;
       featureConfig: unknown;
+      integrationConfig: unknown;
     },
   ) {
     const payload = {
@@ -94,6 +96,8 @@ export class AuthService {
       },
       featureConfig:
         (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
+      integrationConfig:
+        (tenant.integrationConfig as Record<string, boolean>) ?? {},
       // Permissions omitted — gateway fetches them from /me on each request.
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
@@ -284,6 +288,8 @@ export class AuthService {
         featureConfig:
           (tenant.featureConfig as Record<string, Record<string, boolean>>) ??
           {},
+        integrationConfig:
+          (tenant.integrationConfig as Record<string, boolean>) ?? {},
       },
     };
   }

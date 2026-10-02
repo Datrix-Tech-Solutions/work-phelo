@@ -1,0 +1,618 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiCookieAuth,
+  ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
+import { MarketingCrmSettingCategory } from '../../prisma/generated/client';
+import { RequireFeature } from '../auth/decorators/feature.decorator';
+import { RequireModule } from '../auth/decorators/module.decorator';
+import { RequireAnyPermission } from '../auth/decorators/permissions.decorator';
+import { FeatureGuard } from '../auth/guards/feature.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../auth/guards/module.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import {
+  ApiErrorResponseDto,
+  CreateProspectingSettingDto,
+  ProspectingSettingResponseDto,
+  ProspectingSettingsListResponseDto,
+  QueryProspectingSettingsDto,
+  UpdateProspectingSettingDto,
+} from './dto/prospecting-setting.dto';
+import { MarketingCrmSettingsPermission } from './crm-settings.permissions';
+import { ProspectingSettingsService } from './prospecting-settings.service';
+
+type CategoryPermissions = {
+  view: string;
+  create: string;
+  edit: string;
+  delete: string;
+};
+
+const BUSINESS_TYPES_PERMISSIONS: CategoryPermissions = {
+  view: MarketingCrmSettingsPermission.BUSINESS_TYPES_VIEW,
+  create: MarketingCrmSettingsPermission.BUSINESS_TYPES_CREATE,
+  edit: MarketingCrmSettingsPermission.BUSINESS_TYPES_EDIT,
+  delete: MarketingCrmSettingsPermission.BUSINESS_TYPES_DELETE,
+};
+
+const PRODUCTS_PERMISSIONS: CategoryPermissions = {
+  view: MarketingCrmSettingsPermission.PRODUCTS_VIEW,
+  create: MarketingCrmSettingsPermission.PRODUCTS_CREATE,
+  edit: MarketingCrmSettingsPermission.PRODUCTS_EDIT,
+  delete: MarketingCrmSettingsPermission.PRODUCTS_DELETE,
+};
+
+const SOURCE_TYPES_PERMISSIONS: CategoryPermissions = {
+  view: MarketingCrmSettingsPermission.SOURCE_TYPES_VIEW,
+  create: MarketingCrmSettingsPermission.SOURCE_TYPES_CREATE,
+  edit: MarketingCrmSettingsPermission.SOURCE_TYPES_EDIT,
+  delete: MarketingCrmSettingsPermission.SOURCE_TYPES_DELETE,
+};
+
+const INTERACTION_MEDIA_PERMISSIONS: CategoryPermissions = {
+  view: MarketingCrmSettingsPermission.INTERACTION_MEDIA_VIEW,
+  create: MarketingCrmSettingsPermission.INTERACTION_MEDIA_CREATE,
+  edit: MarketingCrmSettingsPermission.INTERACTION_MEDIA_EDIT,
+  delete: MarketingCrmSettingsPermission.INTERACTION_MEDIA_DELETE,
+};
+
+const DECISION_MAKERS_PERMISSIONS: CategoryPermissions = {
+  view: MarketingCrmSettingsPermission.DECISION_MAKERS_VIEW,
+  create: MarketingCrmSettingsPermission.DECISION_MAKERS_CREATE,
+  edit: MarketingCrmSettingsPermission.DECISION_MAKERS_EDIT,
+  delete: MarketingCrmSettingsPermission.DECISION_MAKERS_DELETE,
+};
+
+@Controller('crm-settings')
+@ApiTags('Marketing - CRM Settings')
+@ApiCookieAuth('access_token')
+@ApiBearerAuth('access-token')
+@ApiUnauthorizedResponse({
+  type: ApiErrorResponseDto,
+  description: 'Missing or invalid session/token.',
+})
+@ApiForbiddenResponse({
+  type: ApiErrorResponseDto,
+  description: 'Marketing module, leads feature or permission is unavailable.',
+})
+@UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
+@RequireModule('marketing')
+@RequireFeature('marketing', 'leads')
+export class ProspectingSettingsController {
+  constructor(private readonly service: ProspectingSettingsService) {}
+
+  @Get('business-types')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    BUSINESS_TYPES_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'List prospect business types' })
+  @ApiOkResponse({ type: ProspectingSettingsListResponseDto })
+  listBusinessTypes(
+    @Query() query: QueryProspectingSettingsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
+      query,
+    );
+  }
+
+  @Post('business-types')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+    BUSINESS_TYPES_PERMISSIONS.create,
+  )
+  @ApiOperation({ summary: 'Create a prospect business type' })
+  @ApiCreatedResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  createBusinessType(
+    @Body() dto: CreateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.create(
+      request.user,
+      MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
+      dto,
+    );
+  }
+
+  @Get('business-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    BUSINESS_TYPES_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'Get a prospect business type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  getBusinessType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
+      id,
+    );
+  }
+
+  @Patch('business-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+    BUSINESS_TYPES_PERMISSIONS.edit,
+  )
+  @ApiOperation({ summary: 'Update a prospect business type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  updateBusinessType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(
+      request.user,
+      MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('business-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+    BUSINESS_TYPES_PERMISSIONS.delete,
+  )
+  @ApiOperation({ summary: 'Archive a prospect business type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  archiveBusinessType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.archive(
+      request.user,
+      MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
+      id,
+    );
+  }
+
+  @Get('products')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    PRODUCTS_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'List prospect product and service options' })
+  @ApiOkResponse({ type: ProspectingSettingsListResponseDto })
+  listProducts(
+    @Query() query: QueryProspectingSettingsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.PRODUCT,
+      query,
+    );
+  }
+
+  @Post('products')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+    PRODUCTS_PERMISSIONS.create,
+  )
+  @ApiOperation({ summary: 'Create a prospect product or service option' })
+  @ApiCreatedResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  createProduct(
+    @Body() dto: CreateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.create(
+      request.user,
+      MarketingCrmSettingCategory.PRODUCT,
+      dto,
+    );
+  }
+
+  @Get('products/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    PRODUCTS_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'Get a prospect product or service option' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  getProduct(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.PRODUCT,
+      id,
+    );
+  }
+
+  @Patch('products/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+    PRODUCTS_PERMISSIONS.edit,
+  )
+  @ApiOperation({ summary: 'Update a prospect product or service option' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  updateProduct(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(
+      request.user,
+      MarketingCrmSettingCategory.PRODUCT,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('products/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+    PRODUCTS_PERMISSIONS.delete,
+  )
+  @ApiOperation({ summary: 'Archive a prospect product or service option' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  archiveProduct(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.archive(
+      request.user,
+      MarketingCrmSettingCategory.PRODUCT,
+      id,
+    );
+  }
+
+  @Get('source-types')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    SOURCE_TYPES_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'List prospect source types' })
+  @ApiOkResponse({ type: ProspectingSettingsListResponseDto })
+  listSourceTypes(
+    @Query() query: QueryProspectingSettingsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      query,
+    );
+  }
+
+  @Post('source-types')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+    SOURCE_TYPES_PERMISSIONS.create,
+  )
+  @ApiOperation({ summary: 'Create a prospect source type' })
+  @ApiCreatedResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  createSourceType(
+    @Body() dto: CreateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.create(
+      request.user,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      dto,
+    );
+  }
+
+  @Get('source-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    SOURCE_TYPES_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'Get a prospect source type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  getSourceType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      id,
+    );
+  }
+
+  @Patch('source-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+    SOURCE_TYPES_PERMISSIONS.edit,
+  )
+  @ApiOperation({ summary: 'Update a prospect source type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  updateSourceType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(
+      request.user,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('source-types/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+    SOURCE_TYPES_PERMISSIONS.delete,
+  )
+  @ApiOperation({ summary: 'Archive a prospect source type' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  archiveSourceType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.archive(
+      request.user,
+      MarketingCrmSettingCategory.SOURCE_TYPE,
+      id,
+    );
+  }
+
+  @Get('interaction-media')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    INTERACTION_MEDIA_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'List prospect interaction media' })
+  @ApiOkResponse({ type: ProspectingSettingsListResponseDto })
+  listInteractionMedia(
+    @Query() query: QueryProspectingSettingsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      query,
+    );
+  }
+
+  @Post('interaction-media')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+    INTERACTION_MEDIA_PERMISSIONS.create,
+  )
+  @ApiOperation({ summary: 'Create a prospect interaction medium' })
+  @ApiCreatedResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  createInteractionMedium(
+    @Body() dto: CreateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.create(
+      request.user,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      dto,
+    );
+  }
+
+  @Get('interaction-media/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    INTERACTION_MEDIA_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'Get a prospect interaction medium' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  getInteractionMedium(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      id,
+    );
+  }
+
+  @Patch('interaction-media/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+    INTERACTION_MEDIA_PERMISSIONS.edit,
+  )
+  @ApiOperation({ summary: 'Update a prospect interaction medium' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  updateInteractionMedium(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(
+      request.user,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('interaction-media/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+    INTERACTION_MEDIA_PERMISSIONS.delete,
+  )
+  @ApiOperation({ summary: 'Archive a prospect interaction medium' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  archiveInteractionMedium(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.archive(
+      request.user,
+      MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      id,
+    );
+  }
+
+  @Get('decision-makers')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    DECISION_MAKERS_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'List prospect decision makers' })
+  @ApiOkResponse({ type: ProspectingSettingsListResponseDto })
+  listDecisionMakers(
+    @Query() query: QueryProspectingSettingsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.list(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      query,
+    );
+  }
+
+  @Post('decision-makers')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_CREATE,
+    DECISION_MAKERS_PERMISSIONS.create,
+  )
+  @ApiOperation({ summary: 'Create a prospect decision maker' })
+  @ApiCreatedResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  createDecisionMaker(
+    @Body() dto: CreateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.create(
+      request.user,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      dto,
+    );
+  }
+
+  @Get('decision-makers/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_VIEW,
+    DECISION_MAKERS_PERMISSIONS.view,
+  )
+  @ApiOperation({ summary: 'Get a prospect decision maker' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  getDecisionMaker(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.findOne(
+      request.user.tenantId,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      id,
+    );
+  }
+
+  @Patch('decision-makers/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_EDIT,
+    DECISION_MAKERS_PERMISSIONS.edit,
+  )
+  @ApiOperation({ summary: 'Update a prospect decision maker' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  updateDecisionMaker(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProspectingSettingDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.update(
+      request.user,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('decision-makers/:id')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.CRM_SETTINGS_DELETE,
+    DECISION_MAKERS_PERMISSIONS.delete,
+  )
+  @ApiOperation({ summary: 'Archive a prospect decision maker' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProspectingSettingResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  archiveDecisionMaker(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.archive(
+      request.user,
+      MarketingCrmSettingCategory.DECISION_MAKER,
+      id,
+    );
+  }
+}

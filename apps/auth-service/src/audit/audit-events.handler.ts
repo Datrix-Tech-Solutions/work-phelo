@@ -8,6 +8,7 @@ import {
   ReinsuranceMailboxSyncAuditEvent,
   ReinsurancePlacementAuditEvent,
   ReinsurancePlacementStatusAuditEvent,
+  ReinsuranceAccountingOperationAuditEvent,
   WithMeta,
 } from '@work-phelo/types';
 import { AuditService } from './audit.service';
@@ -120,6 +121,26 @@ export class AuditEventsHandler {
       resource: 'operations.reinsurance.email',
       resourceId: data.linkId,
       changes: data.changes,
+    });
+    this.ack(context);
+  }
+
+  @EventPattern(EventPatterns.REINSURANCE_ACCOUNTING_OPERATION_EXECUTED)
+  async onAccountingOperationExecuted(
+    @Payload() data: WithMeta<ReinsuranceAccountingOperationAuditEvent>,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    await this.auditService.log({
+      tenantId: data.tenantId,
+      userId: data.actorUserId,
+      userEmail: data.actorEmail,
+      userRole: data.actorRole,
+      action: 'UPDATE',
+      resource: 'operations.reinsurance.accounting-operations',
+      resourceId: data.resourceId ?? data.operation,
+      changes: {
+        after: { operation: data.operation, ...data.changes },
+      },
     });
     this.ack(context);
   }

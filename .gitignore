@@ -51,6 +51,8 @@ coverage/
 **/*.spec.ts
 # Allow committed unit specs in service src/ directories
 !apps/*/src/**/*.spec.ts
+# Allow committed unit specs in shared package src/ directories
+!packages/*/src/**/*.spec.ts
 # Allow Jest configs and unit specs in test/ directories
 !apps/*/test/jest.unit.config.js
 !apps/*/test/jest.integration.config.js
@@ -74,10 +76,9 @@ HOME
 # Local UI specs / design references
 roles-ui-spec/
 
-# Local/internal docs
+# Local-only docs directories
 docs/
-!docs/
-docs/*
+**/docs/
 
 .compose.local.env
 .env.dev

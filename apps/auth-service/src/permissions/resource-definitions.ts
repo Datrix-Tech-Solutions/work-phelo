@@ -106,6 +106,154 @@ export const RESOURCES = [
     module: 'FINANCE',
     description: 'Expense reports',
   },
+  {
+    name: 'accounting.settings',
+    module: 'ACCOUNTING',
+    description: 'Accounting configuration, currencies and fiscal periods',
+  },
+  {
+    name: 'accounting.accounts',
+    module: 'ACCOUNTING',
+    description: 'Chart of accounts, cost centres and subledger accounts',
+  },
+  {
+    name: 'accounting.account-classifications',
+    module: 'ACCOUNTING',
+    description: 'Accounting account hierarchy classifications',
+  },
+  {
+    name: 'accounting.account-groups',
+    module: 'ACCOUNTING',
+    description: 'Accounting account hierarchy groups',
+  },
+  {
+    name: 'accounting.customers',
+    module: 'ACCOUNTING',
+    description: 'Accounting customer master records and AR subledgers',
+  },
+  {
+    name: 'accounting.vendors',
+    module: 'ACCOUNTING',
+    description: 'Accounting vendor master records and AP subledgers',
+  },
+  {
+    name: 'accounting.cash-accounts',
+    module: 'ACCOUNTING',
+    description: 'Accounting-owned cash, bank and wallet account masters',
+  },
+  {
+    name: 'accounting.cashbook',
+    module: 'ACCOUNTING',
+    description: 'Standalone Accounting cashbook transaction workflows',
+  },
+  {
+    name: 'accounting.receivables',
+    module: 'ACCOUNTING',
+    description:
+      'Standalone Accounting accounts receivable documents, receipts and allocations',
+  },
+  {
+    name: 'accounting.payables',
+    module: 'ACCOUNTING',
+    description:
+      'Standalone Accounting accounts payable documents, payments and allocations',
+  },
+  {
+    name: 'accounting.budgets',
+    module: 'ACCOUNTING',
+    description: 'Period budgets by account and cost centre, with actuals',
+  },
+  {
+    name: 'accounting.journals',
+    module: 'ACCOUNTING',
+    description: 'Draft, post and reverse journal entries',
+  },
+  {
+    name: 'accounting.ledger',
+    module: 'ACCOUNTING',
+    description: 'Posted general-ledger activity',
+  },
+
+  {
+    name: 'marketing.crm-settings',
+    module: 'MARKETING',
+    description: 'Marketing CRM settings administration',
+  },
+  {
+    name: 'marketing.pipeline-stages',
+    module: 'MARKETING',
+    description: 'Marketing sales pipeline stage configuration',
+  },
+  {
+    name: 'marketing.products',
+    module: 'MARKETING',
+    description: 'Marketing product and service options',
+  },
+  {
+    name: 'marketing.decision-makers',
+    module: 'MARKETING',
+    description: 'Marketing decision maker and role title options',
+  },
+  {
+    name: 'marketing.source-types',
+    module: 'MARKETING',
+    description: 'Marketing prospect source type options',
+  },
+  {
+    name: 'marketing.interaction-media',
+    module: 'MARKETING',
+    description: 'Marketing prospect interaction medium options',
+  },
+  {
+    name: 'marketing.business-types',
+    module: 'MARKETING',
+    description: 'Marketing prospect business type options',
+  },
+  {
+    name: 'marketing.prospects',
+    module: 'MARKETING',
+    description: 'Marketing prospect records and sales pipeline assignments',
+  },
+  {
+    name: 'marketing.prospects.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect list visibility',
+  },
+  {
+    name: 'marketing.clients',
+    module: 'MARKETING',
+    description: 'Marketing client records and prospect conversion',
+  },
+  {
+    name: 'marketing.clients.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing client list visibility',
+  },
+  {
+    name: 'marketing.prospects.interactions',
+    module: 'MARKETING',
+    description: 'Marketing prospect interaction history records',
+  },
+  {
+    name: 'marketing.prospects.interactions.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect interaction history access',
+  },
+  {
+    name: 'marketing.follow-ups',
+    module: 'MARKETING',
+    description: 'Marketing prospect follow-up scheduling and worklists',
+  },
+  {
+    name: 'marketing.follow-ups.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect follow-up scheduling access',
+  },
+  {
+    name: 'marketing.fleet',
+    module: 'MARKETING',
+    description: 'Marketing fleet vehicles linked to HR vehicle assets',
+  },
 
   {
     name: 'operations.reinsurance.dashboard',
@@ -113,9 +261,71 @@ export const RESOURCES = [
     description: 'Reinsurance operations dashboard',
   },
   {
+    name: 'operations.reinsurance.accounting-operations',
+    module: 'OPERATIONS',
+    description:
+      'Reinsurance Accounting integration operational diagnostics and support actions',
+  },
+  {
     name: 'operations.reinsurance.placements',
     module: 'OPERATIONS',
     description: 'Reinsurance placement workflows',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.create-offer',
+    module: 'OPERATIONS',
+    description: 'Create new Reinsurance facultative offers',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.edit-offer',
+    module: 'OPERATIONS',
+    description: 'Edit material Reinsurance facultative offer details',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.partial-edit',
+    module: 'OPERATIONS',
+    description:
+      'Apply non-material Reinsurance facultative offer edits such as policy number changes',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.reopen-offer',
+    module: 'OPERATIONS',
+    description:
+      'Reopen unpaid closed Reinsurance facultative offers into the closing workflow',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.force-close',
+    module: 'OPERATIONS',
+    description:
+      'Force close Reinsurance facultative offers using agreed closing capacity',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.endorse-offer',
+    module: 'OPERATIONS',
+    description:
+      'Initiate and manage Reinsurance facultative endorsement workflows',
+  },
+  {
+    name: 'operations.reinsurance.facultative-offers.archive-offer',
+    module: 'OPERATIONS',
+    description:
+      'Archive Reinsurance facultative offers while preserving history',
+  },
+  {
+    name: 'operations.reinsurance.premiums.receive-from-cedant',
+    module: 'OPERATIONS',
+    description: 'Record inbound Reinsurance premium receipts from cedants',
+  },
+  {
+    name: 'operations.reinsurance.premiums.disburse-to-reinsurer',
+    module: 'OPERATIONS',
+    description:
+      'Record outbound Reinsurance premium disbursements to reinsurers',
+  },
+  {
+    name: 'operations.reinsurance.premiums.reverse-payment',
+    module: 'OPERATIONS',
+    description: 'Reverse Reinsurance premium receipts or disbursements',
   },
   {
     name: 'operations.reinsurance.counterparties',
@@ -126,6 +336,26 @@ export const RESOURCES = [
     name: 'operations.reinsurance.claims',
     module: 'OPERATIONS',
     description: 'Reinsurance claims workflows',
+  },
+  {
+    name: 'operations.reinsurance.claims.add-claim',
+    module: 'OPERATIONS',
+    description: 'Create Reinsurance claim loss events',
+  },
+  {
+    name: 'operations.reinsurance.claims.create-notification',
+    module: 'OPERATIONS',
+    description: 'Move Reinsurance claims into notified status',
+  },
+  {
+    name: 'operations.reinsurance.claims.record-recovery',
+    module: 'OPERATIONS',
+    description: 'Record actual Reinsurance recovery receipts from reinsurers',
+  },
+  {
+    name: 'operations.reinsurance.claims.void-claim',
+    module: 'OPERATIONS',
+    description: 'Void Reinsurance claims while preserving audit history',
   },
   {
     name: 'operations.reinsurance.email',
@@ -146,6 +376,11 @@ export const RESOURCES = [
     name: 'operations.reinsurance.settings',
     module: 'OPERATIONS',
     description: 'Reinsurance module configuration',
+  },
+  {
+    name: 'operations.reinsurance.taxes-levies',
+    module: 'OPERATIONS',
+    description: 'Reinsurance taxes, levies and charge configuration',
   },
 
   {

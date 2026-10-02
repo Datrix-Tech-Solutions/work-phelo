@@ -21,19 +21,31 @@ interface ReinsurerDistributionSelectProps {
   value: ReinsurerEntry[];
   onChange: (entries: ReinsurerEntry[]) => void;
   excludeIds?: string[];
+  /**
+   * Reinsurer whose name matches this (the placement's cedant) is hidden — a
+   * company can't take a share of its own cession. Strict match, so distinct
+   * variants ("Glico Life" vs "Glico General") are left in.
+   */
+  excludeName?: string;
 }
+
+/** Strict name comparison, resilient only to surrounding whitespace and casing. */
+const normalizeName = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
 
 export function ReinsurerDistributionSelect({
   value,
   onChange,
   excludeIds = [],
+  excludeName,
 }: ReinsurerDistributionSelectProps) {
   const { data: reinsurers = [] } = useReinsurers();
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [draft, setDraft] = useState('');
 
+  const excludedName = excludeName ? normalizeName(excludeName) : null;
   const multiSelectOptions = reinsurers
     .filter((r) => !excludeIds.includes(r.id))
+    .filter((r) => excludedName === null || normalizeName(r.name) !== excludedName)
     .map((r) => ({ value: r.id, label: r.name }));
   const selectedIds = value.map((e) => e.id);
 

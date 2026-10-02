@@ -5,7 +5,9 @@ export type PlacementFinancialLockSource =
   | 'PREMIUM_PAYMENT'
   | 'REINSURER_PAYMENT'
   | 'CLAIM_SETTLEMENT'
-  | 'STATUS_TERMINAL';
+  | 'STATUS_TERMINAL'
+  | 'DOWNSTREAM_ACTIVITY'
+  | 'ARCHIVED';
 
 export class PlacementLockStatusDto {
   @ApiProperty({
@@ -41,6 +43,8 @@ export class PlacementLockStatusDto {
       'REINSURER_PAYMENT',
       'CLAIM_SETTLEMENT',
       'STATUS_TERMINAL',
+      'DOWNSTREAM_ACTIVITY',
+      'ARCHIVED',
     ],
     example: 'NONE',
     description:
@@ -56,4 +60,25 @@ export class PlacementLockStatusDto {
       'Timestamp of the financial activity that locked the placement, when known.',
   })
   lockedAt?: string;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'Alias for editable used by clients that distinguish direct editing from financial locking.',
+  })
+  canEdit!: boolean;
+
+  @ApiPropertyOptional({
+    example: 'Confirmed closing exists.',
+    description:
+      'Specific business reason direct editing is blocked, when available.',
+  })
+  editBlockedReason?: string;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'Whether the user should use an endorsement instead of direct placement editing.',
+  })
+  editRequiresEndorsement!: boolean;
 }

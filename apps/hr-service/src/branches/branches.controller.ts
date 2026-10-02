@@ -19,6 +19,7 @@ import {
 import { BranchesService } from './branches.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
+import { BulkImportBranchesDto } from './dto/bulk-import-branches.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
@@ -51,6 +52,17 @@ export class BranchesController {
     @Req() req: Request & { user: RequestUser },
   ) {
     return this.branchesService.create(req.user.tenantId, dto);
+  }
+
+  @Post('bulk-import')
+  @RequirePermissions(Permission.CREATE_BRANCH)
+  @ApiOperation({ summary: 'Bulk-create branches from parsed import rows' })
+  @ApiResponse({ status: 201, description: 'Per-row import results' })
+  bulkImport(
+    @Body() dto: BulkImportBranchesDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.branchesService.bulkImport(req.user.tenantId, dto.rows);
   }
 
   @Get()

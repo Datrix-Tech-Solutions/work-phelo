@@ -10,7 +10,9 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { useUpdateCounterpartyContact, useRemoveCounterpartyContact } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { extractError } from '@/lib/extractError';
+import { cardGrid } from '@/lib/layout';
 import { Counterparty, CounterpartyContact } from '@/types/reinsurance';
 
 interface CedantContactsTabProps {
@@ -26,6 +28,8 @@ interface ContactFormValues {
 
 export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
   const toast = useToast();
+  const canEdit = usePermissionRule('operations.reinsurance.counterparties:EDIT');
+  const canDelete = usePermissionRule('operations.reinsurance.counterparties:DELETE');
   const { mutateAsync: updateContact, isPending: isSaving } = useUpdateCounterpartyContact();
   const { mutateAsync: removeContact, isPending: isRemoving } = useRemoveCounterpartyContact();
 
@@ -90,7 +94,7 @@ export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
 
   return (
     <>
-      <div className="flex flex-wrap gap-4">
+      <div className={cardGrid}>
         {counterparty.contacts.map((c) => (
           <ContactCard
             key={c.id}
@@ -99,8 +103,8 @@ export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
             statusPill={c.isPrimary ? { label: 'Primary', color: 'green' } : undefined}
             email={c.email ?? '—'}
             phone={c.phone ?? '—'}
-            onEdit={() => openEdit(c)}
-            onDelete={() => setDeleteTarget(c)}
+            onEdit={canEdit ? () => openEdit(c) : undefined}
+            onDelete={canDelete ? () => setDeleteTarget(c) : undefined}
           />
         ))}
       </div>
@@ -121,7 +125,7 @@ export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
           </div>
         }
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <FormField
             label="Contact Name"
             registration={register('fullName', { required: 'Contact name is required' })}
@@ -146,7 +150,7 @@ export function CedantContactsTab({ counterparty }: CedantContactsTabProps) {
             error={errors.email}
             placeholder="e.g. ama@example.com"
           />
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <span className="text-sm font-bold text-gray-900">Phone Number</span>
             <PhoneInput
               placeholder="00 000 0000"

@@ -120,11 +120,11 @@ export function RunPayrollPanel({
           </div>
         }
       >
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <SearchSelect label="Month" options={MONTH_OPTIONS} value={month} onChange={setMonth} />
           <SearchSelect label="Year" options={YEARS} value={year} onChange={setYear} />
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-medium text-gray-700">
               Details <span className="text-gray-400 font-normal">(optional)</span>
             </label>

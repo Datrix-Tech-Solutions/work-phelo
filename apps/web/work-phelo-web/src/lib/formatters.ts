@@ -87,6 +87,30 @@ export function resolveHolidayUpcomingDate(date: string): Date {
 }
 
 /**
+ * Backend journal number prefixes, shortened for display. The prefix marks
+ * how the journal was created (see accounting-service journals.service.ts
+ * #journalNumber): JE — entered via the New Journal Entry form, AUTO —
+ * auto-posted by the source-event posting engine, REV — a reversal of
+ * another journal.
+ */
+const JOURNAL_NUMBER_PREFIX_CODES: Record<string, string> = {
+  JE: 'JE',
+  AUTO: 'AU',
+  REV: 'RE',
+};
+
+/**
+ * Shortens a journal number's origin prefix for display
+ * (e.g. "AUTO-20260816-4BB70E8D" -> "AU-20260816-4BB70E8D"). Unrecognized
+ * prefixes pass through unchanged.
+ */
+export function formatJournalNumber(journalNumber: string): string {
+  const [prefix, ...rest] = journalNumber.split('-');
+  const shortPrefix = JOURNAL_NUMBER_PREFIX_CODES[prefix];
+  return shortPrefix ? [shortPrefix, ...rest].join('-') : journalNumber;
+}
+
+/**
  * Returns a time-of-day greeting string.
  */
 export function getGreeting(): string {

@@ -1,19 +1,45 @@
 'use client';
 
-import { useMemo } from 'react';
-import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
-import { Icons } from '@/components/atoms/icons';
-import { useFacultatives, usePremiumsSummary, CLOSING_STATUSES } from '@/hooks';
+import { useMemo, useState } from 'react';
+import { CurrencyAmountListCard } from '@/components/molecules/reinsurance/stats/CurrencyAmountListCard';
+import {
+  PremiumsPeriod,
+  PremiumsPeriodToggle,
+  PREMIUMS_PERIOD_LABEL,
+  premiumsPeriodStart,
+  premiumsPeriodEnd,
+} from '@/components/atoms/PremiumsPeriodToggle';
+import { YearSelect } from '@/components/atoms/YearSelect';
+import { TopCedantsByOffersChart } from '@/components/molecules/reinsurance/stats/TopCedantsByOffersChart';
+import {
+  useFacultatives,
+  usePremiumsSummary,
+  usePremiumsPeriodSummary,
+  useCurrencies,
+  CLOSING_STATUSES,
+  type CurrencyAmount,
+} from '@/hooks';
 
-function fmtAmount(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
-  return value.toFixed(2);
-}
+const toAmountMap = (rows: CurrencyAmount[]) => new Map(rows.map((row) => [row.code, row.amount]));
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 export function PremiumsStatsRow() {
+  const [period, setPeriod] = useState<PremiumsPeriod>('monthly');
+  const [year, setYear] = useState(CURRENT_YEAR);
+
+  const sinceIso = useMemo(
+    () => premiumsPeriodStart(period, { year }).toISOString(),
+    [period, year],
+  );
+  const untilIso = useMemo(
+    () => premiumsPeriodEnd(period, { year })?.toISOString(),
+    [period, year],
+  );
+
+  const isPastYear = period === 'yearly' && year !== CURRENT_YEAR;
+  const periodLabel = isPastYear ? String(year) : PREMIUMS_PERIOD_LABEL[period];
+
   const { data: allPlacements = [], isLoading: loadingPlacements } = useFacultatives();
 
   const closingPlacements = useMemo(
@@ -21,42 +47,61 @@ export function PremiumsStatsRow() {
     [allPlacements],
   );
 
-  const { totalDue, totalPaid, isLoading: loadingPayments } = usePremiumsSummary(closingPlacements);
+  // Balances (due / outstanding) — not windowable, always current.
+  const {
+    dueByCurrency,
+    outstandingByCurrency,
+    isLoading: loadingPayments,
+  } = usePremiumsSummary(closingPlacements);
 
-  const isLoading = loadingPlacements || loadingPayments;
-  const outstanding = Math.max(0, totalDue - totalPaid);
-  const collectionRate = totalDue > 0 ? Math.min((totalPaid / totalDue) * 100, 100) : 0;
+  // Flows (paid / brokerage / collection rate) — scoped to the selected period.
+  const periodSummary = usePremiumsPeriodSummary(closingPlacements, sinceIso, untilIso);
+
+  const { data: currencies = [] } = useCurrencies();
+
+  const isLoading = loadingPlacements || loadingPayments || periodSummary.isLoading;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <KpiCard
-        label="Total Premium Due"
-        value={fmtAmount(totalDue)}
-        icon={Icons.FileCheck2}
-        iconColor="#2a78d6"
-        isLoading={isLoading}
-      />
-      <KpiCard
-        label="Premium Received"
-        value={fmtAmount(totalPaid)}
-        icon={Icons.CircleDollarSign}
-        iconColor="#008300"
-        isLoading={isLoading}
-      />
-      <KpiCard
-        label="Outstanding Premium"
-        value={fmtAmount(outstanding)}
-        icon={Icons.Clock}
-        iconColor="#eda100"
-        isLoading={isLoading}
-      />
-      <KpiCard
-        label="Collection Rate"
-        value={`${collectionRate.toFixed(1)}%`}
-        icon={Icons.Activity}
-        iconColor="#4a3aa7"
-        isLoading={isLoading}
-      />
+    <div className="flex flex-col">
+      <div className="flex justify-end items-center gap-2">
+        {period === 'yearly' && <YearSelect value={year} onChange={setYear} />}
+        <PremiumsPeriodToggle value={period} onChange={setPeriod} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TopCedantsByOffersChart
+          period="monthly"
+          closedOnly
+          sinceIso={sinceIso}
+          untilIso={untilIso}
+          className="h-65"
+        />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-5">
+          <CurrencyAmountListCard
+            title="Total Premium"
+            columnLabel="Total"
+            amountsByCode={toAmountMap(dueByCurrency)}
+            subAmountsByCode={toAmountMap(outstandingByCurrency)}
+            subLabel="Outstanding"
+            currencies={currencies}
+            isLoading={isLoading}
+            emptyMessage="No premium due yet"
+            className="h-65"
+          />
+          <CurrencyAmountListCard
+            title={`Brokerage Received ${periodLabel}`}
+            columnLabel="Brokerage"
+            amountsByCode={toAmountMap(periodSummary.brokerageEarnedByCurrency)}
+            subAmountsByCode={toAmountMap(periodSummary.paidByCurrency)}
+            subLabel="Premium received"
+            currencies={currencies}
+            isLoading={isLoading}
+            emptyMessage="No brokerage received in this period"
+            className="h-65"
+          />
+        </div>
+      </div>
     </div>
   );
 }

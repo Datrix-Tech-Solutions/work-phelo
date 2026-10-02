@@ -20,6 +20,8 @@ describe('NotificationService announcement delivery channels', () => {
   };
   const email = {
     sendAnnouncementPublishedNotification: jest.fn(),
+    sendEmployeeInviteEmail: jest.fn(),
+    sendTenantAdminWelcomeEmail: jest.fn(),
   };
   const sms = {
     sendMessage: jest.fn(),
@@ -32,6 +34,8 @@ describe('NotificationService announcement delivery channels', () => {
     jest.clearAllMocks();
     notificationLogCreate.mockResolvedValue({});
     email.sendAnnouncementPublishedNotification.mockResolvedValue(true);
+    email.sendEmployeeInviteEmail.mockResolvedValue(true);
+    email.sendTenantAdminWelcomeEmail.mockResolvedValue(true);
     sms.sendMessage.mockResolvedValue({
       success: true,
       status: 'SENT',
@@ -98,6 +102,43 @@ describe('NotificationService announcement delivery channels', () => {
         status: 'SENT',
       }),
     );
+  });
+
+  it('suppresses duplicate new invite emails but allows explicit invite resends', async () => {
+    prisma.notificationLog.findFirst.mockResolvedValueOnce({ id: 'log-1' });
+
+    await service.sendInvite({
+      userId: 'user-1',
+      tenantId: 'tenant-1',
+      email: 'ama@acme.test',
+      firstName: 'Ama',
+      tenantName: 'Acme',
+      acceptInviteUrl:
+        'https://app.workphelo.test/acme/accept-invite?token=old',
+      inviteKind: 'EMPLOYEE',
+    });
+
+    expect(email.sendEmployeeInviteEmail).not.toHaveBeenCalled();
+
+    await service.sendInvite({
+      userId: 'user-1',
+      tenantId: 'tenant-1',
+      email: 'ama@acme.test',
+      firstName: 'Ama',
+      tenantName: 'Acme',
+      acceptInviteUrl:
+        'https://app.workphelo.test/acme/accept-invite?token=new',
+      inviteKind: 'EMPLOYEE',
+      isResend: true,
+    });
+
+    expect(email.sendEmployeeInviteEmail).toHaveBeenCalledWith(
+      'ama@acme.test',
+      'Ama',
+      'Acme',
+      'https://app.workphelo.test/acme/accept-invite?token=new',
+    );
+    expect(prisma.notificationLog.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it('detects SMS-only announcements and logs SMS delivery', async () => {

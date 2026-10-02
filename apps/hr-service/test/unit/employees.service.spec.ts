@@ -7,6 +7,8 @@ import { NotificationsService } from '../../src/notifications/notifications.serv
 import { RabbitMQPublisher } from '../../src/messaging/rabbitmq.publisher';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { FieldEncryptionService } from '../../src/crypto/field-encryption.service';
+import { AvatarUrlResolverService } from '../../src/common/avatar-url-resolver.service';
+import { EmployeeDocumentStorageService } from '../../src/common/employee-document-storage.service';
 import { EmployeesService } from '../../src/employees/employees.service';
 import { RESIGNATION_QUEUE } from '../../src/employees/resignation-notification.processor';
 
@@ -48,6 +50,27 @@ describe('EmployeesService', () => {
     hmac: jest.fn((v: string) => `hmac:${v}`),
   };
 
+  const avatarUrlResolver = {
+    resolve: jest.fn(async (value: unknown) => value ?? null),
+    resolveMany: jest.fn(async (values: unknown[]) =>
+      values.map((value) => value ?? null),
+    ),
+  };
+
+  const documentStorage = {
+    store: jest.fn(async () => ({
+      objectKey: 'object-key',
+      mimeType: 'application/octet-stream',
+      fileName: 'file',
+      sizeBytes: 0,
+    })),
+    createSignedReadUrl: jest.fn(async () => ({
+      readUrl: 'https://example.com/signed',
+      expiresAt: new Date().toISOString(),
+    })),
+    delete: jest.fn(async () => undefined),
+  };
+
   const resignationQueue = { add: jest.fn(async () => undefined) };
 
   let service: EmployeesService;
@@ -61,6 +84,8 @@ describe('EmployeesService', () => {
         { provide: LeaveService, useValue: leaveService },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: FieldEncryptionService, useValue: encryption },
+        { provide: AvatarUrlResolverService, useValue: avatarUrlResolver },
+        { provide: EmployeeDocumentStorageService, useValue: documentStorage },
         {
           provide: getQueueToken(RESIGNATION_QUEUE),
           useValue: resignationQueue,
@@ -118,6 +143,8 @@ describe('EmployeesService', () => {
     expect(employee.id).toBe('emp-1');
     expect(rabbitmq.authProvisionEmployeeInvite).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: 'tenant-1', email: dto.email }),
+      undefined,
+      undefined,
     );
     expect(leaveService.initializeLeaveBalances).toHaveBeenCalledWith(
       'tenant-1',

@@ -67,6 +67,7 @@ export function EditFacultativePanel({
         values.riskDetails,
         selectedRiskType?.fields ?? [],
         values.extraRiskFields ?? [],
+        values.riskDetailsVisibility ?? {},
       );
 
       await updateFacultative({

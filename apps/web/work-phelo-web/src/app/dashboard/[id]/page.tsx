@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { CompanyHeader } from '@/components/organisms/shared/CompanyHeader';
 import { CompanyInfoCard } from '@/components/organisms/shared/CompanyInfoCard';
 import { ModuleConfiguration, Module } from '@/components/organisms/shared/ModuleConfiguration';
+import { ReinsuranceAccountingIntegrationControl } from '@/components/organisms/shared/ReinsuranceAccountingIntegrationControl';
 import { TenantAuditTable } from '@/components/organisms/superadmin/TenantAuditTable';
 import { EditCompanyPanel } from '@/components/organisms/superadmin/EditCompanyPanel';
 import { EditAdminPanel } from '@/components/organisms/superadmin/EditAdminPanel';
@@ -191,6 +192,9 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
               });
             }}
           />
+          <div className="col-span-2">
+            <ReinsuranceAccountingIntegrationControl tenantId={tenant.id} canManage />
+          </div>
         </div>
       )}
 

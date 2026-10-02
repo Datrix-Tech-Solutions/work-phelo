@@ -12,7 +12,7 @@ interface ReportCardProps {
   iconClassName?: string;
   title: string;
   description: string;
-  stats: ReportStat[];
+  stats?: ReportStat[];
   onClick: () => void;
   className?: string;
 }
@@ -57,17 +57,19 @@ export function ReportCard({
       </div>
 
       {/* Stats row */}
-      <div
-        className="w-full bg-gray-50 rounded-xl px-4 py-3 grid gap-4"
-        style={{ gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}
-      >
-        {stats.map((stat) => (
-          <div key={stat.label} className="flex flex-col gap-1">
-            <span className="text-xs text-gray-500">{stat.label}</span>
-            <span className="text-sm font-semibold text-gray-900">{stat.value}</span>
-          </div>
-        ))}
-      </div>
+      {stats && stats.length > 0 && (
+        <div
+          className="w-full bg-gray-50 rounded-xl px-4 py-3 grid gap-4"
+          style={{ gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}
+        >
+          {stats.map((stat) => (
+            <div key={stat.label} className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">{stat.label}</span>
+              <span className="text-sm font-semibold text-gray-900">{stat.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </button>
   );
 }

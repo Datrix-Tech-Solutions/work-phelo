@@ -1,11 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useParams } from 'next/navigation';
-import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { AddCurrencyPanel } from '@/components/organisms/reinsurance/panels/AddCurrencyPanel';
 import { EditCurrencyPanel } from '@/components/organisms/reinsurance/panels/EditCurrencyPanel';
 import { useCurrencies, useDeleteCurrency } from '@/hooks';
@@ -15,43 +14,8 @@ import { Currency } from '@/types/reinsurance';
 
 const PAGE_SIZE = 10;
 
-const COLUMNS: Column<Currency>[] = [
-  {
-    key: 'name',
-    label: 'Currency',
-    width: 'minmax(150px, 1fr)',
-    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-  },
-  {
-    key: 'isoCode',
-    label: 'ISO Code',
-    width: '150px',
-    render: (row) => (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-        {row.isoCode}
-      </span>
-    ),
-  },
-  {
-    key: 'exchangeRateToBase',
-    label: 'Exchange Rate',
-    width: '150px',
-    render: (row) => (
-      <span className="text-gray-700">
-        {row.isBaseCurrency
-          ? 'Base'
-          : row.exchangeRateToBase
-            ? parseFloat(row.exchangeRateToBase).toFixed(4)
-            : '—'}
-      </span>
-    ),
-  },
-];
-
 export function CurrenciesTable() {
   const toast = useToast();
-  const router = useRouter();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -60,6 +24,40 @@ export function CurrenciesTable() {
 
   const { data = [], isLoading } = useCurrencies();
   const { mutate: deleteCurrency, isPending: isDeleting } = useDeleteCurrency();
+
+  const columns: Column<Currency>[] = [
+    {
+      key: 'isoCode',
+      label: 'ISO Code',
+      width: '150px',
+      render: (row) => (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
+          {row.isoCode}
+        </span>
+      ),
+    },
+    {
+      key: 'name',
+      label: 'Currency',
+      width: 'minmax(150px, 1fr)',
+      render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 'minmax(160px, auto)',
+      render: (row) => (
+        <div className="flex items-center gap-3.5" onClick={(e) => e.stopPropagation()}>
+          <TableButton variant="blue" onClick={() => setEditTarget(row)}>
+            Edit
+          </TableButton>
+          <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
+            Delete
+          </TableButton>
+        </div>
+      ),
+    },
+  ];
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -86,7 +84,7 @@ export function CurrenciesTable() {
   return (
     <>
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={paged}
         isLoading={isLoading}
         searchPlaceholder="Search currencies…"
@@ -96,22 +94,6 @@ export function CurrenciesTable() {
           setPage(1);
         }}
         actionButton={{ label: 'Add Currency', onClick: () => setPanelOpen(true) }}
-        rowActions={(row) => [
-          {
-            label: 'View',
-            onClick: () =>
-              router.push(`/${tenantSlug}/operations/reinsurance/settings/currency/${row.id}`),
-          },
-          {
-            label: 'Update Rate',
-            onClick: () => setEditTarget(row),
-          },
-          {
-            label: 'Delete',
-            onClick: () => setDeleteTarget(row),
-            danger: true,
-          },
-        ]}
         emptyMessage="No currencies found"
         currentPage={page}
         totalPages={totalPages}

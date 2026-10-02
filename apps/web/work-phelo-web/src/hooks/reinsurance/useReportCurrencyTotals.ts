@@ -37,7 +37,7 @@ function addTo(map: Map<string, number>, currency: string, amount: number) {
  * Aggregates by-currency financial totals (sum insured, premium, brokerage, commission,
  * NIC levy, WHT) across a set of placement/participant entries, for the report summary cards.
  * WHT/NIC levy only apply to participants whose counterparty is a foreign reinsurer, matching
- * the per-document calculation in SlipPreviewModal.
+ * the per-document calculation in OfferSlipContent.
  */
 export function useReportCurrencyTotals(entries: CurrencyTotalsEntry[]): ReportCurrencyTotals {
   const { data: reinsurers = [], isLoading: loadingReinsurers } = useReinsurers();

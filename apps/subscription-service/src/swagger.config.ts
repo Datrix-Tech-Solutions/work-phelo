@@ -6,10 +6,10 @@ export function setupSwagger(app: INestApplication) {
     .setTitle('WorkPhelo ERP — Subscription Service')
     .setDescription(
       '## Subscription API\n\n' +
-        'Handles subscription plans, customer subscriptions, and billing cycles.\n\n' +
+        'Scaffolded service reserved for future subscription and billing workflows.\n\n' +
         '### Base URL\n' +
         'All requests are served under the global prefix /api.\n\n' +
-        '**Example:** GET http://localhost:4005/api/subscriptions\n\n' +
+        '**Example:** GET http://localhost:4005/api/health when health routes are available.\n\n' +
         '### Authentication\n' +
         'Protected endpoints require a valid JWT token via:\n' +
         '- **Bearer token**: Authorization: Bearer <token>\n' +
@@ -19,8 +19,8 @@ export function setupSwagger(app: INestApplication) {
     )
     .setVersion('1.0')
     .addServer('http://localhost:4005/api', 'Local Dev')
-    .addTag('Subscriptions', 'Subscription management and plan lifecycle')
-    .addTag('Billing', 'Billing and recurring charge operations')
+    .addTag('Subscriptions', 'Future subscription management surface')
+    .addTag('Billing', 'Future billing and recurring charge surface')
     .addBearerAuth(
       {
         type: 'http',

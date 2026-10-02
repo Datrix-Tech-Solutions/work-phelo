@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn, cardClass, inputClass, popupClass } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
-import { SearchIcon } from 'lucide-react';
+import { SearchIcon, ArrowUp, ArrowDown } from 'lucide-react';
 import { NoSearchLogo } from '../../atoms/NoSearchLogo';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
@@ -15,6 +15,12 @@ export interface Column<T> {
   width?: string;
   className?: string;
   render?: (row: T) => React.ReactNode;
+  sortable?: boolean;
+}
+
+export interface SortState {
+  key: string;
+  direction: 'asc' | 'desc';
 }
 
 export interface RowAction {
@@ -37,7 +43,11 @@ interface DataTableProps<T extends { id: string | number }> {
   filterOptions?: { value: string; label: string }[];
   onFilter?: (value: string) => void;
   onExport?: () => void;
+  /** Rendered in the toolbar immediately after the Export button — e.g. a rows-per-page select. */
+  toolbarTrailing?: React.ReactNode;
   extraFilters?: React.ReactNode;
+  /** Render extraFilters before the search input instead of after (default order is search, then extraFilters). */
+  searchAfterFilters?: boolean;
   secondaryButton?: {
     color?: string;
     label: string;
@@ -53,13 +63,18 @@ interface DataTableProps<T extends { id: string | number }> {
     disabled?: boolean;
     title?: string;
   }[];
-  actionButton?: { label: string; onClick: () => void };
+  actionButton?: { label: string; onClick: () => void; disabled?: boolean };
   rowActions?: (row: T) => RowAction[];
+  /** When a row has exactly one action, it renders as a standalone inline button by default.
+   *  Set false to always render the ⋯ menu instead, even for a single action. */
+  singleActionAsButton?: boolean;
   onRowClick?: (row: T) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
   noInternalScroll?: boolean;
+  sortState?: SortState;
+  onSort?: (key: string) => void;
 }
 
 function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
@@ -114,7 +129,7 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className="p-1.5 rounded-lg text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-600)) hover:bg-(--surface-hover,var(--color-gray-100)) transition-colors"
+        className="pl-5 p-1.5 rounded-lg text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-900)) hover:[&>svg]:stroke-[4.5] transition-colors"
       >
         <Icons.EllipsisVertical />
       </button>
@@ -136,11 +151,10 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
                 position: 'fixed',
                 right: menuPos.right,
                 ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
-                width: 176,
                 gridTemplateRows: expanded ? '1fr' : '0fr',
                 opacity: expanded ? 1 : 0,
               }}
-              className="z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
+              className="z-50 grid w-max grid-cols-[max-content] transition-[grid-template-rows,opacity] duration-700 ease-in-out"
             >
               <div className={popupClass('min-h-0 overflow-hidden')}>
                 <div className="py-1">
@@ -153,7 +167,7 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
                         closeDropdown();
                       }}
                       className={cn(
-                        'w-full text-left px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
+                        'block w-full text-left whitespace-nowrap px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
                         action.danger
                           ? 'text-red-600'
                           : action.variant === 'success'
@@ -186,22 +200,28 @@ export function DataTable<T extends { id: string | number }>({
   filterOptions,
   onFilter,
   onExport,
+  toolbarTrailing,
   extraFilters,
+  searchAfterFilters = false,
   secondaryButton,
   secondaryButtons,
   actionButton,
   rowActions,
+  singleActionAsButton = true,
   onRowClick,
   currentPage,
   totalPages,
   onPageChange,
   noInternalScroll = false,
+  sortState,
+  onSort,
 }: DataTableProps<T>) {
   const hasToolbar = !!(
     onSearch ||
     extraFilters ||
     (filterOptions && onFilter) ||
     onExport ||
+    toolbarTrailing ||
     secondaryButton ||
     (secondaryButtons && secondaryButtons.length > 0) ||
     actionButton
@@ -211,9 +231,9 @@ export function DataTable<T extends { id: string | number }>({
     <div className={cn('flex flex-col gap-3', noInternalScroll ? '' : 'flex-1 min-h-0 h-full')}>
       {/* Toolbar card */}
       {hasToolbar && (
-        <div className={cardClass('px-4 py-2 shrink-0')}>
+        <div className={cardClass('px-4 py-1 shrink-0')}>
           <div className="flex items-center gap-3 flex-wrap">
-            {onSearch && (
+            {!searchAfterFilters && onSearch && (
               <div className="relative flex-1 min-w-52 max-w-sm">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 w-5 h-5" />
                 <input
@@ -221,18 +241,31 @@ export function DataTable<T extends { id: string | number }>({
                   placeholder={searchPlaceholder}
                   value={searchValue ?? undefined}
                   onChange={(e) => onSearch(e.target.value)}
-                  className={inputClass(undefined, 'pl-9 pr-4 py-2')}
+                  className={inputClass(undefined, 'pl-9 pr-4 py-1.5')}
                 />
               </div>
             )}
 
             {extraFilters}
 
+            {searchAfterFilters && onSearch && (
+              <div className="relative flex-1 min-w-52 max-w-sm">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={searchValue ?? undefined}
+                  onChange={(e) => onSearch(e.target.value)}
+                  className={inputClass(undefined, 'pl-9 pr-4 py-1.5')}
+                />
+              </div>
+            )}
+
             {filterOptions && onFilter && (
               <div className="relative">
                 <select
                   onChange={(e) => onFilter(e.target.value)}
-                  className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-(--focus-ring,var(--color-gray-400)) bg-white"
+                  className="appearance-none pl-8 pr-8 py-1.5 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-(--focus-ring,var(--color-gray-400)) bg-white"
                 >
                   <option value="">Status</option>
                   {filterOptions.map((o) => (
@@ -255,6 +288,8 @@ export function DataTable<T extends { id: string | number }>({
                 </span>
               </Button>
             )}
+
+            {toolbarTrailing}
 
             {secondaryButton && (
               <Button
@@ -291,7 +326,12 @@ export function DataTable<T extends { id: string | number }>({
             ))}
 
             {actionButton && (
-              <Button size="sm" onClick={actionButton.onClick} className="group">
+              <Button
+                size="sm"
+                onClick={actionButton.onClick}
+                disabled={actionButton.disabled}
+                className="group"
+              >
                 {actionButton.label}
                 <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
                   <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
@@ -323,7 +363,7 @@ export function DataTable<T extends { id: string | number }>({
                 )}
               />
               <div
-                className="relative grid gap-x-4 text-xs font-semibold text-(--table-header-text,var(--module-btn-bg,var(--color-brand))) uppercase tracking-wide px-6 py-3"
+                className="relative grid gap-x-4 text-xs font-semibold text-(--table-header-text,var(--module-btn-bg,var(--color-brand))) uppercase tracking-wide px-6 py-2"
                 style={{
                   gridTemplateColumns: [
                     ...columns.map((c) => c.width ?? '1fr'),
@@ -331,11 +371,49 @@ export function DataTable<T extends { id: string | number }>({
                   ].join(' '),
                 }}
               >
-                {columns.map((col) => (
-                  <div key={col.key} className={cn('min-w-0', col.className)}>
-                    {col.label}
-                  </div>
-                ))}
+                {columns.map((col) =>
+                  col.sortable ? (
+                    <button
+                      key={col.key}
+                      type="button"
+                      onClick={() => onSort?.(col.key)}
+                      className={cn(
+                        'min-w-0 flex items-center gap-1 text-left uppercase tracking-wide hover:text-gray-900',
+                        col.className?.includes('text-right') && 'justify-end',
+                        col.className,
+                      )}
+                    >
+                      {col.label}
+                      <span className="flex items-center -space-x-1 shrink-0">
+                        <ArrowUp
+                          className={cn(
+                            'h-3 w-3',
+                            sortState?.key === col.key && sortState.direction === 'asc'
+                              ? 'opacity-100'
+                              : 'opacity-30',
+                          )}
+                        />
+                        <ArrowDown
+                          className={cn(
+                            'h-3 w-3',
+                            sortState?.key === col.key && sortState.direction === 'desc'
+                              ? 'opacity-100'
+                              : 'opacity-30',
+                          )}
+                        />
+                      </span>
+                      {sortState?.key === col.key && (
+                        <span className="sr-only">
+                          {sortState.direction === 'asc' ? 'ascending' : 'descending'}
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    <div key={col.key} className={cn('min-w-0', col.className)}>
+                      {col.label}
+                    </div>
+                  ),
+                )}
                 {rowActions && <span />}
               </div>
             </div>
@@ -392,7 +470,7 @@ export function DataTable<T extends { id: string | number }>({
                       )}
                     />
                     <div
-                      className="relative grid gap-x-4 px-6 py-3 items-center text-sm text-gray-800"
+                      className="relative grid gap-x-4 px-6 py-1.5 items-center text-sm text-gray-800"
                       style={{
                         gridTemplateColumns: [
                           ...columns.map((c) => c.width ?? '1fr'),
@@ -411,7 +489,7 @@ export function DataTable<T extends { id: string | number }>({
                         (() => {
                           const actions = rowActions(row);
                           if (actions.length === 0) return null;
-                          if (actions.length === 1) {
+                          if (actions.length === 1 && singleActionAsButton) {
                             const action = actions[0];
                             return (
                               <div className="flex justify-center">

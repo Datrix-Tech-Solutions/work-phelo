@@ -83,15 +83,23 @@ interface RiskTypePoliciesSectionProps {
   policies: Facultative[];
   isLoading: boolean;
   tenantSlug: string;
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
 }
 
 export function RiskTypePoliciesSection({
   policies,
   isLoading,
   tenantSlug,
+  currentPage,
+  totalPages: serverTotalPages,
+  onPageChange,
 }: RiskTypePoliciesSectionProps) {
   const router = useRouter();
-  const [page, setPage] = useState(1);
+  const [localPage, setLocalPage] = useState(1);
+  const page = currentPage ?? localPage;
+  const setPage = onPageChange ?? setLocalPage;
 
   const openCount = policies.filter((p) => toDisplayStatus(p.status) === 'Open').length;
   const closedCount = policies.filter((p) => toDisplayStatus(p.status) === 'Closed').length;
@@ -125,8 +133,10 @@ export function RiskTypePoliciesSection({
     };
   }, [brokerageByCode]);
 
-  const totalPages = Math.max(1, Math.ceil(policies.length / PAGE_SIZE));
-  const paged = policies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = serverTotalPages ?? Math.max(1, Math.ceil(policies.length / PAGE_SIZE));
+  const paged = serverTotalPages
+    ? policies
+    : policies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-6">

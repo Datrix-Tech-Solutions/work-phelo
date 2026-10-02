@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormSection } from '@/components/atoms/FormSection';
 import { DetailField } from '@/components/atoms/DetailField';
+import { RichTextView } from '@/components/molecules/shared/RichTextView';
 import { Facultative } from '@/types/reinsurance';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 import { useUpdateFacultative } from '@/hooks';
@@ -102,7 +103,7 @@ function PartialEditFacultativePanelContent({
         </div>
       }
     >
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <FormSection title="Policy Details">
           <div className="grid grid-cols-2 gap-3">
             <DetailField label="Insurance Company" value={placement.cedant.name} />
@@ -176,7 +177,7 @@ function PartialEditFacultativePanelContent({
         </FormSection>
 
         <FormSection title="Comment">
-          <DetailField label="" value={placement.description || '—'} />
+          <RichTextView html={placement.description} />
         </FormSection>
       </div>
     </SidePanel>

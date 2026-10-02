@@ -15,6 +15,8 @@ import {
   PasswordResetLinkEvent,
   PasswordResetOtpEvent,
   SmsOtpEvent,
+  EmployeeAvatarUpdatedEvent,
+  EmployeeAvatarUpdatedResult,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -211,6 +213,18 @@ export class RabbitMQPublisher {
     return this.request(
       this.hrClient,
       EventPatterns.HR_PROVISION_TENANT_WORKSPACE,
+      data,
+      correlationId,
+    );
+  }
+
+  hrEmployeeAvatarUpdated(
+    data: EmployeeAvatarUpdatedEvent,
+    correlationId?: string,
+  ): Promise<EmployeeAvatarUpdatedResult> {
+    return this.request(
+      this.hrClient,
+      EventPatterns.HR_EMPLOYEE_AVATAR_UPDATED,
       data,
       correlationId,
     );

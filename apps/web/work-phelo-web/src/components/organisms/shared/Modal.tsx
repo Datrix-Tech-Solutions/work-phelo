@@ -85,7 +85,7 @@ export function Modal({
         )}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-3 shrink-0">
+        <div className="flex items-start justify-between gap-2 shrink-0">
           <h2 className={cn('text-lg font-bold', titleClassName)}>{title}</h2>
           {!hideClose && (
             <button
@@ -107,7 +107,7 @@ export function Modal({
         </div>
 
         {footer && (
-          <div className="mt-auto pt-6 shrink-0 flex items-center justify-end gap-3">{footer}</div>
+          <div className="mt-auto pt-3 shrink-0 flex items-center justify-end gap-3">{footer}</div>
         )}
       </div>
     </div>,

@@ -9,6 +9,11 @@ import { Calendar } from '@/components/atoms/Calendar';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// Fixed, independent of the trigger's own width — a full-width field would otherwise stretch
+// the calendar grid across the same width, which looks broken since the grid's own content
+// (7 day columns) only ever needs about this much room.
+const CALENDAR_WIDTH = 300;
+
 interface DatePickerProps {
   label?: string;
   value?: string; // ISO: YYYY-MM-DD
@@ -18,8 +23,13 @@ interface DatePickerProps {
   disableFuture?: boolean;
   disablePast?: boolean;
   minDate?: string; // ISO: YYYY-MM-DD — disables all days before this date
+  maxDate?: string; // ISO: YYYY-MM-DD — disables all days after this date
   /** 'md' (default) keeps the standard px-4 py-3 sizing; 'sm' matches FormField/SearchSelect's compact px-2 py-2 sizing. */
   size?: 'sm' | 'md';
+  /** Rendered inside the trigger's own box, next to the calendar icon (e.g. a visibility
+   *  toggle). The trigger itself is a <button>, so pass non-<button> interactive content
+   *  here (e.g. a role="button" span) and stopPropagation on its click/keydown. */
+  rightSlot?: React.ReactNode;
 }
 
 export function DatePicker({
@@ -31,7 +41,9 @@ export function DatePicker({
   disableFuture = false,
   disablePast = false,
   minDate,
+  maxDate,
   size = 'sm',
+  rightSlot,
 }: DatePickerProps) {
   const today = new Date();
   const parsed = value ? new Date(value) : null;
@@ -100,6 +112,12 @@ export function DatePicker({
         return new Date(d.getFullYear(), d.getMonth(), d.getDate());
       })()
     : null;
+  const maxDateNorm = maxDate
+    ? (() => {
+        const d = new Date(maxDate);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      })()
+    : null;
 
   // A month is disabled if no selectable day exists within it
   const isDisabledMonth = (monthIdx: number) => {
@@ -108,6 +126,7 @@ export function DatePicker({
     if (disableFuture && firstDay > todayNorm) return true;
     if (disablePast && lastDay < todayNorm) return true;
     if (minDateNorm && lastDay < minDateNorm) return true;
+    if (maxDateNorm && firstDay > maxDateNorm) return true;
     return false;
   };
 
@@ -118,6 +137,7 @@ export function DatePicker({
     if (disableFuture && firstDay > todayNorm) return true;
     if (disablePast && lastDay < todayNorm) return true;
     if (minDateNorm && lastDay < minDateNorm) return true;
+    if (maxDateNorm && firstDay > maxDateNorm) return true;
     return false;
   };
 
@@ -144,7 +164,7 @@ export function DatePicker({
   const yearGrid = Array.from({ length: 9 }, (_, i) => yearPageStart + i);
 
   return (
-    <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={containerRef}>
       {label && (
         <label className="block truncate text-sm font-bold text-gray-900" title={label}>
           {label}
@@ -166,7 +186,10 @@ export function DatePicker({
         )}
       >
         <span>{displayValue || placeholder}</span>
-        <CalendarIcon className={cn('text-gray-400', size === 'sm' ? 'w-4 h-4' : 'w-5 h-5')} />
+        <span className="flex items-center gap-1.5">
+          {rightSlot}
+          <CalendarIcon className={cn('text-gray-400', size === 'sm' ? 'w-4 h-4' : 'w-5 h-5')} />
+        </span>
       </button>
 
       {error && <p className="text-xs text-red-500">{error}</p>}
@@ -181,8 +204,11 @@ export function DatePicker({
               position: 'fixed',
               top: dropdownPos.top,
               bottom: dropdownPos.bottom,
-              left: dropdownPos.left,
-              width: dropdownPos.width,
+              // Right-align to the trigger's own right edge rather than its left — with a fixed
+              // width narrower than a full-width field, left-aligning would open the popup over
+              // the start of the field instead of tucking it under where the user is looking.
+              left: dropdownPos.left + dropdownPos.width - CALENDAR_WIDTH,
+              width: CALENDAR_WIDTH,
               gridTemplateRows: expanded ? '1fr' : '0fr',
               opacity: expanded ? 1 : 0,
             }}
@@ -237,6 +263,7 @@ export function DatePicker({
                       disableFuture={disableFuture}
                       disablePast={disablePast}
                       minDate={minDate}
+                      maxDate={maxDate}
                     />
                   </>
                 )}

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
@@ -43,4 +44,22 @@ export function useUpdateExchangeRate() {
       queryClient.invalidateQueries({ queryKey: EXCHANGE_RATES_KEY });
     },
   });
+}
+
+export function useExchangeRatesForCurrency(
+  fromCurrency: string | undefined,
+  toBaseCurrency: string | null | undefined,
+) {
+  const { data = [], isLoading } = useExchangeRates();
+
+  const rates = useMemo(() => {
+    if (!fromCurrency || !toBaseCurrency) return [];
+    return data
+      .filter((r) => r.fromCurrency === fromCurrency && r.toCurrency === toBaseCurrency)
+      .sort((a, b) => new Date(b.effectiveAt).getTime() - new Date(a.effectiveAt).getTime());
+  }, [data, fromCurrency, toBaseCurrency]);
+
+  const latestActive = useMemo(() => rates.find((r) => r.isActive), [rates]);
+
+  return { rates, latestActive, isLoading };
 }

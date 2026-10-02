@@ -23,6 +23,24 @@ interface SearchSelectProps {
   size?: 'sm' | 'md';
   /** Fires on every keystroke — lets callers drive async option sources (e.g. geocoding search). */
   onQueryChange?: (query: string) => void;
+  /** Rendered inside the control's own box, alongside the clear/chevron icons (e.g. a
+   *  visibility toggle). Not a native <button> internally, so it nests safely here. */
+  rightSlot?: React.ReactNode;
+  /** Show the clear (X) button when a value is selected. Defaults to `true`; set `false`
+   *  for fields that must always hold a value (e.g. a year picker). */
+  clearable?: boolean;
+  /** For filter bars: prepends a selectable "All" option (value `''`) — makes the already-implicit
+   *  "nothing selected = no filter" state a visible, explicit choice instead of just an empty field. */
+  showAllOption?: boolean;
+  /** Label for that "All" option. Defaults to "All {placeholder}" (e.g. "All Currency") so the
+   *  field names its own dimension once collapsed, rather than showing a bare, ambiguous "All". */
+  allLabel?: string;
+  /** Rendered in place of the plain "No results found" message when the filtered list is
+   *  empty — lets callers offer a quick action (e.g. "No account found — Create account").
+   *  Receives the typed query and a `close` callback to dismiss the dropdown afterwards. */
+  emptyState?: (ctx: { query: string; close: () => void }) => React.ReactNode;
+  /** Shows the current value but blocks opening, typing and clearing (e.g. a locked setting). */
+  disabled?: boolean;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -40,6 +58,12 @@ export function SearchSelect({
   error,
   size = 'sm',
   onQueryChange,
+  rightSlot,
+  clearable = true,
+  showAllOption = false,
+  allLabel,
+  emptyState,
+  disabled = false,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -81,7 +105,15 @@ export function SearchSelect({
     if (!open && e.propertyName === 'grid-template-rows') setShowDropdown(false);
   };
 
-  const selected = options.find((o) => o.value === value);
+  const effectiveOptions = useMemo(
+    () =>
+      showAllOption
+        ? [{ value: '', label: allLabel ?? `All ${placeholder}` }, ...options]
+        : options,
+    [options, showAllOption, allLabel, placeholder],
+  );
+
+  const selected = effectiveOptions.find((o) => o.value === value);
 
   /* What the input shows:
      - when open: whatever the user is typing (query)
@@ -102,13 +134,13 @@ export function SearchSelect({
   }, []);
 
   const filtered = useMemo(() => {
-    if (!query) return options;
+    if (!query) return effectiveOptions;
     const q = query.toLowerCase();
-    return options.filter(
+    return effectiveOptions.filter(
       (o) =>
         o.label.toLowerCase().includes(q) || (o.sublabel && o.sublabel.toLowerCase().includes(q)),
     );
-  }, [options, query]);
+  }, [effectiveOptions, query]);
 
   /* keep the highlighted option in range as the filtered list changes — adjusted during
      render (rather than an effect) per React's guidance for state that mirrors a prop/derived value */
@@ -205,13 +237,14 @@ export function SearchSelect({
   };
 
   return (
-    <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={containerRef}>
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
       {/* Combobox input */}
       <div
         className={cn(
           'flex items-center border rounded-input px-4 transition-colors',
+          disabled && 'opacity-60 cursor-not-allowed',
           open
             ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
             : error
@@ -222,6 +255,7 @@ export function SearchSelect({
         <input
           ref={inputRef}
           type="text"
+          disabled={disabled}
           value={inputDisplay}
           onChange={handleInputChange}
           onFocus={handleFocus}
@@ -241,8 +275,9 @@ export function SearchSelect({
         />
 
         <div className="flex items-center gap-1 shrink-0 ml-2">
+          {rightSlot}
           {/* Clear button — only when something is selected */}
-          {value && !open && (
+          {clearable && value && !open && !disabled && (
             <button
               type="button"
               onClick={handleClear}
@@ -254,6 +289,7 @@ export function SearchSelect({
           {/* Chevron toggle */}
           <button
             type="button"
+            disabled={disabled}
             onClick={handleChevronClick}
             className="text-gray-400 hover:text-gray-600 transition-colors p-0.5"
           >
@@ -291,7 +327,17 @@ export function SearchSelect({
                 style={{ maxHeight: Math.min(208, dropdownPos.maxHeight) }}
               >
                 {filtered.length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
+                  emptyState ? (
+                    emptyState({
+                      query,
+                      close: () => {
+                        closeDropdown();
+                        setQuery('');
+                      },
+                    })
+                  ) : (
+                    <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
+                  )
                 ) : (
                   filtered.map((opt, idx) => (
                     <button

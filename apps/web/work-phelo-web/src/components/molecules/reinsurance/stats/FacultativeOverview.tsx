@@ -97,8 +97,8 @@ export function FacultativeOverview({
   const currentCurrency =
     effectiveTerms?.currency ?? effectiveTotals?.currency ?? placement.currency;
   const facOffer =
-    effectiveTerms?.facultativeOfferPercent ??
     effectiveTotals?.facultativeOfferPercent ??
+    effectiveTerms?.facultativeOfferPercent ??
     placement.facultativeOffer ??
     0;
   const premiumValue = effectiveTerms?.premium ?? effectiveTotals?.premium ?? placement.premium;
@@ -111,7 +111,12 @@ export function FacultativeOverview({
   const inceptionDate = effectiveTerms?.inceptionDate ?? placement.inceptionDate;
   const expiryDate = effectiveTerms?.expiryDate ?? placement.expiryDate;
   const facSumInsured = sumInsuredValue != null ? sumInsuredValue * (facOffer / 100) : null;
-  const facPremium = premiumValue != null ? premiumValue * (facOffer / 100) : null;
+  const snapshotGrossPremium =
+    effectiveView && effectiveView.effectiveParticipants.length > 0
+      ? effectiveTotals?.grossPremium
+      : null;
+  const facPremium =
+    snapshotGrossPremium ?? (premiumValue != null ? premiumValue * (facOffer / 100) : null);
   const appliedEndorsementCount = effectiveView?.appliedEndorsements.length ?? 0;
   const scheduledEndorsementCount = effectiveView?.scheduledEndorsements.length ?? 0;
   const pendingEndorsementCount = effectiveView?.pendingEndorsements.length ?? 0;

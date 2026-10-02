@@ -7,6 +7,8 @@ import { CryptoModule } from '../crypto/crypto.module';
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
 import { EmployeeSyncRecoveryCronService } from './employee-sync-recovery.cron';
+import { AvatarUrlResolverService } from '../common/avatar-url-resolver.service';
+import { EmployeeDocumentStorageService } from '../common/employee-document-storage.service';
 import {
   RESIGNATION_QUEUE,
   ResignationNotificationProcessor,
@@ -25,6 +27,8 @@ import {
     EmployeesService,
     EmployeeSyncRecoveryCronService,
     ResignationNotificationProcessor,
+    AvatarUrlResolverService,
+    EmployeeDocumentStorageService,
   ],
   exports: [EmployeesService],
 })

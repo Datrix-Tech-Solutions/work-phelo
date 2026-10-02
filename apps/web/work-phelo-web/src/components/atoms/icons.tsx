@@ -1,5 +1,6 @@
 import {
   // Navigation & UI
+  Link2,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -77,11 +78,16 @@ import {
   FileWarning,
   CircleCheckBig,
   MapPin,
+  Receipt,
+  FileText,
+  FileX2,
+  Bell,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
 export const Icons = {
   // Navigation
+  Link2,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -110,10 +116,14 @@ export const Icons = {
   Check,
   RotateCcw,
   Save,
+  Receipt,
+  FileText,
+  FileX2,
 
   // Time & Status
   Clock,
   PartyPopper,
+  Bell,
 
   // Business / HR
   Building2,

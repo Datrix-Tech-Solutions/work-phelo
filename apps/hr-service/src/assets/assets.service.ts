@@ -83,16 +83,16 @@ export class AssetsService {
   ): Prisma.AssetUncheckedUpdateInput {
     return {
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-      ...(dto.type !== undefined ? { type: dto.type } : {}),
       ...(dto.type !== undefined
         ? {
+            type: dto.type,
             customType:
               dto.type === AssetType.OTHER
                 ? dto.customType?.trim() || null
                 : null,
           }
         : dto.customType !== undefined
-          ? { customType: dto.customType.trim() || null }
+          ? { customType: dto.customType?.trim() || null }
           : {}),
       ...(dto.serialNumber !== undefined
         ? { serialNumber: dto.serialNumber.trim() || null }
@@ -108,18 +108,8 @@ export class AssetsService {
         : {}),
       ...(dto.condition !== undefined ? { condition: dto.condition } : {}),
       ...(dto.notes !== undefined ? { notes: dto.notes.trim() || null } : {}),
-      ...(dto.branchId !== undefined ? { branchId: dto.branchId } : {}),
+      ...(dto.branchId !== undefined ? { branchId: dto.branchId || null } : {}),
     };
-  }
-
-  private async assertBranchBelongsToTenant(
-    tenantId: string,
-    branchId: string,
-  ) {
-    const branch = await this.prisma.branch.findFirst({
-      where: { id: branchId, tenantId },
-    });
-    if (!branch) throw new NotFoundException('Branch not found');
   }
 
   private async generateAssetNumber(tenantId: string, type: AssetType) {
@@ -212,9 +202,129 @@ export class AssetsService {
     return assets.map((asset) => this.serializeAsset(asset));
   }
 
+  async findVehicles(
+    tenantId: string,
+    filters: { ids?: string[]; status?: AssetStatus; branchId?: string } = {},
+  ) {
+    const assets = await this.prisma.asset.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        type: AssetType.VEHICLE,
+        ...(filters.ids?.length ? { id: { in: filters.ids } } : {}),
+        ...(filters.status ? { status: filters.status } : {}),
+        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+      },
+      include: {
+        assignedEmployee: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+        branch: { select: { name: true } },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    return assets.map((asset) => ({
+      ...this.serializeAsset(asset),
+      branchName: asset.branch?.name ?? null,
+    }));
+  }
+
+  /** Branch and driver choices for the fleet forms, readable without HR access. */
+  async findFleetOptions(tenantId: string) {
+    const [branches, employees] = await Promise.all([
+      this.prisma.branch.findMany({
+        where: { tenantId, isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.employee.findMany({
+        where: {
+          tenantId,
+          employmentStatus: {
+            in: [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION],
+          },
+        },
+        select: { id: true, firstName: true, lastName: true },
+        orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+      }),
+    ]);
+
+    return {
+      branches,
+      drivers: employees.map((employee) => ({
+        id: employee.id,
+        name: `${employee.firstName} ${employee.lastName}`,
+      })),
+    };
+  }
+
+  async findVehicleById(tenantId: string, id: string) {
+    const asset = await this.getAssetOrThrow(tenantId, id);
+    if (asset.type !== AssetType.VEHICLE) {
+      throw new NotFoundException('Vehicle not found');
+    }
+    const branch = asset.branchId
+      ? await this.prisma.branch.findFirst({
+          where: { id: asset.branchId, tenantId },
+          select: { name: true },
+        })
+      : null;
+    return { ...this.serializeAsset(asset), branchName: branch?.name ?? null };
+  }
+
+  /**
+   * Sets a status directly. ASSIGNED is excluded on purpose: it is only ever
+   * derived from assign()/unassign() so the assignment history stays correct.
+   */
+  async changeStatus(
+    tenantId: string,
+    id: string,
+    status: 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED',
+  ) {
+    if (status === AssetStatus.RETIRED) {
+      return this.retire(tenantId, id);
+    }
+
+    const asset = await this.assertAssetUpdatable(tenantId, id);
+
+    if (asset.assignedEmployeeId) {
+      throw new BadRequestException(
+        'Unassign this asset before changing its status',
+      );
+    }
+
+    if (asset.status === status) {
+      throw new ConflictException(`This asset is already ${status}`);
+    }
+
+    const updated = await this.prisma.asset.update({
+      where: { id },
+      data: { status },
+      include: {
+        assignedEmployee: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
+    });
+
+    return this.serializeAsset(updated);
+  }
+
   async findById(tenantId: string, id: string) {
     const asset = await this.getAssetOrThrow(tenantId, id);
     return this.serializeAsset(asset);
+  }
+
+  private async assertBranchBelongsToTenant(
+    tenantId: string,
+    branchId: string,
+  ) {
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: branchId, tenantId },
+      select: { id: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
   }
 
   async create(tenantId: string, dto: CreateAssetDto) {

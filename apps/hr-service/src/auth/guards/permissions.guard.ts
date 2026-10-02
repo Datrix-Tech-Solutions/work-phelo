@@ -41,7 +41,7 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'resignations', actions: ['DELETE'] },
   ],
   [Permission.MANAGE_DOCUMENTS]: [
-    { resource: 'documents', actions: ['CREATE', 'EDIT'] },
+    { resource: 'documents', actions: ['CREATE', 'EDIT', 'VIEW', 'DELETE'] },
   ],
   [Permission.EXPORT_EMPLOYEES]: [
     { resource: 'employees', actions: ['EXPORT'] },

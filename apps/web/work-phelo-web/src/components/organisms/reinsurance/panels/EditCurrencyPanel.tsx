@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -21,8 +21,6 @@ function toFormValues(c: Currency): CurrencyFormValues {
     name: c.name,
     isoCode: c.isoCode,
     symbol: c.symbol ?? '',
-    exchangeRateToBase: c.exchangeRateToBase ? parseFloat(c.exchangeRateToBase) : '',
-    isBaseCurrency: c.isBaseCurrency,
   };
 }
 
@@ -34,11 +32,8 @@ export function EditCurrencyPanel({ currency, onClose }: EditCurrencyPanelProps)
     register,
     handleSubmit,
     reset,
-    control,
     formState: { errors },
   } = useForm<CurrencyFormValues>({ defaultValues: CURRENCY_FORM_DEFAULTS });
-
-  const isBaseCurrency = useWatch({ control, name: 'isBaseCurrency' });
 
   useEffect(() => {
     if (currency) reset(toFormValues(currency));
@@ -56,8 +51,6 @@ export function EditCurrencyPanel({ currency, onClose }: EditCurrencyPanelProps)
         id: currency.id,
         name: data.name,
         symbol: data.symbol || undefined,
-        exchangeRateToBase: data.isBaseCurrency ? undefined : (data.exchangeRateToBase as number),
-        isBaseCurrency: data.isBaseCurrency || undefined,
       });
       toast.success('Currency updated successfully');
       handleClose();
@@ -83,7 +76,7 @@ export function EditCurrencyPanel({ currency, onClose }: EditCurrencyPanelProps)
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <FormField
           label="Currency Name"
           registration={register('name', { required: 'Currency name is required' })}
@@ -91,7 +84,7 @@ export function EditCurrencyPanel({ currency, onClose }: EditCurrencyPanelProps)
           placeholder="e.g. Ghana Cedi"
         />
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">ISO Code</label>
           <div
             className={inputClass(undefined, 'bg-gray-50 text-gray-500 cursor-default select-none')}
@@ -107,32 +100,6 @@ export function EditCurrencyPanel({ currency, onClose }: EditCurrencyPanelProps)
           error={errors.symbol}
           placeholder="e.g. ₵"
         /> */}
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="edit-isBaseCurrency"
-            {...register('isBaseCurrency')}
-            className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-          />
-          <label htmlFor="edit-isBaseCurrency" className="text-sm text-gray-700">
-            Set as base currency
-          </label>
-        </div>
-
-        {!isBaseCurrency && (
-          <FormField
-            label="Exchange Rate to Base Currency"
-            type="number"
-            registration={register('exchangeRateToBase', {
-              required: 'Exchange rate is required',
-              min: { value: 0.000001, message: 'Rate must be greater than 0' },
-              valueAsNumber: true,
-            })}
-            error={errors.exchangeRateToBase}
-            placeholder="e.g. 16.5"
-          />
-        )}
       </div>
     </SidePanel>
   );

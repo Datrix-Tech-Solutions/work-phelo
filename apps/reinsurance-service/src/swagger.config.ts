@@ -34,6 +34,12 @@ payloads only and do not create PDFs, persist document records or send email.
 Preview calculations intentionally use \`facultativeOffer ?? 0\` when the
 facultative offer is not yet known.
 
+### Documents
+Document endpoints create registry rows with immutable source snapshots and
+backend-rendered PDFs for supported placement and endorsement documents. Private
+storage metadata is retained by the service and clients use signed download
+URLs. Browser-generated previews are not official documents.
+
 ### Placement closings
 Placement closing endpoints persist participant-specific closing snapshots for
 accepted participants. Closings use the lifecycle \`DRAFT → ISSUED → CONFIRMED\`,
@@ -44,40 +50,57 @@ document registry entries, emails, payments, debit notes or credit notes.
 Debit and credit note endpoints persist financial note records generated from
 confirmed closing snapshots. Debit notes are placement-level cedant notes.
 Credit notes are per confirmed reinsurer closing. NIC levy and withholding tax
-are fixed at 0 in the MVP. Note generation, issuing and voiding do not
-financially lock a placement; payments remain the only hard-lock trigger.
+are tenant-configurable charges selected by effective date and currency.
+Generated notes snapshot the applied charge configuration and calculated
+amounts, so historical notes are not recalculated after settings changes. Note
+generation, issuing and voiding do not financially lock a placement; payments
+remain the only hard-lock trigger.
 
 ### Claims
 Claim endpoints record loss events first. They capture occurrence details,
 estimated loss and optional final loss amounts. Claim allocations are generated
 explicitly from immutable CONFIRMED placement and endorsement closing snapshots
-to calculate reinsurer liability. PR1 does not create cash calls, claim notes,
-settlement payments, documents, email workflows or accounting records.
+to calculate reinsurer liability. Claim cash calls are generated one per
+allocation from those allocation snapshots. Phase 1 claim payable approval is a
+claim-level broker confirmation after required reinsurer approvals have been
+obtained externally; it is not an allocation-level approval workflow. Claim
+recovery approvals are allocation-level Reinsurer receivable recognition records
+and remain separate from cash calls and recovery receipts. Recovery receipts and
+cedant settlements are modeled operationally, while additional claim accounting
+events remain policy-gated unless explicitly activated.
 
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
-are distinct: \`CLOSED\` placements block direct edits but may reopen to
-\`CLOSING\` when no financial lock exists. The first recorded placement payment
-hard-locks future direct mutations and requires the future endorsement workflow.
-Reversal records do not unlock placements. Debit note issuance alone is not a
-hard lock in the MVP policy.
+are distinct. Editable placements can be safely reopened to market after direct
+updates; downstream financial activity requires endorsements instead. Payments,
+claims, active endorsements and terminal lifecycle states block unsafe direct
+mutation. Reversal records preserve financial history and do not erase lock
+history.
 
 ### Endorsements
 Endorsement endpoints create versioned placement adjustment records. The backend
 captures \`originalSnapshot\` at creation and stores proposed changes separately.
-Endorsements may be created once at least one placement closing exists. Before
-	payment they are optional formal version records; after first payment they are
-	the mandatory path for business changes because direct edits are financially
-	locked. Endorsements do not mutate the original placement, participants,
-	closings, payments or notes. Endorsement participants and endorsement closings
-	are endorsement-scoped records for market responses and accepted endorsement
-	business.
+Endorsements do not mutate the original placement, participants, closings,
+payments or notes. Endorsement participants and endorsement closings are
+endorsement-scoped records for market responses, accepted endorsement business,
+force close, close readiness and current effective position calculations.
+Declined endorsement participants may be reinvited through the endpoint that
+preserves prior invitation history.
 
 ### Email foundation
-The email endpoints are a technical foundation for embedded mailbox workflows:
-connection metadata, provider verification, sync proof-of-concept, thread/message
-metadata and manual placement links. They do not send/reply/forward email, download
-attachments, parse content with AI or automatically update placements.
+The email endpoints support mailbox readiness, provider metadata,
+placement-scoped conversation reads and placement email send/reply persistence.
+Claim and cash-call email flows that are still preview-only must remain labeled
+as previews until backend send support exists for those flows.
+
+### Accounting integration
+Accounting integration uses tenant-scoped source events, deterministic
+idempotency keys, transactional outbox rows, automatic dispatcher/retry support,
+reconciliation endpoints and signed internal transport. Active Reinsurance
+events include issued debit/credit notes, endorsement notes, premium receipts
+and reversals, bank-confirmed reinsurer disbursements and reversals, and
+claim-level payable approvals plus allocation-level claim recovery approvals.
+Policy-gated Claims events must not be described as active until implemented.
 
 Documentation is exposed only when \`ENABLE_SWAGGER=true\`; the deployment
 pipeline enables it for development only.
@@ -131,12 +154,28 @@ pipeline enables it for development only.
       'Reinsurer credit notes generated per confirmed closing',
     )
     .addTag(
+      'Reinsurance - Endorsement Notes',
+      'Endorsement debit and credit notes generated from confirmed endorsement closing snapshots',
+    )
+    .addTag(
       'Reinsurance - Claims',
       'Loss-event claim records, lifecycle and final loss updates',
     )
     .addTag(
       'Reinsurance - Claim Allocations',
       'Reinsurer liability calculations generated from immutable closing snapshots',
+    )
+    .addTag(
+      'Reinsurance - Claim Cash Calls',
+      'Cash calls generated one-per-claim-allocation from allocation snapshots',
+    )
+    .addTag(
+      'Reinsurance - Claim Recoveries',
+      'Claim recovery approvals, recovery position, cash-call receipts and receipt reversal endpoints',
+    )
+    .addTag(
+      'Reinsurance - Documents',
+      'Generated document registry entries, immutable snapshots, PDF rendering and private S3 download URLs',
     )
     .addTag(
       'Reinsurance - Financial Locking',
@@ -171,6 +210,10 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Email Threads',
       'Thread/message metadata and manual placement email links',
+    )
+    .addTag(
+      'Reinsurance - Placement Emails',
+      'Placement-scoped email conversation, send, reply, link and unlink workflows',
     )
     .addCookieAuth('access_token')
     .addBearerAuth(

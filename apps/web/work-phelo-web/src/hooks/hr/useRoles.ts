@@ -27,6 +27,7 @@ export function useAssignPermissionSet() {
       queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'module-users'] });
     },
   });
 }
@@ -43,6 +44,7 @@ export function useRemovePermissionSet() {
       queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'module-users'] });
     },
   });
 }
@@ -105,6 +107,18 @@ export function useUpdatePermissionSet() {
     mutationFn: async ({ id, ...dto }: UpdatePermissionSetDto & { id: string }) => {
       const res = await api.patch<PermissionSet>(`/auth/permissions/sets/${id}`, dto);
       return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
+    },
+  });
+}
+
+export function useDeletePermissionSet() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/auth/permissions/sets/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });

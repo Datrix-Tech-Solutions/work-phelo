@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   CounterpartyType,
   PlacementClaimAllocationStatus,
+  PlacementClaimState,
   PlacementClaimStatus,
 } from '../../../prisma/generated/client';
 
@@ -23,6 +24,12 @@ export class PlacementClaimResponseDto {
     example: PlacementClaimStatus.DRAFT,
   })
   status!: PlacementClaimStatus;
+
+  @ApiProperty({
+    enum: PlacementClaimState,
+    example: PlacementClaimState.PENDING,
+  })
+  claimState!: PlacementClaimState;
 
   @ApiProperty({ type: String, format: 'date-time' })
   occurrenceDate!: string;
@@ -50,6 +57,15 @@ export class PlacementClaimResponseDto {
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   finalizedByUserId!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '37500.00' })
+  approvedPayableAmount!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
+  approvedAt!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  approvedByUserId!: string | null;
 
   @ApiProperty({ format: 'uuid' })
   createdByUserId!: string;

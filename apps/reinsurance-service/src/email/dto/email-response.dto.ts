@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   EmailMessageDirection,
+  EmailMessageStatus,
   MailboxConnectionStatus,
   MailboxProvider,
 } from '../../../prisma/generated/client';
@@ -145,6 +146,9 @@ export class EmailMessageResponseDto {
   @ApiProperty({ enum: EmailMessageDirection })
   direction!: EmailMessageDirection;
 
+  @ApiProperty({ enum: EmailMessageStatus })
+  status!: EmailMessageStatus;
+
   @ApiPropertyOptional({ type: String, nullable: true })
   subject!: string | null;
 
@@ -160,6 +164,12 @@ export class EmailMessageResponseDto {
   @ApiPropertyOptional({ nullable: true })
   ccRecipients!: unknown;
 
+  @ApiPropertyOptional({ nullable: true })
+  bccRecipients!: unknown;
+
+  @ApiPropertyOptional({ nullable: true })
+  replyToRecipients!: unknown;
+
   @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
   receivedAt!: string | null;
 
@@ -169,6 +179,21 @@ export class EmailMessageResponseDto {
   @ApiPropertyOptional({ type: String, nullable: true })
   bodyPreview!: string | null;
 
+  @ApiPropertyOptional({ type: String, nullable: true })
+  bodyText!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  bodyHtml!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  errorMessage!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, format: 'uuid' })
+  inReplyToMessageId!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, format: 'uuid' })
+  parentMessageId!: string | null;
+
   @ApiProperty({ example: false })
   hasAttachments!: boolean;
 
@@ -177,6 +202,69 @@ export class EmailMessageResponseDto {
 
   @ApiProperty({ type: [EmailAttachmentMetadataResponseDto] })
   attachments!: EmailAttachmentMetadataResponseDto[];
+}
+
+export class PlacementEmailMailboxSummaryDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ enum: MailboxProvider })
+  provider!: MailboxProvider;
+
+  @ApiProperty({ example: 'placements@broker.example' })
+  emailAddress!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  displayName!: string | null;
+}
+
+export class PlacementEmailThreadSummaryDto {
+  @ApiProperty({ format: 'uuid' })
+  linkId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  threadId!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  subject!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Provider-normalized participant summary JSON.',
+  })
+  participants!: unknown;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  latestMessagePreview!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
+  latestMessageAt!: string | null;
+
+  @ApiProperty({ example: 3 })
+  messageCount!: number;
+
+  @ApiProperty({ example: false })
+  hasAttachments!: boolean;
+
+  @ApiProperty({ format: 'uuid' })
+  linkedByUserId!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  note!: string | null;
+
+  @ApiProperty({ format: 'date-time' })
+  linkedAt!: string;
+
+  @ApiProperty({ type: PlacementEmailMailboxSummaryDto })
+  mailbox!: PlacementEmailMailboxSummaryDto;
+}
+
+export class PlacementEmailThreadConversationDto {
+  @ApiProperty({ type: PlacementEmailThreadSummaryDto })
+  thread!: PlacementEmailThreadSummaryDto;
+
+  @ApiProperty({ type: [EmailMessageResponseDto] })
+  messages!: EmailMessageResponseDto[];
 }
 
 export class PlacementEmailLinkResponseDto {
@@ -203,6 +291,25 @@ export class PlacementEmailLinkResponseDto {
 
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
+}
+
+export class PlacementEmailLinkWithThreadResponseDto {
+  @ApiProperty({ type: PlacementEmailLinkResponseDto })
+  link!: PlacementEmailLinkResponseDto;
+
+  @ApiProperty({ type: PlacementEmailThreadSummaryDto })
+  thread!: PlacementEmailThreadSummaryDto;
+}
+
+export class PlacementEmailSendResponseDto {
+  @ApiProperty({ type: PlacementEmailThreadSummaryDto })
+  thread!: PlacementEmailThreadSummaryDto;
+
+  @ApiProperty({ type: EmailMessageResponseDto })
+  message!: EmailMessageResponseDto;
+
+  @ApiProperty({ type: PlacementEmailLinkResponseDto })
+  link!: PlacementEmailLinkResponseDto;
 }
 
 export class PageMetaDto {

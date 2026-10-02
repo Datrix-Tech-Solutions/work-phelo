@@ -81,9 +81,9 @@ export function AssignAssetPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         {/* Search */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Search Asset</label>
           <div className="relative">
             <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

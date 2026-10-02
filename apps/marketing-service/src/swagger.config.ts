@@ -6,10 +6,10 @@ export function setupSwagger(app: INestApplication) {
     .setTitle('WorkPhelo ERP — Marketing Service')
     .setDescription(
       '## Marketing API\n\n' +
-        'Handles marketing campaigns, announcements, and audience engagement.\n\n' +
+        'Marketing service foundation for tenant-scoped CRM configuration, prospecting and pipeline workflows.\n\n' +
         '### Base URL\n' +
         'All requests are served under the global prefix /api.\n\n' +
-        '**Example:** GET http://localhost:4006/api/marketing/campaigns\n\n' +
+        '**Example:** GET http://localhost:4006/api/health when health routes are available.\n\n' +
         '### Authentication\n' +
         'Protected endpoints require a valid JWT token via:\n' +
         '- **Bearer token**: Authorization: Bearer <token>\n' +
@@ -19,7 +19,8 @@ export function setupSwagger(app: INestApplication) {
     )
     .setVersion('1.0')
     .addServer('http://localhost:4006/api', 'Local Dev')
-    .addTag('Marketing', 'Campaigns, announcements, and audience targeting')
+    .addTag('Marketing', 'CRM settings, prospecting and pipeline workflows')
+    .addTag('CRM Settings', 'Tenant-scoped Marketing CRM configuration')
     .addBearerAuth(
       {
         type: 'http',
@@ -44,5 +45,5 @@ export function setupSwagger(app: INestApplication) {
     customSiteTitle: 'WorkPhelo Marketing API Docs',
   });
 
-  console.log('📖 Marketing service docs: http://localhost:4006/api/docs');
+  console.log('Marketing service docs: http://localhost:4006/api/docs');
 }

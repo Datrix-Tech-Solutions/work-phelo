@@ -3,10 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Bold,
-  FileText,
+  // FileText,
   Heading2,
   CheckSquare,
-  Image as ImageIcon,
+  // Image as ImageIcon,
   Italic,
   List,
   ListOrdered,
@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Styles applied inside both the editable area and the preview pane
-const richContentClass = [
+// Styles applied inside the editable area, the preview pane, and the read-only
+// `RichTextView` renderer.
+export const richContentClass = [
   'text-sm text-gray-900',
   '[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-2',
   '[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:my-2',
@@ -31,9 +32,18 @@ const richContentClass = [
   '[&_a]:text-brand [&_a]:underline',
   '[&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_code]:text-[0.8em]',
   '[&_pre]:bg-gray-100 [&_pre]:rounded [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-sm [&_pre]:overflow-x-auto [&_pre]:my-2',
+  // Tables are wrapped in `.rt-table-scroll` (see `insertTableFromGrid`) so a
+  // table with more columns than the editor is wide scrolls inside its own box
+  // instead of overflowing the comment area. The margin lives on the wrapper so
+  // the scrollbar hugs the last row; a table that predates the wrapper keeps its
+  // own `my-2`.
+  '[&_.rt-table-scroll]:block [&_.rt-table-scroll]:max-w-full [&_.rt-table-scroll]:overflow-x-auto [&_.rt-table-scroll]:my-2',
+  '[&_.rt-table-scroll_table]:my-0',
   '[&_table]:border-collapse [&_table]:w-full [&_table]:my-2',
-  '[&_th]:border [&_th]:border-gray-300 [&_th]:px-3 [&_th]:py-2 [&_th]:bg-gray-50 [&_th]:text-left [&_th]:font-semibold [&_th]:text-sm',
-  '[&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:text-sm',
+  // `h-8` acts as a min-height on table cells, so empty rows match the height a
+  // filled row settles at (one `text-sm` line + padding) instead of collapsing.
+  '[&_th]:border [&_th]:border-gray-300 [&_th]:px-3 [&_th]:py-2 [&_th]:h-8 [&_th]:bg-gray-50 [&_th]:text-left [&_th]:font-semibold [&_th]:text-sm',
+  '[&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:h-8 [&_td]:text-sm',
   '[&_img]:max-w-full [&_img]:rounded [&_img]:my-1',
 ].join(' ');
 
@@ -42,10 +52,6 @@ const btnClass =
 
 const GRID_COLS = 10;
 const GRID_ROWS = 8;
-
-const TH_STYLE =
-  'border:1px solid #d1d5db;padding:6px 12px;background:#f9fafb;font-weight:600;text-align:left;min-width:60px;';
-const TD_STYLE = 'border:1px solid #d1d5db;padding:6px 12px;min-width:60px;';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -124,7 +130,10 @@ export function RichTextEditor({
       return;
     }
     if (contentRef.current.innerHTML !== value) contentRef.current.innerHTML = value;
-  }, [value]);
+    // Also re-run when switching back to the "write" tab: that remounts the
+    // contentEditable div as a fresh, empty node, so it needs to be
+    // re-populated even though `value` itself didn't change.
+  }, [value, tab]);
 
   const syncValue = useCallback(() => {
     isInternalChange.current = true;
@@ -203,16 +212,18 @@ export function RichTextEditor({
       setShowTablePicker(false);
       setPickerHover({ rows: 0, cols: 0 });
       contentRef.current?.focus();
-      const header = Array.from(
-        { length: cols },
-        (_, i) => `<th style="${TH_STYLE}">Column ${i + 1}</th>`,
-      ).join('');
+      // Bare markup — no per-cell inline styles. Tables are styled by
+      // `richContentClass` here and in `RichTextView`, and by the
+      // `[data-rich-text] table` rules in globals.css for document/PDF layouts.
+      // Keeping the HTML small is what lets tables fit character-limited fields.
+      // The `.rt-table-scroll` wrapper gives a wide table its own horizontal
+      // scrollbar so it stays contained in the comment area.
+      const header = Array.from({ length: cols }, (_, i) => `<th>Column ${i + 1}</th>`).join('');
       const bodyRows = Array.from(
         { length: rows },
-        () =>
-          `<tr>${Array.from({ length: cols }, () => `<td style="${TD_STYLE}"></td>`).join('')}</tr>`,
+        () => `<tr>${Array.from({ length: cols }, () => '<td></td>').join('')}</tr>`,
       ).join('');
-      const html = `<table style="border-collapse:collapse;width:100%;margin:8px 0;"><thead><tr>${header}</tr></thead><tbody>${bodyRows}</tbody></table><br/>`;
+      const html = `<div class="rt-table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${bodyRows}</tbody></table></div><br/>`;
       document.execCommand('insertHTML', false, html);
       syncValue();
     },
@@ -221,21 +232,21 @@ export function RichTextEditor({
 
   // ── Other toolbar handlers ────────────────────────────────────────────────
 
-  const handleImageBtn = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const url = window.prompt('Enter image URL:');
-      if (!url) return;
-      contentRef.current?.focus();
-      document.execCommand(
-        'insertHTML',
-        false,
-        `<img src="${url}" alt="Image" style="max-width:100%;border-radius:4px;display:block;margin:4px 0;" />`,
-      );
-      syncValue();
-    },
-    [syncValue],
-  );
+  // const handleImageBtn = useCallback(
+  //   (e: React.MouseEvent) => {
+  //     e.preventDefault();
+  //     const url = window.prompt('Enter image URL:');
+  //     if (!url) return;
+  //     contentRef.current?.focus();
+  //     document.execCommand(
+  //       'insertHTML',
+  //       false,
+  //       `<img src="${url}" alt="Image" style="max-width:100%;border-radius:4px;display:block;margin:4px 0;" />`,
+  //     );
+  //     syncValue();
+  //   },
+  //   [syncValue],
+  // );
 
   const handleTaskListBtn = useCallback(
     (e: React.MouseEvent) => {
@@ -251,10 +262,10 @@ export function RichTextEditor({
     [syncValue],
   );
 
-  const handleFileBtn = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    fileInputRef.current?.click();
-  }, []);
+  // const handleFileBtn = useCallback((e: React.MouseEvent) => {
+  //   e.preventDefault();
+  //   fileInputRef.current?.click();
+  // }, []);
 
   // ── Table row/column operations ───────────────────────────────────────────
 
@@ -265,11 +276,7 @@ export function RichTextEditor({
       if (!td) return;
       const tr = td.closest('tr')!;
       const newRow = document.createElement('tr');
-      Array.from(tr.cells).forEach((cell) => {
-        const c = document.createElement('td');
-        c.style.cssText = (cell as HTMLElement).style.cssText;
-        newRow.appendChild(c);
-      });
+      Array.from(tr.cells).forEach(() => newRow.appendChild(document.createElement('td')));
       tr.after(newRow);
       syncValue();
       refreshActiveFormats();
@@ -304,7 +311,6 @@ export function RichTextEditor({
         const isHeader = row.parentElement?.tagName === 'THEAD';
         const refCell = row.cells[colIdx] as HTMLElement | undefined;
         const newCell = document.createElement(isHeader ? 'th' : 'td');
-        newCell.style.cssText = refCell?.style.cssText ?? '';
         newCell.textContent = isHeader ? 'Column' : '';
         if (refCell) refCell.after(newCell);
         else row.appendChild(newCell);
@@ -365,11 +371,7 @@ export function RichTextEditor({
         const tbody = table.querySelector('tbody')!;
         const lastRow = tbody.lastElementChild as HTMLTableRowElement;
         const newRow = document.createElement('tr');
-        Array.from(lastRow.cells).forEach((cell) => {
-          const c = document.createElement('td');
-          c.style.cssText = (cell as HTMLElement).style.cssText;
-          newRow.appendChild(c);
-        });
+        Array.from(lastRow.cells).forEach(() => newRow.appendChild(document.createElement('td')));
         tbody.appendChild(newRow);
         moveTo(newRow.cells[0]);
         syncValue();
@@ -381,14 +383,15 @@ export function RichTextEditor({
   // ── File handling ─────────────────────────────────────────────────────────
 
   const handleFileDrop = (e: React.DragEvent) => {
+    if (!onFilesAdded) return; // no handler wired up — let the browser's default drop behavior run
     e.preventDefault();
-    if (e.dataTransfer.files.length) onFilesAdded?.(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) onFilesAdded(e.dataTransfer.files);
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
-    if (e.clipboardData.files.length) {
+    if (onFilesAdded && e.clipboardData.files.length) {
       e.preventDefault();
-      onFilesAdded?.(e.clipboardData.files);
+      onFilesAdded(e.clipboardData.files);
       return;
     }
     setTimeout(syncValue, 0);
@@ -399,7 +402,7 @@ export function RichTextEditor({
   const sep = <span className="w-px h-4 bg-gray-200 mx-0.5 self-center" />;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
       {/* overflow-visible so the table grid picker popup isn't clipped */}
@@ -549,12 +552,14 @@ export function RichTextEditor({
                 )}
               </div>
 
-              <ToolbarBtn title="Insert image" onMouseDown={handleImageBtn}>
+              {/* <ToolbarBtn title="Insert image" onMouseDown={handleImageBtn}>
                 <ImageIcon size={15} />
               </ToolbarBtn>
-              <ToolbarBtn title="Attach document" onMouseDown={handleFileBtn}>
-                <FileText size={15} />
-              </ToolbarBtn>
+              {onFilesAdded && (
+                <ToolbarBtn title="Attach document" onMouseDown={handleFileBtn}>
+                  <FileText size={15} />
+                </ToolbarBtn>
+              )} */}
 
               {sep}
 
@@ -565,15 +570,17 @@ export function RichTextEditor({
                 <Redo2 size={15} />
               </ToolbarBtn>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files?.length) onFilesAdded?.(e.target.files);
-                }}
-              />
+              {onFilesAdded && (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) onFilesAdded(e.target.files);
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -647,26 +654,28 @@ export function RichTextEditor({
         )}
 
         {/* ── Footer ────────────────────────────────────────────────── */}
-        <div className="flex items-center border-t border-gray-100 px-4 py-2 text-xs text-gray-400 rounded-b-input">
-          <span
-            className="flex items-center gap-1 cursor-pointer hover:text-gray-600"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+        {onFilesAdded && (
+          <div className="flex items-center border-t border-gray-100 px-4 py-2 text-xs text-gray-400 rounded-b-input">
+            <span
+              className="flex items-center gap-1 cursor-pointer hover:text-gray-600"
+              onClick={() => fileInputRef.current?.click()}
             >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="m21 15-5-5L5 21" />
-            </svg>
-            Paste, drop, or click to add files
-          </span>
-        </div>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="m21 15-5-5L5 21" />
+              </svg>
+              Paste, drop, or click to add files
+            </span>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-xs text-red-500">{error}</p>}

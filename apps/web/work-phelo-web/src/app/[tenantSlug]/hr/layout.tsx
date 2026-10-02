@@ -3,12 +3,13 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { HrSidebar } from '@/components/organisms/shared/HrSidebar';
-import { usePermission } from '@/hooks/hr/usePermission';
 import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { useModuleThemeScope } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
@@ -25,38 +26,50 @@ export default function HRLayout({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  const pathname = usePathname();
   useModuleThemeScope('hr');
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
-  const [sidebarPinned, setSidebarPinned] = useState(false);
-  const groups = useHrSidebarGroups(tenantSlug);
-  const markHrVisited = useNavRailStore((s) => s.markHrVisited);
-  const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canApproveLeave = usePermission(Permission.APPROVE_LEAVE);
   const canSubmitManagerReview = usePermission(Permission.SUBMIT_MANAGER_REVIEW);
   const canApproveTimeCorrection = usePermission(Permission.APPROVE_TIME_CORRECTION);
+  const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
 
+  // Remember that HR has been visited so other modules can show a parked,
+  // icon-only HR rail alongside their own sidebar.
+  const markHrVisited = useNavRailStore((s) => s.markHrVisited);
   useEffect(() => {
     markHrVisited();
   }, [markHrVisited]);
+
+  const groups = useHrSidebarGroups(tenantSlug, 'hr');
+
+  // Lets the sidebar be pinned open via TopNav's menu button, for anyone who
+  // doesn't want to rely on hover to see it expanded.
+  const [pinned, setPinned] = useState(false);
+
+  // Payroll, Appraisal and Leave each have their own dedicated navigation now
+  // (their own layout.tsx), same pattern as Accounting/Operations — hand off
+  // chrome entirely instead of nesting HR's sidebar/TopNav around them.
+  const SELF_CONTAINED_SECTIONS = ['payroll', 'appraisal', 'leave'];
+  if (
+    SELF_CONTAINED_SECTIONS.some((section) => pathname.startsWith(`/${tenantSlug}/hr/${section}`))
+  ) {
+    return <>{children}</>;
+  }
 
   return (
     <AppBackground className="h-dvh overflow-hidden flex flex-col layout-hr">
       <TopNav
         showMenuButton
-        onMenuClick={() => setSidebarPinned((v) => !v)}
+        onMenuClick={() => setPinned((v) => !v)}
         userInitials={initials}
-        notificationCount={0}
         logoVariant="image"
       />
-      <div className="flex flex-1 min-h-0 min-w-0 relative">
-        <HrSidebar
-          groups={groups}
-          forceOpen={sidebarPinned}
-          onRequestClose={() => setSidebarPinned(false)}
-        />
+      <div className="flex flex-1 min-h-0 relative">
+        <HrSidebar groups={groups} forceOpen={pinned} onRequestClose={() => setPinned(false)} />
         <main className="flex-1 min-h-0 min-w-0 overflow-y-auto flex flex-col">{children}</main>
       </div>
 

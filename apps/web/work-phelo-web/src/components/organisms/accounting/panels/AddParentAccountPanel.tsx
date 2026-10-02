@@ -6,11 +6,17 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { GLAccountCategory } from '@/types/accounting';
+import {
+  AccountGroup,
+  CASH_FLOW_CATEGORY_OPTIONS,
+  CashFlowCategory,
+  GLAccountCategory,
+} from '@/types/accounting';
 import {
   useAccountClassifications,
   useAccountingCurrencyOptions,
   useCreateAccountGroup,
+  useUpdateAccountGroup,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -18,6 +24,7 @@ import { extractError } from '@/lib/extractError';
 interface AddParentAccountPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  editing?: AccountGroup;
 }
 
 type FormValues = {
@@ -30,6 +37,7 @@ type FormValues = {
   currency: string;
   status: string;
   description: string;
+  cashFlowCategory: CashFlowCategory | '';
 };
 
 const DEFAULTS: FormValues = {
@@ -40,6 +48,7 @@ const DEFAULTS: FormValues = {
   currency: '',
   status: '',
   description: '',
+  cashFlowCategory: '',
 };
 
 const TYPE_OPTIONS: SearchSelectOption[] = [
@@ -55,9 +64,11 @@ const STATUS_OPTIONS: SearchSelectOption[] = [
   { value: 'Inactive', label: 'Inactive' },
 ];
 
-export function AddParentAccountPanel({ isOpen, onClose }: AddParentAccountPanelProps) {
+export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAccountPanelProps) {
   const toast = useToast();
-  const { mutateAsync: createGroup, isPending } = useCreateAccountGroup();
+  const { mutateAsync: createGroup, isPending: isCreating } = useCreateAccountGroup();
+  const { mutateAsync: updateGroup, isPending: isUpdating } = useUpdateAccountGroup();
+  const isPending = isCreating || isUpdating;
   const { options: currencyOptions } = useAccountingCurrencyOptions();
 
   const {
@@ -78,8 +89,22 @@ export function AddParentAccountPanel({ isOpen, onClose }: AddParentAccountPanel
     : [];
 
   useEffect(() => {
+    if (!isOpen || !editing) return;
+    reset({
+      ...DEFAULTS,
+      accountCode: editing.code,
+      accountName: editing.name,
+      accountType: editing.classification.category,
+      classificationId: editing.classificationId,
+      status: editing.isActive ? 'Active' : 'Inactive',
+      cashFlowCategory: editing.cashFlowCategory ?? '',
+    });
+  }, [isOpen, editing, reset]);
+
+  useEffect(() => {
+    if (editing && accountType === editing.classification.category) return;
     setValue('classificationId', '');
-  }, [accountType, setValue]);
+  }, [accountType, editing, setValue]);
 
   const handleClose = () => {
     reset(DEFAULTS);
@@ -88,15 +113,34 @@ export function AddParentAccountPanel({ isOpen, onClose }: AddParentAccountPanel
 
   const onSubmit = async (data: FormValues) => {
     try {
+      if (editing) {
+        await updateGroup({
+          id: editing.id,
+          code: data.accountCode,
+          name: data.accountName,
+          classificationId: data.classificationId,
+          cashFlowCategory: data.cashFlowCategory || undefined,
+          ...(data.status ? { isActive: data.status === 'Active' } : {}),
+        });
+        toast.success('Parent account updated successfully');
+        handleClose();
+        return;
+      }
       await createGroup({
         code: data.accountCode,
         name: data.accountName,
         classificationId: data.classificationId,
+        cashFlowCategory: data.cashFlowCategory || undefined,
       });
       toast.success('Parent account created successfully');
       handleClose();
     } catch (err) {
-      toast.error(extractError(err, 'Failed to create parent account'));
+      toast.error(
+        extractError(
+          err,
+          editing ? 'Failed to update parent account' : 'Failed to create parent account',
+        ),
+      );
     }
   };
 
@@ -104,15 +148,19 @@ export function AddParentAccountPanel({ isOpen, onClose }: AddParentAccountPanel
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Add Parent Account"
-      description="Add a new parent account under a classification in the chart of accounts."
+      title={editing ? 'Edit Parent Account' : 'Add Parent Account'}
+      description={
+        editing
+          ? 'Update this parent account in the chart of accounts.'
+          : 'Add a new parent account under a classification in the chart of accounts.'
+      }
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
-            Add Parent Account
+            {editing ? 'Update Parent Account' : 'Add Parent Account'}
           </Button>
         </div>
       }
@@ -202,6 +250,20 @@ export function AddParentAccountPanel({ isOpen, onClose }: AddParentAccountPanel
           registration={register('description')}
           error={errors.description}
           placeholder="Provide a brief description of this account…"
+        />
+
+        <Controller
+          name="cashFlowCategory"
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              label="Cash Flow Category (optional)"
+              placeholder="Defaults from the classification, or Operating"
+              options={CASH_FLOW_CATEGORY_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
         />
       </div>
     </SidePanel>

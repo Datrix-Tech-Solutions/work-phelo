@@ -34,6 +34,7 @@ module.exports = {
         'release',
         'ci',
         'security',
+        'accounting',
       ],
     ],
     'subject-max-length': [2, 'always', 100],

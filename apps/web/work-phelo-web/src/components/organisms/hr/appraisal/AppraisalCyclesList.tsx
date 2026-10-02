@@ -144,7 +144,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
       width: 'minmax(200px, 1fr)',
       render: (row) => (
         <Link
-          href={`/${tenantSlug}/hr/hrmanagement/appraisal/cycles/${row.id}`}
+          href={`/${tenantSlug}/hr/appraisal/settings/cycles/${row.id}`}
           className="font-medium text-gray-900 hover:text-brand hover:underline transition-colors"
           onClick={(e) => e.stopPropagation()}
         >
@@ -348,7 +348,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
           </>
         }
       >
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-medium text-gray-700">Reason for cancellation</label>
           <textarea
             rows={3}

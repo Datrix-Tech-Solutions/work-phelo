@@ -128,6 +128,24 @@ export interface PayrollRunDetail extends PayrollRun {
   items: PayrollItem[];
 }
 
+// ── Accounting settlement (linked tenants only) ────────────────────────────────
+
+export type PayrollLedgerPaymentState = 'OPEN' | 'PARTIALLY_PAID' | 'PAID';
+
+export interface PayrollLedgerLineStatus {
+  paymentState: PayrollLedgerPaymentState;
+  amount: number;
+  outstandingAmount: number;
+}
+
+/** Null when the tenant isn't linked to Accounting — the run's own `status` is the only
+ *  signal that matters there. Each line is null until its accrual has actually posted. */
+export interface PayrollSettlementStatus {
+  netPay: PayrollLedgerLineStatus | null;
+  incomeTax: PayrollLedgerLineStatus | null;
+  socialSecurity: PayrollLedgerLineStatus | null;
+}
+
 // ── DTOs ───────────────────────────────────────────────────────────────────────
 
 export interface PayrollDecisionDto {
@@ -170,6 +188,8 @@ export interface PayrollSettings {
   payrollTier3Enabled: boolean;
   payrollTier3Rate: number | null;
   payrollTier3SchemeName: string | null;
+  linkedToAccounting: boolean;
+  autoPostOnApproval: boolean;
 }
 
 export interface UpdatePayrollSettingsDto {
@@ -179,6 +199,8 @@ export interface UpdatePayrollSettingsDto {
   payrollTier3Enabled?: boolean;
   payrollTier3Rate?: number;
   payrollTier3SchemeName?: string;
+  linkedToAccounting?: boolean;
+  autoPostOnApproval?: boolean;
 }
 
 // ── Payslip display ────────────────────────────────────────────────────────────

@@ -113,7 +113,7 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
   return (
     <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
       {/* Header */}
-      <h1 className="text-xl font-bold text-gray-900 shrink-0">Employee Directory</h1>
+      <h1 className="text-xl font-bold text-gray-900 shrink-0">Team</h1>
 
       <EmployeeStatsRow isLoading={isStatsLoading} {...summary} />
 
@@ -121,7 +121,7 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
         data={pagedEmployees}
         isLoading={isLoading}
         skeletonCount={8}
-        renderSkeleton={() => <div className="w-95 h-56 rounded-xl bg-gray-100 animate-pulse" />}
+        renderSkeleton={() => <div className="w-full h-56 rounded-xl bg-gray-100 animate-pulse" />}
         searchPlaceholder="Search by name, email, job title..."
         searchValue={search}
         onSearch={(q) => {

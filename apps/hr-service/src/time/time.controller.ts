@@ -139,7 +139,7 @@ export class TimeController {
 
   @Post('corrections')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions(Permission.SUBMIT_TIME_CORRECTION)
+  @RequirePermissions(Permission.CLOCK_IN_OUT)
   @ApiOperation({ summary: 'Submit a time correction request' })
   @ApiBody({ type: TimeCorrectionDto })
   @ApiResponse({ status: 201, description: 'Time correction submitted' })

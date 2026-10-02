@@ -211,6 +211,7 @@ describe('TenantBrandingService', () => {
 
     expect(storage.storeBrandingAsset).toHaveBeenCalledWith({
       tenantId: 'tenant-1',
+      tenantSlug: 'acme-ghana',
       assetType: 'app-logo',
       body: Buffer.from('logo'),
       contentType: 'image/png',

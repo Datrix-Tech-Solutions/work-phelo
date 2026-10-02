@@ -1,100 +1,296 @@
 'use client';
 
-import { useState } from 'react';
-import { SearchIcon } from 'lucide-react';
-import { cardClass, inputClass } from '@/lib/utils';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { useMemo, useState } from 'react';
+import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { TwoPanelShell } from '@/components/organisms/shared/TwoPanelShell';
-import { ActionMenuButton } from '@/components/organisms/shared/ActionMenuButton';
-import { ChartOfAccountsTree } from '@/components/organisms/accounting/ChartOfAccountsTree';
+import {
+  AccountScope,
+  ChartOfAccountsTree,
+} from '@/components/organisms/accounting/ChartOfAccountsTree';
 import { AddClassificationPanel } from '@/components/organisms/accounting/panels/AddClassificationPanel';
 import { AddParentAccountPanel } from '@/components/organisms/accounting/panels/AddParentAccountPanel';
-import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
-import { GLAccount } from '@/types/accounting';
+import {
+  AddLeafAccountPanel,
+  LockedAccountScope,
+} from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
+import { GLAccountDetail } from '@/components/organisms/accounting/GLAccountDetail';
+import { GLAccountListPanel } from '@/components/organisms/accounting/GLAccountListPanel';
+import { ChartOfAccountsBreadcrumb } from '@/components/molecules/accounting/ChartOfAccountsBreadcrumb';
+import { ChartOfAccountsToolbar } from '@/components/molecules/accounting/ChartOfAccountsToolbar';
+import { SeedHierarchyDialog } from '@/components/molecules/accounting/SeedHierarchyDialog';
+import { BulkImportGLAccountsDialog } from '@/components/organisms/accounting/BulkImportGLAccountsDialog';
+import { getScopedAccounts, getScopeTitle } from '@/lib/accounting/chartOfAccountsScope';
+import { buildAccountBalanceMap } from '@/lib/accounting/glAccountBalance';
+import {
+  useAccountClassifications,
+  useAccountGroups,
+  useAccountingConfig,
+  useDeleteAccountClassification,
+  useDeleteAccountGroup,
+  useGLAccounts,
+  useSeedStandardAccountHierarchy,
+  useTrialBalanceReport,
+} from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
-const STATUS_OPTIONS: SearchSelectOption[] = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Inactive', label: 'Inactive' },
-];
-
-type OpenPanel = 'classification' | 'parent-account' | 'leaf-account' | null;
+type OpenPanel =
+  | 'classification'
+  | 'parent-account'
+  | 'leaf-account'
+  | 'leaf-account-scoped'
+  | 'edit-classification'
+  | 'edit-parent-account'
+  | null;
 
 export default function ChartOfAccountsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
-  const [selectedAccount, setSelectedAccount] = useState<GLAccount | null>(null);
+  const [scope, setScope] = useState<AccountScope>({ kind: 'all' });
+  const [seedDialogOpen, setSeedDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    kind: 'classification' | 'group';
+    id: string;
+    name: string;
+  } | null>(null);
+  const seedHierarchy = useSeedStandardAccountHierarchy();
+  const deleteClassification = useDeleteAccountClassification();
+  const deleteGroup = useDeleteAccountGroup();
+  const toast = useToast();
+
+  const { data: classificationsData, isLoading: isLoadingClassifications } =
+    useAccountClassifications();
+  const { data: groupsData, isLoading: isLoadingGroups } = useAccountGroups();
+  const { data: glAccountsData, isLoading: isLoadingGLAccounts } = useGLAccounts();
+  const { data: config } = useAccountingConfig();
+  const { data: trialBalance } = useTrialBalanceReport(
+    { asOfDate: new Date().toISOString().slice(0, 10), includeZeroBalances: true },
+    true,
+  );
+
+  const classifications = useMemo(() => classificationsData?.items ?? [], [classificationsData]);
+  const groups = useMemo(() => groupsData?.items ?? [], [groupsData]);
+  const glAccounts = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return (glAccountsData ?? []).filter((account) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        account.code.toLowerCase().includes(normalizedSearch) ||
+        account.name.toLowerCase().includes(normalizedSearch) ||
+        account.description?.toLowerCase().includes(normalizedSearch);
+      return matchesSearch && (!status || account.status === status);
+    });
+  }, [glAccountsData, search, status]);
+
+  const hasAccountFilter = Boolean(search.trim() || status);
+  const isLoading = isLoadingClassifications || isLoadingGroups || isLoadingGLAccounts;
+
+  // The selected scope holds a snapshot; re-resolve it from the live lists so saved edits show.
+  const liveScope = useMemo<AccountScope>(() => {
+    if (scope.kind === 'classification') {
+      const classification = classifications.find((c) => c.id === scope.classification.id);
+      return classification ? { kind: 'classification', classification } : scope;
+    }
+    if (scope.kind === 'group') {
+      const group = groups.find((g) => g.id === scope.group.id);
+      return group ? { kind: 'group', group } : scope;
+    }
+    return scope;
+  }, [scope, classifications, groups]);
+
+  const scopedAccounts = useMemo(
+    () => getScopedAccounts(liveScope, glAccounts, groups),
+    [liveScope, glAccounts, groups],
+  );
+  const scopeTitle = useMemo(() => getScopeTitle(liveScope), [liveScope]);
+  const balanceByAccountId = useMemo(() => buildAccountBalanceMap(trialBalance), [trialBalance]);
+
+  // What "Create Account" from the current scope should lock the new account to. Nothing for
+  // "all accounts" or a bare type (neither pins a classification, which a leaf account always
+  // needs) or a single account (GLAccountDetail handles that itself, mirroring its own group).
+  const lockedScope = useMemo<LockedAccountScope | undefined>(() => {
+    switch (liveScope.kind) {
+      case 'classification':
+        return {
+          accountType: liveScope.classification.category,
+          classificationId: liveScope.classification.id,
+          classificationName: liveScope.classification.name,
+        };
+      case 'group':
+        return {
+          accountType: liveScope.group.classification.category,
+          classificationId: liveScope.group.classificationId,
+          classificationName: liveScope.group.classification.name,
+          groupId: liveScope.group.id,
+          groupName: liveScope.group.name,
+        };
+      default:
+        return undefined;
+    }
+  }, [liveScope]);
+
+  const seedStandardHierarchy = async () => {
+    try {
+      const result = await seedHierarchy.mutateAsync();
+      setSeedDialogOpen(false);
+      toast.success(
+        `Standard hierarchy updated: ${result.classificationsCreated} classifications and ${result.groupsCreated} groups created.`,
+      );
+    } catch (error) {
+      toast.error(extractError(error, 'Unable to seed the standard account hierarchy'));
+    }
+  };
+
+  // Deletability is computed from the full, unfiltered lists — never the search/status-filtered
+  // `glAccounts` above — so the delete action only shows up when it will actually succeed.
+  const allAccounts = glAccountsData ?? [];
+  const canDeleteClassification = (classificationId: string) =>
+    groups.every((g) => g.classificationId !== classificationId) &&
+    allAccounts.every((a) => a.classificationId !== classificationId);
+  const canDeleteGroup = (groupId: string) =>
+    allAccounts.every((a) => a.accountGroupId !== groupId);
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      if (confirmDelete.kind === 'classification') {
+        await deleteClassification.mutateAsync(confirmDelete.id);
+        if (scope.kind === 'classification' && scope.classification.id === confirmDelete.id) {
+          setScope({ kind: 'all' });
+        }
+      } else {
+        await deleteGroup.mutateAsync(confirmDelete.id);
+        if (scope.kind === 'group' && scope.group.id === confirmDelete.id) {
+          setScope({ kind: 'all' });
+        }
+      }
+      toast.success(`${confirmDelete.name} deleted`);
+      setConfirmDelete(null);
+    } catch (error) {
+      toast.error(extractError(error, `Unable to delete ${confirmDelete.name}`));
+    }
+  };
 
   return (
     <>
       <TwoPanelShell
+        defaultCollapsed
         header={
           <div className="flex flex-col gap-3">
             <h2 className="text-base font-semibold text-gray-900">Chart of Accounts</h2>
-
-            <div className={cardClass('px-4 py-2')}>
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="relative flex-1 min-w-52 max-w-sm">
-                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    placeholder="Search accounts…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className={inputClass(undefined, 'pl-9 pr-4 py-2')}
-                  />
-                </div>
-
-                <div className="w-36">
-                  <SearchSelect
-                    placeholder="All statuses"
-                    size="sm"
-                    options={STATUS_OPTIONS}
-                    value={status}
-                    onChange={setStatus}
-                  />
-                </div>
-
-                <div className="flex-1" />
-
-                <ActionMenuButton
-                  label="Register Account"
-                  items={[
-                    {
-                      label: 'Classification',
-                      description: 'e.g. Current Assets',
-                      onClick: () => setOpenPanel('classification'),
-                    },
-                    {
-                      label: 'Parent Account',
-                      description: 'e.g. Bank Accounts',
-                      onClick: () => setOpenPanel('parent-account'),
-                    },
-                    {
-                      label: 'Leaf Account',
-                      description: 'e.g. Ecobank',
-                      onClick: () => setOpenPanel('leaf-account'),
-                    },
-                  ]}
-                />
-              </div>
-            </div>
+            <ChartOfAccountsToolbar
+              search={search}
+              onSearchChange={setSearch}
+              status={status}
+              onStatusChange={setStatus}
+              onImport={() => setImportDialogOpen(true)}
+              registerActions={[
+                {
+                  label: 'Classification',
+                  description: 'e.g. Current Assets',
+                  onClick: () => setOpenPanel('classification'),
+                },
+                {
+                  label: 'Parent Account',
+                  description: 'e.g. Bank Accounts',
+                  onClick: () => setOpenPanel('parent-account'),
+                },
+                {
+                  label: 'Leaf Account',
+                  description: 'e.g. Ecobank',
+                  onClick: () => setOpenPanel('leaf-account'),
+                },
+              ]}
+            />
           </div>
         }
         leftPanel={({ collapsed, expand }) => (
           <ChartOfAccountsTree
             collapsed={collapsed}
             onExpand={expand}
-            selectedAccountId={selectedAccount?.id}
-            onSelectAccount={setSelectedAccount}
+            classifications={classifications}
+            groups={groups}
+            glAccounts={glAccounts}
+            isLoading={isLoading}
+            hasAccountFilter={hasAccountFilter}
+            scope={scope}
+            onSelectScope={setScope}
           />
         )}
         rightPanel={
-          selectedAccount ? (
-            <h3 className="text-base font-semibold text-gray-900">{selectedAccount.name}</h3>
-          ) : (
-            <p className="text-sm text-gray-400">Select a leaf account to view its details</p>
-          )
+          <div className="flex h-full flex-col">
+            <ChartOfAccountsBreadcrumb
+              scope={liveScope}
+              classifications={classifications}
+              groups={groups}
+              onSelectScope={setScope}
+            />
+            <div className="min-h-0 flex-1">
+              {scope.kind === 'account' ? (
+                <GLAccountDetail
+                  key={scope.account.id}
+                  account={scope.account}
+                  hasChildAccounts={allAccounts.some((a) => a.parentAccountId === scope.account.id)}
+                  onDeleted={() => setScope({ kind: 'all' })}
+                />
+              ) : (
+                <GLAccountListPanel
+                  title={scopeTitle}
+                  accounts={scopedAccounts}
+                  isLoading={isLoading}
+                  onSelectAccount={(account) => setScope({ kind: 'account', account })}
+                  balanceByAccountId={balanceByAccountId}
+                  baseCurrency={config?.baseCurrency ?? undefined}
+                  groups={groups}
+                  editLabel={
+                    liveScope.kind === 'classification'
+                      ? liveScope.classification.name
+                      : liveScope.kind === 'group'
+                        ? liveScope.group.name
+                        : undefined
+                  }
+                  onEdit={
+                    scope.kind === 'classification'
+                      ? () => setOpenPanel('edit-classification')
+                      : scope.kind === 'group'
+                        ? () => setOpenPanel('edit-parent-account')
+                        : undefined
+                  }
+                  deleteLabel={
+                    liveScope.kind === 'classification'
+                      ? liveScope.classification.name
+                      : liveScope.kind === 'group'
+                        ? liveScope.group.name
+                        : undefined
+                  }
+                  onDelete={
+                    scope.kind === 'classification' &&
+                    canDeleteClassification(scope.classification.id)
+                      ? () =>
+                          setConfirmDelete({
+                            kind: 'classification',
+                            id: scope.classification.id,
+                            name: scope.classification.name,
+                          })
+                      : scope.kind === 'group' && canDeleteGroup(scope.group.id)
+                        ? () =>
+                            setConfirmDelete({
+                              kind: 'group',
+                              id: scope.group.id,
+                              name: scope.group.name,
+                            })
+                        : undefined
+                  }
+                  onCreateAccount={
+                    lockedScope ? () => setOpenPanel('leaf-account-scoped') : undefined
+                  }
+                />
+              )}
+            </div>
+          </div>
         }
       />
 
@@ -106,9 +302,63 @@ export default function ChartOfAccountsPage() {
         isOpen={openPanel === 'parent-account'}
         onClose={() => setOpenPanel(null)}
       />
+      <AddClassificationPanel
+        isOpen={openPanel === 'edit-classification'}
+        onClose={() => setOpenPanel(null)}
+        editing={liveScope.kind === 'classification' ? liveScope.classification : undefined}
+      />
+      <AddParentAccountPanel
+        isOpen={openPanel === 'edit-parent-account'}
+        onClose={() => setOpenPanel(null)}
+        editing={liveScope.kind === 'group' ? liveScope.group : undefined}
+      />
       <AddLeafAccountPanel
         isOpen={openPanel === 'leaf-account'}
         onClose={() => setOpenPanel(null)}
+      />
+      <AddLeafAccountPanel
+        isOpen={openPanel === 'leaf-account-scoped'}
+        onClose={() => setOpenPanel(null)}
+        lockedScope={lockedScope}
+      />
+      <SeedHierarchyDialog
+        isOpen={seedDialogOpen}
+        onClose={() => setSeedDialogOpen(false)}
+        onConfirm={seedStandardHierarchy}
+        isPending={seedHierarchy.isPending}
+      />
+      <BulkImportGLAccountsDialog
+        isOpen={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        classifications={classifications}
+        groups={groups}
+        existingAccounts={glAccountsData ?? []}
+      />
+
+      <Modal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title={`Delete ${confirmDelete?.name ?? ''}?`}
+        description="This will be permanently removed. This cannot be undone."
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDelete(null)}
+              disabled={deleteClassification.isPending || deleteGroup.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmDelete}
+              isLoading={deleteClassification.isPending || deleteGroup.isPending}
+              loadingText="Deleting…"
+            >
+              Delete
+            </Button>
+          </>
+        }
       />
     </>
   );

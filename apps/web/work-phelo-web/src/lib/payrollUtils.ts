@@ -8,6 +8,7 @@ import {
   normalizePayrollCountry,
 } from '@/lib/payrollDisplay';
 import type { SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { addDisclaimerFooter } from '@/lib/pdfDisclaimer';
 
 export const MONTH_NAMES = [
   '',
@@ -511,6 +512,11 @@ export async function downloadPayrollPDFFormat(
     );
   }
 
+  addDisclaimerFooter(
+    doc,
+    'This is a computer-generated payroll report and does not require a signature.',
+  );
+
   doc.save(`payroll-${format}-${label}.pdf`);
 }
 
@@ -959,18 +965,12 @@ export async function downloadPayslipPDF(
   }
 
   // ── Footer ────────────────────────────────────────────────────────────────
-  const footerY = doc.internal.pageSize.height - 10;
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7);
-  doc.setTextColor(140, 140, 140);
   const footerContact = companyInfo.email
     ? `  |  For queries contact HR: ${companyInfo.email}`
     : '';
-  doc.text(
+  addDisclaimerFooter(
+    doc,
     `This is a computer-generated payslip and does not require a signature.${footerContact}`,
-    pageW / 2,
-    footerY,
-    { align: 'center' },
   );
 
   const empName = emp ? `${emp.firstName}-${emp.lastName}` : 'payslip';
@@ -1403,15 +1403,9 @@ export async function downloadTAXFormPDF(
   }
 
   // ── Footer ────────────────────────────────────────────────────────────────
-  const footY = pageH - 6;
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(6.5);
-  doc.setTextColor(140, 140, 140);
-  doc.text(
+  addDisclaimerFooter(
+    doc,
     'GRA Helpline: 0800-900-110 (Toll Free)  |  www.gra.gov.gh  |  This form is for official tax reporting purposes only.',
-    pageW / 2,
-    footY,
-    { align: 'center' },
   );
 
   const empSuffix = employee ? `${employee.lastName}-${employee.firstName}` : 'employee';

@@ -121,6 +121,7 @@ export class TenantAdminService {
             ),
             tenantName: tenant.name,
             inviteKind: 'TENANT_ADMIN',
+            isResend: true,
           })
           .catch((err) =>
             this.logger.error(
@@ -296,10 +297,31 @@ export class TenantAdminService {
         ),
         tenantName: admin.tenant.name,
         inviteKind: 'TENANT_ADMIN',
+        isResend: true,
       })
       .catch((err) =>
         this.logger.error(`Failed to resend invite for ${admin.email}`, err),
       );
+
+    await this.audit.log({
+      tenantId,
+      userId: admin.id,
+      userEmail: admin.email,
+      userRole: admin.role,
+      action: 'UPDATE',
+      resource: 'tenant_admin',
+      resourceId: admin.id,
+      changes: {
+        before: {
+          inviteExpiresAt: admin.inviteExpiresAt?.toISOString(),
+        },
+        after: {
+          resendInvite: true,
+          inviteExpiresAt: inviteExpiresAt.toISOString(),
+        },
+      },
+      status: 'SUCCESS',
+    });
 
     return { message: 'Invitation resent successfully' };
   }

@@ -1,98 +1,140 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# WorkPhelo Marketing Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The Marketing Service owns tenant-scoped CRM configuration, prospecting and
+pipeline workflows for WorkPhelo.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+The service is deployed in the current development environment but is not
+deployed in the current production Compose file.
 
-## Description
+Current environment URLs are listed in the root repository README.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Gateway Prefix
 
-## Project setup
-
-```bash
-$ npm install
+```text
+/api/v1/marketing/*
 ```
 
-## Compile and run the project
+## Local Development
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm run dev --workspace=apps/marketing-service
 ```
 
-## Run tests
+Default local port: `4006`
 
-```bash
-# unit tests
-$ npm run test
+Local Swagger: `http://localhost:4006/api/docs`
 
-# e2e tests
-$ npm run test:e2e
+## Deployed Swagger
 
-# test coverage
-$ npm run test:cov
+| Environment | Swagger                                               |
+| ----------- | ----------------------------------------------------- |
+| Dev         | `https://dev-api.workphelo.com/api/v1/marketing/docs` |
+| Prod        | Not deployed in current prod compose                  |
+
+## Notes
+
+- The health endpoint remains public at `GET /api/health`.
+- Protected CRM endpoints use the gateway-forwarded JWT/auth context already
+  used by other WorkPhelo services.
+- Tenant identity is always derived from the authenticated user. Request bodies
+  must not accept tenant IDs.
+
+## CRM Settings Scope
+
+The approved Phase 1 CRM Settings foundation is limited to configuration used by
+the existing Marketing frontend settings screens:
+
+| Capability              | Storage model               | Feature entitlement  |
+| ----------------------- | --------------------------- | -------------------- |
+| Sales Pipeline stages   | `MarketingPipelineStage`    | `marketing.pipeline` |
+| Products / Services     | `MarketingCrmSettingOption` | `marketing.leads`    |
+| Decision Makers         | `MarketingCrmSettingOption` | `marketing.leads`    |
+| Source Types            | `MarketingCrmSettingOption` | `marketing.leads`    |
+| Interaction Media       | `MarketingCrmSettingOption` | `marketing.leads`    |
+| Prospect Business Types | `MarketingCrmSettingOption` | `marketing.leads`    |
+
+The current UI does not define separate account-related CRM settings beyond
+Prospect Business Types. Do not add tenant/company identity settings, Auth user
+settings, HR-owned employee metadata, or Accounting customer/vendor settings to
+Marketing without a product decision.
+
+## Planned CRM Settings API Contract
+
+All routes are served through the gateway at `/api/v1/marketing/*` and directly
+by the service under `/api/*`.
+
+Implemented in Stage 2:
+
+```text
+GET    /crm-settings/decision-makers
+POST   /crm-settings/decision-makers
+GET    /crm-settings/decision-makers/:id
+PATCH  /crm-settings/decision-makers/:id
+DELETE /crm-settings/decision-makers/:id
+
+GET    /crm-settings/source-types
+POST   /crm-settings/source-types
+GET    /crm-settings/source-types/:id
+PATCH  /crm-settings/source-types/:id
+DELETE /crm-settings/source-types/:id
+
+GET    /crm-settings/interaction-media
+POST   /crm-settings/interaction-media
+GET    /crm-settings/interaction-media/:id
+PATCH  /crm-settings/interaction-media/:id
+DELETE /crm-settings/interaction-media/:id
+
+GET    /crm-settings/business-types
+POST   /crm-settings/business-types
+GET    /crm-settings/business-types/:id
+PATCH  /crm-settings/business-types/:id
+DELETE /crm-settings/business-types/:id
 ```
 
-## Deployment
+Stage 3: Sales Pipeline Settings
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```text
+GET    /crm-settings/pipeline-stages
+POST   /crm-settings/pipeline-stages
+GET    /crm-settings/pipeline-stages/:id
+PATCH  /crm-settings/pipeline-stages/:id
+DELETE /crm-settings/pipeline-stages/:id
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Stage 4: Products / Services Settings
 
-## Resources
+```text
+GET    /crm-settings/products
+POST   /crm-settings/products
+GET    /crm-settings/products/:id
+PATCH  /crm-settings/products/:id
+DELETE /crm-settings/products/:id
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+Reserved for later stages:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```text
+No additional CRM Settings APIs are currently reserved. Operational prospect,
+opportunity and product relationship APIs remain outside this foundation.
+```
 
-## Support
+Delete operations should soft-archive records by setting `archivedAt` and should
+not physically delete rows. This preserves future prospect and pipeline history.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Permissions
 
-## Stay in touch
+Marketing permissions are registered in Auth as resource/action pairs. They are
+not automatically granted to existing users or permission templates.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+| Resource                      | Purpose                                          |
+| ----------------------------- | ------------------------------------------------ |
+| `marketing.crm-settings`      | Broad CRM settings access for navigation/support |
+| `marketing.pipeline-stages`   | Sales pipeline stage configuration               |
+| `marketing.products`          | Product/service option configuration             |
+| `marketing.decision-makers`   | Decision maker/role-title option configuration   |
+| `marketing.source-types`      | Prospect source type option configuration        |
+| `marketing.interaction-media` | Interaction medium option configuration          |
+| `marketing.business-types`    | Prospect business type option configuration      |
 
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Use `VIEW` for read endpoints and `CREATE`, `EDIT`, `DELETE` for management
+endpoints. `DELETE` represents soft-archive behavior in Marketing CRM settings.

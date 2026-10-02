@@ -6,28 +6,94 @@ import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { InvoiceDetailsSection } from '@/components/molecules/accounting/InvoiceDetailsSection';
 import { InvoiceLineDetailsSection } from '@/components/molecules/accounting/InvoiceLineDetailsSection';
-import { InvoiceFormValues, INVOICE_DEFAULTS } from '@/types/accounting';
+import { SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { AccountingTradeSide, InvoiceFormValues, INVOICE_DEFAULTS } from '@/types/accounting';
+import { useCreatePayableBill, useCreateReceivableInvoice, useSubledgers } from '@/hooks';
 import { Icons } from '@/components/atoms/icons';
 import { cardClass } from '@/lib/utils';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 interface NewInvoiceFormProps {
   onCancel: () => void;
+  onCreated: () => void;
+  side: AccountingTradeSide;
   vendorLabel?: string;
 }
 
-export function NewInvoiceForm({ onCancel, vendorLabel }: NewInvoiceFormProps) {
+export function NewInvoiceForm({ onCancel, onCreated, side, vendorLabel }: NewInvoiceFormProps) {
+  const toast = useToast();
+  const isReceivable = side === 'RECEIVABLE';
+  const partyLabel = vendorLabel ?? (isReceivable ? 'Customer' : 'Vendor');
+
   const form = useForm<InvoiceFormValues>({ defaultValues: INVOICE_DEFAULTS });
   const [showCancelModal, setShowCancelModal] = useState(false);
 
-  const onSubmit = () => {
-    // TODO: call create invoice mutation
+  // Any active entity can be picked here — the Transaction Type decides whether the
+  // resulting document is Receivable or Payable, not the entity itself.
+  const { data: entities, isLoading: isLoadingParties } = useSubledgers({ status: 'ACTIVE' });
+  const parties = entities ?? [];
+  const partyOptions: SearchSelectOption[] = parties.map((p) => ({
+    value: p.id,
+    label: `${p.code} — ${p.name}`,
+  }));
+
+  const createInvoice = useCreateReceivableInvoice();
+  const createBill = useCreatePayableBill();
+  const isPending = isReceivable ? createInvoice.isPending : createBill.isPending;
+
+  const onSubmit = async (data: InvoiceFormValues) => {
+    const subtotalAmount = data.lines.reduce(
+      (sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0),
+      0,
+    );
+
+    if (subtotalAmount <= 0) {
+      toast.error('Add at least one line with a quantity and unit price.');
+      return;
+    }
+    if (!data.transactionTypeId) {
+      toast.error('Select a transaction type.');
+      return;
+    }
+
+    const payload = {
+      partyId: data.vendor,
+      documentDate: data.invoiceDate,
+      dueDate: data.dueDate || undefined,
+      currency: data.currency,
+      amount: subtotalAmount,
+      transactionTypeId: data.transactionTypeId,
+      selectedTaxTypeIds: data.selectedTaxTypeIds.length ? data.selectedTaxTypeIds : undefined,
+      description: data.description || undefined,
+      externalReference: data.invoiceNumber || undefined,
+    };
+
+    try {
+      if (isReceivable) {
+        await createInvoice.mutateAsync(payload);
+      } else {
+        await createBill.mutateAsync(payload);
+      }
+      toast.success('Invoice created as a draft.');
+      onCreated();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to create invoice'));
+    }
   };
 
   return (
     <>
       <div className="flex flex-col gap-6">
         <div className={cardClass('p-6')}>
-          <InvoiceDetailsSection form={form} vendorLabel={vendorLabel} />
+          <InvoiceDetailsSection
+            form={form}
+            vendorLabel={partyLabel}
+            parties={parties}
+            partyOptions={partyOptions}
+            isLoadingParties={isLoadingParties}
+            side={side}
+          />
         </div>
 
         <InvoiceLineDetailsSection form={form} />
@@ -39,11 +105,15 @@ export function NewInvoiceForm({ onCancel, vendorLabel }: NewInvoiceFormProps) {
           <Button
             variant="secondary"
             icon={<Icons.Save className="w-4 h-4" />}
+            isLoading={isPending}
+            loadingText="Saving…"
             onClick={form.handleSubmit(onSubmit)}
           >
             Save as Draft
           </Button>
-          <Button onClick={form.handleSubmit(onSubmit)}>Submit for Approval</Button>
+          <Button isLoading={isPending} loadingText="Saving…" onClick={form.handleSubmit(onSubmit)}>
+            Submit for Approval
+          </Button>
         </div>
       </div>
 

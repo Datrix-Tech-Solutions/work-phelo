@@ -4,6 +4,7 @@ import {
   PlacementPaymentDirection,
   PlacementPaymentStatus,
   PlacementPaymentType,
+  PlacementSettlementMethod,
 } from '../../../prisma/generated/client';
 
 export class PlacementPaymentCounterpartyDto {
@@ -34,6 +35,69 @@ export class PlacementPaymentClosingDto {
 
   @ApiProperty({ example: 'CLO-001' })
   closingNumber!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '1250.00' })
+  netPremium?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'USD' })
+  currency?: string | null;
+}
+
+export class PlacementPaymentAllocationNoteDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ example: 'CN-001' })
+  noteNumber!: string;
+
+  @ApiProperty({ example: 'CREDIT_NOTE' })
+  type!: string;
+
+  @ApiProperty({ example: 'USD' })
+  currency!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '25.00' })
+  nicLevyAmount?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '50.00' })
+  withholdingTaxAmount?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '0.5000' })
+  withholdingTaxPercent?: string | null;
+}
+
+export class PlacementPaymentAllocationDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  noteId!: string;
+
+  @ApiProperty({
+    type: String,
+    example: '1000.00',
+    description: 'Positive amount allocated from the payment currency.',
+  })
+  allocatedAmount!: string;
+
+  @ApiProperty({ example: 'USD' })
+  allocatedCurrency!: string;
+
+  @ApiProperty({
+    type: String,
+    example: '1000.00',
+    description: 'Positive obligation amount in the credit-note currency.',
+  })
+  obligationAmount!: string;
+
+  @ApiProperty({ example: 'USD' })
+  obligationCurrency!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '12.345678' })
+  agreedExchangeRate!: string | null;
+
+  @ApiProperty({ type: PlacementPaymentAllocationNoteDto })
+  note!: PlacementPaymentAllocationNoteDto;
 }
 
 export class PlacementPaymentResponseDto {
@@ -48,6 +112,9 @@ export class PlacementPaymentResponseDto {
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   closingId!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  endorsementClosingId!: string | null;
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   participantId!: string | null;
@@ -87,6 +154,61 @@ export class PlacementPaymentResponseDto {
   })
   reference!: string | null;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'SETTLE-2026-001',
+  })
+  settlementReference!: string | null;
+
+  @ApiPropertyOptional({
+    enum: PlacementSettlementMethod,
+    nullable: true,
+    example: PlacementSettlementMethod.BANK_TRANSFER,
+  })
+  settlementMethod!: PlacementSettlementMethod | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'USD' })
+  settlementCurrency!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'BANK-CONF-001',
+  })
+  bankReference!: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Accounting cash/bank account selected during financial confirmation for Cashbook integration.',
+  })
+  accountingCashAccountId!: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  bankConfirmedAt!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  bankConfirmedByUserId!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: '12.345678' })
+  agreedExchangeRate!: string | null;
+
+  @ApiProperty({
+    type: String,
+    example: '0.00',
+    description: 'Bank charges captured on the transaction.',
+  })
+  bankChargeAmount!: string;
+
+  @ApiProperty({
+    type: String,
+    example: '0.00',
+    description: 'Withholding tax captured on the transaction.',
+  })
+  withholdingTaxAmount!: string;
+
   @ApiPropertyOptional({ type: String, nullable: true })
   notes!: string | null;
 
@@ -119,6 +241,12 @@ export class PlacementPaymentResponseDto {
 
   @ApiPropertyOptional({ type: PlacementPaymentClosingDto, nullable: true })
   closing!: PlacementPaymentClosingDto | null;
+
+  @ApiPropertyOptional({ type: PlacementPaymentClosingDto, nullable: true })
+  endorsementClosing!: PlacementPaymentClosingDto | null;
+
+  @ApiProperty({ type: [PlacementPaymentAllocationDto] })
+  allocations!: PlacementPaymentAllocationDto[];
 }
 
 export class PlacementPaymentListResponseDto {

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { Icons } from '@/components/atoms/icons';
-import { useFacultatives, useAllReinsurerClaims, useAllReinsurerClaimPayments } from '@/hooks';
+import { useFacultatives, useAllReinsurerClaims } from '@/hooks';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const OVERDUE_DAYS = 90;
@@ -29,9 +29,8 @@ export function RecoveriesStatsRow() {
   );
 
   const { rows, isLoading: loadingClaims } = useAllReinsurerClaims(reinsuredPlacements);
-  const { paidMap, isLoading: loadingPayments } = useAllReinsurerClaimPayments(reinsuredPlacements);
 
-  const isLoading = loadingPlacements || loadingClaims || loadingPayments;
+  const isLoading = loadingPlacements || loadingClaims;
 
   const { amountDue, amountReceived, outstanding, overdueCount } = useMemo(() => {
     let due = 0;
@@ -39,13 +38,9 @@ export function RecoveriesStatsRow() {
     let overdueCount = 0;
 
     rows.forEach((row) => {
-      const paid = Math.min(
-        paidMap.get(`${row.placementId}:${row.reinsurerId}`) ?? 0,
-        row.recoveryAmount,
-      );
-      const rowOutstanding = Math.max(0, row.recoveryAmount - paid);
-      due += row.recoveryAmount;
-      received += paid;
+      const rowOutstanding = Math.max(0, row.outstandingAmount);
+      due += row.calledAmount;
+      received += row.recoveredAmount;
       if (
         rowOutstanding > 0 &&
         (now - new Date(row.occurrenceDate).getTime()) / MS_PER_DAY > OVERDUE_DAYS
@@ -55,7 +50,7 @@ export function RecoveriesStatsRow() {
     });
 
     return { amountDue: due, amountReceived: received, outstanding: due - received, overdueCount };
-  }, [rows, paidMap, now]);
+  }, [rows, now]);
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

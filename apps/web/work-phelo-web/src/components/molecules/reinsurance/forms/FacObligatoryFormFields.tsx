@@ -38,7 +38,7 @@ export function FacObligatoryFormFields({ form }: FacObligatoryFormFieldsProps) 
   const { data: currencyOptions = [] } = useCurrencyOptions();
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       {/* ── Basic Information ── */}
       <FormSection title="Basic Information">
         <div className="flex flex-col gap-5">

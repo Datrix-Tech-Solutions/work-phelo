@@ -84,9 +84,9 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
         </div>
       }
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         {/* Date */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <DatePicker
             label="Date of Missed Entry"
             value={date}
@@ -100,7 +100,7 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
 
         {/* Times row */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-medium text-gray-700">
               Expected Clock In <span className="text-gray-400 font-normal">(optional)</span>
             </label>
@@ -111,7 +111,7 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
               className="w-full px-3 py-2.5 border border-gray-200 rounded-input text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-400"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-medium text-gray-700">
               Expected Clock Out <span className="text-gray-400 font-normal">(optional)</span>
             </label>
@@ -125,7 +125,7 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
         </div>
 
         {/* Reason */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-medium text-gray-700">
             Reason <span className="text-red-500">*</span>
           </label>

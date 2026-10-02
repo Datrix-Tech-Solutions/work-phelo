@@ -94,6 +94,16 @@ export class PlacementClosingResponseDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
+    example: '600000.00',
+    description:
+      'Sum insured snapshot: (signedLinePercent / 100) × placement.sumInsured, captured at closing ' +
+      'creation. Null when the placement had no sum insured set. Decimal returned as JSON string.',
+  })
+  sumInsuredSnapshot!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
     example: '4500.00',
     description:
       'Gross premium snapshot: (signedLinePercent / 100) × placement.premium. ' +

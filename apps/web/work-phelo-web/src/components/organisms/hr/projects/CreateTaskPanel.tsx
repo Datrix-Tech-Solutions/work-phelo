@@ -94,7 +94,7 @@ export function CreateTaskPanel({ projectId, isOpen, onClose, onCreate, isCreati
       }
     >
       {/* Task name */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-medium text-gray-700">Task Name</label>
         <input
           {...register('name', { required: 'Task name is required' })}

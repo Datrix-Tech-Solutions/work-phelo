@@ -1059,7 +1059,7 @@ export class TimeService {
         data: {
           clockOut,
           hoursWorked: TimeService.AUTO_CLOCK_OUT_HOURS.toFixed(2),
-          note: `Auto clocked out after ${TimeService.AUTO_CLOCK_OUT_HOURS} hours — no manual clock-out was recorded.`,
+          note: 'Auto-closed after 20 hours of inactivity',
         },
       });
     }
@@ -2921,6 +2921,7 @@ export class TimeService {
       isLate: r.isLate,
       isOutsideSchedule: r.isOutsideSchedule,
       workMode: r.workMode,
+      location: r.location ?? undefined,
     }));
   }
 

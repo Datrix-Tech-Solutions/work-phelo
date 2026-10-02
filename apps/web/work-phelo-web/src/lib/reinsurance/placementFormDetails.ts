@@ -12,9 +12,14 @@ export type PlacementCustomField = {
   value: string;
   type?: 'TEXT';
   displayOrder?: number;
+  showOnDocument?: boolean;
 };
 
 export const CUSTOM_FIELDS_KEY = 'customFields';
+/** Reserved key holding the list of schema fieldKeys hidden from generated documents
+ *  for this section. Absent from the list = shown (keeps existing records rendering
+ *  exactly as before this feature existed). */
+export const FIELD_VISIBILITY_KEY = '__fieldVisibility';
 
 export type PlacementDetailEntry = {
   key: string;
@@ -71,9 +76,12 @@ export function splitPlacementDetails(
   riskDetails: Record<string, unknown>,
   fields: RiskTypeField[],
   extraRiskFields: PlacementCustomField[],
+  riskDetailsVisibility: Record<string, boolean> = {},
 ): SplitPlacementDetailsResult {
   const businessDetails: Record<string, unknown> = {};
   const offerDetails: Record<string, unknown> = {};
+  const hiddenBusinessKeys: string[] = [];
+  const hiddenOfferKeys: string[] = [];
 
   for (const field of fields.filter((f) => f.isActive)) {
     const val = coerceFieldValue(riskDetails[field.fieldKey], field);
@@ -81,10 +89,15 @@ export function splitPlacementDetails(
 
     if (field.section === 'BUSINESS_DETAILS') {
       businessDetails[field.fieldKey] = val;
+      if (riskDetailsVisibility[field.fieldKey] === false) hiddenBusinessKeys.push(field.fieldKey);
     } else if (field.section === 'OFFER_DETAILS') {
       offerDetails[field.fieldKey] = val;
+      if (riskDetailsVisibility[field.fieldKey] === false) hiddenOfferKeys.push(field.fieldKey);
     }
   }
+
+  if (hiddenBusinessKeys.length > 0) businessDetails[FIELD_VISIBILITY_KEY] = hiddenBusinessKeys;
+  if (hiddenOfferKeys.length > 0) offerDetails[FIELD_VISIBILITY_KEY] = hiddenOfferKeys;
 
   const customFields = extraRiskFields
     .map((field, index) => ({
@@ -93,6 +106,7 @@ export function splitPlacementDetails(
       value: field.value.trim(),
       type: field.type ?? 'TEXT',
       displayOrder: field.displayOrder ?? index + 1,
+      showOnDocument: field.showOnDocument !== false,
     }))
     .filter((field) => field.label && field.value);
 
@@ -113,13 +127,35 @@ export function mergePlacementRiskDetails(
   const merged: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(businessDetails ?? {})) {
-    if (key !== CUSTOM_FIELDS_KEY) merged[key] = value;
+    if (key !== CUSTOM_FIELDS_KEY && key !== FIELD_VISIBILITY_KEY) merged[key] = value;
   }
   for (const [key, value] of Object.entries(offerDetails ?? {})) {
-    if (key !== CUSTOM_FIELDS_KEY) merged[key] = value;
+    if (key !== CUSTOM_FIELDS_KEY && key !== FIELD_VISIBILITY_KEY) merged[key] = value;
   }
 
   return merged;
+}
+
+/** Reconstructs the fieldKey → visible map from the reserved hidden-keys lists saved
+ *  in businessDetails/offerDetails, for pre-filling the form's `riskDetailsVisibility`
+ *  when editing/renewing/endorsing an existing placement. */
+export function extractRiskDetailsVisibility(
+  businessDetails: Record<string, unknown> | null,
+  offerDetails: Record<string, unknown> | null,
+): Record<string, boolean> {
+  const visibility: Record<string, boolean> = {};
+  const hidden = [
+    ...(Array.isArray(businessDetails?.[FIELD_VISIBILITY_KEY])
+      ? (businessDetails![FIELD_VISIBILITY_KEY] as unknown[])
+      : []),
+    ...(Array.isArray(offerDetails?.[FIELD_VISIBILITY_KEY])
+      ? (offerDetails![FIELD_VISIBILITY_KEY] as unknown[])
+      : []),
+  ];
+  for (const key of hidden) {
+    if (typeof key === 'string') visibility[key] = false;
+  }
+  return visibility;
 }
 
 export function extractPlacementCustomFields(
@@ -143,6 +179,7 @@ export function extractPlacementCustomFields(
         value: String(record.value ?? ''),
         type: 'TEXT',
         displayOrder: typeof record.displayOrder === 'number' ? record.displayOrder : index + 1,
+        showOnDocument: record.showOnDocument !== false,
       });
     });
     return fields;
@@ -152,13 +189,16 @@ export function extractPlacementCustomFields(
     ...(businessDetails ?? {}),
     ...(offerDetails ?? {}),
   })
-    .filter(([key]) => key !== CUSTOM_FIELDS_KEY && !schemaKeys.has(key))
+    .filter(
+      ([key]) => key !== CUSTOM_FIELDS_KEY && key !== FIELD_VISIBILITY_KEY && !schemaKeys.has(key),
+    )
     .map(([key, value], index) => ({
       id: stableCustomFieldId(key, index),
       label: key,
       value: String(value ?? ''),
       type: 'TEXT',
       displayOrder: index + 1,
+      showOnDocument: true,
     }));
 }
 
@@ -194,19 +234,34 @@ export function placementToFormValues(
     periodTo: placement.expiryDate ?? '',
     comment: placement.description ?? '',
     riskDetails: mergePlacementRiskDetails(placement.businessDetails, placement.offerDetails),
+    riskDetailsVisibility: extractRiskDetailsVisibility(
+      placement.businessDetails,
+      placement.offerDetails,
+    ),
     extraRiskFields,
   };
 }
 
+/** Entries feeding every generated document (Slip, Credit/Debit Notes, Closing Letter,
+ *  Endorsement docs, …) go through this one function — fields hidden via the
+ *  "show on document" toggle are filtered out here so every document respects it. */
 export function placementDetailEntries(
   details: Record<string, unknown> | null,
 ): PlacementDetailEntry[] {
   if (!details) return [];
 
   const entries: PlacementDetailEntry[] = [];
+  const hiddenKeys = new Set(
+    Array.isArray(details[FIELD_VISIBILITY_KEY])
+      ? (details[FIELD_VISIBILITY_KEY] as unknown[]).filter((k) => typeof k === 'string')
+      : [],
+  );
 
   for (const [key, value] of Object.entries(details)) {
+    if (key === FIELD_VISIBILITY_KEY) continue;
+
     if (key !== CUSTOM_FIELDS_KEY) {
+      if (hiddenKeys.has(key)) continue;
       entries.push({ key, label: toDisplayLabel(key), value });
       continue;
     }
@@ -216,6 +271,7 @@ export function placementDetailEntries(
     value.forEach((field, index) => {
       if (!field || typeof field !== 'object' || Array.isArray(field)) return;
       const record = field as Record<string, unknown>;
+      if (record.showOnDocument === false) return;
       const label = String(record.label ?? '').trim();
       if (!label) return;
 

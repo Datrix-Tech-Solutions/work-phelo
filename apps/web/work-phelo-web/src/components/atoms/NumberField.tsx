@@ -6,10 +6,14 @@ import { cn, inputClass } from '@/lib/utils';
 interface NumberFieldProps {
   value: number;
   onChange: (value: number) => void;
+  /** Fired on blur with the committed numeric value — useful for normalising
+   * (e.g. rounding to 2 decimals) without fighting the user while they type. */
+  onBlur?: (value: number) => void;
   placeholder?: string;
   className?: string;
   label?: string;
   error?: string;
+  disabled?: boolean;
 }
 
 /** Text input that shows raw digits while focused and a thousands-formatted,
@@ -17,10 +21,12 @@ interface NumberFieldProps {
 export function NumberField({
   value,
   onChange,
+  onBlur,
   placeholder = '0.00',
   className,
   label,
   error,
+  disabled,
 }: NumberFieldProps) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
   const [focused, setFocused] = useState(false);
@@ -46,12 +52,16 @@ export function NumberField({
       value={displayValue}
       placeholder={placeholder}
       onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onBlur={() => {
+        setFocused(false);
+        onBlur?.(local === '' ? 0 : Number(local));
+      }}
       onChange={(e) => {
         const raw = e.target.value.replace(/[^0-9.]/g, '');
         setLocal(raw);
         onChange(raw === '' ? 0 : Number(raw));
       }}
+      disabled={disabled}
       className={inputClass(error, cn(label ? 'w-full' : 'w-28 py-1.5', className))}
     />
   );
@@ -59,7 +69,7 @@ export function NumberField({
   if (!label && !error) return input;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       {label && (
         <label className="block truncate text-sm font-bold text-gray-900" title={label}>
           {label}

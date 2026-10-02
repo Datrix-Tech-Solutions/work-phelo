@@ -1,10 +1,12 @@
 // Central layout spacing config — edit the px/pt/pb values here to affect the whole app.
+// Left padding is driven by --page-pl in globals.css so it can differ per module.
 //
 // Usage (template literal or cn):
 //   className={`${pageBanner} shrink-0`}
 //   className={cn(pageContent, 'other-class')}
 
-const px = 'px-4 sm:px-6 lg:px-8';
+// Left inset comes from --page-pl (globals.css): the old gutter in HR, 0 in the other modules.
+const px = 'pl-(--page-pl) pr-4 sm:pr-6 lg:pr-8';
 const ptLg = 'pt-5 sm:pt-6 lg:pt-8'; // large top padding — banner / hero sections
 const ptSm = 'pt-4 sm:pt-6'; // small top padding — breadcrumb / secondary rows
 const pbLg = 'pb-6 sm:pb-8'; // large bottom padding — main scrollable content
@@ -27,3 +29,7 @@ export const pageContent = `${px} pt-4 ${pbLg}`;
 
 // Full-page wrapper with padding on all sides (e.g. project detail layout)
 export const pageWrapper = 'p-4 sm:p-6 lg:p-8';
+
+// Responsive card grid: as many columns as fit, each card stretching to fill its column.
+// Cards placed in it should be w-full (ContactCard and DataCard are).
+export const cardGrid = 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3';

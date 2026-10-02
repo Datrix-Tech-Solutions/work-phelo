@@ -6,6 +6,7 @@ import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { useDepartment } from '@/hooks/hr/useDepartments';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
+import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { DepartmentOverview } from '@/components/molecules/hr/departments/DepartmentOverview';
@@ -25,6 +26,7 @@ export default function DepartmentDetailPage({
 
   const { data: department, isLoading } = useDepartment(id);
   const { data: employeeOptions = [] } = useEmployeeOptions();
+  const { data: branches = [] } = useBranchOptions();
 
   const managerName = (() => {
     if (!department?.managerId) return undefined;
@@ -65,6 +67,7 @@ export default function DepartmentDetailPage({
             departmentId={department.id}
             departmentName={department.name}
             managerId={department.managerId}
+            summaryMembers={department.employees}
           />
         </>
       )}
@@ -74,6 +77,7 @@ export default function DepartmentDetailPage({
           isOpen={editOpen}
           onClose={() => setEditOpen(false)}
           editTarget={editOpen ? (department ?? null) : null}
+          branches={branches}
         />
       )}
     </div>

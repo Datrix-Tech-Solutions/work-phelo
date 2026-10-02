@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -8,9 +9,20 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PlacementClaimState } from '../../../prisma/generated/client';
 import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
 export class CreatePlacementClaimDto {
+  @ApiProperty({
+    example: 'CLMFAC-260821-0001',
+    maxLength: 50,
+    description: 'User-entered claim number. Must be unique tenant-wide.',
+  })
+  @TrimmedString()
+  @IsString()
+  @MaxLength(50)
+  claimNumber!: string;
+
   @ApiProperty({
     type: String,
     format: 'date-time',
@@ -81,4 +93,14 @@ export class CreatePlacementClaimDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   finalLossAmount?: number;
+
+  @ApiPropertyOptional({
+    enum: PlacementClaimState,
+    default: PlacementClaimState.PENDING,
+    description:
+      'PENDING (default) records the claim without touching reinsurers. FINALIZED generates reinsurer liability allocations in the same transaction and requires finalLossAmount.',
+  })
+  @IsOptional()
+  @IsEnum(PlacementClaimState)
+  claimState?: PlacementClaimState;
 }

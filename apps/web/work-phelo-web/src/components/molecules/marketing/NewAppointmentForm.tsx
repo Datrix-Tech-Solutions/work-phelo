@@ -5,7 +5,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { inputClass } from '@/lib/utils';
 
 export interface NewAppointmentFields {
-  prospectName: string;
+  prospectId: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -20,6 +20,7 @@ interface Props {
   onChange: (values: NewAppointmentFields) => void;
   errors?: NewAppointmentErrors;
   prospectOptions?: SearchSelectOption[];
+  onProspectSearch?: (query: string) => void;
   managerOptions?: SearchSelectOption[];
 }
 
@@ -28,6 +29,7 @@ export function NewAppointmentForm({
   onChange,
   errors,
   prospectOptions = [],
+  onProspectSearch,
   managerOptions = [],
 }: Props) {
   function set<K extends keyof NewAppointmentFields>(key: K, val: string) {
@@ -35,14 +37,15 @@ export function NewAppointmentForm({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       <SearchSelect
         label="Prospect Name"
         placeholder="Select a prospect"
         options={prospectOptions}
-        value={values.prospectName}
-        onChange={(v) => set('prospectName', v)}
-        error={errors?.prospectName}
+        value={values.prospectId}
+        onChange={(v) => set('prospectId', v)}
+        onQueryChange={onProspectSearch}
+        error={errors?.prospectId}
       />
 
       <DatePicker
@@ -53,7 +56,7 @@ export function NewAppointmentForm({
       />
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Start Time</label>
           <input
             type="time"
@@ -63,7 +66,7 @@ export function NewAppointmentForm({
           />
           {errors?.startTime && <p className="text-xs text-red-500">{errors.startTime}</p>}
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">End Time</label>
           <input
             type="time"
@@ -84,7 +87,7 @@ export function NewAppointmentForm({
         error={errors?.manager}
       />
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">Comment</label>
         <textarea
           rows={4}

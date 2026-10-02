@@ -29,7 +29,7 @@ const YEAR_OPTIONS = Array.from({ length: currentYear - 2000 + 6 }, (_, i) => {
 /* Read-only computed field */
 function ComputedField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       <label className="text-sm font-bold text-gray-900">{label}</label>
       <div className={inputClass(undefined, 'bg-gray-50 text-gray-500 cursor-default select-none')}>
         {value || <span className="text-gray-400">—</span>}
@@ -76,10 +76,10 @@ export function ExcessOfLossFormFields({ form }: ExcessOfLossFormFieldsProps) {
       : '';
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       {/* ── Basic Information ── */}
       <FormSection title="Basic Information">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <Controller
             name="classOfBusiness"
             control={control}
@@ -268,7 +268,7 @@ export function ExcessOfLossFormFields({ form }: ExcessOfLossFormFieldsProps) {
 
       {/* ── Basis & Rating ── */}
       <FormSection title="Basis &amp; Rating">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <Controller
             name="basisOfAttachment"
             control={control}

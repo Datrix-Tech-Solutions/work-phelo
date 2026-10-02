@@ -1,24 +1,33 @@
 'use client';
 
+import { useState } from 'react';
 import { useFieldArray, useWatch, Controller, UseFormReturn } from 'react-hook-form';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { Icons } from '@/components/atoms/icons';
 import { inputClass } from '@/lib/utils';
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
-import { JournalEntryFormValues, JournalLine } from '@/types/accounting';
-import { useGLAccountOptions } from '@/hooks';
+import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
+import { CATEGORIES } from '@/components/organisms/accounting/ChartOfAccountsTree';
+import { GLAccountCategory, JournalEntryFormValues, JournalLine } from '@/types/accounting';
+import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
 
-const EMPTY_LINE: JournalLine = { targetAccount: '', description: '', debit: '', credit: '' };
+const EMPTY_LINE: JournalLine = {
+  accountClass: '',
+  targetAccount: '',
+  description: '',
+  debit: '',
+  credit: '',
+};
 
-function fmtAmount(value: number, currency: string) {
-  const n = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return currency ? `${currency} ${n}` : n;
-}
+const CLASS_OPTIONS = CATEGORIES.map((c) => ({ value: c.value, label: c.label }));
 
 interface JournalLinesSectionProps {
   form: UseFormReturn<JournalEntryFormValues>;
+  /** Restricts the Account Class choices (e.g. opening balances are balance sheet only). */
+  allowedClasses?: GLAccountCategory[];
 }
 
-export function JournalLinesSection({ form }: JournalLinesSectionProps) {
+export function JournalLinesSection({ form, allowedClasses }: JournalLinesSectionProps) {
   const {
     register,
     control,
@@ -26,18 +35,52 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
   } = form;
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
 
-  const lines = useWatch({ control, name: 'lines' });
-  const currency = useWatch({ control, name: 'currency' });
-  const { options: accountOptions, isLoading: isLoadingAccounts } = useGLAccountOptions();
+  const [createAccountForIndex, setCreateAccountForIndex] = useState<number | null>(null);
+  const [createAccountQuery, setCreateAccountQuery] = useState('');
 
-  const debitTotal = (lines ?? []).reduce((sum, l) => sum + (Number(l?.debit) || 0), 0);
-  const creditTotal = (lines ?? []).reduce((sum, l) => sum + (Number(l?.credit) || 0), 0);
+  const lines = useWatch({ control, name: 'lines' });
+  const { data: glAccounts = [], isLoading: isLoadingAccounts } = useGLAccounts({
+    status: 'ACTIVE',
+  });
+  const postingAccounts = glAccounts.filter((a) => a.allowPosting);
+  const optionsFor = (accountClass: string) =>
+    postingAccounts
+      .filter((a) => !accountClass || a.category === accountClass)
+      .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` }));
 
   const columns: InlineTableColumn[] = [
     {
+      key: 'accountClass',
+      label: 'Account Class',
+      width: '200px',
+      renderField: (index) => (
+        <Controller
+          name={`lines.${index}.accountClass`}
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              placeholder="Select class…"
+              options={
+                allowedClasses
+                  ? CLASS_OPTIONS.filter((o) => allowedClasses.includes(o.value))
+                  : CLASS_OPTIONS
+              }
+              value={field.value}
+              onChange={(value) => {
+                field.onChange(value);
+                // The chosen account may not belong to the new class
+                form.setValue(`lines.${index}.targetAccount`, '');
+              }}
+              size="sm"
+            />
+          )}
+        />
+      ),
+    },
+    {
       key: 'targetAccount',
-      label: 'Target Account',
-      width: '2fr',
+      label: 'Account',
+      width: 'minmax(100px,0.8fr)',
       renderField: (index) => {
         const err = errors.lines?.[index]?.targetAccount;
         return (
@@ -48,11 +91,33 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
             render={({ field }) => (
               <SearchSelect
                 placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
-                options={accountOptions}
+                options={optionsFor(lines?.[index]?.accountClass ?? '')}
                 value={field.value}
-                onChange={field.onChange}
+                onChange={(value) => {
+                  field.onChange(value);
+                  // Keep the class in sync when the account is picked directly
+                  const picked = postingAccounts.find((a) => a.id === value);
+                  if (picked) form.setValue(`lines.${index}.accountClass`, picked.category);
+                }}
                 error={err?.message}
                 size="sm"
+                emptyState={({ query, close }) => (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setCreateAccountQuery(query);
+                      setCreateAccountForIndex(index);
+                      close();
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-sm text-left text-brand hover:bg-gray-300 transition-colors"
+                  >
+                    <Icons.Plus className="w-4 h-4 shrink-0" />
+                    <span>
+                      No account found — <span className="font-semibold">Create account</span>
+                    </span>
+                  </button>
+                )}
               />
             )}
           />
@@ -62,7 +127,7 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
     {
       key: 'description',
       label: 'Description',
-      width: '2fr',
+      width: 'minmax(150px,1fr)',
       renderField: (index) => (
         <input
           {...register(`lines.${index}.description`)}
@@ -74,7 +139,7 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
     {
       key: 'debit',
       label: 'Debit',
-      width: '140px',
+      width: '100px',
       align: 'right',
       renderField: (index) => {
         const err = errors.lines?.[index]?.debit;
@@ -89,12 +154,11 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
           />
         );
       },
-      renderFooter: () => fmtAmount(debitTotal, currency),
     },
     {
       key: 'credit',
       label: 'Credit',
-      width: '140px',
+      width: '100px',
       align: 'right',
       renderField: (index) => {
         const err = errors.lines?.[index]?.credit;
@@ -109,18 +173,31 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
           />
         );
       },
-      renderFooter: () => fmtAmount(creditTotal, currency),
     },
   ];
 
   return (
-    <InlineTable
-      title="Journal Lines"
-      addLabel="Add Line"
-      columns={columns}
-      fieldIds={fields.map((f) => f.id)}
-      onAddRow={() => append({ ...EMPTY_LINE })}
-      onRemoveRow={(index) => remove(index)}
-    />
+    <>
+      <InlineTable
+        title="Journal Lines"
+        compact
+        addLabel="Add Line"
+        columns={columns}
+        fieldIds={fields.map((f) => f.id)}
+        onAddRow={() => append({ ...EMPTY_LINE })}
+        onRemoveRow={(index) => remove(index)}
+      />
+
+      <AddLeafAccountPanel
+        isOpen={createAccountForIndex !== null}
+        onClose={() => setCreateAccountForIndex(null)}
+        initialName={createAccountQuery}
+        onCreated={(account) => {
+          if (createAccountForIndex === null) return;
+          form.setValue(`lines.${createAccountForIndex}.accountClass`, account.category);
+          form.setValue(`lines.${createAccountForIndex}.targetAccount`, account.id);
+        }}
+      />
+    </>
   );
 }

@@ -3,8 +3,6 @@
 import { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { useQueries } from '@tanstack/react-query';
-import { api } from '@/lib/api';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
@@ -18,31 +16,45 @@ import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/
 import { PartialEditFacultativePanel } from '@/components/organisms/reinsurance/panels/PartialEditFacultativePanel';
 import { RenewFacultativePanel } from '@/components/organisms/reinsurance/panels/RenewFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
-import { Facultative, PlacementEndorsement, PlacementPayment } from '@/types/reinsurance';
+import { Facultative, FacultativeStatus } from '@/types/reinsurance';
 import {
-  endorsementKey,
-  fetchPlacementFinancialPosition,
-  placementFinancialPositionKey,
-  useArchivedFacultatives,
   useDeleteFacultative,
-  useFacultatives,
+  useFacultativesPage,
   useForceCloseFacultative,
-  usePlacementFinancialPosition,
   useRestoreFacultative,
   useCurrentTenantUsers,
+  usePaymentsWorklist,
+  useFacultativeRowState,
 } from '@/hooks';
 import { TenantUser } from '@/types/tenant';
 import { displayPolicyNumber } from '@/lib/reinsurance/policyNumber';
 import {
   acceptedPercentFor,
+  CedantPaymentStatus as PaymentStatus,
   facultativeStatusLabel,
   isEffectivelyClosed,
   RAW_STATUS_VARIANT_MAP,
 } from '@/lib/reinsurance/placementStatus';
 import { useToast } from '@/hooks/useToast';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
+
+const OPEN_PLACEMENT_STATUSES: FacultativeStatus[] = [
+  'DRAFT',
+  'MARKETING',
+  'PARTIALLY_PLACED',
+  'PLACED',
+];
+
+const CLOSED_PLACEMENT_STATUSES: FacultativeStatus[] = [
+  'CLOSING',
+  'CLOSED',
+  'DECLINED',
+  'CANCELLED',
+];
 
 function displayUserName(user: Pick<TenantUser, 'firstName' | 'lastName' | 'email'>): string {
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
@@ -63,6 +75,7 @@ function fmtDateTime(value: string | null) {
 }
 const CLOSING_PAYMENT_FILTER_OPTIONS = [
   { value: 'Outstanding', label: 'Outstanding' },
+  { value: 'Pending', label: 'Pending' },
   { value: 'Part Payment', label: 'Part Payment' },
   { value: 'Paid', label: 'Paid' },
 ];
@@ -71,13 +84,11 @@ const PLACEMENTS_FILTER_OPTIONS = [
   { value: 'DRAFT', label: 'Draft' },
   { value: 'MARKETING', label: 'On Market' },
   { value: 'PARTIALLY_PLACED', label: 'Partially Placed' },
-  // { value: 'PLACED', label: 'Placed' },
-  { value: 'CLOSING', label: 'Partially Closed' },
+  { value: 'PLACED', label: 'Placed' },
   ...CLOSING_PAYMENT_FILTER_OPTIONS,
 ];
 
 const CLOSING_STATUS_FILTER_OPTIONS = [
-  { value: 'PLACED', label: 'Placed' },
   { value: 'CLOSING', label: 'Partially Closed' },
   { value: 'CLOSED', label: 'Closed' },
   { value: 'DECLINED', label: 'Declined' },
@@ -89,30 +100,35 @@ const CLOSING_FILTER_OPTIONS = [
   ...CLOSING_PAYMENT_FILTER_OPTIONS,
 ];
 
-type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
+const RAW_STATUS_OPTIONS = new Set<string>([
+  'DRAFT',
+  'MARKETING',
+  'PARTIALLY_PLACED',
+  'PLACED',
+  'CLOSING',
+  'CLOSED',
+  'DECLINED',
+  'CANCELLED',
+]);
+
+function rawStatusFilter(value: string): FacultativeStatus | undefined {
+  return RAW_STATUS_OPTIONS.has(value) ? (value as FacultativeStatus) : undefined;
+}
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-[10px] text-gray-400',
+  Pending: 'text-[10px] text-amber-600 font-medium',
   'Part Payment': 'text-[10px] text-yellow-600 font-medium',
   Paid: 'text-[10px] text-green-600 font-medium',
 };
 
-/** Derives Outstanding/Part Payment/Paid from the same authoritative financial-position
- *  figures the Premiums page and placement Details page use — keeps all three surfaces
- *  agreeing on payment status instead of each recomputing net premium/paid differently. */
-function statusFromPosition(due: number, paid: number, outstanding: number): PaymentStatus {
-  if (due > 0 && outstanding <= 0.0001) return 'Paid';
-  if (paid > 0) return 'Part Payment';
-  return 'Outstanding';
-}
-
-function PaymentStatusCell({ placement }: { placement: Facultative }) {
-  const { data: position } = usePlacementFinancialPosition(placement.id);
-  const due = position?.cedant.currentObligation ?? 0;
-  const paid = position?.cedant.netSettled ?? 0;
-  const outstanding = position?.cedant.outstanding ?? 0;
-  const paymentStatus = statusFromPosition(due, paid, outstanding);
-
+function PaymentStatusCell({
+  placement,
+  paymentStatus,
+}: {
+  placement: Facultative;
+  paymentStatus: PaymentStatus;
+}) {
   return (
     <div className="flex flex-col gap-1">
       <Badge
@@ -123,6 +139,28 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
     </div>
   );
 }
+
+// Closing tab only: when the offer was created.
+const OFFER_DATE_COLUMN: Column<Facultative> = {
+  key: 'createdAt',
+  label: 'Offer Date',
+  width: '90px',
+  render: (row) => (
+    <span className="font-semibold text-gray-700">{fmtDateTime(row.createdAt)}</span>
+  ),
+};
+
+const SUM_INSURED_COLUMN: Column<Facultative> = {
+  key: 'sumInsured',
+  label: '100% Sum Insured',
+  width: '150px',
+  className: 'text-right',
+  render: (row) => (
+    <span className="font-semibold text-gray-900">
+      {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
+    </span>
+  ),
+};
 
 const COLUMNS: Column<Facultative>[] = [
   {
@@ -148,7 +186,20 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'cedant',
     label: 'Cedant',
     width: 'minmax(120px, 0.8fr)',
-    render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
+    render: (row) => <span className="font-bold text-gray-700">{row.cedant.name}</span>,
+  },
+
+  SUM_INSURED_COLUMN,
+  {
+    key: 'premium',
+    label: '100% Premium',
+    width: '100px',
+    className: 'text-right',
+    render: (row) => (
+      <span className="font-semibold text-gray-900">
+        {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
+      </span>
+    ),
   },
   {
     key: 'facultativeOffer',
@@ -162,21 +213,11 @@ const COLUMNS: Column<Facultative>[] = [
       </div>
     ),
   },
-  {
-    key: 'premium',
-    label: 'Fac Premium',
-    width: '100px',
-    render: (row) => (
-      <span className="font-semibold text-gray-900">
-        {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
-      </span>
-    ),
-  },
+
   {
     key: 'totalAcceptedPercent',
     label: 'Signing Progress',
-    width: '140px',
-    className: 'pr-6',
+    width: '150px',
     render: (row) => {
       const facOffer = row.facultativeOffer ?? 0;
       const closedPercent = acceptedPercentFor(row);
@@ -197,7 +238,6 @@ const COLUMNS: Column<Facultative>[] = [
       );
     },
   },
-
   {
     key: 'participants' as keyof Facultative,
     label: 'Participants',
@@ -221,20 +261,25 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'status',
     label: 'Status',
     width: '100px',
-    render: (row) => <PaymentStatusCell placement={row} />,
   },
 ];
 
-const SUM_INSURED_COLUMN: Column<Facultative> = {
-  key: 'sumInsured',
-  label: '100% Sum Insured',
-  width: '150px',
-  className: 'pr-6',
-  render: (row) => (
-    <span className="font-semibold text-gray-900">
-      {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
-    </span>
-  ),
+// Closing tab: participants are frozen once closed, so the total is redundant noise —
+// just show how many accepted.
+const CLOSED_PARTICIPANTS_COLUMN: Column<Facultative> = {
+  key: 'participants' as keyof Facultative,
+  label: 'Participants',
+  width: '90px',
+  render: (row) => {
+    const closed =
+      row.participants?.filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED').length ?? 0;
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-semibold text-gray-900">{closed}</span>
+        <span className="text-xs text-gray-400">Accepted</span>
+      </div>
+    );
+  },
 };
 
 export function FacultativeTable({
@@ -245,6 +290,15 @@ export function FacultativeTable({
   const toast = useToast();
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+
+  const canCreateOffer = useAnyPermissionRules(RiPerm.createOffer);
+  const canEditOffer = useAnyPermissionRules(RiPerm.editOffer);
+  const canPartialEdit = useAnyPermissionRules(RiPerm.partialEdit);
+  const canReopenOffer = useAnyPermissionRules(RiPerm.reopenOffer);
+  const canForceCloseOffer = useAnyPermissionRules(RiPerm.forceClose);
+  const canEndorseOffer = useAnyPermissionRules(RiPerm.endorseOffer);
+  const canArchiveOffer = useAnyPermissionRules(RiPerm.archiveOffer);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -261,9 +315,19 @@ export function FacultativeTable({
   const [archiveReason, setArchiveReason] = useState('');
   const [forceCloseTarget, setForceCloseTarget] = useState<Facultative | null>(null);
 
-  const { data: activeRows = [], isLoading: loadingActive } = useFacultatives();
-  const { data: archivedRows = [], isLoading: loadingArchived } = useArchivedFacultatives({
-    enabled: tab === 'archived',
+  const serverStatusFilter = rawStatusFilter(statusFilter);
+  const placementsPage = useFacultativesPage({
+    page,
+    limit: PAGE_SIZE,
+    search,
+    archived: tab === 'archived',
+    status: serverStatusFilter,
+    statuses:
+      !serverStatusFilter && tab === 'placements'
+        ? OPEN_PLACEMENT_STATUSES
+        : !serverStatusFilter && tab === 'closing'
+          ? CLOSED_PLACEMENT_STATUSES
+          : undefined,
   });
   const { data: tenantUsers = [] } = useCurrentTenantUsers({ enabled: tab === 'archived' });
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
@@ -272,40 +336,39 @@ export function FacultativeTable({
     forceCloseTarget?.id ?? '',
   );
 
-  const allRows = tab === 'archived' ? archivedRows : activeRows;
-  const isLoading = tab === 'archived' ? loadingArchived : loadingActive;
+  const allRows = useMemo(() => placementsPage.data?.items ?? [], [placementsPage.data?.items]);
+  const isLoading = placementsPage.isLoading;
 
-  const closingRows = useMemo(() => allRows.filter(isEffectivelyClosed), [allRows]);
+  const closingRows = useMemo(() => (tab === 'closing' ? allRows : []), [allRows, tab]);
 
-  const positionQueries = useQueries({
-    queries:
-      tab === 'closing'
-        ? closingRows.map((row) => ({
-            queryKey: placementFinancialPositionKey(row.id),
-            queryFn: () => fetchPlacementFinancialPosition(row.id),
-          }))
-        : [],
-  });
+  const closingPlacementIds = useMemo(() => closingRows.map((row) => row.id), [closingRows]);
+
+  const closingPaymentsWorkList = usePaymentsWorklist(
+    {
+      page: 1,
+      limit: PAGE_SIZE,
+      placementIds: closingPlacementIds,
+    },
+    {
+      enabled: tab === 'closing' && closingPlacementIds.length > 0,
+    },
+  );
 
   const paymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
-    closingRows.forEach((row, i) => {
-      const position = positionQueries[i]?.data;
-      const due = position?.cedant.currentObligation ?? 0;
-      const paid = position?.cedant.netSettled ?? 0;
-      const outstanding = position?.cedant.outstanding ?? 0;
-      map.set(row.id, statusFromPosition(due, paid, outstanding));
+
+    closingRows.forEach((row) => {
+      map.set(row.id, 'Outstanding');
     });
+
+    for (const row of closingPaymentsWorkList.data?.items ?? []) {
+      map.set(row.placementId, row.paymentStatus);
+    }
     return map;
-  }, [closingRows, positionQueries]);
+  }, [closingRows, closingPaymentsWorkList.data?.items]);
 
   const filtered = useMemo(() => {
     let rows = allRows;
-    if (tab !== 'archived') {
-      rows = rows.filter((r) =>
-        tab === 'closing' ? isEffectivelyClosed(r) : !isEffectivelyClosed(r),
-      );
-    }
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -351,90 +414,69 @@ export function FacultativeTable({
     );
   }, [filtered, tab]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, placementsPage.data?.meta.totalPages ?? 1);
+  const paged = sorted;
+  const visiblePlacementIds = useMemo(
+    () => (tab === 'archived' ? [] : paged.map((row) => row.id)),
+    [paged, tab],
+  );
 
-  // Placements tab: only the current page needs a paid/unpaid check, just to swap
-  // Edit Offer for Partial Edit once a payment exists — no filtering depends on this.
-  const openPaymentQueries = useQueries({
-    queries:
-      tab === 'placements'
-        ? paged.map((row) => ({
-            queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
-            queryFn: async () => {
-              const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
-              return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-            },
-          }))
-        : [],
+  const facultativeRowState = useFacultativeRowState(visiblePlacementIds, {
+    enabled: tab !== 'archived' && visiblePlacementIds.length > 0,
   });
+
+  const rowStateByPlacementId = useMemo(
+    () => new Map((facultativeRowState.data?.items ?? []).map((item) => [item.placementId, item])),
+    [facultativeRowState.data?.items],
+  );
 
   const hasPaymentMap = useMemo(() => {
     const map = new Map<string, boolean>();
-    if (tab !== 'placements') return map;
-    paged.forEach((row, i) => {
-      const payments = openPaymentQueries[i]?.data ?? [];
-      map.set(
-        row.id,
-        payments.some((p) => p.status === 'RECORDED'),
-      );
-    });
-    return map;
-  }, [paged, openPaymentQueries, tab]);
 
-  const openPositionQueries = useQueries({
-    queries:
-      tab === 'placements'
-        ? paged.map((row) => ({
-            queryKey: placementFinancialPositionKey(row.id),
-            queryFn: () => fetchPlacementFinancialPosition(row.id),
-          }))
-        : [],
-  });
+    if (tab !== 'placements') return map;
+
+    for (const row of paged) {
+      map.set(row.id, rowStateByPlacementId.get(row.id)?.hasRecordedPayment ?? false);
+    }
+
+    return map;
+  }, [paged, rowStateByPlacementId, tab]);
 
   const openPaymentStatusMap = useMemo(() => {
     const map = new Map<string, PaymentStatus>();
-    if (tab !== 'placements') return map;
-    paged.forEach((row, i) => {
-      const position = openPositionQueries[i]?.data;
-      const due = position?.cedant.currentObligation ?? 0;
-      const paid = position?.cedant.netSettled ?? 0;
-      const outstanding = position?.cedant.outstanding ?? 0;
-      map.set(row.id, statusFromPosition(due, paid, outstanding));
-    });
-    return map;
-  }, [paged, openPositionQueries, tab]);
 
-  // Reopen Offer is only valid once no endorsement has been made on the placement —
-  // reopening after an endorsement would let the original offer diverge from what's
-  // since been endorsed. Excludes VOID endorsements, same as EndorsedReferencePill.
-  const endorsementQueries = useQueries({
-    queries:
-      tab === 'archived'
-        ? []
-        : paged.map((row) => ({
-            queryKey: endorsementKey(row.id),
-            queryFn: async () => {
-              const res = await api.get(
-                `/operations/reinsurance/placements/${row.id}/endorsements`,
-              );
-              return (res.data?.items ?? res.data ?? []) as PlacementEndorsement[];
-            },
-          })),
-  });
+    if (tab !== 'placements') return map;
+
+    for (const row of paged) {
+      map.set(row.id, rowStateByPlacementId.get(row.id)?.paymentStatus ?? 'Outstanding');
+    }
+
+    return map;
+  }, [paged, rowStateByPlacementId, tab]);
 
   const hasEndorsementMap = useMemo(() => {
     const map = new Map<string, boolean>();
+
     if (tab === 'archived') return map;
-    paged.forEach((row, i) => {
-      const endorsements = endorsementQueries[i]?.data ?? [];
-      map.set(
-        row.id,
-        endorsements.some((e) => e.status !== 'VOID'),
-      );
-    });
+
+    for (const row of paged) {
+      map.set(row.id, rowStateByPlacementId.get(row.id)?.hasNonVoidEndorsement ?? false);
+    }
+
     return map;
-  }, [paged, endorsementQueries, tab]);
+  }, [paged, rowStateByPlacementId, tab]);
+
+  const endorsementCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+
+    if (tab === 'archived') return map;
+
+    for (const row of paged) {
+      map.set(row.id, rowStateByPlacementId.get(row.id)?.nonVoidEndorsementCount ?? 0);
+    }
+
+    return map;
+  }, [paged, rowStateByPlacementId, tab]);
 
   const columns = useMemo<Column<Facultative>[]>(() => {
     const userNameById = new Map(
@@ -445,14 +487,111 @@ export function FacultativeTable({
     );
     const actorName = (userId: string | null) =>
       userId ? (userNameById.get(userId) ?? 'Unknown user') : 'Unknown user';
+    const effectiveTermsFor = (placementId: string) =>
+      tab === 'archived' ? undefined : rowStateByPlacementId.get(placementId);
+
+    const columnsWithRowState = COLUMNS.map((col) => {
+      if (tab === 'archived') return col;
+
+      if (col.key === 'reference') {
+        return {
+          ...col,
+          render: (row: Facultative) => (
+            <EndorsedReferencePill
+              id={row.id}
+              reference={displayPolicyNumber(row.policyNumber)}
+              endorsementCount={endorsementCountMap.get(row.id) ?? 0}
+            />
+          ),
+        };
+      }
+
+      if (col.key === 'sumInsured') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value = effectiveTermsFor(row.id)?.effectiveSumInsured ?? row.sumInsured;
+            return (
+              <span className="font-semibold text-gray-900">
+                {value != null ? `${row.currency ?? ''} ${fmtAmount(value)}` : '—'}
+              </span>
+            );
+          },
+        };
+      }
+
+      if (col.key === 'premium') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value = effectiveTermsFor(row.id)?.effectivePremium ?? row.premium;
+            return (
+              <span className="font-semibold text-gray-900">
+                {value != null ? `${row.currency ?? ''} ${fmtAmount(value)}` : '—'}
+              </span>
+            );
+          },
+        };
+      }
+
+      if (col.key === 'facultativeOffer') {
+        return {
+          ...col,
+          render: (row: Facultative) => {
+            const value =
+              effectiveTermsFor(row.id)?.effectiveFacultativeOfferPercent ?? row.facultativeOffer;
+            return (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-semibold text-gray-900">
+                  {value != null ? `${value}%` : '—'}
+                </span>
+              </div>
+            );
+          },
+        };
+      }
+
+      return col;
+    });
 
     if (tab === 'closing') {
-      return COLUMNS.map((col) => (col.key === 'totalAcceptedPercent' ? SUM_INSURED_COLUMN : col));
+      // Signing Progress is dropped for closed placements; 100% Sum Insured (from COLUMNS) stays.
+      return columnsWithRowState
+        .filter((col) => col.key !== 'totalAcceptedPercent')
+        .flatMap((col) => {
+          if (col.key === 'participants') return [CLOSED_PARTICIPANTS_COLUMN];
+
+          if (col.key === 'status') {
+            return [
+              OFFER_DATE_COLUMN,
+              {
+                ...col,
+                render: (row: Facultative) => (
+                  <PaymentStatusCell
+                    placement={row}
+                    paymentStatus={paymentStatusMap.get(row.id) ?? 'Outstanding'}
+                  />
+                ),
+              },
+            ];
+          }
+
+          return [col];
+        });
+    }
+
+    if (tab === 'placements') {
+      return columnsWithRowState.filter((col) => col.key !== 'status');
     }
 
     if (tab !== 'archived') return COLUMNS;
 
-    const ARCHIVED_HIDDEN_KEYS = new Set(['totalAcceptedPercent', 'participants', 'status']);
+    const ARCHIVED_HIDDEN_KEYS = new Set([
+      'sumInsured',
+      'totalAcceptedPercent',
+      'participants',
+      'status',
+    ]);
 
     return [
       ...COLUMNS.filter((col) => !ARCHIVED_HIDDEN_KEYS.has(col.key as string)),
@@ -486,7 +625,7 @@ export function FacultativeTable({
         ),
       },
     ];
-  }, [tab, tenantUsers]);
+  }, [tab, tenantUsers, paymentStatusMap, endorsementCountMap, rowStateByPlacementId]);
 
   const closeArchiveModal = () => {
     setArchiveTarget(null);
@@ -544,25 +683,27 @@ export function FacultativeTable({
     // Renewing only makes sense once an offer has left the draft/open stages; endorsing only
     // applies to an offer that has actually closed (a policy is in force to amend).
     const rowIsClosed = isEffectivelyClosed(row);
-    const renewAction: RowAction | null = rowIsClosed
-      ? { label: 'Renew Offer', onClick: () => setRenewTarget(row), variant: 'success' }
-      : null;
+    const renewAction: RowAction | null =
+      rowIsClosed && canCreateOffer
+        ? { label: 'Renew Offer', onClick: () => setRenewTarget(row), variant: 'success' }
+        : null;
     const endorseAction: RowAction | null =
-      row.status === 'CLOSED'
+      row.status === 'CLOSED' && canEndorseOffer
         ? { label: 'Endorse Policy', onClick: () => setEndorseTarget(row) }
         : null;
 
     if (tab === 'closing' && row.status !== 'DECLINED' && row.status !== 'CANCELLED') {
       const paymentStatus = paymentStatusMap.get(row.id) ?? 'Outstanding';
-      const partialEditAction: RowAction = {
-        label: 'Partial Edit',
-        onClick: () => setPartialEditTarget(row),
-      };
+      const partialEditAction: RowAction | null = canPartialEdit
+        ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
+        : null;
 
-      if (paymentStatus === 'Paid' || paymentStatus === 'Part Payment') {
+      // Anything other than a clean 'Outstanding' (Pending, Part Payment, or Paid) means money
+      // has moved or is in flight — Reopen/Archive only make sense while nothing has happened yet.
+      if (paymentStatus !== 'Outstanding') {
         return [
           { label: 'View Offer', onClick: () => router.push(detailUrl) },
-          partialEditAction,
+          ...(partialEditAction ? [partialEditAction] : []),
           ...(endorseAction ? [endorseAction] : []),
           ...(renewAction ? [renewAction] : []),
         ];
@@ -572,9 +713,13 @@ export function FacultativeTable({
 
       return [
         { label: 'View Offer Details', onClick: () => router.push(detailUrl) },
-        ...(hasEndorsement ? [] : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
-        partialEditAction,
-        { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
+        ...(hasEndorsement || !canReopenOffer
+          ? []
+          : [{ label: 'Reopen Offer', onClick: () => setReopenTarget(row) }]),
+        ...(partialEditAction ? [partialEditAction] : []),
+        ...(canArchiveOffer
+          ? [{ label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }]
+          : []),
         ...(endorseAction ? [endorseAction] : []),
         ...(renewAction ? [renewAction] : []),
       ];
@@ -586,27 +731,32 @@ export function FacultativeTable({
       const isPartiallyClosed = row.status === 'PARTIALLY_PLACED' || row.status === 'CLOSING';
       const hasEndorsement = hasEndorsementMap.get(row.id) ?? false;
       const forceCloseAction: RowAction | null =
-        row.status === 'CLOSING'
+        row.status === 'CLOSING' && canForceCloseOffer
           ? { label: 'Force Close', onClick: () => setForceCloseTarget(row), danger: true }
           : null;
-      const archiveAction: RowAction | null = canArchive
-        ? { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }
-        : null;
+      const archiveAction: RowAction | null =
+        canArchive && canArchiveOffer
+          ? { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }
+          : null;
       const reopenAction: RowAction | null =
-        isPartiallyClosed && !hasEndorsement
+        isPartiallyClosed && !hasEndorsement && canReopenOffer
           ? { label: 'Reopen Offer', onClick: () => setReopenTarget(row) }
           : null;
-      const editAction: RowAction =
-        isPartiallyClosed || hasPaymentMap.get(row.id)
+      const wantsPartialEdit = isPartiallyClosed || !!hasPaymentMap.get(row.id);
+      const editAction: RowAction | null = wantsPartialEdit
+        ? canPartialEdit
           ? { label: 'Partial Edit', onClick: () => setPartialEditTarget(row) }
-          : { label: 'Edit Offer', onClick: () => setEditTarget(row) };
+          : null
+        : canEditOffer
+          ? { label: 'Edit Offer', onClick: () => setEditTarget(row) }
+          : null;
 
       // Rows in this tab are, by definition, not yet effectively closed (draft/open statuses),
       // so neither Renew nor Endorse Policy applies here.
       return [
         { label: 'View Offer', onClick: () => router.push(detailUrl) },
         ...(reopenAction ? [reopenAction] : []),
-        editAction,
+        ...(editAction ? [editAction] : []),
         ...(forceCloseAction ? [forceCloseAction] : []),
         ...(archiveAction ? [archiveAction] : []),
       ];
@@ -617,8 +767,8 @@ export function FacultativeTable({
 
     return [
       { label: 'View', onClick: () => router.push(detailUrl) },
-      { label: 'Edit Slip', onClick: () => setEditTarget(row) },
-      ...(canArchiveFallback
+      ...(canEditOffer ? [{ label: 'Edit Slip', onClick: () => setEditTarget(row) }] : []),
+      ...(canArchiveFallback && canArchiveOffer
         ? [{ label: 'Archive', onClick: () => setArchiveTarget(row), danger: true }]
         : []),
       ...(endorseAction ? [endorseAction] : []),
@@ -686,7 +836,7 @@ export function FacultativeTable({
           )
         }
         actionButton={
-          tab === 'placements'
+          tab === 'placements' && canCreateOffer
             ? { label: 'New Offer', onClick: () => setPanelOpen(true) }
             : undefined
         }

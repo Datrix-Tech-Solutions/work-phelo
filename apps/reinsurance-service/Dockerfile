@@ -12,9 +12,17 @@ RUN npm run build --workspace=packages/config
 RUN npm run build --workspace=apps/reinsurance-service
 
 FROM node:20-alpine AS runner
-RUN apk add --no-cache openssl
+RUN apk add --no-cache \
+    ca-certificates \
+    chromium \
+    freetype \
+    harfbuzz \
+    nss \
+    openssl \
+    ttf-freefont
 WORKDIR /app
 ENV NODE_ENV=production
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/package-lock.json ./
 COPY --from=builder /app/packages/types/package.json ./packages/types/

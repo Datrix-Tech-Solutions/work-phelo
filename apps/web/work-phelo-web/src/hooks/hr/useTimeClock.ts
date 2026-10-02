@@ -260,7 +260,7 @@ export function useAttendanceRecords(params: {
   });
 }
 
-export function useCorrectionRequests(status?: string) {
+export function useCorrectionRequests(status?: string, options?: { enabled?: boolean }) {
   return useQuery<CorrectionRequest[]>({
     queryKey: ['timeclock', 'corrections', status ?? 'all'],
     queryFn: async () => {
@@ -271,6 +271,7 @@ export function useCorrectionRequests(status?: string) {
       const requests = Array.isArray(raw) ? raw : (raw?.data ?? []);
       return requests.map(transformCorrectionRequest);
     },
+    enabled: options?.enabled,
   });
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -10,29 +10,110 @@ import {
   AddPaymentFormValues,
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
-import { useFacultatives, useCreatePlacementPayment, useFacultativePlacement } from '@/hooks';
+import {
+  useCreatePlacementPayment,
+  useConfirmPlacementPaymentBank,
+  useFacultativePlacement,
+  useReversePayment,
+} from '@/hooks';
 import { fetchPlacementFinancialPosition } from '@/hooks/reinsurance/usePayments';
+import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
+import { RiPerm } from '@/lib/reinsurance/permissions';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
 
+/**
+ * Rebuilds the form values for an existing premium payment so the panel opens pre-filled.
+ * Inverts the mapping {@link AddPaymentForm}'s onSubmit applies when recording a payment
+ * (reference = "cheque no. — bank", notes prefixed with the settlement kind, and — for
+ * cross-currency receipts — `amount` booked in the obligation currency at `agreedExchangeRate`).
+ */
+function editDefaults(payment: PlacementPayment): AddPaymentFormValues {
+  const isCheque = payment.settlementMethod === 'CHEQUE';
+  const isCrossCurrency =
+    !!payment.settlementCurrency && payment.settlementCurrency !== payment.currency;
+  const rate =
+    isCrossCurrency && payment.agreedExchangeRate && parseFloat(payment.agreedExchangeRate) > 0
+      ? parseFloat(payment.agreedExchangeRate)
+      : 1;
+  // `payment.amount` is booked in the obligation currency; the figure the amount field shows
+  // is the money the cedant actually moved, i.e. amount × rate in the settlement currency.
+  const movedAmount = (parseFloat(payment.amount) || 0) * rate;
+
+  const refParts = (payment.reference ?? '').split(' — ');
+  const chequeNumber = isCheque ? (refParts[0] ?? '') : '';
+  const bankName = isCheque ? refParts.slice(1).join(' — ') : (payment.reference ?? '');
+
+  const noteLabel = isCheque ? 'Cheque payment' : 'Bank transfer';
+  const rawNotes = payment.notes ?? '';
+  const notes =
+    rawNotes === noteLabel
+      ? ''
+      : rawNotes.startsWith(`${noteLabel} — `)
+        ? rawNotes.slice(noteLabel.length + 3)
+        : rawNotes;
+
+  const date = payment.paymentDate.slice(0, 10);
+
+  return {
+    ...ADD_PAYMENT_DEFAULTS,
+    cedantId: payment.counterpartyId,
+    businessIds: [payment.placementId],
+    paymentType: isCheque ? 'cheque' : 'bank_transfer',
+    chequeNumber,
+    valueDate: isCheque ? date : '',
+    paymentDate: isCheque ? '' : date,
+    amount: movedAmount ? String(Math.round(movedAmount * 100) / 100) : '',
+    bankName,
+    currency: isCrossCurrency ? (payment.settlementCurrency as string) : payment.currency,
+    rate: isCrossCurrency ? String(rate) : '',
+    notes,
+  };
+}
+
 interface AddPaymentFormProps {
   placementId?: string;
+  /** When set, the panel becomes an editor for this premium payment: it opens pre-filled and,
+   *  on submit, reverses this payment before recording the corrected one. */
+  editPayment?: PlacementPayment | null;
+  /** Pre-selects this cedant when the panel opens (e.g. the table's active cedant filter).
+   *  Ignored when `placementId` is set, since that already locks a single cedant + business. */
+  defaultCedantId?: string;
   onPaymentRecorded?: (amount: number) => void;
   onAllocationsRecorded?: (allocations: Record<string, number>) => void;
   onPlacementsChange?: (placementIds: string[]) => void;
+  onPlacementsResolved?: (placements: Facultative[]) => void;
   defaultOpen?: boolean;
+  /** Externally controlled open state — when provided, this component stops rendering its own
+   *  "Receive Cedant Premium" trigger button and open/close is owned entirely by the caller
+   *  (e.g. a table that already has its own action button for this and just wants the side
+   *  panel to open in place instead of navigating to a separate page). */
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export default function AddPaymentForm({
   placementId,
+  editPayment,
+  defaultCedantId,
   onPaymentRecorded,
   onAllocationsRecorded,
   onPlacementsChange,
+  onPlacementsResolved,
   defaultOpen = false,
+  isOpen,
+  onClose,
 }: AddPaymentFormProps) {
-  const [panelOpen, setPanelOpen] = useState(defaultOpen);
+  const isControlled = isOpen !== undefined;
+  const canAddPayment = useAnyPermissionRules(RiPerm.addPayment);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const panelOpen = isControlled ? isOpen : internalOpen;
+  const closePanel = () => {
+    if (isControlled) onClose?.();
+    else setInternalOpen(false);
+  };
   const [receiptPrompt, setReceiptPrompt] = useState<{
     payment: PlacementPayment;
     placement: Facultative;
@@ -42,20 +123,59 @@ export default function AddPaymentForm({
     placement: Facultative;
   } | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [resolvedPlacements, setResolvedPlacements] = useState<Facultative[]>([]);
 
-  const { data: facultatives = [] } = useFacultatives();
   const { data: singlePlacement } = useFacultativePlacement(placementId ?? '');
   const createPayment = useCreatePlacementPayment();
+  const confirmPaymentBank = useConfirmPlacementPaymentBank();
+  const reversePayment = useReversePayment();
   const addToast = useToastStore((s) => s.addToast);
+
+  const isEditing = !!editPayment;
+  const successMessage = isEditing
+    ? 'Premium payment updated successfully'
+    : 'Payment recorded successfully';
 
   const form = useForm<AddPaymentFormValues>({ defaultValues: ADD_PAYMENT_DEFAULTS });
   const {
     handleSubmit,
+    setValue,
+    reset,
     formState: { isSubmitting },
   } = form;
 
+  // Pre-fill from the payment being edited once per open — keyed on its id so a background
+  // refetch of the payments list can't wipe edits the user has started making.
+  const prefilledForId = useRef<string | null>(null);
+  useEffect(() => {
+    if (panelOpen && editPayment) {
+      if (prefilledForId.current !== editPayment.id) {
+        prefilledForId.current = editPayment.id;
+        reset(editDefaults(editPayment));
+      }
+    } else {
+      prefilledForId.current = null;
+    }
+  }, [panelOpen, editPayment, reset]);
+
+  // Pre-select the cedant every time the panel opens with one supplied (e.g. the table's
+  // active cedant filter) — skipped when placementId is set, since that already locks a
+  // single cedant + business via the read-only path in AddPaymentFormFields.
+  useEffect(() => {
+    if (panelOpen && !placementId && defaultCedantId) {
+      setValue('cedantId', defaultCedantId);
+      setValue('businessIds', []);
+    }
+  }, [panelOpen, placementId, defaultCedantId, setValue]);
+
   const onSubmit = async (values: AddPaymentFormValues) => {
-    const selectedFacs = facultatives.filter((f) => values.businessIds.includes(f.id));
+    const selectedFacs = placementId
+      ? singlePlacement
+        ? [singlePlacement]
+        : []
+      : values.businessIds
+          .map((id) => resolvedPlacements.find((placement) => placement.id === id))
+          .filter((placement): placement is Facultative => Boolean(placement));
     if (selectedFacs.length === 0) return;
 
     const parsedAmount = parseFloat(values.amount) || 0;
@@ -72,8 +192,18 @@ export default function AddPaymentForm({
     const reference = refParts.join(' — ') || undefined;
 
     const notesStr = values.paymentType === 'cheque' ? 'Cheque payment' : 'Bank transfer';
+    const notes = values.notes ? `${notesStr} — ${values.notes}` : notesStr;
 
     try {
+      // Editing is reverse-then-record: undo the original premium first so the position we
+      // read next (and the corrected entry we record) start from the pre-payment state.
+      if (editPayment) {
+        await reversePayment.mutateAsync({
+          placementId: editPayment.placementId,
+          paymentId: editPayment.id,
+        });
+      }
+
       const positions = await Promise.all(
         selectedFacs.map((f) =>
           fetchPlacementFinancialPosition(f.id, new Date(resolvedDate).toISOString()),
@@ -110,19 +240,24 @@ export default function AddPaymentForm({
         const paymentCurrency = values.currency;
         const placementCurrency =
           positionByPlacementId.get(f.id)?.currency ?? f.currency ?? values.currency;
-        let submittedAmount = rawAmount;
+        const isCrossCurrency = paymentCurrency !== placementCurrency;
 
-        if (paymentCurrency !== placementCurrency) {
-          const rateStr = allSameCurrency
-            ? values.rate
-            : (values.allocationRates[f.id] ?? values.rate);
-          const rate = parseFloat(rateStr) || 1;
-          submittedAmount = rawAmount * rate;
-        }
+        // `rawAmount` is the money the cedant actually moved, in `paymentCurrency`. `rate` is
+        // stored and shown exactly as the operator entered it — the everyday quote, i.e.
+        // payment-currency units per 1 unit of the obligation currency ("1 USD = 11.37 GHS").
+        // The obligation-currency equivalent booked as `amount` is therefore rawAmount ÷ rate,
+        // recoverable as settlement = amount × rate. Clamp to 8dp — the confirm DTO rejects
+        // anything with more decimal places (@IsNumber({ maxDecimalPlaces: 8 })).
+        const enteredRate = isCrossCurrency
+          ? parseFloat(
+              allSameCurrency ? values.rate : (values.allocationRates[f.id] ?? values.rate),
+            ) || 0
+          : 0;
+        const rate = isCrossCurrency && enteredRate > 0 ? Math.round(enteredRate * 1e8) / 1e8 : 1;
+        const submittedAmount =
+          Math.round((isCrossCurrency ? rawAmount / rate : rawAmount) * 100) / 100;
 
-        submittedAmount = Math.round(submittedAmount * 100) / 100;
-
-        return createPayment.mutateAsync({
+        const created = await createPayment.mutateAsync({
           placementId: f.id,
           type: 'PREMIUM_RECEIVED',
           direction: 'INBOUND',
@@ -131,8 +266,31 @@ export default function AddPaymentForm({
           currency: placementCurrency,
           paymentDate: new Date(resolvedDate).toISOString(),
           reference,
-          notes: notesStr,
+          settlementMethod: values.paymentType === 'cheque' ? 'CHEQUE' : 'BANK_TRANSFER',
+          settlementCurrency: isCrossCurrency ? paymentCurrency : placementCurrency,
+          notes,
         });
+
+        // Confirm right after recording — everything the confirm endpoint needs
+        // (settlement method/currency/reference) is already on the payment from the
+        // create call above. The FX rate + settlement currency only round-trip through
+        // bank-confirmation, so pass them here for cross-currency receipts.
+        try {
+          return await confirmPaymentBank.mutateAsync({
+            placementId: f.id,
+            paymentId: created.id,
+            bankConfirmedAt: new Date(resolvedDate).toISOString(),
+            ...(isCrossCurrency
+              ? { settlementCurrency: paymentCurrency, agreedExchangeRate: rate }
+              : {}),
+          });
+        } catch (confirmError) {
+          addToast({
+            message: `Payment recorded for ${f.policyNumber ?? f.title}, but bank confirmation failed automatically: ${extractError(confirmError)}. It will remain pending until confirmed.`,
+            type: 'error',
+          });
+          return created;
+        }
       });
 
       const results = await Promise.all(calls);
@@ -148,8 +306,10 @@ export default function AddPaymentForm({
         onAllocationsRecorded?.(parsed);
       }
 
-      setPanelOpen(false);
+      closePanel();
       form.reset(ADD_PAYMENT_DEFAULTS);
+      setResolvedPlacements([]);
+      onPlacementsResolved?.([]);
 
       // Offer receipt generation when placement context is available
       const firstPayment = results[0];
@@ -157,7 +317,7 @@ export default function AddPaymentForm({
       if (firstPayment && receiptPlacement) {
         setReceiptPrompt({ payment: firstPayment, placement: receiptPlacement });
       } else {
-        addToast({ message: 'Payment recorded successfully', type: 'success' });
+        addToast({ message: successMessage, type: 'success' });
       }
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
@@ -171,26 +331,32 @@ export default function AddPaymentForm({
   };
 
   const handleLater = () => {
-    addToast({ message: 'Payment recorded successfully', type: 'success' });
+    addToast({ message: successMessage, type: 'success' });
     setReceiptPrompt(null);
   };
 
   return (
     <>
-      <Button onClick={() => setPanelOpen(true)}>Record Payment</Button>
+      {!isControlled && canAddPayment && (
+        <Button onClick={() => setInternalOpen(true)}>Receive Cedant Premium</Button>
+      )}
 
       <SidePanel
         isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        title="Record Payment"
-        description="Enter the payment details below."
+        onClose={closePanel}
+        title={isEditing ? 'Edit Cedant Premium' : 'Receive Cedant Premium'}
+        description={
+          isEditing
+            ? 'Update this premium payment — the current entry is reversed and a corrected one recorded in its place.'
+            : 'Record money received from the cedant for selected placement obligations.'
+        }
         footer={
           <div className="flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
+            <Button type="button" variant="outline" onClick={closePanel}>
               Cancel
             </Button>
             <Button type="submit" form="add-payment-form" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving…' : 'Record Payment'}
+              {isSubmitting ? 'Saving…' : isEditing ? 'Save Changes' : 'Record Cedant Receipt'}
             </Button>
           </div>
         }
@@ -200,6 +366,10 @@ export default function AddPaymentForm({
             form={form}
             placementId={placementId}
             onPlacementsChange={onPlacementsChange}
+            onPlacementsResolved={(placements) => {
+              setResolvedPlacements(placements);
+              onPlacementsResolved?.(placements);
+            }}
           />
         </form>
       </SidePanel>
@@ -226,7 +396,6 @@ export default function AddPaymentForm({
           isOpen={receiptOpen}
           placement={receiptData.placement}
           payment={receiptData.payment}
-          onPrint={() => {}}
           onClose={() => {
             setReceiptOpen(false);
             setReceiptData(null);

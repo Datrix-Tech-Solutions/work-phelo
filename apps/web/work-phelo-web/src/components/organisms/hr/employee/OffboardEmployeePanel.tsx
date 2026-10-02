@@ -193,9 +193,9 @@ export function OffboardEmployeePanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         {/* Reason */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Reason for leaving</label>
           <select
             {...register('reason', { required: 'Reason is required' })}
@@ -212,7 +212,7 @@ export function OffboardEmployeePanel({
         </div>
 
         {reason === 'OTHER' && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-bold text-gray-900">Please specify</label>
             <input
               {...register('otherReason', { required: 'Please specify the reason' })}
@@ -234,7 +234,7 @@ export function OffboardEmployeePanel({
         />
 
         {/* Exit notes */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">
             Exit Interview Notes
             <span className="text-gray-400 font-normal ml-1">(optional)</span>

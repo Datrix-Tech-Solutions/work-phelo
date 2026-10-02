@@ -240,7 +240,7 @@ export function ApprovePayrollTab() {
             </span>
             . The payroll manager will need to revise and resubmit.
           </p>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-bold text-gray-900">
               Rejection Note <span className="text-red-500">*</span>
             </label>

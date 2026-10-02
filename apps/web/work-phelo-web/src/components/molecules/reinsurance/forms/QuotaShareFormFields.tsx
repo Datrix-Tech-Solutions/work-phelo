@@ -16,7 +16,7 @@ import { useCedantOptions, useCurrencyOptions } from '@/hooks';
 
 function ComputedField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
       <label className="text-sm font-bold text-gray-900">{label}</label>
       <div className={inputClass(undefined, 'bg-gray-50 text-gray-500 cursor-default select-none')}>
         {value || <span className="text-gray-400">—</span>}
@@ -58,10 +58,10 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
   const reinsuranceShare = reinsuranceShareNum !== null ? String(reinsuranceShareNum) : '';
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
       {/* ── Basic Information ── */}
       <FormSection title="Basic Information">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <Controller
             name="classOfBusiness"
             control={control}
@@ -206,7 +206,7 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
 
       {/* ── Financial Terms ── */}
       <FormSection title="Financial Terms">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <div className="grid grid-cols-2 gap-3">
             <FormField
               label="Cedant's Commission (%)"
@@ -239,7 +239,7 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
       {/* ── Quota Share Structure ── */}
 
       <FormSection title="Quota Share Structure">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
           <FormField
             label="Limit of Liability"
             type="number"

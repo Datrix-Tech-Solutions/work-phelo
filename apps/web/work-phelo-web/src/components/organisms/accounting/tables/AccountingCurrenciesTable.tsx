@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -16,15 +18,15 @@ import {
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { AddCurrencyPanel } from '@/components/organisms/accounting/panels/AddCurrencyPanel';
-import { EditCurrencyPanel } from '@/components/organisms/accounting/panels/EditCurrencyPanel';
 
 const PAGE_SIZE = 10;
 
 export function AccountingCurrenciesTable() {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<AccountingCurrency | null>(null);
-  const [editTarget, setEditTarget] = useState<AccountingCurrency | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
 
   const { data = [], isLoading } = useAccountingCurrencies();
@@ -136,8 +138,12 @@ export function AccountingCurrenciesTable() {
           label: 'Add Currency',
           onClick: () => setAddPanelOpen(true),
         }}
+        onRowClick={(row) => router.push(`/${tenantSlug}/accounting/settings/currency/${row.id}`)}
         rowActions={(row) => [
-          { label: 'Update', onClick: () => setEditTarget(row) },
+          {
+            label: 'View',
+            onClick: () => router.push(`/${tenantSlug}/accounting/settings/currency/${row.id}`),
+          },
           {
             label: row.isActive ? 'Deactivate' : 'Reactivate',
             onClick: () => (row.isActive ? setDeleteTarget(row) : reactivate(row)),
@@ -173,13 +179,6 @@ export function AccountingCurrenciesTable() {
       />
 
       <AddCurrencyPanel isOpen={addPanelOpen} onClose={() => setAddPanelOpen(false)} />
-
-      <EditCurrencyPanel
-        currency={editTarget}
-        baseCurrency={baseCurrency}
-        existingRate={editTarget ? rateByCode.get(editTarget.code) : undefined}
-        onClose={() => setEditTarget(null)}
-      />
     </>
   );
 }

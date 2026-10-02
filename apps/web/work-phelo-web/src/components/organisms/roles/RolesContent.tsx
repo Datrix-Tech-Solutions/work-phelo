@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { ShieldCheck, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { extractError } from '@/lib/extractError';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { RoleModuleIcon } from '@/components/molecules/roles/RoleModuleIcon';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
   usePermissionSets,
@@ -57,9 +59,7 @@ export function RolesContent() {
       width: 'minmax(150px, 0.5fr)',
       render: (row) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-4 h-4 text-brand" />
-          </div>
+          <RoleModuleIcon set={row} />
           <span className="font-medium text-gray-900">{row.name}</span>
         </div>
       ),
@@ -87,6 +87,31 @@ export function RolesContent() {
         >
           {row.description || <span className="text-gray-400 italic">No description</span>}
         </span>
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 'minmax(260px, auto)',
+      render: (row) => (
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <TableButton variant="blue" onClick={() => setMembersTarget(row)}>
+            Manage Members
+          </TableButton>
+          <TableButton
+            variant="orange"
+            onClick={() =>
+              router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/${row.id}/edit`)
+            }
+          >
+            Edit
+          </TableButton>
+          {!row.isSystem && (
+            <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
+              Delete
+            </TableButton>
+          )}
+        </div>
       ),
     },
   ];
@@ -135,17 +160,6 @@ export function RolesContent() {
           totalPages={totalPages}
           onPageChange={setPage}
           noInternalScroll
-          rowActions={(row) => [
-            { label: 'Manage Members', onClick: () => setMembersTarget(row) },
-            {
-              label: 'Edit',
-              onClick: () =>
-                router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/${row.id}/edit`),
-            },
-            ...(row.isSystem
-              ? []
-              : [{ label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) }]),
-          ]}
         />
       </div>
 

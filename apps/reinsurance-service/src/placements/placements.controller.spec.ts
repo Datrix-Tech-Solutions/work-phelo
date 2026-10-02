@@ -1,25 +1,27 @@
+import { ForbiddenException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
-  PlacementClaimStatus,
-  PlacementEndorsementStatus,
-  PlacementEndorsementType,
   PlacementClosingStatus,
   PlacementNoteStatus,
-  PlacementPaymentDirection,
-  PlacementPaymentType,
-  PlacementEndorsementParticipantStatus,
   PlacementParticipantRole,
   PlacementParticipantStatus,
+  PlacementPaymentDirection,
+  PlacementPaymentType,
 } from '../../prisma/generated/client';
-import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
-import { PlacementPermission } from './placement.permissions';
-import { PlacementClaimsService } from './placement-claims.service';
-import { PlacementClosingsService } from './placement-closings.service';
-import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
-import { PlacementEndorsementsService } from './placement-endorsements.service';
-import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
-import { PlacementNotesService } from './placement-notes.service';
-import { PlacementPaymentsService } from './placement-payments.service';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+} from '../auth/decorators/permissions.decorator';
+import {
+  FacultativeOfferPermission,
+  PlacementPermission,
+  PremiumPermission,
+} from './placement.permissions';
+import { PlacementClosingsService } from './closings/closings.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
+import { PlacementFinancialPositionService } from './finance/financial-position.service';
+import { PlacementNotesService } from './transactions/notes.service';
+import { PlacementPaymentsService } from './transactions/payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
 
@@ -33,11 +35,14 @@ describe('PlacementsController', () => {
     getClosingSlipPreview: jest.fn(),
     update: jest.fn(),
     changeStatus: jest.fn(),
+    forceClose: jest.fn(),
     addParticipant: jest.fn(),
     updateParticipant: jest.fn(),
     changeParticipantStatus: jest.fn(),
+    acceptParticipantAndConfirm: jest.fn(),
     deleteParticipant: jest.fn(),
     archive: jest.fn(),
+    restore: jest.fn(),
   };
   const closingsService = {
     findAll: jest.fn(),
@@ -45,55 +50,56 @@ describe('PlacementsController', () => {
     create: jest.fn(),
     changeStatus: jest.fn(),
   };
-  const endorsementsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    getSummary: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    changeStatus: jest.fn(),
+  const effectiveViewService = {
+    getEffectiveView: jest.fn(),
   };
-  const endorsementParticipantsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    changeStatus: jest.fn(),
-    delete: jest.fn(),
-  };
-  const endorsementClosingsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    validateAndConfirm: jest.fn(),
-    changeStatus: jest.fn(),
+  const financialPositionService = {
+    getFinancialPosition: jest.fn(),
   };
   const notesService = {
     findAll: jest.fn(),
     findOne: jest.fn(),
+    findAllEndorsementNotes: jest.fn(),
+    findEndorsementNote: jest.fn(),
     createDebitNote: jest.fn(),
     createCreditNote: jest.fn(),
+    previewCurrentEffectiveDebitNote: jest.fn(),
+    createCurrentEffectiveDebitNote: jest.fn(),
+    findAllCurrentEffectiveDebitNotes: jest.fn(),
+    findCurrentEffectiveDebitNote: jest.fn(),
+    createEndorsementDebitNote: jest.fn(),
+    createEndorsementCreditNote: jest.fn(),
     issue: jest.fn(),
+    issueEndorsementNote: jest.fn(),
     void: jest.fn(),
+    voidEndorsementNote: jest.fn(),
   };
   const paymentsService = {
+    findPendingBankConfirmations: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
     create: jest.fn(),
+    confirmBankPayment: jest.fn(),
     reverse: jest.fn(),
   };
-  const claimsService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    changeStatus: jest.fn(),
-    findAllocations: jest.fn(),
-    generateAllocations: jest.fn(),
-  };
   const user = {
+    id: 'user-1',
+    email: 'broker@example.com',
     tenantId: 'tenant-1',
+    tenantSlug: 'broker',
+    tenantName: 'Broker',
+    firstName: 'Ama',
+    role: 'TENANT_ADMIN',
+    moduleConfig: { operations: true },
+    featureConfig: { operations: { reinsurance: true } },
+    permissions: [],
   } as RequestUser;
+  const employeeWithPermissions = (permissions: string[]) =>
+    ({
+      ...user,
+      role: 'EMPLOYEE',
+      permissions,
+    }) as RequestUser;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -103,12 +109,10 @@ describe('PlacementsController', () => {
     new PlacementsController(
       service as unknown as PlacementsService,
       closingsService as unknown as PlacementClosingsService,
-      endorsementsService as unknown as PlacementEndorsementsService,
-      endorsementParticipantsService as unknown as PlacementEndorsementParticipantsService,
-      endorsementClosingsService as unknown as PlacementEndorsementClosingsService,
+      effectiveViewService as unknown as PlacementEffectiveViewService,
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
-      claimsService as unknown as PlacementClaimsService,
+      financialPositionService as unknown as PlacementFinancialPositionService,
     );
 
   it('delegates list queries using only the authenticated tenant context', async () => {
@@ -123,55 +127,26 @@ describe('PlacementsController', () => {
   it.each([
     ['findAll', PlacementPermission.VIEW],
     ['findOne', PlacementPermission.VIEW],
+    ['getEffectiveView', PlacementPermission.VIEW],
+    ['getFinancialPosition', PlacementPermission.VIEW],
     ['getLockStatus', PlacementPermission.VIEW],
     ['getOfferSlipPreview', PlacementPermission.VIEW],
     ['getClosingSlipPreview', PlacementPermission.VIEW],
     ['findClosings', PlacementPermission.VIEW],
     ['findClosing', PlacementPermission.VIEW],
-    ['findEndorsements', PlacementPermission.VIEW],
-    ['findEndorsement', PlacementPermission.VIEW],
-    ['getEndorsementSummary', PlacementPermission.VIEW],
-    ['findEndorsementParticipants', PlacementPermission.VIEW],
-    ['findEndorsementParticipant', PlacementPermission.VIEW],
-    ['findEndorsementClosings', PlacementPermission.VIEW],
-    ['findEndorsementClosing', PlacementPermission.VIEW],
+    ['findEndorsementNotes', PlacementPermission.VIEW],
+    ['findEndorsementNote', PlacementPermission.VIEW],
     ['findNotes', PlacementPermission.VIEW],
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
     ['findPayment', PlacementPermission.VIEW],
-    ['findClaims', PlacementPermission.VIEW],
-    ['findClaim', PlacementPermission.VIEW],
-    ['findClaimAllocations', PlacementPermission.VIEW],
-    ['create', PlacementPermission.CREATE],
-    ['createEndorsement', PlacementPermission.CREATE],
-    ['createPayment', PlacementPermission.CREATE],
-    ['createClaim', PlacementPermission.CREATE],
-    ['update', PlacementPermission.EDIT],
-    ['updateEndorsement', PlacementPermission.EDIT],
-    ['changeEndorsementStatus', PlacementPermission.EDIT],
-    ['createEndorsementParticipant', PlacementPermission.EDIT],
-    ['updateEndorsementParticipant', PlacementPermission.EDIT],
-    ['changeEndorsementParticipantStatus', PlacementPermission.EDIT],
-    ['deleteEndorsementParticipant', PlacementPermission.EDIT],
-    ['createEndorsementClosing', PlacementPermission.EDIT],
-    ['validateAndConfirmEndorsementParticipant', PlacementPermission.EDIT],
-    ['changeEndorsementClosingStatus', PlacementPermission.EDIT],
-    ['changeStatus', PlacementPermission.EDIT],
-    ['addParticipant', PlacementPermission.EDIT],
-    ['updateParticipant', PlacementPermission.EDIT],
-    ['changeParticipantStatus', PlacementPermission.EDIT],
-    ['deleteParticipant', PlacementPermission.EDIT],
     ['createClosing', PlacementPermission.EDIT],
     ['changeClosingStatus', PlacementPermission.EDIT],
     ['createDebitNote', PlacementPermission.EDIT],
     ['createCreditNote', PlacementPermission.EDIT],
-    ['updateClaim', PlacementPermission.EDIT],
-    ['changeClaimStatus', PlacementPermission.EDIT],
-    ['generateClaimAllocations', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],
     ['voidNote', PlacementPermission.EDIT],
-    ['reversePayment', PlacementPermission.EDIT],
-    ['archive', PlacementPermission.DELETE],
+    ['restore', PlacementPermission.DELETE],
   ])('requires %s permission on %s', (method, permission) => {
     expect(
       Reflect.getMetadata(
@@ -180,6 +155,91 @@ describe('PlacementsController', () => {
       ),
     ).toEqual([permission]);
   });
+
+  it.each([
+    [
+      'create',
+      [FacultativeOfferPermission.CREATE_OFFER, PlacementPermission.CREATE],
+    ],
+    [
+      'createPayment',
+      [
+        PremiumPermission.RECEIVE_FROM_CEDANT,
+        PremiumPermission.DISBURSE_TO_REINSURER,
+        PlacementPermission.CREATE,
+      ],
+    ],
+    [
+      'update',
+      [
+        FacultativeOfferPermission.EDIT_OFFER,
+        FacultativeOfferPermission.PARTIAL_EDIT,
+        PlacementPermission.EDIT,
+      ],
+    ],
+    [
+      'changeStatus',
+      [FacultativeOfferPermission.REOPEN_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'forceClose',
+      [FacultativeOfferPermission.FORCE_CLOSE, PlacementPermission.EDIT],
+    ],
+    [
+      'addParticipant',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'updateParticipant',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'changeParticipantStatus',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'acceptParticipantAndConfirm',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'deleteParticipant',
+      [FacultativeOfferPermission.EDIT_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'reversePayment',
+      [PremiumPermission.REVERSE_PAYMENT, PlacementPermission.EDIT],
+    ],
+    [
+      'archive',
+      [FacultativeOfferPermission.ARCHIVE_OFFER, PlacementPermission.DELETE],
+    ],
+    [
+      'createEndorsementDebitNote',
+      [FacultativeOfferPermission.ENDORSE_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'createEndorsementCreditNote',
+      [FacultativeOfferPermission.ENDORSE_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'issueEndorsementNote',
+      [FacultativeOfferPermission.ENDORSE_OFFER, PlacementPermission.EDIT],
+    ],
+    [
+      'voidEndorsementNote',
+      [FacultativeOfferPermission.ENDORSE_OFFER, PlacementPermission.EDIT],
+    ],
+  ])(
+    'allows any permitted workflow permission on %s',
+    (method, permissions) => {
+      expect(
+        Reflect.getMetadata(
+          ANY_PERMISSIONS_KEY,
+          PlacementsController.prototype[method as keyof PlacementsController],
+        ),
+      ).toEqual(permissions);
+    },
+  );
 
   it('delegates participant mutations with authenticated user context', async () => {
     const controller = createController();
@@ -204,6 +264,11 @@ describe('PlacementsController', () => {
       { status: PlacementParticipantStatus.OFFER_SENT },
       { user } as never,
     );
+    await controller.acceptParticipantAndConfirm(
+      'placement-1',
+      'participant-1',
+      { user } as never,
+    );
     await controller.deleteParticipant('placement-1', 'participant-1', {
       user,
     } as never);
@@ -224,6 +289,11 @@ describe('PlacementsController', () => {
       'placement-1',
       'participant-1',
       expect.objectContaining({ status: 'OFFER_SENT' }),
+    );
+    expect(service.acceptParticipantAndConfirm).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'participant-1',
     );
     expect(service.deleteParticipant).toHaveBeenCalledWith(
       user,
@@ -259,6 +329,44 @@ describe('PlacementsController', () => {
     expect(service.getLockStatus).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
+    );
+  });
+
+  it('delegates force close with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.forceClose('placement-1', { user } as never);
+
+    expect(service.forceClose).toHaveBeenCalledWith(user, 'placement-1');
+  });
+
+  it('delegates effective view reads with authenticated tenant context', async () => {
+    const controller = createController();
+
+    await controller.getEffectiveView('placement-1', undefined, {
+      user,
+    } as never);
+
+    expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      undefined,
+    );
+  });
+
+  it('delegates financial position reads with authenticated tenant context', async () => {
+    const controller = createController();
+
+    await controller.getFinancialPosition(
+      'placement-1',
+      '2026-08-01T00:00:00.000Z',
+      { user } as never,
+    );
+
+    expect(financialPositionService.getFinancialPosition).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      '2026-08-01T00:00:00.000Z',
     );
   });
 
@@ -311,266 +419,20 @@ describe('PlacementsController', () => {
     );
   });
 
-  it('delegates endorsement reads with authenticated tenant context', async () => {
-    const controller = createController();
-    endorsementsService.findAll.mockResolvedValue([]);
-    endorsementsService.getSummary.mockResolvedValue({ id: 'summary-1' });
-
-    const listResult = await controller.findEndorsements('placement-1', {
-      user,
-    } as never);
-    await controller.findEndorsement('placement-1', 'endorsement-1', {
-      user,
-    } as never);
-    await controller.getEndorsementSummary('placement-1', 'endorsement-1', {
-      user,
-    } as never);
-
-    expect(endorsementsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-    );
-    expect(listResult).toEqual({ items: [] });
-    expect(endorsementsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-    );
-    expect(endorsementsService.getSummary).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-    );
-  });
-
-  it('delegates endorsement mutations with authenticated user context', async () => {
+  it('delegates archive and restore placement lifecycle actions', async () => {
     const controller = createController();
 
-    await controller.createEndorsement(
+    await controller.archive(
       'placement-1',
-      {
-        type: PlacementEndorsementType.SUM_INSURED_INCREASE,
-        effectiveDate: '2026-06-04T00:00:00.000Z',
-        reason: 'Increase sum insured',
-      },
+      { archiveReason: 'Duplicate placement' },
       { user } as never,
     );
-    await controller.updateEndorsement(
-      'placement-1',
-      'endorsement-1',
-      { reason: 'Updated' },
-      { user } as never,
-    );
-    await controller.changeEndorsementStatus(
-      'placement-1',
-      'endorsement-1',
-      { status: PlacementEndorsementStatus.MARKETING },
-      { user } as never,
-    );
+    await controller.restore('placement-1', { user } as never);
 
-    expect(endorsementsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      expect.objectContaining({
-        type: PlacementEndorsementType.SUM_INSURED_INCREASE,
-      }),
-    );
-    expect(endorsementsService.update).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      expect.objectContaining({ reason: 'Updated' }),
-    );
-    expect(endorsementsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      expect.objectContaining({ status: PlacementEndorsementStatus.MARKETING }),
-    );
-  });
-
-  it('delegates endorsement participant reads with authenticated tenant context', async () => {
-    const controller = createController();
-    endorsementParticipantsService.findAll.mockResolvedValue({
-      items: [],
-      aggregates: {
-        totalOfferedPercent: 0,
-        totalAcceptedPercent: 0,
-        remainingPercent: null,
-        declinedPercent: 0,
-      },
+    expect(service.archive).toHaveBeenCalledWith(user, 'placement-1', {
+      archiveReason: 'Duplicate placement',
     });
-
-    const listResult = await controller.findEndorsementParticipants(
-      'placement-1',
-      'endorsement-1',
-      { user } as never,
-    );
-    await controller.findEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-
-    expect(endorsementParticipantsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-    );
-    expect(listResult).toEqual({
-      items: [],
-      aggregates: {
-        totalOfferedPercent: 0,
-        totalAcceptedPercent: 0,
-        remainingPercent: null,
-        declinedPercent: 0,
-      },
-    });
-    expect(endorsementParticipantsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
-  });
-
-  it('delegates endorsement participant mutations with authenticated user context', async () => {
-    const controller = createController();
-
-    await controller.createEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      {
-        counterpartyId: 'reinsurer-1',
-        originalParticipantId: 'participant-1',
-        sharePercent: 20,
-      },
-      { user } as never,
-    );
-    await controller.updateEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { signedLinePercent: 15 },
-      { user } as never,
-    );
-    await controller.changeEndorsementParticipantStatus(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { status: PlacementEndorsementParticipantStatus.OFFER_SENT },
-      { user } as never,
-    );
-    await controller.deleteEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-
-    expect(endorsementParticipantsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      expect.objectContaining({ counterpartyId: 'reinsurer-1' }),
-    );
-    expect(endorsementParticipantsService.update).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      expect.objectContaining({ signedLinePercent: 15 }),
-    );
-    expect(endorsementParticipantsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      expect.objectContaining({
-        status: PlacementEndorsementParticipantStatus.OFFER_SENT,
-      }),
-    );
-    expect(endorsementParticipantsService.delete).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
-  });
-
-  it('delegates endorsement closing reads with authenticated tenant context', async () => {
-    const controller = createController();
-    endorsementClosingsService.findAll.mockResolvedValue([]);
-
-    const listResult = await controller.findEndorsementClosings(
-      'placement-1',
-      'endorsement-1',
-      { user } as never,
-    );
-    await controller.findEndorsementClosing(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-      { user } as never,
-    );
-
-    expect(endorsementClosingsService.findAll).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-    );
-    expect(listResult).toEqual({ items: [] });
-    expect(endorsementClosingsService.findOne).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-    );
-  });
-
-  it('delegates endorsement closing mutations with authenticated user context', async () => {
-    const controller = createController();
-
-    await controller.createEndorsementClosing(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-    await controller.changeEndorsementClosingStatus(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-      { status: PlacementClosingStatus.ISSUED },
-      { user } as never,
-    );
-    await controller.validateAndConfirmEndorsementParticipant(
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-      { user } as never,
-    );
-
-    expect(endorsementClosingsService.create).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
-    expect(endorsementClosingsService.changeStatus).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-closing-1',
-      expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
-    );
-    expect(endorsementClosingsService.validateAndConfirm).toHaveBeenCalledWith(
-      user,
-      'placement-1',
-      'endorsement-1',
-      'endorsement-participant-1',
-    );
+    expect(service.restore).toHaveBeenCalledWith(user, 'placement-1');
   });
 
   it('delegates note reads with authenticated tenant context', async () => {
@@ -590,6 +452,36 @@ describe('PlacementsController', () => {
     expect(notesService.findOne).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
+      'note-1',
+    );
+  });
+
+  it('delegates endorsement note reads with authenticated tenant context', async () => {
+    const controller = createController();
+    notesService.findAllEndorsementNotes.mockResolvedValue([]);
+
+    const listResult = await controller.findEndorsementNotes(
+      'placement-1',
+      'endorsement-1',
+      { user } as never,
+    );
+    await controller.findEndorsementNote(
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      { user } as never,
+    );
+
+    expect(notesService.findAllEndorsementNotes).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+    expect(listResult).toEqual({ items: [] });
+    expect(notesService.findEndorsementNote).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
       'note-1',
     );
   });
@@ -637,86 +529,110 @@ describe('PlacementsController', () => {
     );
   });
 
-  it('delegates claim reads and mutations with authenticated context', async () => {
+  it('delegates current effective debit note operations with authenticated tenant context', async () => {
     const controller = createController();
-    claimsService.findAll.mockResolvedValue([]);
-    claimsService.findAllocations.mockResolvedValue([]);
-    const createDto = {
-      occurrenceDate: '2026-06-03T00:00:00.000Z',
-      reportedDate: '2026-06-05T10:00:00.000Z',
-      claimCause: 'Warehouse fire',
-      currency: 'USD',
-      estimatedLossAmount: 40000,
-    };
-    const updateDto = { finalLossAmount: 37500 };
+    notesService.findAllCurrentEffectiveDebitNotes.mockResolvedValue([]);
 
-    const claimList = await controller.findClaims('placement-1', {
-      user,
-    } as never);
-    await controller.findClaim('placement-1', 'claim-1', { user } as never);
-    await controller.createClaim('placement-1', createDto, { user } as never);
-    await controller.updateClaim('placement-1', 'claim-1', updateDto, {
-      user,
-    } as never);
-    await controller.changeClaimStatus(
+    await controller.previewEffectiveDebitNote(
       'placement-1',
-      'claim-1',
-      { status: PlacementClaimStatus.NOTIFIED },
+      { asOfDate: '2026-06-10T00:00:00.000Z' },
       { user } as never,
     );
-    const allocationList = await controller.findClaimAllocations(
+    await controller.createEffectiveDebitNote(
       'placement-1',
-      'claim-1',
+      { asOfDate: '2026-06-10T00:00:00.000Z' },
       { user } as never,
     );
-    await controller.generateClaimAllocations('placement-1', 'claim-1', {
+    await controller.findEffectiveDebitNotes('placement-1', { user } as never);
+    await controller.findEffectiveDebitNote('placement-1', 'note-1', {
       user,
     } as never);
 
-    expect(claimsService.findAll).toHaveBeenCalledWith(
+    expect(notesService.previewCurrentEffectiveDebitNote).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      '2026-06-10T00:00:00.000Z',
+    );
+    expect(notesService.createCurrentEffectiveDebitNote).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      '2026-06-10T00:00:00.000Z',
+    );
+    expect(notesService.findAllCurrentEffectiveDebitNotes).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
     );
-    expect(claimList).toEqual({ items: [] });
-    expect(claimsService.findOne).toHaveBeenCalledWith(
+    expect(notesService.findCurrentEffectiveDebitNote).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
-      'claim-1',
+      'note-1',
     );
-    expect(claimsService.create).toHaveBeenCalledWith(
+  });
+
+  it('delegates endorsement note create, issue and void with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.createEndorsementDebitNote(
+      'placement-1',
+      'endorsement-1',
+      { user } as never,
+    );
+    await controller.createEndorsementCreditNote(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+      { user } as never,
+    );
+    await controller.issueEndorsementNote(
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      { status: PlacementNoteStatus.ISSUED },
+      { user } as never,
+    );
+    await controller.voidEndorsementNote(
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      { voidReason: 'Issued in error' },
+      { user } as never,
+    );
+
+    expect(notesService.createEndorsementDebitNote).toHaveBeenCalledWith(
       user,
       'placement-1',
-      createDto,
+      'endorsement-1',
     );
-    expect(claimsService.update).toHaveBeenCalledWith(
+    expect(notesService.createEndorsementCreditNote).toHaveBeenCalledWith(
       user,
       'placement-1',
-      'claim-1',
-      updateDto,
+      'endorsement-1',
+      'endorsement-closing-1',
     );
-    expect(claimsService.changeStatus).toHaveBeenCalledWith(
+    expect(notesService.issueEndorsementNote).toHaveBeenCalledWith(
       user,
       'placement-1',
-      'claim-1',
-      expect.objectContaining({ status: PlacementClaimStatus.NOTIFIED }),
+      'endorsement-1',
+      'note-1',
+      expect.objectContaining({ status: PlacementNoteStatus.ISSUED }),
     );
-    expect(claimsService.findAllocations).toHaveBeenCalledWith(
-      'tenant-1',
-      'placement-1',
-      'claim-1',
-    );
-    expect(allocationList).toEqual({ items: [] });
-    expect(claimsService.generateAllocations).toHaveBeenCalledWith(
+    expect(notesService.voidEndorsementNote).toHaveBeenCalledWith(
       user,
       'placement-1',
-      'claim-1',
+      'endorsement-1',
+      'note-1',
+      expect.objectContaining({ voidReason: 'Issued in error' }),
     );
   });
 
   it('delegates payment reads with authenticated tenant context', async () => {
     const controller = createController();
+    paymentsService.findPendingBankConfirmations.mockResolvedValue([]);
     paymentsService.findAll.mockResolvedValue([]);
 
+    const pendingResult = await controller.findPendingBankConfirmationPayments({
+      user,
+    } as never);
     const listResult = await controller.findPayments('placement-1', {
       user,
     } as never);
@@ -724,6 +640,10 @@ describe('PlacementsController', () => {
       user,
     } as never);
 
+    expect(paymentsService.findPendingBankConfirmations).toHaveBeenCalledWith(
+      'tenant-1',
+    );
+    expect(pendingResult).toEqual({ items: [] });
     expect(paymentsService.findAll).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
@@ -736,7 +656,7 @@ describe('PlacementsController', () => {
     );
   });
 
-  it('delegates payment create and reverse with authenticated user context', async () => {
+  it('delegates payment create, bank confirmation and reverse with authenticated user context', async () => {
     const controller = createController();
     const dto = {
       type: PlacementPaymentType.PREMIUM_RECEIVED,
@@ -746,8 +666,20 @@ describe('PlacementsController', () => {
       currency: 'USD',
       paymentDate: '2026-06-04T12:00:00.000Z',
     };
+    const bankConfirmationDto = {
+      bankConfirmedAt: '2026-06-05T10:00:00.000Z',
+      bankReference: 'BANK-CONF-001',
+      accountingCashAccountId: 'cash-account-1',
+      bankChargeAmount: 25,
+    };
 
     await controller.createPayment('placement-1', dto, { user } as never);
+    await controller.confirmPaymentBankCompletion(
+      'placement-1',
+      'payment-1',
+      bankConfirmationDto,
+      { user } as never,
+    );
     await controller.reversePayment('placement-1', 'payment-1', {
       user,
     } as never);
@@ -757,10 +689,126 @@ describe('PlacementsController', () => {
       'placement-1',
       dto,
     );
+    expect(paymentsService.confirmBankPayment).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'payment-1',
+      bankConfirmationDto,
+    );
     expect(paymentsService.reverse).toHaveBeenCalledWith(
       user,
       'placement-1',
       'payment-1',
     );
+  });
+
+  it('allows policy-number-only updates with partial edit permission only', async () => {
+    const controller = createController();
+    const partialEditor = employeeWithPermissions([
+      FacultativeOfferPermission.PARTIAL_EDIT,
+    ]);
+
+    await controller.update('placement-1', { policyNumber: 'POL-2026-002' }, {
+      user: partialEditor,
+    } as never);
+
+    expect(service.update).toHaveBeenCalledWith(partialEditor, 'placement-1', {
+      policyNumber: 'POL-2026-002',
+    });
+  });
+
+  it('rejects material placement updates with partial edit permission only', () => {
+    const controller = createController();
+    const partialEditor = employeeWithPermissions([
+      FacultativeOfferPermission.PARTIAL_EDIT,
+    ]);
+
+    expect(() =>
+      controller.update('placement-1', { title: 'Material title change' }, {
+        user: partialEditor,
+      } as never),
+    ).toThrow(ForbiddenException);
+    expect(service.update).not.toHaveBeenCalled();
+  });
+
+  it('allows material placement updates with edit-offer permission', async () => {
+    const controller = createController();
+    const editor = employeeWithPermissions([
+      FacultativeOfferPermission.EDIT_OFFER,
+    ]);
+
+    await controller.update('placement-1', { title: 'Material title change' }, {
+      user: editor,
+    } as never);
+
+    expect(service.update).toHaveBeenCalledWith(editor, 'placement-1', {
+      title: 'Material title change',
+    });
+  });
+
+  it('requires inbound premium permission for cedant receipts', async () => {
+    const controller = createController();
+    const receiptOnly = employeeWithPermissions([
+      PremiumPermission.RECEIVE_FROM_CEDANT,
+    ]);
+    const disbursementOnly = employeeWithPermissions([
+      PremiumPermission.DISBURSE_TO_REINSURER,
+    ]);
+    const dto = {
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      direction: PlacementPaymentDirection.INBOUND,
+      counterpartyId: 'cedant-1',
+      amount: 1000,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+    };
+
+    await controller.createPayment('placement-1', dto, {
+      user: receiptOnly,
+    } as never);
+
+    expect(paymentsService.create).toHaveBeenCalledWith(
+      receiptOnly,
+      'placement-1',
+      dto,
+    );
+    expect(() =>
+      controller.createPayment('placement-1', dto, {
+        user: disbursementOnly,
+      } as never),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('requires outbound premium permission for reinsurer disbursements', async () => {
+    const controller = createController();
+    const receiptOnly = employeeWithPermissions([
+      PremiumPermission.RECEIVE_FROM_CEDANT,
+    ]);
+    const disbursementOnly = employeeWithPermissions([
+      PremiumPermission.DISBURSE_TO_REINSURER,
+    ]);
+    const dto = {
+      type: PlacementPaymentType.REINSURER_DISBURSEMENT,
+      direction: PlacementPaymentDirection.OUTBOUND,
+      counterpartyId: 'reinsurer-1',
+      amount: 1000,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+    };
+
+    await controller.createPayment('placement-1', dto, {
+      user: disbursementOnly,
+    } as never);
+
+    expect(paymentsService.create).toHaveBeenCalledWith(
+      disbursementOnly,
+      'placement-1',
+      dto,
+    );
+    expect(() =>
+      controller.createPayment('placement-1', dto, {
+        user: receiptOnly,
+      } as never),
+    ).toThrow(ForbiddenException);
   });
 });

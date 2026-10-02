@@ -207,7 +207,8 @@ RABBITMQ_URL=
 **web (Next.js):**
 
 ```
-NEXT_PUBLIC_API_URL=https://workphelo.com/api/v1
+NEXT_PUBLIC_API_URL=https://dev-api.workphelo.com/api/v1
+NEXT_PUBLIC_APP_BASE_URL=https://dev-app.workphelo.com
 ```
 
 ---

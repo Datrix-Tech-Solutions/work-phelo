@@ -1,29 +1,25 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
 import { Badge } from '@/components/atoms/Badge';
-import { AddFiscalPeriodPanel } from '@/components/organisms/accounting/panels/AddFiscalPeriodPanel';
-import { FiscalPeriod, FiscalPeriodStatus } from '@/types/accounting';
+import {
+  ClosePeriodAction,
+  ClosePeriodModal,
+} from '@/components/organisms/accounting/modals/ClosePeriodModal';
+import { FiscalPeriod } from '@/types/accounting';
 import {
   useCloseFiscalPeriod,
-  useFiscalPeriods,
   useLockFiscalPeriod,
   useOpenFiscalPeriod,
+  useSoftCloseFiscalPeriod,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-
-const PAGE_SIZE = 10;
-
-const STATUS_VARIANT: Record<FiscalPeriodStatus, 'success' | 'warning' | 'neutral'> = {
-  OPEN: 'success',
-  CLOSED: 'warning',
-  LOCKED: 'neutral',
-};
+import { FISCAL_STATUS_LABEL, FISCAL_STATUS_VARIANT } from '@/lib/accounting/fiscalPeriodStatus';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -34,52 +30,72 @@ function fmtDate(iso: string) {
 }
 
 function buildColumns(
-  onClose: (row: FiscalPeriod) => void,
   onReopen: (row: FiscalPeriod) => void,
-  onLock: (row: FiscalPeriod) => void,
+  onCloseRequest: (row: FiscalPeriod, action: ClosePeriodAction) => void,
+  onLockRequest: (row: FiscalPeriod) => void,
 ): Column<FiscalPeriod>[] {
   return [
     {
       key: 'name',
-      label: 'Fiscal Year',
+      label: 'Period',
       width: 'minmax(150px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
       key: 'startDate',
       label: 'Start Date',
-      width: '180px',
+      width: '160px',
       render: (row) => <span className="text-gray-700 text-sm">{fmtDate(row.startDate)}</span>,
     },
     {
       key: 'endDate',
       label: 'End Date',
-      width: '180px',
+      width: '160px',
       render: (row) => <span className="text-gray-700 text-sm">{fmtDate(row.endDate)}</span>,
     },
     {
       key: 'status',
       label: 'Status',
       width: '150px',
-      render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
+      render: (row) => (
+        <Badge
+          label={FISCAL_STATUS_LABEL[row.status]}
+          variant={FISCAL_STATUS_VARIANT[row.status]}
+        />
+      ),
     },
     {
       key: 'actions',
       label: '',
-      width: '150px',
+      width: '240px',
       render: (row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           {row.status === 'OPEN' && (
-            <TableButton variant="orange" onClick={() => onClose(row)}>
-              Close
-            </TableButton>
+            <>
+              <TableButton variant="blue" onClick={() => onCloseRequest(row, 'soft-close')}>
+                Soft Close
+              </TableButton>
+              <TableButton variant="red" onClick={() => onCloseRequest(row, 'close')}>
+                Close
+              </TableButton>
+            </>
+          )}
+          {row.status === 'SOFT_CLOSED' && (
+            <>
+              <TableButton variant="red" onClick={() => onCloseRequest(row, 'close')}>
+                Close
+              </TableButton>
+              <TableButton variant="green" onClick={() => onReopen(row)}>
+                Reopen
+              </TableButton>
+            </>
           )}
           {row.status === 'CLOSED' && (
             <>
               <TableButton variant="green" onClick={() => onReopen(row)}>
                 Reopen
               </TableButton>
-              <TableButton variant="red" onClick={() => onLock(row)}>
+              <TableButton variant="gray" onClick={() => onLockRequest(row)}>
                 Lock
               </TableButton>
             </>
@@ -90,75 +106,96 @@ function buildColumns(
   ];
 }
 
-export function FiscalPeriodsTable() {
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [panelOpen, setPanelOpen] = useState(false);
+/** The periods of one fiscal year, with the close / soft close / reopen / lock actions. */
+export function FiscalPeriodsTable({
+  periods,
+  isLoading = false,
+}: {
+  periods: FiscalPeriod[];
+  isLoading?: boolean;
+}) {
+  const [closeTarget, setCloseTarget] = useState<{
+    period: FiscalPeriod;
+    action: ClosePeriodAction;
+  } | null>(null);
   const [lockTarget, setLockTarget] = useState<FiscalPeriod | null>(null);
 
-  const { data = [], isLoading } = useFiscalPeriods();
-  const closePeriod = useCloseFiscalPeriod();
-  const reopenPeriod = useOpenFiscalPeriod();
-  const lockPeriod = useLockFiscalPeriod();
   const toast = useToast();
+  const openMutation = useOpenFiscalPeriod();
+  const softCloseMutation = useSoftCloseFiscalPeriod();
+  const closeMutation = useCloseFiscalPeriod();
+  const lockMutation = useLockFiscalPeriod();
 
-  function close(period: FiscalPeriod) {
-    closePeriod.mutate(period.id, {
-      onError: (error) => toast.error(extractError(error, 'Failed to close fiscal year')),
-    });
+  const reopen = useCallback(
+    async (row: FiscalPeriod) => {
+      try {
+        await openMutation.mutateAsync(row.id);
+      } catch (err) {
+        toast.error(extractError(err, 'Failed to reopen period'));
+      }
+    },
+    [openMutation, toast],
+  );
+
+  async function confirmClose({
+    period,
+    action,
+  }: {
+    period: FiscalPeriod;
+    action: ClosePeriodAction;
+  }) {
+    const soft = action === 'soft-close';
+    try {
+      await (soft ? softCloseMutation : closeMutation).mutateAsync(period.id);
+      setCloseTarget(null);
+    } catch (err) {
+      toast.error(
+        extractError(err, soft ? 'Failed to soft close period' : 'Failed to close period'),
+      );
+    }
   }
 
-  function reopen(period: FiscalPeriod) {
-    reopenPeriod.mutate(period.id, {
-      onError: (error) => toast.error(extractError(error, 'Failed to reopen fiscal year')),
-    });
+  async function confirmLock(row: FiscalPeriod) {
+    try {
+      await lockMutation.mutateAsync(row.id);
+      setLockTarget(null);
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to lock period'));
+    }
   }
 
-  function lock(period: FiscalPeriod) {
-    lockPeriod.mutate(period.id, {
-      onSuccess: () => setLockTarget(null),
-      onError: (error) => toast.error(extractError(error, 'Failed to lock fiscal year')),
-    });
-  }
-
-  const columns = buildColumns(close, reopen, setLockTarget);
-
-  const filtered = useMemo(() => {
-    if (!search) return data;
-    const q = search.toLowerCase();
-    return data.filter((r) => r.name.toLowerCase().includes(q));
-  }, [search, data]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const columns = useMemo(
+    () =>
+      buildColumns(reopen, (period, action) => setCloseTarget({ period, action }), setLockTarget),
+    [reopen],
+  );
 
   return (
     <>
       <DataTable
         columns={columns}
-        data={paged}
+        data={periods}
         isLoading={isLoading}
-        searchPlaceholder="Search fiscal years…"
-        searchValue={search}
-        onSearch={(q) => {
-          setSearch(q);
-          setPage(1);
-        }}
-        actionButton={{
-          label: 'Add Fiscal Year',
-          onClick: () => setPanelOpen(true),
-        }}
-        emptyMessage="No fiscal years found"
-        currentPage={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
+        emptyMessage="This fiscal year has no periods"
+        currentPage={1}
+        totalPages={1}
+        onPageChange={() => {}}
+        noInternalScroll
+      />
+
+      <ClosePeriodModal
+        period={closeTarget?.period ?? null}
+        action={closeTarget?.action ?? 'close'}
+        isSubmitting={closeMutation.isPending || softCloseMutation.isPending}
+        onClose={() => setCloseTarget(null)}
+        onConfirm={() => closeTarget && confirmClose(closeTarget)}
       />
 
       <Modal
         isOpen={!!lockTarget}
         onClose={() => setLockTarget(null)}
-        title="Lock Fiscal Year"
-        description={`Are you sure you want to lock "${lockTarget?.name}"? Locked fiscal years are immutable and cannot be reopened.`}
+        title="Lock Period"
+        description={`Lock "${lockTarget?.name}"? Locked periods are permanently immutable and can never be reopened.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setLockTarget(null)}>
@@ -166,16 +203,15 @@ export function FiscalPeriodsTable() {
             </Button>
             <Button
               variant="danger"
-              disabled={lockPeriod.isPending}
-              onClick={() => lockTarget && lock(lockTarget)}
+              isLoading={lockMutation.isPending}
+              loadingText="Locking…"
+              onClick={() => lockTarget && confirmLock(lockTarget)}
             >
               Lock
             </Button>
           </div>
         }
       />
-
-      <AddFiscalPeriodPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
     </>
   );
 }

@@ -13,6 +13,8 @@ export interface Branch {
   isActive: boolean;
   isHeadOffice: boolean;
   _count?: { employees: number };
+  /** Trimmed member list returned by GET /hr/branches/:id (no contact details). */
+  employees?: DepartmentMember[];
 }
 
 // ── Department ───────────────────────────────────────────
@@ -21,9 +23,18 @@ export interface Department {
   name: string;
   description?: string;
   managerId?: string;
+  branchId?: string;
+  branch?: Pick<Branch, 'id' | 'name'>;
   isActive: boolean;
   _count?: { employees: number };
+  /** Trimmed member list returned by GET /hr/departments/:id (no contact details). */
+  employees?: DepartmentMember[];
 }
+
+export type DepartmentMember = Pick<
+  Employee,
+  'id' | 'firstName' | 'lastName' | 'jobTitle' | 'employmentStatus'
+>;
 
 // ── Shared Enums ─────────────────────────────────────────
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
@@ -58,6 +69,7 @@ export interface EmployeeOption {
   employmentStatus: EmploymentStatus;
   department?: { id: string; name: string };
   branch?: { id: string; name: string };
+  avatarUrl?: string;
 }
 
 export interface Employee {
@@ -153,8 +165,14 @@ export interface EmployeeDocument {
   id: string;
   employeeId: string;
   type: DocumentType;
+  customType?: string | null;
+  /** Short-lived signed read URL, resolved fresh on every fetch. */
   url: string;
   name: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedBy: string;
+  expiresAt?: string | null;
   createdAt: string;
 }
 
@@ -168,12 +186,6 @@ export interface UpdateAllowancePayload {
   type?: AllowanceType;
   amount?: number;
   name?: string;
-}
-
-export interface UploadDocumentPayload {
-  type: DocumentType;
-  url: string;
-  name: string;
 }
 
 export interface UpdateEmployeePayload {
@@ -424,6 +436,9 @@ export type {
   PayrollItemDeduction,
   PayrollItem,
   PayrollRunDetail,
+  PayrollLedgerPaymentState,
+  PayrollLedgerLineStatus,
+  PayrollSettlementStatus,
   PayrollDecisionDto,
   RunPayrollDto,
   UpdatePayrollItemDto,

@@ -1,4 +1,4 @@
-import { cn, glassStrongClass } from '@/lib/utils';
+import { cardClass, cn, glassStrongClass } from '@/lib/utils';
 
 export interface DataCardDetail {
   label: React.ReactNode;
@@ -28,6 +28,8 @@ interface DataCardProps {
   actions?: DataCardAction[];
   onClick?: () => void;
   className?: string;
+  /** `strong` (default) is the opaque-ish glass; `card` is the lighter card style the overview uses. */
+  surface?: 'strong' | 'card';
 }
 
 export function DataCard({
@@ -40,19 +42,20 @@ export function DataCard({
   actions,
   onClick,
   className,
+  surface = 'strong',
 }: DataCardProps) {
+  const classes = cn(
+    surface === 'strong' && 'shadow-lg',
+    'rounded-card flex flex-col h-full w-full transition-all duration-200',
+    onClick &&
+      'cursor-pointer hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-0.5',
+    className,
+  );
+
   return (
     <div
       onClick={onClick}
-      className={glassStrongClass(
-        cn(
-          'shadow-lg rounded-card flex flex-col h-full w-80 transition-all duration-200',
-          onClick &&
-            'cursor-pointer hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-0.5',
-          className,
-        ),
-        'plain',
-      )}
+      className={surface === 'card' ? cardClass(classes) : glassStrongClass(classes, 'plain')}
     >
       {/* Header: icon + title/subtitle — badge on the right */}
       <div className="flex items-start gap-3 p-4 pb-3">

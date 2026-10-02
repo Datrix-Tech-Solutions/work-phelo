@@ -22,10 +22,18 @@ export interface GLAccount {
   name: string;
   category: GLAccountCategory;
   normalBalance: NormalBalance;
+  /** The account's classification. Set directly, so an account can sit under a classification
+   *  with no group; when a group is set, it belongs to this classification. */
+  classificationId: string | null;
+  /** `id` is null for legacy accounts that have neither a classification nor a group. */
+  classification: { id: string | null; code: string; name: string } | null;
+  /** Optional — not every account has a group ("parent account" in the UI). */
   accountGroupId: string | null;
   accountGroup: { id: string; code: string; name: string } | null;
   parentAccountId: string | null;
   parentAccount: { id: string; code: string; name: string } | null;
+  /** Overrides the group's (or classification's) cash-flow default for this one account. */
+  cashFlowCategory: CashFlowCategory | null;
   allowPosting: boolean;
   description: string | null;
   status: GLAccountStatus;
@@ -36,33 +44,503 @@ export interface CreateGLAccountPayload {
   name: string;
   category?: GLAccountCategory;
   normalBalance?: NormalBalance;
-  accountGroupId?: string;
+  classificationId?: string;
+  /** null clears the group, leaving the account directly under its classification. */
+  accountGroupId?: string | null;
   parentAccountId?: string;
+  cashFlowCategory?: CashFlowCategory;
   allowPosting?: boolean;
   description?: string;
 }
 
 export type UpdateGLAccountPayload = Partial<CreateGLAccountPayload>;
 
+export interface BulkImportClassificationPayload {
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export interface BulkImportAccountGroupPayload {
+  code: string;
+  name: string;
+  classificationCode: string;
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export interface BulkImportGLAccountPayload {
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  classificationCode: string;
+  parentAccountCode?: string;
+  description?: string;
+  cashFlowCategory?: CashFlowCategory;
+}
+
+export interface BulkImportAccountsPayload {
+  classifications: BulkImportClassificationPayload[];
+  groups: BulkImportAccountGroupPayload[];
+  accounts: BulkImportGLAccountPayload[];
+}
+
+export interface BulkImportRowResult {
+  code: string;
+  status: 'created' | 'skipped' | 'failed';
+  id?: string;
+  message?: string;
+}
+
+export interface BulkImportAccountsResult {
+  classifications: BulkImportRowResult[];
+  groups: BulkImportRowResult[];
+  accounts: BulkImportRowResult[];
+}
+
+export interface GLAccountLedgerEntry {
+  id: string;
+  description: string | null;
+  baseDebit: string;
+  baseCredit: string;
+  runningBalance: string;
+  subledgerAccount: { id: string; code: string; name: string } | null;
+  journalEntry: {
+    journalNumber: string;
+    transactionDate: string;
+    reference: string | null;
+    description: string;
+    baseCurrency: string;
+  };
+}
+
+export interface GLAccountLedger {
+  entries: GLAccountLedgerEntry[];
+  closingBalance: string;
+}
+
+export interface FinancialReportAccount {
+  id: string;
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  normalBalance?: NormalBalance;
+  classification: { id: string | null; code: string; name: string; category: GLAccountCategory };
+  accountGroup: { id: string | null; code: string; name: string };
+}
+
+export interface GeneralLedgerReport {
+  openingBalance: string;
+  totalDebit: string;
+  totalCredit: string;
+  closingBalance: string;
+  lines: Array<{
+    id: string;
+    journalDate: string;
+    postingDate: string | null;
+    journalNumber: string;
+    journalStatus: JournalRecordStatus;
+    description: string | null;
+    account: FinancialReportAccount;
+    debit: string;
+    credit: string;
+    runningBalance: string;
+    transactionCurrency: string;
+  }>;
+}
+
+export interface TrialBalanceReport {
+  asOfDate: string;
+  accounts: Record<
+    GLAccountCategory,
+    Array<{
+      account: FinancialReportAccount;
+      debitBalance: string;
+      creditBalance: string;
+    }>
+  >;
+  totalDebit: string;
+  totalCredit: string;
+  imbalanceAmount: string;
+}
+
+export interface StatementRow {
+  account: FinancialReportAccount;
+  amount: string;
+}
+
+export interface StatementHierarchyGroup {
+  id: string | null;
+  code: string;
+  name: string;
+  accounts: StatementRow[];
+}
+
+export interface StatementHierarchyClassification {
+  id: string | null;
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  groups: StatementHierarchyGroup[];
+}
+
+export interface StatementHierarchyCategory {
+  category: GLAccountCategory;
+  classifications: StatementHierarchyClassification[];
+}
+
+export interface IncomeStatementReport {
+  fromDate: string;
+  toDate: string;
+  revenueAccounts: StatementRow[];
+  expenseAccounts: StatementRow[];
+  hierarchy: StatementHierarchyCategory[];
+  totalRevenue: string;
+  totalExpenses: string;
+  netProfitOrLoss: string;
+}
+
+export interface BalanceSheetReport {
+  asOfDate: string;
+  assets: Array<{ account: FinancialReportAccount; amount: string }>;
+  liabilities: Array<{ account: FinancialReportAccount; amount: string }>;
+  equity: Array<{ account: FinancialReportAccount; amount: string }>;
+  hierarchy: StatementHierarchyCategory[];
+  totalAssets: string;
+  totalLiabilities: string;
+  totalEquity: string;
+  imbalanceAmount: string;
+}
+
+export interface CashFlowStatementReport {
+  fromDate: string;
+  toDate: string;
+  operatingActivities: {
+    netIncome: string;
+    adjustments: Array<{ account: FinancialReportAccount; amount: string }>;
+    total: string;
+  };
+  investingActivities: {
+    lines: Array<{ account: FinancialReportAccount; amount: string }>;
+    total: string;
+  };
+  financingActivities: {
+    lines: Array<{ account: FinancialReportAccount; amount: string }>;
+    total: string;
+  };
+  netChangeInCash: string;
+  openingCash: string;
+  closingCash: string;
+}
+
 export interface QueryGLAccountsParams {
   category?: GLAccountCategory;
   status?: GLAccountStatus;
 }
 
-export type FiscalPeriodStatus = 'OPEN' | 'CLOSED' | 'LOCKED';
+export type CostCentreStatus = 'ACTIVE' | 'INACTIVE';
+
+export interface CostCentre {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  externalRef: string | null;
+  status: CostCentreStatus;
+}
+
+export interface CreateCostCentrePayload {
+  code: string;
+  name: string;
+  description?: string;
+  externalRef?: string;
+}
+
+export type UpdateCostCentrePayload = Partial<CreateCostCentrePayload>;
+
+export type TransactionTypeCategory = 'NEUTRAL' | 'RECEIVABLE' | 'PAYABLE' | 'NONE';
+
+export interface TransactionTypeDefinition {
+  id: string;
+  name: string;
+  code: string;
+  category: TransactionTypeCategory;
+  businessRoles: string[];
+  allowedDocument: string | null;
+  /** Legacy free-text tag — superseded by sourceTypeId below. */
+  source: string | null;
+  /** Links this type to a Source (Settings > Source Types) — a type with a source is
+   *  usable on New Transaction without a rule: its offset account/amount come from
+   *  picking one of that source's open items instead of a preconfigured rule line. */
+  sourceTypeId: string | null;
+  description: string | null;
+  /** Receivable/Payable types only: when true, this type posts a single-line direct
+   *  entry straight to Cashbook (via the New Transaction form) instead of an
+   *  Invoice/Bill. */
+  postsToCashbook: boolean;
+  /** Receivable/Payable types only: a linked type is a credit note (receivable) or debit
+   *  note (payable) — it must reference an original posted invoice/bill and reduces its
+   *  outstanding balance. Its rule is written in the note's own direction. */
+  isLinked: boolean;
+  createdAt: string;
+  rulesCount: number;
+}
+
+export interface CreateTransactionTypePayload {
+  name: string;
+  code: string;
+  category: TransactionTypeCategory;
+  businessRoles?: string[];
+  allowedDocument?: string;
+  source?: string;
+  sourceTypeId?: string;
+  description?: string;
+  postsToCashbook?: boolean;
+  isLinked?: boolean;
+}
+
+export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>;
+
+/** The module a source type belongs to. Fixed to real product modules — this is never a
+ *  free-text tag, since it's meant to reflect an actual integration, not an arbitrary label. */
+export type SourceModule = 'HR' | 'MARKETING' | 'ACCOUNTING' | 'RECRUITMENT' | 'OPERATIONS';
+
+/** A source type is never created from this side — it's populated automatically once a
+ *  module's own integration setup with Accounting is completed (e.g. HR's "Link Payroll to
+ *  Accounting" toggle is what creates the HR/Payroll entry). This side can only link/unlink it. */
+export interface SourceTypeDefinition {
+  id: string;
+  module: SourceModule;
+  name: string;
+  isActive: boolean;
+  /** Posted source ledger entries this source has ever had, and how many of those are
+   *  now fully paid. */
+  entryCount: number;
+  paidCount: number;
+}
+
+export interface SeedPayrollAccountItem {
+  key: string;
+  name: string;
+  include: boolean;
+}
+
+export interface SeedPayrollAccountsPayload {
+  items: SeedPayrollAccountItem[];
+}
+
+export interface SeedPayrollAccountsResult {
+  accounts: {
+    key: string;
+    code: string;
+    name: string;
+    status: 'created' | 'existing' | 'excluded';
+  }[];
+  entityType: { id: string; name: string };
+  entity: { id: string; code: string; name: string };
+  sourceType: { id: string; module: SourceModule; name: string };
+}
+
+export type SourceLedgerPaymentState = 'OPEN' | 'PARTIALLY_PAID' | 'PAID';
+export type SourceLedgerStatusFilter = 'ALL' | 'PAID' | 'UNPAID';
+export type SourceLedgerSortBy = 'eventDate' | 'paymentDate';
+
+export interface SourceLedgerAllocation {
+  id: string;
+  amount: number;
+  /** When this specific payment was made — not to be confused with the entry's own event
+   *  date (`createdAt`, when the accrual/liability was created). */
+  allocatedAt: string;
+  cashbookTransaction: {
+    id: string;
+    reference: string | null;
+    description: string;
+    transactionDate: string;
+  };
+}
+
+/** An open item created alongside a journal a module integration already posted (e.g.
+ *  payroll's accrual) — never generates its own journal. Only ever appears here once its
+ *  linked journal is actually POSTED. */
+export interface SourceLedgerEntry {
+  id: string;
+  sourceRecordId: string | null;
+  description: string;
+  amount: number;
+  outstandingAmount: number;
+  currency: string;
+  createdAt: string;
+  /** Most recent non-reversed payment against this entry, or null if it has none yet. */
+  lastPaymentAt: string | null;
+  sourceType: { id: string; module: SourceModule; name: string };
+  glAccount: { id: string; code: string; name: string };
+  journalEntry: { id: string; journalNumber: string };
+  paymentState: SourceLedgerPaymentState;
+  allocations: SourceLedgerAllocation[];
+}
+
+export interface SourceLedgerQuery {
+  sourceTypeId?: string;
+  status?: SourceLedgerStatusFilter;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: SourceLedgerSortBy;
+  sortDir?: 'asc' | 'desc';
+  limit?: number;
+}
+
+export interface SourceLedgerSummary {
+  entryCount: number;
+  paidCount: number;
+  totalAmount: number;
+  totalOutstanding: number;
+}
+
+export interface MakeSourceLedgerPaymentPayload {
+  cashAccountId: string;
+  transactionTypeId?: string;
+  amount: number;
+  transactionDate: string;
+  settlementMethod: string;
+  description?: string;
+}
+
+export interface TaxType {
+  id: string;
+  code: string;
+  name: string;
+  rate: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  isActive: boolean;
+}
+
+export interface CreateTaxTypePayload {
+  code: string;
+  name: string;
+  rate: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+}
+
+export type UpdateTaxTypePayload = Partial<CreateTaxTypePayload> & { isActive?: boolean };
+
+export type PostingLineDirection = 'DR' | 'CR';
+
+export interface TransactionTypeRuleLine {
+  id: string;
+  sequence: number;
+  direction: PostingLineDirection;
+  account: { id: string; code: string; name: string };
+  /** Set only on a tax line — which TaxType drives this line's computed amount. */
+  taxType: { id: string; name: string; rate: number } | null;
+  /** Set only when this line also posts to a party's subledger account under the
+   *  (fixed) account above, rather than the account alone. */
+  subledgerType: SubledgerType | null;
+  description: string | null;
+}
+
+export interface TransactionTypeRule {
+  id: string;
+  transactionTypeId: string;
+  description: string | null;
+  /** Cashbook-posted RCPT/PMNT types only: the cash/bank account pre-selected on the
+   *  New Transaction form for this type, still changeable there. */
+  defaultCashAccountId: string | null;
+  defaultCashAccount: {
+    id: string;
+    name: string;
+    accountKind: AccountingCashAccountKind;
+    currency: string;
+  } | null;
+  lines: TransactionTypeRuleLine[];
+}
+
+export interface TransactionTypeRuleLineInput {
+  direction: PostingLineDirection;
+  accountId: string;
+  taxTypeId?: string;
+  subledgerType?: SubledgerType;
+  description?: string;
+}
+
+export interface CreateTransactionTypeRulePayload {
+  transactionTypeId: string;
+  description?: string;
+  defaultCashAccountId?: string;
+  lines: TransactionTypeRuleLineInput[];
+}
+
+export interface UpdateTransactionTypeRulePayload {
+  description?: string;
+  defaultCashAccountId?: string;
+  lines?: TransactionTypeRuleLineInput[];
+}
+
+/** SOFT_CLOSED is the month-end review state — for now it blocks posting like CLOSED. */
+export type FiscalPeriodStatus = 'OPEN' | 'SOFT_CLOSED' | 'CLOSED' | 'LOCKED';
 
 export interface FiscalPeriod {
+  id: string;
+  fiscalYearId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: FiscalPeriodStatus;
+  softClosedAt: string | null;
+  closedAt: string | null;
+  lockedAt: string | null;
+}
+
+/** A fiscal year and how far through its periods it is. There is no stored status — it is
+ *  derived from the periods: open while any is open, closed once all are. */
+export interface FiscalYear {
   id: string;
   name: string;
   startDate: string;
   endDate: string;
   status: FiscalPeriodStatus;
+  periodCount: number;
+  /** Periods that are closed or locked. */
+  closedPeriodCount: number;
+  createdAt: string;
+}
+
+export interface FiscalYearDetail extends FiscalYear {
+  periods: FiscalPeriod[];
+}
+
+export type CloseCheckCode =
+  | 'PRIOR_PERIOD_OPEN'
+  | 'DRAFT_JOURNALS'
+  | 'DRAFT_PAYABLE_DOCUMENTS'
+  | 'DRAFT_RECEIVABLE_DOCUMENTS'
+  | 'DRAFT_CASHBOOK_TRANSACTIONS'
+  | 'SOURCE_EVENTS_PENDING'
+  | 'BANK_RECONCILIATION_PENDING';
+
+export interface CloseCheckItem {
+  code: CloseCheckCode;
+  message: string;
+  count: number;
+}
+
+/** What must be cleared (blockers) or looked at (warnings) before an open period can be closed. */
+export interface FiscalPeriodCloseCheck {
+  periodId: string;
+  blockers: CloseCheckItem[];
+  warnings: CloseCheckItem[];
+  canClose: boolean;
 }
 
 export interface CreateFiscalPeriodPayload {
-  name: string;
-  startDate: string;
-  endDate: string;
+  /** Single-period mode: all three required. Omit together with generateYear set. */
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  /** Bulk mode: the calendar year the fiscal year starts in — the backend generates
+   *  its 12 monthly periods from the tenant's configured fiscalYearStartMonth. */
+  generateYear?: number;
 }
 
 export interface QueryFiscalPeriodsParams {
@@ -75,47 +553,181 @@ export interface AccountTypeDefinition {
   description: string | null;
 }
 
-export type JournalEntryStatus = 'Draft' | 'Posted' | 'Reversed' | 'Void';
+export interface AccountCategoryDefinition {
+  code: GLAccountCategory;
+  name: string;
+  normalBalance: NormalBalance;
+  financialStatement: 'BALANCE_SHEET' | 'INCOME_STATEMENT';
+  displayOrder: number;
+}
 
 export interface JournalLine {
+  accountClass: GLAccountCategory | '';
   targetAccount: string;
   description: string;
   debit: number | '';
   credit: number | '';
 }
 
+export type JournalEntryType =
+  | 'standard'
+  | 'adjusting'
+  | 'reversing'
+  | 'closing'
+  | 'opening'
+  | 'recurring';
+
+/** The backend's journal type. It sets the number prefix (JE-STN2609-0000, ADJ, RVS, CLS, OPN, RCR). */
+export type JournalEntryTypeCode =
+  | 'STANDARD'
+  | 'ADJUSTING'
+  | 'REVERSING'
+  | 'CLOSING'
+  | 'OPENING'
+  | 'RECURRING';
+
+export const JOURNAL_ENTRY_TYPE_LABELS: Record<JournalEntryTypeCode, string> = {
+  STANDARD: 'Standard',
+  ADJUSTING: 'Adjusting Entry',
+  REVERSING: 'Reversing Entry',
+  CLOSING: 'Closing Entry',
+  OPENING: 'Opening Balance Entry',
+  RECURRING: 'Recurring Entry',
+};
+
+export type RecurrenceFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUALLY';
+export type RecurrenceEndType = 'NEVER' | 'ON_DATE';
+export type RecurringOnGeneration = 'AUTO_POST' | 'CREATE_DRAFT';
+
+export const RECURRENCE_FREQUENCY_OPTIONS: { value: RecurrenceFrequency; label: string }[] = [
+  { value: 'DAILY', label: 'Daily' },
+  { value: 'WEEKLY', label: 'Weekly' },
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'QUARTERLY', label: 'Quarterly' },
+  { value: 'ANNUALLY', label: 'Annually' },
+];
+
+export const RECURRING_ON_GENERATION_OPTIONS: { value: RecurringOnGeneration; label: string }[] = [
+  { value: 'AUTO_POST', label: 'Auto Post' },
+  { value: 'CREATE_DRAFT', label: 'Create as Draft' },
+];
+
+export type AdjustmentCategoryCode =
+  | 'ACCRUAL'
+  | 'DEPRECIATION'
+  | 'BAD_DEBT'
+  | 'DEFERRAL'
+  | 'PREPAID_RECOGNITION';
+
+export const ADJUSTMENT_CATEGORY_OPTIONS = [
+  { value: 'accrual', label: 'Accrual' },
+  { value: 'depreciation', label: 'Depreciation' },
+  { value: 'bad_debt', label: 'Bad Debt' },
+  { value: 'deferral', label: 'Deferral' },
+  { value: 'prepaid_recognition', label: 'Prepaid Recognition' },
+];
+
 export interface JournalEntryFormValues {
   transactionDate: string;
+  /** Only used by adjusting entries. */
+  adjustmentCategory: string;
+  /** Only used by reversing entries: the posted journal being reversed and the date the
+   *  reversal posts on (transactionDate then holds the original journal's date). */
+  originalJournalId: string;
+  reversalDate: string;
+  reversalReason: string;
+  /** Only used by closing and opening balance entries. */
+  fiscalYearId: string;
+  /** Closing entries: where the year's net profit or loss is posted. */
+  retainedEarningsAccountId: string;
+  /** Opening balance entries: the offsetting account (e.g. Opening Balance Equity). */
+  balancingAccountId: string;
+  /** Only used by recurring entries (the memo is `description`). */
+  recurringName: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endType: RecurrenceEndType;
+  /** Only meaningful when endType is 'ON_DATE'. */
+  endDate: string;
+  /** Derived from startDate + frequency; not user-editable. */
+  nextRunDate: string;
+  onGeneration: RecurringOnGeneration;
   fiscalPeriodId: string;
   currency: string;
   exchangeRate: number | '';
-  reference: string;
   description: string;
   lines: JournalLine[];
 }
 
 export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   transactionDate: '',
+  adjustmentCategory: '',
+  originalJournalId: '',
+  reversalDate: '',
+  reversalReason: '',
+  fiscalYearId: '',
+  retainedEarningsAccountId: '',
+  balancingAccountId: '',
+  recurringName: '',
+  frequency: 'MONTHLY',
+  startDate: '',
+  endType: 'NEVER',
+  endDate: '',
+  nextRunDate: '',
+  onGeneration: 'CREATE_DRAFT',
   fiscalPeriodId: '',
   currency: '',
   exchangeRate: '',
-  reference: '',
   description: '',
-  lines: [{ targetAccount: '', description: '', debit: '', credit: '' }],
+  lines: [
+    { accountClass: '', targetAccount: '', description: '', debit: '', credit: '' },
+    { accountClass: '', targetAccount: '', description: '', debit: '', credit: '' },
+  ],
 };
 
-export interface JournalEntry {
-  id: string;
-  refNo: string;
-  date: string;
-  currency: string;
-  debitTotal: number;
-  creditTotal: number;
-  createdBy: string;
-  status: JournalEntryStatus;
-}
-
 export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+
+export type SourceEventStatus = 'RECEIVED' | 'PROCESSING' | 'POSTED' | 'FAILED' | 'IGNORED';
+
+export interface SourceEventInboxItem {
+  id: string;
+  sourceModule: string;
+  sourceEventType: string;
+  sourceRecordId: string;
+  sourceDocumentId: string | null;
+  idempotencyKey: string;
+  status: SourceEventStatus;
+  failureReason: string | null;
+  retryCount: number;
+  createdAt: string;
+  processedAt: string | null;
+  postingRule: {
+    id: string;
+    name: string;
+    sourceModule: string;
+    sourceEventType: string;
+    version: number;
+  } | null;
+  journalEntry: {
+    id: string;
+    journalNumber: string;
+    status: JournalRecordStatus;
+    transactionDate: string;
+    transactionCurrency: string;
+    baseCurrency: string;
+    postedAt: string | null;
+  } | null;
+  cashbookTransaction: {
+    id: string;
+    status: JournalRecordStatus;
+    transactionType: string;
+    direction: string;
+    amount: string;
+    currency: string;
+    cashAccountId: string;
+    postedJournalEntryId: string | null;
+  } | null;
+}
 
 export interface JournalLineRecord {
   id: string;
@@ -132,9 +744,32 @@ export interface JournalLineRecord {
   costCentre: { id: string; code: string; name: string } | null;
 }
 
+export type JournalSourceCategory =
+  | 'RECEIVABLE'
+  | 'PAYABLE'
+  | 'CASH_AND_BANK'
+  | 'INTEGRATION'
+  | 'MANUAL';
+
+/** The transaction a journal was posted from. Present on the journal list and detail. */
+export interface JournalSource {
+  category: JournalSourceCategory;
+  /** e.g. "Invoice", "Bill", "Receipt", "Payment", "Transfer". */
+  kind: string;
+  /** The originating transaction's own number, when it has one. */
+  number: string | null;
+}
+
 export interface JournalEntryRecord {
   id: string;
   journalNumber: string;
+  entryType: JournalEntryTypeCode;
+  adjustmentCategory: AdjustmentCategoryCode | null;
+  source?: JournalSource;
+  /** Set when a reversal of this journal exists. The original itself is never modified. */
+  reversalJournal: { id: string; journalNumber: string; transactionDate: string } | null;
+  /** Set on a reversal journal: the journal it reverses. */
+  reversalOfJournal: { id: string; journalNumber: string } | null;
   status: JournalRecordStatus;
   transactionDate: string;
   postingDate: string | null;
@@ -163,6 +798,8 @@ export interface CreateJournalLinePayload {
 }
 
 export interface CreateJournalPayload {
+  entryType?: JournalEntryTypeCode;
+  adjustmentCategory?: AdjustmentCategoryCode;
   transactionDate: string;
   fiscalPeriodId: string;
   transactionCurrency: string;
@@ -173,6 +810,46 @@ export interface CreateJournalPayload {
   sourceRecordType?: string;
   sourceRecordId?: string;
   lines: CreateJournalLinePayload[];
+}
+
+export type RecurringJournalStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
+
+export interface CreateRecurringJournalPayload {
+  name: string;
+  description: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  /** null = never ends. */
+  endDate: string | null;
+  /** The next run is calculated by the server. */
+  onGeneration: RecurringOnGeneration;
+  lines: CreateJournalLinePayload[];
+}
+
+export interface RecurringJournalRecord {
+  id: string;
+  name: string;
+  description: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endDate: string | null;
+  nextRunDate: string;
+  onGeneration: RecurringOnGeneration;
+  status: RecurringJournalStatus;
+  transactionCurrency: string;
+  lastRunAt: string | null;
+  /** Why the last run failed, or a note that a journal was created but could not be posted. */
+  lastError: string | null;
+  lastErrorAt: string | null;
+  createdAt: string;
+  lines: Array<{
+    id: string;
+    glAccountId: string;
+    description: string | null;
+    debit: string;
+    credit: string;
+    glAccount: { id: string; code: string; name: string };
+  }>;
 }
 
 export type UpdateDraftJournalPayload = Partial<Omit<CreateJournalPayload, 'lines'>> & {
@@ -190,14 +867,10 @@ export interface QueryJournalsParams {
   to?: string;
 }
 
-export type InvoiceStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Paid' | 'Overdue' | 'Void';
-
 export interface InvoiceLine {
   description: string;
-  glAccount: string;
   unitPrice: number | '';
   quantity: number | '';
-  tax: number | '';
 }
 
 export interface InvoiceFormValues {
@@ -207,6 +880,11 @@ export interface InvoiceFormValues {
   dueDate: string;
   currency: string;
   description: string;
+  /** The Receivable/Payable Transaction Type driving this invoice/bill — its Rule
+   *  resolves the offset account and any tax lines, replacing manual GL entry. */
+  transactionTypeId: string;
+  /** Which of the Rule's Deduction (tax) lines to apply, by TaxType id. */
+  selectedTaxTypeIds: string[];
   lines: InvoiceLine[];
 }
 
@@ -217,29 +895,273 @@ export const INVOICE_DEFAULTS: InvoiceFormValues = {
   dueDate: '',
   currency: '',
   description: '',
-  lines: [{ description: '', glAccount: '', unitPrice: '', quantity: '', tax: '' }],
+  transactionTypeId: '',
+  selectedTaxTypeIds: [],
+  lines: [{ description: '', unitPrice: '', quantity: '' }],
 };
 
-export interface AccountsReceivableInvoice {
+export type AccountingTradeSide = 'RECEIVABLE' | 'PAYABLE';
+export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type AccountingTradeDocumentKind = 'INVOICE' | 'CREDIT_NOTE' | 'BILL';
+export type AccountingTradeDocumentPaymentState =
+  | 'DRAFT'
+  | 'REVERSED'
+  | 'PAID'
+  | 'PARTIALLY_PAID'
+  | 'OPEN';
+
+export interface AccountingTradePartyRef {
   id: string;
-  invoiceNumber: string;
-  customer: string;
-  invoiceDate: string;
-  dueDate: string;
-  amount: number;
+  code: string;
+  name: string;
   currency: string;
-  status: InvoiceStatus;
+  /** Entity type key (e.g. "VENDOR"). Present on documents, not on every party ref. */
+  type?: string;
+  contactName?: string | null;
+  phone?: string | null;
+  address?: string | null;
 }
 
-export interface AccountsPayableInvoice {
+interface AccountingTradeGLAccountRef {
   id: string;
-  invoiceNumber: string;
-  vendor: string;
-  invoiceDate: string;
-  dueDate: string;
+  code: string;
+  name: string;
+}
+
+interface AccountingTradeJournalRef {
+  id: string;
+  journalNumber: string;
+  status: string;
+  postedAt: string | null;
+}
+
+interface AccountingTradeOriginalDocumentRef {
+  id: string;
+  documentNumber: string;
+  totalAmount: string;
+  status: string;
+}
+
+export interface AccountingTradeDocument {
+  id: string;
+  side: AccountingTradeSide;
+  documentType: AccountingTradeDocumentKind;
+  documentNumber: string;
+  documentDate: string;
+  dueDate: string | null;
+  currency: string;
+  exchangeRate: string | null;
+  subtotalAmount: string;
+  /** Present when the transaction was entered as quantity × unit price. */
+  quantity: string | null;
+  unitPrice: string | null;
+  taxAmount: string;
+  totalAmount: string;
+  description: string | null;
+  externalReference: string | null;
+  sourceModule: string | null;
+  sourceRecordId: string | null;
+  offsetGlAccountId: string;
+  /** Optional department tag, carried onto the offset (P&L) journal line when posted. */
+  costCentreId: string | null;
+  /** The Transaction Type that drove this document's rule-based posting, if any —
+   *  a plain audit trail, null for credit notes and pre-existing documents. */
+  transactionTypeId: string | null;
+  originalDocumentId: string | null;
+  status: AccountingTradeDocumentStatus;
+  paymentState: AccountingTradeDocumentPaymentState;
+  /** What is still owed on a posted document, after payments and credit/debit notes.
+   *  Only present on list rows. */
+  outstandingAmount: string | null;
+  createdAt: string;
+  updatedAt: string;
+  postedAt: string | null;
+  reversedAt: string | null;
+  postedJournalEntryId: string | null;
+  reversalJournalEntryId: string | null;
+  reversalOfDocumentId: string | null;
+  party: AccountingTradePartyRef;
+  offsetGlAccount: AccountingTradeGLAccountRef;
+  costCentre: AccountingTradeGLAccountRef | null;
+  /** The Receivable (AR) or Payable (AP) account this document actually posts to —
+   *  resolved once from the Transaction Type Rule at creation, not a fixed setting. */
+  controlAccount: AccountingTradeGLAccountRef;
+  /** Present only when the document's Rule split tax onto its own account(s); each
+   *  entry's account isn't enriched server-side, so the panel resolves it against the
+   *  GL account list. */
+  taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
+  postedJournalEntry: AccountingTradeJournalRef | null;
+  reversalJournalEntry: AccountingTradeJournalRef | null;
+  originalDocument: AccountingTradeOriginalDocumentRef | null;
+}
+
+export interface QueryTradeDocumentsParams {
+  partyId?: string;
+  status?: AccountingTradeDocumentStatus;
+  currency?: string;
+  fromDate?: string;
+  toDate?: string;
+  dueFrom?: string;
+  dueTo?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateTradeInvoicePayload {
+  partyId: string;
+  documentDate: string;
+  dueDate?: string;
+  currency: string;
+  /** The subtotal (quantity × unitPrice, rounded to 2 decimals), before any tax lines the
+   *  rule adds on top. */
+  amount: number;
+  quantity?: number;
+  unitPrice?: number;
+  exchangeRate?: number;
+  /** The Receivable/Payable-category Transaction Type driving this document — its
+   *  Rule resolves the offset account and any tax lines. A Rule must exist for it. */
+  transactionTypeId: string;
+  /** Which of the Rule's Deduction (tax) lines to apply, by TaxType id. */
+  selectedTaxTypeIds?: string[];
+  /** Optional active cost centre (department) — tags the offset (P&L) line, not the AR/AP or tax lines. */
+  costCentreId?: string;
+  description?: string;
+  externalReference?: string;
+}
+
+export interface ReverseTradeDocumentPayload {
+  reversalDate: string;
+  reason: string;
+}
+
+export interface AccountingTradeDocumentBalance {
+  currency: string;
+  originalAmount: string;
+  appliedSettlements: string;
+  appliedCreditNotes: string;
+  outstandingAmount: string;
+  paymentState: AccountingTradeDocumentPaymentState;
+}
+
+export interface AccountingCurrencyTotal {
+  currency: string;
+  amount: string;
+}
+
+export interface AccountsReceivableSummary {
+  outstandingByCurrency: AccountingCurrencyTotal[];
+  overdueInvoices: number;
+  dueThisWeek: number;
+  collectedMtdByCurrency: AccountingCurrencyTotal[];
+}
+
+export interface AccountsPayableSummary {
+  outstandingByCurrency: AccountingCurrencyTotal[];
+  overdueInvoices: number;
+  dueThisWeek: number;
+  pendingApproval: number;
+  paidMtdByCurrency: AccountingCurrencyTotal[];
+}
+
+export interface CreateTradeCreditNotePayload {
+  partyId: string;
+  documentDate: string;
+  currency: string;
+  amount: number;
+  /** Manual path only — omitted when a linked `transactionTypeId` drives the posting. */
+  offsetGlAccountId?: string;
+  /** Posts to the AR (Receivable) or AP (Payable) account, whichever this side is —
+   *  manually picked on the manual path only. */
+  controlAccountId?: string;
+  /** A linked Receivable/Payable Transaction Type: the rule resolves the accounts and tax
+   *  lines, and `originalDocumentId` is then required. */
+  transactionTypeId?: string;
+  quantity?: number;
+  unitPrice?: number;
+  selectedTaxTypeIds?: string[];
+  costCentreId?: string;
+  originalDocumentId?: string;
+  description?: string;
+  externalReference?: string;
+}
+
+export interface AccountingTradeSettlement {
+  id: string;
+  side: AccountingTradeSide;
+  settlementNumber: string;
+  settlementDate: string;
+  currency: string;
+  amount: string;
+  exchangeRate: string | null;
+  reference: string | null;
+  description: string | null;
+  externalReference: string | null;
+  sourceModule: string | null;
+  sourceRecordId: string | null;
+  status: AccountingTradeDocumentStatus;
+  createdAt: string;
+  updatedAt: string;
+  postedAt: string | null;
+  reversedAt: string | null;
+  reversalOfSettlementId: string | null;
+  party: AccountingTradePartyRef;
+  cashbookTransaction: {
+    id: string;
+    status: string;
+    reference: string | null;
+    postedJournalEntryId: string | null;
+    reversalJournalEntryId: string | null;
+  };
+}
+
+export interface QueryTradeSettlementsParams {
+  partyId?: string;
+  cashAccountId?: string;
+  status?: AccountingTradeDocumentStatus;
+  currency?: string;
+  fromDate?: string;
+  toDate?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateTradeSettlementPayload {
+  partyId: string;
+  /** The posted invoice/bill this settlement is being recorded to pay. The settlement
+   *  inherits that document's own resolved AR/AP account. */
+  documentId: string;
+  cashAccountId: string;
   amount: number;
   currency: string;
-  status: InvoiceStatus;
+  settlementDate: string;
+  settlementMethod: AccountingCashbookSettlementMethod;
+  reference?: string;
+  description?: string;
+  exchangeRate?: number;
+}
+
+export type AccountingTradeAllocationSource = 'RECEIPT' | 'PAYMENT' | 'CREDIT_NOTE';
+
+export interface AccountingTradeAllocation {
+  id: string;
+  amount: string;
+  currency: string;
+  allocatedAt: string;
+  sourceType: AccountingTradeAllocationSource;
+  reversedAt: string | null;
+  reversalReason: string | null;
+  document: { id: string; documentNumber: string; totalAmount: string };
+}
+
+export interface CreateTradeAllocationPayload {
+  documentId: string;
+  amount: number;
+}
+
+export interface ReverseTradeAllocationPayload {
+  reason: string;
 }
 
 export interface AccountingContact {
@@ -261,23 +1183,196 @@ export interface AccountingSubledgerBalance {
   transactionCurrencies: string[];
 }
 
-export interface AccountingSubledgerRef {
+export type AccountingCashAccountKind = 'BANK' | 'CASH' | 'MOBILE_MONEY' | 'OTHER';
+
+export interface AccountingCashAccount {
+  id: string;
+  name: string;
+  accountKind: AccountingCashAccountKind;
+  currency: string;
+  glAccountId: string;
+  /** The account's GL running balance (i.e. its cash position) as of now — computed
+   *  server-side from posted journal lines, not a stored field. */
+  balance: string;
+  bankName: string | null;
+  accountNumber: string | null;
+  branch: string | null;
+  description: string | null;
+  isActive: boolean;
+  createdByUserId: string;
+  updatedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  glAccount: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+  };
+}
+
+export interface QueryCashAccountsParams {
+  accountKind?: AccountingCashAccountKind;
+  currency?: string;
+  isActive?: boolean;
+}
+
+export interface CreateCashAccountPayload {
+  name: string;
+  accountKind: AccountingCashAccountKind;
+  currency: string;
+  glAccountId: string;
+  bankName?: string;
+  accountNumber?: string;
+  branch?: string;
+  description?: string;
+}
+
+export interface UpdateCashAccountPayload extends Partial<CreateCashAccountPayload> {
+  isActive?: boolean;
+}
+
+export type CashbookTransactionType = 'RECEIPT' | 'PAYMENT' | 'TRANSFER' | 'CHARGE' | 'ADJUSTMENT';
+export type CashbookDirection = 'INFLOW' | 'OUTFLOW' | 'TRANSFER';
+export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type AccountingCashbookSettlementMethod =
+  | 'BANK_TRANSFER'
+  | 'CHEQUE'
+  | 'CASH'
+  | 'MOBILE_MONEY'
+  | 'INTERNAL_TRANSFER'
+  | 'JOURNAL'
+  | 'OTHER';
+
+export interface CashbookAccountRef {
+  id: string;
+  name: string;
+  accountKind: AccountingCashAccountKind;
+  currency: string;
+  glAccountId: string;
+  glAccount: { id: string; code: string; name: string };
+}
+
+interface CashbookGLAccountRef {
   id: string;
   code: string;
   name: string;
+}
+
+interface CashbookJournalRef {
+  id: string;
+  journalNumber: string;
+  status: string;
+  postedAt: string | null;
+}
+
+interface CashbookTransactionRef {
+  id: string;
+  reference: string | null;
   status: string;
 }
 
-export interface QueryAccountingPartiesParams {
-  search?: string;
-  isActive?: boolean;
+export interface CashbookTransaction {
+  id: string;
+  cashAccountId: string;
+  destinationCashAccountId: string | null;
+  transactionType: CashbookTransactionType;
+  direction: CashbookDirection;
+  /** Generated ID for a direct Receipt/Payment made from the Transactions page
+   *  (e.g. RCPT26-00001). Null for older rows and non-transaction cashbook entries. */
+  transactionNumber: string | null;
+  amount: string;
+  currency: string;
+  transactionDate: string;
+  settlementMethod: AccountingCashbookSettlementMethod;
+  reference: string | null;
+  counterpartyType: string | null;
+  counterpartyId: string | null;
+  externalReference: string | null;
+  description: string;
+  offsetGlAccountId: string | null;
+  offsetSubledgerAccountId: string | null;
+  chargeAmount: string | null;
+  sourceEventInboxId: string | null;
+  sourceModule: string | null;
+  sourceEventType: string | null;
+  sourceRecordId: string | null;
+  sourceReference: string | null;
+  exchangeRate: string | null;
+  status: CashbookTransactionStatus;
+  createdByUserId: string;
+  updatedByUserId: string;
+  postedByUserId: string | null;
+  reversedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  postedAt: string | null;
+  reversedAt: string | null;
+  postedJournalEntryId: string | null;
+  reversalJournalEntryId: string | null;
+  reversalOfTransactionId: string | null;
+  cashAccount: CashbookAccountRef;
+  destinationCashAccount: CashbookAccountRef | null;
+  offsetGlAccount: CashbookGLAccountRef | null;
+  offsetSubledgerAccount: (CashbookGLAccountRef & { type: string }) | null;
+  postedJournalEntry: CashbookJournalRef | null;
+  reversalJournalEntry: CashbookJournalRef | null;
+  reversalOfTransaction: CashbookTransactionRef | null;
+  reversalTransaction: CashbookTransactionRef | null;
+}
+
+export interface QueryCashbookParams {
+  cashAccountId?: string;
+  transactionType?: CashbookTransactionType;
+  status?: CashbookTransactionStatus;
   currency?: string;
-  sourceModule?: string;
-  externalRef?: string;
+  fromDate?: string;
+  toDate?: string;
   page?: number;
   limit?: number;
-  sortBy?: 'code' | 'legalName' | 'createdAt' | 'updatedAt';
-  sortOrder?: 'asc' | 'desc';
+}
+
+export interface CreateCashbookEntryPayload {
+  cashAccountId: string;
+  /** The Transaction Type the entry is made under — its code builds the transaction number. */
+  transactionTypeId?: string;
+  /** quantity × unitPrice, rounded to 2 decimals. */
+  amount: number;
+  quantity?: number;
+  unitPrice?: number;
+  currency: string;
+  transactionDate: string;
+  settlementMethod: AccountingCashbookSettlementMethod;
+  reference?: string;
+  counterpartyType?: string;
+  counterpartyId?: string;
+  externalReference?: string;
+  description: string;
+  offsetGlAccountId: string;
+  offsetSubledgerAccountId?: string;
+  exchangeRate?: number;
+}
+
+export interface CreateCashbookAdjustmentPayload extends CreateCashbookEntryPayload {
+  direction: 'INFLOW' | 'OUTFLOW';
+}
+
+export interface CreateCashbookTransferPayload {
+  cashAccountId: string;
+  destinationCashAccountId: string;
+  amount: number;
+  currency: string;
+  transactionDate: string;
+  exchangeRate?: number;
+  reference?: string;
+  description: string;
+  chargeAmount?: number;
+  chargeGlAccountId?: string;
+}
+
+export interface ReverseCashbookTransactionPayload {
+  reversalDate: string;
+  reason: string;
 }
 
 export interface PaginatedResult<T> {
@@ -288,52 +1383,103 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
-export interface AccountingVendor {
+export type SubledgerType =
+  | 'CUSTOMER'
+  | 'VENDOR'
+  | 'CEDANT'
+  | 'REINSURER'
+  | 'EMPLOYEE'
+  | 'STATUTORY'
+  | 'OTHER';
+
+export const MANUAL_SUBLEDGER_TYPES: SubledgerType[] = [
+  'CUSTOMER',
+  'VENDOR',
+  'EMPLOYEE',
+  'STATUTORY',
+  'OTHER',
+];
+
+export const SUBLEDGER_TYPE_LABELS: Record<SubledgerType, string> = {
+  CUSTOMER: 'Customer',
+  VENDOR: 'Vendor',
+  CEDANT: 'Cedant',
+  REINSURER: 'Reinsurer',
+  EMPLOYEE: 'Employee',
+  STATUTORY: 'Statutory',
+  OTHER: 'Other',
+};
+
+export interface EntityType {
+  id: string;
+  name: string;
+  /** Short ID/prefix (e.g. "SUP") used to build the Entity ID on the entity form. */
+  code: string | null;
+  isSystem: boolean;
+  entityCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEntityTypePayload {
+  name: string;
+  code: string;
+}
+
+export type UpdateEntityTypePayload = Partial<CreateEntityTypePayload>;
+
+export interface SubledgerAccount {
   id: string;
   code: string;
-  legalName: string;
-  tradingName: string | null;
-  primaryContactName: string | null;
-  email: string | null;
-  phone: string | null;
-  billingAddress: string | null;
-  countryCode: string | null;
-  currency: string;
-  paymentTermsDays: number;
-  taxNumber: string | null;
+  name: string;
+  /** Any name from the tenant's own Entity Types list — not the fixed SubledgerType enum. */
+  type: string;
   externalRef: string | null;
-  sourceModule: string | null;
-  defaultExpenseAccountId: string | null;
-  notes: string | null;
-  isActive: boolean;
-  subledgerAccountId: string;
-  subledgerAccount: AccountingSubledgerRef;
+  /** No entity needs one — which GL account a document affects is decided by the
+   *  Transaction Type Rule used to create it, not anything fixed on the entity. Only ever
+   *  set as an explicit, optional override. */
+  controlAccountId: string | null;
+  controlAccount: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+    normalBalance: NormalBalance;
+  } | null;
+  currency: string | null;
+  contactName: string | null;
+  phone: string | null;
+  address: string | null;
+  description: string | null;
+  status: GLAccountStatus;
   balance: AccountingSubledgerBalance;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface CreateAccountingVendorPayload {
+export interface CreateSubledgerAccountPayload {
   code: string;
-  legalName: string;
-  tradingName?: string;
-  primaryContactName?: string;
-  email?: string;
-  phone?: string;
-  billingAddress?: string;
-  countryCode?: string;
-  currency: string;
-  paymentTermsDays?: number;
-  taxNumber?: string;
+  name: string;
+  /** Any name from the tenant's own Entity Types list — not the fixed SubledgerType enum. */
+  type: string;
   externalRef?: string;
-  sourceModule?: string;
-  defaultExpenseAccountId?: string;
-  notes?: string;
+  /** Optional, explicit override only — not needed for normal use. */
+  controlAccountId?: string;
+  currency?: string;
+  contactName?: string;
+  phone?: string;
+  address?: string;
+  description?: string;
 }
 
-export type UpdateAccountingVendorPayload = Partial<CreateAccountingVendorPayload> & {
-  isActive?: boolean;
-};
+export type UpdateSubledgerAccountPayload = Partial<CreateSubledgerAccountPayload>;
+
+export interface QuerySubledgerAccountsParams {
+  type?: string;
+  externalRef?: string;
+  controlAccountId?: string;
+  status?: GLAccountStatus;
+}
 
 export interface AccountingCurrency {
   id: string;
@@ -363,6 +1509,7 @@ export interface AccountingTenantConfig {
   baseCurrency: string | null;
   fiscalYearStartMonth: number;
   decimalPlaces: number;
+  isConfigured?: boolean;
 }
 
 export interface UpdateAccountingTenantConfigPayload {
@@ -407,6 +1554,64 @@ export interface AccountTransaction {
   currency: string;
 }
 
+export type AgingBucket = 'CURRENT' | '1_30' | '31_60' | '61_90' | 'OVER_90';
+
+export interface AccountingAgingCurrencyTotal extends Record<AgingBucket, string> {
+  currency: string;
+}
+
+export interface AccountingOpenItem {
+  id: string;
+  documentNumber: string;
+  documentDate: string;
+  dueDate: string | null;
+  currency: string;
+  totalAmount: string;
+  outstandingAmount: string;
+}
+
+export interface AccountingAgingReport {
+  agingByCurrency: AccountingAgingCurrencyTotal[];
+}
+
+/** An open document with its age at the report date. */
+export interface AccountingAgingDocument extends AccountingOpenItem {
+  daysOverdue: number;
+  bucket: AgingBucket;
+}
+
+/** One customer or vendor: its aging per currency and the open documents behind it. */
+export interface AccountingAgingParty {
+  party: { id: string; code: string; name: string };
+  agingByCurrency: AccountingAgingCurrencyTotal[];
+  documents: AccountingAgingDocument[];
+}
+
+export interface AccountingAgingPartyReport extends AccountingAgingReport {
+  asOfDate: string;
+  parties: AccountingAgingParty[];
+}
+
+export interface AccountingPartyStatement extends AccountingAgingReport {
+  asOfDate: string;
+  documents: AccountingOpenItem[];
+}
+
+/** Which Cash Flow Statement section an account's balance change belongs in. EXCLUDED covers
+ *  both non-flows (Cash & Bank accounts — always resolved automatically, never set here) and
+ *  non-cash items that belong in the supplemental disclosure note rather than the statement
+ *  itself. Untagged: inherits from the level above, or defaults to Operating for an
+ *  asset/liability/equity account (a revenue/expense account is simply left out of the
+ *  statement's per-account lines — it's already inside Net Income). */
+export type CashFlowCategory = 'OPERATING' | 'INVESTING' | 'FINANCING' | 'EXCLUDED';
+
+export const CASH_FLOW_CATEGORY_OPTIONS: { value: CashFlowCategory; label: string }[] = [
+  { value: 'OPERATING', label: 'Operating' },
+  { value: 'INVESTING', label: 'Investing' },
+  { value: 'FINANCING', label: 'Financing' },
+  { value: 'EXCLUDED', label: 'Excluded / Non-cash' },
+];
+
 export interface AccountClassification {
   id: string;
   code: string;
@@ -415,6 +1620,8 @@ export interface AccountClassification {
   displayOrder: number;
   isSystemTemplate: boolean;
   isActive: boolean;
+  /** Default for accounts under this classification; a group or account can override it. */
+  cashFlowCategory: CashFlowCategory | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -425,6 +1632,7 @@ export interface CreateAccountClassificationPayload {
   category: GLAccountCategory;
   displayOrder?: number;
   isSystemTemplate?: boolean;
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export type UpdateAccountClassificationPayload = Partial<CreateAccountClassificationPayload> & {
@@ -451,9 +1659,12 @@ export interface AccountGroup {
     code: string;
     name: string;
     category: GLAccountCategory;
+    cashFlowCategory: CashFlowCategory | null;
   };
   displayOrder: number;
   isActive: boolean;
+  /** Overrides the classification's cash-flow default for every account in this group. */
+  cashFlowCategory: CashFlowCategory | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -463,6 +1674,7 @@ export interface CreateAccountGroupPayload {
   code: string;
   name: string;
   displayOrder?: number;
+  cashFlowCategory?: CashFlowCategory;
 }
 
 export type UpdateAccountGroupPayload = Partial<CreateAccountGroupPayload> & {
@@ -483,60 +1695,136 @@ export interface CashBankAccount {
   lastReconciled: string | null;
 }
 
-export interface BudgetForecast {
-  id: string;
-  budgetName: string;
-  department: string;
-  fiscalYear: string;
-  version: string;
+export type BudgetPeriod = 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+
+export type BudgetStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED';
+
+/**
+ * Which side of the chart of accounts a budget targets. Drives which leaf accounts are
+ * offered as budget lines: EXPENSE → expense-classification accounts, INCOME →
+ * revenue-classification accounts, BOTH → both.
+ */
+export type BudgetScope = 'EXPENSE' | 'INCOME' | 'BOTH';
+
+export interface BudgetLineInput {
+  accountId: string;
+  /** Optional dimension — null/omitted means the line is company-wide. A line is unique per account + cost centre. */
+  costCentreId?: string | null;
   amount: number;
-  actualSpend: number;
-  currency: string;
 }
 
-export interface AccountingCustomer {
+export interface CreateBudgetPayload {
+  name: string;
+  period: BudgetPeriod;
+  /** ISO YYYY-MM-DD — first day the budget takes effect. */
+  startDate: string;
+  scope: BudgetScope;
+  lines: BudgetLineInput[];
+}
+
+/** A single account's target within a budget, with actuals rolled up from posted GL activity. */
+export interface BudgetLine {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  category: GLAccountCategory;
+  /** Null for a company-wide line (no cost-centre split). */
+  costCentreId: string | null;
+  costCentreCode: string | null;
+  costCentreName: string | null;
+  budgeted: number;
+  /** Posted actual for the account (and cost centre, when set) over the budget window; null until the period has activity. */
+  actual: number | null;
+}
+
+/** One row in the budgets list. */
+export interface Budget {
   id: string;
-  code: string;
-  legalName: string;
-  tradingName: string | null;
-  primaryContactName: string | null;
-  email: string | null;
-  phone: string | null;
-  billingAddress: string | null;
-  countryCode: string | null;
+  name: string;
+  period: BudgetPeriod;
+  scope: BudgetScope;
+  /** ISO YYYY-MM-DD — inclusive window derived from period + start. */
+  startDate: string;
+  endDate: string;
   currency: string;
-  paymentTermsDays: number;
-  creditLimit: number | null;
-  taxNumber: string | null;
-  externalRef: string | null;
-  sourceModule: string | null;
-  notes: string | null;
-  isActive: boolean;
-  subledgerAccountId: string;
-  subledgerAccount: AccountingSubledgerRef;
-  balance: AccountingSubledgerBalance;
+  incomeBudgeted: number;
+  expenseBudgeted: number;
+  /** incomeBudgeted − expenseBudgeted. */
+  netAmount: number;
+  status: BudgetStatus;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface CreateAccountingCustomerPayload {
-  code: string;
-  legalName: string;
-  tradingName?: string;
-  primaryContactName?: string;
-  email?: string;
-  phone?: string;
-  billingAddress?: string;
-  countryCode?: string;
-  currency: string;
-  paymentTermsDays?: number;
-  creditLimit?: number;
-  taxNumber?: string;
-  externalRef?: string;
-  sourceModule?: string;
-  notes?: string;
+/** Budget row plus its per-account lines — the details-page payload. */
+export interface BudgetDetail extends Budget {
+  lines: BudgetLine[];
 }
 
-export type UpdateAccountingCustomerPayload = Partial<CreateAccountingCustomerPayload> & {
-  isActive?: boolean;
-};
+export type PostingRuleDirection = 'DR' | 'CR';
+export type PostingRuleSubledgerType = SubledgerType;
+
+export interface PostingRuleLine {
+  id: string;
+  sequence: number;
+  direction: PostingRuleDirection;
+  glAccountId: string;
+  subledgerType: PostingRuleSubledgerType | null;
+  subledgerExternalRefSource: string | null;
+  amountSource: string;
+  currencySource: string;
+  descriptionTemplate: string;
+  glAccount: { id: string; code: string; name: string; status: string };
+}
+
+export interface PostingRule {
+  id: string;
+  name: string;
+  sourceModule: string;
+  sourceEventType: string;
+  version: number;
+  active: boolean;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lines: PostingRuleLine[];
+}
+
+export interface QueryPostingRulesParams {
+  sourceModule?: string;
+  sourceEventType?: string;
+  active?: boolean;
+}
+
+export interface PostingRuleLineInput {
+  sequence: number;
+  direction: PostingRuleDirection;
+  glAccountId: string;
+  subledgerType?: PostingRuleSubledgerType;
+  subledgerExternalRefSource?: string;
+  amountSource: string;
+  currencySource: string;
+  descriptionTemplate: string;
+}
+
+export interface CreatePostingRulePayload {
+  name: string;
+  sourceModule: string;
+  sourceEventType: string;
+  version: number;
+  active?: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  lines?: PostingRuleLineInput[];
+}
+
+export interface UpdatePostingRulePayload {
+  name?: string;
+  active?: boolean;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+}
+
+export type CreatePostingRuleLinePayload = PostingRuleLineInput;
+export type UpdatePostingRuleLinePayload = Partial<PostingRuleLineInput>;

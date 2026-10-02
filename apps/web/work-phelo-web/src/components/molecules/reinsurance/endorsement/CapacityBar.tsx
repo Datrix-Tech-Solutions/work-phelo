@@ -16,6 +16,8 @@ interface CapacityBarProps {
   originalPercent?: number;
   rows: CapacityBarRow[];
   colorMap: Record<string, string>;
+  /** Once closed there's nothing left to track against a target — show a flat "placed" readout instead. */
+  isClosed?: boolean;
 }
 
 interface CapacitySegmentProps {
@@ -78,6 +80,7 @@ export function CapacityBar({
   originalPercent,
   rows,
   colorMap,
+  isClosed = false,
 }: CapacityBarProps) {
   if (targetPercent <= 0) return null;
 
@@ -87,22 +90,26 @@ export function CapacityBar({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between text-xs font-medium text-gray-500">
         <span>Accepted Capacity</span>
-        <span>
-          <span className="text-gray-700 text-[13px] font-bold">{acceptedPercent}%</span>
-          <span className="text-gray-400 text-[13px] font-bold"> / {targetPercent}%</span>
-          {delta !== 0 && (
-            <span className="text-gray-400 text-[10px] font-bold">
-              {' '}
-              ({originalPercent}%
-              <span className={delta > 0 ? 'text-green-600' : 'text-red-500'}>
+        {isClosed ? (
+          <span className="text-gray-700 text-[13px] font-bold">{acceptedPercent}% placed</span>
+        ) : (
+          <span>
+            <span className="text-gray-700 text-[13px] font-bold">{acceptedPercent}%</span>
+            <span className="text-gray-400 text-[13px] font-bold"> / {targetPercent}%</span>
+            {delta !== 0 && (
+              <span className="text-gray-400 text-[10px] font-bold">
                 {' '}
-                {delta > 0 ? '+' : ''}
-                {delta}%
+                ({originalPercent}%
+                <span className={delta > 0 ? 'text-green-600' : 'text-red-500'}>
+                  {' '}
+                  {delta > 0 ? '+' : ''}
+                  {delta}%
+                </span>
+                )
               </span>
-              )
-            </span>
-          )}
-        </span>
+            )}
+          </span>
+        )}
       </div>
 
       <div className="relative h-2.5 rounded-full bg-gray-100 overflow-hidden">

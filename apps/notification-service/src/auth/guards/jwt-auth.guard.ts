@@ -4,9 +4,12 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { Request } from 'express';
 import * as jwt from 'jsonwebtoken';
 import { JwtPayload, RequestUser } from '@work-phelo/types';
+
+const PERMISSIONS_SIGNATURE_HEADER = 'x-gateway-permissions-signature';
 
 function firstHeader(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -40,6 +43,11 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET) as JwtPayload;
+      if (!payload.sub || !payload.tenantId) {
+        throw new UnauthorizedException(
+          'Invalid gateway authorization context',
+        );
+      }
       request.user = {
         id: payload.sub,
         email: payload.email,
@@ -56,26 +64,65 @@ export class JwtAuthGuard implements CanActivate {
           '',
         moduleConfig: payload.moduleConfig ?? {},
         featureConfig: payload.featureConfig ?? {},
-        permissions:
-          this.parsePermissions(
-            firstHeader(request.headers['x-user-permissions']),
-          ) ??
-          payload.permissions ??
-          [],
+        permissions: this.resolvePermissions(
+          request,
+          payload,
+          process.env.JWT_SECRET,
+        ),
       };
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('Invalid or expired token');
     }
   }
 
-  private parsePermissions(raw: string | undefined): string[] | undefined {
-    if (!raw) return undefined;
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as string[]) : undefined;
-    } catch {
-      return undefined;
+  private resolvePermissions(
+    request: Request,
+    payload: JwtPayload,
+    secret: string,
+  ): string[] {
+    const rawPermissions = firstHeader(request.headers['x-user-permissions']);
+    const signature = firstHeader(
+      request.headers[PERMISSIONS_SIGNATURE_HEADER],
+    );
+
+    if (!rawPermissions && !signature) return payload.permissions ?? [];
+    if (!rawPermissions || !signature) {
+      throw new UnauthorizedException('Invalid gateway authorization context');
     }
+
+    const expected = createHmac('sha256', secret)
+      .update(`${payload.sub}:${payload.tenantId}:${rawPermissions}`)
+      .digest('hex');
+
+    if (!this.matchesSignature(signature, expected)) {
+      throw new UnauthorizedException('Invalid gateway authorization context');
+    }
+
+    try {
+      const permissions: unknown = JSON.parse(rawPermissions);
+      if (
+        !Array.isArray(permissions) ||
+        !permissions.every((permission) => typeof permission === 'string')
+      ) {
+        throw new UnauthorizedException(
+          'Invalid gateway authorization context',
+        );
+      }
+      return permissions;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException('Invalid gateway authorization context');
+    }
+  }
+
+  private matchesSignature(signature: string, expected: string): boolean {
+    const supplied = Buffer.from(signature);
+    const calculated = Buffer.from(expected);
+    return (
+      supplied.length === calculated.length &&
+      timingSafeEqual(supplied, calculated)
+    );
   }
 }

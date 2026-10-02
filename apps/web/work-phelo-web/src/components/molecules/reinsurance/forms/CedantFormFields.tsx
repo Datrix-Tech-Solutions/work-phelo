@@ -1,14 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { useFieldArray, useWatch } from 'react-hook-form';
 import type { Control, UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-form';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
-import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { Input } from '@/components/atoms/Input';
 import { Icons } from '@/components/atoms/icons';
 import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/forms/CounterpartyAddressFields';
 import { CONTACT_PERSON_DEFAULTS } from '@/types/reinsurance';
 import type { CedantFormValues } from '@/types/reinsurance';
+import { useReinsurers } from '@/hooks';
+import { codeToCountry } from '@/lib/geo';
 
 interface CedantFormFieldsProps {
   control: Control<CedantFormValues>;
@@ -24,13 +28,52 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
     remove: removeContact,
   } = useFieldArray({ control, name: 'contacts' });
 
-  // Primary phone via useWatch + setValue (PhoneInput cannot use register directly)
+  // Primary phone via useWatch + setValue (digits-only input, not registered directly)
   const primaryPhone = useWatch({ control, name: 'phone' });
   // Contact phones via watching the entire contacts array
   const watchedContacts = useWatch({ control, name: 'contacts' });
 
+  const { data: reinsurers = [] } = useReinsurers();
+  const [prefillId, setPrefillId] = useState('');
+
+  const reinsurerOptions = reinsurers.map((r) => ({ value: r.id, label: r.name }));
+
+  const handlePrefill = (reinsurerId: string) => {
+    setPrefillId(reinsurerId);
+    const reinsurer = reinsurers.find((r) => r.id === reinsurerId);
+    if (!reinsurer) return;
+
+    setValue('name', reinsurer.name);
+    setValue('email', reinsurer.email ?? '');
+    setValue('phone', reinsurer.phone ?? '');
+
+    const additionalContacts = reinsurer.contacts
+      .filter((c) => !c.isPrimary)
+      .map((c) => ({ fullName: c.fullName, email: c.email ?? '', phone: c.phone ?? '' }));
+    setValue('contacts', additionalContacts);
+
+    const primaryAddr = reinsurer.addresses.find((a) => a.isPrimary) ?? reinsurer.addresses[0];
+    if (primaryAddr) {
+      setValue('address.country', codeToCountry(primaryAddr.country));
+      setValue('address.state', primaryAddr.state ?? '');
+      setValue('address.city', primaryAddr.city ?? '');
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
+      {/* ── Prefill from reinsurer ── */}
+      <div className="flex flex-col gap-1">
+        <SearchSelect
+          label="Prefill from Reinsurer"
+          placeholder="Search reinsurer to prefill…"
+          options={reinsurerOptions}
+          value={prefillId}
+          onChange={handlePrefill}
+        />
+        <p className="text-xs text-gray-400">Selecting a reinsurer prefills the fields below.</p>
+      </div>
+
       {/* ── Basic info ── */}
       <FormSection title="Basic Info">
         <FormField
@@ -38,6 +81,7 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
           registration={register('name', { required: 'Cedant name is required' })}
           error={errors.name}
           placeholder="e.g. Insurance Company Ltd."
+          readOnly={!!prefillId}
         />
       </FormSection>
 
@@ -57,12 +101,14 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
             placeholder="e.g. info@insurancecompany.com"
           />
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <span className="text-sm font-bold text-gray-900">Primary Phone Number</span>
-            <PhoneInput
+            <Input
+              type="tel"
+              inputMode="numeric"
               placeholder="00 000 0000"
               value={primaryPhone ?? ''}
-              onChange={(v) => setValue('phone', v)}
+              onChange={(e) => setValue('phone', e.target.value.replace(/\D/g, ''))}
               error={errors.phone?.message}
             />
           </div>
@@ -109,12 +155,16 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
                 placeholder="e.g. ama@example.com"
               />
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
                 <span className="text-sm font-bold text-gray-900">Contact Phone</span>
-                <PhoneInput
+                <Input
+                  type="tel"
+                  inputMode="numeric"
                   placeholder="00 000 0000"
                   value={watchedContacts?.[index]?.phone ?? ''}
-                  onChange={(v) => setValue(`contacts.${index}.phone`, v)}
+                  onChange={(e) =>
+                    setValue(`contacts.${index}.phone`, e.target.value.replace(/\D/g, ''))
+                  }
                   error={errors.contacts?.[index]?.phone?.message}
                 />
               </div>

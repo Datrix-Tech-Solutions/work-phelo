@@ -4,9 +4,12 @@ import {
   ExecutionContext,
   UnauthorizedException,
 } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import { Request } from 'express';
 import { JwtPayload, RequestUser } from '@work-phelo/types';
+
+const PERMISSIONS_SIGNATURE_HEADER = 'x-gateway-permissions-signature';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -22,25 +25,16 @@ export class JwtAuthGuard implements CanActivate {
 
     if (!token) throw new UnauthorizedException('No token provided');
 
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new UnauthorizedException('Authentication unavailable');
+
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-
-      // Permissions are resolved by the API gateway (injected as a header)
-      // rather than read from the JWT, which no longer embeds them.
-      const rawPerms = request.headers['x-user-permissions'];
-      let permissions: string[] = [];
-      if (rawPerms) {
-        try {
-          const permsStr = Array.isArray(rawPerms) ? rawPerms[0] : rawPerms;
-          const parsed: unknown = JSON.parse(permsStr);
-          if (Array.isArray(parsed)) permissions = parsed as string[];
-        } catch {
-          /* fall through with empty */
-        }
-      } else {
-        permissions = payload.permissions ?? [];
+      const payload = jwt.verify(token, secret) as JwtPayload;
+      if (!payload.sub || !payload.tenantId) {
+        throw new UnauthorizedException(
+          'Invalid gateway authorization context',
+        );
       }
-
       const user: RequestUser = {
         id: payload.sub,
         email: payload.email,
@@ -51,13 +45,71 @@ export class JwtAuthGuard implements CanActivate {
         firstName: payload.firstName ?? '',
         moduleConfig: payload.moduleConfig ?? {},
         featureConfig: payload.featureConfig ?? {},
-        permissions,
+        permissions: this.resolvePermissions(request, payload, secret),
       };
 
       request.user = user;
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('Invalid or expired token');
     }
+  }
+
+  private resolvePermissions(
+    request: Request,
+    payload: JwtPayload,
+    secret: string,
+  ): string[] {
+    const rawPermissions = this.firstHeader(
+      request.headers['x-user-permissions'],
+    );
+    const signature = this.firstHeader(
+      request.headers[PERMISSIONS_SIGNATURE_HEADER],
+    );
+
+    if (!rawPermissions && !signature) return payload.permissions ?? [];
+    if (!rawPermissions || !signature) {
+      throw new UnauthorizedException('Invalid gateway authorization context');
+    }
+
+    const expected = createHmac('sha256', secret)
+      .update(`${payload.sub}:${payload.tenantId}:${rawPermissions}`)
+      .digest('hex');
+
+    if (!this.matchesSignature(signature, expected)) {
+      throw new UnauthorizedException('Invalid gateway authorization context');
+    }
+
+    try {
+      const permissions: unknown = JSON.parse(rawPermissions);
+      if (
+        !Array.isArray(permissions) ||
+        !permissions.every((permission) => typeof permission === 'string')
+      ) {
+        throw new UnauthorizedException(
+          'Invalid gateway authorization context',
+        );
+      }
+      return permissions;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException('Invalid gateway authorization context');
+    }
+  }
+
+  private firstHeader(
+    value: string | string[] | undefined,
+  ): string | undefined {
+    return Array.isArray(value) ? value[0] : value;
+  }
+
+  private matchesSignature(signature: string, expected: string): boolean {
+    const supplied = Buffer.from(signature);
+    const calculated = Buffer.from(expected);
+    return (
+      supplied.length === calculated.length &&
+      timingSafeEqual(supplied, calculated)
+    );
   }
 }

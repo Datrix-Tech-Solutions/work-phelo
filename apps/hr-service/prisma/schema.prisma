@@ -48,6 +48,26 @@ enum MaritalStatus {
   @@schema("hr")
 }
 
+enum HrImportEntityType {
+  EMPLOYEE
+
+  @@schema("hr")
+}
+
+enum HrImportJobStatus {
+  DRY_RUN_COMPLETED
+  DRY_RUN_FAILED
+
+  @@schema("hr")
+}
+
+enum HrImportRowStatus {
+  VALID
+  INVALID
+
+  @@schema("hr")
+}
+
 enum LeaveRequestStatus {
   PENDING
   APPROVED
@@ -201,6 +221,7 @@ enum AllowanceType {
   TRANSPORT
   HOUSING
   MEDICAL
+  CLOTHING
   OTHER
 
   @@schema("hr")
@@ -361,8 +382,9 @@ model Branch {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  employees Employee[]
-  assets    Asset[]
+  employees   Employee[]
+  assets      Asset[]
+  departments Department[]
 
   @@unique([tenantId, name])
   @@schema("hr")
@@ -377,15 +399,18 @@ model Department {
   description String?
   managerId   String?
   parentId    String?
+  branchId    String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   parent    Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
   children  Department[] @relation("DepartmentHierarchy")
+  branch    Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
   employees Employee[]
 
   @@unique([tenantId, name])
+  @@index([tenantId, branchId])
   @@schema("hr")
 }
 
@@ -440,32 +465,32 @@ model Employee {
   createdAt            DateTime                 @default(now())
   updatedAt            DateTime                 @updatedAt
 
-  department            Department?               @relation(fields: [departmentId], references: [id])
-  branch                Branch?                   @relation(fields: [branchId], references: [id])
+  department            Department?                 @relation(fields: [departmentId], references: [id])
+  branch                Branch?                     @relation(fields: [branchId], references: [id])
   leaveBalances         LeaveBalance[]
   leaveRequests         LeaveRequest[]
-  coveringLeaveRequests LeaveRequest[]            @relation("LeaveCoverageEmployee")
+  coveringLeaveRequests LeaveRequest[]              @relation("LeaveCoverageEmployee")
   clockRecords          ClockRecord[]
   timesheets            Timesheet[]
   timeCorrections       TimeCorrection[]
   schedules             ShiftSchedule[]
-  requestedShiftSwaps   ShiftSwapRequest[]        @relation("ShiftSwapRequester")
-  targetShiftSwaps      ShiftSwapRequest[]        @relation("ShiftSwapTarget")
-  managedShiftSwaps     ShiftSwapRequest[]        @relation("ShiftSwapManager")
+  requestedShiftSwaps   ShiftSwapRequest[]          @relation("ShiftSwapRequester")
+  targetShiftSwaps      ShiftSwapRequest[]          @relation("ShiftSwapTarget")
+  managedShiftSwaps     ShiftSwapRequest[]          @relation("ShiftSwapManager")
   shiftSwapActionLogs   ShiftSwapActionLog[]
   shiftOverrides        ShiftAssignmentOverride[]
   payrollItems          PayrollItem[]
-  appraisals            Appraisal[]               @relation("AppraisalEmployee")
-  managedAppraisals     Appraisal[]               @relation("AppraisalManager")
+  appraisals            Appraisal[]                 @relation("AppraisalEmployee")
+  managedAppraisals     Appraisal[]                 @relation("AppraisalManager")
   documents             EmployeeDocument[]
   agreementSignatures   CompanyAgreementSignature[]
   allowances            EmployeeAllowance[]
   deductions            EmployeeDeduction[]
-  assignedAssets        Asset[]                   @relation("AssignedAssets")
-  assetAssignments      AssetAssignment[]         @relation("EmployeeAssetAssignments")
-  managedProjects       Project[]                 @relation("ManagedProjects")
+  assignedAssets        Asset[]                     @relation("AssignedAssets")
+  assetAssignments      AssetAssignment[]           @relation("EmployeeAssetAssignments")
+  managedProjects       Project[]                   @relation("ManagedProjects")
   projectMemberships    ProjectMember[]
-  assignedProjectTasks  ProjectTask[]             @relation("AssignedProjectTasks")
+  assignedProjectTasks  ProjectTask[]               @relation("AssignedProjectTasks")
   offboarding           OffboardingRecord?
   resignation           ResignationRecord?
 
@@ -723,8 +748,15 @@ model EmployeeDocument {
   tenantId   String
   employeeId String
   type       DocumentType
+  // Free-text label a user enters when `type` is 'OTHER', mirroring
+  // Asset.customType.
+  customType String?
   name       String
+  // Private object key resolved to a short-lived signed URL on read — not a
+  // public URL, despite the field name (kept for backward compatibility).
   url        String
+  mimeType   String       @default("application/octet-stream")
+  sizeBytes  Int          @default(0)
   uploadedBy String
   expiresAt  DateTime?
   createdAt  DateTime     @default(now())
@@ -1008,35 +1040,36 @@ model ShiftAssignmentOverride {
 // ── Payroll ───────────────────────────────────────────────────────────────
 
 model PayrollRun {
-  id                String         @id @default(uuid())
-  tenantId          String
-  month             Int
-  year              Int
-  status            PayrollStatus  @default(DRAFT)
-  totalGross        Decimal        @db.Decimal(15, 2)
-  totalNet          Decimal        @db.Decimal(15, 2)
-  totalSSNIT        Decimal        @db.Decimal(15, 2)
-  totalTier1        Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier2        Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier3        Decimal        @default(0) @db.Decimal(15, 2)
-  totalPAYE         Decimal        @db.Decimal(15, 2)
-  totalEmployerCost Decimal        @default(0) @db.Decimal(15, 2)
-  runBy             String
-  submittedBy       String?
-  submittedAt       DateTime?
-  approvedBy        String?
-  approvedAt        DateTime?
-  approvalNote      String?
-  returnToDraftNote String?
-  paidAt            DateTime?
-  notes             String?
-  payrollCountry    PayrollCountry @default(GH)
-  payrollCurrency   String         @default("GHS")
-  tier3Enabled      Boolean        @default(false)
-  tier3Rate         Decimal?       @db.Decimal(5, 2)
-  tier3SchemeName   String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  tenantId           String
+  month              Int
+  year               Int
+  status             PayrollStatus  @default(DRAFT)
+  totalGross         Decimal        @db.Decimal(15, 2)
+  totalNet           Decimal        @db.Decimal(15, 2)
+  totalSSNIT         Decimal        @db.Decimal(15, 2)
+  totalTier1         Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier2         Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier3         Decimal        @default(0) @db.Decimal(15, 2)
+  totalPAYE          Decimal        @db.Decimal(15, 2)
+  totalEmployerCost  Decimal        @default(0) @db.Decimal(15, 2)
+  runBy              String
+  submittedBy        String?
+  submittedAt        DateTime?
+  approvedBy         String?
+  approvedAt         DateTime?
+  approvalNote       String?
+  returnToDraftNote  String?
+  paidAt             DateTime?
+  payslipsReleasedAt DateTime?
+  notes              String?
+  payrollCountry     PayrollCountry @default(GH)
+  payrollCurrency    String         @default("GHS")
+  tier3Enabled       Boolean        @default(false)
+  tier3Rate          Decimal?       @db.Decimal(5, 2)
+  tier3SchemeName    String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   items PayrollItem[]
 
@@ -1295,21 +1328,21 @@ model AppraisalReminderLog {
 }
 
 model Announcement {
-  id                  String                   @id @default(uuid())
+  id                  String                        @id @default(uuid())
   tenantId            String
   title               String
   body                String
-  audienceType        AnnouncementAudienceType @default(ALL)
-  targetDepartmentIds String[]                 @default([])
-  targetBranchIds     String[]                 @default([])
-  targetEmployeeIds   String[]                 @default([])
-  sendEmail           Boolean                  @default(false)
+  audienceType        AnnouncementAudienceType      @default(ALL)
+  targetDepartmentIds String[]                      @default([])
+  targetBranchIds     String[]                      @default([])
+  targetEmployeeIds   String[]                      @default([])
+  sendEmail           Boolean                       @default(false)
   deliveryChannels    AnnouncementDeliveryChannel[] @default([IN_APP])
-  publishedAt         DateTime                 @default(now())
+  publishedAt         DateTime                      @default(now())
   expiresAt           DateTime?
   createdById         String?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
 
   readReceipts AnnouncementReadReceipt[]
 
@@ -1348,6 +1381,50 @@ model EmployeeInviteRollbackTask {
 
   @@unique([tenantId, email])
   @@index([tenantId, createdAt])
+  @@schema("hr")
+}
+
+model HrImportJob {
+  id              String             @id @default(uuid())
+  tenantId        String
+  entityType      HrImportEntityType
+  status          HrImportJobStatus
+  fileName        String
+  fileHash        String
+  idempotencyKey  String?
+  totalRows       Int                @default(0)
+  validRows       Int                @default(0)
+  invalidRows     Int                @default(0)
+  createdByUserId String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  rows HrImportRow[]
+
+  @@unique([tenantId, entityType, idempotencyKey])
+  @@index([tenantId, entityType, createdAt])
+  @@index([tenantId, fileHash])
+  @@schema("hr")
+}
+
+model HrImportRow {
+  id             String            @id @default(uuid())
+  tenantId       String
+  jobId          String
+  rowNumber      Int
+  status         HrImportRowStatus
+  rawData        Json
+  normalizedData Json?
+  errors         Json
+  warnings       Json
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  job HrImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, rowNumber])
+  @@index([tenantId, jobId])
+  @@index([tenantId, status])
   @@schema("hr")
 }
 
@@ -1399,6 +1476,8 @@ model TenantConfig {
   payrollTier3Enabled          Boolean                        @default(false)
   payrollTier3Rate             Decimal?                       @db.Decimal(5, 2)
   payrollTier3SchemeName       String?
+  linkedToAccounting           Boolean                        @default(false)
+  autoPostOnApproval           Boolean                        @default(false)
   appraisalCycleRecipients     AppraisalCycleRecipientGroup[] @default([ALL])
   appraisalEligibleStatuses    EmploymentStatus[]             @default([ACTIVE, PROBATION])
   outstandingThreshold         Int                            @default(90)

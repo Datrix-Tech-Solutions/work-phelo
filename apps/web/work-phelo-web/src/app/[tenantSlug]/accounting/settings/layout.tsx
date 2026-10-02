@@ -4,7 +4,6 @@ import { useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pagePx, pageHeader, pageContent } from '@/lib/layout';
 import { TabBar, TabGroup } from '@/components/molecules/shared/TabBar';
-import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function AccountingSettingsLayout({ children }: { children: React.ReactNode }) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -13,21 +12,19 @@ export default function AccountingSettingsLayout({ children }: { children: React
   const groups: TabGroup[] = [
     {
       tabs: [
-        { key: 'vendors', label: 'Vendors', href: `${base}/vendors` },
-        { key: 'customers', label: 'Customers', href: `${base}/customers` },
+        { key: 'transaction-types', label: 'Transaction Types', href: `${base}/transaction-types` },
+        { key: 'source-types', label: 'Source Types', href: `${base}/source-types` },
+        { key: 'rules', label: 'Rules', href: `${base}/rules` },
       ],
     },
     {
       tabs: [
-        { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
-        { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
+        // { key: 'configuration', label: 'Configuration', href: `${base}/configuration` },
+        // { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
+        // { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
+        { key: 'tax-types', label: 'Tax Types', href: `${base}/tax-types` },
         { key: 'currency', label: 'Currency', href: `${base}/currency` },
-      ],
-    },
-    {
-      tabs: [
-        { key: 'fiscal-year', label: 'Fiscal Year', href: `${base}/fiscal-year` },
-        { key: 'budget-forecast', label: 'Budget & Forecast', href: `${base}/budget-forecast` },
+        // { key: 'posting-rules', label: 'Posting Rules', href: `${base}/posting-rules` },
       ],
     },
   ];
@@ -41,12 +38,9 @@ export default function AccountingSettingsLayout({ children }: { children: React
         <TabBar groups={groups} className={pagePx} />
       </div>
 
-      <AppBackground
-        as="main"
-        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
-      >
+      <main className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}>
         {children}
-      </AppBackground>
+      </main>
     </div>
   );
 }

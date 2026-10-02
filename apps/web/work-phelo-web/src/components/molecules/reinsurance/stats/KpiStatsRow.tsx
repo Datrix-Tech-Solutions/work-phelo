@@ -13,6 +13,7 @@ const PERIOD_LABELS: Record<Period, string> = {
   daily: 'day',
   weekly: 'week',
   monthly: 'month',
+  quarterly: 'quarter',
   yearly: 'year',
 };
 
@@ -20,6 +21,7 @@ const PERIOD_PREV_LABELS: Record<Period, string> = {
   daily: 'Yesterday',
   weekly: 'Last week',
   monthly: 'Last month',
+  quarterly: 'Last quarter',
   yearly: 'Last year',
 };
 
@@ -40,20 +42,24 @@ function fmtAmount(value: number, symbol: string): string {
 
 interface KpiStatsRowProps {
   period: Period;
+  year: number;
   currency: string;
 }
 
-export function KpiStatsRow({ period, currency }: KpiStatsRowProps) {
+export function KpiStatsRow({ period, year, currency }: KpiStatsRowProps) {
   const { data: financials, isLoading: loadingFinancials } = useReinsuranceFinancials({
     period,
+    year,
     currency,
   });
   const {
     totalAmount: claimsIncurred,
+    recoveriesAmount,
+    outstandingAmount,
     prevTotalAmount: prevClaimsIncurred,
     trend: claimsTrend,
     isLoading: loadingClaims,
-  } = useReinsuranceClaimStats({ period, currency });
+  } = useReinsuranceClaimStats({ period, year, currency });
   const {
     ratio: lossRatio,
     trend: lossRatioTrend,
@@ -99,21 +105,19 @@ export function KpiStatsRow({ period, currency }: KpiStatsRowProps) {
       />
       <KpiCard
         label="Recoveries Received"
-        value={fmtAmount(0, sym)}
+        value={fmtAmount(recoveriesAmount, sym)}
         icon={Icons.CircleDollarSign}
         iconColor="#008300"
-        trend={0}
         periodLabel={periodLabel}
-        isLoading={loadingFinancials}
+        isLoading={loadingClaims}
       />
       <KpiCard
         label="Outstanding Recoveries"
-        value={fmtAmount(0, sym)}
+        value={fmtAmount(outstandingAmount, sym)}
         icon={Icons.Clock}
         iconColor="#4a3aa7"
-        trend={0}
         periodLabel={periodLabel}
-        isLoading={loadingFinancials}
+        isLoading={loadingClaims}
       />
       <KpiCard
         label="Loss Ratio"

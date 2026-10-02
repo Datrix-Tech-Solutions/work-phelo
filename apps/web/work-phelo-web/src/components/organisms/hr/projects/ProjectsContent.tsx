@@ -150,16 +150,15 @@ export function ProjectsContent({ tenantSlug }: Props) {
 
   return (
     <>
-      {/* Header */}
-      <h1 className="text-xl font-bold text-gray-900 shrink-0">Projects & Tasks</h1>
-
       <ProjectStatsRow isLoading={isLoading} {...metrics} />
 
       <DataCardGrid
         data={pagedProjects}
         isLoading={isLoading}
         skeletonCount={8}
-        renderSkeleton={() => <div className="w-80 h-52 rounded-card bg-gray-100 animate-pulse" />}
+        renderSkeleton={() => (
+          <div className="w-full h-52 rounded-card bg-gray-100 animate-pulse" />
+        )}
         searchPlaceholder="Search by project name or manager…"
         searchValue={search}
         onSearch={(q) => {
