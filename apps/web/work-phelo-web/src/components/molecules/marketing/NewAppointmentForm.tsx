@@ -5,7 +5,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { inputClass } from '@/lib/utils';
 
 export interface NewAppointmentFields {
-  prospectName: string;
+  prospectId: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -20,6 +20,7 @@ interface Props {
   onChange: (values: NewAppointmentFields) => void;
   errors?: NewAppointmentErrors;
   prospectOptions?: SearchSelectOption[];
+  onProspectSearch?: (query: string) => void;
   managerOptions?: SearchSelectOption[];
 }
 
@@ -28,6 +29,7 @@ export function NewAppointmentForm({
   onChange,
   errors,
   prospectOptions = [],
+  onProspectSearch,
   managerOptions = [],
 }: Props) {
   function set<K extends keyof NewAppointmentFields>(key: K, val: string) {
@@ -40,9 +42,10 @@ export function NewAppointmentForm({
         label="Prospect Name"
         placeholder="Select a prospect"
         options={prospectOptions}
-        value={values.prospectName}
-        onChange={(v) => set('prospectName', v)}
-        error={errors?.prospectName}
+        value={values.prospectId}
+        onChange={(v) => set('prospectId', v)}
+        onQueryChange={onProspectSearch}
+        error={errors?.prospectId}
       />
 
       <DatePicker

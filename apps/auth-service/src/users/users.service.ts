@@ -1,3 +1,4 @@
+import { BASIC_EMPLOYEE_TEMPLATE_NAME } from '../permissions/system-permission-sets';
 import {
   Injectable,
   ConflictException,
@@ -235,9 +236,22 @@ export class UsersService {
       phone?: string;
     },
   ) {
+    // HR-provisioned employees (including bulk imports) start on the baseline
+    // Employee set so they get self-service access without a manual assignment.
+    const employeeSet = await this.prisma.permissionSet.findFirst({
+      where: {
+        tenantId,
+        name: BASIC_EMPLOYEE_TEMPLATE_NAME,
+        isActive: true,
+        isSystem: false,
+      },
+      select: { id: true },
+    });
+
     const result = await this.invite(tenantId, {
       ...dto,
       role: UserSystemRole.EMPLOYEE,
+      permissionSetIds: employeeSet ? [employeeSet.id] : undefined,
     });
 
     return {

@@ -61,10 +61,10 @@ export default function MarketingRolesPermissionsPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-2">
       <div className="shrink-0">
-        <h2 className="text-base font-semibold text-gray-900">Roles & Permissions</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
+        {/* <h2 className="text-base font-semibold text-gray-900">Roles & Permissions</h2> */}
+        <p className="font-semibold text-gray-600">
           Manage roles and control what each role can access
         </p>
       </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import {
   AppointmentCard,
@@ -17,6 +17,7 @@ import { AppointmentsPanel } from '@/components/organisms/marketing/Appointments
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { useProspects } from '@/hooks/marketing/useProspects';
 import { formatDate } from '@/lib/formatters';
 import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
@@ -31,7 +32,7 @@ const MOBILE_TABS = [
 ];
 
 const EMPTY_FORM: NewAppointmentFields = {
-  prospectName: '',
+  prospectId: '',
   date: '',
   startTime: '',
   endTime: '',
@@ -50,6 +51,18 @@ export default function AppointmentsPage() {
   const [errors, setErrors] = useState<NewAppointmentErrors>({});
   const [mobileTab, setMobileTab] = useState<MobileTab>('appointments');
 
+  const [prospectSearch, setProspectSearch] = useState('');
+  const { data: prospectsPage } = useProspects({
+    limit: 100,
+    search: prospectSearch || undefined,
+  });
+  const prospectOptions = useMemo(
+    () => (prospectsPage?.data ?? []).map((p) => ({ value: p.id, label: p.companyName })),
+    [prospectsPage],
+  );
+  // Appointments are still local state, so keep the chosen prospect's name alongside its id.
+  const [prospectLabels, setProspectLabels] = useState<Record<string, string>>({});
+
   const filtered = appointments
     .filter((a) => a.prospectName.toLowerCase().includes(search.toLowerCase()))
     .filter((a) => !dateFilter || a.date === dateFilter);
@@ -60,6 +73,7 @@ export default function AppointmentsPage() {
   function openNew() {
     setForm(EMPTY_FORM);
     setErrors({});
+    setProspectSearch('');
     setPanelOpen(true);
   }
 
@@ -69,7 +83,7 @@ export default function AppointmentsPage() {
 
   function validate(): boolean {
     const next: NewAppointmentErrors = {};
-    if (!form.prospectName.trim()) next.prospectName = 'Prospect is required.';
+    if (!form.prospectId) next.prospectId = 'Prospect is required.';
     if (!form.date) next.date = 'Date is required.';
     if (!form.startTime) next.startTime = 'Start time is required.';
     if (!form.endTime) next.endTime = 'End time is required.';
@@ -87,7 +101,7 @@ export default function AppointmentsPage() {
       ...prev,
       {
         id: crypto.randomUUID(),
-        prospectName: form.prospectName,
+        prospectName: prospectLabels[form.prospectId] ?? '',
         date: form.date,
         startTime: form.startTime,
         endTime: form.endTime,
@@ -170,7 +184,17 @@ export default function AppointmentsPage() {
           </div>
         }
       >
-        <NewAppointmentForm values={form} onChange={setForm} errors={errors} />
+        <NewAppointmentForm
+          values={form}
+          onChange={(next) => {
+            const label = prospectOptions.find((o) => o.value === next.prospectId)?.label;
+            if (label) setProspectLabels((prev) => ({ ...prev, [next.prospectId]: label }));
+            setForm(next);
+          }}
+          errors={errors}
+          prospectOptions={prospectOptions}
+          onProspectSearch={setProspectSearch}
+        />
       </SidePanel>
     </div>
   );
