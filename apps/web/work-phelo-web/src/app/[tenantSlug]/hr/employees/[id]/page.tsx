@@ -66,7 +66,11 @@ export default function EmployeeDetailPage({
   const [unassignOpen, setUnassignOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
 
-  const { data: employee, isLoading, error } = useEmployee(id);
+  // Same rule as the employee directory cards.
+  const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
+  const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
+  const canViewDetail = canEditEmployee || canOffboardEmployee;
+  const { data: employee, isLoading, error } = useEmployee(id, { enabled: canViewDetail });
   const { data: resignationRecord } = useResignationRecord(id);
   const { data: allHrEmployees = [] } = useEmployeeOptions();
   const { data: availableAssets = [] } = useAvailableAssets();
@@ -78,8 +82,6 @@ export default function EmployeeDetailPage({
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
   const canReadProjects = usePermission(Permission.READ_PROJECTS);
-  const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
-  const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
 
   const { data: permissionSets = [] } = usePermissionSets({ enabled: canGrantPermission });
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
@@ -140,6 +142,14 @@ export default function EmployeeDetailPage({
       },
     );
   };
+
+  if (!canViewDetail) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 text-center text-sm text-gray-400">
+        You don&apos;t have permission to access this. Contact your administrator.
+      </div>
+    );
+  }
 
   if (isLoading) return <EmployeeDetailSkeleton />;
 

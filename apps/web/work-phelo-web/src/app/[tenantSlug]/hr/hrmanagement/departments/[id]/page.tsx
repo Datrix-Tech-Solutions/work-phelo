@@ -67,6 +67,7 @@ export default function DepartmentDetailPage({
             departmentId={department.id}
             departmentName={department.name}
             managerId={department.managerId}
+            summaryMembers={department.employees}
           />
         </>
       )}

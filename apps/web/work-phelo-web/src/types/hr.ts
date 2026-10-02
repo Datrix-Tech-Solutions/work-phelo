@@ -13,6 +13,8 @@ export interface Branch {
   isActive: boolean;
   isHeadOffice: boolean;
   _count?: { employees: number };
+  /** Trimmed member list returned by GET /hr/branches/:id (no contact details). */
+  employees?: DepartmentMember[];
 }
 
 // ── Department ───────────────────────────────────────────
@@ -25,7 +27,14 @@ export interface Department {
   branch?: Pick<Branch, 'id' | 'name'>;
   isActive: boolean;
   _count?: { employees: number };
+  /** Trimmed member list returned by GET /hr/departments/:id (no contact details). */
+  employees?: DepartmentMember[];
 }
+
+export type DepartmentMember = Pick<
+  Employee,
+  'id' | 'firstName' | 'lastName' | 'jobTitle' | 'employmentStatus'
+>;
 
 // ── Shared Enums ─────────────────────────────────────────
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER';

@@ -54,9 +54,13 @@ export function useEmployees(query?: EmployeeQuery) {
   });
 }
 
-export function useAllEmployees(query?: Omit<EmployeeQuery, 'page' | 'limit'>) {
+export function useAllEmployees(
+  query?: Omit<EmployeeQuery, 'page' | 'limit'>,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ['employees', 'all', query],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const pageSize = 100;
       const firstPage = await api.get<{
@@ -101,14 +105,14 @@ export function useEmployeeOptions() {
   });
 }
 
-export function useEmployee(id: string) {
+export function useEmployee(id: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['employees', id],
     queryFn: async () => {
       const res = await api.get<Employee>(`/hr/employees/${id}`);
       return res.data;
     },
-    enabled: !!id,
+    enabled: !!id && (options?.enabled ?? true),
   });
 }
 
