@@ -2,12 +2,14 @@
 
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
+import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { HrSidebar } from '@/components/organisms/shared/HrSidebar';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
+import { useModuleThemeScope } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
 import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
@@ -23,16 +25,22 @@ export default function HRLayout({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  useModuleThemeScope('hr');
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   const [sidebarPinned, setSidebarPinned] = useState(false);
   const groups = useHrSidebarGroups(tenantSlug);
+  const markHrVisited = useNavRailStore((s) => s.markHrVisited);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canApproveLeave = usePermission(Permission.APPROVE_LEAVE);
   const canSubmitManagerReview = usePermission(Permission.SUBMIT_MANAGER_REVIEW);
   const canApproveTimeCorrection = usePermission(Permission.APPROVE_TIME_CORRECTION);
+
+  useEffect(() => {
+    markHrVisited();
+  }, [markHrVisited]);
 
   return (
     <AppBackground className="h-dvh overflow-hidden flex flex-col layout-hr">
