@@ -250,6 +250,12 @@ export class ProspectDetailResponseDto {
   @ApiProperty()
   assignedUserId!: string;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Set once the prospect has been converted to a client.',
+  })
+  clientId!: string | null;
+
   @ApiProperty({ type: ProspectLocationDto })
   location!: ProspectLocationDto;
 

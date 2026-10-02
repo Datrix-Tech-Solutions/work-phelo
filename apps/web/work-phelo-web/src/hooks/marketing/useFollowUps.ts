@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
+  CompleteProspectFollowUpPayload,
   CreateProspectFollowUpPayload,
   FollowUpWorklistResponse,
   ProspectFollowUp,
@@ -83,5 +84,27 @@ export function useCancelFollowUp() {
       return res.data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: FOLLOW_UPS_KEY }),
+  });
+}
+
+/** Completes a pending follow-up by recording the interaction that fulfils it. */
+export function useCompleteFollowUp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: CompleteProspectFollowUpPayload;
+    }) => {
+      const res = await api.post(`${FOLLOW_UPS_ENDPOINT}/${id}/complete`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FOLLOW_UPS_KEY });
+      // The interaction is recorded on the prospect too.
+      queryClient.invalidateQueries({ queryKey: ['marketing', 'prospects'] });
+    },
   });
 }

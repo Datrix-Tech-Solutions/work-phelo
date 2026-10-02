@@ -27,6 +27,7 @@ export function useAssignPermissionSet() {
       queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'module-users'] });
     },
   });
 }
@@ -43,6 +44,7 @@ export function useRemovePermissionSet() {
       queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
       queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'module-users'] });
     },
   });
 }

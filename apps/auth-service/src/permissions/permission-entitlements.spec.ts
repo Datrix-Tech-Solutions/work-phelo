@@ -45,6 +45,8 @@ describe('permission entitlements', () => {
   it.each([
     'marketing.prospects',
     'marketing.prospects.all',
+    'marketing.clients',
+    'marketing.clients.all',
     'marketing.prospects.interactions',
     'marketing.prospects.interactions.all',
     'marketing.follow-ups',

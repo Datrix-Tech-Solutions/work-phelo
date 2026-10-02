@@ -261,6 +261,7 @@ export function ProspectWizard({
             rows={productRows}
             onChange={setProductRows}
             productTypeOptions={productTypeOptions}
+            showCommission
           />
           {productsError && <p className="text-xs text-red-500">{productsError}</p>}
         </div>

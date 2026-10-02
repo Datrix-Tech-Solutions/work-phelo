@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { usePermissionSets } from '@/hooks/hr/useRoles';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
-import type { PermissionSet, PermissionSetMember } from '@/types/roles';
+import type { PermissionSet } from '@/types/roles';
 
 export interface MarketingModuleUser {
   id: string;
@@ -12,6 +11,18 @@ export interface MarketingModuleUser {
   department: string;
   status: string;
   roles: { id: string; name: string }[];
+  /** Holds marketing permissions granted directly rather than through a role. */
+  hasDirectPermissions: boolean;
+}
+
+interface ModuleUserResponse {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  status: string;
+  roles: { id: string; name: string }[];
+  hasDirectPermissions: boolean;
 }
 
 /** A role belongs to marketing when it carries at least one marketing resource. */
@@ -19,59 +30,35 @@ export function isMarketingSet(set: PermissionSet): boolean {
   return set.resources.some((r) => r.resource.module === 'MARKETING');
 }
 
-/** Users who hold at least one marketing role (permission set). */
+/** Users who hold at least one marketing permission, through a role or a direct grant. */
 export function useMarketingModuleUsers() {
-  const { data: setsRaw = [], isLoading: isLoadingSets } = usePermissionSets();
-  const marketingSets = useMemo(
-    () => (Array.isArray(setsRaw) ? setsRaw : []).filter(isMarketingSet),
-    [setsRaw],
-  );
-
-  const memberQueries = useQueries({
-    queries: marketingSets.map((set) => ({
-      queryKey: ['permissions', 'sets', set.id, 'members'],
-      queryFn: async () => {
-        const res = await api.get<PermissionSetMember[]>(
-          `/auth/permissions/sets/${set.id}/members`,
-        );
-        return res.data;
-      },
-    })),
+  const { data: rawUsers, isLoading: isLoadingUsers } = useQuery({
+    queryKey: ['permissions', 'module-users', 'MARKETING'],
+    queryFn: async () => {
+      const res = await api.get<ModuleUserResponse[]>('/auth/permissions/module-users', {
+        params: { module: 'MARKETING' },
+      });
+      return res.data;
+    },
   });
   const { data: employees } = useAllEmployees();
 
-  const isLoading = isLoadingSets || memberQueries.some((q) => q.isLoading);
-  // Re-derive only when the fetched members actually change.
-  const membersKey = memberQueries.map((q) => q.dataUpdatedAt).join('|');
-
-  const users = useMemo(() => {
+  const users = useMemo<MarketingModuleUser[]>(() => {
     const departmentByUserId = new Map<string, string>();
     for (const e of employees?.data ?? []) {
       if (e.userId && e.department?.name) departmentByUserId.set(e.userId, e.department.name);
     }
 
-    const byId = new Map<string, MarketingModuleUser>();
-    marketingSets.forEach((set, i) => {
-      for (const member of memberQueries[i]?.data ?? []) {
-        const existing = byId.get(member.id);
-        const role = { id: set.id, name: set.name };
-        if (existing) {
-          existing.roles.push(role);
-        } else {
-          byId.set(member.id, {
-            id: member.id,
-            name: `${member.firstName} ${member.lastName}`.trim(),
-            email: member.email,
-            department: departmentByUserId.get(member.id) ?? '',
-            status: member.status,
-            roles: [role],
-          });
-        }
-      }
-    });
-    return Array.from(byId.values());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [marketingSets, membersKey, employees]);
+    return (rawUsers ?? []).map((u) => ({
+      id: u.id,
+      name: `${u.firstName} ${u.lastName}`.trim(),
+      email: u.email,
+      department: departmentByUserId.get(u.id) ?? '',
+      status: u.status,
+      roles: u.roles,
+      hasDirectPermissions: u.hasDirectPermissions,
+    }));
+  }, [rawUsers, employees]);
 
-  return { users, isLoading };
+  return { users, isLoading: isLoadingUsers };
 }

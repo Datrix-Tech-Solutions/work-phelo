@@ -32,6 +32,18 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     ],
   },
   {
+    key: 'clients',
+    label: 'Clients',
+    umbrellaKey: 'manage_clients',
+    tags: [
+      { key: 'manage_clients', label: 'Manage Clients' },
+      { key: 'view_all_clients', label: 'View All Clients' },
+      { key: 'edit_all_clients', label: 'Edit All Clients' },
+      { key: 'delete_all_clients', label: 'Delete All Clients' },
+      { key: 'create_client', label: 'Create Client' },
+    ],
+  },
+  {
     key: 'crm-configuration',
     label: 'CRM Configuration',
     umbrellaKey: 'manage_crm_configuration',
@@ -56,6 +68,7 @@ const CRUD = ['VIEW', 'CREATE', 'EDIT', 'DELETE'];
 const FOLLOW_UP_ACTIONS = ['VIEW', 'CREATE', 'EDIT', 'CANCEL'];
 
 const PROSPECT_OWN_VIEW = pairs('marketing.prospects', ['VIEW']);
+const CLIENT_OWN_VIEW = pairs('marketing.clients', ['VIEW']);
 
 /** Pills in a section other than its umbrella. */
 const sectionDetailKeys = (sectionKey: string): string[] => {
@@ -91,6 +104,12 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
     ...pairs('marketing.follow-ups.all', FOLLOW_UP_ACTIONS),
   ],
 
+  // Clients — "create client" is the own-records bundle, like "create prospect".
+  create_client: pairs('marketing.clients', CRUD),
+  view_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['VIEW'])],
+  edit_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['EDIT'])],
+  delete_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['DELETE'])],
+
   // CRM Configuration
   manage_pipelines: pairs('marketing.pipeline-stages', CRUD),
   manage_products: pairs('marketing.products', CRUD),
@@ -103,6 +122,7 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
 const UMBRELLA_EXTRAS: Record<string, PermissionPair[]> = {
   manage_crm_configuration: pairs('marketing.crm-settings', CRUD),
   manage_prospects: [],
+  manage_clients: [],
 };
 
 /** Pill key → backend resource/action pairs it grants (umbrellas grant their section's union). */

@@ -31,6 +31,7 @@ function buildPayload({
       productId: row.productType,
       expectedValue: Number(row.expectedRevenue),
       ...(row.achievedRevenue.trim() !== '' ? { achievedValue: Number(row.achievedRevenue) } : {}),
+      ...(row.commissionRate?.trim() ? { commissionRate: Number(row.commissionRate) } : {}),
       ...(row.expectedCloseDate ? { expectedCloseDate: row.expectedCloseDate } : {}),
     })),
     location: {

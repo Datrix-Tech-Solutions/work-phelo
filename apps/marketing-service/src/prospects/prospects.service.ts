@@ -34,6 +34,8 @@ import {
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 
 const INVALID_REFERENCE_MESSAGE = 'Invalid prospect reference';
+const CONVERTED_PROSPECT_DELETE_MESSAGE =
+  'A prospect that has been converted to a client cannot be deleted';
 const DUPLICATE_PRODUCT_MESSAGE =
   'A product or service can only be added once per prospect';
 const EMPTY_PATCH_MESSAGE = 'At least one field is required';
@@ -115,6 +117,7 @@ export class ProspectsService {
             },
           },
         },
+        client: { select: { id: true } },
       },
     });
 
@@ -166,6 +169,7 @@ export class ProspectsService {
           )
         : null,
       assignedUserId: prospect.assignedUserId,
+      clientId: prospect.client?.id ?? null,
       location: {
         label: prospect.locationLabel,
         latitude: prospect.latitude.toString(),
@@ -202,7 +206,7 @@ export class ProspectsService {
         expectedValue: this.decimalToFixed(product.expectedValue),
         achievedValue: this.decimalToFixed(product.achievedValue),
         commissionRate: this.decimalToString(product.commissionRate),
-        commissionAmount: this.decimalToFixed(product.commissionAmount),
+        commissionAmount: this.derivedCommissionAmount(product),
         expectedCloseDate: product.expectedCloseDate,
       })),
       totalExpectedValue: this.sumDecimal(
@@ -267,10 +271,15 @@ export class ProspectsService {
         tenantId: user.tenantId,
         ...this.visibilityWhere(user, canDeleteAll),
       },
-      select: { id: true },
+      select: { id: true, client: { select: { id: true } } },
     });
 
     if (!existing) throw new NotFoundException('Prospect not found');
+    // Interactions and follow-ups are shared with the client; deleting the prospect would
+    // cascade them away from it.
+    if (existing.client) {
+      throw new ConflictException(CONVERTED_PROSPECT_DELETE_MESSAGE);
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.marketingProspect.delete({
@@ -405,6 +414,7 @@ export class ProspectsService {
     const prospects = await this.prisma.marketingProspect.findMany({
       where: {
         tenantId: user.tenantId,
+        client: { is: null },
         ...this.visibilityWhere(user, canViewAll),
       },
       select: {
@@ -1632,6 +1642,8 @@ export class ProspectsService {
   ): Prisma.MarketingProspectWhereInput {
     return {
       tenantId: user.tenantId,
+      // Converted prospects are clients now — they leave the active prospect list.
+      client: { is: null },
       ...this.visibilityWhere(user, canViewAll, query.assignedUserId),
       ...(query.search
         ? {
@@ -1779,6 +1791,23 @@ export class ProspectsService {
       createdByUserId: interaction.createdByUserId,
       createdAt: interaction.createdAt,
     };
+  }
+
+  /**
+   * Commission is rate% of the achieved revenue once any is recorded, otherwise of the expected
+   * revenue. With no rate there is nothing to derive from, so a legacy stored amount is returned.
+   */
+  private derivedCommissionAmount(product: {
+    expectedValue: Prisma.Decimal;
+    achievedValue: Prisma.Decimal | null;
+    commissionRate: Prisma.Decimal | null;
+    commissionAmount: Prisma.Decimal | null;
+  }): string | null {
+    if (product.commissionRate === null) {
+      return this.decimalToFixed(product.commissionAmount);
+    }
+    const base = product.achievedValue ?? product.expectedValue;
+    return base.mul(product.commissionRate).div(100).toFixed(2);
   }
 
   private decimalToString(value: Prisma.Decimal | null): string | null {
