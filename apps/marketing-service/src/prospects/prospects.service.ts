@@ -21,6 +21,7 @@ import {
 } from './dto/create-prospect-interaction.dto';
 import {
   CreateProspectFollowUpDto,
+  CompleteProspectFollowUpDto,
   ProspectFollowUpSourceDto,
   ProspectFollowUpUrgencyDto,
   UpdateProspectFollowUpDto,
@@ -42,6 +43,10 @@ const REQUIRED_PRODUCT_FIELDS_MESSAGE =
 const EMPTY_PRODUCTS_MESSAGE = 'A prospect must have at least one product';
 const DUPLICATE_PENDING_FOLLOW_UP_MESSAGE =
   'A pending follow-up already exists for this prospect';
+const FOLLOW_UP_COMPLETION_CONFLICT_MESSAGE =
+  'Follow-up is no longer pending and cannot be completed';
+const FOLLOW_UP_COMPLETION_ENDPOINT_MESSAGE =
+  'Use the follow-up completion endpoint to complete a pending follow-up';
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_FOLLOW_UP_DELAY_DAYS = 7;
 const UPCOMING_FOLLOW_UP_WINDOW_DAYS = 7;
@@ -279,72 +284,18 @@ export class ProspectsService {
     prospectId: string,
     dto: CreateProspectInteractionDto,
   ) {
+    if (dto.followUpId) {
+      throw new BadRequestException(FOLLOW_UP_COMPLETION_ENDPOINT_MESSAGE);
+    }
+
     const canCreateAll = this.canCreateAllInteractions(user);
     await this.assertProspectAccessible(user, prospectId, canCreateAll);
-    await this.assertActiveSetting(user.tenantId, {
-      id: dto.interactionMediumId,
-      category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
-    });
 
     const interaction = await this.prisma.$transaction(async (tx) => {
-      // Checked before the interaction is written so a bad follow-up rolls everything back.
-      const followUp = dto.followUpId
-        ? await tx.marketingProspectFollowUp.findFirst({
-            where: {
-              id: dto.followUpId,
-              tenantId: user.tenantId,
-              prospectId,
-              status: MarketingProspectFollowUpStatus.PENDING,
-            },
-            select: { id: true },
-          })
-        : null;
-      if (dto.followUpId && !followUp) {
-        throw new NotFoundException('Follow-up not found');
-      }
-
-      const created = await tx.marketingProspectInteraction.create({
-        data: {
-          tenantId: user.tenantId,
-          prospectId,
-          interactionMediumId: dto.interactionMediumId,
-          occurredAt: new Date(dto.occurredAt),
-          notes: this.formatOptionalText(dto.notes),
-          decisionMakerInvolved: dto.decisionMakerInvolved,
-          createdByUserId: user.id,
-          ...(dto.participants && dto.participants.length > 0
-            ? {
-                participants: {
-                  create: dto.participants.map((participant) =>
-                    this.toInteractionParticipantCreateInput(
-                      user.tenantId,
-                      participant,
-                    ),
-                  ),
-                },
-              }
-            : {}),
-        },
-        include: {
-          participants: {
-            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          },
-        },
+      await this.assertActiveInteractionMedium(tx, user.tenantId, {
+        id: dto.interactionMediumId,
       });
-
-      if (followUp) {
-        await tx.marketingProspectFollowUp.update({
-          where: { id: followUp.id },
-          data: {
-            status: MarketingProspectFollowUpStatus.COMPLETED,
-            completedAt: new Date(),
-            completedByUserId: user.id,
-            completedInteractionId: created.id,
-          },
-        });
-      }
-
-      return created;
+      return this.createInteractionInTransaction(tx, user, prospectId, dto);
     });
 
     const settings = await this.findSettingsByIds(user.tenantId, [
@@ -593,6 +544,132 @@ export class ProspectsService {
     });
 
     return this.toFollowUpResponse(followUp);
+  }
+
+  async completeFollowUp(
+    user: RequestUser,
+    id: string,
+    dto: CompleteProspectFollowUpDto,
+  ) {
+    if (dto.interaction.followUpId) {
+      throw new BadRequestException(FOLLOW_UP_COMPLETION_ENDPOINT_MESSAGE);
+    }
+
+    const canCompleteAll = this.canCompleteAllFollowUps(user);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.marketingProspectFollowUp.findFirst({
+        where: {
+          id,
+          tenantId: user.tenantId,
+          prospect: {
+            tenantId: user.tenantId,
+            ...this.visibilityWhere(user, canCompleteAll),
+          },
+        },
+        select: {
+          id: true,
+          prospectId: true,
+          status: true,
+        },
+      });
+
+      if (!existing) throw new NotFoundException('Follow-up not found');
+      if (existing.status !== MarketingProspectFollowUpStatus.PENDING) {
+        throw new ConflictException(FOLLOW_UP_COMPLETION_CONFLICT_MESSAGE);
+      }
+
+      await this.assertActiveInteractionMedium(tx, user.tenantId, {
+        id: dto.interaction.interactionMediumId,
+      });
+
+      const interaction = await this.createInteractionInTransaction(
+        tx,
+        user,
+        existing.prospectId,
+        dto.interaction,
+      );
+      const completedAt = new Date();
+      const completed = await tx.marketingProspectFollowUp.updateMany({
+        where: {
+          id: existing.id,
+          tenantId: user.tenantId,
+          status: MarketingProspectFollowUpStatus.PENDING,
+        },
+        data: {
+          status: MarketingProspectFollowUpStatus.COMPLETED,
+          completedAt,
+          completedByUserId: user.id,
+          completedInteractionId: interaction.id,
+        },
+      });
+
+      if (completed.count !== 1) {
+        throw new ConflictException(FOLLOW_UP_COMPLETION_CONFLICT_MESSAGE);
+      }
+
+      const followUp = await tx.marketingProspectFollowUp.findFirst({
+        where: {
+          id: existing.id,
+          tenantId: user.tenantId,
+        },
+      });
+      if (!followUp) throw new NotFoundException('Follow-up not found');
+
+      const nextFollowUp = dto.nextFollowUp
+        ? await this.createFollowUpInTransaction(
+            tx,
+            user,
+            existing.prospectId,
+            dto.nextFollowUp,
+          )
+        : null;
+
+      const latestInteractionRows =
+        await tx.marketingProspectInteraction.groupBy({
+          by: ['prospectId'],
+          where: {
+            tenantId: user.tenantId,
+            prospectId: existing.prospectId,
+          },
+          _max: { occurredAt: true },
+        });
+      const latestInteractionDate =
+        latestInteractionRows[0]?._max.occurredAt ?? interaction.occurredAt;
+
+      return {
+        followUp,
+        interaction,
+        nextFollowUp,
+        effectiveNextFollowUp: nextFollowUp
+          ? {
+              source: ProspectFollowUpSourceDto.EXPLICIT,
+              dueAt: nextFollowUp.dueAt,
+            }
+          : {
+              source: ProspectFollowUpSourceDto.DEFAULT,
+              dueAt: this.addDays(
+                latestInteractionDate,
+                DEFAULT_FOLLOW_UP_DELAY_DAYS,
+              ),
+            },
+      };
+    });
+
+    const settings = await this.findSettingsByIds(user.tenantId, [
+      result.interaction.interactionMediumId,
+    ]);
+    const settingsById = new Map(
+      settings.map((setting) => [setting.id, setting]),
+    );
+
+    return {
+      followUp: this.toFollowUpResponse(result.followUp),
+      interaction: this.toInteractionResponse(result.interaction, settingsById),
+      nextFollowUp: result.nextFollowUp
+        ? this.toFollowUpResponse(result.nextFollowUp)
+        : null,
+      effectiveNextFollowUp: result.effectiveNextFollowUp,
+    };
   }
 
   async list(user: RequestUser, query: QueryProspectsDto = {}) {
@@ -872,6 +949,86 @@ export class ProspectsService {
     if (!setting) throw new BadRequestException(INVALID_REFERENCE_MESSAGE);
   }
 
+  private async assertActiveInteractionMedium(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    reference: { id: string },
+  ) {
+    const setting = await tx.marketingCrmSettingOption.findFirst({
+      where: {
+        id: reference.id,
+        tenantId,
+        category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+        archivedAt: null,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!setting) throw new BadRequestException(INVALID_REFERENCE_MESSAGE);
+  }
+
+  private async createInteractionInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    prospectId: string,
+    dto: CreateProspectInteractionDto,
+  ) {
+    return tx.marketingProspectInteraction.create({
+      data: {
+        tenantId: user.tenantId,
+        prospectId,
+        interactionMediumId: dto.interactionMediumId,
+        occurredAt: new Date(dto.occurredAt),
+        notes: this.formatOptionalText(dto.notes),
+        decisionMakerInvolved: dto.decisionMakerInvolved,
+        createdByUserId: user.id,
+        ...(dto.participants && dto.participants.length > 0
+          ? {
+              participants: {
+                create: dto.participants.map((participant) =>
+                  this.toInteractionParticipantCreateInput(
+                    user.tenantId,
+                    participant,
+                  ),
+                ),
+              },
+            }
+          : {}),
+      },
+      include: {
+        participants: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+  }
+
+  private async createFollowUpInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    prospectId: string,
+    dto: CreateProspectFollowUpDto,
+  ) {
+    try {
+      return await tx.marketingProspectFollowUp.create({
+        data: {
+          tenantId: user.tenantId,
+          prospectId,
+          dueAt: new Date(dto.dueAt),
+          note: this.formatOptionalText(dto.note),
+          status: MarketingProspectFollowUpStatus.PENDING,
+          createdByUserId: user.id,
+        },
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException(DUPLICATE_PENDING_FOLLOW_UP_MESSAGE);
+      }
+      throw error;
+    }
+  }
+
   private async assertActivePipelineStage(tenantId: string, id: string) {
     const stage = await this.prisma.marketingPipelineStage.findFirst({
       where: {
@@ -1020,6 +1177,16 @@ export class ProspectsService {
 
     return user.permissions.includes(
       MarketingCrmSettingsPermission.FOLLOW_UPS_CANCEL_ALL,
+    );
+  }
+
+  private canCompleteAllFollowUps(user: RequestUser): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
+
+    return user.permissions.includes(
+      MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE_ALL,
     );
   }
 

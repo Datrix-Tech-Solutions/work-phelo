@@ -1,6 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsDateString,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { OptionalCollapseWhitespaceString } from '../../crm-settings/dto/string.transforms';
+import { CreateProspectInteractionDto } from './create-prospect-interaction.dto';
+import { ProspectDetailInteractionDto } from './prospect-response.dto';
 
 export enum ProspectFollowUpStatusDto {
   PENDING = 'PENDING',
@@ -50,6 +59,19 @@ export class UpdateProspectFollowUpDto {
   @IsString()
   @MaxLength(1000)
   note?: string;
+}
+
+export class CompleteProspectFollowUpDto {
+  @ApiProperty({ type: CreateProspectInteractionDto })
+  @ValidateNested()
+  @Type(() => CreateProspectInteractionDto)
+  interaction!: CreateProspectInteractionDto;
+
+  @ApiPropertyOptional({ type: CreateProspectFollowUpDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateProspectFollowUpDto)
+  nextFollowUp?: CreateProspectFollowUpDto;
 }
 
 export class ProspectFollowUpResponseDto {
@@ -124,4 +146,26 @@ export class ProspectFollowUpWorklistItemDto {
 export class ProspectFollowUpWorklistResponseDto {
   @ApiProperty({ type: [ProspectFollowUpWorklistItemDto] })
   items!: ProspectFollowUpWorklistItemDto[];
+}
+
+export class EffectiveNextFollowUpDto {
+  @ApiProperty({ enum: ProspectFollowUpSourceDto })
+  source!: ProspectFollowUpSourceDto;
+
+  @ApiProperty()
+  dueAt!: Date;
+}
+
+export class CompleteProspectFollowUpResponseDto {
+  @ApiProperty({ type: ProspectFollowUpResponseDto })
+  followUp!: ProspectFollowUpResponseDto;
+
+  @ApiProperty({ type: ProspectDetailInteractionDto })
+  interaction!: ProspectDetailInteractionDto;
+
+  @ApiPropertyOptional({ nullable: true, type: ProspectFollowUpResponseDto })
+  nextFollowUp!: ProspectFollowUpResponseDto | null;
+
+  @ApiProperty({ type: EffectiveNextFollowUpDto })
+  effectiveNextFollowUp!: EffectiveNextFollowUpDto;
 }
