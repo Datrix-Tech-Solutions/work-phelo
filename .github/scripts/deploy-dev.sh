@@ -165,7 +165,9 @@ write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.dev" \
   "NODE_ENV=production" \
   "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema marketing)" \
-  "JWT_SECRET=${JWT_SECRET}"
+  "JWT_SECRET=${JWT_SECRET}" \
+  "HR_SERVICE_URL=http://hr-service:4002" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}"
 
 write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
   "PORT=4007" \
