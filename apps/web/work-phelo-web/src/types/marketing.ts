@@ -81,6 +81,7 @@ export interface ProspectSalesStage {
 export interface ProspectListItem {
   id: string;
   companyName: string;
+  businessType: { id: string; name: string } | null;
   expectedValue: string;
   achievedValue: string;
   products: ProspectListProduct[];
@@ -364,8 +365,10 @@ export interface ClientListItem {
   businessType: ProspectReference | null;
   locationLabel: string;
   isBillable: boolean;
-  primaryContact: ProspectListPrimaryContact | null;
+  primaryContact: (ProspectListPrimaryContact & { email: string | null }) | null;
   products: ClientListProduct[];
+  /** Total across the client's products. Not supplied until the sales module exists. */
+  achievedRevenue?: string | null;
   assignedUserId: string;
   /** Set when the client was converted from a prospect. */
   convertedFromProspectId: string | null;
@@ -404,4 +407,122 @@ export interface ConvertedClient {
   companyName: string;
   isBillable: boolean;
   convertedFromProspectId: string | null;
+}
+
+export interface ClientDetailProduct {
+  id: string;
+  product: ProspectReference;
+  status: ClientProductStatus;
+  /** Carried over from the prospect product at conversion; null for products added directly. */
+  expectedValue: string | null;
+  commissionRate: string | null;
+  commissionAmount: string | null;
+  /** Not supplied until the sales module exists. */
+  achievedRevenue?: string | null;
+  createdAt: string;
+}
+
+export interface ClientDetail {
+  id: string;
+  companyName: string;
+  businessType: ProspectReference | null;
+  sourceType: ProspectReference | null;
+  assignedUserId: string;
+  isBillable: boolean;
+  location: ProspectDetailLocation;
+  contacts: ProspectDetailContact[];
+  products: ClientDetailProduct[];
+  /** Total across the client's products. Not supplied until the sales module exists. */
+  achievedRevenue?: string | null;
+  /** Includes interactions recorded while the client was still a prospect. */
+  interactions: ProspectDetailInteraction[];
+  convertedFromProspectId: string | null;
+  convertedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AddClientProductPayload {
+  productId: string;
+}
+
+export interface UpdateClientPayload {
+  companyName?: string;
+  businessTypeId?: string | null;
+  sourceTypeId?: string | null;
+  isBillable?: boolean;
+  primaryContact?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    decisionMakerTypeId?: string | null;
+  };
+  location?: Partial<CreateProspectLocationPayload>;
+}
+
+export type FleetStatus = 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' | 'RETIRED';
+
+/** A vehicle: HR asset (identity, branch, driver, status) plus fleet-specific details. */
+export interface FleetVehicle {
+  /** Alias of assetId so the row works with DataTable. */
+  id: string;
+  assetId: string;
+  assetNumber: string;
+  name: string;
+  vehicleType: string | null;
+  make: string | null;
+  model: string | null;
+  yearOfRegistration: number | null;
+  fuelType: string | null;
+  currentMileage: number | null;
+  branch: { id: string; name: string | null } | null;
+  assignedDriver: { id: string; name: string | null } | null;
+  status: FleetStatus;
+  /** True for vehicles created in HR whose fleet details have not been filled in yet. */
+  needsFleetDetails: boolean;
+  createdAt: string;
+}
+
+export interface FleetQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: FleetStatus;
+  branchId?: string;
+  vehicleType?: string;
+  fuelType?: string;
+}
+
+export interface FleetListResponse {
+  data: FleetVehicle[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface FleetOptions {
+  branches: { id: string; name: string }[];
+  drivers: { id: string; name: string }[];
+}
+
+export interface FleetDetailsPayload {
+  vehicleType: string;
+  make: string;
+  model: string;
+  yearOfRegistration: number;
+  fuelType: string;
+  currentMileage: number;
+}
+
+export interface CreateFleetVehiclePayload extends FleetDetailsPayload {
+  branchId?: string;
+  assignedDriverId?: string;
+  status?: 'AVAILABLE' | 'MAINTENANCE';
+}
+
+export interface UpdateFleetVehiclePayload extends Partial<FleetDetailsPayload> {
+  branchId?: string | null;
+}
+
+export interface CreateFleetVehicleResult extends FleetVehicle {
+  /** Non-fatal follow-up steps that failed after the vehicle was created. */
+  warnings: string[];
 }

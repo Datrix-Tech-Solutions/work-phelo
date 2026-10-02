@@ -249,6 +249,11 @@ export const RESOURCES = [
     module: 'MARKETING',
     description: 'Tenant-wide Marketing prospect follow-up scheduling access',
   },
+  {
+    name: 'marketing.fleet',
+    module: 'MARKETING',
+    description: 'Marketing fleet vehicles linked to HR vehicle assets',
+  },
 
   {
     name: 'operations.reinsurance.dashboard',

@@ -16,7 +16,7 @@ import {
 import {
   INTERNAL_SERVICE_AUTH_HEADERS,
   InternalServiceAuthGuard,
-} from '../auth/guards/internal-service-auth.guard';
+} from '@work-phelo/internal-auth';
 import { PayrollSettlementDto } from './dto/payroll-settlement.dto';
 import { PayrollService } from './payroll.service';
 

@@ -53,6 +53,15 @@ describe('ClientsController authorization contract', () => {
     );
   });
 
+  it('requires the interaction create permissions to record a client follow-up', () => {
+    expect(
+      anyPermissions(ClientsController.prototype.createInteraction),
+    ).toEqual([
+      P.PROSPECT_INTERACTIONS_CREATE,
+      P.PROSPECT_INTERACTIONS_CREATE_ALL,
+    ]);
+  });
+
   it('requires assigned or tenant-wide delete permission on delete', () => {
     expect(anyPermissions(ClientsController.prototype.remove)).toEqual([
       P.CLIENTS_DELETE,

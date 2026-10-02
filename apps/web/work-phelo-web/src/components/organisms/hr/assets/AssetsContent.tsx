@@ -170,7 +170,9 @@ export function AssetsContent() {
         data={pagedAssets}
         isLoading={isLoading}
         skeletonCount={8}
-        renderSkeleton={() => <div className="w-80 h-64 rounded-card bg-gray-100 animate-pulse" />}
+        renderSkeleton={() => (
+          <div className="w-full h-64 rounded-card bg-gray-100 animate-pulse" />
+        )}
         searchPlaceholder="Search by name, serial number, type..."
         searchValue={search}
         onSearch={(q) => {

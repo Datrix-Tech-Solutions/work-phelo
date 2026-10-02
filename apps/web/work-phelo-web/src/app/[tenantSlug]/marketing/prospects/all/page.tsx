@@ -23,6 +23,7 @@ function toRow(item: ProspectListItem): Prospect {
   return {
     id: item.id,
     prospectName: item.companyName,
+    businessType: item.businessType?.name ?? '',
     expectedRevenue: formatMoney(item.expectedValue),
     product: item.products.map((p) => p.name).join(', ') || '—',
     contactNo: item.primaryContact?.phone ?? '',

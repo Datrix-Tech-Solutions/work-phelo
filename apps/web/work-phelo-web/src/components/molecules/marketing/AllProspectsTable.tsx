@@ -1,12 +1,17 @@
 'use client';
 
-import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
+import { useState } from 'react';
+import { TypeChip } from '@/components/atoms/TypeChip';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { ViewModeToggle, type ViewMode } from '@/components/atoms/ViewModeToggle';
+import { ProspectCard, stageColor } from '@/components/molecules/marketing/ProspectCard';
+import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 
 export interface Prospect {
   id: string;
   prospectName: string;
+  businessType: string;
   expectedRevenue: string;
   product: string;
   contactNo: string;
@@ -16,15 +21,6 @@ export interface Prospect {
   salesStageProgress: number;
   decisionMaker: string;
   lastInteraction: string;
-}
-
-function stageColor(progress: number): TypeChipColor {
-  if (progress >= 100) return 'green';
-  if (progress >= 75) return 'blue';
-  if (progress >= 50) return 'purple';
-  if (progress >= 25) return 'amber';
-  if (progress > 0) return 'gray';
-  return 'red';
 }
 
 const COLUMNS: Column<Prospect>[] = [
@@ -122,6 +118,50 @@ export function AllProspectsTable({
   onStageFilter,
   isLoading,
 }: Props) {
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
+
+  const stageFilterSelect = (
+    <SearchSelect
+      size="sm"
+      placeholder="Sales Stage"
+      allLabel="All stages"
+      options={stageOptions}
+      value={stageFilter}
+      showAllOption
+      onChange={onStageFilter}
+    />
+  );
+  const viewToggle = <ViewModeToggle value={viewMode} onChange={setViewMode} />;
+
+  if (viewMode === 'grid') {
+    return (
+      <DataCardGrid
+        data={data}
+        renderCard={(row) => (
+          <ProspectCard
+            prospect={row}
+            onClick={() => onRowClick(row)}
+            onEdit={() => onEdit(row)}
+            onUpdateStage={() => onUpdateStage(row)}
+            onConvertToClient={onConvertToClient && (() => onConvertToClient(row))}
+          />
+        )}
+        renderSkeleton={() => <div className="w-80 h-56 rounded-2xl bg-gray-200 animate-pulse" />}
+        isLoading={isLoading}
+        emptyMessage="No prospects yet"
+        searchPlaceholder="Search prospects..."
+        searchValue={searchValue}
+        onSearch={onSearch}
+        extraFilters={stageFilterSelect}
+        toolbarTrailing={viewToggle}
+        actionButton={{ label: 'Add Prospect', onClick: onAdd }}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+      />
+    );
+  }
+
   return (
     <DataTable
       columns={COLUMNS}
@@ -130,17 +170,8 @@ export function AllProspectsTable({
       searchPlaceholder="Search prospects..."
       searchValue={searchValue}
       onSearch={onSearch}
-      extraFilters={
-        <SearchSelect
-          size="sm"
-          placeholder="Sales Stage"
-          allLabel="All stages"
-          options={stageOptions}
-          value={stageFilter}
-          showAllOption
-          onChange={onStageFilter}
-        />
-      }
+      extraFilters={stageFilterSelect}
+      toolbarTrailing={viewToggle}
       currentPage={currentPage}
       totalPages={totalPages}
       onPageChange={onPageChange}

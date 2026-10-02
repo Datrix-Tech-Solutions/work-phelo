@@ -208,7 +208,7 @@ export default function ProspectDetailPage() {
           <DetailField label="Date Created" value={formatDate(prospect.createdAt)} />
           <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
           <DetailField label="Total Expected" value={formatMoney(prospect.totalExpectedValue)} />
-          <DetailField label="Total Achieved" value={formatMoney(prospect.totalAchievedValue)} />
+          {/* <DetailField label="Total Achieved" value={formatMoney(prospect.totalAchievedValue)} /> */}
           <div className="col-span-2 flex flex-col gap-1.5">
             <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
               Progress

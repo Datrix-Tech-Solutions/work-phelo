@@ -2217,6 +2217,7 @@ describe('ProspectsService', () => {
     const prospectA = {
       id: 'prospect-a',
       companyName: 'Acme Manufacturing',
+      businessTypeId: 'business-type-1',
       pipelineStageId: 'stage-proposal',
       assignedUserId: 'user-1',
       createdAt: new Date('2026-09-28T10:00:00.000Z'),
@@ -2293,6 +2294,7 @@ describe('ProspectsService', () => {
         { id: 'product-1', name: 'Product A' },
         { id: 'product-2', name: 'Service B' },
         { id: 'decision-maker-1', name: 'CEO' },
+        { id: 'business-type-1', name: 'Manufacturing' },
       ]);
     });
 
@@ -2400,6 +2402,7 @@ describe('ProspectsService', () => {
           {
             id: 'prospect-a',
             companyName: 'Acme Manufacturing',
+            businessType: { id: 'business-type-1', name: 'Manufacturing' },
             expectedValue: '15000.25',
             achievedValue: '2500.00',
             products: [
@@ -2435,7 +2438,14 @@ describe('ProspectsService', () => {
       expect(prisma.marketingCrmSettingOption.findMany).toHaveBeenCalledWith({
         where: {
           tenantId: 'tenant-1',
-          id: { in: ['product-1', 'product-2', 'decision-maker-1'] },
+          id: {
+            in: [
+              'business-type-1',
+              'product-1',
+              'product-2',
+              'decision-maker-1',
+            ],
+          },
         },
         select: { id: true, name: true },
       });

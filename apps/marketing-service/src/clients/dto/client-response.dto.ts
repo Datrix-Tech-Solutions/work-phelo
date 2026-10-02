@@ -16,6 +16,24 @@ export class ClientDetailProductDto {
   @ApiProperty({ enum: ['PENDING', 'PURCHASED', 'UNINTERESTED'] })
   status!: string;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    example: '10000.00',
+    description:
+      'Carried over from the prospect product at conversion; null for products added directly.',
+  })
+  expectedValue!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: '10' })
+  commissionRate!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: '1000.00',
+    description: 'Commission on the expected value.',
+  })
+  commissionAmount!: string | null;
+
   @ApiProperty()
   createdAt!: Date;
 }

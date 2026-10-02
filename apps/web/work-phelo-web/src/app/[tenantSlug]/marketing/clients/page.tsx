@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { useClients } from '@/hooks/marketing/useClients';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
@@ -12,6 +14,8 @@ import { cn } from '@/lib/utils';
 const PAGE_SIZE = 12;
 
 export default function ClientsPage() {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -50,7 +54,12 @@ export default function ClientsPage() {
           currentPage={page}
           totalPages={Math.max(1, data?.meta.totalPages ?? 1)}
           onPageChange={setPage}
-          renderCard={(client) => <ClientCard client={client} />}
+          renderCard={(client) => (
+            <ClientCard
+              client={client}
+              onClick={() => router.push(`/${tenantSlug}/marketing/clients/${client.id}`)}
+            />
+          )}
         />
       </div>
 

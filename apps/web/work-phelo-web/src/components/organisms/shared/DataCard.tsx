@@ -46,7 +46,7 @@ export function DataCard({
 }: DataCardProps) {
   const classes = cn(
     surface === 'strong' && 'shadow-lg',
-    'rounded-card flex flex-col h-full w-80 transition-all duration-200',
+    'rounded-card flex flex-col h-full w-full transition-all duration-200',
     onClick &&
       'cursor-pointer hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-0.5',
     className,

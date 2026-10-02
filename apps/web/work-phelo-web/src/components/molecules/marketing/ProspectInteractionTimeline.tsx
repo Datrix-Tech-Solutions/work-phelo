@@ -9,7 +9,10 @@ import type { FollowUpWorklistItem, ProspectDetailInteraction } from '@/types/ma
 
 interface Props {
   interactions: ProspectDetailInteraction[];
-  onAdd: () => void;
+  /** Omit to hide the add button, e.g. where interactions can't be recorded yet. */
+  onAdd?: () => void;
+  /** Label of the add button. */
+  addLabel?: string;
   /** The prospect's next follow-up, shown after the last interaction. */
   upcoming?: FollowUpWorklistItem;
 }
@@ -27,18 +30,25 @@ function fullDate(iso: string) {
 }
 
 /** Oldest to newest, left to right, scrolling sideways when the history outgrows the page. */
-export function ProspectInteractionTimeline({ interactions, onAdd, upcoming }: Props) {
+export function ProspectInteractionTimeline({
+  interactions,
+  onAdd,
+  addLabel = 'Add Follow ups',
+  upcoming,
+}: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = interactions.find((i) => i.id === selectedId);
   const sorted = [...interactions].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button icon={<Plus className="w-4 h-4" />} onClick={onAdd}>
-          Add Follow ups
-        </Button>
-      </div>
+      {onAdd && (
+        <div className="flex justify-end">
+          <Button icon={<Plus className="w-4 h-4" />} onClick={onAdd}>
+            {addLabel}
+          </Button>
+        </div>
+      )}
 
       {sorted.length === 0 && !upcoming ? (
         <p className="text-sm text-gray-400 text-center py-8">No follow ups yet</p>

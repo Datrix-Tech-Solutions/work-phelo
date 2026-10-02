@@ -17,6 +17,7 @@ import {
   ConvertProspectToClientDto,
   CreateClientDto,
 } from './dto/create-client.dto';
+import { CreateProspectInteractionDto } from '../prospects/dto/create-prospect-interaction.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -26,6 +27,8 @@ const DUPLICATE_PRODUCT_MESSAGE =
 const PRODUCT_EXISTS_MESSAGE =
   'This client already has that product or service';
 const EMPTY_PATCH_MESSAGE = 'At least one field is required';
+const FOLLOW_UP_COMPLETION_MESSAGE =
+  'Completing a scheduled follow-up is not supported for clients yet';
 const ALREADY_CONVERTED_MESSAGE = 'This prospect has already been converted';
 const NOT_CONVERTIBLE_MESSAGE =
   'Only prospects at 100% progress can be converted to a client';
@@ -109,6 +112,7 @@ export class ClientsService {
             ? {
                 name: primary.name,
                 phone: primary.phone,
+                email: primary.email,
                 decisionMaker: primary.decisionMakerTypeId
                   ? this.namedReference(
                       primary.decisionMakerTypeId,
@@ -404,6 +408,7 @@ export class ClientsService {
           'Unknown product',
         ),
         status: product.status,
+        ...this.productTerms(product),
         createdAt: product.createdAt,
       };
     } catch (error) {
@@ -412,6 +417,69 @@ export class ClientsService {
       }
       throw error;
     }
+  }
+
+  async createInteraction(
+    user: RequestUser,
+    id: string,
+    dto: CreateProspectInteractionDto,
+  ) {
+    if (dto.followUpId) {
+      throw new BadRequestException(FOLLOW_UP_COMPLETION_MESSAGE);
+    }
+
+    const canCreateAll = this.hasAll(
+      user,
+      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE_ALL,
+    );
+    const client = await this.prisma.marketingClient.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        ...this.visibilityWhere(user, canCreateAll),
+      },
+      select: { id: true },
+    });
+    if (!client) throw new NotFoundException('Client not found');
+
+    await this.assertReferences(user.tenantId, [
+      {
+        id: dto.interactionMediumId,
+        category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      },
+    ]);
+
+    const interaction = await this.prisma.marketingProspectInteraction.create({
+      data: {
+        tenantId: user.tenantId,
+        clientId: client.id,
+        interactionMediumId: dto.interactionMediumId,
+        occurredAt: new Date(dto.occurredAt),
+        notes: this.formatOptionalText(dto.notes),
+        decisionMakerInvolved: dto.decisionMakerInvolved,
+        createdByUserId: user.id,
+        ...(dto.participants && dto.participants.length > 0
+          ? {
+              participants: {
+                create: dto.participants.map((participant) => ({
+                  tenantId: user.tenantId,
+                  fullName: this.formatText(participant.fullName),
+                  phone: this.formatText(participant.phone),
+                  role: this.formatText(participant.role),
+                })),
+              },
+            }
+          : {}),
+      },
+      include: {
+        participants: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
+      },
+    });
+
+    const settings = await this.findSettingsByIds(user.tenantId, [
+      interaction.interactionMediumId,
+    ]);
+    return this.toInteractionResponse(interaction, settings);
   }
 
   async convertProspect(
@@ -477,11 +545,17 @@ export class ClientsService {
             },
             products: {
               create: [
-                ...new Set(prospect.products.map((p) => p.productId)),
-              ].map((productId) => ({
+                ...new Map(
+                  prospect.products.map((p) => [p.productId, p] as const),
+                ).values(),
+              ].map((product) => ({
                 tenantId: user.tenantId,
-                productId,
+                productId: product.productId,
                 status: MarketingClientProductStatus.PENDING,
+                // Achieved revenue is not carried over — it comes from the sales module.
+                expectedValue: product.expectedValue,
+                commissionRate: product.commissionRate,
+                commissionAmount: this.expectedCommission(product),
               })),
             },
           },
@@ -596,34 +670,87 @@ export class ClientsService {
           'Unknown product',
         ),
         status: product.status,
+        ...this.productTerms(product),
         createdAt: product.createdAt,
       })),
-      interactions: client.interactions.map((interaction) => ({
-        id: interaction.id,
-        occurredAt: interaction.occurredAt,
-        interactionMedium: interaction.interactionMediumId
-          ? this.namedReference(
-              interaction.interactionMediumId,
-              settings,
-              'Unknown interaction medium',
-            )
-          : null,
-        notes: interaction.notes,
-        decisionMakerInvolved: interaction.decisionMakerInvolved,
-        participants: interaction.participants.map((participant) => ({
-          id: participant.id,
-          fullName: participant.fullName,
-          phone: participant.phone,
-          role: participant.role,
-          createdAt: participant.createdAt,
-        })),
-        createdByUserId: interaction.createdByUserId,
-        createdAt: interaction.createdAt,
-      })),
+      interactions: client.interactions.map((interaction) =>
+        this.toInteractionResponse(interaction, settings),
+      ),
       convertedFromProspectId: client.convertedFromProspectId,
       convertedAt: client.convertedAt,
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
+    };
+  }
+
+  /**
+   * Commission carried over at conversion: the rate's share of the expected value. With no rate
+   * there is nothing to derive from, so a stored amount is kept as it was.
+   */
+  private expectedCommission(product: {
+    expectedValue: Prisma.Decimal;
+    commissionRate: Prisma.Decimal | null;
+    commissionAmount: Prisma.Decimal | null;
+  }): Prisma.Decimal | null {
+    if (product.commissionRate === null) return product.commissionAmount;
+    return product.expectedValue
+      .mul(product.commissionRate)
+      .div(100)
+      .toDecimalPlaces(2);
+  }
+
+  private productTerms(product: {
+    expectedValue: Prisma.Decimal | null;
+    commissionRate: Prisma.Decimal | null;
+    commissionAmount: Prisma.Decimal | null;
+  }) {
+    return {
+      expectedValue: product.expectedValue?.toFixed(2) ?? null,
+      commissionRate: product.commissionRate?.toString() ?? null,
+      commissionAmount: product.commissionAmount?.toFixed(2) ?? null,
+    };
+  }
+
+  private toInteractionResponse(
+    interaction: {
+      id: string;
+      occurredAt: Date;
+      interactionMediumId: string | null;
+      notes: string | null;
+      decisionMakerInvolved: boolean;
+      createdByUserId: string | null;
+      createdAt: Date;
+      participants: Array<{
+        id: string;
+        fullName: string;
+        phone: string;
+        role: string;
+        createdAt: Date;
+      }>;
+    },
+    settings: NamedSettings,
+  ) {
+    return {
+      id: interaction.id,
+      occurredAt: interaction.occurredAt,
+      interactionMedium: interaction.interactionMediumId
+        ? this.namedReference(
+            interaction.interactionMediumId,
+            settings,
+            'Unknown interaction medium',
+          )
+        : null,
+      notes: interaction.notes,
+      decisionMakerInvolved: interaction.decisionMakerInvolved,
+      participants: interaction.participants.map((participant) => ({
+        id: participant.id,
+        fullName: participant.fullName,
+        phone: participant.phone,
+        role: participant.role,
+        createdAt: participant.createdAt,
+      })),
+      createdByUserId: interaction.createdByUserId,
+      createdAt: interaction.createdAt,
     };
   }
 

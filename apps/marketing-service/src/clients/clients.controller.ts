@@ -56,6 +56,8 @@ import {
   ClientListResponseDto,
   QueryClientsDto,
 } from './dto/query-clients.dto';
+import { CreateProspectInteractionDto } from '../prospects/dto/create-prospect-interaction.dto';
+import { ProspectDetailInteractionDto } from '../prospects/dto/prospect-response.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 const {
@@ -67,6 +69,8 @@ const {
   CLIENTS_DELETE_ALL,
   PROSPECTS_EDIT,
   PROSPECTS_EDIT_ALL,
+  PROSPECT_INTERACTIONS_CREATE,
+  PROSPECT_INTERACTIONS_CREATE_ALL,
 } = MarketingCrmSettingsPermission;
 
 @Controller('clients')
@@ -137,6 +141,28 @@ export class ClientsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.addProduct(request.user, id, dto);
+  }
+
+  @Post(':id/interactions')
+  @RequireAnyPermission(
+    PROSPECT_INTERACTIONS_CREATE,
+    PROSPECT_INTERACTIONS_CREATE_ALL,
+  )
+  @ApiOperation({
+    summary: 'Record a client follow-up (interaction)',
+    description:
+      'Users with marketing.prospects.interactions:CREATE can record interactions for their assigned clients. Users with marketing.prospects.interactions.all:CREATE can record them for any client within their tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiCreatedResponse({ type: ProspectDetailInteractionDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  createInteraction(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateProspectInteractionDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.createInteraction(request.user, id, dto);
   }
 
   @Get(':id')

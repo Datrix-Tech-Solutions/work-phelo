@@ -43,6 +43,8 @@ export function useCreateAsset() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      // Vehicle assets are shown in the marketing fleet list too.
+      queryClient.invalidateQueries({ queryKey: ['marketing', 'fleet'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
@@ -63,6 +65,8 @@ export function useUpdateAsset() {
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      // Vehicle assets are shown in the marketing fleet list too.
+      queryClient.invalidateQueries({ queryKey: ['marketing', 'fleet'] });
       queryClient.invalidateQueries({ queryKey: ['assets', id] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
@@ -81,6 +85,8 @@ export function useAssignAsset() {
     },
     onSuccess: (_, { assetId }) => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      // Vehicle assets are shown in the marketing fleet list too.
+      queryClient.invalidateQueries({ queryKey: ['marketing', 'fleet'] });
       queryClient.invalidateQueries({ queryKey: ['assets', 'available'] });
       queryClient.invalidateQueries({ queryKey: ['assets', assetId] });
       queryClient.invalidateQueries({ queryKey: ['employees'] });
@@ -99,6 +105,8 @@ export function useUnassignAsset() {
     },
     onSuccess: (_, assetId) => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      // Vehicle assets are shown in the marketing fleet list too.
+      queryClient.invalidateQueries({ queryKey: ['marketing', 'fleet'] });
       queryClient.invalidateQueries({ queryKey: ['assets', 'available'] });
       queryClient.invalidateQueries({ queryKey: ['assets', assetId] });
       queryClient.invalidateQueries({ queryKey: ['employees'] });
@@ -117,6 +125,8 @@ export function useRetireAsset() {
     },
     onSuccess: (_, assetId) => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      // Vehicle assets are shown in the marketing fleet list too.
+      queryClient.invalidateQueries({ queryKey: ['marketing', 'fleet'] });
       queryClient.invalidateQueries({ queryKey: ['assets', 'available'] });
       queryClient.invalidateQueries({ queryKey: ['assets', assetId] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -134,6 +144,8 @@ export function useDeleteAsset() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      // Vehicle assets are shown in the marketing fleet list too.
+      queryClient.invalidateQueries({ queryKey: ['marketing', 'fleet'] });
       queryClient.invalidateQueries({ queryKey: ['assets', 'available'] });
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });

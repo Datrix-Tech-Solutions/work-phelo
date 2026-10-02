@@ -22,11 +22,16 @@ function formatDate(value: string | null): string {
   });
 }
 
-function detail(Icon: typeof Package, label: string, value: string): DataCardDetail {
+function detail(
+  Icon: typeof Package,
+  label: string,
+  value: string,
+  iconColor: string,
+): DataCardDetail {
   return {
     label: (
       <>
-        <Icon className="w-3 h-3" /> {label}
+        <Icon className={`w-3 h-3 ${iconColor}`} /> {label}
       </>
     ),
     value: <span className="text-xs font-semibold text-gray-700">{value}</span>,
@@ -35,14 +40,21 @@ function detail(Icon: typeof Package, label: string, value: string): DataCardDet
 
 export function ProspectProductCard({ product }: { product: ProspectDetailProduct }) {
   const details: DataCardDetail[] = [
-    detail(Target, 'Expected Revenue', formatMoney(product.expectedValue)),
-    detail(Banknote, 'Achieved Revenue', formatMoney(product.achievedValue)),
-    detail(CalendarDays, 'Expected Close', formatDate(product.expectedCloseDate)),
+    detail(Target, 'Expected Revenue', formatMoney(product.expectedValue), 'text-blue-500'),
+    detail(Banknote, 'Achieved Revenue', formatMoney(product.achievedValue), 'text-emerald-500'),
+    detail(CalendarDays, 'Expected Close', formatDate(product.expectedCloseDate), 'text-rose-500'),
     ...(product.commissionRate != null
-      ? [detail(Percent, 'Commission Rate', `${Number(product.commissionRate)}%`)]
+      ? [
+          detail(
+            Percent,
+            'Commission Rate',
+            `${Number(product.commissionRate)}%`,
+            'text-violet-500',
+          ),
+        ]
       : []),
     ...(product.commissionAmount != null
-      ? [detail(Banknote, 'Commission', formatMoney(product.commissionAmount))]
+      ? [detail(Banknote, 'Commission', formatMoney(product.commissionAmount), 'text-amber-500')]
       : []),
   ];
 
