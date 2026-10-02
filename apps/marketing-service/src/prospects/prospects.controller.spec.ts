@@ -182,6 +182,18 @@ describe('ProspectFollowUpsController authorization contract', () => {
       MarketingCrmSettingsPermission.FOLLOW_UPS_CANCEL_ALL,
     ]);
   });
+
+  it('requires assigned or tenant-wide follow-up complete permission on complete', () => {
+    expect(
+      Reflect.getMetadata(
+        ANY_PERMISSIONS_KEY,
+        ProspectFollowUpsController.prototype.complete,
+      ),
+    ).toEqual([
+      MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE,
+      MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE_ALL,
+    ]);
+  });
 });
 
 describe('Prospects authorization guards', () => {

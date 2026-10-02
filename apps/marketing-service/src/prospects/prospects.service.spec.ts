@@ -163,13 +163,18 @@ describe('ProspectsService', () => {
         findFirst: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      marketingCrmSettingOption: {
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
     };
 
     return {
       marketingCrmSettingOption: {
-        findFirst: jest.fn(),
-        findMany: jest.fn(),
+        findFirst: tx.marketingCrmSettingOption.findFirst,
+        findMany: tx.marketingCrmSettingOption.findMany,
       },
       marketingPipelineStage: {
         findFirst: jest.fn(),
@@ -231,6 +236,7 @@ describe('ProspectsService', () => {
     prisma.marketingProspectFollowUp.findFirst.mockResolvedValue(null);
     prisma.marketingProspectFollowUp.findMany.mockResolvedValue([]);
     prisma.marketingProspectFollowUp.update.mockResolvedValue({});
+    prisma.marketingProspectFollowUp.updateMany.mockResolvedValue({ count: 1 });
     prisma.marketingPipelineStage.findMany.mockResolvedValue([]);
     prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
     service = new ProspectsService(prisma as unknown as PrismaService);
@@ -923,7 +929,7 @@ describe('ProspectsService', () => {
       await expect(
         service.createInteraction(user, 'prospect-a', interactionDto()),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.marketingProspectInteraction.create).not.toHaveBeenCalled();
     });
 
     it('propagates transaction failures so participants do not partially persist', async () => {
@@ -939,57 +945,18 @@ describe('ProspectsService', () => {
       ).rejects.toThrow('participant create failed');
     });
 
-    it('completes the linked pending follow-up in the same transaction', async () => {
-      prisma.marketingProspect.findFirst.mockResolvedValue({
-        id: 'prospect-a',
-      });
-      prisma.marketingProspectFollowUp.findFirst.mockResolvedValue({
-        id: 'follow-up-1',
-      });
-      prisma.marketingProspectInteraction.create.mockResolvedValue({
-        ...recordedInteraction,
-        participants: [],
-      });
-
-      await service.createInteraction(user, 'prospect-a', {
-        ...interactionDto(),
-        followUpId: '77777777-7777-4777-8777-777777777777',
-      });
-
-      expect(prisma.marketingProspectFollowUp.findFirst).toHaveBeenCalledWith({
-        where: {
-          id: '77777777-7777-4777-8777-777777777777',
-          tenantId: 'tenant-1',
-          prospectId: 'prospect-a',
-          status: MarketingProspectFollowUpStatus.PENDING,
-        },
-        select: { id: true },
-      });
-      expect(prisma.marketingProspectFollowUp.update).toHaveBeenCalledWith({
-        where: { id: 'follow-up-1' },
-        data: {
-          status: MarketingProspectFollowUpStatus.COMPLETED,
-          completedAt: expect.any(Date) as Date,
-          completedByUserId: 'user-1',
-          completedInteractionId: recordedInteraction.id,
-        },
-      });
-    });
-
-    it('rejects a follow-up that is not a pending follow-up of the prospect', async () => {
-      prisma.marketingProspect.findFirst.mockResolvedValue({
-        id: 'prospect-a',
-      });
-      prisma.marketingProspectFollowUp.findFirst.mockResolvedValue(null);
-
+    it('rejects follow-up completion through the generic interaction endpoint', async () => {
       await expect(
         service.createInteraction(user, 'prospect-a', {
           ...interactionDto(),
           followUpId: '77777777-7777-4777-8777-777777777777',
         }),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.marketingProspect.findFirst).not.toHaveBeenCalled();
       expect(prisma.marketingProspectInteraction.create).not.toHaveBeenCalled();
-      expect(prisma.marketingProspectFollowUp.update).not.toHaveBeenCalled();
+      expect(
+        prisma.marketingProspectFollowUp.updateMany,
+      ).not.toHaveBeenCalled();
     });
 
     it('returns interaction history with archived medium names and deterministic ordering', async () => {
@@ -1708,6 +1675,431 @@ describe('ProspectsService', () => {
         data: { status: MarketingProspectFollowUpStatus.CANCELLED },
       });
       expect(result.status).toBe(MarketingProspectFollowUpStatus.CANCELLED);
+    });
+
+    it('completes a pending follow-up by recording the required interaction atomically', async () => {
+      const interaction = {
+        id: 'interaction-1',
+        tenantId: 'tenant-1',
+        prospectId: 'prospect-a',
+        interactionMediumId: '66666666-6666-4666-8666-666666666666',
+        occurredAt: new Date('2026-10-01T10:30:00.000Z'),
+        notes: 'Discussed final quotation',
+        decisionMakerInvolved: true,
+        createdByUserId: 'user-1',
+        createdAt: new Date('2026-10-01T10:31:00.000Z'),
+        participants: [
+          {
+            id: 'participant-1',
+            tenantId: 'tenant-1',
+            interactionId: 'interaction-1',
+            fullName: 'Ama Mensah',
+            phone: '+233201234567',
+            role: 'Finance Director',
+            createdAt: new Date('2026-10-01T10:32:00.000Z'),
+          },
+        ],
+      };
+      const completedFollowUp = {
+        ...pendingFollowUp,
+        status: MarketingProspectFollowUpStatus.COMPLETED,
+        completedAt: new Date('2026-10-01T10:31:00.000Z'),
+        completedByUserId: 'user-1',
+        completedInteractionId: 'interaction-1',
+      };
+      prisma.marketingProspectFollowUp.findFirst
+        .mockResolvedValueOnce({
+          id: 'follow-up-1',
+          prospectId: 'prospect-a',
+          status: MarketingProspectFollowUpStatus.PENDING,
+        })
+        .mockResolvedValueOnce(completedFollowUp);
+      prisma.marketingProspectInteraction.create.mockResolvedValueOnce(
+        interaction,
+      );
+      prisma.marketingProspectInteraction.groupBy.mockResolvedValueOnce([
+        {
+          prospectId: 'prospect-a',
+          _max: { occurredAt: new Date('2026-10-01T10:30:00.000Z') },
+        },
+      ]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValueOnce([
+        {
+          id: '66666666-6666-4666-8666-666666666666',
+          name: 'Phone Call',
+        },
+      ]);
+
+      const result = await service.completeFollowUp(user, 'follow-up-1', {
+        interaction: {
+          occurredAt: '2026-10-01T10:30:00.000Z',
+          interactionMediumId: '66666666-6666-4666-8666-666666666666',
+          notes: ' Discussed  final quotation ',
+          decisionMakerInvolved: true,
+          participants: [
+            {
+              fullName: ' Ama  Mensah ',
+              phone: ' +233201234567 ',
+              role: ' Finance  Director ',
+            },
+          ],
+        },
+      });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(
+        prisma.marketingProspectFollowUp.findFirst,
+      ).toHaveBeenNthCalledWith(1, {
+        where: {
+          id: 'follow-up-1',
+          tenantId: 'tenant-1',
+          prospect: {
+            tenantId: 'tenant-1',
+            assignedUserId: 'user-1',
+          },
+        },
+        select: {
+          id: true,
+          prospectId: true,
+          status: true,
+        },
+      });
+      expect(prisma.marketingCrmSettingOption.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: '66666666-6666-4666-8666-666666666666',
+          tenantId: 'tenant-1',
+          category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+          archivedAt: null,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      expect(prisma.marketingProspectInteraction.create).toHaveBeenCalledWith({
+        data: {
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          interactionMediumId: '66666666-6666-4666-8666-666666666666',
+          occurredAt: new Date('2026-10-01T10:30:00.000Z'),
+          notes: 'Discussed final quotation',
+          decisionMakerInvolved: true,
+          createdByUserId: 'user-1',
+          participants: {
+            create: [
+              {
+                tenantId: 'tenant-1',
+                fullName: 'Ama Mensah',
+                phone: '+233201234567',
+                role: 'Finance Director',
+              },
+            ],
+          },
+        },
+        include: {
+          participants: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          },
+        },
+      });
+      expect(prisma.marketingProspectFollowUp.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'follow-up-1',
+          tenantId: 'tenant-1',
+          status: MarketingProspectFollowUpStatus.PENDING,
+        },
+        data: {
+          status: MarketingProspectFollowUpStatus.COMPLETED,
+          completedAt: expect.any(Date) as Date,
+          completedByUserId: 'user-1',
+          completedInteractionId: 'interaction-1',
+        },
+      });
+      expect(result.followUp).toEqual(
+        expect.objectContaining({
+          status: MarketingProspectFollowUpStatus.COMPLETED,
+          completedByUserId: 'user-1',
+          completedInteractionId: 'interaction-1',
+        }),
+      );
+      expect(result.interaction).toEqual(
+        expect.objectContaining({
+          id: 'interaction-1',
+          interactionMedium: {
+            id: '66666666-6666-4666-8666-666666666666',
+            name: 'Phone Call',
+          },
+        }),
+      );
+      expect(result.nextFollowUp).toBeNull();
+      expect(result.effectiveNextFollowUp).toEqual({
+        source: 'DEFAULT',
+        dueAt: new Date('2026-10-08T10:30:00.000Z'),
+      });
+    });
+
+    it('creates the optional next explicit follow-up during completion', async () => {
+      prisma.marketingProspectFollowUp.findFirst
+        .mockResolvedValueOnce({
+          id: 'follow-up-1',
+          prospectId: 'prospect-a',
+          status: MarketingProspectFollowUpStatus.PENDING,
+        })
+        .mockResolvedValueOnce({
+          ...pendingFollowUp,
+          status: MarketingProspectFollowUpStatus.COMPLETED,
+          completedAt: new Date('2026-10-01T10:31:00.000Z'),
+          completedByUserId: 'user-1',
+          completedInteractionId: 'interaction-1',
+        });
+      prisma.marketingProspectInteraction.create.mockResolvedValueOnce({
+        id: 'interaction-1',
+        tenantId: 'tenant-1',
+        prospectId: 'prospect-a',
+        interactionMediumId: '66666666-6666-4666-8666-666666666666',
+        occurredAt: new Date('2026-10-01T10:30:00.000Z'),
+        notes: null,
+        decisionMakerInvolved: false,
+        createdByUserId: 'user-1',
+        createdAt: new Date('2026-10-01T10:31:00.000Z'),
+        participants: [],
+      });
+      prisma.marketingProspectFollowUp.create.mockResolvedValueOnce({
+        ...pendingFollowUp,
+        id: 'follow-up-next',
+        dueAt: new Date('2026-10-03T09:00:00.000Z'),
+        note: 'Call to confirm approval',
+      });
+      prisma.marketingProspectInteraction.groupBy.mockResolvedValueOnce([
+        {
+          prospectId: 'prospect-a',
+          _max: { occurredAt: new Date('2026-10-01T10:30:00.000Z') },
+        },
+      ]);
+
+      const result = await service.completeFollowUp(user, 'follow-up-1', {
+        interaction: {
+          occurredAt: '2026-10-01T10:30:00.000Z',
+          interactionMediumId: '66666666-6666-4666-8666-666666666666',
+          decisionMakerInvolved: false,
+        },
+        nextFollowUp: {
+          dueAt: '2026-10-03T09:00:00.000Z',
+          note: ' Call  to confirm approval ',
+        },
+      });
+
+      expect(prisma.marketingProspectFollowUp.create).toHaveBeenCalledWith({
+        data: {
+          tenantId: 'tenant-1',
+          prospectId: 'prospect-a',
+          dueAt: new Date('2026-10-03T09:00:00.000Z'),
+          note: 'Call to confirm approval',
+          status: MarketingProspectFollowUpStatus.PENDING,
+          createdByUserId: 'user-1',
+        },
+      });
+      expect(result.nextFollowUp).toEqual(
+        expect.objectContaining({ id: 'follow-up-next' }),
+      );
+      expect(result.effectiveNextFollowUp).toEqual({
+        source: 'EXPLICIT',
+        dueAt: new Date('2026-10-03T09:00:00.000Z'),
+      });
+    });
+
+    it('rejects inactive, archived, wrong-category or cross-tenant interaction media before completion writes', async () => {
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce({
+        id: 'follow-up-1',
+        prospectId: 'prospect-a',
+        status: MarketingProspectFollowUpStatus.PENDING,
+      });
+      prisma.marketingCrmSettingOption.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.completeFollowUp(user, 'follow-up-1', {
+          interaction: {
+            occurredAt: '2026-10-01T10:30:00.000Z',
+            interactionMediumId: '66666666-6666-4666-8666-666666666666',
+            decisionMakerInvolved: false,
+          },
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.marketingProspectInteraction.create).not.toHaveBeenCalled();
+      expect(
+        prisma.marketingProspectFollowUp.updateMany,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate, cancelled or completed follow-up completion', async () => {
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce({
+        id: 'follow-up-1',
+        prospectId: 'prospect-a',
+        status: MarketingProspectFollowUpStatus.CANCELLED,
+      });
+
+      await expect(
+        service.completeFollowUp(user, 'follow-up-1', {
+          interaction: {
+            occurredAt: '2026-10-01T10:30:00.000Z',
+            interactionMediumId: '66666666-6666-4666-8666-666666666666',
+            decisionMakerInvolved: false,
+          },
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.marketingProspectInteraction.create).not.toHaveBeenCalled();
+    });
+
+    it('uses tenant-wide completion scope for COMPLETE_ALL users', async () => {
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.completeFollowUp(
+          {
+            ...user,
+            permissions: [
+              MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE,
+              MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE_ALL,
+            ],
+          },
+          'follow-up-1',
+          {
+            interaction: {
+              occurredAt: '2026-10-01T10:30:00.000Z',
+              interactionMediumId: '66666666-6666-4666-8666-666666666666',
+              decisionMakerInvolved: false,
+            },
+          },
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.marketingProspectFollowUp.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: 'follow-up-1',
+            tenantId: 'tenant-1',
+            prospect: {
+              tenantId: 'tenant-1',
+            },
+          },
+        }),
+      );
+    });
+
+    it('rejects cross-tenant or inaccessible follow-ups without writing interaction records', async () => {
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.completeFollowUp(user, 'follow-up-other', {
+          interaction: {
+            occurredAt: '2026-10-01T10:30:00.000Z',
+            interactionMediumId: '66666666-6666-4666-8666-666666666666',
+            decisionMakerInvolved: false,
+          },
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.marketingProspectInteraction.create).not.toHaveBeenCalled();
+    });
+
+    it('rolls back completion when interaction creation fails', async () => {
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce({
+        id: 'follow-up-1',
+        prospectId: 'prospect-a',
+        status: MarketingProspectFollowUpStatus.PENDING,
+      });
+      prisma.marketingProspectInteraction.create.mockRejectedValueOnce(
+        new Error('interaction failed'),
+      );
+
+      await expect(
+        service.completeFollowUp(user, 'follow-up-1', {
+          interaction: {
+            occurredAt: '2026-10-01T10:30:00.000Z',
+            interactionMediumId: '66666666-6666-4666-8666-666666666666',
+            decisionMakerInvolved: false,
+          },
+        }),
+      ).rejects.toThrow('interaction failed');
+      expect(
+        prisma.marketingProspectFollowUp.updateMany,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rejects concurrent double completion when the pending update no longer matches', async () => {
+      prisma.marketingProspectFollowUp.findFirst.mockResolvedValueOnce({
+        id: 'follow-up-1',
+        prospectId: 'prospect-a',
+        status: MarketingProspectFollowUpStatus.PENDING,
+      });
+      prisma.marketingProspectInteraction.create.mockResolvedValueOnce({
+        id: 'interaction-1',
+        tenantId: 'tenant-1',
+        prospectId: 'prospect-a',
+        interactionMediumId: '66666666-6666-4666-8666-666666666666',
+        occurredAt: new Date('2026-10-01T10:30:00.000Z'),
+        notes: null,
+        decisionMakerInvolved: false,
+        createdByUserId: 'user-1',
+        createdAt: new Date('2026-10-01T10:31:00.000Z'),
+        participants: [],
+      });
+      prisma.marketingProspectFollowUp.updateMany.mockResolvedValueOnce({
+        count: 0,
+      });
+
+      await expect(
+        service.completeFollowUp(user, 'follow-up-1', {
+          interaction: {
+            occurredAt: '2026-10-01T10:30:00.000Z',
+            interactionMediumId: '66666666-6666-4666-8666-666666666666',
+            decisionMakerInvolved: false,
+          },
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('uses the max interaction occurredAt for default follow-up after backdated completion', async () => {
+      prisma.marketingProspectFollowUp.findFirst
+        .mockResolvedValueOnce({
+          id: 'follow-up-1',
+          prospectId: 'prospect-a',
+          status: MarketingProspectFollowUpStatus.PENDING,
+        })
+        .mockResolvedValueOnce({
+          ...pendingFollowUp,
+          status: MarketingProspectFollowUpStatus.COMPLETED,
+          completedAt: new Date('2026-10-01T10:31:00.000Z'),
+          completedByUserId: 'user-1',
+          completedInteractionId: 'interaction-1',
+        });
+      prisma.marketingProspectInteraction.create.mockResolvedValueOnce({
+        id: 'interaction-1',
+        tenantId: 'tenant-1',
+        prospectId: 'prospect-a',
+        interactionMediumId: '66666666-6666-4666-8666-666666666666',
+        occurredAt: new Date('2026-09-20T10:30:00.000Z'),
+        notes: null,
+        decisionMakerInvolved: false,
+        createdByUserId: 'user-1',
+        createdAt: new Date('2026-10-01T10:31:00.000Z'),
+        participants: [],
+      });
+      prisma.marketingProspectInteraction.groupBy.mockResolvedValueOnce([
+        {
+          prospectId: 'prospect-a',
+          _max: { occurredAt: new Date('2026-09-30T10:00:00.000Z') },
+        },
+      ]);
+
+      const result = await service.completeFollowUp(user, 'follow-up-1', {
+        interaction: {
+          occurredAt: '2026-09-20T10:30:00.000Z',
+          interactionMediumId: '66666666-6666-4666-8666-666666666666',
+          decisionMakerInvolved: false,
+        },
+      });
+
+      expect(result.effectiveNextFollowUp).toEqual({
+        source: 'DEFAULT',
+        dueAt: new Date('2026-10-07T10:00:00.000Z'),
+      });
     });
 
     it('uses explicit pending follow-ups before default latest-interaction plus seven days in the worklist', async () => {

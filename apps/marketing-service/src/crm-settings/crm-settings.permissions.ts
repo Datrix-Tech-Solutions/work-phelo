@@ -45,6 +45,8 @@ export const MarketingCrmSettingsPermission = {
   FOLLOW_UPS_CREATE_ALL: 'marketing.follow-ups.all:CREATE',
   FOLLOW_UPS_EDIT: 'marketing.follow-ups:EDIT',
   FOLLOW_UPS_EDIT_ALL: 'marketing.follow-ups.all:EDIT',
-  FOLLOW_UPS_CANCEL: 'marketing.follow-ups:CANCEL',
-  FOLLOW_UPS_CANCEL_ALL: 'marketing.follow-ups.all:CANCEL',
+  FOLLOW_UPS_CANCEL: 'marketing.follow-ups:DELETE',
+  FOLLOW_UPS_CANCEL_ALL: 'marketing.follow-ups.all:DELETE',
+  FOLLOW_UPS_COMPLETE: 'marketing.follow-ups:RUN',
+  FOLLOW_UPS_COMPLETE_ALL: 'marketing.follow-ups.all:RUN',
 } as const;

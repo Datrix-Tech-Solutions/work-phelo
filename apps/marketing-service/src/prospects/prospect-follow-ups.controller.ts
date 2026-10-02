@@ -33,6 +33,8 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import {
+  CompleteProspectFollowUpDto,
+  CompleteProspectFollowUpResponseDto,
   ProspectFollowUpResponseDto,
   ProspectFollowUpWorklistResponseDto,
   UpdateProspectFollowUpDto,
@@ -113,5 +115,27 @@ export class ProspectFollowUpsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.cancelFollowUp(request.user, id);
+  }
+
+  @Post(':id/complete')
+  @RequireAnyPermission(
+    MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE,
+    MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE_ALL,
+  )
+  @ApiOperation({
+    summary: 'Complete a pending marketing prospect follow-up',
+    description:
+      'Records the related prospect interaction, marks the pending explicit follow-up as completed, and optionally schedules the next explicit follow-up in one transaction.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: CompleteProspectFollowUpResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  complete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CompleteProspectFollowUpDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.completeFollowUp(request.user, id, dto);
   }
 }
