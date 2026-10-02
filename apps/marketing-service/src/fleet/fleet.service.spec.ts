@@ -296,6 +296,27 @@ describe('FleetService', () => {
       );
     });
 
+    it.each([
+      [401, true, 'HR_SERVICE_REJECTED_CREDENTIALS'],
+      [500, true, 'HR_SERVICE_ERROR_500'],
+      [undefined, true, 'HR_SERVICE_UNREACHABLE'],
+      [undefined, false, 'HR_SERVICE_NOT_CONFIGURED'],
+    ])(
+      'tags a %s/retryable=%s failure with reason %s',
+      async (status, retryable, reason) => {
+        hr.getVehicle.mockRejectedValue(
+          new InternalServiceClientError('secret detail', retryable, status),
+        );
+
+        const error = (await service
+          .findOne(user, 'asset-1')
+          .catch((e: BadGatewayException) => e)) as BadGatewayException;
+
+        expect(error.getResponse()).toMatchObject({ statusCode: 502, reason });
+        expect(JSON.stringify(error.getResponse())).not.toContain('secret');
+      },
+    );
+
     it('hides network failures behind a 502', async () => {
       hr.getVehicle.mockRejectedValue(
         new InternalServiceClientError('ECONNREFUSED', true),
