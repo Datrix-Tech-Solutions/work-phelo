@@ -59,7 +59,6 @@ export function useUpdateAccountGroup() {
   });
 }
 
-/** Backend has no delete route — activate/deactivate are the dedicated endpoints. */
 export function useActivateAccountGroup() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -79,6 +78,21 @@ export function useDeactivateAccountGroup() {
     mutationFn: async (id: string) => {
       const res = await api.post<AccountGroup>(`${BASE}/${id}/deactivate`);
       return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: GROUPS_KEY });
+    },
+  });
+}
+
+/** Backend only allows this when no GL accounts are linked to the group — otherwise it
+ *  responds with a 409 explaining what to remove first. */
+export function useDeleteAccountGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`${BASE}/${id}`);
+      return id;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: GROUPS_KEY });

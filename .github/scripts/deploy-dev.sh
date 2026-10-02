@@ -129,7 +129,10 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.dev" \
   "CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}" \
   "CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}" \
   "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" \
-  "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
+  "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.dev" \
   "PORT=4004" \
@@ -161,8 +164,8 @@ write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.dev" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
   "ENABLE_SWAGGER=true" \
-  "DATABASE_URL=${DATABASE_URL}" \
-  "RABBITMQ_URL=${RABBITMQ_URL}"
+  "DATABASE_URL=$(db_url_for_schema marketing)" \
+  "JWT_SECRET=${JWT_SECRET}"
 
 write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
   "PORT=4007" \
@@ -190,6 +193,7 @@ write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
   "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema accounting)" \
   "JWT_SECRET=${JWT_SECRET}" \
+  "HR_SERVICE_URL=http://hr-service:4002" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 log "✓ Service env files written"
@@ -220,6 +224,7 @@ preflight_runtime_env "$API_GATEWAY_IMAGE" "${DEPLOY_PATH}/apps/api-gateway/.env
 preflight_runtime_env "$AUTH_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/auth-service/.env.dev" "dist/config/runtime-env.js" "auth-service"
 preflight_runtime_env "$HR_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/hr-service/.env.dev" "dist/config/runtime-env.js" "hr-service"
 preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notification-service/.env.dev" "dist/config/runtime-env.js" "notification-service"
+preflight_runtime_env "$MARKETING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/marketing-service/.env.dev" "dist/config/runtime-env.js" "marketing-service"
 preflight_runtime_env "$REINSURANCE_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" "dist/config/runtime-env.js" "reinsurance-service"
 preflight_runtime_env "$ACCOUNTING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/accounting-service/.env.dev" "dist/config/runtime-env.js" "accounting-service"
 log "✓ Runtime env validation passed"
@@ -235,7 +240,7 @@ docker_compose run --rm auth-service sh -c "npx prisma@5.22.0 migrate deploy --s
 docker_compose run --rm hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
 docker_compose run --rm notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
 docker_compose run --rm subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
-docker_compose run --rm marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" || true
+docker_compose run --rm marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma"
 docker_compose run --rm reinsurance-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/reinsurance-service/prisma/schema.prisma"
 docker_compose run --rm accounting-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/accounting-service/prisma/schema.prisma"
 log "✓ Migrations complete"

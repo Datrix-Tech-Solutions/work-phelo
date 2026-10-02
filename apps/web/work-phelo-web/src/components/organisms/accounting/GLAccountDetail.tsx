@@ -6,16 +6,20 @@ import { Button } from '@/components/atoms/Button';
 import { DetailField } from '@/components/atoms/DetailField';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { useDeactivateGLAccount } from '@/hooks';
+import { useDeactivateGLAccount, useDeleteGLAccount, useGLAccountLedger } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { EditLeafAccountPanel } from '@/components/organisms/accounting/panels/EditLeafAccountPanel';
-import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
 import { GLAccountLedger } from '@/components/organisms/accounting/GLAccountLedger';
 import type { GLAccount } from '@/types/accounting';
 
 interface GLAccountDetailProps {
   account: GLAccount;
+  /** Computed by the caller from the full account list — this account can't be deleted while
+   *  another account is filed under it as a child. */
+  hasChildAccounts?: boolean;
+  /** Called after a successful delete, since this account no longer exists to show. */
+  onDeleted?: () => void;
 }
 
 const TABS = [
@@ -23,27 +27,20 @@ const TABS = [
   { key: 'details', label: 'Details' },
 ];
 
-export function GLAccountDetail({ account }: GLAccountDetailProps) {
+export function GLAccountDetail({ account, hasChildAccounts, onDeleted }: GLAccountDetailProps) {
   const toast = useToast();
   const { mutateAsync: deactivateAccount, isPending: isDeactivating } = useDeactivateGLAccount();
+  const { mutateAsync: deleteAccount, isPending: isDeleting } = useDeleteGLAccount();
+  const { data: ledger } = useGLAccountLedger(account.id);
   const [activeTab, setActiveTab] = useState('ledger');
   const [isEditing, setIsEditing] = useState(false);
-  const [isCreatingSibling, setIsCreatingSibling] = useState(false);
   const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-  // "Create Account" here mirrors this account's own place in the hierarchy — same
-  // classification and parent account, if it has one. A leaf account always needs a
-  // classification, so this account has to have one too before it can be mirrored; a legacy
-  // account with neither just doesn't get the shortcut (the general "Add Account" still works).
-  const siblingScope = account.classification?.id
-    ? {
-        accountType: account.category,
-        classificationId: account.classification.id,
-        classificationName: account.classification.name,
-        groupId: account.accountGroup?.id,
-        groupName: account.accountGroup?.name,
-      }
-    : undefined;
+  // Deletable only once we know for sure it's safe: no child accounts filed under it, and no
+  // ledger activity — `ledger` being undefined (still loading) keeps the button hidden rather
+  // than flashing it on and risking a delete attempt the backend would reject anyway.
+  const canDelete = !hasChildAccounts && ledger !== undefined && ledger.entries.length === 0;
 
   const deactivate = async () => {
     try {
@@ -52,6 +49,17 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
       setConfirmDeactivateOpen(false);
     } catch (error) {
       toast.error(extractError(error, 'Unable to deactivate account'));
+    }
+  };
+
+  const deleteThisAccount = async () => {
+    try {
+      await deleteAccount(account.id);
+      toast.success(`${account.name} deleted`);
+      setConfirmDeleteOpen(false);
+      onDeleted?.();
+    } catch (error) {
+      toast.error(extractError(error, 'Unable to delete account'));
     }
   };
 
@@ -69,16 +77,6 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
             label={account.status}
             variant={account.status === 'ACTIVE' ? 'success' : 'neutral'}
           />
-          {siblingScope && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCreatingSibling(true)}
-            >
-              Create Account
-            </Button>
-          )}
           {account.status === 'ACTIVE' && (
             <Button
               type="button"
@@ -87,6 +85,16 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
               onClick={() => setConfirmDeactivateOpen(true)}
             >
               Deactivate
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              onClick={() => setConfirmDeleteOpen(true)}
+            >
+              Delete
             </Button>
           )}
         </div>
@@ -142,12 +150,6 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
         account={account}
       />
 
-      <AddLeafAccountPanel
-        isOpen={isCreatingSibling}
-        onClose={() => setIsCreatingSibling(false)}
-        lockedScope={siblingScope}
-      />
-
       <Modal
         isOpen={confirmDeactivateOpen}
         onClose={() => setConfirmDeactivateOpen(false)}
@@ -169,6 +171,32 @@ export function GLAccountDetail({ account }: GLAccountDetailProps) {
               loadingText="Deactivating…"
             >
               Deactivate
+            </Button>
+          </>
+        }
+      />
+
+      <Modal
+        isOpen={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        title="Delete account?"
+        description={`"${account.name}" will be permanently removed. This only works if it has no posted activity — if it does, deactivate it instead.`}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDeleteOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={deleteThisAccount}
+              isLoading={isDeleting}
+              loadingText="Deleting…"
+            >
+              Delete
             </Button>
           </>
         }

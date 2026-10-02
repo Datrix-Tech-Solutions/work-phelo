@@ -1,10 +1,336 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
   schemas  = ["marketing"]
+}
+
+enum MarketingCrmSettingCategory {
+  PRODUCT
+  DECISION_MAKER
+  SOURCE_TYPE
+  INTERACTION_MEDIUM
+  PROSPECT_BUSINESS_TYPE
+
+  @@schema("marketing")
+}
+
+enum MarketingProspectFollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+
+  @@schema("marketing")
+}
+
+enum MarketingClientProductStatus {
+  PENDING
+  PURCHASED
+  UNINTERESTED
+
+  @@schema("marketing")
+}
+
+enum MarketingFleetVehicleType {
+  SEDAN
+  SUV
+  PICKUP
+  VAN
+  MINIBUS
+  BUS
+  MOTORCYCLE
+  TRUCK
+  OTHER
+
+  @@schema("marketing")
+}
+
+enum MarketingFleetFuelType {
+  PETROL
+  DIESEL
+  ELECTRIC
+  HYBRID
+  LPG
+  OTHER
+
+  @@schema("marketing")
+}
+
+model MarketingCrmSettingOption {
+  id              String                      @id @default(uuid())
+  tenantId        String
+  category        MarketingCrmSettingCategory
+  name            String
+  normalizedName  String
+  description     String?
+  displayOrder    Int                         @default(0)
+  isActive        Boolean                     @default(true)
+  archivedAt      DateTime?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+
+  @@index([tenantId, category, isActive])
+  @@index([tenantId, category, displayOrder])
+  @@index([tenantId, category, archivedAt])
+  @@index([tenantId, category, normalizedName])
+  @@schema("marketing")
+}
+
+model MarketingPipelineStage {
+  id              String    @id @default(uuid())
+  tenantId        String
+  name            String
+  normalizedName  String
+  probability     Int
+  description     String?
+  displayOrder    Int       @default(0)
+  isActive        Boolean   @default(true)
+  archivedAt      DateTime?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, displayOrder])
+  @@index([tenantId, archivedAt])
+  @@index([tenantId, normalizedName])
+  @@schema("marketing")
+}
+
+model MarketingProspect {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  companyName           String
+  normalizedCompanyName String
+  businessTypeId        String?
+  sourceTypeId          String?
+  pipelineStageId       String
+  assignedUserId        String
+  locationLabel         String
+  latitude              Decimal  @db.Decimal(9, 6)
+  longitude             Decimal  @db.Decimal(9, 6)
+  createdByUserId       String?
+  updatedByUserId       String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  contacts     MarketingProspectContact[]
+  products     MarketingProspectProduct[]
+  interactions MarketingProspectInteraction[]
+  followUps    MarketingProspectFollowUp[]
+  client       MarketingClient?
+
+  @@index([tenantId, normalizedCompanyName])
+  @@index([tenantId, assignedUserId])
+  @@index([tenantId, pipelineStageId])
+  @@index([tenantId, createdAt])
+  @@schema("marketing")
+}
+
+model MarketingProspectContact {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  prospectId          String
+  name                String
+  phone               String?
+  email               String?
+  decisionMakerTypeId String?
+  isPrimary           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  prospect MarketingProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, prospectId])
+  @@index([tenantId, decisionMakerTypeId])
+  @@schema("marketing")
+}
+
+model MarketingProspectProduct {
+  id                String    @id @default(uuid())
+  tenantId          String
+  prospectId        String
+  productId         String
+  expectedValue     Decimal   @db.Decimal(18, 2)
+  achievedValue     Decimal?  @db.Decimal(18, 2)
+  commissionRate    Decimal?  @db.Decimal(7, 4)
+  commissionAmount  Decimal?  @db.Decimal(18, 2)
+  expectedCloseDate DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  prospect MarketingProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, prospectId])
+  @@index([tenantId, productId])
+  @@index([tenantId, expectedCloseDate])
+  @@schema("marketing")
+}
+
+model MarketingProspectInteraction {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  prospectId            String?
+  clientId              String?
+  interactionMediumId   String?
+  occurredAt            DateTime
+  notes                 String?
+  decisionMakerInvolved Boolean  @default(false)
+  createdByUserId       String?
+  createdAt             DateTime @default(now())
+
+  prospect     MarketingProspect?                        @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  client       MarketingClient?                          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  participants MarketingProspectInteractionParticipant[]
+
+  @@index([tenantId, prospectId, occurredAt])
+  @@index([tenantId, clientId, occurredAt])
+  @@index([tenantId, interactionMediumId])
+  @@schema("marketing")
+}
+
+model MarketingProspectInteractionParticipant {
+  id            String   @id @default(uuid())
+  tenantId      String
+  interactionId String
+  fullName      String
+  phone         String
+  role          String
+  createdAt     DateTime @default(now())
+
+  interaction MarketingProspectInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, interactionId])
+  @@schema("marketing")
+}
+
+model MarketingProspectFollowUp {
+  id                     String                          @id @default(uuid())
+  tenantId               String
+  prospectId             String?
+  clientId               String?
+  dueAt                  DateTime
+  note                   String?
+  status                 MarketingProspectFollowUpStatus @default(PENDING)
+  createdByUserId        String?
+  completedByUserId      String?
+  completedAt            DateTime?
+  completedInteractionId String?
+  createdAt              DateTime                        @default(now())
+  updatedAt              DateTime                        @updatedAt
+
+  prospect MarketingProspect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  client   MarketingClient?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, prospectId])
+  @@index([tenantId, prospectId, status])
+  @@index([tenantId, clientId])
+  @@index([tenantId, clientId, status])
+  @@schema("marketing")
+}
+
+model MarketingClient {
+  id                      String    @id @default(uuid())
+  tenantId                String
+  companyName             String
+  normalizedCompanyName   String
+  businessTypeId          String?
+  sourceTypeId            String?
+  assignedUserId          String
+  locationLabel           String
+  latitude                Decimal   @db.Decimal(9, 6)
+  longitude               Decimal   @db.Decimal(9, 6)
+  isBillable              Boolean   @default(false)
+  convertedFromProspectId String?   @unique
+  convertedAt             DateTime?
+  convertedByUserId       String?
+  createdByUserId         String?
+  updatedByUserId         String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  convertedFromProspect MarketingProspect?             @relation(fields: [convertedFromProspectId], references: [id], onDelete: SetNull)
+  contacts              MarketingClientContact[]
+  products              MarketingClientProduct[]
+  interactions          MarketingProspectInteraction[]
+  followUps             MarketingProspectFollowUp[]
+
+  @@index([tenantId, normalizedCompanyName])
+  @@index([tenantId, assignedUserId])
+  @@index([tenantId, createdAt])
+  @@schema("marketing")
+}
+
+model MarketingClientContact {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  clientId            String
+  name                String
+  phone               String?
+  email               String?
+  decisionMakerTypeId String?
+  isPrimary           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  client MarketingClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clientId])
+  @@index([tenantId, decisionMakerTypeId])
+  @@schema("marketing")
+}
+
+model MarketingClientProduct {
+  id               String                       @id @default(uuid())
+  tenantId         String
+  clientId         String
+  productId        String
+  status           MarketingClientProductStatus @default(PENDING)
+  /// Carried over from the prospect product at conversion; null for products added directly.
+  expectedValue    Decimal?                     @db.Decimal(18, 2)
+  commissionRate   Decimal?                     @db.Decimal(7, 4)
+  commissionAmount Decimal?                     @db.Decimal(18, 2)
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
+
+  client MarketingClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, productId])
+  @@index([tenantId, clientId])
+  @@index([tenantId, productId])
+  @@index([tenantId, status])
+  @@schema("marketing")
+}
+
+/// Fleet-specific details for a vehicle. The vehicle itself is an HR Asset
+/// (type VEHICLE) that this row points at by assetId; identity, branch, driver
+/// and status stay in hr-service so both modules share one record.
+model MarketingFleetVehicle {
+  id                 String                    @id @default(uuid())
+  tenantId           String
+  assetId            String
+  vehicleType        MarketingFleetVehicleType
+  make               String
+  model              String
+  yearOfRegistration Int
+  fuelType           MarketingFleetFuelType
+  currentMileage     Int
+  createdByUserId    String?
+  updatedByUserId    String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@unique([tenantId, assetId])
+  @@index([tenantId, vehicleType])
+  @@index([tenantId, fuelType])
+  @@schema("marketing")
 }

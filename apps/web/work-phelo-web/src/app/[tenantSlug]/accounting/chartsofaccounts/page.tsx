@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { TwoPanelShell } from '@/components/organisms/shared/TwoPanelShell';
 import {
   AccountScope,
@@ -24,6 +26,8 @@ import {
   useAccountClassifications,
   useAccountGroups,
   useAccountingConfig,
+  useDeleteAccountClassification,
+  useDeleteAccountGroup,
   useGLAccounts,
   useSeedStandardAccountHierarchy,
   useTrialBalanceReport,
@@ -47,7 +51,14 @@ export default function ChartOfAccountsPage() {
   const [scope, setScope] = useState<AccountScope>({ kind: 'all' });
   const [seedDialogOpen, setSeedDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    kind: 'classification' | 'group';
+    id: string;
+    name: string;
+  } | null>(null);
   const seedHierarchy = useSeedStandardAccountHierarchy();
+  const deleteClassification = useDeleteAccountClassification();
+  const deleteGroup = useDeleteAccountGroup();
   const toast = useToast();
 
   const { data: classificationsData, isLoading: isLoadingClassifications } =
@@ -133,6 +144,36 @@ export default function ChartOfAccountsPage() {
     }
   };
 
+  // Deletability is computed from the full, unfiltered lists — never the search/status-filtered
+  // `glAccounts` above — so the delete action only shows up when it will actually succeed.
+  const allAccounts = glAccountsData ?? [];
+  const canDeleteClassification = (classificationId: string) =>
+    groups.every((g) => g.classificationId !== classificationId) &&
+    allAccounts.every((a) => a.classificationId !== classificationId);
+  const canDeleteGroup = (groupId: string) =>
+    allAccounts.every((a) => a.accountGroupId !== groupId);
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      if (confirmDelete.kind === 'classification') {
+        await deleteClassification.mutateAsync(confirmDelete.id);
+        if (scope.kind === 'classification' && scope.classification.id === confirmDelete.id) {
+          setScope({ kind: 'all' });
+        }
+      } else {
+        await deleteGroup.mutateAsync(confirmDelete.id);
+        if (scope.kind === 'group' && scope.group.id === confirmDelete.id) {
+          setScope({ kind: 'all' });
+        }
+      }
+      toast.success(`${confirmDelete.name} deleted`);
+      setConfirmDelete(null);
+    } catch (error) {
+      toast.error(extractError(error, `Unable to delete ${confirmDelete.name}`));
+    }
+  };
+
   return (
     <>
       <TwoPanelShell
@@ -189,7 +230,12 @@ export default function ChartOfAccountsPage() {
             />
             <div className="min-h-0 flex-1">
               {scope.kind === 'account' ? (
-                <GLAccountDetail key={scope.account.id} account={scope.account} />
+                <GLAccountDetail
+                  key={scope.account.id}
+                  account={scope.account}
+                  hasChildAccounts={allAccounts.some((a) => a.parentAccountId === scope.account.id)}
+                  onDeleted={() => setScope({ kind: 'all' })}
+                />
               ) : (
                 <GLAccountListPanel
                   title={scopeTitle}
@@ -211,6 +257,31 @@ export default function ChartOfAccountsPage() {
                       ? () => setOpenPanel('edit-classification')
                       : scope.kind === 'group'
                         ? () => setOpenPanel('edit-parent-account')
+                        : undefined
+                  }
+                  deleteLabel={
+                    liveScope.kind === 'classification'
+                      ? liveScope.classification.name
+                      : liveScope.kind === 'group'
+                        ? liveScope.group.name
+                        : undefined
+                  }
+                  onDelete={
+                    scope.kind === 'classification' &&
+                    canDeleteClassification(scope.classification.id)
+                      ? () =>
+                          setConfirmDelete({
+                            kind: 'classification',
+                            id: scope.classification.id,
+                            name: scope.classification.name,
+                          })
+                      : scope.kind === 'group' && canDeleteGroup(scope.group.id)
+                        ? () =>
+                            setConfirmDelete({
+                              kind: 'group',
+                              id: scope.group.id,
+                              name: scope.group.name,
+                            })
                         : undefined
                   }
                   onCreateAccount={
@@ -262,6 +333,32 @@ export default function ChartOfAccountsPage() {
         classifications={classifications}
         groups={groups}
         existingAccounts={glAccountsData ?? []}
+      />
+
+      <Modal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title={`Delete ${confirmDelete?.name ?? ''}?`}
+        description="This will be permanently removed. This cannot be undone."
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDelete(null)}
+              disabled={deleteClassification.isPending || deleteGroup.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmDelete}
+              isLoading={deleteClassification.isPending || deleteGroup.isPending}
+              loadingText="Deleting…"
+            >
+              Delete
+            </Button>
+          </>
+        }
       />
     </>
   );

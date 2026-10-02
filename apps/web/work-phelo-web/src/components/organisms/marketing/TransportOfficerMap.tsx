@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Map, { Marker, Popup, NavigationControl, MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import '@/lib/maplibreWorker';
 import { Icons } from '@/components/atoms/icons';
 import { MAPTILER_STYLE_URL, hasMapTilerKey } from '@/lib/maptiler';
 
@@ -29,15 +30,29 @@ interface Props {
 
 export function TransportOfficerMap({ officers, selectedOfficerId }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
   const mapRef = useRef<MapRef>(null);
   const active = officers.find((o) => o.id === (activeId ?? selectedOfficerId));
 
   useEffect(() => {
-    if (!selectedOfficerId) return;
+    // See CompanyLocationMap.tsx for why flyTo needs both the load-gate and the resize() call.
+    if (!isLoaded || !selectedOfficerId) return;
     const officer = officers.find((o) => o.id === selectedOfficerId);
     if (!officer) return;
-    mapRef.current?.flyTo({ center: [officer.lng, officer.lat], zoom: 15, duration: 800 });
-  }, [selectedOfficerId, officers]);
+    const map = mapRef.current;
+    if (!map) return;
+
+    try {
+      map.resize();
+      map.flyTo({ center: [officer.lng, officer.lat], zoom: 15, duration: 800 });
+    } catch {
+      try {
+        map.jumpTo({ center: [officer.lng, officer.lat], zoom: 15 });
+      } catch {
+        // Camera didn't move, but the map is still usable.
+      }
+    }
+  }, [isLoaded, selectedOfficerId, officers]);
 
   if (!hasMapTilerKey()) {
     return (
@@ -52,6 +67,7 @@ export function TransportOfficerMap({ officers, selectedOfficerId }: Props) {
       ref={mapRef}
       initialViewState={DEFAULT_VIEW}
       style={{ width: '100%', height: '100%' }}
+      onLoad={() => setIsLoaded(true)}
       mapStyle={MAPTILER_STYLE_URL}
     >
       <NavigationControl position="bottom-right" />

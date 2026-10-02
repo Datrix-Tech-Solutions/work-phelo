@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { TypeChip } from '@/components/atoms/TypeChip';
@@ -29,6 +29,10 @@ interface GLAccountListPanelProps {
   groups?: AccountGroup[];
   onEdit?: () => void;
   editLabel?: string;
+  /** Only passed in when the current scope is actually deletable (no accounts/groups under it)
+   *  — the caller computes that, so this panel doesn't need to know the deletion rules. */
+  onDelete?: () => void;
+  deleteLabel?: string;
   /** Creates a new account scoped to whatever's currently selected (a type, classification or
    *  parent account) — hidden for the "all accounts" scope, where there's nothing to scope to. */
   onCreateAccount?: () => void;
@@ -44,6 +48,8 @@ export function GLAccountListPanel({
   groups = [],
   onEdit,
   editLabel,
+  onDelete,
+  deleteLabel,
   onCreateAccount,
 }: GLAccountListPanelProps) {
   const [page, setPage] = useState(1);
@@ -192,6 +198,16 @@ export function GLAccountListPanel({
               onClick={onEdit}
             >
               {editLabel ? `Edit ${editLabel}` : 'Edit'}
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="danger"
+              size="sm"
+              icon={<Trash2 className="h-3.5 w-3.5" />}
+              onClick={onDelete}
+            >
+              {deleteLabel ? `Delete ${deleteLabel}` : 'Delete'}
             </Button>
           )}
         </div>

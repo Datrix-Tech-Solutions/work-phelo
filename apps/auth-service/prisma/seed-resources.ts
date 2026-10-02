@@ -183,6 +183,88 @@ export const RESOURCES = [
     description: 'Posted general-ledger activity',
   },
 
+  // ── MARKETING module ───────────────────────────────────────────
+  {
+    name: 'marketing.crm-settings',
+    module: 'MARKETING',
+    description: 'Marketing CRM settings administration',
+  },
+  {
+    name: 'marketing.pipeline-stages',
+    module: 'MARKETING',
+    description: 'Marketing sales pipeline stage configuration',
+  },
+  {
+    name: 'marketing.products',
+    module: 'MARKETING',
+    description: 'Marketing product and service options',
+  },
+  {
+    name: 'marketing.decision-makers',
+    module: 'MARKETING',
+    description: 'Marketing decision maker and role title options',
+  },
+  {
+    name: 'marketing.source-types',
+    module: 'MARKETING',
+    description: 'Marketing prospect source type options',
+  },
+  {
+    name: 'marketing.interaction-media',
+    module: 'MARKETING',
+    description: 'Marketing prospect interaction medium options',
+  },
+  {
+    name: 'marketing.business-types',
+    module: 'MARKETING',
+    description: 'Marketing prospect business type options',
+  },
+  {
+    name: 'marketing.prospects',
+    module: 'MARKETING',
+    description: 'Marketing prospect records and sales pipeline assignments',
+  },
+  {
+    name: 'marketing.prospects.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect list visibility',
+  },
+  {
+    name: 'marketing.clients',
+    module: 'MARKETING',
+    description: 'Marketing client records and prospect conversion',
+  },
+  {
+    name: 'marketing.clients.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing client list visibility',
+  },
+  {
+    name: 'marketing.prospects.interactions',
+    module: 'MARKETING',
+    description: 'Marketing prospect interaction history records',
+  },
+  {
+    name: 'marketing.prospects.interactions.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect interaction history access',
+  },
+  {
+    name: 'marketing.follow-ups',
+    module: 'MARKETING',
+    description: 'Marketing prospect follow-up scheduling and worklists',
+  },
+  {
+    name: 'marketing.follow-ups.all',
+    module: 'MARKETING',
+    description: 'Tenant-wide Marketing prospect follow-up scheduling access',
+  },
+  {
+    name: 'marketing.fleet',
+    module: 'MARKETING',
+    description: 'Marketing fleet vehicles linked to HR vehicle assets',
+  },
+
   // ── OPERATIONS / REINSURANCE module ───────────────────────────
   {
     name: 'operations.reinsurance.dashboard',

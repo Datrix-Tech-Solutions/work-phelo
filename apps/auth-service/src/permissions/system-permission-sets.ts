@@ -23,7 +23,7 @@ type DefaultPermissionTemplateDefinition = {
 };
 
 const ACTIVE_SYSTEM_PERMISSION_SET_NAMES = new Set<SystemPermissionSetName>();
-const BASIC_EMPLOYEE_TEMPLATE_NAME = 'Employee';
+export const BASIC_EMPLOYEE_TEMPLATE_NAME = 'Employee';
 const BASIC_EMPLOYEE_LEGACY_NAME = 'Basic Employee';
 const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplateDefinition[] =
   [

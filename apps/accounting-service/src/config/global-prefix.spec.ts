@@ -21,6 +21,14 @@ describe('Accounting global prefix configuration', () => {
           path: 'internal/reinsurance/accounting-readiness',
           method: RequestMethod.POST,
         },
+        {
+          path: 'internal/payroll-integration/post-accrual',
+          method: RequestMethod.POST,
+        },
+        {
+          path: 'internal/payroll-integration/:payrollRunId/settlement-status',
+          method: RequestMethod.GET,
+        },
       ]),
     );
   });

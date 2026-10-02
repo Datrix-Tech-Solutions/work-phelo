@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Map, { Marker, NavigationControl, MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import '@/lib/maplibreWorker';
 import { Icons } from '@/components/atoms/icons';
 import { MAPTILER_STYLE_URL, hasMapTilerKey } from '@/lib/maptiler';
 
@@ -16,12 +17,31 @@ interface Props {
 
 export function CompanyLocationMap({ lat, lng, onChange }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    if (lat != null && lng != null) {
-      mapRef.current?.flyTo({ center: [lng, lat], zoom: 15, duration: 800 });
+    // Calling flyTo before the underlying map has finished loading throws, since its internal
+    // transform isn't ready yet — e.g. "Get Current Location" can resolve before the map does.
+    if (!isLoaded || lat == null || lng == null) return;
+    const map = mapRef.current;
+    if (!map) return;
+
+    // The map mounts inside a wizard step that's hidden until its turn, so on first mount its
+    // container can still report a stale (often zero) size — maplibre's internal constrain math
+    // then divides by that and throws reading `.center` on the result. Forcing a resize first
+    // makes it pick up the container's real dimensions before we move the camera.
+    try {
+      map.resize();
+      map.flyTo({ center: [lng, lat], zoom: 15, duration: 800 });
+    } catch {
+      try {
+        map.jumpTo({ center: [lng, lat], zoom: 15 });
+      } catch {
+        // Camera didn't move, but the map is still usable and the marker below still renders
+        // at the right spot — better than crashing the whole form.
+      }
     }
-  }, [lat, lng]);
+  }, [isLoaded, lat, lng]);
 
   if (!hasMapTilerKey()) {
     return (
@@ -38,6 +58,7 @@ export function CompanyLocationMap({ lat, lng, onChange }: Props) {
         initialViewState={DEFAULT_VIEW}
         style={{ width: '100%', height: '100%' }}
         mapStyle={MAPTILER_STYLE_URL}
+        onLoad={() => setIsLoaded(true)}
         onClick={(e) => onChange(e.lngLat.lat, e.lngLat.lng)}
       >
         <NavigationControl position="bottom-right" />

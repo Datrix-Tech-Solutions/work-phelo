@@ -10,19 +10,31 @@ import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
-import { TransactionTypeDefinition } from '@/types/accounting';
+import { AccountingCashbookSettlementMethod, TransactionTypeDefinition } from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
+  useCashAccountOptions,
   useCostCentres,
+  useCreateCashbookPayment,
+  useCreateCashbookReceipt,
   useCreatePayableBill,
+  useCreatePayableCreditNote,
+  useCreateReceivableCreditNote,
   useCreateReceivableInvoice,
   useEntityTypes,
+  useGLAccountOptions,
   useGLAccounts,
+  useMakeSourceLedgerPayment,
+  usePayableBills,
+  usePostCashbookTransaction,
+  useReceivableInvoices,
+  useSourceLedger,
   useSubledgers,
   useTransactionTypeRules,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { SETTLEMENT_METHOD_OPTIONS } from '@/lib/accounting/settlementMethod';
 
 function fmtAmount(value: number, currency: string) {
   const formatted = value.toLocaleString(undefined, {
@@ -35,13 +47,27 @@ function fmtAmount(value: number, currency: string) {
 type FormValues = {
   businessRole: string;
   businessEntity: string;
+  originalDocumentId: string;
   description: string;
+  quantity: string;
+  unitPrice: string;
   amount: string;
   currency: string;
   costCentreId: string;
   entryDate: string;
   dueDate: string;
+  cashAccountId: string;
+  offsetGlAccountId: string;
+  sourceLedgerEntryId: string;
+  settlementMethod: AccountingCashbookSettlementMethod | '';
+  reference: string;
 };
+
+/** quantity × unit price, rounded half-up to 2 decimals (EPSILON guards float artefacts like 1.005). */
+function computeAmount(quantity: string, unitPrice: string) {
+  const product = (Number(quantity) || 0) * (Number(unitPrice) || 0);
+  return Math.round((product + Number.EPSILON) * 100) / 100;
+}
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -50,12 +76,20 @@ function today() {
 const DEFAULTS: FormValues = {
   businessRole: '',
   businessEntity: '',
+  originalDocumentId: '',
   description: '',
+  quantity: '',
+  unitPrice: '',
   amount: '',
   currency: '',
   costCentreId: '',
   entryDate: '',
   dueDate: '',
+  cashAccountId: '',
+  offsetGlAccountId: '',
+  sourceLedgerEntryId: '',
+  settlementMethod: '',
+  reference: '',
 };
 
 export function NewTransactionPanel({
@@ -70,13 +104,49 @@ export function NewTransactionPanel({
   const isPayable = transactionType?.category === 'PAYABLE';
   const isSupported = isReceivable || isPayable;
   const hasRule = (transactionType?.rulesCount ?? 0) > 0;
-  const canUse = isSupported && hasRule;
+  // A type flagged postsToCashbook (RCPT/PMNT by default, or any Receivable/Payable type
+  // opted into it) posts straight to Cashbook — no bill/invoice, no rule required (the
+  // offset account can always be picked by hand in the form if no rule set one as default).
+  const isCashbookType = transactionType?.postsToCashbook ?? false;
+  const isCashbookReceipt = isCashbookType && isReceivable;
+  // A linked type is a credit note (receivable) / debit note (payable): it must reference
+  // an original posted invoice/bill and reduces what is owed on it.
+  const isLinked = !isCashbookType && (transactionType?.isLinked ?? false);
+  const canUse = isCashbookType ? isSupported : isSupported && hasRule;
   const toast = useToast();
 
   const createInvoice = useCreateReceivableInvoice();
   const createBill = useCreatePayableBill();
   const createDocument = isPayable ? createBill : createInvoice;
-  const isSaving = createDocument.isPending;
+  const createCreditNote = useCreateReceivableCreditNote();
+  const createDebitNote = useCreatePayableCreditNote();
+  const createCashbookReceipt = useCreateCashbookReceipt();
+  const createCashbookPayment = useCreateCashbookPayment();
+  const createCashbookEntry = isCashbookReceipt ? createCashbookReceipt : createCashbookPayment;
+  const makeSourceLedgerPayment = useMakeSourceLedgerPayment();
+  const postCashbookTransaction = usePostCashbookTransaction();
+  const isSaving = isCashbookType
+    ? createCashbookEntry.isPending ||
+      makeSourceLedgerPayment.isPending ||
+      postCashbookTransaction.isPending
+    : createDocument.isPending || createCreditNote.isPending || createDebitNote.isPending;
+  const [pendingAction, setPendingAction] = useState<'draft' | 'post' | null>(null);
+
+  // A type linked to a Source shows a dropdown of that source's still-unpaid open items —
+  // picking one settles it directly (creates the payment AND records the allocation in one
+  // action) instead of an untracked generic cashbook entry.
+  const { data: unpaidSourceLedgerEntries = [] } = useSourceLedger({
+    sourceTypeId: transactionType?.sourceTypeId ?? undefined,
+    status: 'UNPAID',
+  });
+  const sourceLedgerOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      unpaidSourceLedgerEntries.map((entry) => ({
+        value: entry.id,
+        label: `${entry.description} — ${fmtAmount(entry.outstandingAmount, entry.currency)} outstanding`,
+      })),
+    [unpaidSourceLedgerEntries],
+  );
 
   const {
     control,
@@ -109,6 +179,8 @@ export function NewTransactionPanel({
   );
   const { data: costCentres = [] } = useCostCentres();
   const { data: glAccounts = [] } = useGLAccounts();
+  const { options: glAccountOptions, isLoading: isLoadingGlAccounts } = useGLAccountOptions();
+  const { options: cashAccountOptions, isLoading: isLoadingCashAccounts } = useCashAccountOptions();
   const costCentreOptions = useMemo<SearchSelectOption[]>(
     () =>
       costCentres
@@ -121,15 +193,16 @@ export function NewTransactionPanel({
   // when that account is a balance-sheet one (e.g. an asset purchase), since there is no
   // P&L cost to attribute. While accounts are still loading, err on the side of showing it.
   const showCostCentre = useMemo(() => {
-    const controlDirection = isReceivable ? 'DR' : 'CR';
+    // A linked type's rule is written in the note's own direction, so its control line flips.
+    const controlDirection = isReceivable !== isLinked ? 'DR' : 'CR';
     const mainLine = (rule?.lines ?? []).find(
       (l) => !l.taxType && l.direction !== controlDirection,
     );
     const category = glAccounts.find((a) => a.id === mainLine?.account.id)?.category;
     return !category || category === 'EXPENSE' || category === 'REVENUE';
-  }, [rule, glAccounts, isReceivable]);
+  }, [rule, glAccounts, isReceivable, isLinked]);
   const [selectedTaxTypeIds, setSelectedTaxTypeIds] = useState<string[]>([]);
-  const [successTransactionType, setSuccessTransactionType] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{ name: string; posted: boolean } | null>(null);
 
   // Only the roles actually configured on this transaction type — not the tenant's full
   // Entity Types list — and any of them works now, not just the old fixed enum names.
@@ -142,10 +215,20 @@ export function NewTransactionPanel({
   }, [transactionType, entityTypesData]);
 
   const businessRole = useWatch({ control, name: 'businessRole' });
-  const amount = useWatch({ control, name: 'amount' });
+  const businessEntity = useWatch({ control, name: 'businessEntity' });
+  const manualAmount = useWatch({ control, name: 'amount' });
+  const quantity = useWatch({ control, name: 'quantity' });
+  const unitPrice = useWatch({ control, name: 'unitPrice' });
   const currency = useWatch({ control, name: 'currency' });
+  const sourceLedgerEntryId = useWatch({ control, name: 'sourceLedgerEntryId' });
 
-  const subtotal = Number(amount) || 0;
+  // Source-linked types (e.g. payroll) settle an existing open item, so the amount is keyed in
+  // directly; everything else derives it from quantity × unit price.
+  const hasSource = !!transactionType?.sourceTypeId;
+  const derivedAmount = computeAmount(quantity, unitPrice);
+  const subtotal = hasSource ? Number(manualAmount) || 0 : derivedAmount;
+  const resolveAmount = (values: FormValues) =>
+    hasSource ? Number(values.amount) : computeAmount(values.quantity, values.unitPrice);
   const taxBreakdown = taxLines
     .filter((line) => selectedTaxTypeIds.includes(line.taxTypeId))
     .map((line) => ({ ...line, amount: (subtotal * line.rate) / 100 }));
@@ -153,7 +236,6 @@ export function NewTransactionPanel({
   const total = subtotal + taxAmount;
 
   // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
-  // an extra commit — see https://react.dev/learn/you-might-not-need-an-effect).
   const openKey = isOpen ? (transactionType?.id ?? 'unknown') : null;
   const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
   if (openKey !== null && openKey !== lastOpenKey) {
@@ -163,6 +245,8 @@ export function NewTransactionPanel({
       ...DEFAULTS,
       businessRole: configuredRoles.length === 1 ? configuredRoles[0] : '',
       entryDate: today(),
+      cashAccountId: rule?.defaultCashAccountId ?? '',
+      offsetGlAccountId: rule?.lines?.[0]?.account.id ?? '',
     });
     setSelectedTaxTypeIds([]);
   }
@@ -174,6 +258,34 @@ export function NewTransactionPanel({
     () => entities.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}` })),
     [entities],
   );
+
+  // A linked type picks the entity's open, posted invoice (receivable) / bill (payable) it
+  // reduces. Only fetched once an entity is chosen; the backend re-checks everything.
+  const originalDocumentsEnabled = isOpen && isLinked && !!businessEntity;
+  const originalInvoices = useReceivableInvoices(
+    { status: 'POSTED', partyId: businessEntity || undefined, limit: 100 },
+    { enabled: originalDocumentsEnabled && isReceivable },
+  );
+  const originalBills = usePayableBills(
+    { status: 'POSTED', partyId: businessEntity || undefined, limit: 100 },
+    { enabled: originalDocumentsEnabled && isPayable },
+  );
+  const originalDocuments = useMemo(
+    () =>
+      ((isPayable ? originalBills.data?.items : originalInvoices.data?.items) ?? []).filter(
+        (doc) => doc.party.id === businessEntity && Number(doc.outstandingAmount ?? 0) > 0,
+      ),
+    [isPayable, originalBills.data, originalInvoices.data, businessEntity],
+  );
+  const originalDocumentOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      originalDocuments.map((doc) => ({
+        value: doc.id,
+        label: `${doc.documentNumber} — ${fmtAmount(Number(doc.outstandingAmount), doc.currency)} outstanding`,
+      })),
+    [originalDocuments],
+  );
+  const isLoadingOriginals = isPayable ? originalBills.isLoading : originalInvoices.isLoading;
 
   const close = () => {
     reset(DEFAULTS);
@@ -187,20 +299,123 @@ export function NewTransactionPanel({
     );
   };
 
-  const submit = async (values: FormValues) => {
+  // `post`: only meaningful for a plain direct entry (no Settle Item picked) — Submit for
+  // Review leaves it DRAFT (the normal process, matching Bills/Invoices/every other
+  // transaction), Post creates it and immediately posts it. Picking a Settle Item always
+  // posts regardless of which button was clicked — settling a specific open item only makes
+  // sense once the payment actually happens, so there's no meaningful "draft" version of it.
+  const submit = async (values: FormValues, post: boolean) => {
+    if (!transactionType) return;
+
+    if (isCashbookType) {
+      if (!values.cashAccountId) {
+        toast.error('Select a cash/bank account');
+        return;
+      }
+      if (!values.offsetGlAccountId) {
+        toast.error(`Select the account to ${isCashbookReceipt ? 'credit' : 'debit'}`);
+        return;
+      }
+      if (!values.settlementMethod) {
+        toast.error('Select a settlement method');
+        return;
+      }
+      const willPost = !!values.sourceLedgerEntryId || post;
+      setPendingAction(willPost ? 'post' : 'draft');
+      try {
+        // Settling a picked source ledger item creates the payment AND records the
+        // allocation against it in one call — a generic cashbook entry has no concept of
+        // "which open item this settles", so it can't be used once one is selected.
+        if (values.sourceLedgerEntryId) {
+          await makeSourceLedgerPayment.mutateAsync({
+            entryId: values.sourceLedgerEntryId,
+            payload: {
+              cashAccountId: values.cashAccountId,
+              transactionTypeId: transactionType.id,
+              amount: resolveAmount(values),
+              transactionDate: values.entryDate || today(),
+              settlementMethod: values.settlementMethod,
+              description: values.description || undefined,
+            },
+          });
+        } else {
+          const created = await createCashbookEntry.mutateAsync({
+            cashAccountId: values.cashAccountId,
+            transactionTypeId: transactionType.id,
+            offsetGlAccountId: values.offsetGlAccountId,
+            amount: resolveAmount(values),
+            ...(hasSource
+              ? {}
+              : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
+            currency: values.currency,
+            transactionDate: values.entryDate || today(),
+            settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
+            reference: values.reference || undefined,
+            description: values.description || transactionType.name,
+          });
+          if (post) {
+            await postCashbookTransaction.mutateAsync(created.id);
+          }
+        }
+        close();
+        setSuccessInfo({ name: transactionType.name, posted: willPost });
+      } catch (error) {
+        toast.error(extractError(error, 'Failed to save transaction'));
+      } finally {
+        setPendingAction(null);
+      }
+      return;
+    }
+
     const entity = entities.find((e) => e.id === values.businessEntity);
     if (!entity) {
       toast.error('Select a business entity');
       return;
     }
-    if (!transactionType) return;
+
+    if (isLinked) {
+      const original = originalDocuments.find((doc) => doc.id === values.originalDocumentId);
+      if (!original) {
+        toast.error(`Select the original ${isPayable ? 'bill' : 'invoice'}`);
+        return;
+      }
+      if (subtotal + taxAmount > Number(original.outstandingAmount)) {
+        toast.error(
+          `Total exceeds the ${isPayable ? 'bill' : 'invoice'}'s outstanding balance (${fmtAmount(Number(original.outstandingAmount), original.currency)})`,
+        );
+        return;
+      }
+      try {
+        await (isPayable ? createDebitNote : createCreditNote).mutateAsync({
+          partyId: values.businessEntity,
+          documentDate: values.entryDate || today(),
+          currency: values.currency,
+          amount: resolveAmount(values),
+          quantity: Number(values.quantity),
+          unitPrice: Number(values.unitPrice),
+          transactionTypeId: transactionType.id,
+          originalDocumentId: values.originalDocumentId,
+          selectedTaxTypeIds: selectedTaxTypeIds.length ? selectedTaxTypeIds : undefined,
+          costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
+          description: values.description || undefined,
+        });
+        close();
+        setSuccessInfo({ name: transactionType.name, posted: false });
+      } catch (error) {
+        toast.error(extractError(error, 'Failed to save transaction'));
+      }
+      return;
+    }
 
     const payload = {
       partyId: values.businessEntity,
       documentDate: values.entryDate || today(),
       dueDate: values.dueDate || undefined,
       currency: values.currency,
-      amount: Number(values.amount),
+      amount: resolveAmount(values),
+      ...(hasSource
+        ? {}
+        : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
       transactionTypeId: transactionType.id,
       selectedTaxTypeIds: selectedTaxTypeIds.length ? selectedTaxTypeIds : undefined,
       costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
@@ -212,11 +427,103 @@ export function NewTransactionPanel({
     try {
       await createDocument.mutateAsync(payload);
       close();
-      setSuccessTransactionType(transactionType.name);
+      setSuccessInfo({ name: transactionType.name, posted: false });
     } catch (error) {
       toast.error(extractError(error, 'Failed to save transaction'));
     }
   };
+
+  const amountFields = hasSource ? (
+    <div className="grid grid-cols-2 gap-3">
+      <Controller
+        name="amount"
+        control={control}
+        rules={{
+          required: 'Amount is required',
+          min: { value: 0.01, message: 'Amount must be greater than 0' },
+        }}
+        render={({ field }) => (
+          <NumberField
+            label="Amount"
+            value={Number(field.value) || 0}
+            onChange={(value) => field.onChange(String(value))}
+            error={errors.amount?.message}
+          />
+        )}
+      />
+      <Controller
+        name="currency"
+        control={control}
+        rules={{ required: 'Currency is required' }}
+        render={({ field }) => (
+          <SearchSelect
+            label="Currency"
+            placeholder="Select currency…"
+            options={currencyOptions}
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.currency?.message}
+          />
+        )}
+      />
+    </div>
+  ) : (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <Controller
+          name="quantity"
+          control={control}
+          rules={{
+            required: 'Quantity is required',
+            validate: (v) => Number(v) > 0 || 'Quantity must be greater than 0',
+          }}
+          render={({ field }) => (
+            <NumberField
+              label="Quantity"
+              placeholder="0"
+              value={Number(field.value) || 0}
+              onChange={(value) => field.onChange(String(value))}
+              error={errors.quantity?.message}
+            />
+          )}
+        />
+        <Controller
+          name="unitPrice"
+          control={control}
+          rules={{
+            required: 'Unit price is required',
+            validate: (v) => Number(v) > 0 || 'Unit price must be greater than 0',
+          }}
+          render={({ field }) => (
+            <NumberField
+              label="Unit Price"
+              value={Number(field.value) || 0}
+              onChange={(value) => field.onChange(String(value))}
+              error={errors.unitPrice?.message}
+            />
+          )}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField label="Amount" value={derivedAmount} onChange={() => {}} disabled />
+        <Controller
+          name="currency"
+          control={control}
+          rules={{ required: 'Currency is required' }}
+          render={({ field }) => (
+            <SearchSelect
+              label="Currency"
+              placeholder="Select currency…"
+              options={currencyOptions}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.currency?.message}
+            />
+          )}
+        />
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -232,15 +539,32 @@ export function NewTransactionPanel({
             <Button variant="outline" onClick={close} disabled={isSaving}>
               Cancel
             </Button>
-            {canUse && (
+            {canUse && isCashbookType && !sourceLedgerEntryId && (
               <Button
-                variant="secondary"
-                isLoading={isSaving}
+                variant="outline"
+                isLoading={pendingAction === 'draft'}
                 loadingText="Submitting…"
                 disabled={isSaving}
-                onClick={handleSubmit(submit)}
+                onClick={handleSubmit((values) => submit(values, false))}
               >
                 Submit for Review
+              </Button>
+            )}
+            {canUse && (
+              <Button
+                variant="primary"
+                isLoading={isCashbookType ? pendingAction === 'post' : isSaving}
+                loadingText={
+                  !isCashbookType ? 'Submitting…' : isCashbookReceipt ? 'Receiving…' : 'Paying…'
+                }
+                disabled={isSaving}
+                onClick={handleSubmit((values) => submit(values, true))}
+              >
+                {!isCashbookType
+                  ? 'Submit for Review'
+                  : isCashbookReceipt
+                    ? 'Receive Payment'
+                    : 'Make Payment'}
               </Button>
             )}
           </div>
@@ -251,13 +575,134 @@ export function NewTransactionPanel({
             Forms for {transactionType?.category.toLowerCase() ?? 'this'} transaction types are
             coming soon.
           </p>
-        ) : !hasRule ? (
+        ) : !isCashbookType && !hasRule ? (
           <p className="text-sm text-gray-500">
             {transactionType?.name} has no rule configured yet. Add one under Settings → Transaction
             Types before creating transactions of this type.
           </p>
-        ) : (
+        ) : isCashbookType ? (
           <div className="flex flex-col gap-4">
+            <Input
+              label="Transaction Type"
+              readOnly
+              value={transactionType ? `${transactionType.name} (${transactionType.code})` : ''}
+            />
+
+            {!hasRule && !transactionType?.sourceTypeId && (
+              <p className="text-xs text-gray-500">
+                No rule configured for this type yet — pick the accounts below directly, or add a
+                default rule under Settings → Transaction Types.
+              </p>
+            )}
+
+            {transactionType?.sourceTypeId && (
+              <Controller
+                name="sourceLedgerEntryId"
+                control={control}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Settle Item"
+                    placeholder={
+                      unpaidSourceLedgerEntries.length === 0
+                        ? 'No unpaid items right now'
+                        : 'Select an item to settle (optional)…'
+                    }
+                    options={sourceLedgerOptions}
+                    value={field.value}
+                    onChange={(value) => {
+                      field.onChange(value);
+                      const entry = unpaidSourceLedgerEntries.find((e) => e.id === value);
+                      if (entry) {
+                        setValue('offsetGlAccountId', entry.glAccount.id);
+                        setValue('amount', String(entry.outstandingAmount));
+                        setValue('currency', entry.currency);
+                      }
+                    }}
+                  />
+                )}
+              />
+            )}
+
+            <Controller
+              name="cashAccountId"
+              control={control}
+              rules={{ required: 'Cash/bank account is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Cash/Bank Account"
+                  placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select cash/bank account…'}
+                  options={cashAccountOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.cashAccountId?.message}
+                />
+              )}
+            />
+
+            <Controller
+              name="offsetGlAccountId"
+              control={control}
+              rules={{ required: 'Account is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label={isCashbookReceipt ? 'Account to Credit' : 'Account to Debit'}
+                  placeholder={isLoadingGlAccounts ? 'Loading…' : 'Select account…'}
+                  options={glAccountOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  disabled={!!sourceLedgerEntryId}
+                  error={errors.offsetGlAccountId?.message}
+                />
+              )}
+            />
+
+            {amountFields}
+
+            <Controller
+              name="entryDate"
+              control={control}
+              rules={{ required: 'Date is required' }}
+              render={({ field }) => (
+                <DatePicker
+                  label={`${transactionType?.name ?? 'Transaction'} Date`}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.entryDate?.message}
+                />
+              )}
+            />
+
+            <Controller
+              name="settlementMethod"
+              control={control}
+              rules={{ required: 'Settlement method is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Settlement Method"
+                  placeholder="Select settlement method…"
+                  options={SETTLEMENT_METHOD_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.settlementMethod?.message}
+                />
+              )}
+            />
+
+            <FormField
+              label="Reference"
+              registration={register('reference')}
+              placeholder="Optional bank/cheque reference"
+            />
+
+            <FormField
+              label="Description"
+              type="textarea"
+              registration={register('description')}
+              placeholder={`What is this ${transactionType?.name.toLowerCase() ?? 'transaction'} for?`}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
             <Input
               label="Transaction Type"
               readOnly
@@ -301,6 +746,7 @@ export function NewTransactionPanel({
                   value={field.value}
                   onChange={(value) => {
                     field.onChange(value);
+                    setValue('originalDocumentId', '');
                     const entity = entities.find((e) => e.id === value);
                     if (entity?.currency) setValue('currency', entity.currency);
                   }}
@@ -308,6 +754,37 @@ export function NewTransactionPanel({
                 />
               )}
             />
+
+            {isLinked && (
+              <Controller
+                name="originalDocumentId"
+                control={control}
+                rules={{ required: `Original ${isPayable ? 'bill' : 'invoice'} is required` }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label={`Original ${isPayable ? 'Bill' : 'Invoice'}`}
+                    placeholder={
+                      !businessEntity
+                        ? 'Select a business entity first…'
+                        : isLoadingOriginals
+                          ? 'Loading…'
+                          : originalDocumentOptions.length === 0
+                            ? `No open ${isPayable ? 'bills' : 'invoices'} for this entity`
+                            : `Select the ${isPayable ? 'bill' : 'invoice'} this reduces…`
+                    }
+                    options={originalDocumentOptions}
+                    value={field.value}
+                    onChange={(value) => {
+                      field.onChange(value);
+                      const original = originalDocuments.find((doc) => doc.id === value);
+                      if (original) setValue('currency', original.currency);
+                    }}
+                    disabled={!businessEntity}
+                    error={errors.originalDocumentId?.message}
+                  />
+                )}
+              />
+            )}
 
             {showCostCentre && (
               <Controller
@@ -328,45 +805,12 @@ export function NewTransactionPanel({
             <FormField
               label="Description"
               type="textarea"
-              rows={3}
               registration={register('description')}
               error={errors.description}
               placeholder="Optional description"
             />
 
-            <div className="grid grid-cols-2 gap-4">
-              <Controller
-                name="amount"
-                control={control}
-                rules={{
-                  required: 'Amount is required',
-                  min: { value: 0.01, message: 'Amount must be greater than 0' },
-                }}
-                render={({ field }) => (
-                  <NumberField
-                    label="Amount"
-                    value={Number(field.value) || 0}
-                    onChange={(value) => field.onChange(String(value))}
-                    error={errors.amount?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="currency"
-                control={control}
-                rules={{ required: 'Currency is required' }}
-                render={({ field }) => (
-                  <SearchSelect
-                    label="Currency"
-                    placeholder="Select currency…"
-                    options={currencyOptions}
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.currency?.message}
-                  />
-                )}
-              />
-            </div>
+            {amountFields}
 
             {taxLines.length > 0 && (
               <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
@@ -422,27 +866,33 @@ export function NewTransactionPanel({
                   />
                 )}
               />
-              <Controller
-                name="dueDate"
-                control={control}
-                render={({ field }) => (
-                  <DatePicker
-                    label="Due Date"
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.dueDate?.message}
-                  />
-                )}
-              />
+              {!isLinked && (
+                <Controller
+                  name="dueDate"
+                  control={control}
+                  render={({ field }) => (
+                    <DatePicker
+                      label="Due Date"
+                      value={field.value}
+                      onChange={field.onChange}
+                      error={errors.dueDate?.message}
+                    />
+                  )}
+                />
+              )}
             </div>
           </div>
         )}
       </SidePanel>
       <SuccessModal
-        isOpen={!!successTransactionType}
-        onClose={() => setSuccessTransactionType(null)}
-        title="Transaction Submitted!"
-        message={`Your ${successTransactionType ?? ''} has been submitted for review.`}
+        isOpen={!!successInfo}
+        onClose={() => setSuccessInfo(null)}
+        title={successInfo?.posted ? 'Transaction Posted!' : 'Transaction Submitted!'}
+        message={
+          successInfo?.posted
+            ? `Your ${successInfo.name} has been posted.`
+            : `Your ${successInfo?.name ?? ''} has been submitted for review.`
+        }
       />
     </>
   );

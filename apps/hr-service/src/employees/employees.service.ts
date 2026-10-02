@@ -220,6 +220,46 @@ export class EmployeesService {
     }
   }
 
+  private async cleanUpUnconfirmedInvite(
+    tenantId: string,
+    email: string,
+    cause: unknown,
+  ) {
+    const lastError = cause instanceof Error ? cause.message : String(cause);
+    let deleted = false;
+    try {
+      const result = await this.rabbitmq.authDeletePendingEmployeeInvite({
+        tenantId,
+        email,
+      });
+      deleted = result.deleted;
+    } catch (rollbackErr) {
+      this.logger.error(
+        `Failed to clean up unconfirmed auth invite for ${email}`,
+        rollbackErr,
+      );
+    }
+
+    if (deleted) return;
+
+    // Auth may still be processing the original request, so let the recovery cron retry.
+    await this.prisma.employeeInviteRollbackTask.upsert({
+      where: { tenantId_email: { tenantId, email } },
+      update: {
+        attemptCount: { increment: 1 },
+        lastError,
+        lastAttemptAt: new Date(),
+      },
+      create: {
+        tenantId,
+        email,
+        attemptCount: 1,
+        lastError,
+        lastAttemptAt: new Date(),
+      },
+    });
+  }
+
   private async createEmployeeWithUniqueNumber(
     tenantId: string,
     dto: CreateEmployeeDto,
@@ -426,7 +466,11 @@ export class EmployeesService {
     });
   }
 
-  async create(tenantId: string, dto: CreateEmployeeDto) {
+  async create(
+    tenantId: string,
+    dto: CreateEmployeeDto,
+    options?: { rpcTimeoutMs?: number },
+  ) {
     // Enforce minimum one department before adding employees
     const deptCount = await this.prisma.department.count({
       where: { tenantId, isActive: true },
@@ -485,17 +529,25 @@ export class EmployeesService {
 
     let provisionedUser;
     try {
-      provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite({
-        tenantId,
-        email: dto.email,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        phone: dto.phone,
-      });
+      provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite(
+        {
+          tenantId,
+          email: dto.email,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          phone: dto.phone,
+        },
+        undefined,
+        options?.rpcTimeoutMs,
+      );
     } catch (error) {
       if (this.isDuplicateAuthUserError(error)) {
         throw new ConflictException('A user with this email already exists.');
       }
+      // The auth user may have been created even though the request failed or timed out
+      // (e.g. a late reply during a bulk import), so clean up by email rather than leaving
+      // a user with no employee profile.
+      await this.cleanUpUnconfirmedInvite(tenantId, dto.email, error);
       throw error;
     }
 
@@ -648,22 +700,26 @@ export class EmployeesService {
       }
 
       try {
-        const employee = await this.create(tenantId, {
-          firstName: row.firstName,
-          lastName: row.lastName,
-          email: row.email,
-          phone: row.phone,
-          gender: row.gender,
-          departmentId: department.id,
-          branchId,
-          jobTitle: row.jobTitle,
-          managerId,
-          hireDate: row.hireDate,
-          employmentType: row.employmentType,
-          contractEndDate: row.contractEndDate,
-          compensationType: row.compensationType,
-          basicSalary: row.basicSalary,
-        });
+        const employee = await this.create(
+          tenantId,
+          {
+            firstName: row.firstName,
+            lastName: row.lastName,
+            email: row.email,
+            phone: row.phone,
+            gender: row.gender,
+            departmentId: department.id,
+            branchId,
+            jobTitle: row.jobTitle,
+            managerId,
+            hireDate: row.hireDate,
+            employmentType: row.employmentType,
+            contractEndDate: row.contractEndDate,
+            compensationType: row.compensationType,
+            basicSalary: row.basicSalary,
+          },
+          { rpcTimeoutMs: this.rabbitmq.bulkRmqTimeoutMs },
+        );
         employeeCandidates.push({
           id: employee.id,
           firstName: employee.firstName,

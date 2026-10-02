@@ -35,6 +35,7 @@ import {
   ReverseReceivableDto,
 } from './dto/receivables.dto';
 import { JournalsService } from './journals.service';
+import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
 
 const zero = new Prisma.Decimal(0);
 // SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
@@ -44,7 +45,16 @@ const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
 const receivableDocumentInclude = {
   customer: {
-    select: { id: true, code: true, name: true, currency: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      currency: true,
+      type: true,
+      contactName: true,
+      phone: true,
+      address: true,
+    },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
   costCentre: { select: { id: true, code: true, name: true } },
@@ -291,6 +301,7 @@ export class ReceivablesService {
       this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
+    assertQuantityPriceMatchesAmount(dto);
 
     const subtotalAmount = new Prisma.Decimal(dto.amount);
     const {
@@ -332,6 +343,8 @@ export class ReceivablesService {
             currency: dto.currency,
             exchangeRate: dto.exchangeRate,
             subtotalAmount,
+            quantity: dto.quantity,
+            unitPrice: dto.unitPrice,
             taxAmount,
             totalAmount,
             description: this.optional(dto.description),
@@ -364,12 +377,21 @@ export class ReceivablesService {
     user: RequestUser,
     dto: CreateReceivableCreditNoteDto,
   ) {
+    if (dto.transactionTypeId) {
+      return this.createRuleCreditNote(user, dto, dto.transactionTypeId);
+    }
+    if (!dto.offsetGlAccountId || !dto.arAccountId) {
+      throw new BadRequestException(
+        'offsetGlAccountId and arAccountId are required unless a transactionTypeId is given',
+      );
+    }
+    const { offsetGlAccountId, arAccountId } = dto;
     const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
       this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
-      this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
-      this.assertArAccount(user.tenantId, dto.arAccountId),
+      this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId),
+      this.assertArAccount(user.tenantId, arAccountId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
     if (dto.originalInvoiceId) {
@@ -429,10 +451,132 @@ export class ReceivablesService {
             externalReference: this.optional(dto.externalReference),
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId: dto.offsetGlAccountId,
+            offsetGlAccountId,
             costCentreId: this.optional(dto.costCentreId),
-            arAccountId: dto.arAccountId,
+            arAccountId,
             originalInvoiceId: this.optional(dto.originalInvoiceId),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+          include: receivableDocumentInclude,
+        });
+      },
+    );
+    await this.recordAudit(
+      user,
+      'RECEIVABLE_CREDIT_NOTE_CREATED',
+      'AccountingReceivableDocument',
+      document.id,
+      { documentNumber: document.documentNumber, totalAmount },
+    );
+    return document;
+  }
+
+  /** Rule-driven credit note: created from a linked Receivable transaction type. The
+   *  accounts and tax lines come from the type's rule (written in the note's own direction)
+   *  and it must reference an original posted invoice, which it reduces once posted. */
+  private async createRuleCreditNote(
+    user: RequestUser,
+    dto: CreateReceivableCreditNoteDto,
+    transactionTypeId: string,
+  ) {
+    const [customer] = await Promise.all([
+      this.resolveCustomer(user.tenantId, dto.customerId),
+      this.assertActiveCurrency(user.tenantId, dto.currency),
+      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
+    ]);
+    this.assertCustomerCurrency(customer.currency, dto.currency);
+    assertQuantityPriceMatchesAmount(dto);
+    if (!dto.originalInvoiceId) {
+      throw new BadRequestException(
+        'A linked transaction must reference an original invoice',
+      );
+    }
+
+    const subtotalAmount = new Prisma.Decimal(dto.amount);
+    const {
+      arAccountId,
+      offsetGlAccountId,
+      taxAmount,
+      taxBreakdown,
+      transactionTypeCode,
+    } = await this.resolveRulePosting(
+      user.tenantId,
+      transactionTypeId,
+      TransactionTypeCategory.RECEIVABLE,
+      subtotalAmount,
+      dto.selectedTaxTypeIds,
+      true,
+    );
+    await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
+    const totalAmount = subtotalAmount.plus(taxAmount);
+
+    const original = await this.getDocumentForTenant(
+      user.tenantId,
+      dto.originalInvoiceId,
+    );
+    if (
+      original.documentType !== AccountingReceivableDocumentType.INVOICE ||
+      original.customerId !== customer.id ||
+      original.status !== AccountingReceivableStatus.POSTED
+    ) {
+      throw new BadRequestException(
+        'Credit notes can only reference a posted invoice for the same customer',
+      );
+    }
+    if (original.currency !== dto.currency) {
+      throw new BadRequestException(
+        'Cross-currency invoice credit allocation is not supported in Phase 1',
+      );
+    }
+    if (original.arAccountId !== arAccountId) {
+      throw new BadRequestException(
+        'This credit note type posts to a different receivable account than the invoice — use a rule with the same receivable account',
+      );
+    }
+    const outstanding = await this.invoiceOutstandingAmount(
+      user.tenantId,
+      original.id,
+    );
+    if (totalAmount.greaterThan(outstanding)) {
+      throw new ConflictException(
+        'Credit note cannot exceed the invoice outstanding balance',
+      );
+    }
+
+    const document = await this.withDocumentNumberLock(
+      user.tenantId,
+      `credit-note:${transactionTypeCode}`,
+      async (tx) => {
+        const documentNumber = await this.nextRuleDocumentNumber(
+          tx,
+          user.tenantId,
+          transactionTypeCode,
+        );
+        return tx.accountingReceivableDocument.create({
+          data: {
+            tenantId: user.tenantId,
+            customerId: customer.id,
+            documentType: AccountingReceivableDocumentType.CREDIT_NOTE,
+            documentNumber,
+            documentDate: new Date(dto.documentDate),
+            currency: dto.currency,
+            exchangeRate: dto.exchangeRate,
+            subtotalAmount,
+            quantity: dto.quantity,
+            unitPrice: dto.unitPrice,
+            taxAmount,
+            totalAmount,
+            description: this.optional(dto.description),
+            externalReference: this.optional(dto.externalReference),
+            sourceModule: this.optional(dto.sourceModule),
+            sourceRecordId: this.optional(dto.sourceRecordId),
+            offsetGlAccountId,
+            costCentreId: this.optional(dto.costCentreId),
+            arAccountId,
+            transactionTypeId,
+            taxBreakdown,
+            originalInvoiceId: original.id,
             createdByUserId: user.id,
             updatedByUserId: user.id,
           },
@@ -1436,29 +1580,78 @@ export class ReceivablesService {
     tenantId: string,
     documents: T[],
   ) {
-    const postedIds = documents
-      .filter((doc) => doc.status === AccountingReceivableStatus.POSTED)
+    const isCreditNote = (doc: ReceivableDocument) =>
+      doc.documentType === AccountingReceivableDocumentType.CREDIT_NOTE;
+    const posted = documents.filter(
+      (doc) => doc.status === AccountingReceivableStatus.POSTED,
+    );
+    const postedIds = posted
+      .filter((doc) => !isCreditNote(doc))
       .map((doc) => doc.id);
+    const postedCreditNoteIds = posted
+      .filter(isCreditNote)
+      .map((doc) => doc.id);
+    // A credit note is never "paid" — what matters is how much of it has been applied
+    // against invoices, so its outstanding is the part still unapplied.
+    const appliedByCreditNoteId = new Map<string, Prisma.Decimal>();
+    if (postedCreditNoteIds.length > 0) {
+      const grouped = await this.prisma.accountingReceivableAllocation.groupBy({
+        by: ['creditNoteId'],
+        where: {
+          tenantId,
+          reversedAt: null,
+          creditNoteId: { in: postedCreditNoteIds },
+        },
+        _sum: { amount: true },
+      });
+      for (const row of grouped) {
+        if (row.creditNoteId) {
+          appliedByCreditNoteId.set(row.creditNoteId, row._sum.amount ?? zero);
+        }
+      }
+    }
     const appliedByInvoiceId = new Map<string, Prisma.Decimal>();
+    // Only real receipts, not credit notes — a credited invoice hasn't been paid.
+    const receiptsByInvoiceId = new Map<string, Prisma.Decimal>();
     if (postedIds.length > 0) {
       const grouped = await this.prisma.accountingReceivableAllocation.groupBy({
-        by: ['invoiceId'],
+        by: ['invoiceId', 'sourceType'],
         where: { tenantId, reversedAt: null, invoiceId: { in: postedIds } },
         _sum: { amount: true },
       });
       for (const row of grouped) {
-        appliedByInvoiceId.set(row.invoiceId, row._sum.amount ?? zero);
+        const amount = row._sum.amount ?? zero;
+        appliedByInvoiceId.set(
+          row.invoiceId,
+          (appliedByInvoiceId.get(row.invoiceId) ?? zero).plus(amount),
+        );
+        if (row.sourceType === AccountingReceivableAllocationSource.RECEIPT) {
+          receiptsByInvoiceId.set(
+            row.invoiceId,
+            (receiptsByInvoiceId.get(row.invoiceId) ?? zero).plus(amount),
+          );
+        }
       }
     }
     return documents.map((document) => {
-      const applied = appliedByInvoiceId.get(document.id) ?? zero;
+      const applied =
+        (isCreditNote(document)
+          ? appliedByCreditNoteId.get(document.id)
+          : appliedByInvoiceId.get(document.id)) ?? zero;
       const outstanding =
         document.status === AccountingReceivableStatus.POSTED
           ? document.totalAmount.minus(applied)
           : zero;
       return {
         ...document,
-        paymentState: this.paymentState(document, outstanding),
+        paymentState: this.paymentState(
+          document,
+          outstanding,
+          isCreditNote(document)
+            ? undefined
+            : (receiptsByInvoiceId.get(document.id) ?? zero),
+        ),
+        outstandingAmount: this.money(outstanding),
       };
     });
   }
@@ -1509,7 +1702,7 @@ export class ReceivablesService {
       appliedReceipts: this.money(receiptApplied),
       appliedCreditNotes: this.money(creditApplied),
       outstandingAmount: this.money(outstanding),
-      paymentState: this.paymentState(document, outstanding),
+      paymentState: this.paymentState(document, outstanding, receiptApplied),
     };
   }
 
@@ -1661,6 +1854,7 @@ export class ReceivablesService {
     expectedCategory: TransactionTypeCategory,
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
+    expectLinked = false,
   ): Promise<{
     arAccountId: string;
     offsetGlAccountId: string;
@@ -1685,6 +1879,14 @@ export class ReceivablesService {
       );
     }
 
+    if (transactionType.isLinked !== expectLinked) {
+      throw new BadRequestException(
+        expectLinked
+          ? `${transactionType.name} is not a linked transaction type`
+          : `${transactionType.name} is a linked transaction type — it must reference an original invoice`,
+      );
+    }
+
     const rule = await this.prisma.transactionTypeRule.findFirst({
       where: { tenantId, transactionTypeId },
       include: { lines: { include: { taxType: true } } },
@@ -1695,8 +1897,12 @@ export class ReceivablesService {
       );
     }
 
+    // A linked type (credit / debit note) reverses its original, so its control line — and
+    // the rule that describes it — is on the opposite side to a plain invoice/bill.
+    const isReceivable =
+      expectedCategory === TransactionTypeCategory.RECEIVABLE;
     const autoBalanceDirection =
-      expectedCategory === TransactionTypeCategory.RECEIVABLE
+      isReceivable !== transactionType.isLinked
         ? PostingDirection.DR
         : PostingDirection.CR;
     // The auto-balance (AR) line is never a tax line — checking direction alone isn't
@@ -1854,15 +2060,22 @@ export class ReceivablesService {
     };
   }
 
+  /** `paidApplied` is the part of the reduction that came from real receipts. A document
+   *  reduced only by credit notes is still Unpaid; without it (credit notes themselves) any
+   *  reduction counts as partly applied. */
   private paymentState(
     document: ReceivableDocument,
     outstanding: Prisma.Decimal,
+    paidApplied?: Prisma.Decimal,
   ) {
     if (document.status === AccountingReceivableStatus.REVERSED)
       return 'REVERSED';
     if (document.status === AccountingReceivableStatus.DRAFT) return 'DRAFT';
     if (outstanding.lte(0)) return 'PAID';
-    if (outstanding.lessThan(document.totalAmount)) return 'PARTIALLY_PAID';
+    const partlySettled = paidApplied
+      ? paidApplied.greaterThan(0)
+      : outstanding.lessThan(document.totalAmount);
+    if (partlySettled) return 'PARTIALLY_PAID';
     return 'OPEN';
   }
 

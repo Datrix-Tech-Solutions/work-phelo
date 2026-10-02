@@ -5,6 +5,7 @@ import {
   PayrollRun,
   PayrollRunDetail,
   PayrollSettings,
+  PayrollSettlementStatus,
   RunPayrollDto,
   PayrollDecisionDto,
   UpdatePayrollItemDto,
@@ -29,6 +30,26 @@ export function usePayrollRun(id: string) {
       return res.data;
     },
     enabled: !!id,
+  });
+}
+
+/** Polls while the run is APPROVED and still awaiting settlement, so the progress view
+ *  reflects payments made in Accounting without the employer needing to refresh. Null
+ *  means the tenant isn't linked to Accounting. */
+export function usePayrollSettlementStatus(
+  id: string,
+  runStatus: PayrollRun['status'] | undefined,
+) {
+  return useQuery({
+    queryKey: ['payroll', id, 'settlement-status'],
+    queryFn: async () => {
+      const res = await api.get<PayrollSettlementStatus | null>(
+        `/hr/payroll/${id}/settlement-status`,
+      );
+      return res.data;
+    },
+    enabled: !!id,
+    refetchInterval: runStatus === 'APPROVED' ? 15000 : false,
   });
 }
 

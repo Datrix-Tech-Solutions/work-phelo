@@ -19,9 +19,10 @@ interface AddEntityTypePanelProps {
 
 type FormValues = {
   name: string;
+  code: string;
 };
 
-const DEFAULTS: FormValues = { name: '' };
+const DEFAULTS: FormValues = { name: '', code: '' };
 
 export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTypePanelProps) {
   const isEditing = !!entityType;
@@ -39,7 +40,7 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
 
   useEffect(() => {
     if (!isOpen) return;
-    reset(entityType ? { name: entityType.name } : DEFAULTS);
+    reset(entityType ? { name: entityType.name, code: entityType.code ?? '' } : DEFAULTS);
   }, [isOpen, entityType, reset]);
 
   const handleClose = () => {
@@ -50,10 +51,10 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
   const onSubmit = async (values: FormValues) => {
     try {
       if (entityType) {
-        await updateEntityType({ id: entityType.id, name: values.name });
+        await updateEntityType({ id: entityType.id, name: values.name, code: values.code });
         toast.success('Type updated successfully');
       } else {
-        await createEntityType({ name: values.name });
+        await createEntityType({ name: values.name, code: values.code });
         toast.success('Type created successfully');
       }
       handleClose();
@@ -85,6 +86,15 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
           registration={register('name', { required: 'Name is required' })}
           error={errors.name}
           placeholder="e.g. Supplier"
+        />
+        <FormField
+          label="ID"
+          registration={register('code', {
+            required: 'ID is required',
+            setValueAs: (v: string) => v.trim().toUpperCase(),
+          })}
+          error={errors.code}
+          placeholder="e.g. SUP"
         />
       </div>
     </SidePanel>

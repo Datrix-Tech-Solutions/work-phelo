@@ -1,6 +1,14 @@
 import { isResourceEnabledForTenant } from './permission-entitlements';
 
 describe('permission entitlements', () => {
+  const marketingEnabledConfig = {
+    moduleConfig: { marketing: true },
+    featureConfig: { marketing: { leads: true } },
+  };
+  const marketingDisabledFeatureConfig = {
+    moduleConfig: { marketing: true },
+    featureConfig: { marketing: { leads: false } },
+  };
   const enabledConfig = {
     moduleConfig: { operations: true },
     featureConfig: { operations: { reinsurance: true } },
@@ -32,5 +40,42 @@ describe('permission entitlements', () => {
     expect(isResourceEnabledForTenant(resource, disabledFeatureConfig)).toBe(
       false,
     );
+  });
+
+  it.each([
+    'marketing.prospects',
+    'marketing.prospects.all',
+    'marketing.clients',
+    'marketing.clients.all',
+    'marketing.prospects.interactions',
+    'marketing.prospects.interactions.all',
+    'marketing.follow-ups',
+    'marketing.follow-ups.all',
+  ])('scopes %s to the Marketing leads feature entitlement', (name) => {
+    const resource = { name, module: 'MARKETING' };
+
+    expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
+      true,
+    );
+    expect(
+      isResourceEnabledForTenant(resource, marketingDisabledFeatureConfig),
+    ).toBe(false);
+  });
+
+  it('scopes marketing.fleet to the Marketing module only', () => {
+    const resource = { name: 'marketing.fleet', module: 'MARKETING' };
+
+    expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
+      true,
+    );
+    expect(
+      isResourceEnabledForTenant(resource, marketingDisabledFeatureConfig),
+    ).toBe(true);
+    expect(
+      isResourceEnabledForTenant(resource, {
+        moduleConfig: { marketing: false },
+        featureConfig: { marketing: { leads: true } },
+      }),
+    ).toBe(false);
   });
 });

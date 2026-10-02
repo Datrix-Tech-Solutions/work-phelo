@@ -81,6 +81,8 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     currency: raw.currency,
     exchangeRate: raw.exchangeRate ?? null,
     subtotalAmount: raw.subtotalAmount,
+    quantity: raw.quantity ?? null,
+    unitPrice: raw.unitPrice ?? null,
     taxAmount: raw.taxAmount,
     totalAmount: raw.totalAmount,
     description: raw.description ?? null,
@@ -93,6 +95,7 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     originalDocumentId: raw[config.originalIdField] ?? null,
     status: raw.status,
     paymentState: raw.paymentState,
+    outstandingAmount: raw.outstandingAmount ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,
@@ -154,10 +157,12 @@ function useDocuments(
   side: AccountingTradeSide,
   segment: string,
   params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
 ) {
   const config = SIDE_CONFIG[side];
   const { partyId, ...rest } = params;
   return useQuery({
+    enabled: options.enabled ?? true,
     queryKey: [...documentsKey(side, segment), 'list', params],
     queryFn: async () => {
       const res = await api.get<PaginatedResult<RawTradeDocument>>(`${config.base}/${segment}`, {
@@ -263,6 +268,11 @@ function usePostDocument(side: AccountingTradeSide, segment: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: documentsKey(side, segment) });
+      // Posting a credit/debit note reduces its original invoice/bill, so that list (and its
+      // balance) is stale too.
+      if (segment === CREDIT_NOTE_SEGMENT) {
+        queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
+      }
     },
   });
 }
@@ -280,14 +290,21 @@ function useReverseDocument(side: AccountingTradeSide, segment: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: documentsKey(side, segment) });
+      // Reversing a credit/debit note gives its original invoice/bill its balance back.
+      if (segment === CREDIT_NOTE_SEGMENT) {
+        queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
+      }
     },
   });
 }
 
 // ---- Invoices (AR) / Bills (AP) ----
 
-export function useReceivableInvoices(params: QueryTradeDocumentsParams = {}) {
-  return useDocuments('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment, params);
+export function useReceivableInvoices(
+  params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useDocuments('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment, params, options);
 }
 export function useReceivableInvoice(invoiceId: string | undefined) {
   return useDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment, invoiceId);
@@ -305,8 +322,11 @@ export function useReverseReceivableInvoice() {
   return useReverseDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment);
 }
 
-export function usePayableBills(params: QueryTradeDocumentsParams = {}) {
-  return useDocuments('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment, params);
+export function usePayableBills(
+  params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useDocuments('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment, params, options);
 }
 export function usePayableBill(billId: string | undefined) {
   return useDocument('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment, billId);

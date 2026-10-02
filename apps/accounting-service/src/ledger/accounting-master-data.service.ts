@@ -203,12 +203,14 @@ const STANDARD_TRANSACTION_TYPES = [
     name: 'Receipt',
     category: TransactionTypeCategory.RECEIVABLE,
     description: 'Money received into a cash/bank account.',
+    postsToCashbook: true,
   },
   {
     code: 'PMNT',
     name: 'Payment',
     category: TransactionTypeCategory.PAYABLE,
     description: 'Money paid out of a cash/bank account.',
+    postsToCashbook: true,
   },
   {
     code: 'TRNSF',
@@ -1117,6 +1119,54 @@ export class AccountingMasterDataService {
     );
   }
 
+  async deleteAccountClassification(
+    user: RequestUser,
+    classificationId: string,
+  ) {
+    const classification = await this.findAccountClassification(
+      user.tenantId,
+      classificationId,
+    );
+    const [groupCount, accountCount] = await Promise.all([
+      this.prisma.accountGroup.count({
+        where: { tenantId: user.tenantId, classificationId },
+      }),
+      this.prisma.gLAccount.count({
+        where: { tenantId: user.tenantId, classificationId },
+      }),
+    ]);
+    if (groupCount + accountCount > 0) {
+      throw new ConflictException(
+        'Delete the parent accounts and accounts under this classification before deleting it',
+      );
+    }
+    try {
+      await this.prisma.accountClassification.delete({
+        where: {
+          id_tenantId: { id: classification.id, tenantId: user.tenantId },
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This classification is referenced elsewhere and cannot be deleted',
+        );
+      }
+      throw error;
+    }
+    await this.recordAudit(
+      user,
+      'ACCOUNT_CLASSIFICATION_DELETE',
+      'AccountClassification',
+      classification.id,
+      { code: classification.code },
+    );
+    return { id: classification.id };
+  }
+
   async listAccountGroups(tenantId: string, query: QueryAccountGroupsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
@@ -1450,6 +1500,41 @@ export class AccountingMasterDataService {
     );
   }
 
+  async deleteAccountGroup(user: RequestUser, groupId: string) {
+    const group = await this.findAccountGroup(user.tenantId, groupId);
+    const accountCount = await this.prisma.gLAccount.count({
+      where: { tenantId: user.tenantId, accountGroupId: group.id },
+    });
+    if (accountCount > 0) {
+      throw new ConflictException(
+        'Delete or move the accounts under this parent account before deleting it',
+      );
+    }
+    try {
+      await this.prisma.accountGroup.delete({
+        where: { id_tenantId: { id: group.id, tenantId: user.tenantId } },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This parent account is referenced elsewhere and cannot be deleted',
+        );
+      }
+      throw error;
+    }
+    await this.recordAudit(
+      user,
+      'ACCOUNT_GROUP_DELETE',
+      'AccountGroup',
+      group.id,
+      { code: group.code },
+    );
+    return { id: group.id };
+  }
+
   async seedStandardAccountHierarchy(user: RequestUser) {
     let classificationsCreated = 0;
     let classificationsSkipped = 0;
@@ -1534,6 +1619,13 @@ export class AccountingMasterDataService {
     user: RequestUser,
     dto: CreateTransactionTypeDto,
   ) {
+    if (dto.sourceTypeId) {
+      await this.assertSourceType(user.tenantId, dto.sourceTypeId);
+    }
+    this.assertLinkedTypeCombination(
+      dto.isLinked ?? false,
+      dto.postsToCashbook ?? false,
+    );
     try {
       const transactionType = await this.prisma.transactionType.create({
         data: {
@@ -1544,7 +1636,10 @@ export class AccountingMasterDataService {
           businessRoles: dto.businessRoles ?? [],
           allowedDocument: this.optional(dto.allowedDocument),
           source: this.optional(dto.source),
+          sourceTypeId: dto.sourceTypeId ?? null,
           description: this.optional(dto.description),
+          postsToCashbook: dto.postsToCashbook ?? false,
+          isLinked: dto.isLinked ?? false,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -1571,6 +1666,27 @@ export class AccountingMasterDataService {
       user.tenantId,
       transactionTypeId,
     );
+    if (dto.sourceTypeId) {
+      await this.assertSourceType(user.tenantId, dto.sourceTypeId);
+    }
+    const isLinked = dto.isLinked ?? transactionType.isLinked;
+    this.assertLinkedTypeCombination(
+      isLinked,
+      dto.postsToCashbook ?? transactionType.postsToCashbook,
+    );
+    if (isLinked !== transactionType.isLinked) {
+      // The rule's control line direction depends on this flag, so an existing rule would
+      // silently become invalid — make the user re-create it instead.
+      const rule = await this.prisma.transactionTypeRule.findFirst({
+        where: { tenantId: user.tenantId, transactionTypeId },
+        select: { id: true },
+      });
+      if (rule) {
+        throw new ConflictException(
+          "Delete this transaction type's rule before changing whether it is linked — the rule is written in a different direction for linked types",
+        );
+      }
+    }
     try {
       const updated = await this.prisma.transactionType.update({
         where: {
@@ -1589,9 +1705,16 @@ export class AccountingMasterDataService {
           ...(dto.source !== undefined
             ? { source: this.optional(dto.source) }
             : {}),
+          ...(dto.sourceTypeId !== undefined
+            ? { sourceTypeId: dto.sourceTypeId ?? null }
+            : {}),
           ...(dto.description !== undefined
             ? { description: this.optional(dto.description) }
             : {}),
+          ...(dto.postsToCashbook !== undefined
+            ? { postsToCashbook: dto.postsToCashbook }
+            : {}),
+          ...(dto.isLinked !== undefined ? { isLinked: dto.isLinked } : {}),
           updatedByUserId: user.id,
         },
       });
@@ -1627,6 +1750,17 @@ export class AccountingMasterDataService {
     );
   }
 
+  private assertLinkedTypeCombination(
+    isLinked: boolean,
+    postsToCashbook: boolean,
+  ) {
+    if (isLinked && postsToCashbook) {
+      throw new BadRequestException(
+        'A linked transaction type cannot also post directly to Cashbook',
+      );
+    }
+  }
+
   private async findTransactionType(tenantId: string, id: string) {
     const transactionType = await this.prisma.transactionType.findFirst({
       where: { id, tenantId },
@@ -1644,7 +1778,11 @@ export class AccountingMasterDataService {
     businessRoles: string[];
     allowedDocument: string | null;
     source: string | null;
+    sourceTypeId?: string | null;
     description: string | null;
+    postsToCashbook: boolean;
+    isLinked: boolean;
+    createdAt: Date;
     rule?: { lines: unknown[] } | null;
   }) {
     return {
@@ -1655,7 +1793,11 @@ export class AccountingMasterDataService {
       businessRoles: transactionType.businessRoles,
       allowedDocument: transactionType.allowedDocument,
       source: transactionType.source,
+      sourceTypeId: transactionType.sourceTypeId ?? null,
       description: transactionType.description,
+      postsToCashbook: transactionType.postsToCashbook,
+      isLinked: transactionType.isLinked,
+      createdAt: transactionType.createdAt.toISOString(),
       rulesCount: transactionType.rule?.lines.length ?? 0,
     };
   }
@@ -1705,6 +1847,8 @@ export class AccountingMasterDataService {
           name: template.name,
           category: template.category,
           description: template.description,
+          postsToCashbook:
+            'postsToCashbook' in template ? template.postsToCashbook : false,
           isSystemDefault: true,
           createdByUserId: user.id,
           updatedByUserId: user.id,
@@ -1895,6 +2039,47 @@ export class AccountingMasterDataService {
     return updated;
   }
 
+  async deleteGLAccount(user: RequestUser, accountId: string) {
+    const account = await this.findGLAccount(user.tenantId, accountId);
+    const [childCount, journalLineCount] = await Promise.all([
+      this.prisma.gLAccount.count({
+        where: { tenantId: user.tenantId, parentAccountId: account.id },
+      }),
+      this.prisma.journalLine.count({
+        where: { tenantId: user.tenantId, glAccountId: account.id },
+      }),
+    ]);
+    if (childCount > 0) {
+      throw new ConflictException(
+        'Delete the child accounts under this account before deleting it',
+      );
+    }
+    if (journalLineCount > 0) {
+      throw new ConflictException(
+        'This account has activity and cannot be deleted — deactivate it instead',
+      );
+    }
+    try {
+      await this.prisma.gLAccount.delete({
+        where: { id_tenantId: { id: account.id, tenantId: user.tenantId } },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This account is referenced elsewhere and cannot be deleted — deactivate it instead',
+        );
+      }
+      throw error;
+    }
+    await this.recordAudit(user, 'GL_ACCOUNT_DELETE', 'GLAccount', account.id, {
+      code: account.code,
+    });
+    return { id: account.id };
+  }
+
   listCostCentres(tenantId: string) {
     return this.prisma.costCentre.findMany({
       where: { tenantId },
@@ -2037,7 +2222,9 @@ export class AccountingMasterDataService {
           controlAccountId: dto.controlAccountId,
           currency: dto.currency,
           contactName: this.optional(dto.contactName),
+          phone: this.optional(dto.phone),
           address: this.optional(dto.address),
+          description: this.optional(dto.description),
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -2096,8 +2283,14 @@ export class AccountingMasterDataService {
           ...(dto.contactName !== undefined
             ? { contactName: this.optional(dto.contactName) }
             : {}),
+          ...(dto.phone !== undefined
+            ? { phone: this.optional(dto.phone) }
+            : {}),
           ...(dto.address !== undefined
             ? { address: this.optional(dto.address) }
+            : {}),
+          ...(dto.description !== undefined
+            ? { description: this.optional(dto.description) }
             : {}),
           updatedByUserId: user.id,
         },
@@ -2663,6 +2856,16 @@ export class AccountingMasterDataService {
       );
     }
     return currency;
+  }
+
+  private async assertSourceType(tenantId: string, sourceTypeId: string) {
+    const sourceType = await this.prisma.sourceType.findUnique({
+      where: { id_tenantId: { id: sourceTypeId, tenantId } },
+    });
+    if (!sourceType || !sourceType.isActive) {
+      throw new BadRequestException(`Active source type not found`);
+    }
+    return sourceType;
   }
 
   private async assertParentAccount(

@@ -120,11 +120,41 @@ export class CashbookEntryDto {
   @IsUUID()
   cashAccountId!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The Receivable/Payable Transaction Type (flagged postsToCashbook) this direct ' +
+      'transaction is made under. Its code drives the generated transaction number ' +
+      '(e.g. RCPT26-00001); omit it and the entry gets no number.',
+  })
+  @IsOptional()
+  @IsUUID()
+  transactionTypeId?: string;
+
   @ApiProperty({ example: 1000, minimum: 0.0001 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
   amount!: number;
+
+  @ApiPropertyOptional({
+    example: 2,
+    minimum: 0.0001,
+    description:
+      'Optional descriptive quantity. Sent together with unitPrice; amount must equal quantity × unitPrice rounded to 2 decimals.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  quantity?: number;
+
+  @ApiPropertyOptional({ example: 13.69, minimum: 0.0001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  unitPrice?: number;
 
   @ApiProperty({ example: 'GHS', minLength: 3, maxLength: 3 })
   @Transform(uppercase)
@@ -283,6 +313,27 @@ export class CreateCashbookTransferDto {
   @IsString()
   @MaxLength(500)
   description!: string;
+
+  @ApiPropertyOptional({
+    example: 25,
+    minimum: 0.0001,
+    description:
+      'Optional bank charge deducted from the source account alongside the transfer. Requires chargeGlAccountId.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  chargeAmount?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Posting-enabled GL account (typically a bank charges expense account) debited for chargeAmount. Required when chargeAmount is set.',
+  })
+  @IsOptional()
+  @IsUUID()
+  chargeGlAccountId?: string;
 
   @ApiPropertyOptional({ example: 'TREASURY' })
   @IsOptional()

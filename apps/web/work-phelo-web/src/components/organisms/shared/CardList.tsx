@@ -17,8 +17,12 @@ interface CardListProps {
   addLabel?: string;
   items: CardListItem[];
   onAdd: () => void;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
+  /** Shows a View button on each row. */
+  onView?: (id: string) => void;
+  /** Extra per-row actions, rendered after View. */
+  renderExtraActions?: (id: string) => React.ReactNode;
+  onEdit?: (id: string) => void;
+  onDelete?: (id: string) => void;
   searchValue?: string;
   onSearchChange?: (value: string) => void;
   className?: string;
@@ -29,6 +33,8 @@ export function CardList({
   addLabel = 'Add',
   items,
   onAdd,
+  onView,
+  renderExtraActions,
   onEdit,
   onDelete,
   searchValue = '',
@@ -78,8 +84,10 @@ export function CardList({
                 key={item.id}
                 label={item.label}
                 sublabel={item.sublabel}
-                onEdit={() => onEdit(item.id)}
-                onDelete={() => onDelete(item.id)}
+                onView={onView && (() => onView(item.id))}
+                extraActions={renderExtraActions?.(item.id)}
+                onEdit={onEdit && (() => onEdit(item.id))}
+                onDelete={onDelete && (() => onDelete(item.id))}
               />
             ))
           )}

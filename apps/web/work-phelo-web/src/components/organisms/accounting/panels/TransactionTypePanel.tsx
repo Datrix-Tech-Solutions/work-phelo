@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
 import {
   useCreateTransactionType,
   useEntityTypes,
@@ -15,16 +16,20 @@ import {
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { ACCOUNTING_DOCUMENT_OPTIONS } from '@/lib/accounting/documents';
 import type { TransactionTypeCategory, TransactionTypeDefinition } from '@/types/accounting';
 
+// Neutral/None types (Transfer, Bank Charge, Adjustment) have no working form yet —
+// only Receivable/Payable transaction types can be created or edited here.
 const CATEGORY_OPTIONS: SearchSelectOption[] = [
-  { value: 'NEUTRAL', label: 'Neutral' },
   { value: 'RECEIVABLE', label: 'Receivable' },
   { value: 'PAYABLE', label: 'Payable' },
-  { value: 'NONE', label: 'None' },
 ];
 
-const ALLOWED_DOCUMENT_OPTIONS: SearchSelectOption[] = [];
+const ALLOWED_DOCUMENT_OPTIONS: SearchSelectOption[] = [
+  { value: '', label: 'None' },
+  ...ACCOUNTING_DOCUMENT_OPTIONS,
+];
 
 type FormValues = {
   name: string;
@@ -32,8 +37,10 @@ type FormValues = {
   category: TransactionTypeCategory | '';
   businessRoles: string[];
   allowedDocument: string;
-  source: string;
+  sourceTypeId: string;
   description: string;
+  postsToCashbook: boolean;
+  isLinked: boolean;
 };
 
 const DEFAULTS: FormValues = {
@@ -42,8 +49,10 @@ const DEFAULTS: FormValues = {
   category: '',
   businessRoles: [],
   allowedDocument: '',
-  source: '',
+  sourceTypeId: '',
   description: '',
+  postsToCashbook: false,
+  isLinked: false,
 };
 
 export function TransactionTypePanel({
@@ -58,8 +67,13 @@ export function TransactionTypePanel({
   const { mutateAsync: create, isPending: isCreating } = useCreateTransactionType();
   const { mutateAsync: update, isPending: isUpdating } = useUpdateTransactionType();
   const { data: sourceTypes = [] } = useSourceTypes();
+  // Only offer sources a module has actually linked in — an unlinked one shouldn't be
+  // pickable here even though the row still exists for re-linking later.
   const sourceOptions = useMemo<SearchSelectOption[]>(
-    () => sourceTypes.map((s) => ({ value: s.name, label: s.name })),
+    () =>
+      sourceTypes
+        .filter((s) => s.isActive)
+        .map((s) => ({ value: s.id, label: `${s.module} — ${s.name}` })),
     [sourceTypes],
   );
   const { data: entityTypesData = [] } = useEntityTypes();
@@ -74,8 +88,10 @@ export function TransactionTypePanel({
     control,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
+  const category = useWatch({ control, name: 'category' });
 
   useEffect(() => {
     if (transactionType)
@@ -85,8 +101,10 @@ export function TransactionTypePanel({
         category: transactionType.category,
         businessRoles: transactionType.businessRoles,
         allowedDocument: transactionType.allowedDocument ?? '',
-        source: transactionType.source ?? '',
+        sourceTypeId: transactionType.sourceTypeId ?? '',
         description: transactionType.description ?? '',
+        postsToCashbook: transactionType.postsToCashbook,
+        isLinked: transactionType.isLinked,
       });
     else reset(DEFAULTS);
   }, [transactionType, reset]);
@@ -104,8 +122,10 @@ export function TransactionTypePanel({
         category: values.category as TransactionTypeCategory,
         businessRoles: values.businessRoles,
         allowedDocument: values.allowedDocument || undefined,
-        source: values.source || undefined,
+        sourceTypeId: values.sourceTypeId || undefined,
         description: values.description || undefined,
+        postsToCashbook: values.postsToCashbook,
+        isLinked: values.isLinked,
       };
       if (transactionType) await update({ id: transactionType.id, ...payload });
       else await create(payload);
@@ -178,6 +198,44 @@ export function TransactionTypePanel({
             />
           )}
         />
+        {category && (
+          <Controller
+            name="postsToCashbook"
+            control={control}
+            render={({ field }) => (
+              <ToggleRow
+                label="Posts Directly to Cashbook"
+                description="Make direct payments to Cashbook, instead of creating an Invoice/Bill."
+                enabled={field.value}
+                onChange={(value) => {
+                  field.onChange(value);
+                  if (value) setValue('isLinked', false);
+                }}
+              />
+            )}
+          />
+        )}
+        {category && (
+          <Controller
+            name="isLinked"
+            control={control}
+            render={({ field }) => (
+              <ToggleRow
+                label="Linked Transaction"
+                description={`Creates a ${
+                  category === 'RECEIVABLE'
+                    ? 'credit note against an invoice'
+                    : 'debit note against a bill'
+                } used to reduce what is owed on the linked transaction.`}
+                enabled={field.value}
+                onChange={(value) => {
+                  field.onChange(value);
+                  if (value) setValue('postsToCashbook', false);
+                }}
+              />
+            )}
+          />
+        )}
         <Controller
           name="businessRoles"
           control={control}
@@ -197,7 +255,7 @@ export function TransactionTypePanel({
           render={({ field }) => (
             <SearchSelect
               label="Allowed Document"
-              placeholder="No document types configured yet"
+              placeholder="Select a document…"
               options={ALLOWED_DOCUMENT_OPTIONS}
               value={field.value}
               onChange={field.onChange}
@@ -205,7 +263,7 @@ export function TransactionTypePanel({
           )}
         />
         <Controller
-          name="source"
+          name="sourceTypeId"
           control={control}
           render={({ field }) => (
             <SearchSelect

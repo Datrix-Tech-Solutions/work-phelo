@@ -46,6 +46,7 @@
     "@sentry/nestjs": "^8.26.0",
     "@sentry/node": "^8.26.0",
     "@work-phelo/config": "file:../../packages/config",
+    "@work-phelo/internal-auth": "file:../../packages/internal-auth",
     "@work-phelo/schemas": "file:../../packages/schemas",
     "@work-phelo/types": "file:../../packages/types",
     "@work-phelo/utils": "file:../../packages/utils",

@@ -54,6 +54,25 @@ export class CreatePayableBillDto {
   @Min(0.0001)
   amount!: number;
 
+  @ApiPropertyOptional({
+    example: 2,
+    minimum: 0.0001,
+    description:
+      'Optional descriptive quantity. Sent together with unitPrice; amount must equal quantity × unitPrice rounded to 2 decimals.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  quantity?: number;
+
+  @ApiPropertyOptional({ example: 13.69, minimum: 0.0001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  unitPrice?: number;
+
   @ApiPropertyOptional({ example: 1.25, minimum: 0.00000001 })
   @IsOptional()
   @Type(() => Number)
@@ -151,27 +170,29 @@ export class CreatePayableCreditNoteDto extends PartialType(
   @Min(0)
   taxAmount?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
       'Posting-enabled expense, asset or other offset account credited when the vendor credit is posted.',
   })
+  @IsOptional()
   @IsUUID()
-  offsetGlAccountId!: string;
+  offsetGlAccountId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
       'Posting-enabled liability account debited when the vendor credit is posted — ' +
       'picked manually here since credit notes are not yet Rule-driven.',
   })
+  @IsOptional()
   @IsUUID()
-  apAccountId!: string;
+  apAccountId?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Optional posted bill this credit note applies to. Bill-specific credits cannot exceed bill outstanding.',
+      'Optional posted bill this credit note applies to. Bill-specific credits cannot exceed bill outstanding. Required when the debit note is created from a linked transactionTypeId.',
   })
   @IsOptional()
   @IsUUID()

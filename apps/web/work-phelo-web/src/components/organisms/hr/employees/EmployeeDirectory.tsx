@@ -121,7 +121,7 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
         data={pagedEmployees}
         isLoading={isLoading}
         skeletonCount={8}
-        renderSkeleton={() => <div className="w-95 h-56 rounded-xl bg-gray-100 animate-pulse" />}
+        renderSkeleton={() => <div className="w-full h-56 rounded-xl bg-gray-100 animate-pulse" />}
         searchPlaceholder="Search by name, email, job title..."
         searchValue={search}
         onSearch={(q) => {

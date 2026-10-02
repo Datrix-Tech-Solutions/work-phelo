@@ -1,9 +1,12 @@
+/** Keys of the documents the studio can preview — one per entry in documentRegistry. */
 export type PreviewDoc =
+  | 'payslip'
+  | 'bill'
+  | 'invoice'
+  | 'credit-note'
   | 'debit-note'
-  | 'offer-slip'
   | 'payment-receipt'
-  | 'endorsement-certificate'
-  | 'credit-note';
+  | 'payment-voucher';
 
 export type WatermarkMode = 'none' | 'text' | 'image';
 export type SlotPosition = 'start' | 'middle' | 'end';
@@ -53,7 +56,7 @@ export interface DocumentTemplate {
 }
 
 export const DEFAULT_TEMPLATE: DocumentTemplate = {
-  previewDoc: 'debit-note',
+  previewDoc: 'bill',
   logo: null,
   showLogo: true,
   logoPosition: 'start',
@@ -80,91 +83,17 @@ export const DEFAULT_TEMPLATE: DocumentTemplate = {
   signaturePosition: 'left',
   signatureImage: null,
   signatoryName: 'Ama Mensah',
-  signatoryTitle: 'Head of Reinsurance',
+  signatoryTitle: 'Authorized Signatory',
   signatureRules: {
-    'debit-note': false,
-    'offer-slip': true,
-    'payment-receipt': false,
-    'endorsement-certificate': true,
+    payslip: false,
+    bill: false,
+    invoice: false,
     'credit-note': false,
+    'debit-note': false,
+    'payment-receipt': false,
+    'payment-voucher': false,
   },
 };
-
-export interface SampleDocument {
-  title: string;
-  ref: string;
-  rows: [string, string][];
-}
-
-export const SAMPLE_DOCUMENTS: Record<PreviewDoc, SampleDocument> = {
-  'debit-note': {
-    title: 'Debit Note',
-    ref: 'DN-2026-0042',
-    rows: [
-      ['Reinsured', 'ABC Insurance Ltd'],
-      ['Policy number', 'FAC/2026/0042'],
-      ['Class', 'Fire & Allied Perils'],
-      ['Period', '01 Jan 2026 – 31 Dec 2026'],
-      ['Currency', 'GHS'],
-      ['100% gross premium', '1,200,000.00'],
-      ['25% facultative share', '300,000.00'],
-      ['Less commission 22.5%', '67,500.00'],
-      ['Net premium due', '232,500.00'],
-    ],
-  },
-  'offer-slip': {
-    title: 'Reinsurance Offer Slip',
-    ref: 'OS-2026-0042',
-    rows: [
-      ['Insured', 'ABC Manufacturing Plc'],
-      ['Class', 'Engineering – CAR'],
-      ['Total sum insured', 'GHS 8,000,000.00'],
-      ['Period', '01 Mar 2026 – 28 Feb 2027'],
-      ['Offered share', '15%'],
-      ['Premium at 100%', 'GHS 640,000.00'],
-      ['Your premium', 'GHS 96,000.00'],
-    ],
-  },
-  'payment-receipt': {
-    title: 'Payment Receipt',
-    ref: 'PR-2026-0117',
-    rows: [
-      ['Received from', 'ABC Insurance Ltd'],
-      ['In respect of', 'FAC/2026/0042 – Net premium'],
-      ['Amount', 'GHS 232,500.00'],
-      ['Method', 'Bank transfer'],
-      ['Value date', '14 Feb 2026'],
-      ['Reference', 'TRX-88213'],
-    ],
-  },
-  'endorsement-certificate': {
-    title: 'Endorsement Certificate',
-    ref: 'END/2026/0007',
-    rows: [
-      ['Endorsement no.', 'END/2026/0007'],
-      ['Effective date', '01 Jun 2026'],
-      ['Nature of change', 'Increase in sum insured'],
-      ['Revised sum insured', 'GHS 9,500,000.00'],
-      ['Revised share', '15%'],
-      ['Additional premium', 'GHS 18,000.00'],
-    ],
-  },
-  'credit-note': {
-    title: 'Credit Note',
-    ref: 'CN-2026-0042',
-    rows: [
-      ['Reinsurer', 'Continental Re'],
-      ['Policy number', 'FAC/2026/0042'],
-      ['Gross share premium', '300,000.00'],
-      ['Less commission 22.5%', '67,500.00'],
-      ['Net amount', '232,500.00'],
-    ],
-  },
-};
-
-export const PREVIEW_DOC_OPTIONS: { value: PreviewDoc; label: string }[] = (
-  Object.keys(SAMPLE_DOCUMENTS) as PreviewDoc[]
-).map((value) => ({ value, label: SAMPLE_DOCUMENTS[value].title }));
 
 export const SIGNATURE_POSITION_OPTIONS: { value: SignaturePosition; label: string }[] = [
   { value: 'left', label: 'Left' },

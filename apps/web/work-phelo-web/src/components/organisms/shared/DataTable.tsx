@@ -151,11 +151,10 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
                 position: 'fixed',
                 right: menuPos.right,
                 ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
-                width: 176,
                 gridTemplateRows: expanded ? '1fr' : '0fr',
                 opacity: expanded ? 1 : 0,
               }}
-              className="z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
+              className="z-50 grid w-max grid-cols-[max-content] transition-[grid-template-rows,opacity] duration-700 ease-in-out"
             >
               <div className={popupClass('min-h-0 overflow-hidden')}>
                 <div className="py-1">
@@ -168,7 +167,7 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
                         closeDropdown();
                       }}
                       className={cn(
-                        'w-full text-left px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
+                        'block w-full text-left whitespace-nowrap px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
                         action.danger
                           ? 'text-red-600'
                           : action.variant === 'success'
@@ -232,7 +231,7 @@ export function DataTable<T extends { id: string | number }>({
     <div className={cn('flex flex-col gap-3', noInternalScroll ? '' : 'flex-1 min-h-0 h-full')}>
       {/* Toolbar card */}
       {hasToolbar && (
-        <div className={cardClass('px-4 py-2 shrink-0')}>
+        <div className={cardClass('px-4 py-1 shrink-0')}>
           <div className="flex items-center gap-3 flex-wrap">
             {!searchAfterFilters && onSearch && (
               <div className="relative flex-1 min-w-52 max-w-sm">
@@ -242,7 +241,7 @@ export function DataTable<T extends { id: string | number }>({
                   placeholder={searchPlaceholder}
                   value={searchValue ?? undefined}
                   onChange={(e) => onSearch(e.target.value)}
-                  className={inputClass(undefined, 'pl-9 pr-4 py-2')}
+                  className={inputClass(undefined, 'pl-9 pr-4 py-1.5')}
                 />
               </div>
             )}
@@ -257,7 +256,7 @@ export function DataTable<T extends { id: string | number }>({
                   placeholder={searchPlaceholder}
                   value={searchValue ?? undefined}
                   onChange={(e) => onSearch(e.target.value)}
-                  className={inputClass(undefined, 'pl-9 pr-4 py-2')}
+                  className={inputClass(undefined, 'pl-9 pr-4 py-1.5')}
                 />
               </div>
             )}
@@ -266,7 +265,7 @@ export function DataTable<T extends { id: string | number }>({
               <div className="relative">
                 <select
                   onChange={(e) => onFilter(e.target.value)}
-                  className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-(--focus-ring,var(--color-gray-400)) bg-white"
+                  className="appearance-none pl-8 pr-8 py-1.5 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-(--focus-ring,var(--color-gray-400)) bg-white"
                 >
                   <option value="">Status</option>
                   {filterOptions.map((o) => (
@@ -364,7 +363,7 @@ export function DataTable<T extends { id: string | number }>({
                 )}
               />
               <div
-                className="relative grid gap-x-4 text-xs font-semibold text-(--table-header-text,var(--module-btn-bg,var(--color-brand))) uppercase tracking-wide px-6 py-3"
+                className="relative grid gap-x-4 text-xs font-semibold text-(--table-header-text,var(--module-btn-bg,var(--color-brand))) uppercase tracking-wide px-6 py-2"
                 style={{
                   gridTemplateColumns: [
                     ...columns.map((c) => c.width ?? '1fr'),
@@ -471,7 +470,7 @@ export function DataTable<T extends { id: string | number }>({
                       )}
                     />
                     <div
-                      className="relative grid gap-x-4 px-6 py-3 items-center text-sm text-gray-800"
+                      className="relative grid gap-x-4 px-6 py-1.5 items-center text-sm text-gray-800"
                       style={{
                         gridTemplateColumns: [
                           ...columns.map((c) => c.width ?? '1fr'),

@@ -7,32 +7,24 @@ import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SubledgerAccount, SubledgerType } from '@/types/accounting';
-import { useCreateSubledger, useEntityTypes, useUpdateSubledger } from '@/hooks';
+import { useCreateSubledger, useEntityTypes, useSubledgers, useUpdateSubledger } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
 interface AddEntityPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Pre-fills the entity name — e.g. with what the caller had already typed while
-   *  searching for a subledger that didn't exist yet. */
+
   initialName?: string;
-  /** Pins the entity to a specific control account instead of leaving it up to the user —
-   *  e.g. when creating one for a journal line that's already targeting that account. When
-   *  set, the Control Account field is shown read-only (must be paired with
-   *  `initialControlAccountLabel` for a readable display). */
+
   initialControlAccountId?: string;
   initialControlAccountLabel?: string;
-  /** Restricts the Entity Type dropdown to a subset — e.g. `['CUSTOMER', 'VENDOR']` for a
-   *  quick-add flow that shouldn't also offer Employee/Statutory/Other. Defaults to every
-   *  manually-creatable type. */
+
   allowedTypes?: SubledgerType[];
-  /** Fires with the newly created subledger after a successful save, before the panel
-   *  closes — lets a caller (e.g. a journal line picker) select it immediately instead of
-   *  making the user reopen the dropdown and search again. */
+
   onCreated?: (subledger: SubledgerAccount) => void;
-  /** Editing an existing entity instead of creating one. */
   entity?: SubledgerAccount | null;
 }
 
@@ -42,7 +34,9 @@ type FormValues = {
   type: string;
   controlAccountId: string;
   contactName: string;
+  phone: string;
   address: string;
+  description: string;
 };
 
 const DEFAULTS: FormValues = {
@@ -51,7 +45,9 @@ const DEFAULTS: FormValues = {
   type: '',
   controlAccountId: '',
   contactName: '',
+  phone: '',
   address: '',
+  description: '',
 };
 
 export function AddEntityPanel({
@@ -70,11 +66,22 @@ export function AddEntityPanel({
   const { mutateAsync: updateSubledger, isPending: isUpdating } = useUpdateSubledger();
   const isPending = isCreating || isUpdating;
   const { data: entityTypesData = [] } = useEntityTypes();
+  const { data: existingEntities = [] } = useSubledgers();
 
-  // Sourced from the tenant's own Entity Types list (Settings > Entities > Types), not a
-  // hardcoded set — Customer/Vendor come pre-seeded there; anything else must be created
-  // there first. Entities of any type here post through whichever account the Transaction
-  // Type Rule resolves at document creation — no control account is fixed on the entity.
+  // Suggests the next free code for a type: its ID prefix + the highest existing number for
+  // that prefix + 1 (e.g. SUP-0007). Still editable, and the backend stays the authority on
+  // uniqueness.
+  const nextCodeFor = (typeValue: string) => {
+    const prefix = entityTypesData.find((t) => t.name.trim().toUpperCase() === typeValue)?.code;
+    if (!prefix) return null;
+    const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`, 'i');
+    const highest = existingEntities.reduce((max, e) => {
+      const match = pattern.exec(e.code);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `${prefix}-${String(highest + 1).padStart(4, '0')}`;
+  };
+
   const typeOptions: SearchSelectOption[] = useMemo(() => {
     return entityTypesData
       .map((t) => ({ label: t.name, value: t.name.trim().toUpperCase() }))
@@ -86,11 +93,10 @@ export function AddEntityPanel({
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
-  // Seed the name and (when the caller already knows it) the control account each time the
-  // panel opens — or, when editing, the existing entity's own values.
   useEffect(() => {
     if (!isOpen) return;
     if (entity) {
@@ -100,7 +106,9 @@ export function AddEntityPanel({
         type: entity.type,
         controlAccountId: entity.controlAccountId ?? '',
         contactName: entity.contactName ?? '',
+        phone: entity.phone ?? '',
         address: entity.address ?? '',
+        description: entity.description ?? '',
       });
     } else {
       reset({
@@ -124,7 +132,9 @@ export function AddEntityPanel({
         type: data.type,
         controlAccountId: data.controlAccountId || undefined,
         contactName: data.contactName.trim() || undefined,
+        phone: data.phone || undefined,
         address: data.address.trim() || undefined,
+        description: data.description.trim() || undefined,
       };
       const subledger = entity
         ? await updateSubledger({ id: entity.id, ...payload })
@@ -154,7 +164,28 @@ export function AddEntityPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <Controller
+          name="type"
+          control={control}
+          rules={{ required: 'Entity type is required' }}
+          render={({ field }) => (
+            <SearchSelect
+              label="Entity Type"
+              placeholder="Select type…"
+              options={typeOptions}
+              value={field.value}
+              onChange={(value) => {
+                field.onChange(value);
+                if (isEditing) return;
+                const code = nextCodeFor(value);
+                if (code) setValue('code', code, { shouldValidate: true });
+              }}
+              error={errors.type?.message}
+            />
+          )}
+        />
+
         <FormField
           label="Entity Code"
           registration={register('code', { required: 'Entity code is required' })}
@@ -169,40 +200,44 @@ export function AddEntityPanel({
           placeholder="e.g. Acme Supplies Ltd."
         />
 
-        <Controller
-          name="type"
-          control={control}
-          rules={{ required: 'Entity type is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Entity Type"
-              placeholder="Select type…"
-              options={typeOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.type?.message}
-            />
-          )}
-        />
-
         {initialControlAccountId && (
           <Input label="Control Account" value={initialControlAccountLabel ?? ''} readOnly />
         )}
 
         <FormField
-          label="Contact"
+          label="Contact Person"
           registration={register('contactName')}
           error={errors.contactName}
           placeholder="e.g. Jane Doe"
         />
 
+        <Controller
+          control={control}
+          name="phone"
+          render={({ field, fieldState }) => (
+            <PhoneInput
+              label="Contact"
+              value={field.value}
+              onChange={field.onChange}
+              error={fieldState.error?.message}
+            />
+          )}
+        />
+
         <FormField
           label="Address"
-          type="textarea"
-          rows={3}
           registration={register('address')}
           error={errors.address}
           placeholder="Optional address"
+        />
+
+        <FormField
+          label="Description"
+          type="textarea"
+          rows={3}
+          registration={register('description')}
+          error={errors.description}
+          placeholder="Optional description"
         />
       </div>
     </SidePanel>

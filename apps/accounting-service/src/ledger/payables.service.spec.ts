@@ -133,6 +133,7 @@ const setup = () => {
         tenantId: actor.tenantId,
         code: 'BILL',
         category: TransactionTypeCategory.PAYABLE,
+        isLinked: false,
       }),
     },
     transactionTypeRule: {
@@ -369,6 +370,172 @@ describe('PayablesService', () => {
         }) as unknown,
       }),
     );
+  });
+
+  describe('linked transaction types (debit notes)', () => {
+    const linkedType = {
+      id: transactionTypeId,
+      tenantId: actor.tenantId,
+      name: 'Debit Note',
+      code: 'DN',
+      category: TransactionTypeCategory.PAYABLE,
+      isLinked: true,
+    };
+    // Written in the debit note's own direction: AR credited, revenue debited.
+    const linkedRule = (apAccountId = apControlAccountId) => ({
+      id: 'rule-cn',
+      tenantId: actor.tenantId,
+      transactionTypeId,
+      lines: [
+        {
+          id: 'l1',
+          direction: PostingDirection.CR,
+          accountId: offsetAccountId,
+          taxTypeId: null,
+          taxType: null,
+        },
+        {
+          id: 'l2',
+          direction: PostingDirection.DR,
+          accountId: apAccountId,
+          taxTypeId: null,
+          taxType: null,
+        },
+      ],
+    });
+    const dto = {
+      vendorId: vendor.id,
+      documentDate: '2026-08-12',
+      currency: 'GHS',
+      amount: 200,
+      quantity: 2,
+      unitPrice: 100,
+      transactionTypeId,
+      originalBillId: 'bill-1',
+    };
+    const linkedSetup = (apAccountId?: string) => {
+      const ctx = setup();
+      ctx.prisma.transactionType.findFirst.mockResolvedValue(linkedType);
+      ctx.prisma.transactionTypeRule.findFirst.mockResolvedValue(
+        linkedRule(apAccountId),
+      );
+      return ctx;
+    };
+
+    it('creates a debit note from the rule, linked to the original bill', async () => {
+      const { prisma, service } = linkedSetup();
+
+      await service.createCreditNote(actor, dto);
+
+      expect(prisma.accountingPayableDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            documentType: AccountingPayableDocumentType.CREDIT_NOTE,
+            originalBillId: 'bill-1',
+            transactionTypeId,
+            apAccountId: apControlAccountId,
+            offsetGlAccountId: offsetAccountId,
+            subtotalAmount: new Prisma.Decimal(200),
+            totalAmount: new Prisma.Decimal(200),
+            quantity: 2,
+            unitPrice: 100,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('requires an original bill', async () => {
+      const { service } = linkedSetup();
+
+      await expect(
+        service.createCreditNote(actor, {
+          ...dto,
+          originalBillId: undefined,
+        }),
+      ).rejects.toThrow('must reference an original bill');
+    });
+
+    it('rejects a debit note larger than the bill outstanding balance', async () => {
+      const { prisma, service } = linkedSetup();
+      prisma.accountingPayableAllocation.aggregate.mockResolvedValue({
+        _sum: { amount: new Prisma.Decimal(900) },
+      });
+
+      await expect(service.createCreditNote(actor, dto)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('rejects a bill that uses a different payable account', async () => {
+      const { service } = linkedSetup('other-ap-account');
+
+      await expect(service.createCreditNote(actor, dto)).rejects.toThrow(
+        'different payable account',
+      );
+    });
+
+    it('rejects an amount that does not match quantity × unit price', async () => {
+      const { service } = linkedSetup();
+
+      await expect(
+        service.createCreditNote(actor, { ...dto, amount: 250 }),
+      ).rejects.toThrow('amount must equal quantity');
+    });
+
+    it('does not let a linked type create a plain bill', async () => {
+      const { service } = linkedSetup();
+
+      await expect(
+        service.createBill(actor, {
+          vendorId: vendor.id,
+          documentDate: '2026-08-12',
+          currency: 'GHS',
+          amount: 200,
+          transactionTypeId,
+        }),
+      ).rejects.toThrow('must reference an original bill');
+    });
+
+    it('does not let a plain type create a debit note', async () => {
+      const { service } = setup();
+
+      await expect(service.createCreditNote(actor, dto)).rejects.toThrow(
+        'not a linked transaction type',
+      );
+    });
+  });
+
+  describe('payment state with credit notes', () => {
+    const balanceWith = async (payments: number, credits: number) => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableAllocation.aggregate
+        .mockResolvedValueOnce({
+          _sum: { amount: new Prisma.Decimal(payments) },
+        })
+        .mockResolvedValueOnce({
+          _sum: { amount: new Prisma.Decimal(credits) },
+        });
+      return service.billBalance(actor.tenantId, 'bill-1');
+    };
+
+    it('leaves a bill Unpaid when only a debit note has been applied', async () => {
+      const balance = await balanceWith(0, 400);
+
+      expect(balance.outstandingAmount).toBe('600.0000');
+      expect(balance.paymentState).toBe('OPEN');
+    });
+
+    it('is Partially Paid once a real payment has been applied', async () => {
+      const balance = await balanceWith(300, 400);
+
+      expect(balance.paymentState).toBe('PARTIALLY_PAID');
+    });
+
+    it('is Paid when debit notes and payments clear the whole bill', async () => {
+      const balance = await balanceWith(600, 400);
+
+      expect(balance.paymentState).toBe('PAID');
+    });
   });
 
   it('posts a bill as Dr offset account and Cr AP control', async () => {

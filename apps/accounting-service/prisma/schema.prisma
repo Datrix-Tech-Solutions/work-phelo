@@ -344,6 +344,7 @@ model GLAccount {
   payablePaymentApAccounts AccountingPayablePayment[] @relation("PayablePaymentApAccount")
   budgetLines       BudgetLine[]
   recurringLines    RecurringJournalLine[]
+  sourceLedgerEntries SourceLedgerEntry[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -474,7 +475,9 @@ model SubledgerAccount {
   controlAccountId String?
   currency         String?
   contactName      String?
+  phone            String?
   address          String?
+  description      String?
   status           RecordStatus          @default(ACTIVE)
   createdByUserId  String
   updatedByUserId  String
@@ -646,6 +649,7 @@ model JournalEntry {
   receivableReversalDocument  AccountingReceivableDocument? @relation("ReceivableReversalJournal")
   payablePostedDocument       AccountingPayableDocument?    @relation("PayablePostedJournal")
   payableReversalDocument     AccountingPayableDocument?    @relation("PayableReversalJournal")
+  sourceLedgerEntries         SourceLedgerEntry[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, journalNumber])
@@ -678,6 +682,7 @@ model AccountingCashAccount {
   transactions    CashbookTransaction[]     @relation("CashbookCashAccount")
   transferIns     CashbookTransaction[]     @relation("CashbookDestinationCashAccount")
   reconciliations BankReconciliation[]
+  defaultForRules TransactionTypeRule[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
@@ -758,6 +763,9 @@ model CashbookTransaction {
   transactionType          CashbookTransactionType
   direction                CashbookDirection
   amount                   Decimal                      @db.Decimal(20, 4)
+  /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
+  quantity                 Decimal?                     @db.Decimal(20, 4)
+  unitPrice                Decimal?                     @db.Decimal(20, 4)
   currency                 String
   transactionDate          DateTime
   settlementMethod         AccountingSettlementMethod
@@ -766,8 +774,13 @@ model CashbookTransaction {
   counterpartyId           String?
   externalReference        String?
   description              String
+  /// Set only for direct entries made from the Transactions page (Receipt/Payment types):
+  /// <TransactionType code><YY>-<00001>, e.g. RCPT26-00001. Null for transfers, charges,
+  /// adjustments, reversals, integration-event postings and rows created before it existed.
+  transactionNumber        String?
   offsetGlAccountId        String?
   offsetSubledgerAccountId String?
+  chargeAmount             Decimal?                     @db.Decimal(20, 4)
   sourceEventInboxId       String?
   sourceModule             String?
   sourceEventType          String?
@@ -798,7 +811,9 @@ model CashbookTransaction {
   bankStatementMatches     BankStatementLine[]          @relation("BankStatementLineMatchedCashbook")
   receivableReceipt        AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
   payablePayment           AccountingPayablePayment?    @relation("PayableCashbookTransaction")
+  sourceLedgerAllocations  SourceLedgerAllocation[]
 
+  @@unique([tenantId, transactionNumber])
   @@unique([id, tenantId])
   @@unique([sourceEventInboxId, tenantId])
   @@unique([postedJournalEntryId, tenantId])
@@ -827,18 +842,35 @@ model TransactionType {
   category        TransactionTypeCategory
   businessRoles   String[]                 @default([])
   allowedDocument String?
+  /// Legacy free-text tag — superseded by sourceTypeId below, kept only so existing rows
+  /// aren't silently dropped. Never read by the New Transaction source-picker dropdown.
   source          String?
+  /// A rule is not the only thing that makes a type usable on New Transaction — a type
+  /// linked to a source is usable too, since its offset account/amount come from picking
+  /// one of that source's open SourceLedgerEntry items instead of a preconfigured rule line.
+  sourceTypeId    String?
   description     String?
   isSystemDefault Boolean                  @default(false)
+  /// When true, this Receivable/Payable type posts a single-line direct entry straight
+  /// to Cashbook (New Transaction opens the cash/bank + offset account form and calls
+  /// /cashbook/receipts or /cashbook/payments) instead of creating an Invoice/Bill.
+  postsToCashbook Boolean                  @default(false)
+  /// Receivable/Payable types only (never cashbook-posted): a linked type creates a Credit
+  /// Note (receivable) / Debit Note (payable) that must reference an original posted
+  /// invoice/bill and reduces its outstanding balance. Its rule is written in the note's own
+  /// direction, so the control (AR/AP) line is the opposite side to a normal invoice/bill.
+  isLinked        Boolean                  @default(false)
   createdByUserId String
   updatedByUserId String
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
   rule            TransactionTypeRule?
+  sourceType      SourceType?              @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
   @@index([tenantId, category])
+  @@index([tenantId, sourceTypeId])
   @@schema("accounting")
 }
 
@@ -871,19 +903,25 @@ model TaxType {
 /// is derived (sum of the other side) rather than entered, so it absorbs however many
 /// tax lines the other side carries. See AccountingMasterDataService for the posting math.
 model TransactionTypeRule {
-  id                String                    @id @default(uuid())
-  tenantId          String
-  transactionTypeId String
-  description       String?
-  createdByUserId   String
-  updatedByUserId   String
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
-  transactionType   TransactionType           @relation(fields: [transactionTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  lines             TransactionTypeRuleLine[]
+  id                    String                    @id @default(uuid())
+  tenantId              String
+  transactionTypeId     String
+  description           String?
+  /// Only meaningful for postsToCashbook types: the cash/bank account pre-selected on
+  /// the New Transaction form for this type, still changeable there. Null means the
+  /// form starts with no cash account chosen.
+  defaultCashAccountId  String?
+  createdByUserId       String
+  updatedByUserId       String
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  transactionType       TransactionType           @relation(fields: [transactionTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  defaultCashAccount    AccountingCashAccount?    @relation(fields: [defaultCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  lines                 TransactionTypeRuleLine[]
 
   @@unique([id, tenantId])
   @@unique([transactionTypeId, tenantId])
+  @@index([tenantId, defaultCashAccountId])
   @@schema("accounting")
 }
 
@@ -920,6 +958,9 @@ model AccountingReceivableDocument {
   currency               String
   exchangeRate           Decimal?                         @db.Decimal(18, 8)
   subtotalAmount         Decimal                          @db.Decimal(20, 4)
+  /// Optional descriptive breakdown of the subtotal: subtotalAmount = quantity × unitPrice (2dp).
+  quantity               Decimal?                         @db.Decimal(20, 4)
+  unitPrice              Decimal?                         @db.Decimal(20, 4)
   taxAmount              Decimal                          @default(0) @db.Decimal(20, 4)
   totalAmount            Decimal                          @db.Decimal(20, 4)
   description            String?
@@ -1071,6 +1112,9 @@ model AccountingPayableDocument {
   currency               String
   exchangeRate           Decimal?                      @db.Decimal(18, 8)
   subtotalAmount         Decimal                       @db.Decimal(20, 4)
+  /// Optional descriptive breakdown of the subtotal: subtotalAmount = quantity × unitPrice (2dp).
+  quantity               Decimal?                         @db.Decimal(20, 4)
+  unitPrice              Decimal?                         @db.Decimal(20, 4)
   taxAmount              Decimal                       @default(0) @db.Decimal(20, 4)
   totalAmount            Decimal                       @db.Decimal(20, 4)
   description            String?
@@ -1316,6 +1360,9 @@ model EntityType {
   id                String   @id @default(uuid())
   tenantId          String
   name              String
+  /// Short ID/prefix (e.g. "SUP") the entity form builds Entity Codes from. Null for types
+  /// that predate it (e.g. auto-created Employee) until someone sets one.
+  code              String?
   isSystem          Boolean  @default(false)
   createdByUserId   String
   updatedByUserId   String
@@ -1324,6 +1371,94 @@ model EntityType {
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
+  @@unique([tenantId, code])
+  @@schema("accounting")
+}
+
+enum SourceModule {
+  HR
+  MARKETING
+  ACCOUNTING
+  RECRUITMENT
+  OPERATIONS
+
+  @@schema("accounting")
+}
+
+// Never created directly from the accounting settings UI — a row only ever comes into
+// existence as a side effect of the owning module's own integration setup completing
+// (e.g. HR's payroll GL-account seed calls SourceTypesService.ensureExists('HR', 'Payroll')).
+// Accounting's Source Types page only lists/links/unlinks what's already here.
+model SourceType {
+  id           String              @id @default(uuid())
+  tenantId     String
+  module       SourceModule
+  name         String
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  ledgerEntries SourceLedgerEntry[]
+  transactionTypes TransactionType[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, module, name])
+  @@schema("accounting")
+}
+
+/// A generic open item created alongside a journal a module integration already posted (e.g.
+/// payroll's accrual) — never generates its own journal. Settling it (SourceLedgerAllocation)
+/// reuses an ordinary cashbook Payment/Receipt, not a new posting mechanism. One entry per
+/// distinct thing the source wants tracked independently — e.g. payroll creates one per
+/// liability line (Net Pay, Income Tax, Social Security, ...) since each settles on its own
+/// schedule, not one lump entry per accrual journal.
+model SourceLedgerEntry {
+  id             String   @id @default(uuid())
+  tenantId       String
+  sourceTypeId   String
+  glAccountId    String
+  journalEntryId String
+  /// Traces back to the record that caused this entry to exist (e.g. a payroll run id) —
+  /// informational only, not a hard FK since it belongs to another service's data.
+  sourceRecordId String?
+  description    String
+  amount         Decimal  @db.Decimal(20, 4)
+  currency       String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sourceType  SourceType               @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  glAccount   GLAccount                @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  journalEntry JournalEntry            @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  allocations SourceLedgerAllocation[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, sourceTypeId])
+  @@index([tenantId, journalEntryId])
+  @@schema("accounting")
+}
+
+/// Links a SourceLedgerEntry to the ordinary cashbook Payment/Receipt that settled some or all
+/// of it — mirrors AccountingPayableAllocation/AccountingReceivableAllocation's pattern
+/// (balance always computed live as amount minus sum of non-reversed allocations, never
+/// stored), just scoped to source ledger items instead of AP/AR trade documents.
+model SourceLedgerAllocation {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  sourceLedgerEntryId   String
+  cashbookTransactionId String
+  amount                Decimal   @db.Decimal(20, 4)
+  allocatedAt           DateTime  @default(now())
+  allocatedByUserId     String
+  reversedAt            DateTime?
+  reversedByUserId      String?
+  reversalReason        String?
+
+  sourceLedgerEntry   SourceLedgerEntry   @relation(fields: [sourceLedgerEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  cashbookTransaction CashbookTransaction @relation(fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, sourceLedgerEntryId])
+  @@index([tenantId, cashbookTransactionId])
   @@schema("accounting")
 }
 

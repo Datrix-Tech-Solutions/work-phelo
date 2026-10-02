@@ -25,6 +25,9 @@ export * from './hr/useProjects';
 export * from './useModuleTransition';
 export * from './useDropdownPosition';
 export * from './marketing/useGeocode';
+export * from './marketing/usePipelineStages';
+export * from './marketing/useProspectingSettings';
+export * from './marketing/useProspects';
 
 // Reinsurance hooks
 export * from './reinsurance/useFacultatives';
@@ -58,6 +61,7 @@ export * from './accounting/useCostCentres';
 export * from './accounting/useBudgets';
 export * from './accounting/useTransactionTypes';
 export * from './accounting/useSourceTypes';
+export * from './accounting/useSourceLedger';
 export * from './accounting/useTransactionTypeRules';
 export * from './accounting/useTaxTypes';
 export * from './accounting/useCashAccounts';

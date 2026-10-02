@@ -267,8 +267,22 @@ export interface TransactionTypeDefinition {
   category: TransactionTypeCategory;
   businessRoles: string[];
   allowedDocument: string | null;
+  /** Legacy free-text tag — superseded by sourceTypeId below. */
   source: string | null;
+  /** Links this type to a Source (Settings > Source Types) — a type with a source is
+   *  usable on New Transaction without a rule: its offset account/amount come from
+   *  picking one of that source's open items instead of a preconfigured rule line. */
+  sourceTypeId: string | null;
   description: string | null;
+  /** Receivable/Payable types only: when true, this type posts a single-line direct
+   *  entry straight to Cashbook (via the New Transaction form) instead of an
+   *  Invoice/Bill. */
+  postsToCashbook: boolean;
+  /** Receivable/Payable types only: a linked type is a credit note (receivable) or debit
+   *  note (payable) — it must reference an original posted invoice/bill and reduces its
+   *  outstanding balance. Its rule is written in the note's own direction. */
+  isLinked: boolean;
+  createdAt: string;
   rulesCount: number;
 }
 
@@ -279,23 +293,117 @@ export interface CreateTransactionTypePayload {
   businessRoles?: string[];
   allowedDocument?: string;
   source?: string;
+  sourceTypeId?: string;
   description?: string;
+  postsToCashbook?: boolean;
+  isLinked?: boolean;
 }
 
 export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>;
 
+/** The module a source type belongs to. Fixed to real product modules — this is never a
+ *  free-text tag, since it's meant to reflect an actual integration, not an arbitrary label. */
+export type SourceModule = 'HR' | 'MARKETING' | 'ACCOUNTING' | 'RECRUITMENT' | 'OPERATIONS';
+
+/** A source type is never created from this side — it's populated automatically once a
+ *  module's own integration setup with Accounting is completed (e.g. HR's "Link Payroll to
+ *  Accounting" toggle is what creates the HR/Payroll entry). This side can only link/unlink it. */
 export interface SourceTypeDefinition {
   id: string;
+  module: SourceModule;
   name: string;
-  description: string | null;
+  isActive: boolean;
+  /** Posted source ledger entries this source has ever had, and how many of those are
+   *  now fully paid. */
+  entryCount: number;
+  paidCount: number;
 }
 
-export interface CreateSourceTypePayload {
+export interface SeedPayrollAccountItem {
+  key: string;
   name: string;
+  include: boolean;
+}
+
+export interface SeedPayrollAccountsPayload {
+  items: SeedPayrollAccountItem[];
+}
+
+export interface SeedPayrollAccountsResult {
+  accounts: {
+    key: string;
+    code: string;
+    name: string;
+    status: 'created' | 'existing' | 'excluded';
+  }[];
+  entityType: { id: string; name: string };
+  entity: { id: string; code: string; name: string };
+  sourceType: { id: string; module: SourceModule; name: string };
+}
+
+export type SourceLedgerPaymentState = 'OPEN' | 'PARTIALLY_PAID' | 'PAID';
+export type SourceLedgerStatusFilter = 'ALL' | 'PAID' | 'UNPAID';
+export type SourceLedgerSortBy = 'eventDate' | 'paymentDate';
+
+export interface SourceLedgerAllocation {
+  id: string;
+  amount: number;
+  /** When this specific payment was made — not to be confused with the entry's own event
+   *  date (`createdAt`, when the accrual/liability was created). */
+  allocatedAt: string;
+  cashbookTransaction: {
+    id: string;
+    reference: string | null;
+    description: string;
+    transactionDate: string;
+  };
+}
+
+/** An open item created alongside a journal a module integration already posted (e.g.
+ *  payroll's accrual) — never generates its own journal. Only ever appears here once its
+ *  linked journal is actually POSTED. */
+export interface SourceLedgerEntry {
+  id: string;
+  sourceRecordId: string | null;
+  description: string;
+  amount: number;
+  outstandingAmount: number;
+  currency: string;
+  createdAt: string;
+  /** Most recent non-reversed payment against this entry, or null if it has none yet. */
+  lastPaymentAt: string | null;
+  sourceType: { id: string; module: SourceModule; name: string };
+  glAccount: { id: string; code: string; name: string };
+  journalEntry: { id: string; journalNumber: string };
+  paymentState: SourceLedgerPaymentState;
+  allocations: SourceLedgerAllocation[];
+}
+
+export interface SourceLedgerQuery {
+  sourceTypeId?: string;
+  status?: SourceLedgerStatusFilter;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: SourceLedgerSortBy;
+  sortDir?: 'asc' | 'desc';
+  limit?: number;
+}
+
+export interface SourceLedgerSummary {
+  entryCount: number;
+  paidCount: number;
+  totalAmount: number;
+  totalOutstanding: number;
+}
+
+export interface MakeSourceLedgerPaymentPayload {
+  cashAccountId: string;
+  transactionTypeId?: string;
+  amount: number;
+  transactionDate: string;
+  settlementMethod: string;
   description?: string;
 }
-
-export type UpdateSourceTypePayload = Partial<CreateSourceTypePayload>;
 
 export interface TaxType {
   id: string;
@@ -336,6 +444,15 @@ export interface TransactionTypeRule {
   id: string;
   transactionTypeId: string;
   description: string | null;
+  /** Cashbook-posted RCPT/PMNT types only: the cash/bank account pre-selected on the
+   *  New Transaction form for this type, still changeable there. */
+  defaultCashAccountId: string | null;
+  defaultCashAccount: {
+    id: string;
+    name: string;
+    accountKind: AccountingCashAccountKind;
+    currency: string;
+  } | null;
   lines: TransactionTypeRuleLine[];
 }
 
@@ -350,11 +467,13 @@ export interface TransactionTypeRuleLineInput {
 export interface CreateTransactionTypeRulePayload {
   transactionTypeId: string;
   description?: string;
+  defaultCashAccountId?: string;
   lines: TransactionTypeRuleLineInput[];
 }
 
 export interface UpdateTransactionTypeRulePayload {
   description?: string;
+  defaultCashAccountId?: string;
   lines?: TransactionTypeRuleLineInput[];
 }
 
@@ -796,6 +915,11 @@ export interface AccountingTradePartyRef {
   code: string;
   name: string;
   currency: string;
+  /** Entity type key (e.g. "VENDOR"). Present on documents, not on every party ref. */
+  type?: string;
+  contactName?: string | null;
+  phone?: string | null;
+  address?: string | null;
 }
 
 interface AccountingTradeGLAccountRef {
@@ -828,6 +952,9 @@ export interface AccountingTradeDocument {
   currency: string;
   exchangeRate: string | null;
   subtotalAmount: string;
+  /** Present when the transaction was entered as quantity × unit price. */
+  quantity: string | null;
+  unitPrice: string | null;
   taxAmount: string;
   totalAmount: string;
   description: string | null;
@@ -843,6 +970,9 @@ export interface AccountingTradeDocument {
   originalDocumentId: string | null;
   status: AccountingTradeDocumentStatus;
   paymentState: AccountingTradeDocumentPaymentState;
+  /** What is still owed on a posted document, after payments and credit/debit notes.
+   *  Only present on list rows. */
+  outstandingAmount: string | null;
   createdAt: string;
   updatedAt: string;
   postedAt: string | null;
@@ -883,8 +1013,11 @@ export interface CreateTradeInvoicePayload {
   documentDate: string;
   dueDate?: string;
   currency: string;
-  /** The subtotal, before any tax lines the rule adds on top. */
+  /** The subtotal (quantity × unitPrice, rounded to 2 decimals), before any tax lines the
+   *  rule adds on top. */
   amount: number;
+  quantity?: number;
+  unitPrice?: number;
   exchangeRate?: number;
   /** The Receivable/Payable-category Transaction Type driving this document — its
    *  Rule resolves the offset account and any tax lines. A Rule must exist for it. */
@@ -936,10 +1069,18 @@ export interface CreateTradeCreditNotePayload {
   documentDate: string;
   currency: string;
   amount: number;
-  offsetGlAccountId: string;
+  /** Manual path only — omitted when a linked `transactionTypeId` drives the posting. */
+  offsetGlAccountId?: string;
   /** Posts to the AR (Receivable) or AP (Payable) account, whichever this side is —
-   *  manually picked here since credit notes are not yet Rule-driven. */
-  controlAccountId: string;
+   *  manually picked on the manual path only. */
+  controlAccountId?: string;
+  /** A linked Receivable/Payable Transaction Type: the rule resolves the accounts and tax
+   *  lines, and `originalDocumentId` is then required. */
+  transactionTypeId?: string;
+  quantity?: number;
+  unitPrice?: number;
+  selectedTaxTypeIds?: string[];
+  costCentreId?: string;
   originalDocumentId?: string;
   description?: string;
   externalReference?: string;
@@ -1137,6 +1278,9 @@ export interface CashbookTransaction {
   destinationCashAccountId: string | null;
   transactionType: CashbookTransactionType;
   direction: CashbookDirection;
+  /** Generated ID for a direct Receipt/Payment made from the Transactions page
+   *  (e.g. RCPT26-00001). Null for older rows and non-transaction cashbook entries. */
+  transactionNumber: string | null;
   amount: string;
   currency: string;
   transactionDate: string;
@@ -1148,6 +1292,7 @@ export interface CashbookTransaction {
   description: string;
   offsetGlAccountId: string | null;
   offsetSubledgerAccountId: string | null;
+  chargeAmount: string | null;
   sourceEventInboxId: string | null;
   sourceModule: string | null;
   sourceEventType: string | null;
@@ -1189,7 +1334,12 @@ export interface QueryCashbookParams {
 
 export interface CreateCashbookEntryPayload {
   cashAccountId: string;
+  /** The Transaction Type the entry is made under — its code builds the transaction number. */
+  transactionTypeId?: string;
+  /** quantity × unitPrice, rounded to 2 decimals. */
   amount: number;
+  quantity?: number;
+  unitPrice?: number;
   currency: string;
   transactionDate: string;
   settlementMethod: AccountingCashbookSettlementMethod;
@@ -1216,6 +1366,8 @@ export interface CreateCashbookTransferPayload {
   exchangeRate?: number;
   reference?: string;
   description: string;
+  chargeAmount?: number;
+  chargeGlAccountId?: string;
 }
 
 export interface ReverseCashbookTransactionPayload {
@@ -1261,6 +1413,8 @@ export const SUBLEDGER_TYPE_LABELS: Record<SubledgerType, string> = {
 export interface EntityType {
   id: string;
   name: string;
+  /** Short ID/prefix (e.g. "SUP") used to build the Entity ID on the entity form. */
+  code: string | null;
   isSystem: boolean;
   entityCount: number;
   createdAt: string;
@@ -1269,6 +1423,7 @@ export interface EntityType {
 
 export interface CreateEntityTypePayload {
   name: string;
+  code: string;
 }
 
 export type UpdateEntityTypePayload = Partial<CreateEntityTypePayload>;
@@ -1293,7 +1448,9 @@ export interface SubledgerAccount {
   } | null;
   currency: string | null;
   contactName: string | null;
+  phone: string | null;
   address: string | null;
+  description: string | null;
   status: GLAccountStatus;
   balance: AccountingSubledgerBalance;
   createdAt: string;
@@ -1310,7 +1467,9 @@ export interface CreateSubledgerAccountPayload {
   controlAccountId?: string;
   currency?: string;
   contactName?: string;
+  phone?: string;
   address?: string;
+  description?: string;
 }
 
 export type UpdateSubledgerAccountPayload = Partial<CreateSubledgerAccountPayload>;

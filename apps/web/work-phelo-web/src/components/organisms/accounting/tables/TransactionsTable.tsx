@@ -3,18 +3,26 @@
 import { useMemo, useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import { TypeChip } from '@/components/atoms/TypeChip';
+import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
 import { TableButton } from '@/components/atoms/TableButton';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Icons } from '@/components/atoms/icons';
+import {
+  DocumentPreviewPanel,
+  type DocumentPreviewTarget,
+} from '@/components/organisms/accounting/panels/DocumentPreviewPanel';
+import { isAccountingDocumentKey, type AccountingDocumentKey } from '@/lib/accounting/documents';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
   AccountingTradeDocument,
   AccountingTradeDocumentPaymentState,
   AccountingTradeDocumentStatus,
+  CashbookTransaction,
+  CashbookTransactionType,
   TransactionTypeDefinition,
 } from '@/types/accounting';
 import {
+  useCashbookTransactions,
   usePayableBills,
   usePayableCreditNotes,
   useReceivableCreditNotes,
@@ -22,6 +30,7 @@ import {
   useTransactionTypes,
 } from '@/hooks';
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
+import { CashbookTransactionDetailPanel } from '@/components/organisms/accounting/panels/CashbookTransactionDetailPanel';
 import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
 import { BulkPaymentPanel } from '@/components/organisms/accounting/panels/BulkPaymentPanel';
@@ -32,6 +41,8 @@ import {
 
 const PAGE_SIZE = 10;
 
+// Documents and plain cashbook entries (Receipt/Payment/Charge/Adjustment/Transfer) share the
+// exact same status enum (DRAFT/POSTED/REVERSED), so one map covers both.
 const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral' | 'danger'> = {
   DRAFT: 'neutral',
   POSTED: 'success',
@@ -52,6 +63,41 @@ const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> =
   OPEN: 'Unpaid',
 };
 
+// A credit/debit note is never "paid" — its state is how much of it has been applied
+// against the invoice/bill it reduces.
+const CREDIT_NOTE_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
+  DRAFT: 'Draft',
+  REVERSED: 'Reversed',
+  PAID: 'Applied',
+  PARTIALLY_PAID: 'Partly Applied',
+  OPEN: 'Unapplied',
+};
+
+const CASHBOOK_TYPE_LABEL: Record<CashbookTransactionType, string> = {
+  RECEIPT: 'Receipt',
+  PAYMENT: 'Payment',
+  TRANSFER: 'Transfer',
+  CHARGE: 'Charge',
+  ADJUSTMENT: 'Adjustment',
+};
+
+const CASHBOOK_TYPE_CHIP_COLOR: Record<CashbookTransactionType, TypeChipColor> = {
+  RECEIPT: 'green',
+  PAYMENT: 'red',
+  TRANSFER: 'purple',
+  CHARGE: 'amber',
+  ADJUSTMENT: 'gray',
+};
+
+// A direct cashbook entry's "commit it" action reads as Receive Payment/Make Payment (money
+// in/out), matching the same wording used for AP/AR documents — "Post" is only kept for a
+// Transfer, which isn't a payment either way.
+function cashbookActionLabel(direction: CashbookTransaction['direction']) {
+  if (direction === 'INFLOW') return 'Receive Payment';
+  if (direction === 'OUTFLOW') return 'Make Payment';
+  return 'Post';
+}
+
 const STATUS_FILTER_OPTIONS: SearchSelectOption[] = [
   { value: 'DRAFT', label: 'Pending' },
   { value: 'POSTED', label: 'Posted' },
@@ -61,6 +107,7 @@ const STATUS_FILTER_OPTIONS: SearchSelectOption[] = [
 const TYPE_FILTER_OPTIONS: SearchSelectOption[] = [
   { value: 'RECEIVABLE', label: 'Receivable' },
   { value: 'PAYABLE', label: 'Payable' },
+  { value: 'CASHBOOK', label: 'Cashbook' },
 ];
 
 function fmtDate(iso: string | null) {
@@ -77,12 +124,103 @@ function fmtAmount(amount: string, currency: string) {
   return `${currency} ${Number.isFinite(value) ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amount}`;
 }
 
+/** A row is either an AP/AR trade document or a plain cashbook entry — the two are
+ *  conceptually different (a document tracks its own payment state; a cashbook entry's
+ *  posting IS its settlement) but belong in one merged, sortable/filterable list since both
+ *  are "transactions" to a tenant. Flattened to one shape so columns don't need to branch
+ *  on kind for every field, only for the handful that genuinely differ. */
+interface UnifiedTransactionRow {
+  id: string;
+  kind: 'document' | 'cashbook';
+  transactionNumber: string;
+  date: string;
+  entityLabel: string;
+  /** The original invoice/bill a credit/debit note reduces, when it has one. */
+  linkedTo: string | null;
+  subtotalAmount: string | null;
+  taxAmount: string | null;
+  totalAmount: string;
+  currency: string;
+  typeLabel: string;
+  typeColor: TypeChipColor;
+  filterSide: 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK';
+  status: AccountingTradeDocumentStatus;
+  paymentStateLabel: string | null;
+  /** The printable document this row's Transaction Type allows, if any. */
+  documentKey: AccountingDocumentKey | null;
+  createdAt: string;
+  document?: AccountingTradeDocument;
+  cashbook?: CashbookTransaction;
+}
+
+function toDocumentRow(
+  doc: AccountingTradeDocument,
+  documentKeyByTypeId: Map<string, AccountingDocumentKey>,
+): UnifiedTransactionRow {
+  return {
+    id: doc.id,
+    kind: 'document',
+    transactionNumber: doc.documentNumber,
+    date: doc.documentDate,
+    entityLabel: doc.party.name,
+    linkedTo: doc.originalDocument?.documentNumber ?? null,
+    subtotalAmount: doc.subtotalAmount,
+    taxAmount: doc.taxAmount,
+    totalAmount: doc.totalAmount,
+    currency: doc.currency,
+    typeLabel: TRANSACTION_TYPE_CATEGORY_LABEL[doc.side],
+    typeColor: TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[doc.side],
+    filterSide: doc.side,
+    status: doc.status,
+    paymentStateLabel:
+      doc.status !== 'DRAFT'
+        ? (doc.documentType === 'CREDIT_NOTE' ? CREDIT_NOTE_STATE_LABEL : PAYMENT_STATE_LABEL)[
+            doc.paymentState
+          ]
+        : null,
+    documentKey: doc.transactionTypeId
+      ? (documentKeyByTypeId.get(doc.transactionTypeId) ?? null)
+      : null,
+    createdAt: doc.createdAt,
+    document: doc,
+  };
+}
+
+function toCashbookRow(cb: CashbookTransaction): UnifiedTransactionRow {
+  return {
+    id: cb.id,
+    kind: 'cashbook',
+    transactionNumber: cb.transactionNumber || cb.reference || cb.id.slice(0, 8).toUpperCase(),
+    date: cb.transactionDate,
+    entityLabel: cb.description,
+    linkedTo: null,
+    // Direct cashbook entries have no tax field yet — subtotal is the full entered amount
+    // and tax is a fixed 0 until that's built, so total = subtotal (+ 0) still adds up.
+    subtotalAmount: cb.amount,
+    taxAmount: '0',
+    totalAmount: cb.amount,
+    currency: cb.currency,
+    typeLabel: CASHBOOK_TYPE_LABEL[cb.transactionType],
+    typeColor: CASHBOOK_TYPE_CHIP_COLOR[cb.transactionType],
+    filterSide: 'CASHBOOK',
+    status: cb.status,
+    paymentStateLabel: null,
+    documentKey: null,
+    createdAt: cb.createdAt,
+    cashbook: cb,
+  };
+}
+
 export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
+  const [cashbookDetailTarget, setCashbookDetailTarget] = useState<CashbookTransaction | null>(
+    null,
+  );
+  const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<AccountingTradeDocument | null>(null);
   const [newTransactionOpen, setNewTransactionOpen] = useState(false);
   const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
@@ -101,28 +239,55 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const bills = usePayableBills({ limit: 100, partyId });
   const receivableCreditNotes = useReceivableCreditNotes({ limit: 100, partyId });
   const payableCreditNotes = usePayableCreditNotes({ limit: 100, partyId });
+  // An entity's own page only ever shows its AP/AR documents — cashbook entries aren't
+  // resolved against a party the same way, so they're fetched but left out of that scoped
+  // view's merged list below.
+  const cashbookTransactions = useCashbookTransactions({ limit: 100 });
 
   const isLoading =
     invoices.isLoading ||
     bills.isLoading ||
     receivableCreditNotes.isLoading ||
-    payableCreditNotes.isLoading;
+    payableCreditNotes.isLoading ||
+    (!partyId && cashbookTransactions.isLoading);
 
-  const transactions = useMemo(() => {
+  const documentKeyByTypeId = useMemo(() => {
+    const map = new Map<string, AccountingDocumentKey>();
+    for (const type of transactionTypes) {
+      if (isAccountingDocumentKey(type.allowedDocument)) map.set(type.id, type.allowedDocument);
+    }
+    return map;
+  }, [transactionTypes]);
+
+  const transactions = useMemo<UnifiedTransactionRow[]>(() => {
+    const toRow = (doc: AccountingTradeDocument) => toDocumentRow(doc, documentKeyByTypeId);
     const all = [
-      ...(invoices.data?.items ?? []),
-      ...(bills.data?.items ?? []),
-      ...(receivableCreditNotes.data?.items ?? []),
-      ...(payableCreditNotes.data?.items ?? []),
+      ...(invoices.data?.items ?? []).map(toRow),
+      ...(bills.data?.items ?? []).map(toRow),
+      ...(receivableCreditNotes.data?.items ?? []).map(toRow),
+      ...(payableCreditNotes.data?.items ?? []).map(toRow),
+      ...(!partyId
+        ? (cashbookTransactions.data?.items ?? [])
+            .filter((cb) => cb.sourceModule !== 'ACCOUNTING')
+            .map(toCashbookRow)
+        : []),
     ];
     return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [invoices.data, bills.data, receivableCreditNotes.data, payableCreditNotes.data]);
+  }, [
+    invoices.data,
+    bills.data,
+    receivableCreditNotes.data,
+    payableCreditNotes.data,
+    cashbookTransactions.data,
+    partyId,
+    documentKeyByTypeId,
+  ]);
 
   // On an entity's page, "New Transaction" doesn't make sense — offer the payment
   // action for whichever side actually has documents here instead.
   const bulkPaymentSide = useMemo(() => {
-    const payableCount = transactions.filter((t) => t.side === 'PAYABLE').length;
-    const receivableCount = transactions.filter((t) => t.side === 'RECEIVABLE').length;
+    const payableCount = transactions.filter((t) => t.filterSide === 'PAYABLE').length;
+    const receivableCount = transactions.filter((t) => t.filterSide === 'RECEIVABLE').length;
     return payableCount > receivableCount ? 'PAYABLE' : 'RECEIVABLE';
   }, [transactions]);
 
@@ -130,11 +295,11 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     const q = search.trim().toLowerCase();
     return transactions.filter((r) => {
       if (statusFilter && r.status !== statusFilter) return false;
-      if (typeFilter && r.side !== typeFilter) return false;
+      if (typeFilter && r.filterSide !== typeFilter) return false;
       if (!q) return true;
       return (
-        r.documentNumber.toLowerCase().includes(q) ||
-        r.party.name.toLowerCase().includes(q) ||
+        r.transactionNumber.toLowerCase().includes(q) ||
+        r.entityLabel.toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q)
       );
     });
@@ -143,51 +308,62 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const columns = useMemo<Column<AccountingTradeDocument>[]>(
+  const columns = useMemo<Column<UnifiedTransactionRow>[]>(
     () => [
       {
-        key: 'documentNumber',
+        key: 'transactionNumber',
         label: 'Transaction ID',
         width: '160px',
         render: (row) => (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-            {row.documentNumber}
-          </span>
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
+              {row.transactionNumber}
+            </span>
+            {row.linkedTo && (
+              <span
+                className="inline-flex max-w-full items-center gap-1 text-[10px] text-gray-500"
+                title={`Linked to ${row.linkedTo}`}
+              >
+                <Icons.Link2 className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{row.linkedTo}</span>
+              </span>
+            )}
+          </div>
         ),
       },
       {
-        key: 'documentDate',
+        key: 'date',
         label: 'Date',
         width: '80px',
-        render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.documentDate)}</span>,
+        render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.date)}</span>,
       },
       {
         key: 'entity',
         label: 'Entity',
         width: 'minmax(120px, 1fr)',
         render: (row) => (
-          <span className="text-sm text-gray-800 font-medium">{row.party.name}</span>
+          <span className="text-sm text-gray-800 font-medium truncate">{row.entityLabel}</span>
         ),
       },
       {
         key: 'subtotalAmount',
         label: 'Subtotal',
         width: '130px',
-        className: 'text-right pr-6',
+        className: 'text-right',
         render: (row) => (
           <span className="block text-right text-sm text-gray-700">
-            {fmtAmount(row.subtotalAmount, row.currency)}
+            {row.subtotalAmount === null ? '—' : fmtAmount(row.subtotalAmount, row.currency)}
           </span>
         ),
       },
       {
         key: 'taxAmount',
         label: 'Tax',
-        width: '90px',
-        className: 'text-right pr-6',
+        width: '80px',
+        className: 'text-right',
         render: (row) => (
           <span className="block text-right text-sm text-gray-700">
-            {fmtAmount(row.taxAmount, row.currency)}
+            {row.taxAmount === null ? '—' : fmtAmount(row.taxAmount, row.currency)}
           </span>
         ),
       },
@@ -195,7 +371,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         key: 'totalAmount',
         label: 'Total',
         width: '130px',
-        className: 'text-right pr-6',
+        className: 'text-right',
         render: (row) => (
           <span className="block text-right text-sm font-medium text-gray-900">
             {fmtAmount(row.totalAmount, row.currency)}
@@ -203,27 +379,20 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         ),
       },
       {
-        key: 'side',
+        key: 'type',
         label: 'Type',
-        width: '90px',
-        render: (row) => (
-          <TypeChip
-            label={TRANSACTION_TYPE_CATEGORY_LABEL[row.side]}
-            color={TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[row.side]}
-          />
-        ),
+        width: '80px',
+        render: (row) => <TypeChip label={row.typeLabel} color={row.typeColor} />,
       },
       {
         key: 'status',
         label: 'Status',
-        width: '90px',
+        width: '70px',
         render: (row) => (
           <div className="flex flex-col gap-0.5">
             <Badge label={STATUS_LABEL[row.status]} variant={STATUS_VARIANT[row.status]} />
-            {row.status !== 'DRAFT' && (
-              <span className="font-semibold text-xs text-gray-500">
-                {PAYMENT_STATE_LABEL[row.paymentState]}
-              </span>
+            {row.paymentStateLabel && (
+              <span className="font-semibold text-xs text-gray-500">{row.paymentStateLabel}</span>
             )}
           </div>
         ),
@@ -231,25 +400,53 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'actions',
         label: '',
-        width: '170px',
+        width: '160px',
         render: (row) => (
           <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-            {row.status === 'DRAFT' ? (
-              <TableButton variant="green" onClick={() => setDetailTarget(row)}>
-                Post
-              </TableButton>
-            ) : row.status === 'POSTED' && row.paymentState !== 'PAID' ? (
-              <TableButton variant="green" onClick={() => setPaymentTarget(row)}>
-                {row.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
+            {row.kind === 'document' ? (
+              row.document!.status === 'DRAFT' ? (
+                <TableButton variant="green" onClick={() => setDetailTarget(row.document!)}>
+                  Post
+                </TableButton>
+              ) : row.document!.status === 'POSTED' &&
+                row.document!.documentType !== 'CREDIT_NOTE' &&
+                row.document!.paymentState !== 'PAID' ? (
+                <TableButton variant="green" onClick={() => setPaymentTarget(row.document!)}>
+                  {row.document!.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
+                </TableButton>
+              ) : null
+            ) : row.cashbook!.status === 'DRAFT' ? (
+              <TableButton variant="green" onClick={() => setCashbookDetailTarget(row.cashbook!)}>
+                {cashbookActionLabel(row.cashbook!.direction)}
               </TableButton>
             ) : null}
             <TableButton
+              variant="gray"
+              disabled={!row.documentKey || row.kind !== 'document'}
+              tooltip={
+                row.documentKey && row.kind === 'document'
+                  ? 'Preview document'
+                  : 'No document set for this transaction type'
+              }
+              onClick={() =>
+                row.documentKey &&
+                row.document &&
+                setPreviewTarget({ document: row.document, documentKey: row.documentKey })
+              }
+            >
+              <Icons.FileText className="w-4 h-4" />
+            </TableButton>
+            {/* <TableButton
               variant="blue"
-              tooltip="View Documents"
-              onClick={() => setDetailTarget(row)}
+              tooltip="View Details"
+              onClick={() =>
+                row.kind === 'document'
+                  ? setDetailTarget(row.document!)
+                  : setCashbookDetailTarget(row.cashbook!)
+              }
             >
               <Icons.FileText className="w-3.5 h-3.5" />
-            </TableButton>
+            </TableButton> */}
           </div>
         ),
       },
@@ -297,7 +494,11 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           setPage(1);
         }}
         extraFilters={extraFilters}
-        onRowClick={(row) => setDetailTarget(row)}
+        onRowClick={(row) =>
+          row.kind === 'document'
+            ? setDetailTarget(row.document!)
+            : setCashbookDetailTarget(row.cashbook!)
+        }
         actionButton={
           partyId
             ? {
@@ -327,31 +528,44 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-2">
-            {selectableTypes.map((type) => (
-              <button
-                key={type.id}
-                type="button"
-                onClick={() => {
-                  setNewTransactionOpen(false);
-                  setSelectedType(type);
-                }}
-                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-semibold text-gray-900">{type.name}</span>
-                  {type.description && (
-                    <span className="text-xs text-gray-500">{type.description}</span>
-                  )}
-                  {type.rulesCount === 0 && (
-                    <span className="text-xs text-orange-600">Rule required to use</span>
-                  )}
-                </div>
-                <TypeChip
-                  label={TRANSACTION_TYPE_CATEGORY_LABEL[type.category]}
-                  color={TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[type.category]}
-                />
-              </button>
-            ))}
+            {selectableTypes.map((type) => {
+              // A rule and a source are each independently sufficient to use a type — applies
+              // uniformly, including cashbook (Receipt/Payment/Charge/Adjustment) types: every
+              // type must be deliberately configured with at least one before it's usable,
+              // rather than falling back to ad hoc free-form account picking.
+              const hasRule = type.rulesCount > 0;
+              const hasSource = Boolean(type.sourceTypeId);
+              const canSelect = hasRule || hasSource;
+              return (
+                <button
+                  key={type.id}
+                  type="button"
+                  disabled={!canSelect}
+                  onClick={() => {
+                    if (!canSelect) return;
+                    setNewTransactionOpen(false);
+                    setSelectedType(type);
+                  }}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-gray-900">{type.name}</span>
+                    {type.description && (
+                      <span className="text-xs text-gray-500">{type.description}</span>
+                    )}
+                    {!canSelect && (
+                      <span className="text-xs text-orange-600">
+                        Rule or source required to use
+                      </span>
+                    )}
+                  </div>
+                  <TypeChip
+                    label={TRANSACTION_TYPE_CATEGORY_LABEL[type.category]}
+                    color={TRANSACTION_TYPE_CATEGORY_CHIP_COLOR[type.category]}
+                  />
+                </button>
+              );
+            })}
           </div>
         )}
       </Modal>
@@ -372,7 +586,14 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         }}
       />
 
+      <DocumentPreviewPanel target={previewTarget} onClose={() => setPreviewTarget(null)} />
+
       <MakePaymentPanel document={paymentTarget} onClose={() => setPaymentTarget(null)} />
+
+      <CashbookTransactionDetailPanel
+        transaction={cashbookDetailTarget}
+        onClose={() => setCashbookDetailTarget(null)}
+      />
 
       {partyId && (
         <BulkPaymentPanel

@@ -259,12 +259,39 @@ export class CreateTransactionTypeDto {
   @MaxLength(160)
   source?: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Links this type to a Source (Settings > Source Types) — lets it be used on New Transaction without a rule.',
+  })
+  @IsOptional()
+  @IsUUID()
+  sourceTypeId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(trimmed)
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Receivable/Payable types only: when true, this type posts a single-line direct entry straight to Cashbook (via /cashbook/receipts or /cashbook/payments) instead of creating an Invoice/Bill.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  postsToCashbook?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      "Receivable/Payable types only, not combinable with postsToCashbook: a linked type creates a credit note (receivable) or debit note (payable) that must reference an original posted invoice/bill for the same entity and reduces its outstanding balance. The type's rule is written in the note's own direction (control line credit for receivable, debit for payable).",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isLinked?: boolean;
 }
 
 export class UpdateTransactionTypeDto extends PartialType(
@@ -723,12 +750,26 @@ export class CreateSubledgerAccountDto {
   @MaxLength(160)
   contactName?: string;
 
+  @ApiPropertyOptional({ example: '+233301234567' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
   @ApiPropertyOptional({ example: '12 Independence Ave, Accra' })
   @IsOptional()
   @Transform(trimmed)
   @IsString()
   @MaxLength(500)
   address?: string;
+
+  @ApiPropertyOptional({ example: 'Main packaging supplier' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
 }
 
 export class UpdateSubledgerAccountDto extends PartialType(

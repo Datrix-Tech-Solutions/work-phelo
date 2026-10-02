@@ -1,114 +1,82 @@
 'use client';
 
-import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ProspectFormLayout } from '@/components/organisms/marketing/ProspectFormLayout';
 import {
-  CompanyInformationForm,
-  CompanyInformationFields,
-  CompanyInformationErrors,
-} from '@/components/molecules/marketing/CompanyInformationForm';
-import {
-  ProductServiceForm,
-  ProductServiceRow,
-} from '@/components/molecules/marketing/ProductServiceForm';
-import {
-  CompanyLocationForm,
-  CompanyLocationFields,
-} from '@/components/molecules/marketing/CompanyLocationForm';
+  ProspectWizard,
+  ProspectWizardValues,
+} from '@/components/organisms/marketing/ProspectWizard';
+import { useCreateProspect } from '@/hooks/marketing/useProspects';
+import { useToast } from '@/hooks/useToast';
+import { apiErrorMessage } from '@/lib/apiError';
+import { CreateProspectPayload } from '@/types/marketing';
 
-const STEPS = [
-  'Company Information',
-  'Product / Service Info.',
-  'Company Location',
-  'Sale Stage',
-  'Preview',
-];
-
-const EMPTY_COMPANY: CompanyInformationFields = {
-  companyName: '',
-  businessType: '',
-  contactName: '',
-  phone: '',
-  email: '',
-  interactionType: '',
-  roleJobTitle: '',
-  sourceType: '',
-  dateContacted: '',
-};
-
-const EMPTY_PRODUCT_ROW: ProductServiceRow = {
-  id: crypto.randomUUID(),
-  productType: '',
-  expectedRevenue: '',
-  achievedRevenue: '',
-  expectedCloseDate: '',
-};
+function buildPayload({
+  company,
+  productRows,
+  location,
+  saleStage,
+}: ProspectWizardValues): CreateProspectPayload {
+  return {
+    companyName: company.companyName.trim(),
+    ...(company.businessType ? { businessTypeId: company.businessType } : {}),
+    ...(company.sourceType ? { sourceTypeId: company.sourceType } : {}),
+    pipelineStageId: saleStage.pipelineStageId,
+    primaryContact: {
+      name: company.contactPerson.trim(),
+      ...(company.phone.trim() ? { phone: company.phone.trim() } : {}),
+      ...(company.email.trim() ? { email: company.email.trim() } : {}),
+      ...(company.roleJobTitle ? { decisionMakerTypeId: company.roleJobTitle } : {}),
+    },
+    products: productRows.map((row) => ({
+      productId: row.productType,
+      expectedValue: Number(row.expectedRevenue),
+      ...(row.achievedRevenue.trim() !== '' ? { achievedValue: Number(row.achievedRevenue) } : {}),
+      ...(row.commissionRate?.trim() ? { commissionRate: Number(row.commissionRate) } : {}),
+      ...(row.expectedCloseDate ? { expectedCloseDate: row.expectedCloseDate } : {}),
+    })),
+    location: {
+      label: location.location,
+      latitude: location.lat as number,
+      longitude: location.lng as number,
+    },
+    ...(company.dateContacted
+      ? {
+          initialInteraction: {
+            occurredAt: company.dateContacted,
+            ...(company.interactionType ? { interactionMediumId: company.interactionType } : {}),
+            // A named decision maker on the form means one was involved in this first contact.
+            decisionMakerInvolved: company.contactName.trim() !== '',
+          },
+        }
+      : {}),
+  };
+}
 
 export default function NewProspectPage() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const router = useRouter();
+  const toast = useToast();
+  const createProspect = useCreateProspect();
 
-  const [currentStep, setCurrentStep] = useState(0);
+  const listHref = `/${tenantSlug}/marketing/prospects/all`;
 
-  const [companyForm, setCompanyForm] = useState<CompanyInformationFields>(EMPTY_COMPANY);
-  const [companyErrors, setCompanyErrors] = useState<CompanyInformationErrors>({});
-
-  const [productRows, setProductRows] = useState<ProductServiceRow[]>([EMPTY_PRODUCT_ROW]);
-  const [locationForm, setLocationForm] = useState<CompanyLocationFields>({ location: '' });
-
-  function validateStep(): boolean {
-    if (currentStep === 0) {
-      const next: CompanyInformationErrors = {};
-      if (!companyForm.companyName.trim()) next.companyName = 'Company name is required.';
-      if (!companyForm.contactName.trim()) next.contactName = 'Contact name is required.';
-      if (!companyForm.email.trim()) next.email = 'Email is required.';
-      setCompanyErrors(next);
-      return Object.keys(next).length === 0;
-    }
-    return true;
-  }
-
-  function handleNext() {
-    if (!validateStep()) return;
-    if (currentStep < STEPS.length - 1) setCurrentStep((s) => s + 1);
-  }
-
-  function handleBack() {
-    setCompanyErrors({});
-    setCurrentStep((s) => s - 1);
-  }
-
-  function handleCancel() {
-    router.push(`/${tenantSlug}/marketing/prospects/all`);
+  function handleSubmit(values: ProspectWizardValues) {
+    createProspect.mutate(buildPayload(values), {
+      onSuccess: () => {
+        toast.success('Prospect created');
+        router.push(listHref);
+      },
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to create prospect')),
+    });
   }
 
   return (
-    <ProspectFormLayout
-      steps={STEPS}
-      currentStep={currentStep}
+    <ProspectWizard
       tenantSlug={tenantSlug}
-      prospectName="Create New Prospect"
-      onNext={handleNext}
-      onBack={handleBack}
-      onCancel={handleCancel}
-      nextLabel={currentStep === STEPS.length - 1 ? 'Submit' : 'Next'}
-    >
-      {currentStep === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 px-8">
-          <CompanyInformationForm
-            values={companyForm}
-            onChange={setCompanyForm}
-            errors={companyErrors}
-          />
-        </div>
-      )}
-      {currentStep === 1 && <ProductServiceForm rows={productRows} onChange={setProductRows} />}
-      {currentStep === 2 && (
-        <CompanyLocationForm values={locationForm} onChange={setLocationForm} />
-      )}
-      {currentStep === 3 && <div />}
-      {currentStep === 4 && <div />}
-    </ProspectFormLayout>
+      title="Create New Prospect"
+      isSubmitting={createProspect.isPending}
+      onSubmit={handleSubmit}
+      onCancel={() => router.push(listHref)}
+    />
   );
 }

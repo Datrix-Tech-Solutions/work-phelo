@@ -115,7 +115,10 @@ describe('calculatePayrollForCountry commission payroll MVP', () => {
       employeeSSNIT: '55',
       taxableIncome: '945',
       payeTax: '106.13',
-      netSalary: '1338.88',
+      // payeTax's true unrounded value is exactly 106.125 (a rounding tie) — netSalary must
+      // be computed from the *rounded* 106.13, matching the frontend preview, not from the
+      // unrounded 106.125 (which would give 1338.88 instead of the correct 1338.87).
+      netSalary: '1338.87',
     });
   });
 
