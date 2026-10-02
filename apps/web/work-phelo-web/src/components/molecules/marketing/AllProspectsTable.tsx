@@ -95,7 +95,8 @@ interface Props {
   onEdit: (row: Prospect) => void;
   onUpdateStage: (row: Prospect) => void;
   onDelete: (row: Prospect) => void;
-  onConvertToClient: (row: Prospect) => void;
+  /** Omit to hide the action, e.g. when the user can't create clients. */
+  onConvertToClient?: (row: Prospect) => void;
   onAdd: () => void;
   stageOptions: { value: string; label: string }[];
   stageFilter: string;
@@ -145,7 +146,7 @@ export function AllProspectsTable({
       onPageChange={onPageChange}
       onRowClick={onRowClick}
       rowActions={(row) => [
-        ...(row.salesStageProgress >= 100
+        ...(row.salesStageProgress >= 100 && onConvertToClient
           ? [{ label: 'Convert to Client', onClick: () => onConvertToClient(row) }]
           : []),
         { label: 'Edit', onClick: () => onEdit(row) },

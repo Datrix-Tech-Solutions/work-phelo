@@ -31,6 +31,7 @@ import {
   PermissionAction,
 } from './dto/grant-permission.dto';
 import { QueryPermissionRecipientsDto } from './dto/query-permission-recipients.dto';
+import { QueryModuleUsersDto } from './dto/query-module-users.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -82,6 +83,24 @@ export class PermissionsController {
     return this.permissionsService.getUserPermissions(
       req.user.tenantId,
       userId,
+    );
+  }
+
+  @Get('module-users')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
+  @ApiOperation({
+    summary:
+      'List users who hold at least one permission in a module, via roles or direct grants',
+  })
+  @ApiQuery({ name: 'module', required: true, example: 'MARKETING' })
+  @ApiResponse({ status: 200, description: 'Module users returned' })
+  getModuleUsers(
+    @Query() query: QueryModuleUsersDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.permissionsService.getModuleUsers(
+      req.user.tenantId,
+      query.module,
     );
   }
 

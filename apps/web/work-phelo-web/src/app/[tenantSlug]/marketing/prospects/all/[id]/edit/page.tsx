@@ -43,6 +43,7 @@ function toInitialValues(prospect: ProspectDetail): ProspectWizardValues {
       expectedRevenue: p.expectedValue,
       achievedRevenue: p.achievedValue ?? '',
       expectedCloseDate: toDateInput(p.expectedCloseDate),
+      commissionRate: p.commissionRate != null ? String(Number(p.commissionRate)) : '',
     })),
     location: {
       location: prospect.location.label,
@@ -76,6 +77,7 @@ function buildPayload(
       expectedValue: Number(row.expectedRevenue),
       achievedValue: row.achievedRevenue.trim() !== '' ? Number(row.achievedRevenue) : null,
       expectedCloseDate: row.expectedCloseDate || null,
+      commissionRate: row.commissionRate?.trim() ? Number(row.commissionRate) : null,
     })),
     location: {
       label: location.location,

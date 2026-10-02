@@ -71,7 +71,13 @@ export default function MarketingModuleUsersPage() {
       label: 'Roles',
       width: 'minmax(160px, 1.5fr)',
       render: (row) => (
-        <span className="text-sm text-gray-600">{row.roles.map((r) => r.name).join(', ')}</span>
+        <span className="text-sm text-gray-600">
+          {row.roles.length > 0
+            ? row.roles.map((r) => r.name).join(', ')
+            : row.hasDirectPermissions
+              ? 'Direct permissions'
+              : '—'}
+        </span>
       ),
     },
     {
@@ -97,6 +103,13 @@ export default function MarketingModuleUsersPage() {
   // Revoking access removes the user from every marketing role they hold.
   const handleRevoke = async () => {
     if (!revokeTarget) return;
+    if (revokeTarget.roles.length === 0) {
+      toast.error(
+        'This access is granted directly, not through a role, so it cannot be revoked here.',
+      );
+      setRevokeTarget(null);
+      return;
+    }
     setIsRevoking(true);
     try {
       await Promise.all(

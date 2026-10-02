@@ -3,7 +3,10 @@
 import { formatMoney } from '@/lib/formatMoney';
 import { ProspectFormSection } from '@/components/molecules/marketing/ProspectFormSection';
 import { CompanyInformationFields } from '@/components/molecules/marketing/CompanyInformationForm';
-import { ProductServiceRow } from '@/components/molecules/marketing/ProductServiceForm';
+import {
+  ProductServiceRow,
+  derivedCommission,
+} from '@/components/molecules/marketing/ProductServiceForm';
 import { CompanyLocationFields } from '@/components/molecules/marketing/CompanyLocationForm';
 import { SaleStageFields } from '@/components/molecules/marketing/SaleStageForm';
 
@@ -85,12 +88,20 @@ export function ProspectPreview({
           {productRows.map((row) => (
             <div
               key={row.id}
-              className="grid grid-cols-4 gap-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5"
+              className="grid grid-cols-6 gap-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5"
             >
               <Field label="Product" value={labelFor(productTypeOptions, row.productType)} />
               <Field label="Expected Revenue" value={formatMoney(row.expectedRevenue)} />
               <Field label="Achieved Revenue" value={formatMoney(row.achievedRevenue)} />
               <Field label="Expected Close Date" value={row.expectedCloseDate} />
+              <Field
+                label="Commission"
+                value={row.commissionRate?.trim() ? `${row.commissionRate}%` : ''}
+              />
+              <Field
+                label="Commission Amount"
+                value={row.commissionRate?.trim() ? formatMoney(derivedCommission(row)) : ''}
+              />
             </div>
           ))}
         </div>

@@ -27,7 +27,7 @@ export function ProspectManageMenu({ items }: { items: ManageMenuItem[] }) {
   return (
     <div ref={ref} className="relative">
       <Button
-        variant="outline"
+        variant="primary"
         // icon={<Settings2 className="w-4 h-4" />}
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"

@@ -523,6 +523,81 @@ export class PermissionsService {
     }));
   }
 
+  // Users who effectively hold at least one permission in a module — through a
+  // role (permission set) or a direct grant. Unlike the role list, this is not
+  // narrowed by the caller's delegated scope: it only reports who has access.
+  async getModuleUsers(tenantId: string, module: string) {
+    const now = new Date();
+    const moduleResource = { module, isActive: true };
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        OR: [
+          {
+            userPermissions: {
+              some: {
+                isActive: true,
+                OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                resource: moduleResource,
+              },
+            },
+          },
+          {
+            permissionSets: {
+              some: {
+                permissionSet: {
+                  isActive: true,
+                  resources: { some: { resource: moduleResource } },
+                },
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+        permissionSets: {
+          where: {
+            permissionSet: {
+              isActive: true,
+              resources: { some: { resource: moduleResource } },
+            },
+          },
+          select: { permissionSet: { select: { id: true, name: true } } },
+        },
+        userPermissions: {
+          where: {
+            isActive: true,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            resource: moduleResource,
+          },
+          select: { id: true },
+        },
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+
+    return users.map((user) => ({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      status: user.status,
+      roles: user.permissionSets.map((assignment) => ({
+        id: assignment.permissionSet.id,
+        name: assignment.permissionSet.name,
+      })),
+      hasDirectPermissions: user.userPermissions.length > 0,
+    }));
+  }
+
   async getPermissionRecipients(
     tenantId: string,
     resourceName: string,

@@ -11,6 +11,7 @@ import { Toggle } from '@/components/atoms/Toggle';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
 import { useAddProspectInteraction } from '@/hooks/marketing/useProspects';
+import { useCompleteFollowUp } from '@/hooks/marketing/useFollowUps';
 import {
   useCreateProspectingSetting,
   useProspectingSettings,
@@ -49,6 +50,8 @@ export function AddInteractionPanel({
 }: AddInteractionPanelProps) {
   const toast = useToast();
   const addInteraction = useAddProspectInteraction(prospectId);
+  const completeFollowUp = useCompleteFollowUp();
+  const isSaving = addInteraction.isPending || completeFollowUp.isPending;
   const { data: media = [] } = useProspectingSettings('interaction-media');
   const createMedium = useCreateProspectingSetting('interaction-media');
   const mediumOptions = useMemo(() => media.map((m) => ({ value: m.id, label: m.name })), [media]);
@@ -122,23 +125,27 @@ export function AddInteractionPanel({
     setParticipantErrors(nextParticipantErrors);
     if (!occurredAt || !mediumId || Object.keys(nextParticipantErrors).length > 0) return;
 
-    addInteraction.mutate(
-      {
-        occurredAt,
-        interactionMediumId: mediumId,
-        decisionMakerInvolved: decisionMakerMet,
-        ...(followUpId ? { followUpId } : {}),
-        ...(hasParticipant ? { participants: [{ fullName, phone, role }] } : {}),
-        ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
+    const interaction = {
+      occurredAt,
+      interactionMediumId: mediumId,
+      decisionMakerInvolved: decisionMakerMet,
+      ...(hasParticipant ? { participants: [{ fullName, phone, role }] } : {}),
+      ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
+    };
+    const callbacks = {
+      onSuccess: () => {
+        toast.success('Interaction added');
+        handleClose();
       },
-      {
-        onSuccess: () => {
-          toast.success('Interaction added');
-          handleClose();
-        },
-        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add interaction')),
-      },
-    );
+      onError: (error: unknown) => toast.error(apiErrorMessage(error, 'Failed to add interaction')),
+    };
+
+    // A follow-up is completed through its own endpoint, which records the interaction too.
+    if (followUpId) {
+      completeFollowUp.mutate({ id: followUpId, payload: { interaction } }, callbacks);
+    } else {
+      addInteraction.mutate(interaction, callbacks);
+    }
   }
 
   return (
@@ -152,7 +159,7 @@ export function AddInteractionPanel({
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} disabled={addInteraction.isPending}>
+          <Button onClick={handleSubmit(onSubmit)} disabled={isSaving}>
             Add Interaction
           </Button>
         </div>

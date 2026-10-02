@@ -28,6 +28,14 @@ enum MarketingProspectFollowUpStatus {
   @@schema("marketing")
 }
 
+enum MarketingClientProductStatus {
+  PENDING
+  PURCHASED
+  UNINTERESTED
+
+  @@schema("marketing")
+}
+
 model MarketingCrmSettingOption {
   id              String                      @id @default(uuid())
   tenantId        String
@@ -93,6 +101,7 @@ model MarketingProspect {
   products     MarketingProspectProduct[]
   interactions MarketingProspectInteraction[]
   followUps    MarketingProspectFollowUp[]
+  client       MarketingClient?
 
   @@index([tenantId, normalizedCompanyName])
   @@index([tenantId, assignedUserId])
@@ -144,7 +153,8 @@ model MarketingProspectProduct {
 model MarketingProspectInteraction {
   id                    String   @id @default(uuid())
   tenantId              String
-  prospectId            String
+  prospectId            String?
+  clientId              String?
   interactionMediumId   String?
   occurredAt            DateTime
   notes                 String?
@@ -152,10 +162,12 @@ model MarketingProspectInteraction {
   createdByUserId       String?
   createdAt             DateTime @default(now())
 
-  prospect     MarketingProspect                         @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospect     MarketingProspect?                        @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  client       MarketingClient?                          @relation(fields: [clientId], references: [id], onDelete: SetNull)
   participants MarketingProspectInteractionParticipant[]
 
   @@index([tenantId, prospectId, occurredAt])
+  @@index([tenantId, clientId, occurredAt])
   @@index([tenantId, interactionMediumId])
   @@schema("marketing")
 }
@@ -178,7 +190,8 @@ model MarketingProspectInteractionParticipant {
 model MarketingProspectFollowUp {
   id                     String                          @id @default(uuid())
   tenantId               String
-  prospectId             String
+  prospectId             String?
+  clientId               String?
   dueAt                  DateTime
   note                   String?
   status                 MarketingProspectFollowUpStatus @default(PENDING)
@@ -189,10 +202,82 @@ model MarketingProspectFollowUp {
   createdAt              DateTime                        @default(now())
   updatedAt              DateTime                        @updatedAt
 
-  prospect MarketingProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospect MarketingProspect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  client   MarketingClient?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status, dueAt])
   @@index([tenantId, prospectId])
   @@index([tenantId, prospectId, status])
+  @@index([tenantId, clientId])
+  @@index([tenantId, clientId, status])
+  @@schema("marketing")
+}
+
+model MarketingClient {
+  id                      String    @id @default(uuid())
+  tenantId                String
+  companyName             String
+  normalizedCompanyName   String
+  businessTypeId          String?
+  sourceTypeId            String?
+  assignedUserId          String
+  locationLabel           String
+  latitude                Decimal   @db.Decimal(9, 6)
+  longitude               Decimal   @db.Decimal(9, 6)
+  isBillable              Boolean   @default(false)
+  convertedFromProspectId String?   @unique
+  convertedAt             DateTime?
+  convertedByUserId       String?
+  createdByUserId         String?
+  updatedByUserId         String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  convertedFromProspect MarketingProspect?             @relation(fields: [convertedFromProspectId], references: [id], onDelete: SetNull)
+  contacts              MarketingClientContact[]
+  products              MarketingClientProduct[]
+  interactions          MarketingProspectInteraction[]
+  followUps             MarketingProspectFollowUp[]
+
+  @@index([tenantId, normalizedCompanyName])
+  @@index([tenantId, assignedUserId])
+  @@index([tenantId, createdAt])
+  @@schema("marketing")
+}
+
+model MarketingClientContact {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  clientId            String
+  name                String
+  phone               String?
+  email               String?
+  decisionMakerTypeId String?
+  isPrimary           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  client MarketingClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clientId])
+  @@index([tenantId, decisionMakerTypeId])
+  @@schema("marketing")
+}
+
+model MarketingClientProduct {
+  id        String                       @id @default(uuid())
+  tenantId  String
+  clientId  String
+  productId String
+  status    MarketingClientProductStatus @default(PENDING)
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
+
+  client MarketingClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, productId])
+  @@index([tenantId, clientId])
+  @@index([tenantId, productId])
+  @@index([tenantId, status])
   @@schema("marketing")
 }

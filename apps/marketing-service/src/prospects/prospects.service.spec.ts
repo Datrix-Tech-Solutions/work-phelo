@@ -433,7 +433,7 @@ describe('ProspectsService', () => {
           productId: 'product-2',
           expectedValue: new Prisma.Decimal('5000.25'),
           achievedValue: null,
-          commissionRate: null,
+          commissionRate: new Prisma.Decimal('2'),
           commissionAmount: null,
           expectedCloseDate: null,
           createdAt: new Date('2026-09-28T10:06:00.000Z'),
@@ -532,6 +532,7 @@ describe('ProspectsService', () => {
               },
             },
           },
+          client: { select: { id: true } },
         },
       });
       expect(result).toEqual({
@@ -540,6 +541,7 @@ describe('ProspectsService', () => {
         businessType: { id: 'business-type-1', name: 'Enterprise' },
         sourceType: { id: 'source-type-1', name: 'Referral' },
         assignedUserId: 'user-1',
+        clientId: null,
         location: {
           label: 'Accra, Ghana',
           latitude: '5.6037',
@@ -577,7 +579,8 @@ describe('ProspectsService', () => {
             expectedValue: '10000.00',
             achievedValue: '2500.00',
             commissionRate: '10.5',
-            commissionAmount: '1000.00',
+            // Derived from the achieved revenue: 10.5% of 2500.
+            commissionAmount: '262.50',
             expectedCloseDate: new Date('2026-10-31T00:00:00.000Z'),
           },
           {
@@ -585,8 +588,9 @@ describe('ProspectsService', () => {
             product: { id: 'product-2', name: 'Service B' },
             expectedValue: '5000.25',
             achievedValue: null,
-            commissionRate: null,
-            commissionAmount: null,
+            commissionRate: '2',
+            // No achieved revenue yet, so derived from the expected revenue: 2% of 5000.25.
+            commissionAmount: '100.01',
             expectedCloseDate: null,
           },
         ],
@@ -1367,7 +1371,7 @@ describe('ProspectsService', () => {
           tenantId: 'tenant-1',
           assignedUserId: 'user-1',
         },
-        select: { id: true },
+        select: { id: true, client: { select: { id: true } } },
       });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.marketingProspect.delete).toHaveBeenCalledWith({
@@ -1398,7 +1402,7 @@ describe('ProspectsService', () => {
           id: 'prospect-a',
           tenantId: 'tenant-1',
         },
-        select: { id: true },
+        select: { id: true, client: { select: { id: true } } },
       });
       expect(prisma.marketingProspect.delete).toHaveBeenCalledWith({
         where: { id: 'prospect-a' },
@@ -1477,6 +1481,25 @@ describe('ProspectsService', () => {
         data: [],
         meta: { page: 1, limit: 20, total: 0, totalPages: 1 },
       });
+    });
+
+    it('refuses to delete a prospect that has been converted to a client', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValueOnce({
+        id: 'prospect-a',
+        client: { id: 'client-a' },
+      });
+
+      await expect(
+        service.remove(
+          {
+            ...user,
+            permissions: [MarketingCrmSettingsPermission.PROSPECTS_DELETE],
+          },
+          'prospect-a',
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.marketingProspect.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -2140,6 +2163,7 @@ describe('ProspectsService', () => {
       expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith({
         where: {
           tenantId: 'tenant-1',
+          client: { is: null },
           assignedUserId: 'user-1',
         },
         select: {
@@ -2183,7 +2207,7 @@ describe('ProspectsService', () => {
 
       expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tenantId: 'tenant-1' },
+          where: { tenantId: 'tenant-1', client: { is: null } },
         }),
       );
     });
@@ -2349,6 +2373,7 @@ describe('ProspectsService', () => {
         expect.objectContaining({
           where: {
             tenantId: 'tenant-1',
+            client: { is: null },
             assignedUserId: 'user-1',
             normalizedCompanyName: { contains: 'acme manu' },
             createdAt: {

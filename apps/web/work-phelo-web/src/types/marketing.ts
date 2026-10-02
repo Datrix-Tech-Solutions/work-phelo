@@ -157,8 +157,6 @@ export interface CreateProspectInteractionPayload {
   notes?: string;
   decisionMakerInvolved: boolean;
   participants?: ProspectInteractionParticipantPayload[];
-  /** A pending follow-up of this prospect that the interaction completes. */
-  followUpId?: string;
 }
 
 export interface CreateProspectPayload {
@@ -254,6 +252,8 @@ export interface ProspectDetail {
   businessType: ProspectReference | null;
   sourceType: ProspectReference | null;
   assignedUserId: string;
+  /** Set once the prospect has been converted to a client. */
+  clientId: string | null;
   location: ProspectDetailLocation;
   salesStage: ProspectDetailSalesStage;
   progress: number;
@@ -337,7 +337,71 @@ export interface CreateProspectFollowUpPayload {
   note?: string;
 }
 
+/** Records the interaction and completes the pending follow-up in one request. */
+export interface CompleteProspectFollowUpPayload {
+  interaction: CreateProspectInteractionPayload;
+  nextFollowUp?: CreateProspectFollowUpPayload;
+}
+
 export interface UpdateProspectFollowUpPayload {
   dueAt?: string;
   note?: string;
+}
+
+// ── Clients ──────────────────────────────────────────────────────────────────
+
+export type ClientProductStatus = 'PENDING' | 'PURCHASED' | 'UNINTERESTED';
+
+export interface ClientListProduct {
+  id: string;
+  name: string;
+  status: ClientProductStatus;
+}
+
+export interface ClientListItem {
+  id: string;
+  companyName: string;
+  businessType: ProspectReference | null;
+  locationLabel: string;
+  isBillable: boolean;
+  primaryContact: ProspectListPrimaryContact | null;
+  products: ClientListProduct[];
+  assignedUserId: string;
+  /** Set when the client was converted from a prospect. */
+  convertedFromProspectId: string | null;
+  createdAt: string;
+}
+
+export interface ClientListResponse {
+  data: ClientListItem[];
+  meta: ProspectListMeta;
+}
+
+export interface ClientsQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  assignedUserId?: string;
+}
+
+export interface CreateClientPayload {
+  companyName: string;
+  businessTypeId?: string;
+  sourceTypeId?: string;
+  isBillable: boolean;
+  primaryContact: CreateProspectContactPayload;
+  /** Products/services the client is linked to — they start as PENDING. */
+  productIds: string[];
+  location: CreateProspectLocationPayload;
+}
+
+export interface ConvertProspectPayload {
+  isBillable: boolean;
+}
+
+export interface ConvertedClient {
+  id: string;
+  companyName: string;
+  isBillable: boolean;
+  convertedFromProspectId: string | null;
 }

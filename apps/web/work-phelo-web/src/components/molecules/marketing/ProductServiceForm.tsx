@@ -1,6 +1,7 @@
 'use client';
 
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
+import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
@@ -14,6 +15,17 @@ export interface ProductServiceRow {
   expectedRevenue: string;
   achievedRevenue: string;
   expectedCloseDate: string;
+  /** Only captured where `showCommission` is on. */
+  commissionRate?: string;
+}
+
+/** Rate% of the achieved revenue if any has been entered, otherwise of the expected revenue. */
+export function derivedCommission(row: ProductServiceRow): number {
+  const rate = parseFloat(row.commissionRate ?? '');
+  if (!Number.isFinite(rate)) return 0;
+  const achieved = row.achievedRevenue.trim() !== '' ? parseFloat(row.achievedRevenue) : NaN;
+  const base = Number.isFinite(achieved) ? achieved : parseFloat(row.expectedRevenue) || 0;
+  return Math.round(((base * rate) / 100 + Number.EPSILON) * 100) / 100;
 }
 
 function emptyRow(): ProductServiceRow {
@@ -30,9 +42,16 @@ interface Props {
   rows: ProductServiceRow[];
   onChange: (rows: ProductServiceRow[]) => void;
   productTypeOptions?: { value: string; label: string }[];
+  /** Adds the commission rate and amount columns. */
+  showCommission?: boolean;
 }
 
-export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: Props) {
+export function ProductServiceForm({
+  rows,
+  onChange,
+  productTypeOptions = [],
+  showCommission = false,
+}: Props) {
   const toast = useToast();
   const createProduct = useCreateProspectingSetting('products');
 
@@ -54,7 +73,7 @@ export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: 
     {
       key: 'product',
       label: 'Product',
-      width: '2fr',
+      width: 'minmax(150px, 1fr)',
       renderField: (i) => (
         <SearchSelect
           placeholder="Select or type to add new"
@@ -73,7 +92,8 @@ export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: 
     {
       key: 'expectedRevenue',
       label: 'Expected Revenue',
-      width: '1.5fr',
+      width: '150px',
+      align: 'right',
       renderField: (i) => (
         <CurrencyInput
           currency="GHS"
@@ -89,7 +109,8 @@ export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: 
     {
       key: 'achievedRevenue',
       label: 'Achieved Revenue',
-      width: '1.5fr',
+      width: '150px',
+      align: 'right',
       renderField: (i) => (
         <CurrencyInput
           currency="GHS"
@@ -105,7 +126,8 @@ export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: 
     {
       key: 'expectedCloseDate',
       label: 'Expected Close Date',
-      width: '1.5fr',
+      width: '150px',
+      align: 'right',
       renderField: (i) => (
         <DatePicker
           value={rows[i].expectedCloseDate}
@@ -113,6 +135,38 @@ export function ProductServiceForm({ rows, onChange, productTypeOptions = [] }: 
         />
       ),
     },
+    ...(showCommission
+      ? [
+          {
+            key: 'commissionRate',
+            label: 'Commission',
+            width: '100px',
+            align: 'right' as const,
+            renderField: (i: number) => (
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                placeholder="0"
+                value={rows[i].commissionRate ?? ''}
+                onChange={(e) => update(i, 'commissionRate', e.target.value)}
+                rightElement={<span className="text-sm text-gray-400">%</span>}
+              />
+            ),
+          },
+          {
+            key: 'commissionAmount',
+            label: 'Commission Amount',
+            width: '150px',
+            align: 'right' as const,
+            renderField: (i: number) => (
+              <span className="block text-right text-sm font-semibold text-gray-600">
+                {fmt(derivedCommission(rows[i]))}
+              </span>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (

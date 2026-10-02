@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { ArrowRightLeft, Pencil, UserCheck } from 'lucide-react';
+import { ArrowRightLeft, UserCheck } from 'lucide-react';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ProspectBreadcrumb } from '@/components/molecules/marketing/ProspectBreadcrumb';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
@@ -16,20 +16,20 @@ import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
 import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
+import { EditProspectProductsModal } from '@/components/organisms/marketing/EditProspectProductsModal';
+import { EditProspectCompanyModal } from '@/components/organisms/marketing/EditProspectCompanyModal';
 import { ChangeProspectLocationModal } from '@/components/organisms/marketing/ChangeProspectLocationModal';
 import { ChangeProspectDecisionMakerModal } from '@/components/organisms/marketing/ChangeProspectDecisionMakerModal';
+import { ProspectInteractionTimeline } from '@/components/molecules/marketing/ProspectInteractionTimeline';
 import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
-import { InteractionDetailPanel } from '@/components/organisms/marketing/InteractionDetailPanel';
+import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
+import { ProspectProductCard } from '@/components/molecules/marketing/ProspectProductCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import type {
-  FollowUpStatus,
-  ProspectDetailInteraction,
-  ProspectDetailProduct,
-  ProspectFollowUp,
-} from '@/types/marketing';
-import { useProspectFollowUps } from '@/hooks/marketing/useFollowUps';
+import type { FollowUpStatus, ProspectFollowUp } from '@/types/marketing';
+import { useFollowUpWorklist, useProspectFollowUps } from '@/hooks/marketing/useFollowUps';
 import { useDeleteProspect, useProspect } from '@/hooks/marketing/useProspects';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import { pageContent } from '@/lib/layout';
@@ -51,74 +51,6 @@ function formatDate(value: string | null): string {
     year: 'numeric',
   });
 }
-
-const PRODUCT_COLUMNS: Column<ProspectDetailProduct>[] = [
-  {
-    key: 'product',
-    label: 'Product',
-    width: 'minmax(100px, 1fr)',
-    render: (row) => <span className="font-semibold">{row.product.name}</span>,
-  },
-  {
-    key: 'expectedValue',
-    label: 'Expected Revenue',
-    width: '150px',
-    className: 'text-right',
-    render: (row) => <span className="font-semibold">{formatMoney(row.expectedValue)}</span>,
-  },
-  {
-    key: 'achievedValue',
-    label: 'Achieved Revenue',
-    className: 'text-right',
-    width: '150px',
-    render: (row) => <span className="font-semibold">{formatMoney(row.achievedValue)}</span>,
-  },
-  {
-    key: 'expectedCloseDate',
-    label: 'Expected Close Date',
-    width: '150px',
-    render: (row) => <span className="font-semibold">{formatDate(row.expectedCloseDate)}</span>,
-  },
-];
-
-const INTERACTION_COLUMNS: Column<ProspectDetailInteraction>[] = [
-  {
-    key: 'occurredAt',
-    label: 'Date',
-    width: '160px',
-    render: (row) => <span className="font-semibold">{formatDate(row.occurredAt)}</span>,
-  },
-  {
-    key: 'interactionMedium',
-    label: 'Medium',
-    width: '160px',
-    render: (row) => <span className="font-semibold">{row.interactionMedium?.name ?? '—'}</span>,
-  },
-  {
-    key: 'decisionMakerInvolved',
-    label: 'Decision Maker Met',
-    width: '160px',
-    render: (row) => (
-      <span className="font-semibold">{row.decisionMakerInvolved ? 'Yes' : 'No'}</span>
-    ),
-  },
-  {
-    key: 'participants',
-    label: 'Participants',
-    width: 'minmax(160px, 0.7fr)',
-    render: (row) => (
-      <span className="font-semibold">
-        {row.participants.map((p) => p.fullName).join(', ') || '—'}
-      </span>
-    ),
-  },
-  {
-    key: 'notes',
-    label: 'Notes',
-    width: 'minmax(160px, 1fr)',
-    render: (row) => <span className="font-semibold">{row.notes || '—'}</span>,
-  },
-];
 
 const FOLLOW_UP_STATUS: Record<FollowUpStatus, { label: string; color: TypeChipColor }> = {
   PENDING: { label: 'Pending', color: 'amber' },
@@ -172,14 +104,15 @@ export default function ProspectDetailPage() {
   const toast = useToast();
 
   const { data: prospect, isLoading, isError } = useProspect(id);
+  const canCreateClient = usePermissionRule('marketing.clients:CREATE');
   const deleteProspect = useDeleteProspect();
   const { data: followUps = [], isLoading: followUpsLoading } = useProspectFollowUps(id);
+  const { data: worklist = [] } = useFollowUpWorklist();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [viewingInteraction, setViewingInteraction] = useState<ProspectDetailInteraction | null>(
-    null,
-  );
   const [convertingToClient, setConvertingToClient] = useState(false);
   const [updatingStage, setUpdatingStage] = useState(false);
+  const [editingProducts, setEditingProducts] = useState(false);
+  const [editingCompany, setEditingCompany] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
   const [changingDecisionMaker, setChangingDecisionMaker] = useState(false);
   const [addingInteraction, setAddingInteraction] = useState(false);
@@ -230,7 +163,7 @@ export default function ProspectDetailPage() {
       <div className="flex items-center justify-between gap-4">
         <ProspectBreadcrumb tenantSlug={tenantSlug} prospectName={prospect.companyName} />
         <div className="flex items-center gap-3">
-          {prospect.progress >= 100 && (
+          {prospect.progress >= 100 && !prospect.clientId && canCreateClient && (
             <Button
               variant="outline"
               icon={<UserCheck className="w-4 h-4" />}
@@ -248,17 +181,13 @@ export default function ProspectDetailPage() {
           </Button>
           <ProspectManageMenu
             items={[
+              { label: 'Manage Products', onClick: () => setEditingProducts(true) },
+              { label: 'Edit Company Details', onClick: () => setEditingCompany(true) },
               { label: 'Change Location', onClick: () => setChangingLocation(true) },
               { label: 'Change Decision Maker', onClick: () => setChangingDecisionMaker(true) },
               { label: 'Delete Prospect', onClick: () => setConfirmingDelete(true), danger: true },
             ]}
           />
-          <Button
-            icon={<Pencil className="w-4 h-4" />}
-            onClick={() => router.push(`${listHref}/${id}/edit`)}
-          >
-            Edit
-          </Button>
         </div>
       </div>
 
@@ -300,28 +229,21 @@ export default function ProspectDetailPage() {
       />
 
       {activeTab === 'products' && (
-        <DataTable
-          columns={PRODUCT_COLUMNS}
+        <DataCardGrid
           data={prospect.products}
+          renderCard={(product) => <ProspectProductCard product={product} />}
           emptyMessage="No products on record"
           currentPage={1}
           totalPages={0}
           onPageChange={() => {}}
-          noInternalScroll
         />
       )}
 
       {activeTab === 'interactions' && (
-        <DataTable
-          columns={INTERACTION_COLUMNS}
-          data={prospect.interactions}
-          emptyMessage="No follow ups yet"
-          onRowClick={setViewingInteraction}
-          actionButton={{ label: 'Add Follow ups', onClick: () => setAddingInteraction(true) }}
-          currentPage={1}
-          totalPages={0}
-          onPageChange={() => {}}
-          noInternalScroll
+        <ProspectInteractionTimeline
+          interactions={prospect.interactions}
+          onAdd={() => setAddingInteraction(true)}
+          upcoming={worklist.find((w) => w.prospectId === id)}
         />
       )}
 
@@ -346,6 +268,27 @@ export default function ProspectDetailPage() {
         isOpen={updatingStage}
         onClose={() => setUpdatingStage(false)}
       />
+
+      {editingProducts && (
+        <EditProspectProductsModal
+          prospectId={id}
+          prospectName={prospect.companyName}
+          products={prospect.products}
+          isOpen
+          onClose={() => setEditingProducts(false)}
+        />
+      )}
+
+      {editingCompany && (
+        <EditProspectCompanyModal
+          prospectId={id}
+          prospectName={prospect.companyName}
+          currentBusinessTypeId={prospect.businessType?.id ?? ''}
+          currentSourceTypeId={prospect.sourceType?.id ?? ''}
+          isOpen
+          onClose={() => setEditingCompany(false)}
+        />
+      )}
 
       {changingLocation && (
         <ChangeProspectLocationModal
@@ -372,11 +315,6 @@ export default function ProspectDetailPage() {
         prospect={prospect}
         isOpen={convertingToClient}
         onClose={() => setConvertingToClient(false)}
-      />
-
-      <InteractionDetailPanel
-        interaction={viewingInteraction}
-        onClose={() => setViewingInteraction(null)}
       />
 
       <AddInteractionPanel

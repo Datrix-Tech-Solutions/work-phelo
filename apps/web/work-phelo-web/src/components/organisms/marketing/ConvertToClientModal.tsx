@@ -6,22 +6,20 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { DetailField } from '@/components/atoms/DetailField';
 import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
+import { useConvertProspectToClient } from '@/hooks/marketing/useClients';
+import { useToast } from '@/hooks/useToast';
+import { apiErrorMessage } from '@/lib/apiError';
 import type { ProspectDetail } from '@/types/marketing';
 
 interface ConvertToClientModalProps {
   prospect: ProspectDetail;
   isOpen: boolean;
   onClose: () => void;
-  /** Called on confirm — the hook for the conversion API call once one exists. */
-  onConfirm?: (options: { billable: boolean }) => void;
 }
 
-export function ConvertToClientModal({
-  prospect,
-  isOpen,
-  onClose,
-  onConfirm,
-}: ConvertToClientModalProps) {
+export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToClientModalProps) {
+  const toast = useToast();
+  const convert = useConvertProspectToClient(prospect.id);
   const [billable, setBillable] = useState(false);
   const [converted, setConverted] = useState(false);
   const contact = prospect.contacts.find((c) => c.isPrimary) ?? prospect.contacts[0];
@@ -33,9 +31,13 @@ export function ConvertToClientModal({
   }
 
   function handleConfirm() {
-    // Front-end only for now: nothing is persisted until a conversion endpoint exists.
-    onConfirm?.({ billable });
-    setConverted(true);
+    convert.mutate(
+      { isBillable: billable },
+      {
+        onSuccess: () => setConverted(true),
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to convert prospect')),
+      },
+    );
   }
 
   if (converted) {
@@ -58,10 +60,12 @@ export function ConvertToClientModal({
       width="max-w-xl"
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={convert.isPending}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm}>Convert to Client</Button>
+          <Button onClick={handleConfirm} isLoading={convert.isPending} loadingText="Converting…">
+            Convert to Client
+          </Button>
         </div>
       }
     >
