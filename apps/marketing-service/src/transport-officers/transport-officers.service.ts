@@ -9,6 +9,7 @@ import { MarketingTransportOfficer } from '../../prisma/generated/client';
 import { callHr } from '../hr/call-hr';
 import { DirectoryPerson, HrDirectoryClient } from '../hr/hr-directory.client';
 import { PrismaService } from '../prisma/prisma.service';
+import { TripHistoryQueryDto } from '../trips/dto/trip-history-query.dto';
 import { strongestState } from '../trips/trip-schedule';
 import {
   ScheduledTrip,
@@ -88,6 +89,22 @@ export class TransportOfficersService {
         totalPages: Math.max(1, Math.ceil(total / limit)),
       },
     };
+  }
+
+  /** Completed trips this officer has driven (including ones they drove themselves), most recent first. */
+  async tripHistory(user: RequestUser, id: string, query: TripHistoryQueryDto) {
+    const officer = await this.prisma.marketingTransportOfficer.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { employeeId: true },
+    });
+    if (!officer) throw new NotFoundException(NOT_FOUND_MESSAGE);
+
+    return this.trips.completedTrips(
+      user.tenantId,
+      { driverEmployeeId: officer.employeeId },
+      query.page,
+      query.limit,
+    );
   }
 
   /** Employees who can still be added: active in HR and not already an officer. */
@@ -225,6 +242,7 @@ export class TransportOfficersService {
       trips: trips.slice(0, MAX_TRIPS_PER_ROW).map((trip) => ({
         requestId: trip.requestId,
         state: trip.state,
+        overdue: trip.overdue,
         travelDate: trip.travelDate,
         departureTime: trip.departureTime,
         returnTime: trip.returnTime,

@@ -6,6 +6,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { TransportOfficerCard } from '@/components/molecules/marketing/TransportOfficerCard';
 import { AddTransportOfficersPanel } from '@/components/organisms/marketing/AddTransportOfficersPanel';
 import { TripsPanel } from '@/components/organisms/marketing/TripsPanel';
+import { useOfficerTripHistory } from '@/hooks/marketing/useTripHistory';
 import { OFFICER_STATUS_OPTIONS } from '@/lib/fleetOptions';
 import {
   useSetTransportOfficerActive,
@@ -30,6 +31,8 @@ export default function TransportOfficerDetailsPage() {
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
   const [viewingTrips, setViewingTrips] = useState<TransportOfficer | null>(null);
+  // Past trips load only once an officer's trips are opened.
+  const tripHistory = useOfficerTripHistory(viewingTrips?.id);
 
   const { data, isLoading, isError } = useTransportOfficers({
     page,
@@ -117,7 +120,7 @@ export default function TransportOfficerDetailsPage() {
       </div>
 
       <TripsPanel
-        title="Booked Trips"
+        title="Trips"
         subtitle={viewingTrips?.name}
         trips={
           viewingTrips
@@ -132,6 +135,20 @@ export default function TransportOfficerDetailsPage() {
             : null
         }
         totalCount={viewingTrips?.tripCount}
+        history={{
+          items: tripHistory.data?.pages.flatMap((page) => page.data) ?? [],
+          total: tripHistory.data?.pages[0]?.meta.total ?? 0,
+          isLoading: tripHistory.isLoading,
+          hasMore: !!tripHistory.hasNextPage,
+          isLoadingMore: tripHistory.isFetchingNextPage,
+          onLoadMore: () => tripHistory.fetchNextPage(),
+          describeWith: (trip) =>
+            trip.selfDriven
+              ? 'Self-driven'
+              : trip.vehicleName
+                ? `Vehicle: ${trip.vehicleName}${trip.vehicleAssetNumber ? ` · ${trip.vehicleAssetNumber}` : ''}`
+                : null,
+        }}
         onClose={() => setViewingTrips(null)}
       />
       <AddTransportOfficersPanel isOpen={addOpen} onClose={() => setAddOpen(false)} />

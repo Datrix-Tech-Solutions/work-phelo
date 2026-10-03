@@ -9,6 +9,7 @@ import { MarketingFleetVehicle } from '../../prisma/generated/client';
 import { callHr } from '../hr/call-hr';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransportOfficersService } from '../transport-officers/transport-officers.service';
+import { TripHistoryQueryDto } from '../trips/dto/trip-history-query.dto';
 import { strongestState } from '../trips/trip-schedule';
 import {
   ScheduledTrip,
@@ -126,6 +127,16 @@ export class FleetService {
         name: driver.name,
       })),
     };
+  }
+
+  /** Completed trips this vehicle has been on, most recent first. */
+  tripHistory(user: RequestUser, assetId: string, query: TripHistoryQueryDto) {
+    return this.trips.completedTrips(
+      user.tenantId,
+      { vehicleAssetId: assetId },
+      query.page,
+      query.limit,
+    );
   }
 
   async findOne(user: RequestUser, assetId: string) {
@@ -388,6 +399,7 @@ export class FleetService {
       trips: trips.slice(0, MAX_TRIPS_PER_ROW).map((trip) => ({
         requestId: trip.requestId,
         state: trip.state,
+        overdue: trip.overdue,
         travelDate: trip.travelDate,
         departureTime: trip.departureTime,
         returnTime: trip.returnTime,

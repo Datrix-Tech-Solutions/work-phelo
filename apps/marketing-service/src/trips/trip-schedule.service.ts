@@ -1,8 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { MarketingTransportRequestStatus } from '../../prisma/generated/client';
+import {
+  MarketingTransportRequestStatus,
+  Prisma,
+} from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DEFAULT_TRANSPORT_TIMEZONE,
+  isOverdue,
+  minutesBetween,
   TripState,
   tripState,
   wallClockNow,
@@ -23,12 +28,34 @@ export interface ScheduledTrip {
   driver: { employeeId: string | null; name: string | null } | null;
   selfDriven: boolean;
   state: TripState;
+  /** The return time has passed but the trip has not been completed. */
+  overdue: boolean;
+}
+
+/** A trip that was completed, with how its return compared with the plan. */
+export interface CompletedTrip {
+  requestId: string;
+  travelDate: string;
+  departureTime: string;
+  returnTime: string;
+  /** When the vehicle really got back (HH:mm); null for trips completed before this was recorded. */
+  actualReturnTime: string | null;
+  /** Positive = late, negative = early, null = not recorded. */
+  minutesLate: number | null;
+  destination: string;
+  requesterName: string;
+  vehicleName: string | null;
+  vehicleAssetNumber: string | null;
+  driverName: string | null;
+  selfDriven: boolean;
+  completedAt: string | null;
 }
 
 /**
  * Approved trips that are booked or running, with their live state. Vehicle and
- * driver statuses are derived from these on every read, so they flip to "on
- * route" at the departure time and back when the trip ends without any job.
+ * driver statuses are derived from these on every read: they flip to "on route"
+ * at the departure time and stay that way until the trip is completed, cancelled
+ * or rescheduled, so an overdue trip keeps its vehicle and driver occupied.
  */
 @Injectable()
 export class TripScheduleService {
@@ -41,7 +68,7 @@ export class TripScheduleService {
     return wallClockNow(this.timeZone);
   }
 
-  /** Booked and on-route trips, soonest first. Optionally limited to some vehicles/drivers. */
+  /** Unresolved approved trips (booked, on route, overdue), soonest first. Optionally limited to some vehicles/drivers. */
   async activeTrips(
     tenantId: string,
     only: { vehicleAssetIds?: string[]; driverEmployeeIds?: string[] } = {},
@@ -71,44 +98,96 @@ export class TripScheduleService {
       where: {
         tenantId,
         status: MarketingTransportRequestStatus.APPROVED,
-        travelDate: { gte: new Date(`${now.date}T00:00:00.000Z`) },
         OR: owners,
       },
       orderBy: [{ travelDate: 'asc' }, { departureTime: 'asc' }, { id: 'asc' }],
     });
 
-    return rows.flatMap((row) => {
-      const travelDate = row.travelDate.toISOString().slice(0, 10);
-      const state = tripState(now, {
-        travelDate,
+    return rows.map((row) => {
+      const window = {
+        travelDate: row.travelDate.toISOString().slice(0, 10),
         departureTime: row.departureTime,
         returnTime: row.returnTime,
-      });
-      if (state === 'ENDED') return [];
-      return [
-        {
-          requestId: row.id,
-          travelDate,
-          departureTime: row.departureTime,
-          returnTime: row.returnTime,
-          destination: row.destination,
-          requesterName: row.requesterName,
-          vehicle: row.vehicleAssetId
-            ? {
-                assetId: row.vehicleAssetId,
-                name: row.vehicleName,
-                assetNumber: row.vehicleAssetNumber,
-              }
+      };
+      return {
+        requestId: row.id,
+        ...window,
+        destination: row.destination,
+        requesterName: row.requesterName,
+        vehicle: row.vehicleAssetId
+          ? {
+              assetId: row.vehicleAssetId,
+              name: row.vehicleName,
+              assetNumber: row.vehicleAssetNumber,
+            }
+          : null,
+        driver:
+          row.driverEmployeeId || row.driverName
+            ? { employeeId: row.driverEmployeeId, name: row.driverName }
             : null,
-          driver:
-            row.driverEmployeeId || row.driverName
-              ? { employeeId: row.driverEmployeeId, name: row.driverName }
-              : null,
-          selfDriven: row.selfDriven,
-          state,
-        },
-      ];
+        selfDriven: row.selfDriven,
+        state: tripState(now, window),
+        overdue: isOverdue(now, window),
+      };
     });
+  }
+
+  /**
+   * Trips a vehicle or driver has actually been on: completed requests, most recent
+   * first. Cancelled and rejected requests never happened, so they aren't included.
+   */
+  async completedTrips(
+    tenantId: string,
+    owner: { vehicleAssetId: string } | { driverEmployeeId: string },
+    page = 1,
+    limit = 10,
+  ) {
+    const where: Prisma.MarketingTransportRequestWhereInput = {
+      tenantId,
+      status: MarketingTransportRequestStatus.COMPLETED,
+      ...owner,
+    };
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.marketingTransportRequest.count({ where }),
+      this.prisma.marketingTransportRequest.findMany({
+        where,
+        orderBy: [
+          { travelDate: 'desc' },
+          { departureTime: 'desc' },
+          { id: 'asc' },
+        ],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+
+    const data: CompletedTrip[] = rows.map((row) => ({
+      requestId: row.id,
+      travelDate: row.travelDate.toISOString().slice(0, 10),
+      departureTime: row.departureTime,
+      returnTime: row.returnTime,
+      actualReturnTime: row.actualReturnTime,
+      minutesLate: row.actualReturnTime
+        ? minutesBetween(row.returnTime, row.actualReturnTime)
+        : null,
+      destination: row.destination,
+      requesterName: row.requesterName,
+      vehicleName: row.vehicleName,
+      vehicleAssetNumber: row.vehicleAssetNumber,
+      driverName: row.driverName,
+      selfDriven: row.selfDriven,
+      completedAt: row.completedAt?.toISOString() ?? null,
+    }));
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
   }
 
   private resolveTimeZone() {

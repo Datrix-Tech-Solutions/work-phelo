@@ -1,4 +1,10 @@
-import { strongestState, tripState, wallClockNow } from './trip-schedule';
+import {
+  isOverdue,
+  minutesBetween,
+  strongestState,
+  tripState,
+  wallClockNow,
+} from './trip-schedule';
 
 const trip = {
   travelDate: '2026-10-20',
@@ -13,12 +19,38 @@ describe('tripState', () => {
     ['earlier the same day', '2026-10-20', '09:59', 'BOOKED'],
     ['the minute it departs', '2026-10-20', '10:00', 'ON_ROUTE'],
     ['part way through', '2026-10-20', '11:30', 'ON_ROUTE'],
-    ['one minute before it ends', '2026-10-20', '11:59', 'ON_ROUTE'],
-    ['the minute it is due back', '2026-10-20', '12:00', 'ENDED'],
-    ['later the same day', '2026-10-20', '18:00', 'ENDED'],
-    ['the next day', '2026-10-21', '00:00', 'ENDED'],
+    [
+      'after the return time, still unresolved',
+      '2026-10-20',
+      '18:00',
+      'ON_ROUTE',
+    ],
+    ['the next day, still unresolved', '2026-10-21', '00:00', 'ON_ROUTE'],
+    ['long after, still unresolved', '2026-11-30', '09:00', 'ON_ROUTE'],
   ])('is %s → %s', (_label, date, time, expected) => {
     expect(tripState(clock(date, time), trip)).toBe(expected);
+  });
+});
+
+describe('isOverdue', () => {
+  it.each([
+    ['before it departs', '2026-10-20', '09:00', false],
+    ['while it is out within its window', '2026-10-20', '11:59', false],
+    ['the minute it is due back', '2026-10-20', '12:00', true],
+    ['later the same day', '2026-10-20', '18:00', true],
+    ['on a later day', '2026-10-21', '08:00', true],
+    ['a future trip', '2026-10-19', '23:59', false],
+  ])('is %s → %s', (_label, date, time, expected) => {
+    expect(isOverdue(clock(date, time), trip)).toBe(expected);
+  });
+});
+
+describe('minutesBetween', () => {
+  it('measures late, early and on time', () => {
+    expect(minutesBetween('12:00', '12:40')).toBe(40);
+    expect(minutesBetween('12:00', '11:45')).toBe(-15);
+    expect(minutesBetween('12:00', '12:00')).toBe(0);
+    expect(minutesBetween('09:30', '17:05')).toBe(455);
   });
 });
 

@@ -10,6 +10,7 @@ const anyPermissions = (handler: object) =>
 const handlerNames = [
   'list',
   'options',
+  'tripHistory',
   'findOne',
   'create',
   'update',
@@ -29,6 +30,7 @@ describe('FleetController authorization contract', () => {
     ['list', P.FLEET_VIEW],
     ['options', P.FLEET_VIEW],
     ['findOne', P.FLEET_VIEW],
+    ['tripHistory', P.FLEET_VIEW],
     ['create', P.FLEET_CREATE],
     ['update', P.FLEET_EDIT],
     ['setStatus', P.FLEET_EDIT],

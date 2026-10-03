@@ -469,6 +469,8 @@ export type TripState = 'BOOKED' | 'ON_ROUTE';
 export interface FleetTrip {
   requestId: string;
   state: TripState;
+  /** Return time has passed but the trip has not been completed. */
+  overdue: boolean;
   /** YYYY-MM-DD */
   travelDate: string;
   departureTime: string;
@@ -550,7 +552,17 @@ export interface CreateFleetVehicleResult extends FleetVehicle {
   warnings: string[];
 }
 
-export type TransportRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+/**
+ * ON_ROUTE is derived: an approved request whose departure time has passed. It stays on
+ * route until someone completes, cancels or reschedules it. COMPLETED is a real, final status.
+ */
+export type TransportRequestStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'ON_ROUTE'
+  | 'COMPLETED'
+  | 'REJECTED'
+  | 'CANCELLED';
 
 export interface TransportRequestPerson {
   employeeId: string;
@@ -574,6 +586,22 @@ export interface TransportRequest {
   requester: { userId: string; name: string; department: string | null };
   passengers: TransportRequestPerson[];
   review: { byName: string | null; at: string; note: string | null } | null;
+  /** The return time has passed on a trip nobody has completed yet. */
+  overdue: boolean;
+  /** Set once completed. minutesLate: positive = late, negative = early, null = never recorded. */
+  completion: {
+    at: string;
+    byName: string | null;
+    actualReturnTime: string | null;
+    minutesLate: number | null;
+  } | null;
+  /** Set when an approver moved the trip; `previous` is where it was before. */
+  reschedule: {
+    count: number;
+    at: string | null;
+    byName: string | null;
+    previous: { travelDate: string; departureTime: string | null; returnTime: string | null };
+  } | null;
   /** Set once approved: who is driving what. */
   allocation: {
     vehicle: { assetId: string; name: string | null; assetNumber: string | null };
@@ -620,6 +648,7 @@ export interface TransportRequestAllocationOptions {
     name: string;
     assetNumber: string;
     available: boolean;
+    unavailableKind: AllocationBlock | null;
     unavailableReason: string | null;
   }[];
   drivers: {
@@ -627,8 +656,26 @@ export interface TransportRequestAllocationOptions {
     name: string;
     department: string | null;
     available: boolean;
+    unavailableKind: AllocationBlock | null;
     unavailableReason: string | null;
   }[];
+}
+
+/** Why a vehicle or driver can't be picked: maintenance, still out on an overdue trip, or booked. */
+export type AllocationBlock = 'MAINTENANCE' | 'OVERDUE' | 'BOOKED';
+
+export interface TransportRequestWindow {
+  travelDate: string;
+  departureTime: string;
+  returnTime: string;
+}
+
+export interface RescheduleTransportRequestPayload
+  extends ApproveTransportRequestPayload, TransportRequestWindow {}
+
+export interface CompleteTransportRequestPayload {
+  /** HH:mm on the travel date. */
+  actualReturnTime: string;
 }
 
 export interface ApproveTransportRequestPayload {
@@ -646,6 +693,7 @@ export type OfficerStatus = 'AVAILABLE' | 'BOOKED' | 'ON_ROUTE' | 'INACTIVE' | '
 export interface OfficerTrip {
   requestId: string;
   state: TripState;
+  overdue: boolean;
   travelDate: string;
   departureTime: string;
   returnTime: string;
@@ -697,4 +745,29 @@ export interface TransportOfficerCandidate {
 export interface TransportOfficerToggleResult extends TransportOfficer {
   /** Approved, still-upcoming trips that list this driver (only when deactivating). */
   upcomingTrips: number;
+}
+
+/** A trip a vehicle or driver has been on: a completed request. */
+export interface CompletedTrip {
+  requestId: string;
+  /** YYYY-MM-DD */
+  travelDate: string;
+  departureTime: string;
+  returnTime: string;
+  /** When it really got back (HH:mm); null for trips completed before this was recorded. */
+  actualReturnTime: string | null;
+  /** Positive = late, negative = early, null = not recorded. */
+  minutesLate: number | null;
+  destination: string;
+  requesterName: string;
+  vehicleName: string | null;
+  vehicleAssetNumber: string | null;
+  driverName: string | null;
+  selfDriven: boolean;
+  completedAt: string | null;
+}
+
+export interface TripHistoryResponse {
+  data: CompletedTrip[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
 }

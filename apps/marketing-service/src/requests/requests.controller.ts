@@ -31,9 +31,12 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import {
+  AllocationOptionsQueryDto,
   ApproveTransportRequestDto,
+  CompleteTransportRequestDto,
   CreateTransportRequestDto,
   QueryTransportRequestsDto,
+  RescheduleTransportRequestDto,
   ReviewTransportRequestDto,
   UpdateTransportRequestDto,
 } from './dto/transport-request.dto';
@@ -98,14 +101,15 @@ export class RequestsController {
   @ApiOperation({
     summary: 'Vehicles and drivers an approver can allocate',
     description:
-      'Each is flagged unavailable when under maintenance or already allocated to an overlapping approved trip.',
+      'Each is flagged unavailable when under maintenance, still out on an overdue trip, or allocated to an overlapping approved trip. Pass travelDate, departureTime and returnTime to check a new window when rescheduling.',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   allocationOptions(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: AllocationOptionsQueryDto,
     @Req() request: AuthedRequest,
   ) {
-    return this.service.allocationOptions(request.user, id);
+    return this.service.allocationOptions(request.user, id, query);
   }
 
   @Get(':id')
@@ -147,14 +151,53 @@ export class RequestsController {
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @RequireAnyPermission(REQUESTS_CANCEL)
-  @ApiOperation({ summary: 'Cancel your own pending or approved request' })
+  @RequireAnyPermission(REQUESTS_CANCEL, REQUESTS_APPROVE_ALL)
+  @ApiOperation({
+    summary: 'Cancel a pending or approved (including on-route) request',
+    description:
+      'The requester can cancel their own; anyone who can approve can cancel any. A completed trip cannot be cancelled.',
+  })
   @ApiParam({ name: 'id', format: 'uuid' })
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: AuthedRequest,
   ) {
     return this.service.cancel(request.user, id);
+  }
+
+  @Post(':id/complete')
+  @HttpCode(HttpStatus.OK)
+  @RequireAnyPermission(REQUESTS_EDIT, REQUESTS_APPROVE_ALL)
+  @ApiOperation({
+    summary: 'Complete a trip once its return time has passed',
+    description:
+      'Records when the vehicle actually got back. The requester can complete their own; anyone who can approve can complete any. Final: a completed trip cannot be changed.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  complete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CompleteTransportRequestDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.complete(request.user, id, dto);
+  }
+
+  @Post(':id/reschedule')
+  @HttpCode(HttpStatus.OK)
+  @RequireAnyPermission(REQUESTS_APPROVE_ALL)
+  @ApiOperation({
+    summary:
+      'Reschedule an approved trip and re-allocate its vehicle and driver',
+    description:
+      'Like approving, with a new date and times. Runs the same availability checks and keeps the previous schedule.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  reschedule(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RescheduleTransportRequestDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.reschedule(request.user, id, dto);
   }
 
   @Post(':id/approve')

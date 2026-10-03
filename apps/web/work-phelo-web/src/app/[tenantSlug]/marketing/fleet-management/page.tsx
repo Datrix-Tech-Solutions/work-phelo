@@ -8,6 +8,7 @@ import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/Con
 import { FleetVehiclePanel } from '@/components/organisms/marketing/FleetVehiclePanel';
 import { AssignFleetDriverPanel } from '@/components/organisms/marketing/AssignFleetDriverPanel';
 import { TripsPanel } from '@/components/organisms/marketing/TripsPanel';
+import { useFleetTripHistory } from '@/hooks/marketing/useTripHistory';
 import {
   useFleet,
   useFleetOptions,
@@ -41,6 +42,8 @@ export default function FleetManagementPage() {
   const [assigning, setAssigning] = useState<FleetVehicle | null>(null);
   const [retiring, setRetiring] = useState<FleetVehicle | null>(null);
   const [viewingTrips, setViewingTrips] = useState<FleetVehicle | null>(null);
+  // Past trips load only once a vehicle's trips are opened.
+  const tripHistory = useFleetTripHistory(viewingTrips?.assetId);
 
   const { data, isLoading, isError } = useFleet({
     page,
@@ -148,7 +151,7 @@ export default function FleetManagementPage() {
       </div>
 
       <TripsPanel
-        title="Booked Trips"
+        title="Trips"
         subtitle={
           viewingTrips
             ? `${viewingTrips.make && viewingTrips.model ? `${viewingTrips.make} ${viewingTrips.model}` : viewingTrips.name} · ${viewingTrips.assetNumber}`
@@ -167,6 +170,20 @@ export default function FleetManagementPage() {
             : null
         }
         totalCount={viewingTrips?.tripCount}
+        history={{
+          items: tripHistory.data?.pages.flatMap((page) => page.data) ?? [],
+          total: tripHistory.data?.pages[0]?.meta.total ?? 0,
+          isLoading: tripHistory.isLoading,
+          hasMore: !!tripHistory.hasNextPage,
+          isLoadingMore: tripHistory.isFetchingNextPage,
+          onLoadMore: () => tripHistory.fetchNextPage(),
+          describeWith: (trip) =>
+            trip.selfDriven
+              ? `Self-driven by ${trip.requesterName}`
+              : trip.driverName
+                ? `Driver: ${trip.driverName}`
+                : null,
+        }}
         onClose={() => setViewingTrips(null)}
       />
       <FleetVehiclePanel isOpen={addOpen} onClose={() => setAddOpen(false)} />

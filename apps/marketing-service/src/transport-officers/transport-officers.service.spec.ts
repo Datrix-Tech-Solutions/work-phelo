@@ -43,7 +43,7 @@ describe('TransportOfficersService', () => {
     $transaction: jest.fn(),
   };
   const directory = { list: jest.fn(), resolve: jest.fn() };
-  const trips = { activeTrips: jest.fn() };
+  const trips = { activeTrips: jest.fn(), completedTrips: jest.fn() };
   const service = new TransportOfficersService(
     prisma as never,
     directory as never,
@@ -207,6 +207,37 @@ describe('TransportOfficersService', () => {
       expect(await status('ON_ROUTE')).toEqual(['Ama']);
       expect(await status('BOOKED')).toEqual(['Kofi']);
       expect(await status('AVAILABLE')).toEqual(['Yaw']);
+    });
+  });
+
+  describe('tripHistory', () => {
+    it('lists the completed trips driven by that officer’s employee', async () => {
+      prisma.marketingTransportOfficer.findFirst.mockResolvedValue({
+        employeeId: 'e1',
+      });
+      trips.completedTrips.mockResolvedValue({ data: [], meta: {} });
+
+      await service.tripHistory(user, 'off-1', { page: 2, limit: 5 });
+
+      expect(prisma.marketingTransportOfficer.findFirst).toHaveBeenCalledWith({
+        where: { id: 'off-1', tenantId: TENANT },
+        select: { employeeId: true },
+      });
+      expect(trips.completedTrips).toHaveBeenCalledWith(
+        TENANT,
+        { driverEmployeeId: 'e1' },
+        2,
+        5,
+      );
+    });
+
+    it('returns 404 for an officer in another tenant, without querying trips', async () => {
+      prisma.marketingTransportOfficer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.tripHistory(user, 'off-1', {}),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(trips.completedTrips).not.toHaveBeenCalled();
     });
   });
 

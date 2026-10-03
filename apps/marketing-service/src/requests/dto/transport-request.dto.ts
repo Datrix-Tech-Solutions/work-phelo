@@ -5,7 +5,7 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
-  IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -17,6 +17,16 @@ import {
   MinLength,
 } from 'class-validator';
 import { MarketingTransportRequestStatus } from '../../../prisma/generated/client';
+
+/**
+ * Statuses a request can be filtered by. ON_ROUTE is not stored: it is an approved
+ * request whose departure time has passed, worked out from the clock when listing.
+ */
+export const REQUEST_STATUS_FILTERS = [
+  ...Object.values(MarketingTransportRequestStatus),
+  'ON_ROUTE',
+] as const;
+export type RequestStatusFilter = (typeof REQUEST_STATUS_FILTERS)[number];
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -174,6 +184,62 @@ export class ApproveTransportRequestDto extends ReviewTransportRequestDto {
   selfDriven?: boolean;
 }
 
+export class RescheduleTransportRequestDto extends ApproveTransportRequestDto {
+  @ApiProperty({
+    example: '2026-10-20',
+    description: 'New travel date (YYYY-MM-DD).',
+  })
+  @Matches(DATE_PATTERN, { message: 'travelDate must be in YYYY-MM-DD format' })
+  travelDate!: string;
+
+  @ApiProperty({
+    example: '14:00',
+    description: 'New departure time (24h HH:mm).',
+  })
+  @Matches(TIME_PATTERN, { message: 'departureTime must be in HH:mm format' })
+  departureTime!: string;
+
+  @ApiProperty({
+    example: '17:00',
+    description: 'New return time (24h HH:mm).',
+  })
+  @Matches(TIME_PATTERN, { message: 'returnTime must be in HH:mm format' })
+  returnTime!: string;
+}
+
+export class CompleteTransportRequestDto {
+  @ApiProperty({
+    example: '12:40',
+    description:
+      'When the vehicle actually got back (24h HH:mm, on the travel date).',
+  })
+  @Matches(TIME_PATTERN, {
+    message: 'actualReturnTime must be in HH:mm format',
+  })
+  actualReturnTime!: string;
+}
+
+export class AllocationOptionsQueryDto {
+  @ApiPropertyOptional({
+    example: '2026-10-20',
+    description:
+      'Check availability for this date instead of the request’s own (for rescheduling).',
+  })
+  @IsOptional()
+  @Matches(DATE_PATTERN, { message: 'travelDate must be in YYYY-MM-DD format' })
+  travelDate?: string;
+
+  @ApiPropertyOptional({ example: '14:00' })
+  @IsOptional()
+  @Matches(TIME_PATTERN, { message: 'departureTime must be in HH:mm format' })
+  departureTime?: string;
+
+  @ApiPropertyOptional({ example: '17:00' })
+  @IsOptional()
+  @Matches(TIME_PATTERN, { message: 'returnTime must be in HH:mm format' })
+  returnTime?: string;
+}
+
 export class QueryTransportRequestsDto {
   @ApiPropertyOptional({ example: 1, minimum: 1, default: 1 })
   @IsOptional()
@@ -199,9 +265,10 @@ export class QueryTransportRequestsDto {
   search?: string;
 
   @ApiPropertyOptional({
-    enum: MarketingTransportRequestStatus,
+    enum: REQUEST_STATUS_FILTERS,
     isArray: true,
-    description: 'One or more statuses, comma-separated.',
+    description:
+      'One or more statuses, comma-separated. APPROVED means approved and not yet departed; ON_ROUTE means approved, departed and not yet completed.',
   })
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
@@ -213,6 +280,6 @@ export class QueryTransportRequestsDto {
       : value,
   )
   @IsArray()
-  @IsEnum(MarketingTransportRequestStatus, { each: true })
-  status?: MarketingTransportRequestStatus[];
+  @IsIn(REQUEST_STATUS_FILTERS, { each: true })
+  status?: RequestStatusFilter[];
 }

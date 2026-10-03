@@ -106,10 +106,18 @@ export function FleetCard({
   const tripRow: DataCardDetail[] = nextTrip
     ? [
         {
-          label: nextTrip.state === 'ON_ROUTE' ? 'On route' : 'Next trip',
+          label: nextTrip.overdue
+            ? 'Overdue'
+            : nextTrip.state === 'ON_ROUTE'
+              ? 'On route'
+              : 'Next trip',
           value: value(
             `${nextTrip.destination} · ${formatTravelDate(nextTrip.travelDate)} ${formatClock(nextTrip.departureTime)}–${formatClock(nextTrip.returnTime)}`,
-            nextTrip.state === 'ON_ROUTE' ? 'text-blue-600' : 'text-violet-600',
+            nextTrip.overdue
+              ? 'text-amber-600'
+              : nextTrip.state === 'ON_ROUTE'
+                ? 'text-blue-600'
+                : 'text-violet-600',
           ),
         },
         ...(vehicle.tripCount > 1

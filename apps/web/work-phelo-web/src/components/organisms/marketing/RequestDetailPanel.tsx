@@ -3,7 +3,12 @@
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { REQUEST_STATUS_BADGES, formatClock, formatTravelDate } from '@/lib/requestOptions';
+import {
+  REQUEST_STATUS_BADGES,
+  describeReturn,
+  formatClock,
+  formatTravelDate,
+} from '@/lib/requestOptions';
 import type { TransportRequest } from '@/types/marketing';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -15,34 +20,55 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+const longDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
 interface Props {
   request: TransportRequest | null;
   onClose: () => void;
   /** Shows Approve / Reject for pending requests (the viewer holds the approve permission). */
   canReview: boolean;
+  /** What the viewer may do to an approved or on-route trip. */
+  canReschedule: boolean;
+  canComplete: boolean;
+  canCancel: boolean;
   /** Approving needs a vehicle and driver, so it opens the approval pop-up. */
   onApprove: (request: TransportRequest) => void;
   /** Rejecting asks for a reason, so it opens the rejection pop-up. */
   onReject: (request: TransportRequest) => void;
+  /** Rescheduling is the approval pop-up again, with a date and times. */
+  onReschedule: (request: TransportRequest) => void;
+  /** Completing asks for the real return time. */
+  onComplete: (request: TransportRequest) => void;
+  onCancel: (request: TransportRequest) => void;
 }
 
-export function RequestDetailPanel({ request, onClose, canReview, onApprove, onReject }: Props) {
-  function handleClose() {
-    onClose();
-  }
-
-  const showActions = canReview && request?.status === 'PENDING';
+export function RequestDetailPanel({
+  request,
+  onClose,
+  canReview,
+  canReschedule,
+  canComplete,
+  canCancel,
+  onApprove,
+  onReject,
+  onReschedule,
+  onComplete,
+  onCancel,
+}: Props) {
   const badge = request ? REQUEST_STATUS_BADGES[request.status] : null;
+  const reviewing = canReview && request?.status === 'PENDING';
+  const tripActions = !!request && (canReschedule || canComplete || canCancel);
 
   return (
     <SidePanel
       isOpen={!!request}
-      onClose={handleClose}
+      onClose={onClose}
       title="Transport Request"
       description={request ? `Raised by ${request.requester.name}` : undefined}
       descriptionAction={badge ? <Badge label={badge.label} variant={badge.variant} /> : undefined}
       footer={
-        showActions && request ? (
+        request && reviewing ? (
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
@@ -53,11 +79,36 @@ export function RequestDetailPanel({ request, onClose, canReview, onApprove, onR
             </Button>
             <Button onClick={() => onApprove(request)}>Approve</Button>
           </div>
+        ) : request && tripActions && !reviewing ? (
+          <div className="flex flex-wrap justify-end gap-3">
+            {canCancel && (
+              <Button
+                variant="outline"
+                onClick={() => onCancel(request)}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+              >
+                Cancel Trip
+              </Button>
+            )}
+            {canReschedule && (
+              <Button variant="outline" onClick={() => onReschedule(request)}>
+                Reschedule
+              </Button>
+            )}
+            {canComplete && <Button onClick={() => onComplete(request)}>Complete Trip</Button>}
+          </div>
         ) : undefined
       }
     >
       {request && (
         <div className="flex flex-col gap-4">
+          {request.status === 'ON_ROUTE' && request.overdue && (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded-input px-3 py-2">
+              This trip is past its planned return time. Complete it once the vehicle is back,
+              cancel it if nobody went, or reschedule it.
+            </p>
+          )}
+
           <Field label="Requester">
             {request.requester.name}
             {request.requester.department ? ` · ${request.requester.department}` : ''}
@@ -68,6 +119,17 @@ export function RequestDetailPanel({ request, onClose, canReview, onApprove, onR
           <Field label="Departure – Return">
             {formatClock(request.departureTime)} – {formatClock(request.returnTime)}
           </Field>
+          {request.reschedule && (
+            <Field label="Rescheduled">
+              {`From ${formatTravelDate(request.reschedule.previous.travelDate)}${
+                request.reschedule.previous.departureTime && request.reschedule.previous.returnTime
+                  ? ` ${formatClock(request.reschedule.previous.departureTime)} – ${formatClock(request.reschedule.previous.returnTime)}`
+                  : ''
+              }`}
+              {request.reschedule.byName ? `\nBy ${request.reschedule.byName}` : ''}
+              {request.reschedule.count > 1 ? ` (moved ${request.reschedule.count} times)` : ''}
+            </Field>
+          )}
           <Field label="Passengers">
             {request.passengers.length === 0
               ? 'None'
@@ -95,13 +157,21 @@ export function RequestDetailPanel({ request, onClose, canReview, onApprove, onR
 
           {request.review && (
             <Field label={request.status === 'REJECTED' ? 'Rejected by' : 'Approved by'}>
-              {request.review.byName ?? 'Unknown'} ·{' '}
-              {new Date(request.review.at).toLocaleDateString('en-GB', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              })}
+              {request.review.byName ?? 'Unknown'} · {longDate(request.review.at)}
               {request.review.note ? `\n${request.review.note}` : ''}
+            </Field>
+          )}
+
+          {request.completion && (
+            <Field label="Returned">
+              {request.completion.actualReturnTime
+                ? `${formatClock(request.completion.actualReturnTime)}${
+                    describeReturn(request.completion.minutesLate)
+                      ? ` · ${describeReturn(request.completion.minutesLate)}`
+                      : ''
+                  }`
+                : 'Not recorded'}
+              {`\nCompleted by ${request.completion.byName ?? 'Unknown'} · ${longDate(request.completion.at)}`}
             </Field>
           )}
         </div>
