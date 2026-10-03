@@ -27,39 +27,9 @@ const EMPTY_FORM: NewAppointmentFields = {
   comment: '',
 };
 
-// TODO: remove — temporary dummy data (dates relative to today) to preview the layout.
-function daysFromToday(offset: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.toLocaleDateString('en-CA');
-}
-
-const DUMMY_APPOINTMENTS: Appointment[] = [
-  ['Accra Brewing Co.', -6, '09:00', '10:00', 'Ama Mensah', 'completed', 'Nana Addo'],
-  ['Volta Logistics', -2, '14:00', '15:00', 'Kofi Boateng', 'completed', 'Nana Addo'],
-  ['Golden Tulip Hotels', 0, '10:00', '11:00', 'Ama Mensah', 'scheduled', 'Nana Addo'],
-  ['Kumasi Textiles', 0, '13:30', '14:30', 'Yaw Owusu', 'scheduled', ''],
-  ['Takoradi Marine', 1, '09:30', '10:30', 'Kofi Boateng', 'scheduled', 'Abena Sarpong'],
-  ['Cape Coast Foods', 3, '11:00', '12:00', 'Efua Asare', 'scheduled', ''],
-  ['Tema Steel Works', 3, '15:00', '16:00', 'Yaw Owusu', 'scheduled', ''],
-  ['Sunyani Agro', 5, '08:30', '', 'Ama Mensah', 'cancelled', 'Abena Sarpong'],
-  ['Ho Pharma Ltd', 8, '10:00', '11:30', 'Efua Asare', 'scheduled', ''],
-  ['Tamale Energy', 12, '14:00', '15:00', 'Kofi Boateng', 'scheduled', ''],
-].map(([prospectName, offset, startTime, endTime, marketer, status, manager], i) => ({
-  id: `dummy-${i}`,
-  prospectName: prospectName as string,
-  date: daysFromToday(offset as number),
-  startTime: startTime as string,
-  endTime: (endTime as string) || undefined,
-  marketer: marketer as string,
-  manager: (manager as string) || undefined,
-  comment: '',
-  status: status as Appointment['status'],
-}));
-
 export default function AppointmentsPage() {
   const user = useAuthStore((s) => s.user);
-  const [appointments, setAppointments] = useState<Appointment[]>(DUMMY_APPOINTMENTS);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   const [viewing, setViewing] = useState<Appointment | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);

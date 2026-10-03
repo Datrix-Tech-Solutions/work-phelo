@@ -5,7 +5,6 @@ import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
@@ -18,7 +17,7 @@ export type CampaignDispatch = 'instant' | 'schedule';
 export interface CampaignForm {
   name: string;
   outreachChannel: CampaignChannel[];
-  targetSegment: string;
+  targetSegment: string[];
   subject: string;
   message: string;
   dispatch: CampaignDispatch;
@@ -28,7 +27,7 @@ export interface CampaignForm {
 const DEFAULT_VALUES: CampaignForm = {
   name: '',
   outreachChannel: [],
-  targetSegment: '',
+  targetSegment: [],
   subject: '',
   message: '',
   dispatch: 'instant',
@@ -84,7 +83,7 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
   }, [isOpen, reset]);
 
   const preview = useCampaignPreview({
-    businessTypeId: segmentValue || undefined,
+    businessTypeIds: segmentValue,
     channels: channelValue,
   });
 
@@ -143,10 +142,15 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
           error={errors.outreachChannel?.message}
         />
 
-        <input type="hidden" {...register('targetSegment', { required: 'Required' })} />
-        <SearchSelect
+        <input
+          type="hidden"
+          {...register('targetSegment', {
+            validate: (v) => v.length > 0 || 'Select at least one target segment',
+          })}
+        />
+        <MultiSelect
           label="Target Segment"
-          placeholder="Select target segment"
+          placeholder="Select target segments"
           value={segmentValue}
           onChange={(v) => setValue('targetSegment', v, { shouldValidate: true })}
           options={segmentOptions}
@@ -155,10 +159,7 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
         {preview.data && (
           <p className="text-xs text-gray-500">
             {preview.data.prospectCount} prospect{preview.data.prospectCount === 1 ? '' : 's'} in
-            this segment · {preview.data.reachable} message
-            {preview.data.reachable === 1 ? '' : 's'} will be queued
-            {preview.data.skipped > 0 ? `, ${preview.data.skipped} skipped` : ''}. Only each
-            prospect&apos;s primary contact is messaged.
+            the selected segments · {preview.data.reachable} message
           </p>
         )}
 

@@ -26,11 +26,11 @@ import {
 
 const NOT_FOUND_MESSAGE = 'Campaign not found';
 const INVALID_BUSINESS_TYPE_MESSAGE =
-  'The selected business type is invalid or inactive';
+  'A selected business type is invalid or inactive';
 const NO_PROSPECTS_MESSAGE =
-  'No prospects were found under the selected business type';
+  'No prospects were found under the selected business types';
 const NO_REACHABLE_MESSAGE =
-  'None of the prospects under this business type have a primary contact reachable on the selected channels';
+  'None of the prospects under these business types have a primary contact reachable on the selected channels';
 const PAST_DATE_MESSAGE = 'The scheduled date cannot be in the past';
 const NOT_CANCELLABLE_MESSAGE = 'Only scheduled campaigns can be cancelled';
 const CANCELLED_DETAIL = 'Campaign cancelled';
@@ -85,17 +85,7 @@ export class CampaignsService {
       tenantId: user.tenantId,
       ...(query.status ? { status: query.status } : {}),
       ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: 'insensitive' } },
-              {
-                businessTypeName: {
-                  contains: query.search,
-                  mode: 'insensitive',
-                },
-              },
-            ],
-          }
+        ? { name: { contains: query.search, mode: 'insensitive' } }
         : {}),
     };
 
@@ -134,10 +124,10 @@ export class CampaignsService {
 
   /** How many messages a campaign would queue, without saving anything. */
   async preview(user: RequestUser, dto: PreviewCampaignRecipientsDto) {
-    await this.assertActiveBusinessType(user.tenantId, dto.businessTypeId);
+    await this.assertActiveBusinessTypes(user.tenantId, dto.businessTypeIds);
     const { prospectCount, drafts } = await this.resolveRecipients(
       user.tenantId,
-      dto.businessTypeId,
+      dto.businessTypeIds,
       dto.channels,
     );
     return {
@@ -149,13 +139,13 @@ export class CampaignsService {
 
   async create(user: RequestUser, dto: CreateCampaignDto) {
     const scheduledDate = this.parseScheduledDate(dto);
-    const businessType = await this.assertActiveBusinessType(
+    const businessTypes = await this.assertActiveBusinessTypes(
       user.tenantId,
-      dto.businessTypeId,
+      dto.businessTypeIds,
     );
     const { prospectCount, drafts } = await this.resolveRecipients(
       user.tenantId,
-      dto.businessTypeId,
+      dto.businessTypeIds,
       dto.channels,
     );
     if (prospectCount === 0)
@@ -170,8 +160,8 @@ export class CampaignsService {
           tenantId: user.tenantId,
           name: dto.name,
           channels: dto.channels,
-          businessTypeId: businessType.id,
-          businessTypeName: businessType.name,
+          businessTypeIds: businessTypes.map((type) => type.id),
+          businessTypeNames: businessTypes.map((type) => type.name),
           subject: dto.subject,
           message: dto.message,
           dispatchMode: dto.dispatchMode,
@@ -281,11 +271,11 @@ export class CampaignsService {
    */
   private async resolveRecipients(
     tenantId: string,
-    businessTypeId: string,
+    businessTypeIds: string[],
     channels: CampaignChannel[],
   ) {
     const prospects = await this.prisma.marketingProspect.findMany({
-      where: { tenantId, businessTypeId },
+      where: { tenantId, businessTypeId: { in: businessTypeIds } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
@@ -346,10 +336,11 @@ export class CampaignsService {
     return drafts.filter((draft) => draft.status === status).length;
   }
 
-  private async assertActiveBusinessType(tenantId: string, id: string) {
-    const setting = await this.prisma.marketingCrmSettingOption.findFirst({
+  /** Every id must be an active business type of this tenant; returned in the order requested. */
+  private async assertActiveBusinessTypes(tenantId: string, ids: string[]) {
+    const settings = await this.prisma.marketingCrmSettingOption.findMany({
       where: {
-        id,
+        id: { in: ids },
         tenantId,
         category: MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
         archivedAt: null,
@@ -357,8 +348,12 @@ export class CampaignsService {
       },
       select: { id: true, name: true },
     });
-    if (!setting) throw new BadRequestException(INVALID_BUSINESS_TYPE_MESSAGE);
-    return setting;
+    const byId = new Map(settings.map((setting) => [setting.id, setting]));
+    const ordered = ids.map((id) => byId.get(id));
+    if (ordered.some((setting) => !setting)) {
+      throw new BadRequestException(INVALID_BUSINESS_TYPE_MESSAGE);
+    }
+    return ordered as { id: string; name: string }[];
   }
 
   /** "YYYY-MM-DD" as a UTC date, rejecting anything before today. */
@@ -410,10 +405,10 @@ export class CampaignsService {
       id: campaign.id,
       name: campaign.name,
       channels: campaign.channels,
-      businessType: {
-        id: campaign.businessTypeId,
-        name: campaign.businessTypeName,
-      },
+      businessTypes: campaign.businessTypeIds.map((id, index) => ({
+        id,
+        name: campaign.businessTypeNames[index] ?? '',
+      })),
       subject: campaign.subject,
       message: campaign.message,
       dispatchMode: campaign.dispatchMode,

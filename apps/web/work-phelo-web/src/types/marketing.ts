@@ -790,7 +790,7 @@ export interface Campaign {
   id: string;
   name: string;
   channels: CampaignChannel[];
-  businessType: { id: string; name: string };
+  businessTypes: { id: string; name: string }[];
   subject: string;
   message: string;
   dispatchMode: CampaignDispatchMode;
@@ -817,7 +817,7 @@ export interface CampaignsQuery {
 export interface CreateCampaignPayload {
   name: string;
   channels: CampaignChannel[];
-  businessTypeId: string;
+  businessTypeIds: string[];
   subject: string;
   message: string;
   dispatchMode: CampaignDispatchMode;
@@ -825,7 +825,7 @@ export interface CreateCampaignPayload {
 }
 
 export interface CampaignPreviewPayload {
-  businessTypeId: string;
+  businessTypeIds: string[];
   channels: CampaignChannel[];
 }
 

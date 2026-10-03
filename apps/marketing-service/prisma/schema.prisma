@@ -476,8 +476,8 @@ model MarketingCampaign {
   tenantId          String
   name              String
   channels          MarketingCampaignChannel[]
-  businessTypeId    String
-  businessTypeName  String
+  businessTypeIds   String[]
+  businessTypeNames String[]
   subject           String
   message           String
   dispatchMode      MarketingCampaignDispatchMode

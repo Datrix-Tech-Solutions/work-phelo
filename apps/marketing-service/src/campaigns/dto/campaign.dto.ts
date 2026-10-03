@@ -53,12 +53,15 @@ export class CreateCampaignDto {
   channels!: CampaignChannel[];
 
   @ApiProperty({
-    format: 'uuid',
+    type: [String],
     description:
-      'Prospect business type. Every prospect under it is contacted, through its primary contact.',
+      'Prospect business types. Every prospect under any of them is contacted, through its primary contact.',
   })
-  @IsUUID()
-  businessTypeId!: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  businessTypeIds!: string[];
 
   @ApiProperty({ example: 'Introducing our new product', maxLength: 200 })
   @Transform(trim)
@@ -107,7 +110,7 @@ export class QueryCampaignsDto {
   limit?: number;
 
   @ApiPropertyOptional({
-    description: 'Matches campaign name or business type.',
+    description: 'Matches the campaign name.',
   })
   @IsOptional()
   @Transform(trim)
@@ -122,9 +125,12 @@ export class QueryCampaignsDto {
 }
 
 export class PreviewCampaignRecipientsDto {
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
-  businessTypeId!: string;
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  businessTypeIds!: string[];
 
   @ApiProperty({ enum: CAMPAIGN_CHANNELS, isArray: true })
   @IsArray()
