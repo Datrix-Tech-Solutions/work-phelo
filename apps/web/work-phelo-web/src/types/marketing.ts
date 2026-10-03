@@ -534,6 +534,8 @@ export interface TransportRequestPerson {
   employeeId: string;
   name: string;
   department: string | null;
+  /** Present on the selectable employees; saved passengers don't store it. */
+  jobTitle?: string | null;
 }
 
 export interface TransportRequest {
@@ -553,7 +555,7 @@ export interface TransportRequest {
   /** Set once approved: who is driving what. */
   allocation: {
     vehicle: { assetId: string; name: string | null; assetNumber: string | null };
-    driver: { employeeId: string; name: string | null };
+    driver: { employeeId: string | null; name: string | null; selfDriven: boolean };
   } | null;
   cancelledAt: string | null;
   createdAt: string;
@@ -609,7 +611,10 @@ export interface TransportRequestAllocationOptions {
 
 export interface ApproveTransportRequestPayload {
   vehicleAssetId: string;
-  driverEmployeeId: string;
+  /** Required unless selfDriven is true. */
+  driverEmployeeId?: string;
+  /** The requester drives, so no driver is assigned. */
+  selfDriven?: boolean;
   note?: string;
 }
 

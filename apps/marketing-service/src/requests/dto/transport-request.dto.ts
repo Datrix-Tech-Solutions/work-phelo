@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -155,12 +156,22 @@ export class ApproveTransportRequestDto extends ReviewTransportRequestDto {
   @IsUUID()
   vehicleAssetId!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
-    description: 'HR employee ID of the driver to allocate.',
+    description:
+      'HR employee ID of a transport officer to drive. Required unless selfDriven is true.',
   })
+  @IsOptional()
   @IsUUID()
-  driverEmployeeId!: string;
+  driverEmployeeId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'True when the requester drives themselves, so no driver is assigned. Cannot be combined with driverEmployeeId.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  selfDriven?: boolean;
 }
 
 export class QueryTransportRequestsDto {

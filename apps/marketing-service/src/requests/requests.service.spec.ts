@@ -2,7 +2,6 @@ import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { InternalServiceClientError } from '@work-phelo/internal-auth';
@@ -63,6 +62,12 @@ function row(overrides: Record<string, unknown> = {}) {
     reviewedByName: null,
     reviewedAt: null,
     reviewNote: null,
+    vehicleAssetId: null,
+    vehicleName: null,
+    vehicleAssetNumber: null,
+    driverEmployeeId: null,
+    driverName: null,
+    selfDriven: false,
     cancelledAt: null,
     createdAt: new Date('2026-10-01T00:00:00.000Z'),
     updatedAt: new Date('2026-10-01T00:00:00.000Z'),
@@ -431,8 +436,171 @@ describe('RequestsService', () => {
           name: 'Toyota Hilux',
           assetNumber: 'VEH-0001',
         },
-        driver: { employeeId: 'e5', name: 'Yaw Owusu' },
+        driver: { employeeId: 'e5', name: 'Yaw Owusu', selfDriven: false },
       });
+    });
+
+    describe('self-driven trips', () => {
+      const selfDrivenDto = { vehicleAssetId: 'veh-1', selfDriven: true };
+
+      it('allocates only the vehicle and records the requester as the driver', async () => {
+        arrangeApprove();
+
+        await service.approve(reviewer(), 'req-1', selfDrivenDto);
+
+        expect(
+          callArg(tx.marketingTransportRequest.updateMany).data,
+        ).toMatchObject({
+          status: 'APPROVED',
+          vehicleAssetId: 'veh-1',
+          selfDriven: true,
+          driverEmployeeId: 'e1',
+          driverName: 'Ama Mensah',
+        });
+      });
+
+      it('needs no transport officer, so the officer check is skipped', async () => {
+        arrangeApprove();
+
+        await service.approve(reviewer(), 'req-1', selfDrivenDto);
+
+        expect(officers.assertActiveOfficer).not.toHaveBeenCalled();
+        expect(directory.resolve).toHaveBeenCalledWith(TENANT, {
+          userId: 'user-2',
+        });
+      });
+
+      it('still stops the requester being double-booked as a driver', async () => {
+        arrangeApprove();
+        tx.marketingTransportRequest.findMany.mockResolvedValue([
+          {
+            vehicleAssetId: 'other',
+            driverEmployeeId: 'e1',
+            departureTime: '09:00',
+            returnTime: '12:00',
+            requesterName: 'Efua',
+          },
+        ]);
+
+        await expect(
+          service.approve(reviewer(), 'req-1', selfDrivenDto),
+        ).rejects.toThrow(/Ama Mensah is already allocated/);
+        expect(
+          callArg(tx.marketingTransportRequest.findMany).where,
+        ).toMatchObject({
+          OR: [{ vehicleAssetId: 'veh-1' }, { driverEmployeeId: 'e1' }],
+        });
+      });
+
+      it('skips the driver clash check when the requester has no employee record', async () => {
+        arrangeApprove();
+        prisma.marketingTransportRequest.findFirst.mockReset();
+        prisma.marketingTransportRequest.findFirst
+          .mockResolvedValueOnce(row({ requesterEmployeeId: null }))
+          .mockResolvedValueOnce(
+            row({
+              status: 'APPROVED',
+              selfDriven: true,
+              vehicleAssetId: 'veh-1',
+            }),
+          );
+
+        await service.approve(reviewer(), 'req-1', selfDrivenDto);
+
+        expect(
+          callArg(tx.marketingTransportRequest.findMany).where,
+        ).toMatchObject({
+          OR: [{ vehicleAssetId: 'veh-1' }],
+        });
+      });
+
+      it('still checks the vehicle', async () => {
+        arrangeApprove();
+        fleet.getVehicle.mockResolvedValue(
+          hrVehicle({ status: 'MAINTENANCE' }),
+        );
+
+        await expect(
+          service.approve(reviewer(), 'req-1', selfDrivenDto),
+        ).rejects.toThrow(/under maintenance/);
+      });
+
+      it('shows the allocation as self-driven', async () => {
+        prisma.marketingTransportRequest.findFirst
+          .mockResolvedValueOnce(row())
+          .mockResolvedValueOnce(
+            row({
+              status: 'APPROVED',
+              vehicleAssetId: 'veh-1',
+              vehicleName: 'Toyota Hilux',
+              vehicleAssetNumber: 'VEH-0001',
+              driverEmployeeId: 'e1',
+              driverName: 'Ama Mensah',
+              selfDriven: true,
+            }),
+          );
+        directory.resolve.mockResolvedValue(resolvedFor());
+        fleet.getVehicle.mockResolvedValue(hrVehicle());
+        prisma.marketingFleetVehicle.findUnique.mockResolvedValue(null);
+        tx.marketingTransportRequest.findMany.mockResolvedValue([]);
+        tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 1 });
+
+        const result = await service.approve(
+          reviewer(),
+          'req-1',
+          selfDrivenDto,
+        );
+
+        expect(result.allocation?.driver).toEqual({
+          employeeId: 'e1',
+          name: 'Ama Mensah',
+          selfDriven: true,
+        });
+      });
+
+      it('shows a self-driven allocation even when the requester has no employee record', async () => {
+        prisma.marketingTransportRequest.findFirst.mockResolvedValue(
+          row({
+            status: 'APPROVED',
+            vehicleAssetId: 'veh-1',
+            driverEmployeeId: null,
+            driverName: 'Ama',
+            selfDriven: true,
+          }),
+        );
+
+        const result = await service.findOne(user(), 'req-1');
+
+        expect(result.allocation?.driver).toEqual({
+          employeeId: null,
+          name: 'Ama',
+          selfDriven: true,
+        });
+      });
+    });
+
+    it.each([
+      [
+        'both a driver and self-driven',
+        { driverEmployeeId: 'e5', selfDriven: true },
+        /not both/,
+      ],
+      ['neither a driver nor self-driven', {}, /Select a driver/],
+      [
+        'self-driven explicitly false and no driver',
+        { selfDriven: false },
+        /Select a driver/,
+      ],
+    ])('rejects %s', async (_label, patch, message) => {
+      arrangeApprove();
+
+      await expect(
+        service.approve(reviewer(), 'req-1', {
+          vehicleAssetId: 'veh-1',
+          ...patch,
+        }),
+      ).rejects.toThrow(message);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('refuses a driver who is not an active transport officer', async () => {
@@ -581,15 +749,31 @@ describe('RequestsService', () => {
       expect(data).not.toHaveProperty('vehicleAssetId');
     });
 
-    it('does not let anyone review their own request', async () => {
-      prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+    it('lets the requester approve their own request, since the permission is the only gate', async () => {
+      arrangeApprove();
+      // arrangeApprove's first lookup is a request raised by user-1; approve as that same user.
+      const requester = user({ id: 'user-1', firstName: 'Ama' });
 
       await expect(
-        service.approve(user(), 'req-1', approveDto),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-      await expect(service.reject(user(), 'req-1', {})).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+        service.approve(requester, 'req-1', approveDto),
+      ).resolves.toBeDefined();
+      expect(
+        callArg(tx.marketingTransportRequest.updateMany).data,
+      ).toMatchObject({ status: 'APPROVED', reviewedByUserId: 'user-1' });
+    });
+
+    it('lets the requester reject their own request too', async () => {
+      prisma.marketingTransportRequest.findFirst
+        .mockResolvedValueOnce(row())
+        .mockResolvedValueOnce(row({ status: 'REJECTED' }));
+      directory.resolve.mockResolvedValue({ person: null, people: [] });
+      prisma.marketingTransportRequest.updateMany.mockResolvedValue({
+        count: 1,
+      });
+
+      await expect(
+        service.reject(user({ id: 'user-1' }), 'req-1', {}),
+      ).resolves.toBeDefined();
     });
 
     it('only reviews pending requests', async () => {

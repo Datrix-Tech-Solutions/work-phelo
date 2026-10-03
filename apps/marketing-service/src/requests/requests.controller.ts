@@ -163,7 +163,7 @@ export class RequestsController {
   @ApiOperation({
     summary: 'Approve a pending request and allocate a vehicle and driver',
     description:
-      'Both a vehicle and a driver are required. Reviewers cannot approve their own requests, and a vehicle or driver already allocated to an overlapping approved trip is rejected.',
+      'Both a vehicle and a driver are required. A vehicle or driver already allocated to an overlapping approved trip is rejected.',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   approve(
@@ -179,7 +179,6 @@ export class RequestsController {
   @RequireAnyPermission(REQUESTS_APPROVE_ALL)
   @ApiOperation({
     summary: 'Reject a pending request',
-    description: 'Reviewers cannot reject their own requests.',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   reject(

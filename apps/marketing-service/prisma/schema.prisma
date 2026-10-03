@@ -371,6 +371,8 @@ model MarketingTransportRequest {
   vehicleAssetNumber  String?
   driverEmployeeId    String?
   driverName          String?
+  /// True when the requester drives; driverEmployeeId/driverName then hold the requester.
+  selfDriven          Boolean                         @default(false)
   cancelledAt         DateTime?
   createdAt           DateTime                        @default(now())
   updatedAt           DateTime                        @updatedAt

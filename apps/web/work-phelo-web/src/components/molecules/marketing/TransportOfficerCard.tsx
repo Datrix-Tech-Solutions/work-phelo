@@ -49,6 +49,7 @@ export function TransportOfficerCard({ officer, onToggleActive }: Props) {
 
   return (
     <DataCard
+      compact
       className={cn(!officer.isActive && 'opacity-80')}
       icon={<Avatar name={officer.name} size="md" />}
       title={officer.name}
