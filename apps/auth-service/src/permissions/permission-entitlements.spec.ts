@@ -67,6 +67,7 @@ describe('permission entitlements', () => {
     'marketing.requests',
     'marketing.requests.all',
     'marketing.transport-officers',
+    'marketing.campaigns',
   ])('scopes %s to the Marketing module only', (name) => {
     const resource = { name, module: 'MARKETING' };
 

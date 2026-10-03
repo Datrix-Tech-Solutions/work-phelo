@@ -36,6 +36,40 @@ enum MarketingClientProductStatus {
   @@schema("marketing")
 }
 
+enum MarketingCampaignChannel {
+  SMS
+  EMAIL
+
+  @@schema("marketing")
+}
+
+enum MarketingCampaignDispatchMode {
+  INSTANT
+  SCHEDULED
+
+  @@schema("marketing")
+}
+
+enum MarketingCampaignStatus {
+  PENDING_DISPATCH
+  SCHEDULED
+  SENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+
+  @@schema("marketing")
+}
+
+enum MarketingCampaignRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+
+  @@schema("marketing")
+}
+
 enum MarketingTransportRequestStatus {
   PENDING
   APPROVED
@@ -434,5 +468,55 @@ model MarketingTransportOfficer {
 
   @@unique([tenantId, employeeId])
   @@index([tenantId, isActive])
+  @@schema("marketing")
+}
+
+model MarketingCampaign {
+  id                String                        @id @default(uuid())
+  tenantId          String
+  name              String
+  channels          MarketingCampaignChannel[]
+  businessTypeId    String
+  businessTypeName  String
+  subject           String
+  message           String
+  dispatchMode      MarketingCampaignDispatchMode
+  scheduledDate     DateTime?                     @db.Date
+  status            MarketingCampaignStatus
+  cancelledAt       DateTime?
+  cancelledByUserId String?
+  createdByUserId   String?
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  recipients MarketingCampaignRecipient[]
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@schema("marketing")
+}
+
+/// One row per prospect primary contact per channel, fixed when the campaign is created.
+model MarketingCampaignRecipient {
+  id             String                           @id @default(uuid())
+  tenantId       String
+  campaignId     String
+  prospectId     String
+  contactId      String
+  companyName    String
+  contactName    String
+  channel        MarketingCampaignChannel
+  /// Phone or email at creation time; null when the contact has none (row is SKIPPED).
+  address        String?
+  status         MarketingCampaignRecipientStatus @default(PENDING)
+  providerDetail String?
+  sentAt         DateTime?
+  createdAt      DateTime                         @default(now())
+  updatedAt      DateTime                         @updatedAt
+
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, contactId, channel])
+  @@index([tenantId, campaignId, status])
   @@schema("marketing")
 }

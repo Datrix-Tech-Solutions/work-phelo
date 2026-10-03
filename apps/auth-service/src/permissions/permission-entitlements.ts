@@ -94,6 +94,9 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
   'marketing.transport-officers': {
     moduleKey: 'marketing',
   },
+  'marketing.campaigns': {
+    moduleKey: 'marketing',
+  },
   'operations.reinsurance.dashboard': {
     moduleKey: 'operations',
     featurePath: ['operations', 'reinsurance'],

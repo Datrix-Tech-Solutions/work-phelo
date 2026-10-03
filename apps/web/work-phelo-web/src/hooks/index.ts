@@ -24,6 +24,7 @@ export * from './useTenantConfig';
 export * from './hr/useProjects';
 export * from './useModuleTransition';
 export * from './useDropdownPosition';
+export * from './marketing/useCampaigns';
 export * from './marketing/useGeocode';
 export * from './marketing/usePipelineStages';
 export * from './marketing/useProspectingSettings';

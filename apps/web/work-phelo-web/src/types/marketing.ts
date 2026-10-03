@@ -584,6 +584,10 @@ export interface TransportRequest {
   destination: string;
   notes: string | null;
   requester: { userId: string; name: string; department: string | null };
+  /** People in the vehicle excluding the driver; the requester counts unless they drive. */
+  passengerCount: number;
+  /** The requester is the one driving, so they are not a passenger. */
+  requesterIsDriver: boolean;
   passengers: TransportRequestPerson[];
   review: { byName: string | null; at: string; note: string | null } | null;
   /** The return time has passed on a trip nobody has completed yet. */
@@ -770,4 +774,65 @@ export interface CompletedTrip {
 export interface TripHistoryResponse {
   data: CompletedTrip[];
   meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export type CampaignChannel = 'SMS' | 'EMAIL';
+export type CampaignDispatchMode = 'INSTANT' | 'SCHEDULED';
+export type CampaignStatus =
+  | 'PENDING_DISPATCH'
+  | 'SCHEDULED'
+  | 'SENDING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  channels: CampaignChannel[];
+  businessType: { id: string; name: string };
+  subject: string;
+  message: string;
+  dispatchMode: CampaignDispatchMode;
+  /** YYYY-MM-DD; null for instant campaigns. */
+  scheduledDate: string | null;
+  status: CampaignStatus;
+  recipients: { total: number; pending: number; sent: number; failed: number; skipped: number };
+  cancelledAt: string | null;
+  createdAt: string;
+}
+
+export interface CampaignListResponse {
+  data: Campaign[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface CampaignsQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: CampaignStatus;
+}
+
+export interface CreateCampaignPayload {
+  name: string;
+  channels: CampaignChannel[];
+  businessTypeId: string;
+  subject: string;
+  message: string;
+  dispatchMode: CampaignDispatchMode;
+  scheduledDate?: string;
+}
+
+export interface CampaignPreviewPayload {
+  businessTypeId: string;
+  channels: CampaignChannel[];
+}
+
+export interface CampaignPreview {
+  prospectCount: number;
+  /** Messages that will be queued. */
+  reachable: number;
+  /** Contacts with no phone/email for a chosen channel, or a repeated address. */
+  skipped: number;
 }

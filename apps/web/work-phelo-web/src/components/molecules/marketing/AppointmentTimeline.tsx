@@ -2,13 +2,17 @@
 
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/lib/formatters';
-import { Appointment } from '@/components/molecules/marketing/AppointmentCard';
+import {
+  Appointment,
+  formatAppointmentTime,
+} from '@/components/molecules/marketing/AppointmentCard';
 
 interface Props {
   appointments: Appointment[];
+  onSelect?: (appointment: Appointment) => void;
 }
 
-export function AppointmentTimeline({ appointments }: Props) {
+export function AppointmentTimeline({ appointments, onSelect }: Props) {
   if (appointments.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-8">No upcoming appointments</p>;
   }
@@ -26,15 +30,33 @@ export function AppointmentTimeline({ appointments }: Props) {
                 i === 0 ? 'bg-brand border-brand' : 'bg-white border-gray-300',
               )}
             />
-            <div className="flex-1 flex items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
+            <div
+              role={onSelect ? 'button' : undefined}
+              tabIndex={onSelect ? 0 : undefined}
+              onClick={() => onSelect?.(appt)}
+              onKeyDown={(e) => {
+                if (onSelect && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  onSelect(appt);
+                }
+              }}
+              className={cn(
+                'flex-1 flex items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0 transition-shadow',
+                onSelect && 'cursor-pointer hover:shadow-md',
+              )}
+            >
               <div>
                 <p className="text-sm font-semibold text-gray-900">{formatDate(appt.date)}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {appt.startTime} – {appt.endTime}
-                </p>
+                <p className="text-xs text-gray-400 mt-0.5">{formatAppointmentTime(appt)}</p>
               </div>
               <span className="w-px h-8 bg-gray-200 shrink-0" />
-              <p className="text-sm text-gray-500 text-right truncate">{appt.prospectName}</p>
+              <div className="text-right min-w-0">
+                <p className="text-sm text-gray-500 truncate">{appt.prospectName}</p>
+                <p className="text-sm text-gray-500 mt-0.5 truncate">
+                  {appt.marketer}
+                  {appt.manager && ` · Mgr: ${appt.manager}`}
+                </p>
+              </div>
             </div>
           </div>
         ))}

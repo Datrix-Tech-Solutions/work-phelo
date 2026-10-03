@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { CampaignsModule } from './campaigns/campaigns.module';
 import { ClientsModule } from './clients/clients.module';
 import { FleetModule } from './fleet/fleet.module';
 import { CrmSettingsModule } from './crm-settings/crm-settings.module';
@@ -17,6 +18,7 @@ import { TransportOfficersModule } from './transport-officers/transport-officers
     CrmSettingsModule,
     ProspectsModule,
     ClientsModule,
+    CampaignsModule,
     FleetModule,
     RequestsModule,
     TransportOfficersModule,

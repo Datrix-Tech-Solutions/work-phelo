@@ -31,10 +31,16 @@ export interface Appointment {
   prospectName: string;
   date: string; // ISO: YYYY-MM-DD
   startTime: string; // HH:MM
-  endTime: string; // HH:MM
-  manager: string;
+  endTime?: string; // HH:MM — optional
+  marketer: string; // who requested the appointment
+  manager?: string; // assigned on approval — optional
   comment: string;
   status: 'scheduled' | 'completed' | 'cancelled';
+}
+
+/** "09:00 – 10:00", or just "09:00" when no end time was set. */
+export function formatAppointmentTime(appt: Pick<Appointment, 'startTime' | 'endTime'>): string {
+  return appt.endTime ? `${appt.startTime} – ${appt.endTime}` : appt.startTime;
 }
 
 export const APPOINTMENT_STATUS_PILL: Record<
@@ -50,7 +56,7 @@ export interface AppointmentCardProps {
   prospectName: string;
   date: string;
   time: string;
-  manager: string;
+  manager?: string;
   statusPill: { label: string; color: PillColor };
   onClick?: () => void;
   className?: string;
@@ -109,10 +115,12 @@ export function AppointmentCard({
       <hr className="border-gray-100" />
 
       {/* Manager */}
-      <div className="flex items-center gap-2 text-gray-600 text-sm">
-        <User size={14} className="shrink-0 text-gray-400" />
-        <span>{manager}</span>
-      </div>
+      {manager && (
+        <div className="flex items-center gap-2 text-gray-600 text-sm">
+          <User size={14} className="shrink-0 text-gray-400" />
+          <span>{manager}</span>
+        </div>
+      )}
     </div>
   );
 }
