@@ -1,14 +1,9 @@
-import {
-  BadGatewayException,
-  BadRequestException,
-  HttpException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
-import { InternalServiceClientError } from '@work-phelo/internal-auth';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { MarketingFleetVehicle } from '../../prisma/generated/client';
+import { callHr } from '../hr/call-hr';
 import { PrismaService } from '../prisma/prisma.service';
+import { TransportOfficersService } from '../transport-officers/transport-officers.service';
 import {
   CreateFleetVehicleDto,
   QueryFleetVehiclesDto,
@@ -28,6 +23,10 @@ const DETAIL_FIELDS = [
   'fuelType',
   'currentMileage',
 ] as const;
+/** Everything but mileage must be present the first time details are saved. */
+const REQUIRED_DETAIL_FIELDS = DETAIL_FIELDS.filter(
+  (key) => key !== 'currentMileage',
+);
 
 type FleetDetails = Pick<MarketingFleetVehicle, (typeof DETAIL_FIELDS)[number]>;
 
@@ -43,6 +42,7 @@ export class FleetService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hr: HrFleetClient,
+    private readonly officers: TransportOfficersService,
   ) {}
 
   async list(user: RequestUser, query: QueryFleetVehiclesDto = {}) {
@@ -89,8 +89,19 @@ export class FleetService {
     };
   }
 
-  options(user: RequestUser) {
-    return this.callHr(() => this.hr.getOptions(user.tenantId));
+  /** Branches come from HR; drivers are the tenant's active transport officers. */
+  async options(user: RequestUser) {
+    const [hrOptions, drivers] = await Promise.all([
+      this.callHr(() => this.hr.getOptions(user.tenantId)),
+      this.officers.activeDrivers(user.tenantId),
+    ]);
+    return {
+      branches: hrOptions.branches,
+      drivers: drivers.map((driver) => ({
+        id: driver.employeeId,
+        name: driver.name,
+      })),
+    };
   }
 
   async findOne(user: RequestUser, assetId: string) {
@@ -103,6 +114,13 @@ export class FleetService {
   async create(user: RequestUser, dto: CreateFleetVehicleDto) {
     if (dto.status === 'MAINTENANCE' && dto.assignedDriverId) {
       throw new BadRequestException(MAINTENANCE_WITH_DRIVER_MESSAGE);
+    }
+
+    if (dto.assignedDriverId) {
+      await this.officers.assertActiveOfficer(
+        user.tenantId,
+        dto.assignedDriverId,
+      );
     }
 
     const asset = await this.callHr(() =>
@@ -160,7 +178,9 @@ export class FleetService {
     const existing = await this.findDetails(user.tenantId, assetId);
 
     if (!existing) {
-      const missing = DETAIL_FIELDS.filter((key) => detailPatch[key] == null);
+      const missing = REQUIRED_DETAIL_FIELDS.filter(
+        (key) => detailPatch[key] == null,
+      );
       if (Object.keys(detailPatch).length && missing.length) {
         throw new BadRequestException(
           `Fleet details are incomplete: ${missing.join(', ')} required`,
@@ -217,6 +237,7 @@ export class FleetService {
   }
 
   async assignDriver(user: RequestUser, assetId: string, employeeId: string) {
+    await this.officers.assertActiveOfficer(user.tenantId, employeeId);
     const asset = await this.callHr(() =>
       this.hr.assignDriver(user.tenantId, assetId, employeeId),
     );
@@ -313,40 +334,11 @@ export class FleetService {
     }
   }
 
-  /** Passes HR validation errors through; hides outages and service-auth problems. */
-  private async callHr<T>(action: () => Promise<T>): Promise<T> {
-    try {
-      return await action();
-    } catch (error) {
-      if (!(error instanceof InternalServiceClientError)) throw error;
-      const status = error.statusCode;
-      const passThrough =
-        status !== undefined &&
-        status >= 400 &&
-        status < 500 &&
-        ![401, 403, 408, 429].includes(status);
-      if (passThrough) throw new HttpException(error.message, status);
-
-      this.logger.error(`hr-service call failed: ${error.message}`);
-      throw new BadGatewayException({
-        statusCode: 502,
-        error: 'Bad Gateway',
-        message:
-          'Fleet vehicles are temporarily unavailable. Please try again.',
-        // Coarse, secret-free hint so a failure can be diagnosed without server logs.
-        reason: this.failureReason(error),
-      });
-    }
-  }
-
-  private failureReason(error: InternalServiceClientError) {
-    const status = error.statusCode;
-    if (status === 401 || status === 403)
-      return 'HR_SERVICE_REJECTED_CREDENTIALS';
-    if (status !== undefined) return `HR_SERVICE_ERROR_${status}`;
-    // No HTTP status: either we never sent the request (config) or it never arrived.
-    return error.retryable
-      ? 'HR_SERVICE_UNREACHABLE'
-      : 'HR_SERVICE_NOT_CONFIGURED';
+  private callHr<T>(action: () => Promise<T>): Promise<T> {
+    return callHr(
+      this.logger,
+      action,
+      'Fleet vehicles are temporarily unavailable. Please try again.',
+    );
   }
 }

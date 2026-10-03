@@ -58,6 +58,7 @@ describe('FleetService', () => {
     },
   };
   const hr = {
+    getOptions: jest.fn(),
     listVehicles: jest.fn(),
     getVehicle: jest.fn(),
     createVehicle: jest.fn(),
@@ -66,9 +67,20 @@ describe('FleetService', () => {
     assignDriver: jest.fn(),
     unassignDriver: jest.fn(),
   };
-  const service = new FleetService(prisma as never, hr as never);
+  const officers = {
+    activeDrivers: jest.fn(),
+    assertActiveOfficer: jest.fn(),
+  };
+  const service = new FleetService(
+    prisma as never,
+    hr as never,
+    officers as never,
+  );
 
-  beforeEach(() => jest.resetAllMocks());
+  beforeEach(() => {
+    jest.resetAllMocks();
+    officers.assertActiveOfficer.mockResolvedValue(undefined);
+  });
 
   describe('list', () => {
     it('merges HR assets with details and flags vehicles missing details', async () => {
@@ -130,6 +142,25 @@ describe('FleetService', () => {
     });
   });
 
+  describe('options', () => {
+    it('offers HR branches but only active transport officers as drivers', async () => {
+      hr.getOptions.mockResolvedValue({
+        branches: [{ id: 'b1', name: 'Accra' }],
+        drivers: [{ id: 'every-employee', name: 'Not an officer' }],
+      });
+      officers.activeDrivers.mockResolvedValue([
+        { employeeId: 'e1', name: 'Ama Mensah', department: null },
+      ]);
+
+      const result = await service.options(user);
+
+      expect(result).toEqual({
+        branches: [{ id: 'b1', name: 'Accra' }],
+        drivers: [{ id: 'e1', name: 'Ama Mensah' }],
+      });
+    });
+  });
+
   describe('create', () => {
     it('creates the HR asset first, then the fleet details', async () => {
       hr.createVehicle.mockResolvedValue(asset());
@@ -154,6 +185,23 @@ describe('FleetService', () => {
       expect(result.warnings).toEqual([]);
     });
 
+    it('creates a vehicle without mileage', async () => {
+      const { currentMileage, ...withoutMileage } = createDto as Record<
+        string,
+        unknown
+      >;
+      void currentMileage;
+      hr.createVehicle.mockResolvedValue(asset());
+      prisma.marketingFleetVehicle.create.mockResolvedValue(
+        details({ currentMileage: null }),
+      );
+
+      const result = await service.create(user, withoutMileage as never);
+
+      expect(result.currentMileage).toBeNull();
+      expect(result.needsFleetDetails).toBe(false);
+    });
+
     it('keeps the vehicle and reports a warning when driver assignment fails', async () => {
       hr.createVehicle.mockResolvedValue(asset());
       prisma.marketingFleetVehicle.create.mockResolvedValue(details());
@@ -168,6 +216,20 @@ describe('FleetService', () => {
 
       expect(result.assetId).toBe('asset-1');
       expect(result.warnings[0]).toContain('driver could not be assigned');
+    });
+
+    it('refuses a driver who is not an active officer before creating anything', async () => {
+      officers.assertActiveOfficer.mockRejectedValue(
+        new BadRequestException('not an officer'),
+      );
+
+      await expect(
+        service.create(user, {
+          ...(createDto as object),
+          assignedDriverId: 'emp-1',
+        } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(hr.createVehicle).not.toHaveBeenCalled();
     });
 
     it('rejects maintenance combined with a driver before touching HR', async () => {
@@ -191,6 +253,41 @@ describe('FleetService', () => {
         service.update(user, 'asset-1', { make: 'Toyota' }),
       ).rejects.toThrow(/incomplete: vehicleType, model/);
       expect(prisma.marketingFleetVehicle.upsert).not.toHaveBeenCalled();
+    });
+
+    it('does not require mileage the first time details are saved', async () => {
+      hr.getVehicle.mockResolvedValue(asset());
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(null);
+      prisma.marketingFleetVehicle.upsert.mockResolvedValue(
+        details({ currentMileage: null }),
+      );
+
+      const result = await service.update(user, 'asset-1', {
+        vehicleType: 'PICKUP',
+        make: 'Toyota',
+        model: 'Hilux',
+        yearOfRegistration: 2022,
+        fuelType: 'DIESEL',
+      });
+
+      expect(result.currentMileage).toBeNull();
+      expect(prisma.marketingFleetVehicle.upsert).toHaveBeenCalled();
+    });
+
+    it('clears mileage when null is sent', async () => {
+      hr.getVehicle.mockResolvedValue(asset());
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(details());
+      prisma.marketingFleetVehicle.upsert.mockResolvedValue(
+        details({ currentMileage: null }),
+      );
+
+      await service.update(user, 'asset-1', { currentMileage: null });
+
+      expect(prisma.marketingFleetVehicle.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ currentMileage: null }) as unknown,
+        }),
+      );
     });
 
     it('rejects an empty patch', async () => {
@@ -242,6 +339,32 @@ describe('FleetService', () => {
         }),
       ).rejects.toBeInstanceOf(HttpException);
       expect(prisma.marketingFleetVehicle.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('assignDriver', () => {
+    it('only assigns active transport officers', async () => {
+      officers.assertActiveOfficer.mockRejectedValue(
+        new BadRequestException('not an officer'),
+      );
+
+      await expect(
+        service.assignDriver(user, 'asset-1', 'emp-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(hr.assignDriver).not.toHaveBeenCalled();
+    });
+
+    it('assigns an active officer', async () => {
+      hr.assignDriver.mockResolvedValue(asset({ status: 'ASSIGNED' }));
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(details());
+
+      await service.assignDriver(user, 'asset-1', 'emp-1');
+
+      expect(officers.assertActiveOfficer).toHaveBeenCalledWith(
+        TENANT,
+        'emp-1',
+      );
+      expect(hr.assignDriver).toHaveBeenCalledWith(TENANT, 'asset-1', 'emp-1');
     });
   });
 

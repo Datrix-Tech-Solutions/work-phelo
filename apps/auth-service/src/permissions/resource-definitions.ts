@@ -254,6 +254,24 @@ export const RESOURCES = [
     module: 'MARKETING',
     description: 'Marketing fleet vehicles linked to HR vehicle assets',
   },
+  {
+    name: 'marketing.requests',
+    module: 'MARKETING',
+    description:
+      'Marketing transport requests the user raised: create, edit while pending, cancel',
+  },
+  {
+    name: 'marketing.requests.all',
+    module: 'MARKETING',
+    description:
+      'Tenant-wide Marketing transport request visibility and approval',
+  },
+  {
+    name: 'marketing.transport-officers',
+    module: 'MARKETING',
+    description:
+      'Marketing transport officers (drivers) added from the employee list',
+  },
 
   {
     name: 'operations.reinsurance.dashboard',
