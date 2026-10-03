@@ -5,6 +5,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
+import { Icons } from '@/components/atoms/icons';
 import {
   useCreateRequest,
   useRequestFormOptions,
@@ -98,9 +99,20 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
       (options?.employees ?? []).map((employee) => ({
         value: employee.employeeId,
         label: employee.name,
-        sublabel: employee.department ?? undefined,
+        sublabel: [employee.jobTitle, employee.department].filter(Boolean).join(' · ') || undefined,
       })),
     [options],
+  );
+  // Saved passengers may no longer be selectable (e.g. left the company), so fall back to the saved copy.
+  const selectedPassengers = values.passengerIds.map(
+    (id) =>
+      options?.employees.find((employee) => employee.employeeId === id) ??
+      request?.passengers.find((passenger) => passenger.employeeId === id) ?? {
+        employeeId: id,
+        name: 'Unknown employee',
+        department: null,
+        jobTitle: null,
+      },
   );
 
   const requester = request
@@ -274,7 +286,39 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
           options={passengerOptions}
           value={values.passengerIds}
           onChange={(v) => set('passengerIds', v)}
+          hideChips
         />
+
+        {selectedPassengers.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {selectedPassengers.map((person) => (
+              <div
+                key={person.employeeId}
+                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{person.name}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {[person.jobTitle, person.department].filter(Boolean).join(' · ') ||
+                      'No role or department on record'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    set(
+                      'passengerIds',
+                      values.passengerIds.filter((id) => id !== person.employeeId),
+                    )
+                  }
+                  className="text-gray-400 hover:text-red-400 transition-colors shrink-0"
+                >
+                  <Icons.X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <SectionTitle>Notes</SectionTitle>
 

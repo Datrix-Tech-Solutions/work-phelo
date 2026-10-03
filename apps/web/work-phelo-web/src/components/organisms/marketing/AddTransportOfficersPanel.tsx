@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
+import { Icons } from '@/components/atoms/icons';
 import {
   useAddTransportOfficers,
   useTransportOfficerCandidates,
@@ -31,6 +32,9 @@ export function AddTransportOfficersPanel({ isOpen, onClose }: Props) {
         sublabel: [person.jobTitle, person.department].filter(Boolean).join(' · ') || undefined,
       })),
     [candidates],
+  );
+  const selectedPeople = (candidates ?? []).filter((person) =>
+    employeeIds.includes(person.employeeId),
   );
 
   function handleClose() {
@@ -82,8 +86,38 @@ export function AddTransportOfficersPanel({ isOpen, onClose }: Props) {
         value={employeeIds}
         onChange={setEmployeeIds}
         error={error || undefined}
+        hideChips
       />
-      {!isLoading && options.length === 0 && (
+
+      {selectedPeople.length > 0 && (
+        <div className="flex flex-col gap-2 mt-3">
+          {selectedPeople.map((person) => (
+            <div
+              key={person.employeeId}
+              className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">{person.name}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {[person.jobTitle, person.department].filter(Boolean).join(' · ') ||
+                    'No role or department on record'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setEmployeeIds((ids) => ids.filter((id) => id !== person.employeeId))
+                }
+                className="text-gray-400 hover:text-red-400 transition-colors shrink-0"
+              >
+                <Icons.X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && (candidates ?? []).length === 0 && (
         <p className="text-xs text-gray-400 mt-2">
           Every active employee is already a transport officer.
         </p>

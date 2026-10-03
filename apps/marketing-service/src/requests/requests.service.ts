@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -281,23 +280,45 @@ export class RequestsService {
     dto: ApproveTransportRequestDto,
   ) {
     const existing = await this.getReviewable(user, id);
-    await this.officers.assertActiveOfficer(
-      user.tenantId,
-      dto.driverEmployeeId,
-    );
+
+    const selfDriven = dto.selfDriven === true;
+    if (selfDriven && dto.driverEmployeeId) {
+      throw new BadRequestException(
+        'Choose either a driver or self-driven, not both',
+      );
+    }
+    if (!selfDriven && !dto.driverEmployeeId) {
+      throw new BadRequestException(
+        'Select a driver, or mark the trip as self-driven',
+      );
+    }
+    if (dto.driverEmployeeId) {
+      await this.officers.assertActiveOfficer(
+        user.tenantId,
+        dto.driverEmployeeId,
+      );
+    }
 
     const [resolved, vehicle] = await Promise.all([
       this.callHr(() =>
         this.directory.resolve(user.tenantId, {
           userId: user.id,
-          employeeIds: [dto.driverEmployeeId],
+          ...(dto.driverEmployeeId
+            ? { employeeIds: [dto.driverEmployeeId] }
+            : {}),
         }),
       ),
       this.callHr(() =>
         this.fleet.getVehicle(user.tenantId, dto.vehicleAssetId),
       ),
     ]);
-    const driver = resolved.people[0];
+    // Self-driven: the requester is the driver, so they can't be double-booked either.
+    const driver = selfDriven
+      ? {
+          employeeId: existing.requesterEmployeeId,
+          name: existing.requesterName,
+        }
+      : resolved.people[0];
     this.assertVehicleUsable(vehicle);
 
     const details = await this.prisma.marketingFleetVehicle.findUnique({
@@ -317,7 +338,9 @@ export class RequestsService {
               ...this.overlapWhere(existing),
               OR: [
                 { vehicleAssetId: vehicle.id },
-                { driverEmployeeId: driver.employeeId },
+                ...(driver.employeeId
+                  ? [{ driverEmployeeId: driver.employeeId }]
+                  : []),
               ],
             },
             select: {
@@ -354,6 +377,7 @@ export class RequestsService {
               vehicleAssetNumber: vehicle.assetNumber,
               driverEmployeeId: driver.employeeId,
               driverName: driver.name,
+              selfDriven,
             },
           });
           if (result.count === 0) {
@@ -475,9 +499,7 @@ export class RequestsService {
       where: { id, tenantId: user.tenantId },
     });
     if (!existing) throw new NotFoundException(NOT_FOUND_MESSAGE);
-    if (existing.requesterUserId === user.id) {
-      throw new ForbiddenException('You cannot review your own request');
-    }
+    // Whoever holds the approve permission may review, including the requester.
     if (existing.status !== Status.PENDING) {
       throw new ConflictException('Only pending requests can be reviewed');
     }
@@ -610,7 +632,7 @@ export class RequestsService {
           }
         : null,
       allocation:
-        row.vehicleAssetId && row.driverEmployeeId
+        row.vehicleAssetId && (row.driverEmployeeId || row.selfDriven)
           ? {
               vehicle: {
                 assetId: row.vehicleAssetId,
@@ -620,6 +642,7 @@ export class RequestsService {
               driver: {
                 employeeId: row.driverEmployeeId,
                 name: row.driverName,
+                selfDriven: row.selfDriven,
               },
             }
           : null,

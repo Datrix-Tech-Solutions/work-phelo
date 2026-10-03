@@ -47,7 +47,11 @@ const COLUMNS: Column<TransportRequest>[] = [
       row.allocation ? (
         <div className="flex flex-col">
           <span className="text-gray-900">{row.allocation.vehicle.name ?? '—'}</span>
-          <span className="text-xs text-gray-500">{row.allocation.driver.name ?? '—'}</span>
+          <span className="text-xs text-gray-500">
+            {row.allocation.driver.selfDriven
+              ? `Self-driven · ${row.allocation.driver.name ?? row.requester.name}`
+              : (row.allocation.driver.name ?? '—')}
+          </span>
         </div>
       ) : (
         dash
@@ -77,6 +81,9 @@ interface Props {
   onView: (row: TransportRequest) => void;
   /** Omit a handler to hide that action (no permission, or not the user's request). */
   onAdd?: () => void;
+  canApprove?: (row: TransportRequest) => boolean;
+  onApprove?: (row: TransportRequest) => void;
+  onReject?: (row: TransportRequest) => void;
   canEdit?: (row: TransportRequest) => boolean;
   onEdit?: (row: TransportRequest) => void;
   canCancel?: (row: TransportRequest) => boolean;
@@ -96,6 +103,9 @@ export function RequestsTable({
   onPageChange,
   onView,
   onAdd,
+  canApprove,
+  onApprove,
+  onReject,
   canEdit,
   onEdit,
   canCancel,
@@ -103,6 +113,12 @@ export function RequestsTable({
 }: Props) {
   const rowActions = (row: TransportRequest): RowAction[] => {
     const actions: RowAction[] = [{ label: 'View', onClick: () => onView(row) }];
+    if (onApprove && canApprove?.(row)) {
+      actions.push({ label: 'Approve', onClick: () => onApprove(row), variant: 'success' });
+    }
+    if (onReject && canApprove?.(row)) {
+      actions.push({ label: 'Reject', onClick: () => onReject(row), danger: true });
+    }
     if (onEdit && canEdit?.(row)) actions.push({ label: 'Edit', onClick: () => onEdit(row) });
     if (onCancel && canCancel?.(row)) {
       actions.push({ label: 'Cancel Request', onClick: () => onCancel(row), danger: true });

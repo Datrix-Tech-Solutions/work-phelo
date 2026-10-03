@@ -127,6 +127,7 @@ function AssetCard({
 
   return (
     <DataCard
+      compact
       onClick={onView}
       icon={
         <div

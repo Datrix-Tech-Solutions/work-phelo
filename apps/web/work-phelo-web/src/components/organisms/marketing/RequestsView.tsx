@@ -5,6 +5,8 @@ import { RequestsTable } from '@/components/molecules/marketing/RequestsTable';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { RequestPanel } from '@/components/organisms/marketing/RequestPanel';
 import { RequestDetailPanel } from '@/components/organisms/marketing/RequestDetailPanel';
+import { ApproveRequestModal } from '@/components/organisms/marketing/ApproveRequestModal';
+import { RejectRequestModal } from '@/components/organisms/marketing/RejectRequestModal';
 import { useCancelRequest, useRequests } from '@/hooks/marketing/useRequests';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
@@ -39,6 +41,8 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<TransportRequest | null>(null);
   const [viewing, setViewing] = useState<TransportRequest | null>(null);
+  const [approving, setApproving] = useState<TransportRequest | null>(null);
+  const [rejecting, setRejecting] = useState<TransportRequest | null>(null);
   const [cancelling, setCancelling] = useState<TransportRequest | null>(null);
 
   const { data, isLoading, isError } = useRequests({
@@ -83,6 +87,9 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
           totalPages={Math.max(1, data?.meta.totalPages ?? 1)}
           onPageChange={setPage}
           onView={setViewing}
+          onApprove={canApprove ? setApproving : undefined}
+          onReject={canApprove ? setRejecting : undefined}
+          canApprove={(row) => row.status === 'PENDING'}
           onAdd={allowCreate && canCreate ? () => setAddOpen(true) : undefined}
           onEdit={canEdit ? setEditing : undefined}
           canEdit={(row) => isOwn(row) && row.status === 'PENDING'}
@@ -96,8 +103,18 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
       <RequestDetailPanel
         request={viewing}
         onClose={() => setViewing(null)}
-        canReview={canApprove && !!viewing && !isOwn(viewing)}
+        canReview={canApprove}
+        onApprove={(row) => {
+          setViewing(null);
+          setApproving(row);
+        }}
+        onReject={(row) => {
+          setViewing(null);
+          setRejecting(row);
+        }}
       />
+      <ApproveRequestModal request={approving} onClose={() => setApproving(null)} />
+      <RejectRequestModal request={rejecting} onClose={() => setRejecting(null)} />
 
       {cancelling && (
         <ConfirmDeleteProspectModal
