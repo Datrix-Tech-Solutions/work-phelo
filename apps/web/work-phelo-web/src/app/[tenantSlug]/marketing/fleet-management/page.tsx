@@ -7,6 +7,7 @@ import { FleetCard } from '@/components/molecules/marketing/FleetCard';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { FleetVehiclePanel } from '@/components/organisms/marketing/FleetVehiclePanel';
 import { AssignFleetDriverPanel } from '@/components/organisms/marketing/AssignFleetDriverPanel';
+import { TripsPanel } from '@/components/organisms/marketing/TripsPanel';
 import {
   useFleet,
   useFleetOptions,
@@ -39,6 +40,7 @@ export default function FleetManagementPage() {
   const [editing, setEditing] = useState<FleetVehicle | null>(null);
   const [assigning, setAssigning] = useState<FleetVehicle | null>(null);
   const [retiring, setRetiring] = useState<FleetVehicle | null>(null);
+  const [viewingTrips, setViewingTrips] = useState<FleetVehicle | null>(null);
 
   const { data, isLoading, isError } = useFleet({
     page,
@@ -113,6 +115,7 @@ export default function FleetManagementPage() {
           renderCard={(vehicle) => (
             <FleetCard
               vehicle={vehicle}
+              onViewTrips={() => setViewingTrips(vehicle)}
               onEdit={canEdit ? () => setEditing(vehicle) : undefined}
               onAssignDriver={canEdit ? () => setAssigning(vehicle) : undefined}
               onUnassignDriver={
@@ -144,6 +147,28 @@ export default function FleetManagementPage() {
         />
       </div>
 
+      <TripsPanel
+        title="Booked Trips"
+        subtitle={
+          viewingTrips
+            ? `${viewingTrips.make && viewingTrips.model ? `${viewingTrips.make} ${viewingTrips.model}` : viewingTrips.name} · ${viewingTrips.assetNumber}`
+            : undefined
+        }
+        trips={
+          viewingTrips
+            ? viewingTrips.trips.map((trip) => ({
+                ...trip,
+                with: trip.selfDriven
+                  ? `Self-driven by ${trip.requesterName}`
+                  : trip.driverName
+                    ? `Driver: ${trip.driverName}`
+                    : null,
+              }))
+            : null
+        }
+        totalCount={viewingTrips?.tripCount}
+        onClose={() => setViewingTrips(null)}
+      />
       <FleetVehiclePanel isOpen={addOpen} onClose={() => setAddOpen(false)} />
       <FleetVehiclePanel isOpen={!!editing} vehicle={editing} onClose={() => setEditing(null)} />
       <AssignFleetDriverPanel

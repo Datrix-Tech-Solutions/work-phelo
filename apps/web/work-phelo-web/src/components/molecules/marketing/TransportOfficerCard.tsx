@@ -2,11 +2,15 @@
 
 import { DataCard, DataCardAction, DataCardDetail } from '@/components/organisms/shared/DataCard';
 import { Avatar } from '@/components/atoms/Avatar';
+import { OFFICER_STATUS_STYLES } from '@/lib/fleetOptions';
+import { formatClock, formatTravelDate } from '@/lib/requestOptions';
 import { cn } from '@/lib/utils';
 import type { TransportOfficer } from '@/types/marketing';
 
 interface Props {
   officer: TransportOfficer;
+  /** Opens the list of this officer's booked trips. */
+  onViewTrips?: () => void;
   /** Omit to hide the action (e.g. when the user lacks the edit permission). */
   onToggleActive?: () => void;
 }
@@ -17,12 +21,8 @@ const value = (text: string | null | undefined, className = 'text-gray-700') => 
   </span>
 );
 
-export function TransportOfficerCard({ officer, onToggleActive }: Props) {
-  const badge = !officer.employeeActive
-    ? { label: 'Left company', bg: 'bg-gray-100', text: 'text-gray-500' }
-    : officer.isActive
-      ? { label: 'Active', bg: 'bg-green-50', text: 'text-green-700' }
-      : { label: 'Inactive', bg: 'bg-gray-100', text: 'text-gray-500' };
+export function TransportOfficerCard({ officer, onViewTrips, onToggleActive }: Props) {
+  const badge = OFFICER_STATUS_STYLES[officer.status];
 
   const actions: DataCardAction[] = [];
   // Someone who left HR can't drive again, so only offer reactivating current employees.
@@ -42,14 +42,30 @@ export function TransportOfficerCard({ officer, onToggleActive }: Props) {
     );
   }
 
+  const nextTrip = officer.trips[0];
   const details: DataCardDetail[] = [
     { label: 'Department', value: value(officer.department) },
     { label: 'Email', value: value(officer.email) },
+    ...(nextTrip
+      ? [
+          {
+            label: nextTrip.state === 'ON_ROUTE' ? 'On route' : 'Next trip',
+            value: value(
+              `${nextTrip.destination} · ${formatTravelDate(nextTrip.travelDate)} ${formatClock(nextTrip.departureTime)}–${formatClock(nextTrip.returnTime)}`,
+              nextTrip.state === 'ON_ROUTE' ? 'text-blue-600' : 'text-violet-600',
+            ),
+          },
+          ...(officer.tripCount > 1
+            ? [{ label: 'Booked trips', value: value(String(officer.tripCount)) }]
+            : []),
+        ]
+      : []),
   ];
 
   return (
     <DataCard
       compact
+      onClick={onViewTrips}
       className={cn(!officer.isActive && 'opacity-80')}
       icon={<Avatar name={officer.name} size="md" />}
       title={officer.name}

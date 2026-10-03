@@ -17,7 +17,19 @@ import {
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
 
-export const OFFICER_STATUS_FILTERS = ['ACTIVE', 'INACTIVE'] as const;
+/**
+ * Derived officer status. BOOKED / ON_ROUTE come from approved trips; INACTIVE is
+ * switched off on the officers page; LEFT means the employee is no longer in HR.
+ */
+export const OFFICER_STATUSES = [
+  'AVAILABLE',
+  'BOOKED',
+  'ON_ROUTE',
+  'INACTIVE',
+  'LEFT',
+] as const;
+export type OfficerStatus = (typeof OFFICER_STATUSES)[number];
+export const OFFICER_STATUS_FILTERS = OFFICER_STATUSES;
 
 export class AddTransportOfficersDto {
   @ApiProperty({
@@ -59,5 +71,5 @@ export class QueryTransportOfficersDto {
   @ApiPropertyOptional({ enum: OFFICER_STATUS_FILTERS })
   @IsOptional()
   @IsIn(OFFICER_STATUS_FILTERS)
-  status?: (typeof OFFICER_STATUS_FILTERS)[number];
+  status?: OfficerStatus;
 }

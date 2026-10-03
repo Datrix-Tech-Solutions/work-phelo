@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   BadRequestException,
+  ConflictException,
   HttpException,
 } from '@nestjs/common';
 import { InternalServiceClientError } from '@work-phelo/internal-auth';
@@ -71,15 +72,36 @@ describe('FleetService', () => {
     activeDrivers: jest.fn(),
     assertActiveOfficer: jest.fn(),
   };
+  const trips = { activeTrips: jest.fn() };
   const service = new FleetService(
     prisma as never,
     hr as never,
     officers as never,
+    trips as never,
   );
+
+  const trip = (overrides: Record<string, unknown> = {}) => ({
+    requestId: 'req-1',
+    travelDate: '2026-10-20',
+    departureTime: '10:00',
+    returnTime: '12:00',
+    destination: 'Kumasi',
+    requesterName: 'Efua',
+    vehicle: {
+      assetId: 'asset-1',
+      name: 'Toyota Hilux',
+      assetNumber: 'VEH-0001',
+    },
+    driver: { employeeId: 'e1', name: 'Ama Mensah' },
+    selfDriven: false,
+    state: 'BOOKED',
+    ...overrides,
+  });
 
   beforeEach(() => {
     jest.resetAllMocks();
     officers.assertActiveOfficer.mockResolvedValue(undefined);
+    trips.activeTrips.mockResolvedValue([]);
   });
 
   describe('list', () => {
@@ -139,6 +161,134 @@ describe('FleetService', () => {
       const paged = await service.list(user, { page: 2, limit: 2 });
       expect(paged.data).toHaveLength(1);
       expect(paged.meta.totalPages).toBe(2);
+    });
+  });
+
+  describe('status from trips', () => {
+    const listOne = async (hrStatus: string, tripList: unknown[]) => {
+      hr.listVehicles.mockResolvedValue([asset({ status: hrStatus } as never)]);
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([details()]);
+      trips.activeTrips.mockResolvedValue(tripList);
+      return (await service.list(user)).data[0];
+    };
+
+    it('is available with no trips', async () => {
+      expect((await listOne('AVAILABLE', [])).status).toBe('AVAILABLE');
+    });
+
+    it('is booked when an approved trip is still to come', async () => {
+      const row = await listOne('AVAILABLE', [trip({ state: 'BOOKED' })]);
+      expect(row.status).toBe('BOOKED');
+      expect(row.tripCount).toBe(1);
+      expect(row.trips[0]).toMatchObject({
+        destination: 'Kumasi',
+        departureTime: '10:00',
+        driverName: 'Ama Mensah',
+        state: 'BOOKED',
+      });
+    });
+
+    it('is on route once a trip has started, even with another booked after it', async () => {
+      const row = await listOne('AVAILABLE', [
+        trip({ state: 'BOOKED', requestId: 'later' }),
+        trip({ state: 'ON_ROUTE' }),
+      ]);
+      expect(row.status).toBe('ON_ROUTE');
+    });
+
+    it('only counts trips for that vehicle', async () => {
+      const row = await listOne('AVAILABLE', [
+        trip({
+          vehicle: {
+            assetId: 'someone-else',
+            name: 'Van',
+            assetNumber: 'VEH-2',
+          },
+        }),
+      ]);
+      expect(row.status).toBe('AVAILABLE');
+      expect(row.tripCount).toBe(0);
+    });
+
+    it.each(['MAINTENANCE', 'RETIRED'])(
+      'keeps %s from HR even when a trip is on route',
+      async (hrStatus) => {
+        const row = await listOne(hrStatus, [trip({ state: 'ON_ROUTE' })]);
+        expect(row.status).toBe(hrStatus);
+      },
+    );
+
+    it('does not treat a driver assignment as a status', async () => {
+      const row = await listOne('ASSIGNED', []);
+      expect(row.status).toBe('AVAILABLE');
+      expect(row.hrStatus).toBe('ASSIGNED');
+    });
+
+    it('filters the list by the derived status', async () => {
+      hr.listVehicles.mockResolvedValue([
+        asset({ id: 'asset-1' }),
+        asset({ id: 'asset-2', assetNumber: 'VEH-2' }),
+      ]);
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([]);
+      trips.activeTrips.mockResolvedValue([trip({ state: 'ON_ROUTE' })]);
+
+      const result = await service.list(user, { status: 'ON_ROUTE' });
+
+      expect(result.data.map((row) => row.assetId)).toEqual(['asset-1']);
+    });
+
+    it('loads only this vehicle’s trips for single-vehicle reads', async () => {
+      hr.getVehicle.mockResolvedValue(asset());
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(details());
+      trips.activeTrips.mockResolvedValue([trip({ state: 'ON_ROUTE' })]);
+
+      const row = await service.findOne(user, 'asset-1');
+
+      expect(trips.activeTrips).toHaveBeenCalledWith(TENANT, {
+        vehicleAssetIds: ['asset-1'],
+      });
+      expect(row.status).toBe('ON_ROUTE');
+    });
+
+    it.each(['MAINTENANCE', 'RETIRED'] as const)(
+      'refuses to set %s while the vehicle is on a trip',
+      async (status) => {
+        trips.activeTrips.mockResolvedValue([trip({ state: 'ON_ROUTE' })]);
+
+        await expect(
+          service.setStatus(user, 'asset-1', status),
+        ).rejects.toBeInstanceOf(ConflictException);
+        expect(hr.setStatus).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still allows maintenance for a vehicle that is only booked', async () => {
+      trips.activeTrips.mockResolvedValue([trip({ state: 'BOOKED' })]);
+      hr.setStatus.mockResolvedValue(asset({ status: 'MAINTENANCE' } as never));
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(details());
+
+      const row = await service.setStatus(user, 'asset-1', 'MAINTENANCE');
+
+      expect(row.status).toBe('MAINTENANCE');
+    });
+
+    it('does not need the trip check to bring a vehicle back to available', async () => {
+      hr.setStatus.mockResolvedValue(asset());
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(details());
+
+      await service.setStatus(user, 'asset-1', 'AVAILABLE');
+
+      expect(hr.setStatus).toHaveBeenCalledWith(TENANT, 'asset-1', 'AVAILABLE');
+    });
+
+    it('refuses to retire a vehicle that is on a trip', async () => {
+      hr.getVehicle.mockResolvedValue(asset());
+      trips.activeTrips.mockResolvedValue([trip({ state: 'ON_ROUTE' })]);
+
+      await expect(service.remove(user, 'asset-1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(hr.setStatus).not.toHaveBeenCalled();
     });
   });
 

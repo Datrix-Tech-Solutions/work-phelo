@@ -24,9 +24,11 @@ const MAX_MILEAGE = 10_000_000;
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
 
+/** Derived status: BOOKED / ON_ROUTE come from approved trips, the rest from HR. */
 export const FLEET_STATUSES = [
   'AVAILABLE',
-  'ASSIGNED',
+  'BOOKED',
+  'ON_ROUTE',
   'MAINTENANCE',
   'RETIRED',
 ] as const;

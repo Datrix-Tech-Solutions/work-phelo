@@ -5,6 +5,8 @@ import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { TransportOfficerCard } from '@/components/molecules/marketing/TransportOfficerCard';
 import { AddTransportOfficersPanel } from '@/components/organisms/marketing/AddTransportOfficersPanel';
+import { TripsPanel } from '@/components/organisms/marketing/TripsPanel';
+import { OFFICER_STATUS_OPTIONS } from '@/lib/fleetOptions';
 import {
   useSetTransportOfficerActive,
   useTransportOfficers,
@@ -14,14 +16,9 @@ import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import type { TransportOfficersQuery } from '@/types/marketing';
+import type { TransportOfficer, TransportOfficersQuery } from '@/types/marketing';
 
 const PAGE_SIZE = 12;
-
-const STATUS_OPTIONS = [
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'INACTIVE', label: 'Inactive' },
-];
 
 export default function TransportOfficerDetailsPage() {
   const toast = useToast();
@@ -32,6 +29,7 @@ export default function TransportOfficerDetailsPage() {
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
+  const [viewingTrips, setViewingTrips] = useState<TransportOfficer | null>(null);
 
   const { data, isLoading, isError } = useTransportOfficers({
     page,
@@ -66,7 +64,7 @@ export default function TransportOfficerDetailsPage() {
               size="sm"
               placeholder="Status"
               allLabel="All statuses"
-              options={STATUS_OPTIONS}
+              options={OFFICER_STATUS_OPTIONS}
               value={status}
               showAllOption
               onChange={(v) => {
@@ -89,6 +87,7 @@ export default function TransportOfficerDetailsPage() {
           renderCard={(officer) => (
             <TransportOfficerCard
               officer={officer}
+              onViewTrips={() => setViewingTrips(officer)}
               onToggleActive={
                 canEdit
                   ? () =>
@@ -117,6 +116,24 @@ export default function TransportOfficerDetailsPage() {
         />
       </div>
 
+      <TripsPanel
+        title="Booked Trips"
+        subtitle={viewingTrips?.name}
+        trips={
+          viewingTrips
+            ? viewingTrips.trips.map((trip) => ({
+                ...trip,
+                with: trip.selfDriven
+                  ? 'Self-driven'
+                  : trip.vehicleName
+                    ? `Vehicle: ${trip.vehicleName}${trip.vehicleAssetNumber ? ` · ${trip.vehicleAssetNumber}` : ''}`
+                    : null,
+              }))
+            : null
+        }
+        totalCount={viewingTrips?.tripCount}
+        onClose={() => setViewingTrips(null)}
+      />
       <AddTransportOfficersPanel isOpen={addOpen} onClose={() => setAddOpen(false)} />
     </>
   );
