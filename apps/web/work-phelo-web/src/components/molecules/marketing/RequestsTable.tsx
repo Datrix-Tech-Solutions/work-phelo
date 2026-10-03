@@ -15,8 +15,10 @@ const COLUMNS: Column<TransportRequest>[] = [
     width: 'minmax(120px, 0.8fr)',
     render: (row) => (
       <div className="flex flex-col">
-        <span className="font-medium text-gray-900">{row.requester.name}</span>
-        <span className="text-xs text-gray-500">{row.requester.department ?? '—'}</span>
+        <span className="font-semibold text-gray-900">{row.requester.name}</span>
+        <span className="text-xs font-semibold text-gray-500">
+          {row.requester.department ?? '—'}
+        </span>
       </div>
     ),
   },
@@ -24,7 +26,9 @@ const COLUMNS: Column<TransportRequest>[] = [
     key: 'businessPurpose',
     label: 'Business Purpose',
     width: 'minmax(120px, 1fr)',
-    render: (row) => <span className="line-clamp-2 max-w-64">{row.businessPurpose}</span>,
+    render: (row) => (
+      <span className="font-semibold line-clamp-2 max-w-64">{row.businessPurpose}</span>
+    ),
   },
   { key: 'destination', label: 'Destination', width: 'minmax(120px, 0.8fr)' },
   {
@@ -43,7 +47,7 @@ const COLUMNS: Column<TransportRequest>[] = [
     key: 'passengers',
     label: 'Passengers',
     width: '80px',
-    render: (row) => (row.passengers.length ? row.passengers.length : dash),
+    render: (row) => (row.passengerCount ? row.passengerCount : dash),
   },
   {
     key: 'allocation',
@@ -51,7 +55,7 @@ const COLUMNS: Column<TransportRequest>[] = [
     width: 'minmax(120px, 1fr)',
     render: (row) =>
       row.allocation ? (
-        <div className="flex flex-col">
+        <div className="font-semibold flex flex-col">
           <span className="text-gray-900">{row.allocation.vehicle.name ?? '—'}</span>
           <span className="text-xs text-gray-500">
             {row.allocation.driver.selfDriven
@@ -69,12 +73,7 @@ const COLUMNS: Column<TransportRequest>[] = [
     width: '100px',
     render: (row) => {
       const { label, variant } = REQUEST_STATUS_BADGES[row.status];
-      return (
-        <div className="flex flex-col items-start gap-1">
-          <Badge label={label} variant={variant} />
-          {row.overdue && row.status === 'ON_ROUTE' && <Badge label="Overdue" variant="warning" />}
-        </div>
-      );
+      return <Badge label={label} variant={variant} />;
     },
   },
 ];
@@ -91,6 +90,8 @@ interface Props {
   totalPages: number;
   onPageChange: (page: number) => void;
   onView: (row: TransportRequest) => void;
+  /** Show "View" in the row menu. Off where tapping the row already opens the request and nothing else is offered. */
+  showViewAction?: boolean;
   /** Omit a handler to hide that action (no permission, or not the user's request). */
   onAdd?: () => void;
   canApprove?: (row: TransportRequest) => boolean;
@@ -118,6 +119,7 @@ export function RequestsTable({
   totalPages,
   onPageChange,
   onView,
+  showViewAction = true,
   onAdd,
   canApprove,
   onApprove,
@@ -132,7 +134,9 @@ export function RequestsTable({
   onCancel,
 }: Props) {
   const rowActions = (row: TransportRequest): RowAction[] => {
-    const actions: RowAction[] = [{ label: 'View', onClick: () => onView(row) }];
+    const actions: RowAction[] = showViewAction
+      ? [{ label: 'View', onClick: () => onView(row) }]
+      : [];
     if (onApprove && canApprove?.(row)) {
       actions.push({ label: 'Approve', onClick: () => onApprove(row), variant: 'success' });
     }

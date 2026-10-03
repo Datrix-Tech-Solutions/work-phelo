@@ -19,9 +19,10 @@ interface Props {
   appointments: Appointment[];
   /** Called with the selected calendar day (if any) so the form can prefill its date. */
   onNew: (date?: string) => void;
+  onSelectAppointment?: (appointment: Appointment) => void;
 }
 
-export function AppointmentsPanel({ appointments, onNew }: Props) {
+export function AppointmentsPanel({ appointments, onNew, onSelectAppointment }: Props) {
   const [view, setView] = useState<View>('calendar');
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -96,7 +97,7 @@ export function AppointmentsPanel({ appointments, onNew }: Props) {
 
       {view === 'timeline' ? (
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <AppointmentTimeline appointments={upcoming} />
+          <AppointmentTimeline appointments={upcoming} onSelect={onSelectAppointment} />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-[minmax(280px,380px)_1fr] gap-6 content-start md:content-stretch flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
@@ -137,6 +138,7 @@ export function AppointmentsPanel({ appointments, onNew }: Props) {
           <div className="min-h-0 md:overflow-y-auto">
             <AppointmentDayList
               date={selectedDate}
+              onSelect={onSelectAppointment}
               appointments={
                 selectedDate ? appointments.filter((a) => a.date === selectedDate) : appointments
               }

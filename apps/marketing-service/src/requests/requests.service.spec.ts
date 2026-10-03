@@ -342,6 +342,84 @@ describe('RequestsService', () => {
     });
   });
 
+  describe('passenger count (people in the vehicle excluding the driver)', () => {
+    const person = (employeeId: string) => ({
+      id: `p-${employeeId}`,
+      employeeId,
+      name: `Person ${employeeId}`,
+      department: null,
+    });
+    const countFor = async (overrides: Record<string, unknown>) => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(
+        row(overrides),
+      );
+      return service.findOne(user(), 'req-1');
+    };
+
+    it('counts the requester when nobody else is added', async () => {
+      const result = await countFor({ passengers: [] });
+      expect(result.passengerCount).toBe(1);
+      expect(result.requesterIsDriver).toBe(false);
+    });
+
+    it('adds the chosen passengers to the requester', async () => {
+      const result = await countFor({
+        passengers: [person('e2'), person('e3')],
+      });
+      expect(result.passengerCount).toBe(3);
+    });
+
+    it('does not count the requester when they drive themselves', async () => {
+      const result = await countFor({
+        status: 'APPROVED',
+        selfDriven: true,
+        passengers: [person('e2'), person('e3')],
+      });
+      expect(result.passengerCount).toBe(2);
+      expect(result.requesterIsDriver).toBe(true);
+    });
+
+    it('is zero for a self-driven trip with nobody else', async () => {
+      const result = await countFor({
+        status: 'APPROVED',
+        selfDriven: true,
+        passengers: [],
+      });
+      expect(result.passengerCount).toBe(0);
+    });
+
+    it('counts the requester plus passengers when a separate driver is assigned', async () => {
+      const result = await countFor({
+        status: 'APPROVED',
+        driverEmployeeId: 'e5',
+        passengers: [person('e2')],
+      });
+      expect(result.passengerCount).toBe(2);
+      expect(result.requesterIsDriver).toBe(false);
+    });
+
+    it('counts a passenger who is also the assigned driver as the driver only', async () => {
+      const result = await countFor({
+        status: 'APPROVED',
+        driverEmployeeId: 'e2',
+        passengers: [person('e2'), person('e3')],
+      });
+      expect(result.passengerCount).toBe(2);
+    });
+
+    it('treats an assigned driver who is the requester as the requester driving', async () => {
+      const result = await countFor({
+        status: 'APPROVED',
+        requesterEmployeeId: 'e1',
+        driverEmployeeId: 'e1',
+        selfDriven: false,
+        passengers: [person('e2')],
+      });
+      expect(result.passengerCount).toBe(1);
+      expect(result.requesterIsDriver).toBe(true);
+    });
+  });
+
   describe('request status and trip details', () => {
     const at = (date: string) => new Date(`${date}T00:00:00.000Z`);
     const viewOne = async (overrides: Record<string, unknown>) => {

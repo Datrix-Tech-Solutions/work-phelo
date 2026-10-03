@@ -66,6 +66,17 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     ],
   },
   {
+    key: 'campaigns',
+    label: 'Campaigns',
+    umbrellaKey: 'manage_campaigns',
+    tags: [
+      { key: 'manage_campaigns', label: 'Manage Campaigns' },
+      { key: 'view_campaigns', label: 'View Campaigns' },
+      { key: 'create_campaigns', label: 'Create Campaigns' },
+      { key: 'cancel_campaigns', label: 'Cancel Campaigns' },
+    ],
+  },
+  {
     key: 'fleet',
     label: 'Fleet',
     umbrellaKey: 'manage_fleet',
@@ -161,6 +172,11 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
   add_transport_officers: pairs('marketing.transport-officers', ['VIEW', 'CREATE']),
   edit_transport_officers: pairs('marketing.transport-officers', ['VIEW', 'EDIT']),
 
+  // Campaigns — creating or cancelling implies being able to see the list.
+  view_campaigns: pairs('marketing.campaigns', ['VIEW']),
+  create_campaigns: pairs('marketing.campaigns', ['VIEW', 'CREATE']),
+  cancel_campaigns: pairs('marketing.campaigns', ['VIEW', 'CANCEL']),
+
   // Fleet — edit/delete imply view since the list is the entry point.
   view_fleet: pairs('marketing.fleet', ['VIEW']),
   create_fleet: pairs('marketing.fleet', ['VIEW', 'CREATE']),
@@ -183,6 +199,7 @@ const UMBRELLA_EXTRAS: Record<string, PermissionPair[]> = {
   manage_fleet: [],
   manage_requests: [],
   manage_transport_officers: [],
+  manage_campaigns: [],
 };
 
 /** Pill key → backend resource/action pairs it grants (umbrellas grant their section's union). */

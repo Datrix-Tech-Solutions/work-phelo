@@ -9,6 +9,7 @@ export interface NewAppointmentFields {
   date: string;
   startTime: string;
   endTime: string;
+  marketerId: string;
   manager: string;
   comment: string;
 }
@@ -21,6 +22,7 @@ interface Props {
   errors?: NewAppointmentErrors;
   prospectOptions?: SearchSelectOption[];
   onProspectSearch?: (query: string) => void;
+  marketerOptions?: SearchSelectOption[];
   managerOptions?: SearchSelectOption[];
 }
 
@@ -30,6 +32,7 @@ export function NewAppointmentForm({
   errors,
   prospectOptions = [],
   onProspectSearch,
+  marketerOptions = [],
   managerOptions = [],
 }: Props) {
   function set<K extends keyof NewAppointmentFields>(key: K, val: string) {
@@ -38,6 +41,15 @@ export function NewAppointmentForm({
 
   return (
     <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
+      <SearchSelect
+        label="Marketer"
+        placeholder="Select a marketer"
+        options={marketerOptions}
+        value={values.marketerId}
+        onChange={(v) => set('marketerId', v)}
+        error={errors?.marketerId}
+      />
+
       <SearchSelect
         label="Prospect Name"
         placeholder="Select a prospect"
@@ -67,7 +79,7 @@ export function NewAppointmentForm({
           {errors?.startTime && <p className="text-xs text-red-500">{errors.startTime}</p>}
         </div>
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-          <label className="text-sm font-bold text-gray-900">End Time</label>
+          <label className="text-sm font-bold text-gray-900">End Time (optional)</label>
           <input
             type="time"
             value={values.endTime}
@@ -79,8 +91,8 @@ export function NewAppointmentForm({
       </div>
 
       <SearchSelect
-        label="Manager"
-        placeholder="Select a manager"
+        label="Manager (optional)"
+        placeholder="Assign a manager"
         options={managerOptions}
         value={values.manager}
         onChange={(v) => set('manager', v)}

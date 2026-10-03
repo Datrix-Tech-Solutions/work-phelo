@@ -1,19 +1,65 @@
 'use client';
 
-import { Clock, User } from 'lucide-react';
+import { Clock, User, UserRoundPlus } from 'lucide-react';
 import { formatDate } from '@/lib/formatters';
-import { Appointment } from '@/components/molecules/marketing/AppointmentCard';
+import { Avatar } from '@/components/atoms/Avatar';
+import { DataList, Column } from '@/components/organisms/shared/DataList';
+import {
+  Appointment,
+  formatAppointmentTime,
+} from '@/components/molecules/marketing/AppointmentCard';
 
 interface Props {
   /** ISO date. When omitted, every appointment is listed with its own date. */
   date?: string;
   appointments: Appointment[];
+  onSelect?: (appointment: Appointment) => void;
 }
 
-export function AppointmentDayList({ date, appointments }: Props) {
+export function AppointmentDayList({ date, appointments, onSelect }: Props) {
   const sorted = [...appointments].sort((a, b) =>
     `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`),
   );
+
+  const columns: Column<Appointment>[] = [
+    {
+      key: 'prospectName',
+      label: 'Prospect',
+      render: (appt) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <Avatar name={appt.prospectName} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900 truncate">{appt.prospectName}</p>
+            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+              <Clock size={12} className="shrink-0" />
+              {!date && <span>{formatDate(appt.date)} ·</span>}
+              {formatAppointmentTime(appt)}
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'people',
+      label: 'People',
+      width: '11rem',
+      className: 'flex flex-col items-end gap-1 text-sm text-gray-600',
+      render: (appt) => (
+        <>
+          <p className="flex items-center gap-1 max-w-full" title="Marketer">
+            <User size={16} className="shrink-0" />
+            <span className="font-semibold truncate">{appt.marketer}</span>
+          </p>
+          {appt.manager && (
+            <p className="flex items-center gap-1 text-gray-400 max-w-full" title="Manager">
+              <UserRoundPlus size={14} className="shrink-0" />
+              <span className="font-semibold truncate">{appt.manager}</span>
+            </p>
+          )}
+        </>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-3 min-w-0">
@@ -21,33 +67,12 @@ export function AppointmentDayList({ date, appointments }: Props) {
         {date ? formatDate(date) : 'All appointments'}
       </h3>
 
-      {sorted.length === 0 ? (
-        <p className="text-sm text-gray-400">
-          {date ? 'No appointments on this day' : 'No appointments yet'}
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {sorted.map((appt) => (
-            <div
-              key={appt.id}
-              className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">{appt.prospectName}</p>
-                <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                  <Clock size={12} className="shrink-0" />
-                  {!date && <span>{formatDate(appt.date)} ·</span>}
-                  {appt.startTime} – {appt.endTime}
-                </p>
-              </div>
-              <p className="text-xs text-gray-500 flex items-center gap-1 shrink-0">
-                <User size={12} className="shrink-0" />
-                {appt.manager}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+      <DataList
+        columns={columns}
+        data={sorted}
+        onRowClick={onSelect}
+        emptyMessage={date ? 'No appointments on this day' : 'No appointments yet'}
+      />
     </div>
   );
 }

@@ -7,7 +7,7 @@ export const REQUEST_STATUS_BADGES: Record<
   PENDING: { label: 'Pending', variant: 'warning' },
   APPROVED: { label: 'Approved', variant: 'success' },
   ON_ROUTE: { label: 'On route', variant: 'info' },
-  COMPLETED: { label: 'Completed', variant: 'neutral' },
+  COMPLETED: { label: 'Completed', variant: 'success' },
   REJECTED: { label: 'Rejected', variant: 'danger' },
   CANCELLED: { label: 'Cancelled', variant: 'neutral' },
 };

@@ -83,6 +83,9 @@ export const EventPatterns = {
   NOTIFY_ANNOUNCEMENT_PUBLISHED: 'notify.announcement_published',
   NOTIFY_PAYROLL_APPROVAL_REQUESTED: 'notify.payroll_approval_requested',
   NOTIFY_PAYROLL_DECISION: 'notify.payroll_decision',
+
+  // Marketing → Notification
+  NOTIFY_CAMPAIGN_DISPATCH: 'notify.campaign_dispatch',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -686,4 +689,27 @@ export interface AnnouncementPublishedEvent {
   deliveryChannels?: AnnouncementDeliveryChannel[];
   platformLink?: string;
   recipients: AnnouncementRecipientEvent[];
+}
+
+// ── Marketing → Notification Events ────────────────────────────────────────
+
+export type CampaignDeliveryChannel = 'SMS' | 'EMAIL';
+
+export interface CampaignRecipientEvent {
+  /** MarketingCampaignRecipient id, echoed back when reporting the delivery result. */
+  recipientId: string;
+  channel: CampaignDeliveryChannel;
+  /** Phone number for SMS, email address for EMAIL. */
+  address: string;
+  contactName: string;
+}
+
+/** One batch of a campaign's pending recipients. Large campaigns are sent as several events. */
+export interface CampaignDispatchEvent {
+  tenantId: string;
+  campaignId: string;
+  tenantName?: string;
+  subject: string;
+  message: string;
+  recipients: CampaignRecipientEvent[];
 }

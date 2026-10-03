@@ -958,7 +958,27 @@ export class RequestsService {
     };
   }
 
+  /**
+   * Who is travelling in the vehicle apart from the driver. The requester travels,
+   * unless they are the one driving; an added passenger who is also the assigned
+   * driver is counted as the driver, not as a passenger.
+   */
+  private occupants(row: RequestWithPassengers) {
+    const driverId = row.driverEmployeeId;
+    const requesterIsDriver =
+      row.selfDriven || (!!driverId && driverId === row.requesterEmployeeId);
+    const passengers = row.passengers.filter(
+      (passenger) => passenger.employeeId !== driverId,
+    );
+    return {
+      requesterIsDriver,
+      passengers,
+      count: passengers.length + (requesterIsDriver ? 0 : 1),
+    };
+  }
+
   private toResponse(row: RequestWithPassengers, now: WallClock) {
+    const occupants = this.occupants(row);
     return {
       id: row.id,
       status: this.displayStatus(row, now),
@@ -973,6 +993,9 @@ export class RequestsService {
         name: row.requesterName,
         department: row.requesterDepartment,
       },
+      // People in the vehicle excluding the driver (the requester included unless driving).
+      passengerCount: occupants.count,
+      requesterIsDriver: occupants.requesterIsDriver,
       passengers: row.passengers.map((passenger) => ({
         employeeId: passenger.employeeId,
         name: passenger.name,

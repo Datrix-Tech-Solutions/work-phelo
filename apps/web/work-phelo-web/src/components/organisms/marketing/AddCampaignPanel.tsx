@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -10,9 +10,8 @@ import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
-import { ProspectingSetting } from '@/types/marketing';
-
-export type CampaignChannel = 'sms' | 'email';
+import { useCampaignPreview } from '@/hooks/marketing/useCampaigns';
+import type { CampaignChannel, ProspectingSetting } from '@/types/marketing';
 
 export type CampaignDispatch = 'instant' | 'schedule';
 
@@ -42,8 +41,8 @@ const DISPATCH_OPTIONS: { label: string; value: CampaignDispatch }[] = [
 ];
 
 const CHANNEL_OPTIONS: { label: string; value: CampaignChannel }[] = [
-  { label: 'SMS', value: 'sms' },
-  { label: 'Email', value: 'email' },
+  { label: 'SMS', value: 'SMS' },
+  { label: 'Email', value: 'EMAIL' },
 ];
 
 function toOptions(items: ProspectingSetting[]) {
@@ -54,9 +53,10 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: CampaignForm) => void;
+  isSubmitting?: boolean;
 }
 
-export function AddCampaignPanel({ isOpen, onClose, onSubmit }: Props) {
+export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Props) {
   const { data: businessTypes = [] } = useProspectingSettings('business-types');
   const segmentOptions = useMemo(() => toOptions(businessTypes), [businessTypes]);
 
@@ -77,17 +77,24 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit }: Props) {
   const dispatchValue = useWatch({ control, name: 'dispatch' });
   const scheduledDateValue = useWatch({ control, name: 'scheduledDate' });
 
-  const handleClose = () => {
-    reset(DEFAULT_VALUES);
-    onClose();
-  };
+  // The caller closes the panel after a successful save, so reset on close rather than on submit:
+  // a failed save keeps what the user typed.
+  useEffect(() => {
+    if (!isOpen) reset(DEFAULT_VALUES);
+  }, [isOpen, reset]);
+
+  const preview = useCampaignPreview({
+    businessTypeId: segmentValue || undefined,
+    channels: channelValue,
+  });
+
+  const handleClose = () => onClose();
 
   const handleFormSubmit = (data: CampaignForm) => {
     onSubmit({
       ...data,
       scheduledDate: data.dispatch === 'schedule' ? data.scheduledDate : undefined,
     });
-    reset(DEFAULT_VALUES);
   };
 
   return (
@@ -98,10 +105,10 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit }: Props) {
       description="Set up an outreach campaign for a target segment."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(handleFormSubmit)}>
+          <Button onClick={handleSubmit(handleFormSubmit)} isLoading={isSubmitting}>
             {dispatchValue === 'schedule' ? 'Schedule Campaign' : 'Send Campaign'}
           </Button>
         </div>
@@ -145,6 +152,15 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit }: Props) {
           options={segmentOptions}
           error={errors.targetSegment?.message}
         />
+        {preview.data && (
+          <p className="text-xs text-gray-500">
+            {preview.data.prospectCount} prospect{preview.data.prospectCount === 1 ? '' : 's'} in
+            this segment · {preview.data.reachable} message
+            {preview.data.reachable === 1 ? '' : 's'} will be queued
+            {preview.data.skipped > 0 ? `, ${preview.data.skipped} skipped` : ''}. Only each
+            prospect&apos;s primary contact is messaged.
+          </p>
+        )}
 
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">
           Message

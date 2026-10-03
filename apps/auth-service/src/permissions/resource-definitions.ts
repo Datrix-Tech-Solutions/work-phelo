@@ -272,6 +272,12 @@ export const RESOURCES = [
     description:
       'Marketing transport officers (drivers) added from the employee list',
   },
+  {
+    name: 'marketing.campaigns',
+    module: 'MARKETING',
+    description:
+      'Marketing SMS and email campaigns to prospects by business type',
+  },
 
   {
     name: 'operations.reinsurance.dashboard',
