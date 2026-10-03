@@ -509,7 +509,8 @@ export interface FleetDetailsPayload {
   model: string;
   yearOfRegistration: number;
   fuelType: string;
-  currentMileage: number;
+  /** Optional; null clears it on update. */
+  currentMileage?: number | null;
 }
 
 export interface CreateFleetVehiclePayload extends FleetDetailsPayload {
@@ -525,4 +526,128 @@ export interface UpdateFleetVehiclePayload extends Partial<FleetDetailsPayload> 
 export interface CreateFleetVehicleResult extends FleetVehicle {
   /** Non-fatal follow-up steps that failed after the vehicle was created. */
   warnings: string[];
+}
+
+export type TransportRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface TransportRequestPerson {
+  employeeId: string;
+  name: string;
+  department: string | null;
+}
+
+export interface TransportRequest {
+  id: string;
+  status: TransportRequestStatus;
+  businessPurpose: string;
+  /** YYYY-MM-DD */
+  travelDate: string;
+  /** 24h HH:mm */
+  departureTime: string;
+  returnTime: string;
+  destination: string;
+  notes: string | null;
+  requester: { userId: string; name: string; department: string | null };
+  passengers: TransportRequestPerson[];
+  review: { byName: string | null; at: string; note: string | null } | null;
+  /** Set once approved: who is driving what. */
+  allocation: {
+    vehicle: { assetId: string; name: string | null; assetNumber: string | null };
+    driver: { employeeId: string; name: string | null };
+  } | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TransportRequestsQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  /** Sent comma-separated. */
+  status?: TransportRequestStatus[];
+}
+
+export interface TransportRequestListResponse {
+  data: TransportRequest[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface TransportRequestFormOptions {
+  requester: { name: string; department: string | null };
+  employees: TransportRequestPerson[];
+}
+
+export interface CreateTransportRequestPayload {
+  businessPurpose: string;
+  travelDate: string;
+  departureTime: string;
+  returnTime: string;
+  destination: string;
+  passengerIds?: string[];
+  notes?: string;
+}
+
+export type UpdateTransportRequestPayload = Partial<CreateTransportRequestPayload>;
+
+export interface TransportRequestAllocationOptions {
+  vehicles: {
+    assetId: string;
+    name: string;
+    assetNumber: string;
+    available: boolean;
+    unavailableReason: string | null;
+  }[];
+  drivers: {
+    employeeId: string;
+    name: string;
+    department: string | null;
+    available: boolean;
+    unavailableReason: string | null;
+  }[];
+}
+
+export interface ApproveTransportRequestPayload {
+  vehicleAssetId: string;
+  driverEmployeeId: string;
+  note?: string;
+}
+
+/** A driver: an HR employee marked as a transport officer. */
+export interface TransportOfficer {
+  id: string;
+  employeeId: string;
+  name: string;
+  department: string | null;
+  jobTitle: string | null;
+  email: string | null;
+  isActive: boolean;
+  /** False once the employee has left HR; they no longer appear in driver dropdowns. */
+  employeeActive: boolean;
+  deactivatedAt: string | null;
+  createdAt: string;
+}
+
+export interface TransportOfficersQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface TransportOfficerListResponse {
+  data: TransportOfficer[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface TransportOfficerCandidate {
+  employeeId: string;
+  name: string;
+  department: string | null;
+  jobTitle?: string | null;
+}
+
+export interface TransportOfficerToggleResult extends TransportOfficer {
+  /** Approved, still-upcoming trips that list this driver (only when deactivating). */
+  upcomingTrips: number;
 }

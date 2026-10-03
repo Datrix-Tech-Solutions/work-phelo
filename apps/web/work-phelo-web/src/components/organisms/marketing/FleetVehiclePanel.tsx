@@ -125,21 +125,28 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
       next.yearOfRegistration = 'Enter a valid year of registration.';
     }
     if (!values.fuelType) next.fuelType = 'Fuel type is required.';
-    if (values.currentMileage.trim() === '' || !Number.isInteger(mileage) || mileage < 0) {
-      next.currentMileage = 'Enter the current mileage in km.';
+    // Mileage is optional, but must be a valid reading when given.
+    if (values.currentMileage.trim() !== '' && (!Number.isInteger(mileage) || mileage < 0)) {
+      next.currentMileage = 'Enter a valid mileage in km, or leave it blank.';
     }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
 
   function details() {
+    const hasMileage = values.currentMileage.trim() !== '';
     return {
       vehicleType: values.vehicleType,
       make: values.make.trim(),
       model: values.model.trim(),
       yearOfRegistration: Number(values.yearOfRegistration),
       fuelType: values.fuelType,
-      currentMileage: Number(values.currentMileage),
+      // Editing: a blank field clears the stored value. Creating: just omit it.
+      ...(hasMileage
+        ? { currentMileage: Number(values.currentMileage) }
+        : vehicle
+          ? { currentMileage: null }
+          : {}),
     };
   }
 
@@ -271,7 +278,7 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
           />
         </div>
 
-        {numberField('currentMileage', 'Current Mileage (km)', 'eg; 45000')}
+        {numberField('currentMileage', 'Current Mileage (km) — optional', 'eg; 45000')}
 
         <SectionTitle>Assignment</SectionTitle>
 
@@ -293,6 +300,11 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
               onChange={(v) => set('assignedDriverId', v)}
               disabled={values.status === 'MAINTENANCE'}
             />
+            {options && driverOptions.length === 0 && (
+              <p className="text-xs text-amber-600 -mt-1">
+                No transport officers yet. Add drivers under Transport Officers first.
+              </p>
+            )}
             <SearchSelect
               label="Status"
               placeholder="Select status"

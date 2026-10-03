@@ -44,6 +44,28 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     ],
   },
   {
+    key: 'requests',
+    label: 'Transport Requests',
+    umbrellaKey: 'manage_requests',
+    tags: [
+      { key: 'manage_requests', label: 'Manage Requests' },
+      { key: 'create_request', label: 'Create Request' },
+      { key: 'view_all_requests', label: 'View All Requests' },
+      { key: 'approve_requests', label: 'Approve Requests' },
+    ],
+  },
+  {
+    key: 'transport-officers',
+    label: 'Transport Officers',
+    umbrellaKey: 'manage_transport_officers',
+    tags: [
+      { key: 'manage_transport_officers', label: 'Manage Transport Officers' },
+      { key: 'view_transport_officers', label: 'View Transport Officers' },
+      { key: 'add_transport_officers', label: 'Add Transport Officers' },
+      { key: 'edit_transport_officers', label: 'Activate / Deactivate Officers' },
+    ],
+  },
+  {
     key: 'fleet',
     label: 'Fleet',
     umbrellaKey: 'manage_fleet',
@@ -122,6 +144,23 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
   edit_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['EDIT'])],
   delete_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['DELETE'])],
 
+  // Transport requests — "create request" is the own-records bundle: raise, view,
+  // edit while pending and cancel. Approving needs tenant-wide visibility to be useful.
+  create_request: pairs('marketing.requests', ['VIEW', 'CREATE', 'EDIT', 'CANCEL']),
+  view_all_requests: [
+    ...pairs('marketing.requests', ['VIEW']),
+    ...pairs('marketing.requests.all', ['VIEW']),
+  ],
+  approve_requests: [
+    ...pairs('marketing.requests', ['VIEW']),
+    ...pairs('marketing.requests.all', ['VIEW', 'APPROVE']),
+  ],
+
+  // Transport officers (drivers) — adding or toggling implies being able to see the list.
+  view_transport_officers: pairs('marketing.transport-officers', ['VIEW']),
+  add_transport_officers: pairs('marketing.transport-officers', ['VIEW', 'CREATE']),
+  edit_transport_officers: pairs('marketing.transport-officers', ['VIEW', 'EDIT']),
+
   // Fleet — edit/delete imply view since the list is the entry point.
   view_fleet: pairs('marketing.fleet', ['VIEW']),
   create_fleet: pairs('marketing.fleet', ['VIEW', 'CREATE']),
@@ -142,6 +181,8 @@ const UMBRELLA_EXTRAS: Record<string, PermissionPair[]> = {
   manage_prospects: [],
   manage_clients: [],
   manage_fleet: [],
+  manage_requests: [],
+  manage_transport_officers: [],
 };
 
 /** Pill key → backend resource/action pairs it grants (umbrellas grant their section's union). */

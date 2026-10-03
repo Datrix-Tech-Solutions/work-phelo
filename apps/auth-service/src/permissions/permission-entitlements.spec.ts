@@ -62,8 +62,13 @@ describe('permission entitlements', () => {
     ).toBe(false);
   });
 
-  it('scopes marketing.fleet to the Marketing module only', () => {
-    const resource = { name: 'marketing.fleet', module: 'MARKETING' };
+  it.each([
+    'marketing.fleet',
+    'marketing.requests',
+    'marketing.requests.all',
+    'marketing.transport-officers',
+  ])('scopes %s to the Marketing module only', (name) => {
+    const resource = { name, module: 'MARKETING' };
 
     expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
       true,

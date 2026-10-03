@@ -36,6 +36,15 @@ enum MarketingClientProductStatus {
   @@schema("marketing")
 }
 
+enum MarketingTransportRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+
+  @@schema("marketing")
+}
+
 enum MarketingFleetVehicleType {
   SEDAN
   SUV
@@ -323,7 +332,7 @@ model MarketingFleetVehicle {
   model              String
   yearOfRegistration Int
   fuelType           MarketingFleetFuelType
-  currentMileage     Int
+  currentMileage     Int?
   createdByUserId    String?
   updatedByUserId    String?
   createdAt          DateTime                  @default(now())
@@ -332,5 +341,82 @@ model MarketingFleetVehicle {
   @@unique([tenantId, assetId])
   @@index([tenantId, vehicleType])
   @@index([tenantId, fuelType])
+  @@schema("marketing")
+}
+
+/// A staff transport request. Requester, department and passenger names are
+/// snapshots taken at submission so the record stays accurate if HR data changes.
+model MarketingTransportRequest {
+  id                  String                          @id @default(uuid())
+  tenantId            String
+  requesterUserId     String
+  requesterEmployeeId String?
+  requesterName       String
+  requesterDepartment String?
+  businessPurpose     String
+  travelDate          DateTime                        @db.Date
+  departureTime       String
+  returnTime          String
+  destination         String
+  notes               String?
+  status              MarketingTransportRequestStatus @default(PENDING)
+  reviewedByUserId    String?
+  reviewedByName      String?
+  reviewedAt          DateTime?
+  reviewNote          String?
+  /// Set on approval. Names are snapshots; the vehicle is an HR asset id and the
+  /// driver an HR employee id. Allocating does not change HR assignment or status.
+  vehicleAssetId      String?
+  vehicleName         String?
+  vehicleAssetNumber  String?
+  driverEmployeeId    String?
+  driverName          String?
+  cancelledAt         DateTime?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+
+  passengers MarketingTransportRequestPassenger[]
+
+  @@index([tenantId, status, travelDate])
+  @@index([tenantId, requesterUserId, createdAt], map: "MarketingTransportRequest_requester_created_idx")
+  @@index([tenantId, createdAt])
+  @@index([tenantId, vehicleAssetId, travelDate], map: "MarketingTransportRequest_vehicle_date_idx")
+  @@index([tenantId, driverEmployeeId, travelDate], map: "MarketingTransportRequest_driver_date_idx")
+  @@schema("marketing")
+}
+
+model MarketingTransportRequestPassenger {
+  id         String   @id @default(uuid())
+  tenantId   String
+  requestId  String
+  employeeId String
+  name       String
+  department String?
+  createdAt  DateTime @default(now())
+
+  request MarketingTransportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, employeeId])
+  @@index([tenantId, employeeId])
+  @@schema("marketing")
+}
+
+/// A driver: an HR employee marked as a transport officer. HR owns the person;
+/// this row only records that they drive. `name` is a fallback label for when
+/// the employee is no longer active in HR.
+model MarketingTransportOfficer {
+  id              String    @id @default(uuid())
+  tenantId        String
+  employeeId      String
+  name            String
+  isActive        Boolean   @default(true)
+  deactivatedAt   DateTime?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([tenantId, employeeId])
+  @@index([tenantId, isActive])
   @@schema("marketing")
 }

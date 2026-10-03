@@ -18,15 +18,13 @@ export const FLEET_STATUS_OPTIONS: { value: FleetStatus; label: string }[] = [
   { value: 'RETIRED', label: 'Retired' },
 ];
 
-export const FLEET_STATUS_BADGES: Record<
-  FleetStatus,
-  { label: string; variant: 'success' | 'info' | 'warning' | 'danger' }
-> = {
-  AVAILABLE: { label: 'Available', variant: 'success' },
-  ASSIGNED: { label: 'Assigned', variant: 'info' },
-  MAINTENANCE: { label: 'Under Maintenance', variant: 'warning' },
-  RETIRED: { label: 'Retired', variant: 'danger' },
-};
+export const FLEET_STATUS_STYLES: Record<FleetStatus, { label: string; text: string; bg: string }> =
+  {
+    AVAILABLE: { label: 'Available', text: 'text-green-700', bg: 'bg-green-50' },
+    ASSIGNED: { label: 'Assigned', text: 'text-blue-700', bg: 'bg-blue-50' },
+    MAINTENANCE: { label: 'Maintenance', text: 'text-yellow-700', bg: 'bg-yellow-50' },
+    RETIRED: { label: 'Retired', text: 'text-gray-500', bg: 'bg-gray-100' },
+  };
 
 export const labelFor = (options: { value: string; label: string }[], value: string | null) =>
   options.find((option) => option.value === value)?.label ?? value ?? '—';

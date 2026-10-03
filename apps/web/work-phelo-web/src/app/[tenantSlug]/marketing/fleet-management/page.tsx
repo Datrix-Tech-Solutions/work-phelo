@@ -1,7 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { FleetsTable } from '@/components/molecules/marketing/FleetsTable';
+import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { FleetCard } from '@/components/molecules/marketing/FleetCard';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { FleetVehiclePanel } from '@/components/organisms/marketing/FleetVehiclePanel';
 import { AssignFleetDriverPanel } from '@/components/organisms/marketing/AssignFleetDriverPanel';
@@ -15,11 +17,12 @@ import {
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
+import { FLEET_STATUS_OPTIONS } from '@/lib/fleetOptions';
 import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import type { FleetStatus, FleetVehicle } from '@/types/marketing';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
 export default function FleetManagementPage() {
   const toast = useToast();
@@ -72,46 +75,72 @@ export default function FleetManagementPage() {
   return (
     <>
       <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto')}>
-        <FleetsTable
+        <DataCardGrid
           data={data?.data ?? []}
           isLoading={isLoading}
+          searchPlaceholder="Search vehicles…"
           searchValue={search}
           onSearch={resetPage(setSearch)}
-          statusFilter={statusFilter}
-          onStatusFilter={resetPage(setStatusFilter)}
-          branchFilter={branchFilter}
-          onBranchFilter={resetPage(setBranchFilter)}
-          branchOptions={branchOptions}
+          extraFilters={
+            <>
+              <SearchSelect
+                size="sm"
+                placeholder="Status"
+                allLabel="All statuses"
+                options={FLEET_STATUS_OPTIONS}
+                value={statusFilter}
+                showAllOption
+                onChange={resetPage(setStatusFilter)}
+              />
+              <SearchSelect
+                size="sm"
+                placeholder="Branch"
+                allLabel="All branches"
+                options={branchOptions}
+                value={branchFilter}
+                showAllOption
+                onChange={resetPage(setBranchFilter)}
+              />
+            </>
+          }
+          actionButton={
+            canCreate ? { label: 'Add Vehicle', onClick: () => setAddOpen(true) } : undefined
+          }
+          emptyMessage="No vehicles found"
           currentPage={page}
           totalPages={Math.max(1, data?.meta.totalPages ?? 1)}
           onPageChange={setPage}
-          onAdd={canCreate ? () => setAddOpen(true) : undefined}
-          onEdit={canEdit ? setEditing : undefined}
-          onAssignDriver={canEdit ? setAssigning : undefined}
-          onUnassignDriver={
-            canEdit
-              ? (vehicle) =>
-                  unassignDriver.mutate(vehicle.assetId, {
-                    onSuccess: () => toast.success('Driver removed'),
-                    onError: (error) =>
-                      toast.error(apiErrorMessage(error, 'Failed to remove driver')),
-                  })
-              : undefined
-          }
-          onSetStatus={
-            canEdit
-              ? (vehicle, status) =>
-                  setStatus.mutate(
-                    { assetId: vehicle.assetId, status },
-                    {
-                      onSuccess: () => toast.success('Vehicle status updated'),
-                      onError: (error) =>
-                        toast.error(apiErrorMessage(error, 'Failed to update status')),
-                    },
-                  )
-              : undefined
-          }
-          onRetire={canDelete ? setRetiring : undefined}
+          renderCard={(vehicle) => (
+            <FleetCard
+              vehicle={vehicle}
+              onEdit={canEdit ? () => setEditing(vehicle) : undefined}
+              onAssignDriver={canEdit ? () => setAssigning(vehicle) : undefined}
+              onUnassignDriver={
+                canEdit
+                  ? () =>
+                      unassignDriver.mutate(vehicle.assetId, {
+                        onSuccess: () => toast.success('Driver removed'),
+                        onError: (error) =>
+                          toast.error(apiErrorMessage(error, 'Failed to remove driver')),
+                      })
+                  : undefined
+              }
+              onSetStatus={
+                canEdit
+                  ? (status) =>
+                      setStatus.mutate(
+                        { assetId: vehicle.assetId, status },
+                        {
+                          onSuccess: () => toast.success('Vehicle status updated'),
+                          onError: (error) =>
+                            toast.error(apiErrorMessage(error, 'Failed to update status')),
+                        },
+                      )
+                  : undefined
+              }
+              onRetire={canDelete ? () => setRetiring(vehicle) : undefined}
+            />
+          )}
         />
       </div>
 

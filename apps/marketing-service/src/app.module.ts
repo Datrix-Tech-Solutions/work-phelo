@@ -6,6 +6,8 @@ import { CrmSettingsModule } from './crm-settings/crm-settings.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProspectsModule } from './prospects/prospects.module';
+import { RequestsModule } from './requests/requests.module';
+import { TransportOfficersModule } from './transport-officers/transport-officers.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { ProspectsModule } from './prospects/prospects.module';
     ProspectsModule,
     ClientsModule,
     FleetModule,
+    RequestsModule,
+    TransportOfficersModule,
   ],
 })
 export class AppModule {}

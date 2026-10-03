@@ -17,6 +17,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { AssetsModule } from './assets/assets.module';
+import { DirectoryModule } from './directory/directory.module';
 import { CompanyPoliciesModule } from './company-policies/company-policies.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
@@ -49,6 +50,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     AppraisalsModule,
     DashboardModule,
     AssetsModule,
+    DirectoryModule,
     CompanyPoliciesModule,
     RabbitMQModule,
     AnnouncementsModule,

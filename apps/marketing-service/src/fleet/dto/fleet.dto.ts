@@ -69,12 +69,17 @@ class FleetDetailsFields {
   @IsEnum(MarketingFleetFuelType)
   fuelType!: MarketingFleetFuelType;
 
-  @ApiProperty({ example: 45000, description: 'Odometer reading in km.' })
+  @ApiPropertyOptional({
+    example: 45000,
+    nullable: true,
+    description: 'Odometer reading in km. Optional.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(MAX_MILEAGE)
-  currentMileage!: number;
+  currentMileage?: number | null;
 }
 
 export class CreateFleetVehicleDto extends FleetDetailsFields {
@@ -132,13 +137,16 @@ export class UpdateFleetVehicleDto {
   @IsEnum(MarketingFleetFuelType)
   fuelType?: MarketingFleetFuelType;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Null clears the mileage.',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(MAX_MILEAGE)
-  currentMileage?: number;
+  currentMileage?: number | null;
 
   @ApiPropertyOptional({
     format: 'uuid',
