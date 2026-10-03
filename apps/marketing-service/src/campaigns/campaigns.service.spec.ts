@@ -26,8 +26,8 @@ function campaignRow(overrides: Record<string, unknown> = {}) {
     tenantId: TENANT,
     name: 'Q4 Launch',
     channels: ['SMS'],
-    businessTypeId: BUSINESS_TYPE,
-    businessTypeName: 'Insurance',
+    businessTypeIds: [BUSINESS_TYPE],
+    businessTypeNames: ['Insurance'],
     subject: 'Hello',
     message: 'Body',
     dispatchMode: 'INSTANT',
@@ -42,7 +42,7 @@ function campaignRow(overrides: Record<string, unknown> = {}) {
 const baseDto: CreateCampaignDto = {
   name: 'Q4 Launch',
   channels: ['SMS'],
-  businessTypeId: BUSINESS_TYPE,
+  businessTypeIds: [BUSINESS_TYPE],
   subject: 'Hello',
   message: 'Body',
   dispatchMode: 'INSTANT',
@@ -74,7 +74,7 @@ describe('CampaignsService', () => {
       count: jest.fn(),
     },
     marketingCampaignRecipient: { groupBy: jest.fn() },
-    marketingCrmSettingOption: { findFirst: jest.fn() },
+    marketingCrmSettingOption: { findMany: jest.fn() },
     marketingProspect: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -93,10 +93,9 @@ describe('CampaignsService', () => {
     prisma.$transaction.mockImplementation((fn: (t: typeof tx) => unknown) =>
       fn(tx),
     );
-    prisma.marketingCrmSettingOption.findFirst.mockResolvedValue({
-      id: BUSINESS_TYPE,
-      name: 'Insurance',
-    });
+    prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+      { id: BUSINESS_TYPE, name: 'Insurance' },
+    ]);
     prisma.marketingCampaignRecipient.groupBy.mockResolvedValue([]);
     tx.marketingCampaign.create.mockResolvedValue(campaignRow());
   });
@@ -112,13 +111,14 @@ describe('CampaignsService', () => {
 
       expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tenantId: TENANT, businessTypeId: BUSINESS_TYPE },
+          where: { tenantId: TENANT, businessTypeId: { in: [BUSINESS_TYPE] } },
         }),
       );
       expect(tx.marketingCampaign.create).toHaveBeenCalledWith({
         data: like({
           status: 'PENDING_DISPATCH',
-          businessTypeName: 'Insurance',
+          businessTypeIds: [BUSINESS_TYPE],
+          businessTypeNames: ['Insurance'],
           createdByUserId: 'user-1',
         }),
       });
@@ -167,6 +167,49 @@ describe('CampaignsService', () => {
       expect(rows[1].providerDetail).toBe('Duplicate address in this campaign');
     });
 
+    it('targets every selected business type and keeps their order', async () => {
+      const OTHER = '33333333-3333-4333-8333-333333333333';
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        { id: OTHER, name: 'Retail' },
+        { id: BUSINESS_TYPE, name: 'Insurance' },
+      ]);
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        prospect('1', '0240000001', null),
+      ]);
+
+      await service.create(user, {
+        ...baseDto,
+        businessTypeIds: [BUSINESS_TYPE, OTHER],
+      });
+
+      expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
+        like({
+          where: {
+            tenantId: TENANT,
+            businessTypeId: { in: [BUSINESS_TYPE, OTHER] },
+          },
+        }),
+      );
+      expect(tx.marketingCampaign.create).toHaveBeenCalledWith({
+        data: like({
+          businessTypeIds: [BUSINESS_TYPE, OTHER],
+          businessTypeNames: ['Insurance', 'Retail'],
+        }),
+      });
+    });
+
+    it('rejects when any selected business type is unknown', async () => {
+      const OTHER = '33333333-3333-4333-8333-333333333333';
+
+      await expect(
+        service.create(user, {
+          ...baseDto,
+          businessTypeIds: [BUSINESS_TYPE, OTHER],
+        }),
+      ).rejects.toThrow('A selected business type is invalid or inactive');
+      expect(prisma.marketingProspect.findMany).not.toHaveBeenCalled();
+    });
+
     it('ignores prospects that have no primary contact', async () => {
       prisma.marketingProspect.findMany.mockResolvedValue([
         prospect('1', '0240000001', null),
@@ -182,7 +225,7 @@ describe('CampaignsService', () => {
       prisma.marketingProspect.findMany.mockResolvedValue([]);
 
       await expect(service.create(user, baseDto)).rejects.toThrow(
-        'No prospects were found under the selected business type',
+        'No prospects were found under the selected business types',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(dispatcher.dispatch).not.toHaveBeenCalled();
@@ -200,12 +243,12 @@ describe('CampaignsService', () => {
     });
 
     it('rejects a business type that is not active in this tenant', async () => {
-      prisma.marketingCrmSettingOption.findFirst.mockResolvedValue(null);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
 
       await expect(service.create(user, baseDto)).rejects.toThrow(
-        'The selected business type is invalid or inactive',
+        'A selected business type is invalid or inactive',
       );
-      expect(prisma.marketingCrmSettingOption.findFirst).toHaveBeenCalledWith(
+      expect(prisma.marketingCrmSettingOption.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: like({ tenantId: TENANT }),
         }),
@@ -255,7 +298,7 @@ describe('CampaignsService', () => {
 
       await expect(
         service.preview(user, {
-          businessTypeId: BUSINESS_TYPE,
+          businessTypeIds: [BUSINESS_TYPE],
           channels: ['SMS', 'EMAIL'],
         }),
       ).resolves.toEqual({ prospectCount: 2, reachable: 3, skipped: 1 });

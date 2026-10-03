@@ -25,13 +25,13 @@ export function useCampaigns(query: CampaignsQuery = {}) {
 
 /** Counts the messages a campaign would queue; runs only once the audience is chosen. */
 export function useCampaignPreview(payload: Partial<CampaignPreviewPayload>) {
-  const { businessTypeId, channels } = payload;
-  const ready = Boolean(businessTypeId) && (channels?.length ?? 0) > 0;
+  const { businessTypeIds, channels } = payload;
+  const ready = (businessTypeIds?.length ?? 0) > 0 && (channels?.length ?? 0) > 0;
   return useQuery({
-    queryKey: [...CAMPAIGNS_KEY, 'preview', businessTypeId, channels] as const,
+    queryKey: [...CAMPAIGNS_KEY, 'preview', businessTypeIds, channels] as const,
     queryFn: async () => {
       const res = await api.post<CampaignPreview>(`${ENDPOINT}/preview`, {
-        businessTypeId,
+        businessTypeIds,
         channels,
       });
       return res.data;

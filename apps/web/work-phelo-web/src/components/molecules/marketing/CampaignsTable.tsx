@@ -2,6 +2,7 @@
 
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { TableButton } from '@/components/atoms/TableButton';
 import { formatDate } from '@/lib/formatters';
 import type { Campaign, CampaignChannel, CampaignStatus } from '@/types/marketing';
 
@@ -23,6 +24,7 @@ const COLUMNS: Column<Campaign>[] = [
   {
     key: 'name',
     label: 'Campaign',
+    width: 'minmax(120px, 1fr)',
     render: (row) => (
       <div className="flex flex-col">
         <span className="font-medium text-gray-900">{row.name}</span>
@@ -33,12 +35,19 @@ const COLUMNS: Column<Campaign>[] = [
   {
     key: 'channels',
     label: 'Channels',
+    width: '120px',
     render: (row) => row.channels.map((c) => CHANNEL_LABEL[c]).join(', '),
   },
-  { key: 'businessType', label: 'Target Audience', render: (row) => row.businessType.name },
+  {
+    key: 'businessType',
+    label: 'Target Audience',
+    width: 'minmax(120px, 1fr)',
+    render: (row) => row.businessTypes.map((type) => type.name).join(', '),
+  },
   {
     key: 'recipients',
     label: 'Recipients',
+    width: '90px',
     render: (row) => {
       const { total, skipped, sent, failed } = row.recipients;
       const detail = [
@@ -57,15 +66,22 @@ const COLUMNS: Column<Campaign>[] = [
   {
     key: 'dispatchMode',
     label: 'Dispatch',
+    width: '90px',
     render: (row) =>
       row.dispatchMode === 'SCHEDULED' && row.scheduledDate
         ? formatDate(row.scheduledDate)
         : 'Instant',
   },
-  { key: 'createdAt', label: 'Created', render: (row) => formatDate(row.createdAt) },
+  {
+    key: 'createdAt',
+    label: 'Created',
+    width: '90px',
+    render: (row) => formatDate(row.createdAt),
+  },
   {
     key: 'status',
     label: 'Status',
+    width: '100px',
     render: (row) => {
       const { label, variant } = STATUS_MAP[row.status];
       return <Badge label={label} variant={variant} />;
@@ -84,7 +100,7 @@ interface Props {
   onRowClick?: (row: Campaign) => void;
   /** Omit to hide the New Campaign button (no create permission). */
   onAdd?: () => void;
-  /** Omit to hide Cancel (no cancel permission). Only offered for scheduled campaigns. */
+  /** Omit to hide the Actions column (no cancel permission). Cancel shows only on scheduled campaigns. */
   onCancel?: (row: Campaign) => void;
 }
 
@@ -100,9 +116,32 @@ export function CampaignsTable({
   onAdd,
   onCancel,
 }: Props) {
+  const columns: Column<Campaign>[] = onCancel
+    ? [
+        ...COLUMNS,
+        {
+          key: 'actions',
+          label: 'Actions',
+          width: '90px',
+          render: (row) =>
+            row.status === 'SCHEDULED' ? (
+              <TableButton
+                variant="red"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancel(row);
+                }}
+              >
+                Cancel
+              </TableButton>
+            ) : null,
+        },
+      ]
+    : COLUMNS;
+
   return (
     <DataTable
-      columns={COLUMNS}
+      columns={columns}
       data={data}
       isLoading={isLoading}
       emptyMessage="No campaigns yet"
@@ -113,14 +152,6 @@ export function CampaignsTable({
       totalPages={totalPages}
       onPageChange={onPageChange}
       onRowClick={onRowClick}
-      rowActions={
-        onCancel
-          ? (row) =>
-              row.status === 'SCHEDULED'
-                ? [{ label: 'Cancel Campaign', danger: true, onClick: () => onCancel(row) }]
-                : []
-          : undefined
-      }
       actionButton={onAdd ? { label: 'New Campaign', onClick: onAdd } : undefined}
       noInternalScroll
     />
