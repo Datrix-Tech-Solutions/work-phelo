@@ -460,7 +460,24 @@ export interface UpdateClientPayload {
   location?: Partial<CreateProspectLocationPayload>;
 }
 
-export type FleetStatus = 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' | 'RETIRED';
+/** BOOKED / ON_ROUTE come from approved trips; MAINTENANCE / RETIRED from HR. */
+export type FleetStatus = 'AVAILABLE' | 'BOOKED' | 'ON_ROUTE' | 'MAINTENANCE' | 'RETIRED';
+
+export type TripState = 'BOOKED' | 'ON_ROUTE';
+
+/** A booked or running approved trip, as shown on a vehicle. */
+export interface FleetTrip {
+  requestId: string;
+  state: TripState;
+  /** YYYY-MM-DD */
+  travelDate: string;
+  departureTime: string;
+  returnTime: string;
+  destination: string;
+  requesterName: string;
+  driverName: string | null;
+  selfDriven: boolean;
+}
 
 /** A vehicle: HR asset (identity, branch, driver, status) plus fleet-specific details. */
 export interface FleetVehicle {
@@ -478,6 +495,11 @@ export interface FleetVehicle {
   branch: { id: string; name: string | null } | null;
   assignedDriver: { id: string; name: string | null } | null;
   status: FleetStatus;
+  /** Raw HR state (e.g. whether maintenance can be cleared); `status` is the derived one. */
+  hrStatus: 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' | 'RETIRED';
+  /** Booked and on-route trips, soonest first (capped; see tripCount). */
+  trips: FleetTrip[];
+  tripCount: number;
   /** True for vehicles created in HR whose fleet details have not been filled in yet. */
   needsFleetDetails: boolean;
   createdAt: string;
@@ -618,6 +640,22 @@ export interface ApproveTransportRequestPayload {
   note?: string;
 }
 
+export type OfficerStatus = 'AVAILABLE' | 'BOOKED' | 'ON_ROUTE' | 'INACTIVE' | 'LEFT';
+
+/** A booked or running approved trip, as shown on a driver. */
+export interface OfficerTrip {
+  requestId: string;
+  state: TripState;
+  travelDate: string;
+  departureTime: string;
+  returnTime: string;
+  destination: string;
+  requesterName: string;
+  vehicleName: string | null;
+  vehicleAssetNumber: string | null;
+  selfDriven: boolean;
+}
+
 /** A driver: an HR employee marked as a transport officer. */
 export interface TransportOfficer {
   id: string;
@@ -629,6 +667,10 @@ export interface TransportOfficer {
   isActive: boolean;
   /** False once the employee has left HR; they no longer appear in driver dropdowns. */
   employeeActive: boolean;
+  /** BOOKED / ON_ROUTE come from approved trips; INACTIVE and LEFT override them. */
+  status: OfficerStatus;
+  trips: OfficerTrip[];
+  tripCount: number;
   deactivatedAt: string | null;
   createdAt: string;
 }
@@ -637,7 +679,7 @@ export interface TransportOfficersQuery {
   page?: number;
   limit?: number;
   search?: string;
-  status?: 'ACTIVE' | 'INACTIVE';
+  status?: OfficerStatus;
 }
 
 export interface TransportOfficerListResponse {

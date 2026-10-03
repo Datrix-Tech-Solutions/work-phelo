@@ -19,6 +19,8 @@ export function useTransportOfficers(query: TransportOfficersQuery = {}) {
       return res.data;
     },
     placeholderData: (previous) => previous,
+    // Booked → on route → available changes with the clock, so keep it fresh.
+    refetchInterval: 60_000,
   });
 }
 

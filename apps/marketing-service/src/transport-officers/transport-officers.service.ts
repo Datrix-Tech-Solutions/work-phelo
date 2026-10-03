@@ -9,12 +9,21 @@ import { MarketingTransportOfficer } from '../../prisma/generated/client';
 import { callHr } from '../hr/call-hr';
 import { DirectoryPerson, HrDirectoryClient } from '../hr/hr-directory.client';
 import { PrismaService } from '../prisma/prisma.service';
+import { strongestState } from '../trips/trip-schedule';
+import {
+  ScheduledTrip,
+  TripScheduleService,
+  tripsForDriver,
+} from '../trips/trip-schedule.service';
 import {
   AddTransportOfficersDto,
+  OfficerStatus,
   QueryTransportOfficersDto,
 } from './dto/transport-officer.dto';
 
 const NOT_FOUND_MESSAGE = 'Transport officer not found';
+/** How many booked/on-route trips an officer row carries. */
+const MAX_TRIPS_PER_ROW = 10;
 export const NOT_AN_OFFICER_MESSAGE =
   'The selected driver is not an active transport officer';
 
@@ -30,6 +39,7 @@ export class TransportOfficersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly directory: HrDirectoryClient,
+    private readonly trips: TripScheduleService,
   ) {}
 
   async list(user: RequestUser, query: QueryTransportOfficersDto = {}) {
@@ -37,22 +47,26 @@ export class TransportOfficersService {
     const limit = query.limit ?? 20;
     const search = query.search?.toLowerCase();
 
-    const [officers, people] = await Promise.all([
+    const [officers, people, trips] = await Promise.all([
       this.prisma.marketingTransportOfficer.findMany({
         where: { tenantId: user.tenantId },
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       }),
       this.callHr(() => this.directory.list(user.tenantId)),
+      this.trips.activeTrips(user.tenantId),
     ]);
     const peopleById = new Map(people.map((p) => [p.employeeId, p]));
 
     const rows = officers
       .map((officer) =>
-        this.toResponse(officer, peopleById.get(officer.employeeId)),
+        this.toResponse(
+          officer,
+          peopleById.get(officer.employeeId),
+          tripsForDriver(trips, officer.employeeId),
+        ),
       )
       .filter((row) => {
-        if (query.status === 'ACTIVE' && !row.isActive) return false;
-        if (query.status === 'INACTIVE' && row.isActive) return false;
+        if (query.status && row.status !== query.status) return false;
         if (!search) return true;
         return [row.name, row.jobTitle, row.department].some((value) =>
           value?.toLowerCase().includes(search),
@@ -123,8 +137,15 @@ export class TransportOfficersService {
     );
 
     const byId = new Map(people.map((p) => [p.employeeId, p]));
+    const trips = await this.trips.activeTrips(user.tenantId, {
+      driverEmployeeIds: saved.map((officer) => officer.employeeId),
+    });
     return saved.map((officer) =>
-      this.toResponse(officer, byId.get(officer.employeeId)),
+      this.toResponse(
+        officer,
+        byId.get(officer.employeeId),
+        tripsForDriver(trips, officer.employeeId),
+      ),
     );
   }
 
@@ -144,24 +165,19 @@ export class TransportOfficersService {
     });
 
     // Deactivating never cancels trips already approved with this driver; say so.
-    const upcomingTrips = isActive
-      ? 0
-      : await this.prisma.marketingTransportRequest.count({
-          where: {
-            tenantId: user.tenantId,
-            status: 'APPROVED',
-            driverEmployeeId: existing.employeeId,
-            travelDate: { gte: this.startOfTodayUtc() },
-          },
-        });
-
-    const people = await this.callHr(() => this.directory.list(user.tenantId));
+    const [people, trips] = await Promise.all([
+      this.callHr(() => this.directory.list(user.tenantId)),
+      this.trips.activeTrips(user.tenantId, {
+        driverEmployeeIds: [existing.employeeId],
+      }),
+    ]);
     return {
       ...this.toResponse(
         updated,
         people.find((p) => p.employeeId === updated.employeeId),
+        tripsForDriver(trips, updated.employeeId),
       ),
-      upcomingTrips,
+      upcomingTrips: isActive ? 0 : trips.length,
     };
   }
 
@@ -193,6 +209,7 @@ export class TransportOfficersService {
   private toResponse(
     officer: MarketingTransportOfficer,
     person: DirectoryPerson | undefined,
+    trips: ScheduledTrip[],
   ) {
     return {
       id: officer.id,
@@ -204,16 +221,34 @@ export class TransportOfficersService {
       isActive: officer.isActive,
       // False once the employee has left HR; they drop out of every dropdown.
       employeeActive: !!person,
+      status: this.deriveStatus(officer.isActive, !!person, trips),
+      trips: trips.slice(0, MAX_TRIPS_PER_ROW).map((trip) => ({
+        requestId: trip.requestId,
+        state: trip.state,
+        travelDate: trip.travelDate,
+        departureTime: trip.departureTime,
+        returnTime: trip.returnTime,
+        destination: trip.destination,
+        requesterName: trip.requesterName,
+        vehicleName: trip.vehicle?.name ?? null,
+        vehicleAssetNumber: trip.vehicle?.assetNumber ?? null,
+        selfDriven: trip.selfDriven,
+      })),
+      tripCount: trips.length,
       deactivatedAt: officer.deactivatedAt?.toISOString() ?? null,
       createdAt: officer.createdAt.toISOString(),
     };
   }
 
-  private startOfTodayUtc() {
-    const now = new Date();
-    return new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-    );
+  /** Switched off or gone from HR beats everything; otherwise the trips decide. */
+  private deriveStatus(
+    isActive: boolean,
+    employeeActive: boolean,
+    trips: ScheduledTrip[],
+  ): OfficerStatus {
+    if (!isActive) return 'INACTIVE';
+    if (!employeeActive) return 'LEFT';
+    return strongestState(trips.map((trip) => trip.state)) ?? 'AVAILABLE';
   }
 
   private callHr<T>(action: () => Promise<T>) {

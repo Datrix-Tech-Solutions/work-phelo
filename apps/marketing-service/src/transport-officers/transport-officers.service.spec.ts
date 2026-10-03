@@ -40,17 +40,32 @@ describe('TransportOfficersService', () => {
       upsert: jest.fn(),
       update: jest.fn(),
     },
-    marketingTransportRequest: { count: jest.fn() },
     $transaction: jest.fn(),
   };
   const directory = { list: jest.fn(), resolve: jest.fn() };
+  const trips = { activeTrips: jest.fn() };
   const service = new TransportOfficersService(
     prisma as never,
     directory as never,
+    trips as never,
   );
+
+  const trip = (employeeId: string, state: string, requestId = 'req-1') => ({
+    requestId,
+    travelDate: '2026-10-20',
+    departureTime: '10:00',
+    returnTime: '12:00',
+    destination: 'Kumasi',
+    requesterName: 'Efua',
+    vehicle: { assetId: 'v1', name: 'Toyota Hilux', assetNumber: 'VEH-1' },
+    driver: { employeeId, name: 'Driver' },
+    selfDriven: false,
+    state,
+  });
 
   beforeEach(() => {
     jest.resetAllMocks();
+    trips.activeTrips.mockResolvedValue([]);
     prisma.$transaction.mockImplementation((ops: Promise<unknown>[]) =>
       Promise.all(ops),
     );
@@ -112,6 +127,86 @@ describe('TransportOfficersService', () => {
       expect(prisma.marketingTransportOfficer.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { tenantId: TENANT } }),
       );
+    });
+  });
+
+  describe('status from trips', () => {
+    const listOne = async (
+      overrides: Record<string, unknown>,
+      tripList: unknown[],
+      inHr = true,
+    ) => {
+      prisma.marketingTransportOfficer.findMany.mockResolvedValue([
+        officer(overrides),
+      ]);
+      directory.list.mockResolvedValue(inHr ? [person('e1', 'Ama')] : []);
+      trips.activeTrips.mockResolvedValue(tripList);
+      return (await service.list(user)).data[0];
+    };
+
+    it('is available with no trips', async () => {
+      expect((await listOne({}, [])).status).toBe('AVAILABLE');
+    });
+
+    it('is booked when assigned to an approved trip that has not started', async () => {
+      const row = await listOne({}, [trip('e1', 'BOOKED')]);
+      expect(row.status).toBe('BOOKED');
+      expect(row.tripCount).toBe(1);
+      expect(row.trips[0]).toMatchObject({
+        destination: 'Kumasi',
+        departureTime: '10:00',
+        returnTime: '12:00',
+        vehicleName: 'Toyota Hilux',
+        state: 'BOOKED',
+      });
+    });
+
+    it('is on route once the trip has started', async () => {
+      const row = await listOne({}, [
+        trip('e1', 'BOOKED', 'later'),
+        trip('e1', 'ON_ROUTE'),
+      ]);
+      expect(row.status).toBe('ON_ROUTE');
+    });
+
+    it('ignores other drivers’ trips', async () => {
+      const row = await listOne({}, [trip('someone-else', 'ON_ROUTE')]);
+      expect(row.status).toBe('AVAILABLE');
+      expect(row.tripCount).toBe(0);
+    });
+
+    it('is inactive when switched off, whatever trips they have', async () => {
+      const row = await listOne({ isActive: false }, [trip('e1', 'ON_ROUTE')]);
+      expect(row.status).toBe('INACTIVE');
+    });
+
+    it('is marked as left once the employee is gone from HR', async () => {
+      const row = await listOne({}, [], false);
+      expect(row.status).toBe('LEFT');
+    });
+
+    it('filters the list by the derived status', async () => {
+      prisma.marketingTransportOfficer.findMany.mockResolvedValue([
+        officer({ id: 'a', employeeId: 'e1', name: 'Ama' }),
+        officer({ id: 'b', employeeId: 'e2', name: 'Kofi' }),
+        officer({ id: 'c', employeeId: 'e3', name: 'Yaw' }),
+      ]);
+      directory.list.mockResolvedValue([
+        person('e1', 'Ama'),
+        person('e2', 'Kofi'),
+        person('e3', 'Yaw'),
+      ]);
+      trips.activeTrips.mockResolvedValue([
+        trip('e1', 'ON_ROUTE'),
+        trip('e2', 'BOOKED'),
+      ]);
+
+      const status = async (value: 'ON_ROUTE' | 'BOOKED' | 'AVAILABLE') =>
+        (await service.list(user, { status: value })).data.map((o) => o.name);
+
+      expect(await status('ON_ROUTE')).toEqual(['Ama']);
+      expect(await status('BOOKED')).toEqual(['Kofi']);
+      expect(await status('AVAILABLE')).toEqual(['Yaw']);
     });
   });
 
@@ -189,17 +284,21 @@ describe('TransportOfficersService', () => {
       prisma.marketingTransportOfficer.update.mockResolvedValue(
         officer({ isActive: false, deactivatedAt: new Date() }),
       );
-      prisma.marketingTransportRequest.count.mockResolvedValue(2);
+      trips.activeTrips.mockResolvedValue([
+        trip('e1', 'BOOKED', 'a'),
+        trip('e1', 'BOOKED', 'b'),
+      ]);
       directory.list.mockResolvedValue([person('e1', 'Ama')]);
 
       const result = await service.setActive(user, 'off-1', false);
 
-      expect(result).toMatchObject({ isActive: false, upcomingTrips: 2 });
-      expect(prisma.marketingTransportRequest.count).toHaveBeenCalledWith({
-        where: expect.objectContaining({
-          status: 'APPROVED',
-          driverEmployeeId: 'e1',
-        }) as unknown,
+      expect(result).toMatchObject({
+        isActive: false,
+        status: 'INACTIVE',
+        upcomingTrips: 2,
+      });
+      expect(trips.activeTrips).toHaveBeenCalledWith(TENANT, {
+        driverEmployeeIds: ['e1'],
       });
     });
 
@@ -212,8 +311,11 @@ describe('TransportOfficersService', () => {
 
       const result = await service.setActive(user, 'off-1', true);
 
-      expect(result).toMatchObject({ isActive: true, upcomingTrips: 0 });
-      expect(prisma.marketingTransportRequest.count).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        isActive: true,
+        status: 'AVAILABLE',
+        upcomingTrips: 0,
+      });
     });
 
     it('returns 404 for an officer in another tenant', async () => {
