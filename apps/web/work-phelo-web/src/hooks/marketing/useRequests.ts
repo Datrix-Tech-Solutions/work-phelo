@@ -2,10 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
   ApproveTransportRequestPayload,
+  CompleteTransportRequestPayload,
   CreateTransportRequestPayload,
   TransportRequest,
   TransportRequestAllocationOptions,
+  RescheduleTransportRequestPayload,
   TransportRequestFormOptions,
+  TransportRequestWindow,
   TransportRequestListResponse,
   TransportRequestsQuery,
   UpdateTransportRequestPayload,
@@ -39,24 +42,38 @@ export function useRequestFormOptions(enabled = true) {
   });
 }
 
-export function useRequestAllocationOptions(id: string | undefined, enabled = true) {
+/** `window` checks a different date and times (rescheduling); omit it to use the request's own. */
+export function useRequestAllocationOptions(
+  id: string | undefined,
+  enabled = true,
+  window?: TransportRequestWindow,
+) {
   return useQuery({
-    queryKey: [...REQUESTS_KEY, 'allocation-options', id] as const,
+    queryKey: [...REQUESTS_KEY, 'allocation-options', id, window ?? null] as const,
     queryFn: async () => {
       const res = await api.get<TransportRequestAllocationOptions>(
         `${ENDPOINT}/${id}/allocation-options`,
+        { params: window },
       );
       return res.data;
     },
     enabled: enabled && !!id,
     // Availability changes as other requests get approved, so don't serve stale answers.
     staleTime: 0,
+    placeholderData: (previous) => previous,
   });
 }
 
+/** Requests drive vehicle and driver status (booked / on route), so their lists refresh too. */
 function useInvalidateRequests() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: REQUESTS_KEY });
+  return () => {
+    queryClient.invalidateQueries({ queryKey: REQUESTS_KEY });
+    queryClient.invalidateQueries({ queryKey: ['marketing', 'fleet'] });
+    queryClient.invalidateQueries({ queryKey: ['marketing', 'transport-officers'] });
+    // A completed trip joins its vehicle's and driver's history.
+    queryClient.invalidateQueries({ queryKey: ['marketing', 'trip-history'] });
+  };
 }
 
 export function useCreateRequest() {
@@ -110,6 +127,28 @@ export function useRejectRequest() {
       const res = await api.post<TransportRequest>(`${ENDPOINT}/${id}/reject`, {
         ...(note ? { note } : {}),
       });
+      return res.data;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+export function useRescheduleRequest() {
+  const invalidate = useInvalidateRequests();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: RescheduleTransportRequestPayload & { id: string }) => {
+      const res = await api.post<TransportRequest>(`${ENDPOINT}/${id}/reschedule`, payload);
+      return res.data;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+export function useCompleteRequest() {
+  const invalidate = useInvalidateRequests();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: CompleteTransportRequestPayload & { id: string }) => {
+      const res = await api.post<TransportRequest>(`${ENDPOINT}/${id}/complete`, payload);
       return res.data;
     },
     onSuccess: invalidate,

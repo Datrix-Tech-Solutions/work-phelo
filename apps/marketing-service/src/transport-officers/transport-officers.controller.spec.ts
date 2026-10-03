@@ -16,6 +16,7 @@ describe('TransportOfficersController authorization contract', () => {
   it.each([
     ['list', P.TRANSPORT_OFFICERS_VIEW],
     ['candidates', P.TRANSPORT_OFFICERS_CREATE],
+    ['tripHistory', P.TRANSPORT_OFFICERS_VIEW],
     ['add', P.TRANSPORT_OFFICERS_CREATE],
     ['deactivate', P.TRANSPORT_OFFICERS_EDIT],
     ['activate', P.TRANSPORT_OFFICERS_EDIT],
@@ -32,7 +33,14 @@ describe('TransportOfficersController authorization contract', () => {
       .filter((name) => name !== 'constructor')
       .sort();
     expect(declared).toEqual(
-      ['list', 'candidates', 'add', 'deactivate', 'activate'].sort(),
+      [
+        'list',
+        'candidates',
+        'tripHistory',
+        'add',
+        'deactivate',
+        'activate',
+      ].sort(),
     );
   });
 });

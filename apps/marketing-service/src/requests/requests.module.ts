@@ -3,12 +3,18 @@ import { AuthModule } from '../auth/auth.module';
 import { HrFleetClient } from '../fleet/hr-fleet.client';
 import { HrDirectoryClient } from '../hr/hr-directory.client';
 import { PrismaModule } from '../prisma/prisma.module';
+import { TripScheduleModule } from '../trips/trip-schedule.module';
 import { TransportOfficersModule } from '../transport-officers/transport-officers.module';
 import { RequestsController } from './requests.controller';
 import { RequestsService } from './requests.service';
 
 @Module({
-  imports: [AuthModule, PrismaModule, TransportOfficersModule],
+  imports: [
+    AuthModule,
+    PrismaModule,
+    TransportOfficersModule,
+    TripScheduleModule,
+  ],
   controllers: [RequestsController],
   providers: [RequestsService, HrDirectoryClient, HrFleetClient],
 })

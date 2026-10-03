@@ -41,6 +41,7 @@ enum MarketingTransportRequestStatus {
   APPROVED
   REJECTED
   CANCELLED
+  COMPLETED
 
   @@schema("marketing")
 }
@@ -347,35 +348,48 @@ model MarketingFleetVehicle {
 /// A staff transport request. Requester, department and passenger names are
 /// snapshots taken at submission so the record stays accurate if HR data changes.
 model MarketingTransportRequest {
-  id                  String                          @id @default(uuid())
-  tenantId            String
-  requesterUserId     String
-  requesterEmployeeId String?
-  requesterName       String
-  requesterDepartment String?
-  businessPurpose     String
-  travelDate          DateTime                        @db.Date
-  departureTime       String
-  returnTime          String
-  destination         String
-  notes               String?
-  status              MarketingTransportRequestStatus @default(PENDING)
-  reviewedByUserId    String?
-  reviewedByName      String?
-  reviewedAt          DateTime?
-  reviewNote          String?
+  id                    String                          @id @default(uuid())
+  tenantId              String
+  requesterUserId       String
+  requesterEmployeeId   String?
+  requesterName         String
+  requesterDepartment   String?
+  businessPurpose       String
+  travelDate            DateTime                        @db.Date
+  departureTime         String
+  returnTime            String
+  destination           String
+  notes                 String?
+  status                MarketingTransportRequestStatus @default(PENDING)
+  reviewedByUserId      String?
+  reviewedByName        String?
+  reviewedAt            DateTime?
+  reviewNote            String?
   /// Set on approval. Names are snapshots; the vehicle is an HR asset id and the
   /// driver an HR employee id. Allocating does not change HR assignment or status.
-  vehicleAssetId      String?
-  vehicleName         String?
-  vehicleAssetNumber  String?
-  driverEmployeeId    String?
-  driverName          String?
+  vehicleAssetId        String?
+  vehicleName           String?
+  vehicleAssetNumber    String?
+  driverEmployeeId      String?
+  driverName            String?
   /// True when the requester drives; driverEmployeeId/driverName then hold the requester.
-  selfDriven          Boolean                         @default(false)
-  cancelledAt         DateTime?
-  createdAt           DateTime                        @default(now())
-  updatedAt           DateTime                        @updatedAt
+  selfDriven            Boolean                         @default(false)
+  /// Set when someone completes the trip (a trip never completes on its own).
+  completedAt           DateTime?
+  completedByUserId     String?
+  completedByName       String?
+  /// Actual return, HH:mm on the travel date, to compare with returnTime.
+  actualReturnTime      String?
+  /// Set when an approver reschedules; the previous schedule is kept for display.
+  rescheduleCount       Int                             @default(0)
+  rescheduledAt         DateTime?
+  rescheduledByName     String?
+  previousTravelDate    DateTime?                       @db.Date
+  previousDepartureTime String?
+  previousReturnTime    String?
+  cancelledAt           DateTime?
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
 
   passengers MarketingTransportRequestPassenger[]
 

@@ -12,6 +12,7 @@ const COLUMNS: Column<TransportRequest>[] = [
   {
     key: 'requester',
     label: 'Requester',
+    width: 'minmax(120px, 0.8fr)',
     render: (row) => (
       <div className="flex flex-col">
         <span className="font-medium text-gray-900">{row.requester.name}</span>
@@ -22,27 +23,32 @@ const COLUMNS: Column<TransportRequest>[] = [
   {
     key: 'businessPurpose',
     label: 'Business Purpose',
+    width: 'minmax(120px, 1fr)',
     render: (row) => <span className="line-clamp-2 max-w-64">{row.businessPurpose}</span>,
   },
-  { key: 'destination', label: 'Destination' },
+  { key: 'destination', label: 'Destination', width: 'minmax(120px, 0.8fr)' },
   {
     key: 'travelDate',
     label: 'Travel Date',
+    width: '80px',
     render: (row) => formatTravelDate(row.travelDate),
   },
   {
     key: 'time',
     label: 'Departure – Return',
+    width: '140px',
     render: (row) => `${formatClock(row.departureTime)} – ${formatClock(row.returnTime)}`,
   },
   {
     key: 'passengers',
     label: 'Passengers',
+    width: '80px',
     render: (row) => (row.passengers.length ? row.passengers.length : dash),
   },
   {
     key: 'allocation',
     label: 'Vehicle / Driver',
+    width: 'minmax(120px, 1fr)',
     render: (row) =>
       row.allocation ? (
         <div className="flex flex-col">
@@ -60,9 +66,15 @@ const COLUMNS: Column<TransportRequest>[] = [
   {
     key: 'status',
     label: 'Status',
+    width: '100px',
     render: (row) => {
       const { label, variant } = REQUEST_STATUS_BADGES[row.status];
-      return <Badge label={label} variant={variant} />;
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <Badge label={label} variant={variant} />
+          {row.overdue && row.status === 'ON_ROUTE' && <Badge label="Overdue" variant="warning" />}
+        </div>
+      );
     },
   },
 ];
@@ -84,6 +96,10 @@ interface Props {
   canApprove?: (row: TransportRequest) => boolean;
   onApprove?: (row: TransportRequest) => void;
   onReject?: (row: TransportRequest) => void;
+  canReschedule?: (row: TransportRequest) => boolean;
+  onReschedule?: (row: TransportRequest) => void;
+  canComplete?: (row: TransportRequest) => boolean;
+  onComplete?: (row: TransportRequest) => void;
   canEdit?: (row: TransportRequest) => boolean;
   onEdit?: (row: TransportRequest) => void;
   canCancel?: (row: TransportRequest) => boolean;
@@ -106,6 +122,10 @@ export function RequestsTable({
   canApprove,
   onApprove,
   onReject,
+  canReschedule,
+  onReschedule,
+  canComplete,
+  onComplete,
   canEdit,
   onEdit,
   canCancel,
@@ -119,9 +139,19 @@ export function RequestsTable({
     if (onReject && canApprove?.(row)) {
       actions.push({ label: 'Reject', onClick: () => onReject(row), danger: true });
     }
+    if (onComplete && canComplete?.(row)) {
+      actions.push({ label: 'Complete Trip', onClick: () => onComplete(row), variant: 'success' });
+    }
+    if (onReschedule && canReschedule?.(row)) {
+      actions.push({ label: 'Reschedule', onClick: () => onReschedule(row) });
+    }
     if (onEdit && canEdit?.(row)) actions.push({ label: 'Edit', onClick: () => onEdit(row) });
     if (onCancel && canCancel?.(row)) {
-      actions.push({ label: 'Cancel Request', onClick: () => onCancel(row), danger: true });
+      actions.push({
+        label: row.status === 'PENDING' ? 'Cancel Request' : 'Cancel Trip',
+        onClick: () => onCancel(row),
+        danger: true,
+      });
     }
     return actions;
   };

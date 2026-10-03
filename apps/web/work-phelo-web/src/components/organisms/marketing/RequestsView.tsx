@@ -7,6 +7,7 @@ import { RequestPanel } from '@/components/organisms/marketing/RequestPanel';
 import { RequestDetailPanel } from '@/components/organisms/marketing/RequestDetailPanel';
 import { ApproveRequestModal } from '@/components/organisms/marketing/ApproveRequestModal';
 import { RejectRequestModal } from '@/components/organisms/marketing/RejectRequestModal';
+import { CompleteTripModal } from '@/components/organisms/marketing/CompleteTripModal';
 import { useCancelRequest, useRequests } from '@/hooks/marketing/useRequests';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
@@ -43,6 +44,8 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
   const [viewing, setViewing] = useState<TransportRequest | null>(null);
   const [approving, setApproving] = useState<TransportRequest | null>(null);
   const [rejecting, setRejecting] = useState<TransportRequest | null>(null);
+  const [rescheduling, setRescheduling] = useState<TransportRequest | null>(null);
+  const [completing, setCompleting] = useState<TransportRequest | null>(null);
   const [cancelling, setCancelling] = useState<TransportRequest | null>(null);
 
   const { data, isLoading, isError } = useRequests({
@@ -54,6 +57,17 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
   const cancelRequest = useCancelRequest();
 
   const isOwn = (row: TransportRequest) => row.requester.userId === userId;
+
+  // The requester can act on their own trip; anyone who can approve can act on any, and only
+  // approvers can reschedule (it re-allocates a vehicle and driver).
+  const isLive = (row: TransportRequest) =>
+    row.status === 'PENDING' || row.status === 'APPROVED' || row.status === 'ON_ROUTE';
+  const canCancelRow = (row: TransportRequest) =>
+    isLive(row) && ((isOwn(row) && canCancel) || canApprove);
+  const canCompleteRow = (row: TransportRequest) =>
+    row.status === 'ON_ROUTE' && row.overdue && ((isOwn(row) && canEdit) || canApprove);
+  const canRescheduleRow = (row: TransportRequest) =>
+    canApprove && (row.status === 'APPROVED' || row.status === 'ON_ROUTE');
 
   if (isError) {
     return (
@@ -93,8 +107,12 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
           onAdd={allowCreate && canCreate ? () => setAddOpen(true) : undefined}
           onEdit={canEdit ? setEditing : undefined}
           canEdit={(row) => isOwn(row) && row.status === 'PENDING'}
-          onCancel={canCancel ? setCancelling : undefined}
-          canCancel={(row) => isOwn(row) && (row.status === 'PENDING' || row.status === 'APPROVED')}
+          onCancel={canCancel || canApprove ? setCancelling : undefined}
+          canCancel={canCancelRow}
+          onReschedule={canApprove ? setRescheduling : undefined}
+          canReschedule={canRescheduleRow}
+          onComplete={canEdit || canApprove ? setCompleting : undefined}
+          canComplete={canCompleteRow}
         />
       </div>
 
@@ -104,6 +122,9 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
         request={viewing}
         onClose={() => setViewing(null)}
         canReview={canApprove}
+        canReschedule={!!viewing && canRescheduleRow(viewing)}
+        canComplete={!!viewing && canCompleteRow(viewing)}
+        canCancel={!!viewing && canCancelRow(viewing) && viewing.status !== 'PENDING'}
         onApprove={(row) => {
           setViewing(null);
           setApproving(row);
@@ -112,25 +133,53 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
           setViewing(null);
           setRejecting(row);
         }}
+        onReschedule={(row) => {
+          setViewing(null);
+          setRescheduling(row);
+        }}
+        onComplete={(row) => {
+          setViewing(null);
+          setCompleting(row);
+        }}
+        onCancel={(row) => {
+          setViewing(null);
+          setCancelling(row);
+        }}
       />
       <ApproveRequestModal request={approving} onClose={() => setApproving(null)} />
+      <ApproveRequestModal
+        request={rescheduling}
+        mode="reschedule"
+        onClose={() => setRescheduling(null)}
+      />
       <RejectRequestModal request={rejecting} onClose={() => setRejecting(null)} />
+      <CompleteTripModal request={completing} onClose={() => setCompleting(null)} />
 
       {cancelling && (
         <ConfirmDeleteProspectModal
-          title="Cancel Request"
+          title={cancelling.status === 'PENDING' ? 'Cancel Request' : 'Cancel Trip'}
           verb="Cancelling"
-          name={`your trip to ${cancelling.destination}`}
-          consequence="withdraws the request"
-          warning="You can raise a new request at any time."
-          confirmLabel="Cancel Request"
+          name={`${isOwn(cancelling) ? 'your' : `${cancelling.requester.name}'s`} trip to ${cancelling.destination}`}
+          consequence={
+            cancelling.status === 'PENDING'
+              ? 'withdraws the request'
+              : 'cancels it and frees the vehicle and driver'
+          }
+          warning={
+            cancelling.status === 'PENDING'
+              ? 'You can raise a new request at any time.'
+              : 'Use this when the trip did not go ahead.'
+          }
+          confirmLabel={cancelling.status === 'PENDING' ? 'Cancel Request' : 'Cancel Trip'}
           confirmingLabel="Cancelling…"
           isDeleting={cancelRequest.isPending}
           onCancel={() => setCancelling(null)}
           onConfirm={() =>
             cancelRequest.mutate(cancelling.id, {
               onSuccess: () => {
-                toast.success('Request cancelled');
+                toast.success(
+                  cancelling.status === 'PENDING' ? 'Request cancelled' : 'Trip cancelled',
+                );
                 setCancelling(null);
               },
               onError: (error) => toast.error(apiErrorMessage(error, 'Failed to cancel request')),

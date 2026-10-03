@@ -72,7 +72,7 @@ describe('FleetService', () => {
     activeDrivers: jest.fn(),
     assertActiveOfficer: jest.fn(),
   };
-  const trips = { activeTrips: jest.fn() };
+  const trips = { activeTrips: jest.fn(), completedTrips: jest.fn() };
   const service = new FleetService(
     prisma as never,
     hr as never,
@@ -289,6 +289,21 @@ describe('FleetService', () => {
         ConflictException,
       );
       expect(hr.setStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tripHistory', () => {
+    it('lists the completed trips of just that vehicle in this tenant', async () => {
+      trips.completedTrips.mockResolvedValue({ data: [], meta: {} });
+
+      await service.tripHistory(user, 'asset-1', { page: 2, limit: 5 });
+
+      expect(trips.completedTrips).toHaveBeenCalledWith(
+        TENANT,
+        { vehicleAssetId: 'asset-1' },
+        2,
+        5,
+      );
     });
   });
 

@@ -38,6 +38,7 @@ import {
   SetFleetVehicleStatusDto,
   UpdateFleetVehicleDto,
 } from './dto/fleet.dto';
+import { TripHistoryQueryDto } from '../trips/dto/trip-history-query.dto';
 import { FleetService } from './fleet.service';
 
 const { FLEET_VIEW, FLEET_CREATE, FLEET_EDIT, FLEET_DELETE } =
@@ -82,6 +83,22 @@ export class FleetController {
   })
   options(@Req() request: AuthedRequest) {
     return this.service.options(request.user);
+  }
+
+  @Get(':assetId/trip-history')
+  @RequireAnyPermission(FLEET_VIEW)
+  @ApiOperation({
+    summary: 'Completed trips this vehicle has been on',
+    description:
+      'Most recent first, with the planned and actual return times. Cancelled and rejected requests are not included.',
+  })
+  @ApiParam({ name: 'assetId', format: 'uuid' })
+  tripHistory(
+    @Param('assetId', ParseUUIDPipe) assetId: string,
+    @Query() query: TripHistoryQueryDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.tripHistory(request.user, assetId, query);
   }
 
   @Get(':assetId')

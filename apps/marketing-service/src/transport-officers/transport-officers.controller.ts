@@ -33,6 +33,7 @@ import {
   AddTransportOfficersDto,
   QueryTransportOfficersDto,
 } from './dto/transport-officer.dto';
+import { TripHistoryQueryDto } from '../trips/dto/trip-history-query.dto';
 import { TransportOfficersService } from './transport-officers.service';
 
 const {
@@ -82,6 +83,22 @@ export class TransportOfficersController {
   })
   candidates(@Req() request: AuthedRequest) {
     return this.service.candidates(request.user);
+  }
+
+  @Get(':id/trip-history')
+  @RequireAnyPermission(TRANSPORT_OFFICERS_VIEW)
+  @ApiOperation({
+    summary: 'Completed trips this officer has driven',
+    description:
+      'Most recent first, with the planned and actual return times. Cancelled and rejected requests are not included.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  tripHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: TripHistoryQueryDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.tripHistory(request.user, id, query);
   }
 
   @Post()

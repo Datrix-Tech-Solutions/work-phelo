@@ -1,25 +1,33 @@
 'use client';
 
 import { Clock, User } from 'lucide-react';
-import { cardClass } from '@/lib/utils';
 import { formatDate } from '@/lib/formatters';
 import { Appointment } from '@/components/molecules/marketing/AppointmentCard';
 
 interface Props {
-  date: string; // ISO
+  /** ISO date. When omitted, every appointment is listed with its own date. */
+  date?: string;
   appointments: Appointment[];
 }
 
 export function AppointmentDayList({ date, appointments }: Props) {
-  return (
-    <div className={cardClass('p-4 flex flex-col gap-3')}>
-      <h3 className="text-sm font-bold text-gray-900">{formatDate(date)}</h3>
+  const sorted = [...appointments].sort((a, b) =>
+    `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`),
+  );
 
-      {appointments.length === 0 ? (
-        <p className="text-sm text-gray-400">No appointments on this day</p>
+  return (
+    <div className="flex flex-col gap-3 min-w-0">
+      <h3 className="text-sm font-bold text-gray-900">
+        {date ? formatDate(date) : 'All appointments'}
+      </h3>
+
+      {sorted.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          {date ? 'No appointments on this day' : 'No appointments yet'}
+        </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {appointments.map((appt) => (
+          {sorted.map((appt) => (
             <div
               key={appt.id}
               className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2"
@@ -28,6 +36,7 @@ export function AppointmentDayList({ date, appointments }: Props) {
                 <p className="text-sm font-semibold text-gray-900 truncate">{appt.prospectName}</p>
                 <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                   <Clock size={12} className="shrink-0" />
+                  {!date && <span>{formatDate(appt.date)} ·</span>}
                   {appt.startTime} – {appt.endTime}
                 </p>
               </div>

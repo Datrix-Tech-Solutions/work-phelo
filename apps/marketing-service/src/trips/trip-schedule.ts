@@ -44,19 +44,31 @@ export function wallClockNow(
 }
 
 /**
- * - ENDED: the return time has passed (or the date is gone).
- * - ON_ROUTE: today, from the departure time until the return time.
- * - BOOKED: still to come, later today or on a future date.
+ * A trip starts by itself at its departure time and then stays on route until a
+ * person completes, cancels or reschedules it. It never ends on the clock alone.
+ * - BOOKED: the departure time has not come yet.
+ * - ON_ROUTE: departure has passed (even if the return time has too).
  */
-export function tripState(
-  now: WallClock,
-  trip: TripWindow,
-): TripState | 'ENDED' {
-  if (trip.travelDate < now.date) return 'ENDED';
+export function tripState(now: WallClock, trip: TripWindow): TripState {
   if (trip.travelDate > now.date) return 'BOOKED';
-  if (now.time >= trip.returnTime) return 'ENDED';
-  if (now.time >= trip.departureTime) return 'ON_ROUTE';
-  return 'BOOKED';
+  if (trip.travelDate < now.date) return 'ON_ROUTE';
+  return now.time >= trip.departureTime ? 'ON_ROUTE' : 'BOOKED';
+}
+
+/** True once the return time has passed while the trip is still unresolved. */
+export function isOverdue(now: WallClock, trip: TripWindow): boolean {
+  if (trip.travelDate < now.date) return true;
+  if (trip.travelDate > now.date) return false;
+  return now.time >= trip.returnTime;
+}
+
+/** Whole minutes from one HH:mm to another on the same day (negative if `to` is earlier). */
+export function minutesBetween(from: string, to: string): number {
+  const toMinutes = (value: string) => {
+    const [hours, minutes] = value.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+  return toMinutes(to) - toMinutes(from);
 }
 
 /** The strongest state across a resource's trips: on route beats booked. */
