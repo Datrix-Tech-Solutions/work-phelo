@@ -22,8 +22,9 @@ import {
 const ENDPOINT = '/marketing/clients';
 const CLIENTS_KEY = ['marketing', 'clients'] as const;
 
-export function useClients(query: ClientsQuery = {}) {
+export function useClients(query: ClientsQuery = {}, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: [...CLIENTS_KEY, query] as const,
     queryFn: async () => {
       const res = await api.get<ClientListResponse>(ENDPOINT, { params: query });

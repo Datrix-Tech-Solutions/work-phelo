@@ -202,7 +202,12 @@ describe('ProspectsService', () => {
 
   let prisma: ReturnType<typeof makePrisma>;
   let service: ProspectsService;
-  let assignees: { forCreate: jest.Mock; forUpdate: jest.Mock };
+  let assignees: {
+    forCreate: jest.Mock;
+    forUpdate: jest.Mock;
+    nameFor: jest.Mock;
+    namesFor: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = makePrisma();
@@ -249,6 +254,10 @@ describe('ProspectsService', () => {
           Promise.resolve(requested ?? u.id),
         ),
       forUpdate: jest.fn().mockResolvedValue(null),
+      nameFor: jest.fn().mockResolvedValue('Ada Lovelace'),
+      namesFor: jest
+        .fn()
+        .mockResolvedValue(new Map([['user-1', 'Ada Lovelace']])),
     };
     service = new ProspectsService(
       prisma as unknown as PrismaService,
@@ -539,6 +548,8 @@ describe('ProspectsService', () => {
     it('allows the owner to view complete prospect details', async () => {
       const result = await service.findOne(user, 'prospect-a');
 
+      expect(result.assignedUserName).toBe('Ada Lovelace');
+
       expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
         where: {
           id: 'prospect-a',
@@ -581,6 +592,7 @@ describe('ProspectsService', () => {
         businessType: { id: 'business-type-1', name: 'Enterprise' },
         sourceType: { id: 'source-type-1', name: 'Referral' },
         assignedUserId: 'user-1',
+        assignedUserName: 'Ada Lovelace',
         clientId: null,
         location: {
           label: 'Accra, Ghana',
@@ -2507,6 +2519,7 @@ describe('ProspectsService', () => {
             lastInteractionDate: new Date('2026-09-29T11:00:00.000Z'),
             expectedCloseDate: new Date('2026-10-15T00:00:00.000Z'),
             assignedUserId: 'user-1',
+            assignedUserName: 'Ada Lovelace',
             createdAt: new Date('2026-09-28T10:00:00.000Z'),
           },
         ],

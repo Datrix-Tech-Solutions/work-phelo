@@ -21,6 +21,8 @@ export interface Prospect {
   salesStageProgress: number;
   decisionMaker: string;
   lastInteraction: string;
+  /** The assigned marketer's name. */
+  assignedTo: string;
 }
 
 const COLUMNS: Column<Prospect>[] = [

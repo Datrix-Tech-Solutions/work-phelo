@@ -32,6 +32,7 @@ interface Props {
   currentSourceTypeId: string;
   /** The user it is assigned to now. */
   currentAssignedUserId: string;
+  currentAssignedUserName?: string | null;
   currentBillable: boolean;
   /** The client's entity type in Accounting, once it has an entity. */
   currentEntityTypeId: string | null;
@@ -47,6 +48,7 @@ export function EditClientCompanyModal({
   currentBusinessTypeId,
   currentSourceTypeId,
   currentAssignedUserId,
+  currentAssignedUserName,
   currentBillable,
   currentEntityTypeId,
   productOptions,
@@ -193,6 +195,7 @@ export function EditClientCompanyModal({
         />
         <AssignedToSelect
           record="client"
+          currentName={currentAssignedUserName}
           value={assignedUserId}
           onChange={(id) => setAssignedUserId(id || currentAssignedUserId)}
         />

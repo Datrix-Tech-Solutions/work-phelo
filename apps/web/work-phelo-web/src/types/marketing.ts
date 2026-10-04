@@ -91,6 +91,7 @@ export interface ProspectListItem {
   lastInteractionDate: string | null;
   expectedCloseDate: string | null;
   assignedUserId: string;
+  assignedUserName: string | null;
   createdAt: string;
 }
 
@@ -255,6 +256,8 @@ export interface ProspectDetail {
   businessType: ProspectReference | null;
   sourceType: ProspectReference | null;
   assignedUserId: string;
+  /** The assigned marketer's name, when it can be found. */
+  assignedUserName: string | null;
   /** Set once the prospect has been converted to a client. */
   clientId: string | null;
   location: ProspectDetailLocation;
@@ -376,6 +379,7 @@ export interface ClientListItem {
   /** Total across the client's products. Not supplied until the sales module exists. */
   achievedRevenue?: string | null;
   assignedUserId: string;
+  assignedUserName: string | null;
   /** Set when the client was converted from a prospect. */
   convertedFromProspectId: string | null;
   createdAt: string;
@@ -441,6 +445,8 @@ export interface ClientDetail {
   businessType: ProspectReference | null;
   sourceType: ProspectReference | null;
   assignedUserId: string;
+  /** The assigned marketer's name, when it can be found. */
+  assignedUserName: string | null;
   isBillable: boolean;
   hasAccountingEntity: boolean;
   /** The entity type the client's Accounting entity sits under. Fixed after the first transaction. */
@@ -1048,5 +1054,5 @@ export interface AppointmentFormOptions {
 export interface Assignee {
   userId: string;
   name: string;
-  department: string | null;
+  email: string;
 }

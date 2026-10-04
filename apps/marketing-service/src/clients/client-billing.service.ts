@@ -58,6 +58,8 @@ export interface BillingSubmission {
   description?: string;
   productId?: string;
   idempotencyKey: string;
+  /** Who the client is assigned to; they can bill it without the billing permission. */
+  assignedUserId?: string;
 }
 
 type Tx = Prisma.TransactionClient;
@@ -79,14 +81,22 @@ export class ClientBillingService {
     );
   }
 
-  assertCanBill(user: RequestUser) {
-    if (!this.canBill(user))
-      throw new ForbiddenException(NO_PERMISSION_MESSAGE);
+  /**
+   * Billing a client takes the billing permission, or the client being the user's own: whoever a
+   * client is assigned to can bill it.
+   */
+  assertCanBill(user: RequestUser, assignedUserId?: string | null) {
+    if (this.canBill(user) || (assignedUserId && assignedUserId === user.id)) {
+      return;
+    }
+    throw new ForbiddenException(NO_PERMISSION_MESSAGE);
   }
 
   /** What the Billable toggle and billing form need. Never throws - "not ready" is an answer. */
   async getOptions(user: RequestUser) {
-    const canBill = this.canBill(user);
+    // Billing is per client (the permission, or the client being the user's own), so the form is
+    // offered to everyone and the server decides when it is submitted.
+    const canBill = true;
     const notReady = (reason: BillingNotReadyReason, detail?: string) => ({
       canBill,
       ready: false,
@@ -143,7 +153,7 @@ export class ClientBillingService {
     user: RequestUser,
     input: BillingSubmission,
   ): Promise<SourceTransactionCreated> {
-    this.assertCanBill(user);
+    this.assertCanBill(user, input.assignedUserId);
     if (!input.entityId && !input.entityTypeId) {
       throw new BadRequestException(ENTITY_TYPE_REQUIRED_MESSAGE);
     }
@@ -209,8 +219,8 @@ export class ClientBillingService {
 
   /** A client's next transaction (the first one included, for a client created without billing). */
   async raise(user: RequestUser, clientId: string, dto: RaiseClientBillingDto) {
-    this.assertCanBill(user);
     const client = await this.findVisibleClient(user, clientId);
+    this.assertCanBill(user, client.assignedUserId);
 
     if (dto.productId) {
       const product = client.products.find(
@@ -236,6 +246,7 @@ export class ClientBillingService {
       tenantId: user.tenantId,
       clientId: client.id,
       clientName: client.companyName,
+      assignedUserId: client.assignedUserId,
       entityId: client.accountingEntityId,
       entityTypeId: dto.entityTypeId,
       transactionTypeId: dto.transactionTypeId,
@@ -283,8 +294,8 @@ export class ClientBillingService {
     clientId: string,
     dto: RequestClientPaymentDto,
   ) {
-    this.assertCanBill(user);
     const client = await this.findVisibleClient(user, clientId);
+    this.assertCanBill(user, client.assignedUserId);
     if (!client.accountingEntityId) {
       throw new BadRequestException(NOT_BILLED_MESSAGE);
     }
@@ -312,8 +323,8 @@ export class ClientBillingService {
 
   /** Withdraws a payment request that Accounting has not acted on yet. */
   async cancelPayment(user: RequestUser, clientId: string, requestId: string) {
-    this.assertCanBill(user);
     const client = await this.findVisibleClient(user, clientId);
+    this.assertCanBill(user, client.assignedUserId);
 
     return callAccounting(this.logger, () =>
       this.accounting.cancelPaymentRequest(
@@ -593,6 +604,7 @@ export class ClientBillingService {
       select: {
         id: true,
         companyName: true,
+        assignedUserId: true,
         accountingEntityId: true,
         products: { select: { productId: true, status: true } },
       },

@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
@@ -10,6 +11,8 @@ import { MARKETING_NAV_GROUPS } from '@/config/marketing-nav';
 import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
 import { AppBackground } from '@/components/atoms/AppBackground';
 import { useModuleThemeScope } from '@/hooks';
+import { useMarketingAccess } from '@/hooks/marketing/useMarketingAccess';
+import { MarketingNoAccess } from '@/components/molecules/marketing/MarketingNoAccess';
 
 export default function MarketingLayout({
   children,
@@ -38,10 +41,24 @@ export default function MarketingLayout({
     };
   }
 
+  // A page shows in the menu only when the user can open at least one of its tabs.
+  const { canSeePage, canSeeTab, tabsOf, isResolving } = useMarketingAccess();
   const groups = MARKETING_NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.map(prefixItem),
+    items: group.items.map(prefixItem).map((item) => ({
+      ...item,
+      enabled: item.enabled !== false && canSeePage(item.key),
+    })),
   }));
+
+  // Typing the address of a page (or tab) that is out of reach shows the same answer as the menu.
+  const pathname = usePathname();
+  const [page, tab] = pathname.replace(`${BASE}/`, '').split('/');
+  const blocked =
+    !isResolving &&
+    !!page &&
+    (!canSeePage(page) ||
+      (!!tab && tabsOf(page).includes(tab) && page !== 'clients' && !canSeeTab(page, tab)));
 
   // Parked, icon-only HR rail — shown once the user has visited HR, sitting
   // next to Marketing's own sidebar (which behaves exactly as before).
@@ -71,7 +88,7 @@ export default function MarketingLayout({
             if (!collapsed) setCollapsed(true);
           }}
         >
-          {children}
+          {blocked ? <MarketingNoAccess /> : children}
         </main>
       </div>
     </AppBackground>

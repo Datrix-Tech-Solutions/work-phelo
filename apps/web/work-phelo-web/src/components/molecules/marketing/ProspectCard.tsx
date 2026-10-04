@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarClock, Package, Phone, Target } from 'lucide-react';
+import { CalendarClock, Package, Phone, Target, UserCheck } from 'lucide-react';
 import { DataCard } from '@/components/organisms/shared/DataCard';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { getInitials, pickAvatarColor } from '@/components/atoms/Avatar';
@@ -83,6 +83,7 @@ export function ProspectCard({
           <InfoRow icon={Package} iconClass="text-violet-500" value={prospect.product} />
           <InfoRow icon={Phone} iconClass="text-emerald-500" value={prospect.contactNo} />
           <InfoRow icon={CalendarClock} iconClass="text-orange-500" value={lastInteraction} />
+          <InfoRow icon={UserCheck} iconClass="text-rose-500" value={prospect.assignedTo} />
         </div>
       }
       actions={[

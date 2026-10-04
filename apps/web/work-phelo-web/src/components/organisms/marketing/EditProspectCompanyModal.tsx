@@ -18,6 +18,7 @@ interface Props {
   currentSourceTypeId: string;
   /** The user it is assigned to now. */
   currentAssignedUserId: string;
+  currentAssignedUserName?: string | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -28,6 +29,7 @@ export function EditProspectCompanyModal({
   currentBusinessTypeId,
   currentSourceTypeId,
   currentAssignedUserId,
+  currentAssignedUserName,
   isOpen,
   onClose,
 }: Props) {
@@ -121,6 +123,7 @@ export function EditProspectCompanyModal({
         />
         <AssignedToSelect
           record="prospect"
+          currentName={currentAssignedUserName}
           value={assignedUserId}
           onChange={(id) => setAssignedUserId(id || currentAssignedUserId)}
         />

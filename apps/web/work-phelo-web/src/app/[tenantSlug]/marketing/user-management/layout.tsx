@@ -4,15 +4,18 @@ import { useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pageHeader, pageContent, pagePx } from '@/lib/layout';
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { useMarketingAccess } from '@/hooks/marketing/useMarketingAccess';
 
 export default function UserManagementLayout({ children }: { children: React.ReactNode }) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const base = `/${tenantSlug}/marketing/user-management`;
 
-  const tabs = [
+  const { canSeeTab } = useMarketingAccess();
+  const allTabs = [
     { key: 'roles-permissions', label: 'Roles & Permissions', href: `${base}/roles-permissions` },
     { key: 'module-users', label: 'Module Users', href: `${base}/module-users` },
   ];
+  const tabs = allTabs.filter((tab) => canSeeTab('user-management', tab.key));
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

@@ -1,6 +1,7 @@
 'use client';
 
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { useMarketingAccess } from '@/hooks/marketing/useMarketingAccess';
 
 interface Props {
   base: string;
@@ -21,5 +22,8 @@ export function ProspectingTabs({ base, className }: Props) {
     },
   ];
 
-  return <TabBar tabs={tabs} className={className} />;
+  const { canSeeTab } = useMarketingAccess();
+  const visible = tabs.filter((tab) => canSeeTab('settings', tab.key));
+
+  return <TabBar tabs={visible} className={className} />;
 }

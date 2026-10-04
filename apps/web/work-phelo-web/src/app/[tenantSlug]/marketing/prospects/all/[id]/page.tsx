@@ -9,6 +9,7 @@ import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/Con
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
+import { useAuthStore } from '@/store/auth.store';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { TabBar } from '@/components/molecules/shared/TabBar';
@@ -104,7 +105,11 @@ export default function ProspectDetailPage() {
   const toast = useToast();
 
   const { data: prospect, isLoading, isError } = useProspect(id);
-  const canCreateClient = usePermissionRule('marketing.clients:CREATE');
+  // The assignee can convert their own prospect; the permission extends that to others' prospects.
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const hasCreateClientPermission = usePermissionRule('marketing.clients:CREATE');
+  const canCreateClient =
+    hasCreateClientPermission || (!!prospect && prospect.assignedUserId === currentUserId);
   const deleteProspect = useDeleteProspect();
   const { data: followUps = [], isLoading: followUpsLoading } = useProspectFollowUps(id);
   const { data: worklist = [] } = useFollowUpWorklist();
@@ -199,6 +204,7 @@ export default function ProspectDetailPage() {
           <DetailField label="Company Name" value={prospect.companyName} />
           <DetailField label="Type of Business" value={prospect.businessType?.name} />
           <DetailField label="Source Type" value={prospect.sourceType?.name} />
+          <DetailField label="Assigned To" value={prospect.assignedUserName} />
           <DetailField label="Location" value={prospect.location.label} />
           {/* <DetailField label="Decision Maker" value={primaryContact?.name} /> */}
           <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
@@ -282,6 +288,7 @@ export default function ProspectDetailPage() {
       {editingCompany && (
         <EditProspectCompanyModal
           currentAssignedUserId={prospect.assignedUserId}
+          currentAssignedUserName={prospect.assignedUserName}
           prospectId={id}
           prospectName={prospect.companyName}
           currentBusinessTypeId={prospect.businessType?.id ?? ''}
