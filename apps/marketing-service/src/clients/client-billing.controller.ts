@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
@@ -37,6 +38,7 @@ import { ClientBillingService } from './client-billing.service';
 import {
   QueryClientBillingDto,
   RaiseClientBillingDto,
+  RequestClientPaymentDto,
 } from './dto/billing.dto';
 
 const { CLIENTS_VIEW, CLIENTS_BILLING_VIEW, CLIENTS_BILLING_CREATE } =
@@ -128,5 +130,43 @@ export class ClientBillingController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.raise(request.user, id, dto);
+  }
+
+  @Post(':id/billing/payments')
+  @RequireAnyPermission(CLIENTS_BILLING_CREATE)
+  @ApiOperation({
+    summary: 'Ask Accounting to record a client payment against an invoice',
+    description:
+      'The client has paid some or all of a posted invoice. Accounting confirms it through Receive Payment (choosing the bank) or rejects it. While it waits, its amount is held back from what can be requested. Sending the same submissionId again does not raise a second request.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiCreatedResponse({ description: 'The request, waiting for Accounting.' })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  requestPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RequestClientPaymentDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.requestPayment(request.user, id, dto);
+  }
+
+  @Post(':id/billing/payments/:requestId/cancel')
+  @HttpCode(200)
+  @RequireAnyPermission(CLIENTS_BILLING_CREATE)
+  @ApiOperation({
+    summary: 'Withdraw a payment request Accounting has not acted on yet',
+    description: 'Releases the amount it was holding back.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiParam({ name: 'requestId', format: 'uuid' })
+  @ApiOkResponse({ description: 'The cancelled request.' })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  cancelPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.cancelPayment(request.user, id, requestId);
   }
 }

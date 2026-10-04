@@ -22,6 +22,14 @@ describe('Accounting global prefix configuration', () => {
           method: RequestMethod.POST,
         },
         {
+          path: 'internal/source-transactions/payment-requests',
+          method: RequestMethod.POST,
+        },
+        {
+          path: 'internal/source-transactions/payment-requests/:requestId/cancel',
+          method: RequestMethod.POST,
+        },
+        {
           path: 'internal/source-transactions/options',
           method: RequestMethod.GET,
         },

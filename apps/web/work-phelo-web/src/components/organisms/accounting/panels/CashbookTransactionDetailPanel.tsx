@@ -80,6 +80,9 @@ export function CashbookTransactionDetailPanel({
     transaction.status === 'DRAFT' &&
     (transaction.transactionType === 'RECEIPT' || transaction.transactionType === 'PAYMENT') &&
     transaction.sourceModule !== 'ACCOUNTING';
+  // Raised by another module (not entered by an accountant): it is simply posted - there is no
+  // separate receive/make payment step.
+  const isExternal = !!transaction?.sourceModule && transaction.sourceModule !== 'ACCOUNTING';
   const sourceLabel = transaction?.sourceModule
     ? (SOURCE_MODULE_LABELS[transaction.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
       transaction.sourceModule)
@@ -102,11 +105,13 @@ export function CashbookTransactionDetailPanel({
     try {
       await postTransaction.mutateAsync(transaction.id);
       toast.success(
-        transaction.direction === 'INFLOW'
-          ? 'Payment received.'
-          : transaction.direction === 'OUTFLOW'
-            ? 'Payment made.'
-            : 'Transaction posted.',
+        isExternal
+          ? 'Transaction posted.'
+          : transaction.direction === 'INFLOW'
+            ? 'Payment received.'
+            : transaction.direction === 'OUTFLOW'
+              ? 'Payment made.'
+              : 'Transaction posted.',
       );
       onClose();
     } catch (error) {
@@ -123,29 +128,42 @@ export function CashbookTransactionDetailPanel({
       footer={
         transaction &&
         transaction.status === 'DRAFT' && (
-          <div className="flex gap-3">
-            {canReviewDraft && (
-              <>
-                <Button variant="danger" onClick={() => setRejectOpen(true)}>
-                  Reject
-                </Button>
-                <Button variant="outline" onClick={() => setEditOpen(true)}>
-                  Edit
-                </Button>
-              </>
-            )}
-            <Button
-              className="flex-1"
-              onClick={handlePost}
-              isLoading={postTransaction.isPending}
-              loadingText={transaction.direction === 'INFLOW' ? 'Receiving…' : 'Paying…'}
-            >
-              {actionLabel(transaction.direction)}
-            </Button>
-          </div>
+          <Button
+            className="w-full"
+            onClick={handlePost}
+            isLoading={postTransaction.isPending}
+            loadingText={
+              isExternal
+                ? 'Posting…'
+                : transaction.direction === 'INFLOW'
+                  ? 'Receiving…'
+                  : 'Paying…'
+            }
+          >
+            {isExternal ? 'Post' : actionLabel(transaction.direction)}
+          </Button>
         )
       }
     >
+      {transaction && (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <Badge
+            label={STATUS_LABEL[transaction.status]}
+            variant={STATUS_VARIANT[transaction.status]}
+          />
+          {canReviewDraft && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+                Edit
+              </Button>
+              <Button size="sm" variant="danger" onClick={() => setRejectOpen(true)}>
+                Reject
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {transaction && sourceLabel && transaction.status === 'DRAFT' && (
         <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
           Raised from {sourceLabel}. Complete the remaining details, then post it — or reject it
@@ -164,13 +182,6 @@ export function CashbookTransactionDetailPanel({
 
       {transaction && (
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Status</span>
-            <Badge
-              label={STATUS_LABEL[transaction.status]}
-              variant={STATUS_VARIANT[transaction.status]}
-            />
-          </div>
           <Row label="Type" value={transaction.transactionType} />
           <Row label="Cash/Bank Account" value={transaction.cashAccount.name} />
           {transaction.offsetGlAccount && (

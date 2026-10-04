@@ -217,7 +217,9 @@ export default function ClientDetailPage() {
       {activeTab === 'transactions' && canViewBilling && (
         <ClientTransactionsTab
           clientId={id}
+          clientName={client.companyName}
           onNew={canBill ? () => setBillingOpen(true) : undefined}
+          canPay={canBill}
         />
       )}
 

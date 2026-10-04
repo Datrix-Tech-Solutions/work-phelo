@@ -12,10 +12,22 @@ interface Props {
   isRejecting: boolean;
   onConfirm: (reason: string) => void;
   onClose: () => void;
+  /** Defaults to "Reject Draft". */
+  title?: string;
+  /** Defaults to the line about a draft that is never posted. */
+  description?: string;
 }
 
 /** Turning a draft down. The reason is kept on the record and shown to whoever raised it. */
-export function RejectDraftModal({ isOpen, subject, isRejecting, onConfirm, onClose }: Props) {
+export function RejectDraftModal({
+  isOpen,
+  subject,
+  isRejecting,
+  onConfirm,
+  onClose,
+  title = 'Reject Draft',
+  description,
+}: Props) {
   const [reason, setReason] = useState('');
 
   const handleClose = () => {
@@ -27,8 +39,11 @@ export function RejectDraftModal({ isOpen, subject, isRejecting, onConfirm, onCl
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Reject Draft"
-      description={`${subject} will never be posted. It keeps its record, and the reason is shown to whoever raised it.`}
+      title={title}
+      description={
+        description ??
+        `${subject} will never be posted. It keeps its record, and the reason is shown to whoever raised it.`
+      }
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isRejecting}>

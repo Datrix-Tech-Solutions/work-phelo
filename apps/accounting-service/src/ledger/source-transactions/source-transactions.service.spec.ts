@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import {
   BadRequestException,
   ConflictException,
@@ -112,7 +112,8 @@ describe('SourceTransactionsService', () => {
     },
     accountingReceivableDocument: { findMany: jest.fn(), count: jest.fn() },
     accountingReceivableReceipt: { findMany: jest.fn(), count: jest.fn() },
-    accountingReceivableAllocation: { groupBy: jest.fn() },
+    accountingReceivableAllocation: { groupBy: jest.fn(), findMany: jest.fn() },
+    accountingPaymentRequest: { findMany: jest.fn() },
     cashbookTransaction: {
       findMany: jest.fn(),
       count: jest.fn(),
@@ -164,6 +165,8 @@ describe('SourceTransactionsService', () => {
     prisma.accountingReceivableReceipt.findMany.mockResolvedValue([]);
     prisma.accountingReceivableReceipt.count.mockResolvedValue(0);
     prisma.accountingReceivableAllocation.groupBy.mockResolvedValue([]);
+    prisma.accountingReceivableAllocation.findMany.mockResolvedValue([]);
+    prisma.accountingPaymentRequest.findMany.mockResolvedValue([]);
     prisma.cashbookTransaction.findMany.mockResolvedValue([]);
     prisma.cashbookTransaction.count.mockResolvedValue(0);
     prisma.cashbookTransaction.groupBy.mockResolvedValue([]);
@@ -385,7 +388,6 @@ describe('SourceTransactionsService', () => {
         sourceName: 'Client Billing',
         linked: true,
         baseCurrency: 'GHS',
-        defaultEntityType: { id: 'et-1', name: 'Marketing Client' },
         entityTypes: [{ id: 'et-1', name: 'Marketing Client' }],
         ready: true,
         reason: null,
@@ -398,6 +400,8 @@ describe('SourceTransactionsService', () => {
           problem: null,
         },
       ]);
+      // Entity types are never provisioned - only the tenant's own are offered.
+      expect(setup).not.toHaveProperty('defaultEntityType');
     });
 
     it('is not ready while the source is unlinked, and says that first', async () => {
@@ -866,6 +870,221 @@ describe('SourceTransactionsService', () => {
           },
         }),
       );
+    });
+
+    it('leaves out receipts already applied to an invoice, in the list and the count', async () => {
+      await service.list({
+        tenantId: 'tenant-1',
+        sourceModule: 'MARKETING',
+        entityId: 'entity-1',
+      });
+
+      const where = {
+        tenantId: 'tenant-1',
+        customerId: 'entity-1',
+        allocations: { none: { reversedAt: null } },
+      };
+      expect(prisma.accountingReceivableReceipt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where }),
+      );
+      expect(prisma.accountingReceivableReceipt.count).toHaveBeenCalledWith({
+        where,
+      });
+    });
+
+    describe('an invoice’s payments', () => {
+      const invoice = {
+        id: 'inv-1',
+        status: 'POSTED',
+        documentType: 'INVOICE',
+        documentNumber: 'INV26-00001',
+        transactionTypeId: null,
+        totalAmount: D('20000'),
+        currency: 'GHS',
+        rejectionReason: null,
+        createdAt: when(1),
+      };
+      const request = (overrides: object = {}) => ({
+        id: 'req-1',
+        invoiceId: 'inv-1',
+        status: 'PENDING',
+        amount: D('5000'),
+        currency: 'GHS',
+        paymentDate: new Date('2026-09-12'),
+        reference: 'TT-1',
+        requestedByName: 'Ada',
+        rejectionReason: null,
+        receiptId: null,
+        createdAt: when(2),
+        ...overrides,
+      });
+      const allocation = (overrides: object = {}) => ({
+        id: 'alloc-1',
+        invoiceId: 'inv-1',
+        receiptId: 'rec-1',
+        sourceType: 'RECEIPT',
+        amount: D('5000'),
+        currency: 'GHS',
+        allocatedAt: when(3),
+        reversedAt: null,
+        reversalReason: null,
+        receipt: { receiptNumber: 'ARR26-00001' },
+        ...overrides,
+      });
+      const listInvoice = async () => {
+        prisma.accountingReceivableDocument.findMany.mockResolvedValue([
+          invoice,
+        ]);
+        const result = await service.list({
+          tenantId: 'tenant-1',
+          sourceModule: 'MARKETING',
+          entityId: 'entity-1',
+        });
+        return result.items[0] as Record<string, any>;
+      };
+
+      it('marks each kind of row', async () => {
+        const item = await listInvoice();
+        expect(item.kind).toBe('INVOICE');
+      });
+
+      it('can be claimed in full when nothing has happened', async () => {
+        const item = await listInvoice();
+        expect(item).toMatchObject({
+          outstandingAmount: '20000.00',
+          pendingAmount: '0.00',
+          claimableAmount: '20000.00',
+          canRequestPayment: true,
+          payments: [],
+        });
+      });
+
+      it('holds a waiting request against what can be claimed, not what is owed', async () => {
+        prisma.accountingPaymentRequest.findMany.mockResolvedValue([request()]);
+
+        const item = await listInvoice();
+
+        expect(item).toMatchObject({
+          outstandingAmount: '20000.00',
+          pendingAmount: '5000.00',
+          claimableAmount: '15000.00',
+          canRequestPayment: true,
+        });
+        expect(item.payments).toEqual([
+          expect.objectContaining({
+            id: 'req-1',
+            kind: 'PAYMENT_REQUEST',
+            state: 'PENDING',
+            amount: '5000.00',
+            paymentDate: '2026-09-12',
+            requestedByName: 'Ada',
+          }),
+        ]);
+      });
+
+      it('cannot take another request once everything owed is already asked for', async () => {
+        prisma.accountingPaymentRequest.findMany.mockResolvedValue([
+          request({ amount: D('20000') }),
+        ]);
+
+        const item = await listInvoice();
+
+        expect(item).toMatchObject({
+          claimableAmount: '0.00',
+          canRequestPayment: false,
+        });
+      });
+
+      it('shows a completed request as the payment received, once', async () => {
+        prisma.accountingPaymentRequest.findMany.mockResolvedValue([
+          request({ status: 'COMPLETED', receiptId: 'rec-1' }),
+        ]);
+        prisma.accountingReceivableAllocation.findMany.mockResolvedValue([
+          allocation(),
+        ]);
+
+        const item = await listInvoice();
+
+        expect(item).toMatchObject({
+          outstandingAmount: '15000.00',
+          pendingAmount: '0.00',
+        });
+        expect(item.payments).toHaveLength(1);
+        expect(item.payments[0]).toMatchObject({
+          id: 'req-1',
+          kind: 'PAYMENT_REQUEST',
+          state: 'POSTED',
+          stateLabel: 'Received',
+        });
+      });
+
+      it('shows a completed request as reversed when its receipt was undone, and owes it again', async () => {
+        prisma.accountingPaymentRequest.findMany.mockResolvedValue([
+          request({ status: 'COMPLETED', receiptId: 'rec-1' }),
+        ]);
+        prisma.accountingReceivableAllocation.findMany.mockResolvedValue([
+          allocation({ reversedAt: when(4) }),
+        ]);
+
+        const item = await listInvoice();
+
+        expect(item.outstandingAmount).toBe('20000.00');
+        expect(item.payments[0].state).toBe('REVERSED');
+      });
+
+      it('includes a receipt applied directly by the accountant', async () => {
+        prisma.accountingReceivableAllocation.findMany.mockResolvedValue([
+          allocation({ receiptId: 'rec-9', amount: D('2000') }),
+        ]);
+
+        const item = await listInvoice();
+
+        expect(item.outstandingAmount).toBe('18000.00');
+        expect(item.payments).toEqual([
+          expect.objectContaining({
+            id: 'alloc-1',
+            kind: 'RECEIPT',
+            state: 'POSTED',
+            amount: '2000.00',
+            reference: 'ARR26-00001',
+          }),
+        ]);
+      });
+
+      it('lists rejected and cancelled requests but they hold nothing back', async () => {
+        prisma.accountingPaymentRequest.findMany.mockResolvedValue([
+          request({
+            id: 'r1',
+            status: 'REJECTED',
+            rejectionReason: 'Not received',
+          }),
+          request({ id: 'r2', status: 'CANCELLED', createdAt: when(3) }),
+        ]);
+
+        const item = await listInvoice();
+
+        expect(item.claimableAmount).toBe('20000.00');
+        expect(item.payments.map((p: any) => [p.state, p.reason])).toEqual([
+          ['REJECTED', 'Not received'],
+          ['CANCELLED', null],
+        ]);
+      });
+
+      it('owes nothing, and takes no requests, unless it is posted', async () => {
+        prisma.accountingReceivableDocument.findMany.mockResolvedValue([
+          { ...invoice, status: 'DRAFT' },
+        ]);
+        const result = await service.list({
+          tenantId: 'tenant-1',
+          sourceModule: 'MARKETING',
+          entityId: 'entity-1',
+        });
+
+        expect(result.items[0]).toMatchObject({
+          outstandingAmount: '0.00',
+          canRequestPayment: false,
+        });
+      });
     });
 
     it('pages across the merged list', async () => {

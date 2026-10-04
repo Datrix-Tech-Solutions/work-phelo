@@ -894,8 +894,43 @@ export interface RaiseClientBillingPayload {
   productId?: string;
 }
 
+/** A payment against an invoice: a request waiting on Accounting, or money it has received. */
+export interface BillingInvoicePayment {
+  id: string;
+  kind: 'PAYMENT_REQUEST' | 'RECEIPT';
+  /** PENDING, POSTED (received), REVERSED, REJECTED or CANCELLED. */
+  state: string;
+  stateLabel: string;
+  amount: string;
+  currency: string;
+  /** YYYY-MM-DD */
+  paymentDate: string;
+  reference: string | null;
+  requestedByName: string | null;
+  /** Why it was rejected (or reversed). */
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface RequestClientPaymentPayload {
+  /** Generated once per form, so a retry never raises a second request. */
+  submissionId: string;
+  invoiceId: string;
+  amount: number;
+  paymentDate: string;
+  reference?: string;
+  note?: string;
+}
+
 export interface BillingTransaction {
   id: string;
+  kind: 'INVOICE' | 'CREDIT_NOTE' | 'RECEIPT' | 'CASHBOOK';
+  /** Invoices only: what is still owed, what waiting requests hold, and what can still be asked for. */
+  outstandingAmount?: string;
+  pendingAmount?: string;
+  claimableAmount?: string;
+  canRequestPayment?: boolean;
+  payments?: BillingInvoicePayment[];
   /** Accounting's machine code: DRAFT, POSTED, REVERSED, REJECTED, … */
   state: string;
   stateLabel: string;

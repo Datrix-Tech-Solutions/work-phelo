@@ -2,9 +2,10 @@ import { SourceModule } from '../../../prisma/generated/client';
 
 /**
  * A module that raises transactions in Accounting on behalf of its own records (e.g. Marketing
- * billing a client). Adding another module is one entry here: Accounting provisions its source and
- * entity type, and everything else - creating the entity and the draft, history, receipts, the
- * callback - works from this description.
+ * billing a client). Adding another module is one entry here: Accounting provisions its source, and
+ * everything else - creating the entity and the draft, history, receipts, the callback - works from
+ * this description. Entity types are never provisioned: the accountant creates their own (or uses
+ * an existing one) and names it on the transaction types linked to the source.
  */
 export interface SourceRegistration {
   module: SourceModule;
@@ -12,8 +13,6 @@ export interface SourceRegistration {
   moduleConfigKey: string;
   /** Shown on the Source Types page. */
   sourceName: string;
-  /** Created once per tenant, protected, so the module works before a tenant makes its own. */
-  entityType: { name: string; code: string };
   /** The one service allowed to raise transactions for this module. */
   serviceName: string;
   /** Where Accounting reports what happened to a transaction (the module's own service). */
@@ -27,7 +26,6 @@ export const SOURCE_REGISTRY: Partial<
     module: 'MARKETING',
     moduleConfigKey: 'marketing',
     sourceName: 'Client Billing',
-    entityType: { name: 'Marketing Client', code: 'MKC' },
     serviceName: 'marketing-service',
     callback: {
       baseUrlEnv: 'MARKETING_SERVICE_URL',

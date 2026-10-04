@@ -39,6 +39,15 @@ describe('ClientBillingController authorization contract', () => {
     ]);
   });
 
+  it('requires billing create to request or cancel a payment', () => {
+    expect(
+      anyPermissions(ClientBillingController.prototype.requestPayment),
+    ).toEqual([P.CLIENTS_BILLING_CREATE]);
+    expect(
+      anyPermissions(ClientBillingController.prototype.cancelPayment),
+    ).toEqual([P.CLIENTS_BILLING_CREATE]);
+  });
+
   it('requires billing create to raise a transaction', () => {
     expect(anyPermissions(ClientBillingController.prototype.raise)).toEqual([
       P.CLIENTS_BILLING_CREATE,

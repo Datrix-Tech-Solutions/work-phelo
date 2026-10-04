@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  AccountingPaymentRequestStatus,
   AccountingReceivableStatus,
   AccountingSettlementMethod,
   AccountingSourceTransactionKind,
@@ -53,6 +54,14 @@ const STATE_LABELS: Record<string, string> = {
   POSTED: 'Posted',
   REVERSED: 'Reversed',
   REJECTED: 'Rejected',
+};
+
+const PAYMENT_STATE_LABELS: Record<string, string> = {
+  PENDING: 'Pending',
+  POSTED: 'Received',
+  REVERSED: 'Reversed',
+  REJECTED: 'Rejected',
+  CANCELLED: 'Cancelled',
 };
 
 @Injectable()
@@ -133,14 +142,6 @@ export class SourceTransactionsService {
       tenantId,
       usable,
     );
-    const defaultEntityType = await this.prisma.entityType.findFirst({
-      where: {
-        tenantId,
-        name: { equals: registration.entityType.name, mode: 'insensitive' },
-      },
-      select: { id: true, name: true },
-    });
-
     const offeredIds = new Map(
       transactionTypes.map((t) => [t.id, t.entityTypeIds]),
     );
@@ -160,7 +161,6 @@ export class SourceTransactionsService {
       sourceName: source.name,
       linked: source.isActive,
       baseCurrency,
-      defaultEntityType,
       entityTypes,
       transactionTypes: linkedTypes.map(({ type, problem }) => {
         const named = (offeredIds.get(type.id)?.length ?? 0) > 0;
@@ -288,6 +288,8 @@ export class SourceTransactionsService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const take = page * limit;
+    // A receipt applied to an invoice shows under that invoice, not again on its own.
+    const unallocated = { allocations: { none: { reversedAt: null } } };
 
     const [
       documents,
@@ -303,7 +305,7 @@ export class SourceTransactionsService {
         take,
       }),
       this.prisma.accountingReceivableReceipt.findMany({
-        where: { tenantId, customerId: entityId },
+        where: { tenantId, customerId: entityId, ...unallocated },
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         take,
       }),
@@ -321,7 +323,7 @@ export class SourceTransactionsService {
         where: { tenantId, customerId: entityId },
       }),
       this.prisma.accountingReceivableReceipt.count({
-        where: { tenantId, customerId: entityId },
+        where: { tenantId, customerId: entityId, ...unallocated },
       }),
       this.prisma.cashbookTransaction.count({
         where: {
@@ -344,11 +346,17 @@ export class SourceTransactionsService {
       tenantId,
       documents.map((d) => d.id),
     );
+    const invoices = await this.invoiceDetails(
+      tenantId,
+      documents.filter((d) => d.documentType === 'INVOICE'),
+    );
 
     const items = [
       ...documents.map((d) => ({
         createdAt: d.createdAt,
         item: this.item({
+          kind: d.documentType === 'INVOICE' ? 'INVOICE' : 'CREDIT_NOTE',
+          extra: invoices.get(d.id),
           id: d.id,
           status: d.status,
           label:
@@ -366,6 +374,7 @@ export class SourceTransactionsService {
       ...receipts.map((r) => ({
         createdAt: r.createdAt,
         item: this.item({
+          kind: 'RECEIPT',
           id: r.id,
           status: r.status,
           label: 'Receipt',
@@ -383,6 +392,7 @@ export class SourceTransactionsService {
       ...entries.map((e) => ({
         createdAt: e.createdAt,
         item: this.item({
+          kind: 'CASHBOOK',
           id: e.id,
           status: e.status,
           label:
@@ -837,7 +847,124 @@ export class SourceTransactionsService {
     );
   }
 
+  /**
+   * What an invoice is still owed, what is already claimed by waiting payment requests, and every
+   * payment on it: requests in any state, plus receipts applied without one. A request that was
+   * completed shows as its allocation (reversed if that was undone).
+   */
+  private async invoiceDetails(
+    tenantId: string,
+    invoices: Array<{
+      id: string;
+      status: string;
+      totalAmount: Prisma.Decimal;
+      currency: string;
+    }>,
+  ) {
+    const details = new Map<string, Record<string, unknown>>();
+    if (invoices.length === 0) return details;
+    const invoiceIds = invoices.map((i) => i.id);
+    const [allocations, requests] = await Promise.all([
+      this.prisma.accountingReceivableAllocation.findMany({
+        where: { tenantId, invoiceId: { in: invoiceIds } },
+        include: { receipt: true },
+        orderBy: { allocatedAt: 'asc' },
+      }),
+      this.prisma.accountingPaymentRequest.findMany({
+        where: { tenantId, invoiceId: { in: invoiceIds } },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+
+    for (const invoice of invoices) {
+      const mine = allocations.filter((a) => a.invoiceId === invoice.id);
+      const applied = mine
+        .filter((a) => a.reversedAt === null)
+        .reduce((sum, a) => sum.plus(a.amount), new Prisma.Decimal(0));
+      const outstanding =
+        invoice.status === AccountingReceivableStatus.POSTED
+          ? Prisma.Decimal.max(
+              invoice.totalAmount.minus(applied),
+              new Prisma.Decimal(0),
+            )
+          : new Prisma.Decimal(0);
+      const myRequests = requests.filter((r) => r.invoiceId === invoice.id);
+      const pending = myRequests
+        .filter((r) => r.status === AccountingPaymentRequestStatus.PENDING)
+        .reduce((sum, r) => sum.plus(r.amount), new Prisma.Decimal(0));
+      const claimable = Prisma.Decimal.max(
+        outstanding.minus(pending),
+        new Prisma.Decimal(0),
+      );
+
+      const payments: Array<Record<string, unknown>> = [];
+      const requestReceiptIds = new Set<string>();
+      for (const r of myRequests) {
+        let state: string = r.status;
+        if (r.status === AccountingPaymentRequestStatus.COMPLETED) {
+          if (r.receiptId) requestReceiptIds.add(r.receiptId);
+          const allocation = mine.find(
+            (a) => a.receiptId !== null && a.receiptId === r.receiptId,
+          );
+          state = allocation?.reversedAt ? 'REVERSED' : 'POSTED';
+        }
+        payments.push({
+          id: r.id,
+          kind: 'PAYMENT_REQUEST',
+          state,
+          stateLabel: PAYMENT_STATE_LABELS[state] ?? state,
+          amount: r.amount.toFixed(2),
+          currency: r.currency,
+          paymentDate: r.paymentDate.toISOString().slice(0, 10),
+          reference: r.reference,
+          requestedByName: r.requestedByName,
+          reason: r.rejectionReason,
+          createdAt: r.createdAt.toISOString(),
+        });
+      }
+      for (const a of mine) {
+        if (
+          a.sourceType !== 'RECEIPT' ||
+          !a.receipt ||
+          (a.receiptId && requestReceiptIds.has(a.receiptId))
+        ) {
+          continue;
+        }
+        const state = a.reversedAt ? 'REVERSED' : 'POSTED';
+        payments.push({
+          id: a.id,
+          kind: 'RECEIPT',
+          state,
+          stateLabel: PAYMENT_STATE_LABELS[state],
+          amount: a.amount.toFixed(2),
+          currency: a.currency,
+          paymentDate: a.allocatedAt.toISOString().slice(0, 10),
+          reference: a.receipt.receiptNumber,
+          requestedByName: null,
+          reason: a.reversalReason,
+          createdAt: a.allocatedAt.toISOString(),
+        });
+      }
+      payments.sort((x, y) =>
+        String(x.createdAt).localeCompare(String(y.createdAt)),
+      );
+
+      details.set(invoice.id, {
+        outstandingAmount: outstanding.toFixed(2),
+        pendingAmount: pending.toFixed(2),
+        claimableAmount: claimable.toFixed(2),
+        canRequestPayment:
+          invoice.status === AccountingReceivableStatus.POSTED &&
+          claimable.gt(0),
+        payments,
+      });
+    }
+    return details;
+  }
+
   private item(input: {
+    kind: 'INVOICE' | 'CREDIT_NOTE' | 'RECEIPT' | 'CASHBOOK';
+    extra?: Record<string, unknown>;
     id: string;
     status: string;
     label: string;
@@ -849,6 +976,7 @@ export class SourceTransactionsService {
     createdAt: Date;
   }) {
     return {
+      kind: input.kind,
       id: input.id,
       state: input.status,
       stateLabel: STATE_LABELS[input.status] ?? input.status,
@@ -859,6 +987,7 @@ export class SourceTransactionsService {
       reason: input.reason,
       receivedAmount: input.received.toFixed(2),
       createdAt: input.createdAt.toISOString(),
+      ...input.extra,
     };
   }
 

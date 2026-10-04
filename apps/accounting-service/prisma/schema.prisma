@@ -1582,3 +1582,56 @@ model AccountingSourceTransaction {
   @@index([tenantId, documentId])
   @@schema("accounting")
 }
+
+enum AccountingPaymentRequestStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+  CANCELLED
+
+  @@schema("accounting")
+}
+
+/// A request from another module's user ("the client paid this much") against a posted invoice. It
+/// is not money moving: it waits for an accountant, who confirms it with the usual Receive Payment
+/// (choosing the bank), which creates, posts and allocates the receipt and marks this COMPLETED.
+/// Only PENDING requests count against what can still be claimed on the invoice.
+model AccountingPaymentRequest {
+  id                  String                         @id @default(uuid())
+  tenantId            String
+  sourceModule        SourceModule
+  /// Stable per submission - the same key never raises a second request.
+  idempotencyKey      String
+  invoiceId           String
+  /// The invoice's customer entity, kept so lists need no join.
+  customerId          String
+  amount              Decimal                        @db.Decimal(20, 4)
+  currency            String
+  /// When the payer says they paid - not when it was recorded.
+  paymentDate         DateTime                       @db.Date
+  reference           String?
+  note                String?
+  status              AccountingPaymentRequestStatus @default(PENDING)
+  requestedByUserId   String
+  requestedByName     String?
+  /// Set the moment a completion starts, so two accountants cannot record the same request.
+  processingStartedAt DateTime?
+  /// The receipt created for it. Set before the receipt is posted and allocated, so a completion
+  /// that stopped part way can be resumed instead of recording the payment twice.
+  receiptId           String?
+  completedAt         DateTime?
+  completedByUserId   String?
+  rejectedAt          DateTime?
+  rejectedByUserId    String?
+  rejectionReason     String?
+  cancelledAt         DateTime?
+  cancelledByUserId   String?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+
+  @@unique([tenantId, sourceModule, idempotencyKey])
+  @@index([tenantId, invoiceId, status])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, customerId])
+  @@schema("accounting")
+}

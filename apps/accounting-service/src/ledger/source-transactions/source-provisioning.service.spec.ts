@@ -60,28 +60,11 @@ describe('SourceProvisioningService', () => {
     expect(source.isActive).toBe(true);
   });
 
-  it('creates the default entity type once, protected', async () => {
-    await service.ensure('tenant-1', marketing);
-
-    expect(prisma.entityType.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        tenantId: 'tenant-1',
-        name: 'Marketing Client',
-        code: 'MKC',
-        isSystem: true,
-      }),
-    });
-  });
-
-  it('does not create the entity type when the tenant already has one by that name', async () => {
-    prisma.entityType.findFirst.mockResolvedValue({
-      id: 'existing',
-      name: 'marketing client',
-    });
-
+  it('never creates an entity type - those belong to the tenant', async () => {
     await service.ensure('tenant-1', marketing);
 
     expect(prisma.entityType.create).not.toHaveBeenCalled();
+    expect(prisma.entityType.findFirst).not.toHaveBeenCalled();
   });
 
   it('copes with another request creating the source at the same moment', async () => {
@@ -93,24 +76,6 @@ describe('SourceProvisioningService', () => {
     const source = await service.ensure('tenant-1', marketing);
 
     expect(source.id).toBe('source-raced');
-  });
-
-  it('creates the entity type without its code when the tenant already uses the code', async () => {
-    prisma.entityType.create
-      .mockRejectedValueOnce(uniqueError())
-      .mockImplementation(({ data }: { data: object }) =>
-        Promise.resolve({ id: 'entity-type-2', ...data }),
-      );
-
-    await service.ensure('tenant-1', marketing);
-
-    expect(prisma.entityType.create).toHaveBeenLastCalledWith({
-      data: expect.objectContaining({
-        name: 'Marketing Client',
-        code: null,
-        isSystem: true,
-      }),
-    });
   });
 
   describe('ensureForUser', () => {

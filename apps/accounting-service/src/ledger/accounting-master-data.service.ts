@@ -2395,6 +2395,9 @@ export class AccountingMasterDataService {
    * is needed and found again after that. Matched by the record's reference alone, so a later
    * change of entity type never produces a second entity. Once created it belongs to Accounting:
    * its name is not kept in step with the module's record.
+   *
+   * Its code follows the entity convention - the type's ID prefix and the next number, e.g.
+   * MKC-0007 - the same as an entity added by hand.
    */
   async ensureSourceEntity(
     actorUserId: string,
@@ -2409,9 +2412,11 @@ export class AccountingMasterDataService {
     const name = this.requiredName(input.name);
     const entityType = await this.assertEntityType(input.tenantId, input.type);
 
-    const existing = await this.prisma.subledgerAccount.findFirst({
-      where: { tenantId: input.tenantId, externalRef },
-    });
+    const find = () =>
+      this.prisma.subledgerAccount.findFirst({
+        where: { tenantId: input.tenantId, externalRef },
+      });
+    const existing = await find();
     if (existing) {
       if (existing.status !== RecordStatus.ACTIVE) {
         throw new ConflictException(
@@ -2421,25 +2426,71 @@ export class AccountingMasterDataService {
       return existing;
     }
 
-    try {
-      return await this.prisma.subledgerAccount.create({
-        data: {
-          tenantId: input.tenantId,
-          code: this.integrationSubledgerCode(entityType.name, externalRef),
-          name,
-          type: entityType.name,
-          externalRef,
-          createdByUserId: actorUserId,
-          updatedByUserId: actorUserId,
-        },
-      });
-    } catch (error) {
-      const raced = await this.prisma.subledgerAccount.findFirst({
-        where: { tenantId: input.tenantId, externalRef },
-      });
-      if (raced) return raced;
-      this.rethrowUnique(error, 'Subledger account already exists');
+    const prefix = this.entityCodePrefix(entityType);
+    // Two entities created at the same moment can pick the same number; the one that loses just
+    // takes the next.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = await this.nextEntityCode(input.tenantId, prefix);
+      try {
+        return await this.prisma.subledgerAccount.create({
+          data: {
+            tenantId: input.tenantId,
+            code,
+            name,
+            type: entityType.name,
+            externalRef,
+            createdByUserId: actorUserId,
+            updatedByUserId: actorUserId,
+          },
+        });
+      } catch (error) {
+        const raced = await find();
+        if (raced) return raced;
+        if (
+          !(
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === 'P2002'
+          )
+        ) {
+          throw error;
+        }
+      }
     }
+    throw new ConflictException(
+      'Could not allocate an entity code. Please try again.',
+    );
+  }
+
+  /** The type's own ID prefix (e.g. SUP); a type without one falls back to the start of its name. */
+  private entityCodePrefix(entityType: { code: string | null; name: string }) {
+    const own = entityType.code?.trim();
+    if (own) return own;
+    return (
+      entityType.name
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 3) || 'ENT'
+    );
+  }
+
+  /** The prefix and one more than the highest number already used with it, e.g. SUP-0007. */
+  private async nextEntityCode(tenantId: string, prefix: string) {
+    const used = await this.prisma.subledgerAccount.findMany({
+      where: {
+        tenantId,
+        code: { startsWith: `${prefix}-`, mode: 'insensitive' },
+      },
+      select: { code: true },
+    });
+    const pattern = new RegExp(
+      `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`,
+      'i',
+    );
+    const highest = used.reduce((max, entity) => {
+      const match = pattern.exec(entity.code);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `${prefix}-${String(highest + 1).padStart(4, '0')}`;
   }
 
   async findFiscalPeriod(tenantId: string, id: string) {

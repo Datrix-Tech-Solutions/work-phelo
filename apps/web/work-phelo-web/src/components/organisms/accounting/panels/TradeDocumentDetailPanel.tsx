@@ -8,21 +8,26 @@ import { Badge } from '@/components/atoms/Badge';
 import { Input } from '@/components/atoms/Input';
 import { EditInvoiceDraftModal } from '@/components/organisms/accounting/panels/EditInvoiceDraftModal';
 import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
+import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
 import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import {
   AccountingTradeDocument,
   AccountingTradeDocumentPaymentState,
   AccountingTradeDocumentStatus,
   AccountingTradeSide,
+  PaymentRequest,
+  PaymentRequestStatus,
 } from '@/types/accounting';
 import {
   useGLAccounts,
+  useInvoicePaymentRequests,
   usePayableBillBalance,
   usePostPayableBill,
   usePostPayableCreditNote,
   usePostReceivableCreditNote,
   usePostReceivableInvoice,
   useReceivableInvoiceBalance,
+  useRejectPaymentRequest,
   useRejectReceivableInvoice,
   useReversePayableBill,
   useReversePayableCreditNote,
@@ -52,6 +57,13 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   POSTED: 'success',
   REVERSED: 'danger',
   REJECTED: 'danger',
+};
+
+const REQUEST_STATUS_LABEL: Record<PaymentRequestStatus, string> = {
+  PENDING: 'Pending',
+  COMPLETED: 'Received',
+  REJECTED: 'Rejected',
+  CANCELLED: 'Cancelled',
 };
 
 const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
@@ -114,6 +126,9 @@ export function TradeDocumentDetailPanel({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reversalDate, setReversalDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState('');
+  const [receiveRequest, setReceiveRequest] = useState<PaymentRequest | null>(null);
+  const [rejectRequest, setRejectRequest] = useState<PaymentRequest | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const isReceivable = side === 'RECEIVABLE';
   const isCreditNote = documentKind === 'creditNote';
@@ -137,6 +152,15 @@ export function TradeDocumentDetailPanel({
         ? 'Fully Credited'
         : 'Partially Credited';
 
+  // Requests from another module to record a client's payment against this invoice.
+  const { data: paymentRequests = [] } = useInvoicePaymentRequests(
+    isReceivable && !isCreditNote && document?.status === 'POSTED' ? document.id : undefined,
+  );
+  const rejectPaymentRequest = useRejectPaymentRequest();
+  const waitingRequests = paymentRequests.filter((r) => r.status === 'PENDING');
+  const pastRequests = paymentRequests.filter((r) => r.status !== 'PENDING');
+  const pendingTotal = waitingRequests.reduce((sum, r) => sum + Number(r.amount), 0);
+
   const postReceivableInvoice = usePostReceivableInvoice();
   const postPayableBill = usePostPayableBill();
   const postReceivableCreditNote = usePostReceivableCreditNote();
@@ -158,6 +182,9 @@ export function TradeDocumentDetailPanel({
   // A draft customer invoice can be completed or turned down, whoever raised it. Its amount, quantity
   // and unit price are fixed when it is raised.
   const canReviewDraft = isReceivable && !isCreditNote && document?.status === 'DRAFT';
+  // Raised by another module (not entered by an accountant): its payment is received separately,
+  // so the "post and receive payment" shortcut doesn't apply.
+  const isExternal = !!document?.sourceModule && document.sourceModule !== 'ACCOUNTING';
   const sourceLabel = document?.sourceModule
     ? (SOURCE_MODULE_LABELS[document.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
       document.sourceModule)
@@ -282,17 +309,7 @@ export function TradeDocumentDetailPanel({
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
-              {canReviewDraft && (
-                <>
-                  <Button variant="danger" onClick={() => setRejectOpen(true)}>
-                    Reject
-                  </Button>
-                  <Button variant="outline" onClick={() => setEditOpen(true)}>
-                    Edit
-                  </Button>
-                </>
-              )}
-              {onPostedForPayment && (
+              {onPostedForPayment && !isExternal && (
                 <Button
                   variant="outline"
                   isLoading={isPostingForPayment}
@@ -326,18 +343,30 @@ export function TradeDocumentDetailPanel({
       >
         {document && (
           <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <Badge
-                label={STATUS_LABEL[document.status]}
-                variant={STATUS_VARIANT[document.status]}
-              />
-              {balance && balance.paymentState !== 'DRAFT' && (
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
                 <Badge
-                  label={PAYMENT_STATE_LABEL[balance.paymentState]}
-                  variant={PAYMENT_STATE_VARIANT[balance.paymentState]}
+                  label={STATUS_LABEL[document.status]}
+                  variant={STATUS_VARIANT[document.status]}
                 />
+                {balance && balance.paymentState !== 'DRAFT' && (
+                  <Badge
+                    label={PAYMENT_STATE_LABEL[balance.paymentState]}
+                    variant={PAYMENT_STATE_VARIANT[balance.paymentState]}
+                  />
+                )}
+                {balance && creditStatus && <Badge label={creditStatus} variant="info" />}
+              </div>
+              {canReviewDraft && (
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => setRejectOpen(true)}>
+                    Reject
+                  </Button>
+                </div>
               )}
-              {balance && creditStatus && <Badge label={creditStatus} variant="info" />}
             </div>
 
             {sourceLabel && document.status === 'DRAFT' && (
@@ -442,7 +471,86 @@ export function TradeDocumentDetailPanel({
                   <span className="text-right font-semibold text-gray-900">
                     {fmtAmount(balance.outstandingAmount, balance.currency)}
                   </span>
+                  {pendingTotal > 0 && (
+                    <>
+                      <span className="text-gray-600">Pending requests</span>
+                      <span className="text-right text-amber-700">
+                        {fmtAmount(String(pendingTotal), balance.currency)}
+                      </span>
+                      <span className="text-gray-600">Available to claim</span>
+                      <span className="text-right text-gray-900">
+                        {fmtAmount(
+                          String(Math.max(0, Number(balance.outstandingAmount) - pendingTotal)),
+                          balance.currency,
+                        )}
+                      </span>
+                    </>
+                  )}
                 </div>
+              </div>
+            )}
+
+            {paymentRequests.length > 0 && document.status === 'POSTED' && (
+              <div className="rounded-xl border border-gray-200 p-3 flex flex-col gap-3">
+                <span className="text-xs font-semibold text-gray-500">Payment requests</span>
+                {waitingRequests.length === 0 && (
+                  <p className="text-sm text-gray-500">Nothing is waiting for you.</p>
+                )}
+                {waitingRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex flex-col gap-2 rounded-lg border border-amber-100 bg-amber-50/60 p-3"
+                  >
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold text-gray-900">
+                        {fmtAmount(request.amount, request.currency)}
+                      </span>
+                      <span className="text-gray-600">{fmtDate(request.paymentDate)}</span>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      Requested by {request.requestedByName ?? 'a user'}
+                      {request.reference ? ` · ref. ${request.reference}` : ''}
+                    </p>
+                    {request.note && <p className="text-xs text-gray-600">“{request.note}”</p>}
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="danger" onClick={() => setRejectRequest(request)}>
+                        Reject
+                      </Button>
+                      <Button size="sm" onClick={() => setReceiveRequest(request)}>
+                        Receive Payment
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {pastRequests.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      className="self-start text-xs font-medium text-brand hover:underline"
+                      onClick={() => setHistoryOpen((open) => !open)}
+                    >
+                      {historyOpen ? 'Hide' : 'Show'} request history ({pastRequests.length})
+                    </button>
+                    {historyOpen &&
+                      pastRequests.map((request) => (
+                        <div
+                          key={request.id}
+                          className="flex items-center justify-between gap-3 text-sm text-gray-700"
+                        >
+                          <span>
+                            {fmtAmount(request.amount, request.currency)} ·{' '}
+                            {fmtDate(request.paymentDate)}
+                          </span>
+                          <span className="text-xs font-semibold text-gray-500">
+                            {REQUEST_STATUS_LABEL[request.status]}
+                            {request.status === 'REJECTED' && request.rejectionReason
+                              ? ` — ${request.rejectionReason}`
+                              : ''}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -467,6 +575,38 @@ export function TradeDocumentDetailPanel({
           }}
         />
       )}
+
+      <MakePaymentPanel
+        document={receiveRequest ? document : null}
+        paymentRequest={receiveRequest}
+        onClose={() => setReceiveRequest(null)}
+        onRejectRequest={() => {
+          setRejectRequest(receiveRequest);
+          setReceiveRequest(null);
+        }}
+      />
+
+      <RejectDraftModal
+        isOpen={!!rejectRequest}
+        title="Reject Payment Request"
+        subject="This payment request"
+        description="It is turned down, no payment is recorded, and the reason is shown to whoever asked."
+        isRejecting={rejectPaymentRequest.isPending}
+        onConfirm={async (rejectionReason) => {
+          if (!rejectRequest) return;
+          try {
+            await rejectPaymentRequest.mutateAsync({
+              id: rejectRequest.id,
+              reason: rejectionReason,
+            });
+            toast.success('Payment request rejected.');
+            setRejectRequest(null);
+          } catch (error) {
+            toast.error(extractError(error, 'Failed to reject the request'));
+          }
+        }}
+        onClose={() => setRejectRequest(null)}
+      />
 
       <RejectDraftModal
         isOpen={rejectOpen}

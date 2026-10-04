@@ -87,6 +87,8 @@ describe('ClientBillingService', () => {
     createTransaction: jest.fn(),
     listTransactions: jest.fn(),
     receiptsSummary: jest.fn(),
+    createPaymentRequest: jest.fn(),
+    cancelPaymentRequest: jest.fn(),
   });
 
   let prisma: ReturnType<typeof makePrisma>;
@@ -353,6 +355,170 @@ describe('ClientBillingService', () => {
       expect(error.message).toBe(
         'Transaction type is not linked to this source',
       );
+    });
+  });
+
+  describe('requestPayment', () => {
+    const payment = {
+      submissionId: '22222222-2222-4222-8222-222222222222',
+      invoiceId: 'inv-1',
+      amount: 5000,
+      paymentDate: '2026-09-12',
+      reference: 'TT-993',
+      note: 'First instalment',
+    };
+
+    beforeEach(() => {
+      prisma.marketingClient.findFirst.mockResolvedValue({
+        ...client,
+        accountingEntityId: 'entity-1',
+      });
+      accounting.createPaymentRequest.mockResolvedValue({
+        id: 'req-1',
+        status: 'PENDING',
+        amount: '5000.00',
+      });
+    });
+
+    it('refuses users without the billing permission', async () => {
+      await expect(
+        service.requestPayment(viewer, 'client-1', payment),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(accounting.createPaymentRequest).not.toHaveBeenCalled();
+    });
+
+    it('returns not found for a client the user cannot see', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.requestPayment(biller, 'client-1', payment),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('has nothing to pay for a client that was never billed', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue({ ...client });
+
+      await expect(
+        service.requestPayment(biller, 'client-1', payment),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(accounting.createPaymentRequest).not.toHaveBeenCalled();
+    });
+
+    it('sends the request as the user, tied to the client and this submission', async () => {
+      const result = await service.requestPayment(biller, 'client-1', payment);
+
+      expect(accounting.createPaymentRequest).toHaveBeenCalledWith(
+        {
+          tenantId: 'tenant-1',
+          idempotencyKey: `client-payment:client-1:${payment.submissionId}`,
+          externalRef: 'client-1',
+          invoiceId: 'inv-1',
+          amount: 5000,
+          paymentDate: '2026-09-12',
+          reference: 'TT-993',
+          note: 'First instalment',
+          requestedByName: 'Ada',
+        },
+        'user-1',
+      );
+      expect(result).toEqual({
+        id: 'req-1',
+        status: 'PENDING',
+        amount: '5000.00',
+      });
+    });
+
+    it('leaves out the optional details that were not given', async () => {
+      await service.requestPayment(biller, 'client-1', {
+        submissionId: payment.submissionId,
+        invoiceId: 'inv-1',
+        amount: 5000,
+        paymentDate: '2026-09-12',
+      });
+
+      const sent = accounting.createPaymentRequest.mock.calls[0][0];
+      expect(sent).not.toHaveProperty('reference');
+      expect(sent).not.toHaveProperty('note');
+    });
+
+    it("passes accounting's own message through, such as a balance that is too small", async () => {
+      accounting.createPaymentRequest.mockRejectedValue(
+        new InternalServiceClientError(
+          'The amount is more than can still be claimed (3000.00)',
+          false,
+          400,
+        ),
+      );
+
+      await expect(
+        service.requestPayment(biller, 'client-1', payment),
+      ).rejects.toMatchObject({
+        message: 'The amount is more than can still be claimed (3000.00)',
+        status: 400,
+      });
+    });
+
+    it('says nothing was sent when accounting cannot be reached', async () => {
+      accounting.createPaymentRequest.mockRejectedValue(
+        new InternalServiceClientError('timeout', true),
+      );
+
+      await expect(
+        service.requestPayment(biller, 'client-1', payment),
+      ).rejects.toBeInstanceOf(BadGatewayException);
+    });
+  });
+
+  describe('cancelPayment', () => {
+    beforeEach(() => {
+      prisma.marketingClient.findFirst.mockResolvedValue({
+        ...client,
+        accountingEntityId: 'entity-1',
+      });
+      accounting.cancelPaymentRequest.mockResolvedValue({
+        id: 'req-1',
+        status: 'CANCELLED',
+      });
+    });
+
+    it('refuses users without the billing permission', async () => {
+      await expect(
+        service.cancelPayment(viewer, 'client-1', 'req-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(accounting.cancelPaymentRequest).not.toHaveBeenCalled();
+    });
+
+    it('returns not found for a client the user cannot see', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.cancelPayment(biller, 'client-1', 'req-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(accounting.cancelPaymentRequest).not.toHaveBeenCalled();
+    });
+
+    it('withdraws the request as the user, naming the client it must belong to', async () => {
+      const result = await service.cancelPayment(biller, 'client-1', 'req-1');
+
+      expect(accounting.cancelPaymentRequest).toHaveBeenCalledWith(
+        { tenantId: 'tenant-1', requestId: 'req-1', externalRef: 'client-1' },
+        'user-1',
+      );
+      expect(result).toEqual({ id: 'req-1', status: 'CANCELLED' });
+    });
+
+    it('tells the user when accounting already acted on it', async () => {
+      accounting.cancelPaymentRequest.mockRejectedValue(
+        new InternalServiceClientError(
+          'This payment request is no longer pending',
+          false,
+          409,
+        ),
+      );
+
+      await expect(
+        service.cancelPayment(biller, 'client-1', 'req-1'),
+      ).rejects.toMatchObject({ status: 409 });
     });
   });
 
