@@ -983,6 +983,8 @@ export interface Appointment {
   id: string;
   prospectId: string | null;
   prospectName: string;
+  /** The prospect's current pipeline stage; null if the prospect was removed. */
+  salesStage: ProspectSalesStage | null;
   date: string; // ISO: YYYY-MM-DD
   startTime: string; // HH:mm
   endTime: string | null; // HH:mm — optional

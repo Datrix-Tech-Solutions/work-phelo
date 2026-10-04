@@ -119,12 +119,20 @@ describe('RequestsService', () => {
   };
   // "Now" for the tests: far enough before `future` that default rows are upcoming.
   const trips = { now: jest.fn() };
+  const notifier = {
+    requested: jest.fn(),
+    approved: jest.fn(),
+    rejected: jest.fn(),
+    rescheduled: jest.fn(),
+    cancelled: jest.fn(),
+  };
   const service = new RequestsService(
     prisma as never,
     directory as never,
     fleet as never,
     officers as never,
     trips as never,
+    notifier as never,
   );
 
   beforeEach(() => {
@@ -163,6 +171,10 @@ describe('RequestsService', () => {
       });
       expect(data).not.toHaveProperty('status');
       expect(result.status).toBe('PENDING');
+      expect(notifier.requested).toHaveBeenCalledWith(
+        TENANT,
+        expect.objectContaining({ id: 'req-1' }),
+      );
       expect(result.passengers).toEqual([
         { employeeId: 'e2', name: 'Kofi Boateng', department: null },
       ]);
@@ -792,6 +804,11 @@ describe('RequestsService', () => {
       const result = await service.cancel(user(), 'req-1');
 
       expect(result.status).toBe('CANCELLED');
+      expect(notifier.cancelled).toHaveBeenCalledWith(
+        TENANT,
+        expect.objectContaining({ id: 'req-1' }),
+        'user-1',
+      );
     });
 
     it('lets an approver cancel someone else’s trip, for example one nobody went on', async () => {
@@ -916,6 +933,12 @@ describe('RequestsService', () => {
       arrangeApprove();
 
       const result = await service.approve(reviewer(), 'req-1', approveDto);
+
+      expect(notifier.approved).toHaveBeenCalledWith(
+        TENANT,
+        expect.objectContaining({ id: 'req-1' }),
+        'user-2',
+      );
 
       expect(tx.marketingTransportRequest.updateMany).toHaveBeenCalledWith({
         where: { id: 'req-1', tenantId: TENANT, status: 'PENDING' },
@@ -1281,6 +1304,11 @@ describe('RequestsService', () => {
         reviewNote: 'No vehicle free',
       });
       expect(data).not.toHaveProperty('vehicleAssetId');
+      expect(notifier.rejected).toHaveBeenCalledWith(
+        TENANT,
+        expect.objectContaining({ id: 'req-1' }),
+        'user-2',
+      );
     });
 
     it('lets the requester approve their own request, since the permission is the only gate', async () => {

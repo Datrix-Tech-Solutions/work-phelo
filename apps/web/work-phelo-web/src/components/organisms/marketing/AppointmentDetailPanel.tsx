@@ -136,6 +136,11 @@ export function AppointmentDetailPanel({ appointment, onClose }: Props) {
         <div className="flex flex-col gap-4">
           <dl className="flex flex-col gap-4">
             <Field label="Prospect">{appointment.prospectName}</Field>
+            {appointment.salesStage && (
+              <Field label="Sales stage">
+                {appointment.salesStage.name} ({appointment.salesStage.probability}%)
+              </Field>
+            )}
             <Field label="Status">
               <Badge
                 label={APPOINTMENT_STATUS_BADGES[appointment.status].label}

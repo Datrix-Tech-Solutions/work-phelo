@@ -15,6 +15,8 @@ export interface CalendarProps {
   maxDate?: string; // ISO: YYYY-MM-DD — disables all days after this date
   /** ISO dates (YYYY-MM-DD) to mark with a dot indicator — e.g. days that have appointments. */
   markedDates?: string[];
+  /** ISO dates whose only appointments are still pending — shown as a hollow, fainter dot. */
+  tentativeDates?: string[];
   className?: string;
 }
 
@@ -30,11 +32,13 @@ export function Calendar({
   minDate,
   maxDate,
   markedDates,
+  tentativeDates,
   className,
 }: CalendarProps) {
   const today = new Date();
   const parsed = value ? new Date(value) : null;
   const markedSet = new Set(markedDates ?? []);
+  const tentativeSet = new Set(tentativeDates ?? []);
 
   const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const minDateNorm = minDate
@@ -92,6 +96,7 @@ export function Calendar({
             today.getMonth() === viewMonth &&
             today.getFullYear() === viewYear;
           const isMarked = markedSet.has(iso);
+          const isTentative = !isMarked && tentativeSet.has(iso);
 
           return (
             <button
@@ -113,6 +118,9 @@ export function Calendar({
               {day}
               {isMarked && !isSelected && (
                 <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-orange-500" />
+              )}
+              {isTentative && !isSelected && (
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full border border-orange-400 bg-transparent" />
               )}
             </button>
           );

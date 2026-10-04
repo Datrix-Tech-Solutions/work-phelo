@@ -31,6 +31,19 @@ export function useRequests(query: TransportRequestsQuery = {}) {
   });
 }
 
+/** One request by id — used when a notification links straight to it. */
+export function useRequest(id: string | undefined) {
+  return useQuery({
+    queryKey: [...REQUESTS_KEY, 'detail', id] as const,
+    queryFn: async () => {
+      const res = await api.get<TransportRequest>(`${ENDPOINT}/${id}`);
+      return res.data;
+    },
+    enabled: !!id,
+    retry: false,
+  });
+}
+
 export function useRequestFormOptions(enabled = true) {
   return useQuery({
     queryKey: [...REQUESTS_KEY, 'form-options'] as const,

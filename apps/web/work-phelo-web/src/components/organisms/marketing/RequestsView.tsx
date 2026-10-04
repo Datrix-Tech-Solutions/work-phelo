@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { RequestsTable } from '@/components/molecules/marketing/RequestsTable';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { RequestPanel } from '@/components/organisms/marketing/RequestPanel';
@@ -8,7 +9,7 @@ import { RequestDetailPanel } from '@/components/organisms/marketing/RequestDeta
 import { ApproveRequestModal } from '@/components/organisms/marketing/ApproveRequestModal';
 import { RejectRequestModal } from '@/components/organisms/marketing/RejectRequestModal';
 import { CompleteTripModal } from '@/components/organisms/marketing/CompleteTripModal';
-import { useCancelRequest, useRequests } from '@/hooks/marketing/useRequests';
+import { useCancelRequest, useRequest, useRequests } from '@/hooks/marketing/useRequests';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -42,6 +43,19 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<TransportRequest | null>(null);
   const [viewing, setViewing] = useState<TransportRequest | null>(null);
+
+  // A notification links here with ?requestId=…, which opens that request's details whichever
+  // tab it lands on.
+  const router = useRouter();
+  const pathname = usePathname();
+  const linkedId = useSearchParams().get('requestId');
+  const { data: linked } = useRequest(linkedId ?? undefined);
+  const detail = viewing ?? linked ?? null;
+
+  function closeDetail() {
+    setViewing(null);
+    if (linkedId) router.replace(pathname);
+  }
   const [approving, setApproving] = useState<TransportRequest | null>(null);
   const [rejecting, setRejecting] = useState<TransportRequest | null>(null);
   const [rescheduling, setRescheduling] = useState<TransportRequest | null>(null);
@@ -119,30 +133,30 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
       <RequestPanel isOpen={addOpen} onClose={() => setAddOpen(false)} />
       <RequestPanel isOpen={!!editing} request={editing} onClose={() => setEditing(null)} />
       <RequestDetailPanel
-        request={viewing}
-        onClose={() => setViewing(null)}
+        request={detail}
+        onClose={closeDetail}
         canReview={canApprove}
-        canReschedule={!!viewing && canRescheduleRow(viewing)}
-        canComplete={!!viewing && canCompleteRow(viewing)}
-        canCancel={!!viewing && canCancelRow(viewing) && viewing.status !== 'PENDING'}
+        canReschedule={!!detail && canRescheduleRow(detail)}
+        canComplete={!!detail && canCompleteRow(detail)}
+        canCancel={!!detail && canCancelRow(detail) && detail.status !== 'PENDING'}
         onApprove={(row) => {
-          setViewing(null);
+          closeDetail();
           setApproving(row);
         }}
         onReject={(row) => {
-          setViewing(null);
+          closeDetail();
           setRejecting(row);
         }}
         onReschedule={(row) => {
-          setViewing(null);
+          closeDetail();
           setRescheduling(row);
         }}
         onComplete={(row) => {
-          setViewing(null);
+          closeDetail();
           setCompleting(row);
         }}
         onCancel={(row) => {
-          setViewing(null);
+          closeDetail();
           setCancelling(row);
         }}
       />

@@ -15,6 +15,7 @@ import {
 } from '../../prisma/generated/client';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppointmentNotifier } from './appointment-notifier.service';
 import { AuthDirectoryClient, ModuleUser } from './auth-directory.client';
 import {
   AppointmentFormOptionsQueryDto,
@@ -46,6 +47,7 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly directory: AuthDirectoryClient,
+    private readonly notifier: AppointmentNotifier,
   ) {}
 
   async list(user: RequestUser, query: QueryAppointmentsDto = {}) {
@@ -70,7 +72,7 @@ export class AppointmentsService {
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
       ...(query.limit ? { take: query.limit } : {}),
     });
-    return { data: rows.map((row) => this.toResponse(row)) };
+    return { data: await this.respondAll(user.tenantId, rows) };
   }
 
   async findOne(user: RequestUser, id: string) {
@@ -78,7 +80,7 @@ export class AppointmentsService {
       where: { id, tenantId: user.tenantId, ...this.visibilityWhere(user) },
     });
     if (!row) throw new NotFoundException(NOT_FOUND_MESSAGE);
-    return this.toResponse(row);
+    return this.respond(user.tenantId, row);
   }
 
   /**
@@ -145,7 +147,9 @@ export class AppointmentsService {
         createdByUserId: user.id,
       },
     });
-    return this.toResponse(row);
+    // Tell the approvers (best-effort, not awaited so the booking returns straight away).
+    void this.notifier.requested(row, user.id);
+    return this.respond(user.tenantId, row);
   }
 
   /** Pending only. The marketer (or who booked it) edits their own; create-for-others edits any. */
@@ -181,7 +185,7 @@ export class AppointmentsService {
         ...(dto.comment !== undefined ? { comment: dto.comment || null } : {}),
       },
     });
-    return this.toResponse(row);
+    return this.respond(user.tenantId, row);
   }
 
   async approve(user: RequestUser, id: string, dto: ApproveAppointmentDto) {
@@ -212,7 +216,8 @@ export class AppointmentsService {
         reviewNote: dto.reviewNote || null,
       },
     });
-    return this.toResponse(row);
+    void this.notifier.reviewed(row, user.id, 'APPROVED');
+    return this.respond(user.tenantId, row);
   }
 
   async reject(user: RequestUser, id: string, dto: ReviewAppointmentDto) {
@@ -227,7 +232,8 @@ export class AppointmentsService {
         reviewNote: dto.reviewNote || null,
       },
     });
-    return this.toResponse(row);
+    void this.notifier.reviewed(row, user.id, 'REJECTED');
+    return this.respond(user.tenantId, row);
   }
 
   /** The marketer or whoever booked it can cancel; so can an approver. */
@@ -245,7 +251,7 @@ export class AppointmentsService {
       where: { id },
       data: { status: Status.CANCELLED, cancelledAt: new Date() },
     });
-    return this.toResponse(row);
+    return this.respond(user.tenantId, row);
   }
 
   /** Marks an approved appointment as held. Final. */
@@ -260,7 +266,7 @@ export class AppointmentsService {
       where: { id },
       data: { status: Status.COMPLETED, completedAt: new Date() },
     });
-    return this.toResponse(row);
+    return this.respond(user.tenantId, row);
   }
 
   // --- rules ---------------------------------------------------------------
@@ -452,11 +458,54 @@ export class AppointmentsService {
     return this.person(found).name;
   }
 
-  private toResponse(row: AppointmentRow) {
+  private async respond(tenantId: string, row: AppointmentRow) {
+    const [response] = await this.respondAll(tenantId, [row]);
+    return response;
+  }
+
+  /** Adds each prospect's current sales stage, looked up live so it follows stage changes. */
+  private async respondAll(tenantId: string, rows: AppointmentRow[]) {
+    const prospectIds = [
+      ...new Set(
+        rows.map((r) => r.prospectId).filter((id): id is string => !!id),
+      ),
+    ];
+    const prospects = prospectIds.length
+      ? await this.prisma.marketingProspect.findMany({
+          where: { tenantId, id: { in: prospectIds } },
+          select: { id: true, pipelineStageId: true },
+        })
+      : [];
+    const stages = prospects.length
+      ? await this.prisma.marketingPipelineStage.findMany({
+          where: {
+            tenantId,
+            id: { in: [...new Set(prospects.map((p) => p.pipelineStageId))] },
+          },
+          select: { id: true, name: true, probability: true },
+        })
+      : [];
+    const stageById = new Map(stages.map((st) => [st.id, st]));
+    const stageByProspect = new Map(
+      prospects.map((p) => [p.id, stageById.get(p.pipelineStageId) ?? null]),
+    );
+    return rows.map((row) =>
+      this.toResponse(
+        row,
+        row.prospectId ? (stageByProspect.get(row.prospectId) ?? null) : null,
+      ),
+    );
+  }
+
+  private toResponse(
+    row: AppointmentRow,
+    salesStage: { id: string; name: string; probability: number } | null,
+  ) {
     return {
       id: row.id,
       prospectId: row.prospectId,
       prospectName: row.prospectName,
+      salesStage,
       date: toIso(row.date),
       startTime: row.startTime,
       endTime: row.endTime,

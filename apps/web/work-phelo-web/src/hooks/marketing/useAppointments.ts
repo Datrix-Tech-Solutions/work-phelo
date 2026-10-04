@@ -26,6 +26,19 @@ export function useAppointments(query: AppointmentsQuery = {}) {
   });
 }
 
+/** One appointment by id — used when a notification links straight to it. */
+export function useAppointment(id: string | undefined) {
+  return useQuery({
+    queryKey: [...APPOINTMENTS_KEY, 'detail', id] as const,
+    queryFn: async () => {
+      const res = await api.get<Appointment>(`${ENDPOINT}/${id}`);
+      return res.data;
+    },
+    enabled: !!id,
+    retry: false,
+  });
+}
+
 /** What the form may offer: who can be the marketer, and that marketer's prospects. */
 export function useAppointmentFormOptions(
   query: { marketerUserId?: string; search?: string } = {},

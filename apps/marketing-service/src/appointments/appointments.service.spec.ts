@@ -96,13 +96,17 @@ describe('AppointmentsService', () => {
       update: jest.fn(),
     },
     marketingProspect: { findFirst: jest.fn(), findMany: jest.fn() },
+    marketingPipelineStage: { findMany: jest.fn() },
   };
   const directory = { moduleUsers: jest.fn() };
+  const notifier = { requested: jest.fn(), reviewed: jest.fn() };
   let service: AppointmentsService;
 
   beforeEach(() => {
     jest.resetAllMocks();
     directory.moduleUsers.mockResolvedValue(people);
+    prisma.marketingProspect.findMany.mockResolvedValue([]);
+    prisma.marketingPipelineStage.findMany.mockResolvedValue([]);
     prisma.marketingProspect.findFirst.mockResolvedValue({
       id: PROSPECT,
       companyName: 'Accra Brewing Co.',
@@ -115,7 +119,11 @@ describe('AppointmentsService', () => {
       ({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve(row(data)),
     );
-    service = new AppointmentsService(prisma as never, directory as never);
+    service = new AppointmentsService(
+      prisma as never,
+      directory as never,
+      notifier as never,
+    );
   });
 
   describe('create', () => {
@@ -130,6 +138,16 @@ describe('AppointmentsService', () => {
       expect(result.marketerUserId).toBe(AMA);
       expect(result.marketerName).toBe('Ama Mensah');
       expect(result.status).toBe('PENDING');
+    });
+
+    it('notifies the approvers of a new appointment', async () => {
+      await service.create(user(), createDto);
+
+      expect(notifier.requested).toHaveBeenCalledTimes(1);
+      expect(notifier.requested).toHaveBeenCalledWith(
+        expect.objectContaining({ marketerUserId: AMA }),
+        AMA,
+      );
     });
 
     it('refuses to book for someone else without create-for-others', async () => {
@@ -222,6 +240,30 @@ describe('AppointmentsService', () => {
     });
   });
 
+  describe('sales stage', () => {
+    it('adds the prospect’s current pipeline stage to each appointment', async () => {
+      prisma.marketingAppointment.findMany.mockResolvedValue([
+        row(),
+        row({ id: 'appt-2', prospectId: null }),
+      ]);
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        { id: PROSPECT, pipelineStageId: 'stage-1' },
+      ]);
+      prisma.marketingPipelineStage.findMany.mockResolvedValue([
+        { id: 'stage-1', name: 'Negotiation', probability: 60 },
+      ]);
+
+      const { data } = await service.list(user());
+
+      expect(data[0].salesStage).toEqual({
+        id: 'stage-1',
+        name: 'Negotiation',
+        probability: 60,
+      });
+      expect(data[1].salesStage).toBeNull();
+    });
+  });
+
   describe('formOptions', () => {
     it('offers a normal user only themselves and their prospects', async () => {
       prisma.marketingProspect.findMany.mockResolvedValue([
@@ -262,6 +304,29 @@ describe('AppointmentsService', () => {
       permissions: [P.APPOINTMENTS_APPROVE_ALL],
     });
 
+    it('notifies the marketer when an appointment is rejected', async () => {
+      prisma.marketingAppointment.findFirst.mockResolvedValue(row());
+
+      await service.reject(approver, 'appt-1', {});
+
+      expect(notifier.reviewed).toHaveBeenCalledWith(
+        expect.objectContaining({ marketerUserId: AMA }),
+        KOFI,
+        'REJECTED',
+      );
+    });
+
+    it('does not notify when a decision is refused', async () => {
+      prisma.marketingAppointment.findFirst.mockResolvedValue(
+        row({ status: 'APPROVED' }),
+      );
+
+      await expect(
+        service.reject(approver, 'appt-1', {}),
+      ).rejects.toBeDefined();
+      expect(notifier.reviewed).not.toHaveBeenCalled();
+    });
+
     it('only reviews pending appointments', async () => {
       prisma.marketingAppointment.findFirst.mockResolvedValue(
         row({ status: 'APPROVED' }),
@@ -281,6 +346,11 @@ describe('AppointmentsService', () => {
       });
 
       expect(result.status).toBe('APPROVED');
+      expect(notifier.reviewed).toHaveBeenCalledWith(
+        expect.objectContaining({ managerUserId: MANAGER }),
+        KOFI,
+        'APPROVED',
+      );
       expect(result.managerUserId).toBe(MANAGER);
       expect(result.managerName).toBe('Abena Sarpong');
     });

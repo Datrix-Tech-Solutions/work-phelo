@@ -22,6 +22,7 @@ import {
   WallClock,
 } from '../trips/trip-schedule';
 import { TripScheduleService } from '../trips/trip-schedule.service';
+import { RequestNotifier } from './request-notifier.service';
 import { TransportOfficersService } from '../transport-officers/transport-officers.service';
 import {
   AllocationOptionsQueryDto,
@@ -54,6 +55,7 @@ export class RequestsService {
     private readonly fleet: HrFleetClient,
     private readonly officers: TransportOfficersService,
     private readonly trips: TripScheduleService,
+    private readonly notifier: RequestNotifier,
   ) {}
 
   async list(user: RequestUser, query: QueryTransportRequestsDto = {}) {
@@ -190,7 +192,10 @@ export class RequestsService {
       include: { passengers: { orderBy: { name: 'asc' } } },
     });
 
-    return this.toResponse(created, this.trips.now());
+    const response = this.toResponse(created, this.trips.now());
+    // Tell the approvers (best-effort, not awaited so the request returns straight away).
+    void this.notifier.requested(user.tenantId, response);
+    return response;
   }
 
   async update(user: RequestUser, id: string, dto: UpdateTransportRequestDto) {
@@ -294,7 +299,9 @@ export class RequestsService {
     if (result.count === 0) {
       throw new ConflictException('This request can no longer be cancelled');
     }
-    return this.findOne(user, id);
+    const response = await this.findOne(user, id);
+    void this.notifier.cancelled(user.tenantId, response, user.id);
+    return response;
   }
 
   /**
@@ -329,7 +336,9 @@ export class RequestsService {
       }),
     });
 
-    return this.findOne(user, id);
+    const response = await this.findOne(user, id);
+    void this.notifier.approved(user.tenantId, response, user.id);
+    return response;
   }
 
   /**
@@ -380,7 +389,9 @@ export class RequestsService {
       }),
     });
 
-    return this.findOne(user, id);
+    const response = await this.findOne(user, id);
+    void this.notifier.rescheduled(user.tenantId, response, user.id);
+    return response;
   }
 
   /**
@@ -461,7 +472,9 @@ export class RequestsService {
     if (result.count === 0) {
       throw new ConflictException('This request has already been reviewed');
     }
-    return this.findOne(user, id);
+    const response = await this.findOne(user, id);
+    void this.notifier.rejected(user.tenantId, response, user.id);
+    return response;
   }
 
   /**
