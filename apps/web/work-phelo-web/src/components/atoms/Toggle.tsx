@@ -5,17 +5,20 @@ import { cn } from '@/lib/utils';
 interface ToggleProps {
   enabled: boolean;
   onChange: (value: boolean) => void;
+  disabled?: boolean;
 }
 
-export function Toggle({ enabled, onChange }: ToggleProps) {
+export function Toggle({ enabled, onChange, disabled = false }: ToggleProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={enabled}
+      disabled={disabled}
       onClick={() => onChange(!enabled)}
       className={cn(
-        'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200',
+        'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200',
+        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
         enabled ? 'bg-brand' : 'bg-gray-200',
       )}
     >

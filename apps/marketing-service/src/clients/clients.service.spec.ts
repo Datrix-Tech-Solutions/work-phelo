@@ -2,6 +2,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
@@ -11,7 +12,9 @@ import {
 } from '../../prisma/generated/client';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClientBillingService } from './client-billing.service';
 import { ClientsService } from './clients.service';
+import { ClientBillingDto } from './dto/billing.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 
 describe('ClientsService', () => {
@@ -64,7 +67,20 @@ describe('ClientsService', () => {
       '66666666-6666-4666-8666-666666666666',
     ],
     location: { label: 'Accra, Ghana', latitude: 5.6037, longitude: -0.187 },
-    isBillable: true,
+  });
+
+  const makeBilling = (): ClientBillingDto => ({
+    entityTypeId: '99999999-9999-4999-8999-999999999999',
+    transactionTypeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    amount: 20000,
+    productId: '55555555-5555-4555-8555-555555555555',
+  });
+
+  const makeBillingService = () => ({
+    totalsForEntities: jest.fn(),
+    assertCanBill: jest.fn(),
+    submit: jest.fn(),
+    record: jest.fn(),
   });
 
   const makePrisma = () => {
@@ -109,6 +125,7 @@ describe('ClientsService', () => {
 
   let prisma: ReturnType<typeof makePrisma>;
   let service: ClientsService;
+  let billing: ReturnType<typeof makeBillingService>;
 
   beforeEach(() => {
     prisma = makePrisma();
@@ -124,7 +141,19 @@ describe('ClientsService', () => {
     prisma.tx.marketingProspectFollowUp.updateMany.mockResolvedValue({
       count: 1,
     });
-    service = new ClientsService(prisma as unknown as PrismaService);
+    billing = makeBillingService();
+    billing.totalsForEntities.mockResolvedValue(new Map());
+    billing.submit.mockResolvedValue({
+      entityId: 'entity-1',
+      entityTypeId: 'entity-type-1',
+      transactionId: 'txn-1',
+      state: 'DRAFT',
+    });
+    billing.record.mockResolvedValue({});
+    service = new ClientsService(
+      prisma as unknown as PrismaService,
+      billing as unknown as ClientBillingService,
+    );
   });
 
   describe('list', () => {
@@ -203,6 +232,35 @@ describe('ClientsService', () => {
     });
   });
 
+  describe('list billing fields', () => {
+    it('shows the entity flag and achieved revenue from accounting', async () => {
+      prisma.marketingClient.count.mockResolvedValue(2);
+      prisma.marketingClient.findMany.mockResolvedValue([
+        { ...clientRecord, id: 'c-1', accountingEntityId: 'entity-1' },
+        { ...clientRecord, id: 'c-2', accountingEntityId: null },
+      ]);
+      billing.totalsForEntities.mockResolvedValue(
+        new Map([['entity-1', '12500.00']]),
+      );
+
+      const result = await service.list(user);
+
+      expect(billing.totalsForEntities).toHaveBeenCalledWith(user, [
+        'entity-1',
+      ]);
+      expect(result.data[0]).toMatchObject({
+        id: 'c-1',
+        hasAccountingEntity: true,
+        achievedRevenue: '12500.00',
+      });
+      expect(result.data[1]).toMatchObject({
+        id: 'c-2',
+        hasAccountingEntity: false,
+        achievedRevenue: null,
+      });
+    });
+  });
+
   describe('create', () => {
     it('rejects the same product listed twice', async () => {
       const dto = makeDto();
@@ -234,8 +292,11 @@ describe('ClientsService', () => {
         companyName: 'Acme Manufacturing',
         normalizedCompanyName: 'acme manufacturing',
         assignedUserId: 'user-1',
-        isBillable: true,
+        isBillable: false,
+        accountingEntityId: null,
       });
+      expect(arg.data.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(billing.submit).not.toHaveBeenCalled();
       expect(arg.data.contacts.create).toMatchObject({
         tenantId: 'tenant-1',
         name: 'Ama Mensah',
@@ -252,6 +313,134 @@ describe('ClientsService', () => {
           productId: '66666666-6666-4666-8666-666666666666',
         },
       ]);
+    });
+  });
+
+  describe('create with billing', () => {
+    const clientId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+    beforeEach(() => {
+      prisma.marketingClient.findFirst.mockResolvedValue(null);
+    });
+
+    it('needs the first transaction for a billable client', async () => {
+      await expect(
+        service.create(user, { ...makeDto(), isBillable: true }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(billing.submit).not.toHaveBeenCalled();
+      expect(prisma.marketingClient.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses billing details for a client that is not billable', async () => {
+      await expect(
+        service.create(user, { ...makeDto(), billing: makeBilling() }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(billing.submit).not.toHaveBeenCalled();
+    });
+
+    it('refuses users who cannot bill', async () => {
+      billing.assertCanBill.mockImplementation(() => {
+        throw new ForbiddenException();
+      });
+
+      await expect(
+        service.create(user, {
+          ...makeDto(),
+          isBillable: true,
+          billing: makeBilling(),
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(billing.submit).not.toHaveBeenCalled();
+    });
+
+    it('rejects a billing product the client does not have', async () => {
+      await expect(
+        service.create(user, {
+          ...makeDto(),
+          isBillable: true,
+          billing: {
+            ...makeBilling(),
+            productId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          },
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(billing.submit).not.toHaveBeenCalled();
+    });
+
+    it('sends the transaction to accounting first, then saves the billable client with its entity', async () => {
+      // First lookup (is this a retry?) finds nothing; the detail read after saving finds the client.
+      prisma.marketingClient.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(clientRecord);
+
+      await service.create(user, {
+        ...makeDto(),
+        id: clientId,
+        isBillable: true,
+        billing: makeBilling(),
+      });
+
+      expect(billing.submit).toHaveBeenCalledWith(
+        user,
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          clientId,
+          clientName: 'Acme Manufacturing',
+          entityId: null,
+          entityTypeId: '99999999-9999-4999-8999-999999999999',
+          amount: 20000,
+          idempotencyKey: `client-create:${clientId}`,
+        }),
+      );
+      const arg = prisma.marketingClient.create.mock.calls[0][0];
+      expect(arg.data).toMatchObject({
+        id: clientId,
+        isBillable: true,
+        accountingEntityId: 'entity-1',
+        accountingEntityTypeId: 'entity-type-1',
+      });
+      expect(billing.record).toHaveBeenCalledWith(
+        prisma.tx,
+        user,
+        expect.objectContaining({
+          clientId: 'client-1',
+          productId: '55555555-5555-4555-8555-555555555555',
+          transactionId: 'txn-1',
+          state: 'DRAFT',
+          amount: 20000,
+          idempotencyKey: `client-create:${clientId}`,
+        }),
+      );
+    });
+
+    it('creates no client when accounting cannot take the transaction', async () => {
+      billing.submit.mockRejectedValue(new Error('accounting down'));
+
+      await expect(
+        service.create(user, {
+          ...makeDto(),
+          isBillable: true,
+          billing: makeBilling(),
+        }),
+      ).rejects.toThrow('accounting down');
+      expect(prisma.marketingClient.create).not.toHaveBeenCalled();
+    });
+
+    it('returns the existing client when the same id is submitted again', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue({
+        ...clientRecord,
+        id: clientId,
+      });
+
+      await service.create(user, {
+        ...makeDto(),
+        id: clientId,
+        isBillable: true,
+        billing: makeBilling(),
+      });
+
+      expect(billing.submit).not.toHaveBeenCalled();
+      expect(prisma.marketingClient.create).not.toHaveBeenCalled();
     });
   });
 
@@ -295,15 +484,22 @@ describe('ClientsService', () => {
       prisma.marketingClient.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.update(user, 'client-1', { isBillable: true }),
+        service.update(user, 'client-1', { isBillable: false }),
       ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('does not switch billing on - only a billing transaction does', async () => {
+      await expect(
+        service.update(user, 'client-1', { isBillable: true }),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('updates company fields, normalising the name', async () => {
       await service.update(user, 'client-1', {
         companyName: '  New   Name ',
-        isBillable: true,
+        isBillable: false,
         businessTypeId: null,
       });
 
@@ -314,7 +510,7 @@ describe('ClientsService', () => {
           companyName: 'New Name',
           normalizedCompanyName: 'new name',
           businessTypeId: null,
-          isBillable: true,
+          isBillable: false,
         },
       });
     });
@@ -485,6 +681,18 @@ describe('ClientsService', () => {
   });
 
   describe('remove', () => {
+    it('keeps a client that has an entity in accounting', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue({
+        id: 'client-1',
+        accountingEntityId: 'entity-1',
+      });
+
+      await expect(service.remove(user, 'client-1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('removes client-only history, then the client', async () => {
       prisma.marketingClient.findFirst.mockResolvedValue({ id: 'client-1' });
 
@@ -628,7 +836,7 @@ describe('ClientsService', () => {
     });
 
     it('copies the prospect, carries products over as PENDING and shares its history', async () => {
-      await service.convertProspect(user, 'prospect-1', { isBillable: true });
+      await service.convertProspect(user, 'prospect-1', {});
 
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       const arg = prisma.tx.marketingClient.create.mock.calls[0][0];
@@ -638,7 +846,8 @@ describe('ClientsService', () => {
         businessTypeId: 'bt-1',
         sourceTypeId: 'st-1',
         assignedUserId: 'user-1',
-        isBillable: true,
+        isBillable: false,
+        accountingEntityId: null,
         convertedFromProspectId: 'prospect-1',
         convertedByUserId: 'user-1',
       });
@@ -693,6 +902,100 @@ describe('ClientsService', () => {
       await expect(
         service.convertProspect(user, 'prospect-1', {}),
       ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    describe('with billing', () => {
+      const clientId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const billingFor = (productId: string) => ({
+        ...makeBilling(),
+        productId,
+      });
+
+      it('needs the first transaction for a billable client', async () => {
+        await expect(
+          service.convertProspect(user, 'prospect-1', { isBillable: true }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(billing.submit).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('rejects a billing product the prospect did not have', async () => {
+        await expect(
+          service.convertProspect(user, 'prospect-1', {
+            isBillable: true,
+            billing: billingFor('p-9'),
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(billing.submit).not.toHaveBeenCalled();
+      });
+
+      it('sends the transaction first, then converts with the entity and records the billing', async () => {
+        await service.convertProspect(user, 'prospect-1', {
+          clientId,
+          isBillable: true,
+          billing: billingFor('p-1'),
+        });
+
+        expect(billing.submit).toHaveBeenCalledWith(
+          user,
+          expect.objectContaining({
+            clientId,
+            clientName: 'Acme Manufacturing',
+            entityId: null,
+            amount: 20000,
+            idempotencyKey: `client-create:${clientId}`,
+          }),
+        );
+        const arg = prisma.tx.marketingClient.create.mock.calls[0][0];
+        expect(arg.data).toMatchObject({
+          id: clientId,
+          isBillable: true,
+          accountingEntityId: 'entity-1',
+          convertedFromProspectId: 'prospect-1',
+        });
+        expect(billing.record).toHaveBeenCalledWith(
+          prisma.tx,
+          user,
+          expect.objectContaining({
+            clientId: 'client-1',
+            productId: 'p-1',
+            transactionId: 'txn-1',
+          }),
+        );
+      });
+
+      it('converts nothing when accounting cannot take the transaction', async () => {
+        billing.submit.mockRejectedValue(new Error('accounting down'));
+
+        await expect(
+          service.convertProspect(user, 'prospect-1', {
+            isBillable: true,
+            billing: billingFor('p-1'),
+          }),
+        ).rejects.toThrow('accounting down');
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('hands back the same client when a finished conversion is retried', async () => {
+        prisma.marketingProspect.findFirst.mockResolvedValue({
+          ...prospect,
+          client: { id: clientId },
+        });
+        prisma.marketingClient.findFirst.mockResolvedValue({
+          ...clientRecord,
+          id: clientId,
+        });
+
+        const result = await service.convertProspect(user, 'prospect-1', {
+          clientId,
+          isBillable: true,
+          billing: billingFor('p-1'),
+        });
+
+        expect(result.id).toBe(clientId);
+        expect(billing.submit).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
     });
   });
 });

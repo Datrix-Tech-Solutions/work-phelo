@@ -37,12 +37,19 @@ function detail(
   };
 }
 
-export function ClientProductCard({ product }: { product: ClientDetailProduct }) {
+export function ClientProductCard({
+  product,
+  achievedRevenue,
+}: {
+  product: ClientDetailProduct;
+  /** What Accounting has received for this product's transactions. Null/undefined shows a dash. */
+  achievedRevenue?: string | null;
+}) {
   const status = STATUS[product.status];
 
   const details: DataCardDetail[] = [
     detail(Target, 'Expected Revenue', formatMoney(product.expectedValue), 'text-blue-500'),
-    detail(Banknote, 'Achieved Revenue', formatMoney(product.achievedRevenue), 'text-emerald-500'),
+    detail(Banknote, 'Achieved Revenue', formatMoney(achievedRevenue), 'text-emerald-500'),
     ...(product.commissionRate != null
       ? [
           detail(

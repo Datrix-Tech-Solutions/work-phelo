@@ -10,7 +10,9 @@ import type {
   CreateTradeInvoicePayload,
   PaginatedResult,
   QueryTradeDocumentsParams,
+  RejectDraftPayload,
   ReverseTradeDocumentPayload,
+  UpdateInvoiceDraftPayload,
 } from '@/types/accounting';
 
 /* Accounts Receivable (customer invoices/credit notes) and Accounts Payable
@@ -100,6 +102,8 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,
     reversedAt: raw.reversedAt ?? null,
+    rejectedAt: raw.rejectedAt ?? null,
+    rejectionReason: raw.rejectionReason ?? null,
     postedJournalEntryId: raw.postedJournalEntryId ?? null,
     reversalJournalEntryId: raw.reversalJournalEntryId ?? null,
     reversalOfDocumentId: raw.reversalOfDocumentId ?? null,
@@ -320,6 +324,44 @@ export function usePostReceivableInvoice() {
 }
 export function useReverseReceivableInvoice() {
   return useReverseDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment);
+}
+
+/** Completes a draft invoice's dates, cost centre and references. Its amount stays as raised. */
+export function useUpdateReceivableInvoiceDraft() {
+  const queryClient = useQueryClient();
+  const config = SIDE_CONFIG.RECEIVABLE;
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: UpdateInvoiceDraftPayload & { id: string }) => {
+      const res = await api.patch<RawTradeDocument>(
+        `${config.base}/${config.invoiceSegment}/${id}`,
+        payload,
+      );
+      return mapDocument(res.data, 'RECEIVABLE');
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: documentsKey('RECEIVABLE', config.invoiceSegment),
+      }),
+  });
+}
+
+/** Turns a draft invoice down. It keeps its record, never posts, and the reason is stored. */
+export function useRejectReceivableInvoice() {
+  const queryClient = useQueryClient();
+  const config = SIDE_CONFIG.RECEIVABLE;
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: RejectDraftPayload & { id: string }) => {
+      const res = await api.post<RawTradeDocument>(
+        `${config.base}/${config.invoiceSegment}/${id}/reject`,
+        payload,
+      );
+      return mapDocument(res.data, 'RECEIVABLE');
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: documentsKey('RECEIVABLE', config.invoiceSegment),
+      }),
+  });
 }
 
 export function usePayableBills(

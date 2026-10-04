@@ -901,11 +901,12 @@ export const INVOICE_DEFAULTS: InvoiceFormValues = {
 };
 
 export type AccountingTradeSide = 'RECEIVABLE' | 'PAYABLE';
-export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'REJECTED';
 export type AccountingTradeDocumentKind = 'INVOICE' | 'CREDIT_NOTE' | 'BILL';
 export type AccountingTradeDocumentPaymentState =
   | 'DRAFT'
   | 'REVERSED'
+  | 'REJECTED'
   | 'PAID'
   | 'PARTIALLY_PAID'
   | 'OPEN';
@@ -977,6 +978,9 @@ export interface AccountingTradeDocument {
   updatedAt: string;
   postedAt: string | null;
   reversedAt: string | null;
+  /** Set when a draft was turned down - it never posts, and the reason is kept. */
+  rejectedAt: string | null;
+  rejectionReason: string | null;
   postedJournalEntryId: string | null;
   reversalJournalEntryId: string | null;
   reversalOfDocumentId: string | null;
@@ -1028,6 +1032,33 @@ export interface CreateTradeInvoicePayload {
   costCentreId?: string;
   description?: string;
   externalReference?: string;
+}
+
+/** Why a draft is being turned down. Kept on the record and shown to whoever raised it. */
+export interface RejectDraftPayload {
+  reason: string;
+}
+
+/** What can still be changed on a draft invoice - the amount, quantity, unit price, customer and
+ *  transaction type are fixed when it is raised. */
+export interface UpdateInvoiceDraftPayload {
+  documentDate?: string;
+  dueDate?: string;
+  /** Null clears the cost centre. */
+  costCentreId?: string | null;
+  description?: string;
+  externalReference?: string;
+}
+
+/** What can still be changed on a draft direct receipt or payment - its amount is fixed. */
+export interface UpdateCashbookDraftPayload {
+  transactionDate?: string;
+  cashAccountId?: string;
+  settlementMethod?: AccountingCashbookSettlementMethod;
+  offsetGlAccountId?: string;
+  reference?: string;
+  externalReference?: string;
+  description?: string;
 }
 
 export interface ReverseTradeDocumentPayload {
@@ -1234,7 +1265,7 @@ export interface UpdateCashAccountPayload extends Partial<CreateCashAccountPaylo
 
 export type CashbookTransactionType = 'RECEIPT' | 'PAYMENT' | 'TRANSFER' | 'CHARGE' | 'ADJUSTMENT';
 export type CashbookDirection = 'INFLOW' | 'OUTFLOW' | 'TRANSFER';
-export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'REJECTED';
 export type AccountingCashbookSettlementMethod =
   | 'BANK_TRANSFER'
   | 'CHEQUE'
@@ -1308,6 +1339,9 @@ export interface CashbookTransaction {
   updatedAt: string;
   postedAt: string | null;
   reversedAt: string | null;
+  /** Set when a draft was turned down - it never posts, and the reason is kept. */
+  rejectedAt: string | null;
+  rejectionReason: string | null;
   postedJournalEntryId: string | null;
   reversalJournalEntryId: string | null;
   reversalOfTransactionId: string | null;
@@ -1828,3 +1862,28 @@ export interface UpdatePostingRulePayload {
 
 export type CreatePostingRuleLinePayload = PostingRuleLineInput;
 export type UpdatePostingRuleLinePayload = Partial<PostingRuleLineInput>;
+
+/** What is left to set up before a module can raise transactions in Accounting. */
+export type SourceSetupReason =
+  | 'SOURCE_NOT_LINKED'
+  | 'NO_BASE_CURRENCY'
+  | 'NO_TRANSACTION_TYPES'
+  | 'NO_ENTITY_TYPE';
+
+export type SourceTypeSetup =
+  | { supported: false }
+  | {
+      supported: true;
+      module: SourceModule;
+      sourceName: string;
+      linked: boolean;
+      baseCurrency: string | null;
+      /** The entity type Accounting created for the module, when it exists. */
+      defaultEntityType: { id: string; name: string } | null;
+      /** Entity types named on the usable linked transaction types - what the module's form offers. */
+      entityTypes: { id: string; name: string }[];
+      /** Every transaction type linked to the source, and why an unusable one cannot be used. */
+      transactionTypes: { id: string; name: string; usable: boolean; problem: string | null }[];
+      ready: boolean;
+      reason: SourceSetupReason | null;
+    };

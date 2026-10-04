@@ -2,6 +2,7 @@
 
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { PayrollAccountingSetup } from '@/components/organisms/accounting/panels/PayrollAccountingSetup';
+import { SourceBillingSetup } from '@/components/organisms/accounting/panels/SourceBillingSetup';
 import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import type { SourceTypeDefinition } from '@/types/accounting';
 
@@ -28,6 +29,8 @@ export function SourceTypeManagePanel({
     >
       {sourceType?.module === 'HR' ? (
         <PayrollAccountingSetup />
+      ) : sourceType?.module === 'MARKETING' ? (
+        <SourceBillingSetup sourceType={sourceType} />
       ) : (
         <p className="text-sm text-gray-500">
           This will surface {sourceType ? SOURCE_MODULE_LABELS[sourceType.module] : 'the module'}

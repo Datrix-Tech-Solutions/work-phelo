@@ -28,6 +28,17 @@ enum MarketingProspectFollowUpStatus {
   @@schema("marketing")
 }
 
+/// Where a billing transaction raised for a client stands in Accounting. Accounting owns the
+/// real state; this mirrors only what marketing needs to act on (product status).
+enum MarketingClientBillingState {
+  SUBMITTED
+  POSTED
+  REVERSED
+  REJECTED
+
+  @@schema("marketing")
+}
+
 enum MarketingClientProductStatus {
   PENDING
   PURCHASED
@@ -294,6 +305,10 @@ model MarketingClient {
   latitude                Decimal   @db.Decimal(9, 6)
   longitude               Decimal   @db.Decimal(9, 6)
   isBillable              Boolean   @default(false)
+  /// The client's entity in Accounting, created with its first billing transaction. One per client.
+  accountingEntityId      String?
+  /// The entity type Accounting created that entity under - fixed after the first transaction.
+  accountingEntityTypeId  String?
   convertedFromProspectId String?   @unique
   convertedAt             DateTime?
   convertedByUserId       String?
@@ -305,6 +320,7 @@ model MarketingClient {
   convertedFromProspect MarketingProspect?             @relation(fields: [convertedFromProspectId], references: [id], onDelete: SetNull)
   contacts              MarketingClientContact[]
   products              MarketingClientProduct[]
+  billings              MarketingClientBilling[]
   interactions          MarketingProspectInteraction[]
   followUps             MarketingProspectFollowUp[]
 
@@ -518,5 +534,31 @@ model MarketingCampaignRecipient {
 
   @@unique([campaignId, contactId, channel])
   @@index([tenantId, campaignId, status])
+  @@schema("marketing")
+}
+
+/// A transaction raised in Accounting for a client. Accounting never learns which product it was
+/// for - that link lives only here, and drives the product's Purchased status once the
+/// transaction is posted (and back to Pending if it is reversed).
+model MarketingClientBilling {
+  id                      String                      @id @default(uuid())
+  tenantId                String
+  clientId                String
+  /// CRM Settings product the transaction was raised for, when one was picked.
+  productId               String?
+  accountingTransactionId String
+  idempotencyKey          String
+  state                   MarketingClientBillingState @default(SUBMITTED)
+  amount                  Decimal                     @db.Decimal(20, 2)
+  createdByUserId         String
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+
+  client MarketingClient @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, accountingTransactionId])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, clientId])
+  @@index([tenantId, clientId, productId, state])
   @@schema("marketing")
 }

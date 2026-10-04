@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
+import { SourceTransactionsService } from './source-transactions/source-transactions.service';
 import { SourceTypesService } from './source-types.service';
 
 @Controller('source-types')
@@ -32,7 +33,10 @@ import { SourceTypesService } from './source-types.service';
 @UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
 @RequireModule('accounting')
 export class SourceTypesController {
-  constructor(private readonly service: SourceTypesService) {}
+  constructor(
+    private readonly service: SourceTypesService,
+    private readonly sourceTransactions: SourceTransactionsService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -41,6 +45,21 @@ export class SourceTypesController {
   @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
   list(@Req() request: Request & { user: RequestUser }) {
     return this.service.list(request.user);
+  }
+
+  @Get(':id/setup')
+  @ApiOperation({
+    summary:
+      'What is left to set up before a module can raise transactions in Accounting',
+    description:
+      'For modules that raise transactions: whether the source is linked, the base currency is set, and which of its linked transaction types can be used (and why not, if not).',
+  })
+  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  setup(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.sourceTransactions.getSetup(request.user.tenantId, id);
   }
 
   @Post(':id/link')

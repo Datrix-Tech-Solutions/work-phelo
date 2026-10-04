@@ -167,7 +167,9 @@ write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.dev" \
   "DATABASE_URL=$(db_url_for_schema marketing)" \
   "JWT_SECRET=${JWT_SECRET}" \
   "HR_SERVICE_URL=http://hr-service:4002" \
-  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}"
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 
 write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
   "PORT=4007" \
@@ -196,6 +198,7 @@ write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
   "DATABASE_URL=$(db_url_for_schema accounting)" \
   "JWT_SECRET=${JWT_SECRET}" \
   "HR_SERVICE_URL=http://hr-service:4002" \
+  "MARKETING_SERVICE_URL=http://marketing-service:4006" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 log "✓ Service env files written"

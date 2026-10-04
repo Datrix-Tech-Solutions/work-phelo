@@ -40,6 +40,7 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  REJECTED: 'danger',
 };
 
 function fmtAmount(amount: string, currency: string) {

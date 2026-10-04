@@ -41,6 +41,8 @@ export const MarketingCrmSettingsPermission = {
   CLIENTS_EDIT_ALL: 'marketing.clients.all:EDIT',
   CLIENTS_DELETE: 'marketing.clients:DELETE',
   CLIENTS_DELETE_ALL: 'marketing.clients.all:DELETE',
+  CLIENTS_BILLING_VIEW: 'marketing.clients.billing:VIEW',
+  CLIENTS_BILLING_CREATE: 'marketing.clients.billing:CREATE',
   FLEET_VIEW: 'marketing.fleet:VIEW',
   FLEET_CREATE: 'marketing.fleet:CREATE',
   FLEET_EDIT: 'marketing.fleet:EDIT',

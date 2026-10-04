@@ -76,6 +76,20 @@ export class ClientListItemDto {
   @ApiProperty()
   isBillable!: boolean;
 
+  @ApiProperty({
+    description:
+      'True once the client has its entity in Accounting (its first transaction was sent).',
+  })
+  hasAccountingEntity!: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: '12500.00',
+    description:
+      'What Accounting has received for the client. Null when unavailable or not yet billed.',
+  })
+  achievedRevenue!: string | null;
+
   @ApiPropertyOptional({ nullable: true, type: ClientListPrimaryContactDto })
   primaryContact!: ClientListPrimaryContactDto | null;
 

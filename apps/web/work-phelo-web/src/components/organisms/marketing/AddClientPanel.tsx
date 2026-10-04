@@ -7,7 +7,14 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { EmailField } from '@/components/atoms/EmailField';
-import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
+import { BillingSection } from '@/components/organisms/marketing/BillingSection';
+import {
+  ClientBillingErrors,
+  ClientBillingValues,
+  EMPTY_BILLING,
+  toBillingInput,
+  validateBilling,
+} from '@/components/molecules/marketing/ClientBillingFields';
 import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
 import {
   CompanyLocationFields,
@@ -17,7 +24,7 @@ import {
   useCreateProspectingSetting,
   useProspectingSettings,
 } from '@/hooks/marketing/useProspectingSettings';
-import { useCreateClient } from '@/hooks/marketing/useClients';
+import { useBillingOptions, useCreateClient } from '@/hooks/marketing/useClients';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import { inputClass, isValidEmail } from '@/lib/utils';
@@ -74,6 +81,12 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
 
   const [values, setValues] = useState<FormValues>(EMPTY);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
+  const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
+  // Generated up front, so if saving fails after Accounting took the transaction, trying again
+  // reuses the same client (and the same Accounting entity) instead of creating another.
+  const [clientId, setClientId] = useState(() => crypto.randomUUID());
+  const { data: billingOptions } = useBillingOptions();
 
   const { data: businessTypes = [] } = useProspectingSettings('business-types');
   const { data: sourceTypes = [] } = useProspectingSettings('source-types');
@@ -96,6 +109,9 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
   function handleClose() {
     setValues(EMPTY);
     setErrors({});
+    setBilling(EMPTY_BILLING);
+    setBillingErrors({});
+    setClientId(crypto.randomUUID());
     onClose();
   }
 
@@ -109,15 +125,28 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     if (values.location.lat == null || values.location.lng == null)
       next.location = 'Select a location on the map or from search.';
     setErrors(next);
-    return Object.keys(next).length === 0;
+
+    let billingValid = true;
+    if (values.isBillable && billingOptions) {
+      const nextBilling = validateBilling(billing, billingOptions);
+      setBillingErrors(nextBilling);
+      billingValid = Object.keys(nextBilling).length === 0;
+    } else {
+      setBillingErrors({});
+    }
+    return Object.keys(next).length === 0 && billingValid;
   }
 
   function buildPayload(): CreateClientPayload {
     return {
+      id: clientId,
       companyName: values.companyName.trim(),
       ...(values.businessType ? { businessTypeId: values.businessType } : {}),
       ...(values.sourceType ? { sourceTypeId: values.sourceType } : {}),
       isBillable: values.isBillable,
+      ...(values.isBillable && billingOptions
+        ? { billing: toBillingInput(billing, billingOptions) }
+        : {}),
       primaryContact: {
         name: values.contactName.trim(),
         ...(values.phone.trim() ? { phone: values.phone.trim() } : {}),
@@ -251,16 +280,24 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           placeholder="Select products or services"
           options={productOptions}
           value={values.productIds}
-          onChange={(v) => set('productIds', v)}
+          onChange={(v) => {
+            set('productIds', v);
+            // A billing transaction can only be tagged to a product the client has.
+            if (billing.productId && !v.includes(billing.productId)) {
+              setBilling((prev) => ({ ...prev, productId: '' }));
+            }
+          }}
         />
 
         <SectionTitle>Billing</SectionTitle>
 
-        <ToggleRow
-          label="Make billable"
-          description="Mark this client as billable."
+        <BillingSection
           enabled={values.isBillable}
-          onChange={(v) => set('isBillable', v)}
+          onEnabledChange={(v) => set('isBillable', v)}
+          values={billing}
+          onValuesChange={setBilling}
+          errors={billingErrors}
+          productOptions={productOptions.filter((o) => values.productIds.includes(o.value))}
         />
 
         <SectionTitle>Location</SectionTitle>

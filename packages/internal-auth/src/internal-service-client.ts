@@ -24,6 +24,11 @@ export interface InternalServiceClientOptions {
 export interface InternalRequestOptions {
   query?: Record<string, string | number | boolean | undefined | null>;
   body?: unknown;
+  /**
+   * The user the call is made for (e.g. who clicked the button). It travels in a signed header,
+   * so the receiver can record it for audit and trust it.
+   */
+  actingUserId?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 10000;
@@ -85,6 +90,7 @@ export class InternalServiceClient {
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined && value !== null) query.set(key, String(value));
     }
+    const queryPairs = [...query.entries()];
     const queryString = query.toString();
     const hasBody = options.body !== undefined;
 
@@ -100,6 +106,13 @@ export class InternalServiceClient {
             serviceName,
             method,
             path,
+            // Also bind the query, body and acting user to this caller. Receivers that only
+            // know the legacy signature simply ignore the extra headers.
+            signRequest: {
+              query: queryPairs,
+              body: options.body,
+              actingUserId: options.actingUserId,
+            },
           }),
         },
         body: hasBody ? JSON.stringify(options.body) : undefined,

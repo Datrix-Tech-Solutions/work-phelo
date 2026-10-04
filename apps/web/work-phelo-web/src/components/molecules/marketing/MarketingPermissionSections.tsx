@@ -43,6 +43,7 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
       { key: 'edit_all_clients', label: 'Edit All Clients' },
       { key: 'delete_all_clients', label: 'Delete All Clients' },
       { key: 'create_client', label: 'Create Client' },
+      { key: 'manage_billing', label: 'Manage Billing' },
     ],
   },
   {
@@ -58,7 +59,8 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     key: 'transport',
     label: 'Transport',
     tags: [
-      { key: 'manage_requests', label: 'Manage Requests' },
+      { key: 'manage_requests', label: 'Manage Requests', implies: ['view_all_requests'] },
+      { key: 'view_all_requests', label: 'View All Requests' },
       { key: 'manage_transport_officers', label: 'Manage Transport Officers' },
       { key: 'view_fleet', label: 'View Fleet' },
       { key: 'manage_fleet', label: 'Manage Fleet', implies: ['view_fleet'] },
@@ -132,11 +134,17 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
   view_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['VIEW'])],
   edit_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['EDIT'])],
   delete_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['DELETE'])],
+  // Billing sits on top of client visibility: a user bills the clients they can already see.
+  manage_billing: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.billing', ['VIEW', 'CREATE'])],
 
   // Transport — each "manage" pill carries the full set for its area.
   manage_requests: [
     ...pairs('marketing.requests', ['VIEW', 'CREATE', 'EDIT', 'CANCEL']),
     ...pairs('marketing.requests.all', ['VIEW', 'APPROVE']),
+  ],
+  view_all_requests: [
+    ...pairs('marketing.requests', ['VIEW']),
+    ...pairs('marketing.requests.all', ['VIEW']),
   ],
   manage_transport_officers: pairs('marketing.transport-officers', ['VIEW', 'CREATE', 'EDIT']),
   view_fleet: pairs('marketing.fleet', ['VIEW']),

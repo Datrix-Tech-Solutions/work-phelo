@@ -240,6 +240,11 @@ export const RESOURCES = [
     description: 'Tenant-wide Marketing client list visibility',
   },
   {
+    name: 'marketing.clients.billing',
+    module: 'MARKETING',
+    description: 'Raise and review client billing transactions in Accounting',
+  },
+  {
     name: 'marketing.prospects.interactions',
     module: 'MARKETING',
     description: 'Marketing prospect interaction history records',

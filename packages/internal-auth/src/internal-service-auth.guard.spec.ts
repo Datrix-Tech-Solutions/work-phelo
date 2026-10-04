@@ -2,7 +2,11 @@ import { createHmac } from 'crypto';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
 import { INTERNAL_SERVICE_AUTH_HEADERS } from './constants';
-import { InternalServiceAuthGuard } from './internal-service-auth.guard';
+import {
+  AuthenticatedInternalRequest,
+  InternalServiceAuthGuard,
+} from './internal-service-auth.guard';
+import { buildAuthHeaders } from './signing';
 
 const SECRET = 'a-secure-internal-service-secret-of-at-least-32-characters';
 const PATH = '/internal/source-events';
@@ -112,5 +116,131 @@ describe('InternalServiceAuthGuard', () => {
     expect(() => new InternalServiceAuthGuard().canActivate(context(headers))).toThrow(
       UnauthorizedException,
     );
+  });
+
+  describe('request signature', () => {
+    const signedRequest = (
+      overrides: {
+        method?: string;
+        url?: string;
+        body?: unknown;
+        actingUserId?: string;
+      } = {},
+    ) => {
+      const method = overrides.method ?? 'POST';
+      const url = overrides.url ?? '/internal/source-transactions?tenantId=t1';
+      const [path, queryString = ''] = url.split('?');
+      const headers = buildAuthHeaders({
+        secret: SECRET,
+        serviceName: 'hr-service',
+        method,
+        path,
+        signRequest: {
+          query: new URLSearchParams(queryString).entries(),
+          body: overrides.body ?? { amount: 20000 },
+          actingUserId: overrides.actingUserId ?? 'user-1',
+        },
+      });
+      return { headers, method, url, body: overrides.body ?? { amount: 20000 } };
+    };
+
+    const contextFor = (request: Record<string, unknown>) =>
+      ({
+        switchToHttp: () => ({ getRequest: () => request }),
+      }) as unknown as ExecutionContext;
+
+    it('accepts a request signature and exposes the acting user', () => {
+      const { headers, method, url, body } = signedRequest();
+      const request = { headers, method, originalUrl: url, body };
+
+      expect(new InternalServiceAuthGuard().canActivate(contextFor(request))).toBe(true);
+      expect((request as unknown as AuthenticatedInternalRequest).internalActingUserId).toBe(
+        'user-1',
+      );
+    });
+
+    it('rejects a replay with a different tenant', () => {
+      const { headers, method, body } = signedRequest();
+      const request = {
+        headers,
+        method,
+        originalUrl: '/internal/source-transactions?tenantId=t2',
+        body,
+      };
+
+      expect(() => new InternalServiceAuthGuard().canActivate(contextFor(request))).toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('rejects a tampered body', () => {
+      const { headers, method, url } = signedRequest();
+      const request = { headers, method, originalUrl: url, body: { amount: 1 } };
+
+      expect(() => new InternalServiceAuthGuard().canActivate(contextFor(request))).toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('rejects a swapped acting user', () => {
+      const { headers, method, url, body } = signedRequest();
+      headers[INTERNAL_SERVICE_AUTH_HEADERS.actingUser] = 'someone-else';
+      const request = { headers, method, originalUrl: url, body };
+
+      expect(() => new InternalServiceAuthGuard().canActivate(contextFor(request))).toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('does not trust an acting-user header sent without a request signature', () => {
+      const headers = {
+        ...signedHeaders('hr-service'),
+        [INTERNAL_SERVICE_AUTH_HEADERS.actingUser]: 'forged',
+      };
+      const request = {
+        headers,
+        method: 'POST',
+        originalUrl: PATH,
+      } as unknown as Record<string, unknown>;
+
+      expect(new InternalServiceAuthGuard().canActivate(contextFor(request))).toBe(true);
+      expect(
+        (request as unknown as AuthenticatedInternalRequest).internalActingUserId,
+      ).toBeUndefined();
+    });
+
+    it('still accepts legacy-only callers unless the request signature is required', () => {
+      expect(new InternalServiceAuthGuard().canActivate(context(signedHeaders('hr-service')))).toBe(
+        true,
+      );
+
+      process.env.INTERNAL_SERVICE_AUTH_REQUIRE_REQUEST_SIGNATURE = 'true';
+      try {
+        expect(() =>
+          new InternalServiceAuthGuard().canActivate(context(signedHeaders('hr-service'))),
+        ).toThrow(UnauthorizedException);
+        const { headers, method, url, body } = signedRequest();
+        expect(
+          new InternalServiceAuthGuard().canActivate(
+            contextFor({ headers, method, originalUrl: url, body }),
+          ),
+        ).toBe(true);
+      } finally {
+        delete process.env.INTERNAL_SERVICE_AUTH_REQUIRE_REQUEST_SIGNATURE;
+      }
+    });
+
+    it('treats the empty body a parser fills in as no body', () => {
+      const headers = buildAuthHeaders({
+        secret: SECRET,
+        serviceName: 'hr-service',
+        method: 'GET',
+        path: '/internal/x',
+        signRequest: { query: [], body: undefined },
+      });
+      const request = { headers, method: 'GET', originalUrl: '/internal/x', body: {} };
+
+      expect(new InternalServiceAuthGuard().canActivate(contextFor(request))).toBe(true);
+    });
   });
 });

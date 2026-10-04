@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
@@ -23,6 +24,10 @@ import { CashbookService } from './cashbook.service';
 import { CreateJournalDto } from './dto/accounting.dto';
 import { CreateCashbookReceiptDto } from './dto/cashbook.dto';
 import {
+  RejectDraftDto,
+  UpdateReceivableInvoiceDraftDto,
+} from './dto/draft-actions.dto';
+import {
   CreateCreditNoteAllocationDto,
   CreateReceivableCreditNoteDto,
   CreateReceivableInvoiceDto,
@@ -36,6 +41,10 @@ import {
 } from './dto/receivables.dto';
 import { JournalsService } from './journals.service';
 import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
+import {
+  SourceTransactionEvent,
+  SourceEventsNotifier,
+} from './source-transactions/source-events.notifier';
 
 const zero = new Prisma.Decimal(0);
 // SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
@@ -101,6 +110,7 @@ export class ReceivablesService {
     private readonly prisma: PrismaService,
     private readonly cashbook: CashbookService,
     private readonly journals: JournalsService,
+    @Optional() private readonly sourceEvents?: SourceEventsNotifier,
   ) {}
 
   async summary(tenantId: string) {
@@ -632,11 +642,13 @@ export class ReceivablesService {
   }
 
   async postInvoice(user: RequestUser, invoiceId: string) {
-    return this.postDocument(
+    const posted = await this.postDocument(
       user,
       invoiceId,
       AccountingReceivableDocumentType.INVOICE,
     );
+    await this.notifySource(user.tenantId, invoiceId, 'POSTED');
+    return posted;
   }
 
   async postCreditNote(user: RequestUser, creditNoteId: string) {
@@ -652,12 +664,169 @@ export class ReceivablesService {
     invoiceId: string,
     dto: ReverseReceivableDto,
   ) {
-    return this.reverseDocument(
+    const reversed = await this.reverseDocument(
       user,
       invoiceId,
       AccountingReceivableDocumentType.INVOICE,
       dto,
     );
+    await this.notifySource(user.tenantId, invoiceId, 'REVERSED');
+    return reversed;
+  }
+
+  /**
+   * Completes a draft invoice - the dates, currency, tax lines, cost centre and references. What the
+   * draft is for stays fixed: the amount, quantity, unit price, entity and transaction type were set
+   * when it was raised (by the accountant or by another module) and cannot be edited here.
+   */
+  async updateInvoiceDraft(
+    user: RequestUser,
+    invoiceId: string,
+    dto: UpdateReceivableInvoiceDraftDto,
+  ) {
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException('At least one field is required');
+    }
+    const document = await this.prisma.accountingReceivableDocument.findFirst({
+      where: {
+        id: invoiceId,
+        tenantId: user.tenantId,
+        documentType: AccountingReceivableDocumentType.INVOICE,
+      },
+    });
+    if (!document) throw new NotFoundException('Invoice not found');
+    if (document.status !== AccountingReceivableStatus.DRAFT) {
+      throw new ConflictException('Only draft invoices can be edited');
+    }
+
+    const data: Prisma.AccountingReceivableDocumentUncheckedUpdateManyInput = {
+      updatedByUserId: user.id,
+    };
+    if (dto.currency !== undefined && dto.currency !== document.currency) {
+      const customer = await this.resolveCustomer(
+        user.tenantId,
+        document.customerId,
+      );
+      await this.assertActiveCurrency(user.tenantId, dto.currency);
+      this.assertCustomerCurrency(customer.currency, dto.currency);
+      data.currency = dto.currency;
+    }
+    if (dto.exchangeRate !== undefined) data.exchangeRate = dto.exchangeRate;
+    if (dto.documentDate !== undefined)
+      data.documentDate = new Date(dto.documentDate);
+    if (dto.dueDate !== undefined) data.dueDate = new Date(dto.dueDate);
+    if (dto.description !== undefined)
+      data.description = this.optional(dto.description);
+    if (dto.externalReference !== undefined) {
+      data.externalReference = this.optional(dto.externalReference);
+    }
+    if (dto.costCentreId !== undefined) {
+      if (dto.costCentreId !== null) {
+        await this.assertActiveCostCentre(user.tenantId, dto.costCentreId);
+      }
+      data.costCentreId = dto.costCentreId;
+    }
+    if (dto.selectedTaxTypeIds !== undefined) {
+      if (!document.transactionTypeId) {
+        throw new BadRequestException(
+          'This invoice has no transaction type, so its tax lines cannot be changed',
+        );
+      }
+      // Only the tax lines are taken from the rule; the accounts the draft already resolved stay put.
+      const posting = await this.resolveRulePosting(
+        user.tenantId,
+        document.transactionTypeId,
+        TransactionTypeCategory.RECEIVABLE,
+        document.subtotalAmount,
+        dto.selectedTaxTypeIds,
+      );
+      data.taxAmount = posting.taxAmount;
+      data.taxBreakdown = posting.taxBreakdown;
+      data.totalAmount = document.subtotalAmount.plus(posting.taxAmount);
+    }
+
+    const claimed = await this.prisma.accountingReceivableDocument.updateMany({
+      where: {
+        id: document.id,
+        tenantId: user.tenantId,
+        status: AccountingReceivableStatus.DRAFT,
+      },
+      data,
+    });
+    if (claimed.count !== 1) {
+      throw new ConflictException('Invoice was changed by another request');
+    }
+    await this.recordAudit(
+      user,
+      'RECEIVABLE_INVOICE_DRAFT_UPDATED',
+      'AccountingReceivableDocument',
+      document.id,
+      { changed: Object.keys(dto) },
+    );
+    return this.getInvoice(user, invoiceId);
+  }
+
+  /** Turns a draft invoice down. It keeps its record, never posts, and the reason is stored. */
+  async rejectInvoice(
+    user: RequestUser,
+    invoiceId: string,
+    dto: RejectDraftDto,
+  ) {
+    const claimed = await this.prisma.accountingReceivableDocument.updateMany({
+      where: {
+        id: invoiceId,
+        tenantId: user.tenantId,
+        documentType: AccountingReceivableDocumentType.INVOICE,
+        status: AccountingReceivableStatus.DRAFT,
+      },
+      data: {
+        status: AccountingReceivableStatus.REJECTED,
+        rejectedAt: new Date(),
+        rejectedByUserId: user.id,
+        rejectionReason: dto.reason,
+        updatedByUserId: user.id,
+      },
+    });
+    if (claimed.count !== 1) {
+      const exists = await this.prisma.accountingReceivableDocument.findFirst({
+        where: {
+          id: invoiceId,
+          tenantId: user.tenantId,
+          documentType: AccountingReceivableDocumentType.INVOICE,
+        },
+        select: { id: true },
+      });
+      if (!exists) throw new NotFoundException('Invoice not found');
+      throw new ConflictException('Only draft invoices can be rejected');
+    }
+    await this.recordAudit(
+      user,
+      'RECEIVABLE_INVOICE_REJECTED',
+      'AccountingReceivableDocument',
+      invoiceId,
+      { reason: dto.reason },
+    );
+    await this.notifySource(user.tenantId, invoiceId, 'REJECTED');
+    return this.getInvoice(user, invoiceId);
+  }
+
+  /** Tells the module that raised an invoice what happened to it. Never fails the action itself. */
+  private async notifySource(
+    tenantId: string,
+    documentId: string,
+    event: SourceTransactionEvent,
+  ) {
+    if (!this.sourceEvents) return;
+    const document = await this.prisma.accountingReceivableDocument.findFirst({
+      where: { id: documentId, tenantId },
+      select: { sourceModule: true },
+    });
+    await this.sourceEvents.notify({
+      tenantId,
+      sourceModule: document?.sourceModule,
+      transactionId: documentId,
+      event,
+    });
   }
 
   async reverseCreditNote(
@@ -2070,6 +2239,8 @@ export class ReceivablesService {
   ) {
     if (document.status === AccountingReceivableStatus.REVERSED)
       return 'REVERSED';
+    if (document.status === AccountingReceivableStatus.REJECTED)
+      return 'REJECTED';
     if (document.status === AccountingReceivableStatus.DRAFT) return 'DRAFT';
     if (outstanding.lte(0)) return 'PAID';
     const partlySettled = paidApplied

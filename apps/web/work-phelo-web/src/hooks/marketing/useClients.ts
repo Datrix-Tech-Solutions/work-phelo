@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
   AddClientProductPayload,
+  BillingOptions,
+  BillingTransactionsResponse,
+  ClientBillingSummary,
   ClientDetail,
   ClientDetailProduct,
   ClientListItem,
@@ -11,6 +14,7 @@ import {
   ConvertProspectPayload,
   CreateClientPayload,
   CreateProspectInteractionPayload,
+  RaiseClientBillingPayload,
   UpdateClientPayload,
 } from '@/types/marketing';
 
@@ -111,6 +115,57 @@ export function useAddClientInteraction(id: string) {
   return useMutation({
     mutationFn: async (payload: CreateProspectInteractionPayload) => {
       const res = await api.post(`${ENDPOINT}/${id}/interactions`, payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
+  });
+}
+
+/** Whether Accounting is set up to bill clients, and what the billing form offers. */
+export function useBillingOptions() {
+  return useQuery({
+    queryKey: [...CLIENTS_KEY, 'billing-options'] as const,
+    queryFn: async () => {
+      const res = await api.get<BillingOptions>(`${ENDPOINT}/billing/options`);
+      return res.data;
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useClientBillingTransactions(id: string, page: number, enabled = true) {
+  return useQuery({
+    queryKey: [...CLIENTS_KEY, 'detail', id, 'billing', 'transactions', page] as const,
+    queryFn: async () => {
+      const res = await api.get<BillingTransactionsResponse>(
+        `${ENDPOINT}/${id}/billing/transactions`,
+        { params: { page, limit: 10 } },
+      );
+      return res.data;
+    },
+    enabled: enabled && !!id,
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** Achieved revenue for the client and per product — Accounting's receipts. */
+export function useClientBillingSummary(id: string, enabled = true) {
+  return useQuery({
+    queryKey: [...CLIENTS_KEY, 'detail', id, 'billing', 'summary'] as const,
+    queryFn: async () => {
+      const res = await api.get<ClientBillingSummary>(`${ENDPOINT}/${id}/billing/summary`);
+      return res.data;
+    },
+    enabled: enabled && !!id,
+  });
+}
+
+export function useRaiseClientBilling(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: RaiseClientBillingPayload) => {
+      const res = await api.post(`${ENDPOINT}/${id}/billing`, payload);
       return res.data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),

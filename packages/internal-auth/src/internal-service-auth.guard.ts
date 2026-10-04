@@ -1,11 +1,24 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request } from 'express';
-import { DEFAULT_MAX_CLOCK_SKEW_SECONDS, INTERNAL_SERVICE_AUTH_HEADERS } from './constants';
-import { computeSignature, isUsableSecret, signaturesMatch } from './signing';
+import {
+  DEFAULT_MAX_CLOCK_SKEW_SECONDS,
+  INTERNAL_SERVICE_AUTH_HEADERS,
+  INTERNAL_SERVICE_AUTH_REQUIRE_REQUEST_SIGNATURE_ENV,
+} from './constants';
+import {
+  computeRequestSignature,
+  computeSignature,
+  isUsableSecret,
+  signaturesMatch,
+} from './signing';
 
 export interface AuthenticatedInternalRequest extends Request {
   internalServiceName: string;
+  /** The user the calling service acted for. Set only when the request signature verified. */
+  internalActingUserId?: string;
 }
+
+const INVALID = 'Invalid internal service credentials.';
 
 @Injectable()
 export class InternalServiceAuthGuard implements CanActivate {
@@ -24,23 +37,51 @@ export class InternalServiceAuthGuard implements CanActivate {
       !this.isAllowedService(serviceName) ||
       !this.isFreshTimestamp(timestamp)
     ) {
-      throw new UnauthorizedException('Invalid internal service credentials.');
+      throw new UnauthorizedException(INVALID);
     }
 
-    const path = request.originalUrl.split('?')[0];
+    const [path, queryString = ''] = request.originalUrl.split('?');
     const expected = computeSignature(secret, serviceName, timestamp, request.method, path);
 
     if (!signaturesMatch(expected, signature)) {
-      throw new UnauthorizedException('Invalid internal service credentials.');
+      throw new UnauthorizedException(INVALID);
     }
 
-    (request as AuthenticatedInternalRequest).internalServiceName = serviceName;
+    const authenticated = request as AuthenticatedInternalRequest;
+    const requestSignature = this.header(request, INTERNAL_SERVICE_AUTH_HEADERS.requestSignature);
+
+    if (requestSignature) {
+      // The legacy signature above only proves who is calling which route. This one also binds
+      // the query (e.g. tenantId), the body and the acting user to the caller.
+      const actingUserId = this.header(request, INTERNAL_SERVICE_AUTH_HEADERS.actingUser);
+      const expectedRequest = computeRequestSignature(secret, {
+        serviceName,
+        timestamp,
+        method: request.method,
+        path,
+        query: new URLSearchParams(queryString).entries(),
+        body: (request as Request & { body?: unknown }).body,
+        actingUserId: actingUserId || undefined,
+      });
+      if (!signaturesMatch(expectedRequest, requestSignature)) {
+        throw new UnauthorizedException(INVALID);
+      }
+      if (actingUserId) authenticated.internalActingUserId = actingUserId;
+    } else if (this.requiresRequestSignature()) {
+      throw new UnauthorizedException(INVALID);
+    }
+
+    authenticated.internalServiceName = serviceName;
     return true;
   }
 
   private header(request: Request, name: string): string {
     const value = request.headers[name];
     return Array.isArray(value) ? (value[0]?.trim() ?? '') : value?.trim() || '';
+  }
+
+  private requiresRequestSignature(): boolean {
+    return process.env[INTERNAL_SERVICE_AUTH_REQUIRE_REQUEST_SIGNATURE_ENV]?.trim() === 'true';
   }
 
   private isAllowedService(serviceName: string): boolean {
