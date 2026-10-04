@@ -6,8 +6,21 @@ import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
+import { BillingSection } from '@/components/organisms/marketing/BillingSection';
+import {
+  ClientBillingErrors,
+  ClientBillingValues,
+  EMPTY_BILLING,
+  resolveEntityTypeId,
+  toBillingInput,
+  validateBilling,
+} from '@/components/molecules/marketing/ClientBillingFields';
 import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
-import { useUpdateClient } from '@/hooks/marketing/useClients';
+import {
+  useBillingOptions,
+  useRaiseClientBilling,
+  useUpdateClient,
+} from '@/hooks/marketing/useClients';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 
@@ -17,6 +30,10 @@ interface Props {
   currentBusinessTypeId: string;
   currentSourceTypeId: string;
   currentBillable: boolean;
+  /** The client's entity type in Accounting, once it has an entity. */
+  currentEntityTypeId: string | null;
+  /** The client's products a billing transaction can be tagged to. */
+  productOptions: { value: string; label: string }[];
   isOpen: boolean;
   onClose: () => void;
 }
@@ -27,11 +44,17 @@ export function EditClientCompanyModal({
   currentBusinessTypeId,
   currentSourceTypeId,
   currentBillable,
+  currentEntityTypeId,
+  productOptions,
   isOpen,
   onClose,
 }: Props) {
   const toast = useToast();
   const updateClient = useUpdateClient(clientId);
+  const raiseBilling = useRaiseClientBilling(clientId);
+  const { data: billingOptions } = useBillingOptions();
+  // One id per open form, so trying Save again after a failure never sends a second transaction.
+  const [submissionId] = useState(() => crypto.randomUUID());
   const { data: businessTypes = [], isLoading: loadingBusiness } =
     useProspectingSettings('business-types');
   const { data: sourceTypes = [], isLoading: loadingSource } =
@@ -40,6 +63,8 @@ export function EditClientCompanyModal({
   const [businessTypeId, setBusinessTypeId] = useState(currentBusinessTypeId);
   const [sourceTypeId, setSourceTypeId] = useState(currentSourceTypeId);
   const [billable, setBillable] = useState(currentBillable);
+  const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
+  const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
 
   const businessOptions = useMemo(
     () => businessTypes.map((t) => ({ value: t.id, label: t.name })),
@@ -56,22 +81,62 @@ export function EditClientCompanyModal({
     sourceTypeId !== currentSourceTypeId ||
     billable !== currentBillable;
 
-  function handleSave() {
-    updateClient.mutate(
-      {
-        companyName: trimmedName,
-        businessTypeId: businessTypeId || null,
-        sourceTypeId: sourceTypeId || null,
-        isBillable: billable,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Company details updated');
-          onClose();
-        },
-        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update company details')),
-      },
+  const isPending = updateClient.isPending || raiseBilling.isPending;
+  // Billing is only ever switched ON by raising a transaction (below); a plain edit can only switch it off.
+  const switchingOn = !currentBillable && billable;
+  const switchingOff = currentBillable && !billable;
+
+  async function handleSave() {
+    if (switchingOn) {
+      if (!billingOptions) return;
+      const next = validateBilling(billing, billingOptions, currentEntityTypeId);
+      setBillingErrors(next);
+      if (Object.keys(next).length > 0) return;
+    }
+
+    try {
+      const detailsChanged =
+        trimmedName !== clientName ||
+        businessTypeId !== currentBusinessTypeId ||
+        sourceTypeId !== currentSourceTypeId ||
+        switchingOff;
+      if (detailsChanged) {
+        await updateClient.mutateAsync({
+          companyName: trimmedName,
+          businessTypeId: businessTypeId || null,
+          sourceTypeId: sourceTypeId || null,
+          ...(switchingOff ? { isBillable: false } : {}),
+        });
+      }
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Failed to update company details'));
+      return;
+    }
+
+    if (switchingOn && billingOptions) {
+      try {
+        const input = toBillingInput(billing, billingOptions, currentEntityTypeId);
+        await raiseBilling.mutateAsync({
+          submissionId,
+          ...(currentEntityTypeId
+            ? {}
+            : { entityTypeId: resolveEntityTypeId(billing, billingOptions, null) }),
+          transactionTypeId: input.transactionTypeId,
+          amount: input.amount,
+          ...(input.description ? { description: input.description } : {}),
+          ...(input.productId ? { productId: input.productId } : {}),
+        });
+      } catch (error) {
+        // The company details above are already saved; only the transaction needs another try.
+        toast.error(apiErrorMessage(error, 'Failed to send the transaction'));
+        return;
+      }
+    }
+
+    toast.success(
+      switchingOn ? 'Company details updated and transaction sent' : 'Company details updated',
     );
+    onClose();
   }
 
   return (
@@ -82,13 +147,13 @@ export function EditClientCompanyModal({
       description={clientName}
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose} disabled={updateClient.isPending}>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
           <Button
             onClick={handleSave}
             disabled={!trimmedName || !changed}
-            isLoading={updateClient.isPending}
+            isLoading={isPending}
             loadingText="Saving…"
           >
             Save
@@ -118,12 +183,24 @@ export function EditClientCompanyModal({
           onChange={setSourceTypeId}
           disabled={loadingSource}
         />
-        <ToggleRow
-          label="Billable"
-          description="Mark this client as billable."
-          enabled={billable}
-          onChange={setBillable}
-        />
+        {currentBillable ? (
+          <ToggleRow
+            label="Billable"
+            description="Turn off to stop raising new transactions. Existing ones stay in Accounting."
+            enabled={billable}
+            onChange={setBillable}
+          />
+        ) : (
+          <BillingSection
+            enabled={billable}
+            onEnabledChange={setBillable}
+            values={billing}
+            onValuesChange={setBilling}
+            errors={billingErrors}
+            productOptions={productOptions}
+            lockedEntityTypeId={currentEntityTypeId}
+          />
+        )}
       </div>
     </Modal>
   );

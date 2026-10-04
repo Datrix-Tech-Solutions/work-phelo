@@ -12,6 +12,8 @@ import { AddInteractionPanel } from '@/components/organisms/marketing/AddInterac
 import { AddClientProductModal } from '@/components/organisms/marketing/AddClientProductModal';
 import { ChangeClientDecisionMakerModal } from '@/components/organisms/marketing/ChangeClientDecisionMakerModal';
 import { ChangeClientLocationModal } from '@/components/organisms/marketing/ChangeClientLocationModal';
+import { ClientBillingModal } from '@/components/organisms/marketing/ClientBillingModal';
+import { ClientTransactionsTab } from '@/components/organisms/marketing/ClientTransactionsTab';
 import { EditClientCompanyModal } from '@/components/organisms/marketing/EditClientCompanyModal';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
@@ -19,7 +21,7 @@ import { DetailField } from '@/components/atoms/DetailField';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { TabBar } from '@/components/molecules/shared/TabBar';
-import { useClient, useDeleteClient } from '@/hooks/marketing/useClients';
+import { useClient, useClientBillingSummary, useDeleteClient } from '@/hooks/marketing/useClients';
 import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -36,7 +38,7 @@ function formatDate(value: string | null): string {
   });
 }
 
-type ClientTab = 'products' | 'interactions';
+type ClientTab = 'products' | 'interactions' | 'transactions';
 
 export default function ClientDetailPage() {
   const { tenantSlug, id } = useParams<{ tenantSlug: string; id: string }>();
@@ -45,6 +47,9 @@ export default function ClientDetailPage() {
 
   const { data: client, isLoading, isError } = useClient(id);
   const deleteClient = useDeleteClient();
+  const canViewBilling = useAnyPermissionRules(['marketing.clients.billing:VIEW']);
+  const canBill = useAnyPermissionRules(['marketing.clients.billing:CREATE']);
+  const { data: billingSummary } = useClientBillingSummary(id, canViewBilling);
   const canEdit = useAnyPermissionRules(['marketing.clients:EDIT', 'marketing.clients.all:EDIT']);
   const canAddFollowUp = useAnyPermissionRules([
     'marketing.prospects.interactions:CREATE',
@@ -58,6 +63,7 @@ export default function ClientDetailPage() {
   const [activeTab, setActiveTab] = useState<ClientTab>('products');
   const [addingProduct, setAddingProduct] = useState(false);
   const [addingFollowUp, setAddingFollowUp] = useState(false);
+  const [billingOpen, setBillingOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
   const [changingDecisionMaker, setChangingDecisionMaker] = useState(false);
@@ -90,6 +96,13 @@ export default function ClientDetailPage() {
     null,
   );
   const purchased = client.products.filter((p) => p.status === 'PURCHASED').length;
+  const achievedByProduct = new Map(
+    (billingSummary?.products ?? []).map((p) => [p.productId, p.achievedRevenue]),
+  );
+  // A transaction can be tagged to any product the client has, except one it isn't interested in.
+  const billingProductOptions = client.products
+    .filter((p) => p.status !== 'UNINTERESTED')
+    .map((p) => ({ value: p.product.id, label: p.product.name }));
 
   const menuItems = [
     ...(canEdit
@@ -148,7 +161,10 @@ export default function ClientDetailPage() {
             value={formatDate(client.convertedAt ?? client.createdAt)}
           />
           <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
-          <DetailField label="Achieved Revenue" value={formatMoney(client.achievedRevenue)} />
+          <DetailField
+            label="Achieved Revenue"
+            value={formatMoney(billingSummary?.achievedRevenue)}
+          />
           <DetailField
             label="Products"
             value={
@@ -168,6 +184,7 @@ export default function ClientDetailPage() {
         tabs={[
           { key: 'products', label: 'Products / Services' },
           { key: 'interactions', label: 'Follow-ups' },
+          ...(canViewBilling ? [{ key: 'transactions', label: 'Transaction History' }] : []),
         ]}
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as ClientTab)}
@@ -176,7 +193,12 @@ export default function ClientDetailPage() {
       {activeTab === 'products' && (
         <DataCardGrid
           data={client.products}
-          renderCard={(product) => <ClientProductCard product={product} />}
+          renderCard={(product) => (
+            <ClientProductCard
+              product={product}
+              achievedRevenue={achievedByProduct.get(product.product.id)}
+            />
+          )}
           emptyMessage="No products on record"
           currentPage={1}
           totalPages={0}
@@ -189,6 +211,24 @@ export default function ClientDetailPage() {
           interactions={client.interactions}
           addLabel="Add Follow-up"
           onAdd={canAddFollowUp ? () => setAddingFollowUp(true) : undefined}
+        />
+      )}
+
+      {activeTab === 'transactions' && canViewBilling && (
+        <ClientTransactionsTab
+          clientId={id}
+          onNew={canBill ? () => setBillingOpen(true) : undefined}
+        />
+      )}
+
+      {billingOpen && (
+        <ClientBillingModal
+          clientId={id}
+          clientName={client.companyName}
+          entityTypeId={client.accountingEntityTypeId}
+          productOptions={billingProductOptions}
+          isOpen
+          onClose={() => setBillingOpen(false)}
         />
       )}
 
@@ -212,6 +252,8 @@ export default function ClientDetailPage() {
           currentBusinessTypeId={client.businessType?.id ?? ''}
           currentSourceTypeId={client.sourceType?.id ?? ''}
           currentBillable={client.isBillable}
+          currentEntityTypeId={client.accountingEntityTypeId}
+          productOptions={billingProductOptions}
           isOpen
           onClose={() => setEditingCompany(false)}
         />

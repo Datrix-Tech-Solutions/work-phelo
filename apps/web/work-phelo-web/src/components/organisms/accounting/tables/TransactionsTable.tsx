@@ -47,17 +47,20 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  REJECTED: 'danger',
 };
 
 const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
   DRAFT: 'PENDING',
   POSTED: 'POSTED',
   REVERSED: 'REVERSED',
+  REJECTED: 'REJECTED',
 };
 
 const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
   DRAFT: 'Draft',
   REVERSED: 'Reversed',
+  REJECTED: 'Rejected',
   PAID: 'Paid',
   PARTIALLY_PAID: 'Partially Paid',
   OPEN: 'Unpaid',
@@ -68,6 +71,7 @@ const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> =
 const CREDIT_NOTE_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
   DRAFT: 'Draft',
   REVERSED: 'Reversed',
+  REJECTED: 'Rejected',
   PAID: 'Applied',
   PARTIALLY_PAID: 'Partly Applied',
   OPEN: 'Unapplied',

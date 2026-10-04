@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
@@ -34,8 +35,16 @@ import {
   CashbookEntryDto,
 } from './dto/cashbook.dto';
 import { CreateJournalDto, JournalLineDto } from './dto/accounting.dto';
+import {
+  RejectDraftDto,
+  UpdateCashbookDraftDto,
+} from './dto/draft-actions.dto';
 import { JournalsService } from './journals.service';
 import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
+import {
+  SourceEventsNotifier,
+  SourceTransactionEvent,
+} from './source-transactions/source-events.notifier';
 
 const cashAccountInclude = {
   glAccount: {
@@ -119,6 +128,7 @@ export class CashbookService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly journals: JournalsService,
+    @Optional() private readonly sourceEvents?: SourceEventsNotifier,
   ) {}
 
   async listCashAccounts(tenantId: string, query: QueryCashAccountsDto) {
@@ -440,9 +450,185 @@ export class CashbookService {
   }
 
   async postTransaction(user: RequestUser, transactionId: string) {
-    return this.prisma.$transaction((tx) =>
+    const posted = await this.prisma.$transaction((tx) =>
       this.postTransactionInTransaction(tx, user, transactionId),
     );
+    await this.notifySource(user.tenantId, transactionId, 'POSTED');
+    return posted;
+  }
+
+  /**
+   * Completes a draft direct receipt or payment - the date, cash account, settlement method, account
+   * and references. The amount, quantity and unit price stay as they were raised and cannot be edited.
+   */
+  async updateDraftTransaction(
+    user: RequestUser,
+    transactionId: string,
+    dto: UpdateCashbookDraftDto,
+  ) {
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException('At least one field is required');
+    }
+    const transaction = await this.findEditableDraft(
+      user.tenantId,
+      transactionId,
+      'edited',
+    );
+
+    const data: Prisma.CashbookTransactionUncheckedUpdateManyInput = {
+      updatedByUserId: user.id,
+    };
+    if (
+      dto.cashAccountId !== undefined &&
+      dto.cashAccountId !== transaction.cashAccountId
+    ) {
+      const cashAccount = await this.resolveActiveCashAccount(
+        user.tenantId,
+        dto.cashAccountId,
+      );
+      if (cashAccount.currency !== transaction.currency) {
+        throw new BadRequestException(
+          'Cashbook transaction currency must match the cash account currency',
+        );
+      }
+      data.cashAccountId = cashAccount.id;
+    }
+    if (dto.offsetGlAccountId !== undefined) {
+      await this.assertPostingOffsetAccount(
+        user.tenantId,
+        dto.offsetGlAccountId,
+      );
+      data.offsetGlAccountId = dto.offsetGlAccountId;
+    }
+    if (dto.transactionDate !== undefined)
+      data.transactionDate = new Date(dto.transactionDate);
+    if (dto.settlementMethod !== undefined)
+      data.settlementMethod = dto.settlementMethod;
+    if (dto.exchangeRate !== undefined) data.exchangeRate = dto.exchangeRate;
+    if (dto.reference !== undefined)
+      data.reference = this.optional(dto.reference);
+    if (dto.externalReference !== undefined) {
+      data.externalReference = this.optional(dto.externalReference);
+    }
+    if (dto.description !== undefined) data.description = dto.description;
+
+    const claimed = await this.prisma.cashbookTransaction.updateMany({
+      where: {
+        id: transaction.id,
+        tenantId: user.tenantId,
+        status: CashbookTransactionStatus.DRAFT,
+      },
+      data,
+    });
+    if (claimed.count !== 1) {
+      throw new ConflictException(
+        'Cashbook transaction was changed by another request',
+      );
+    }
+    await this.recordAudit(
+      user,
+      'CASHBOOK_TRANSACTION_DRAFT_UPDATED',
+      'CashbookTransaction',
+      transaction.id,
+      { changed: Object.keys(dto) },
+    );
+    return this.getCashbookTransaction(user, transactionId);
+  }
+
+  /** Turns a draft direct receipt or payment down. It keeps its record, never posts, and the reason is stored. */
+  async rejectTransaction(
+    user: RequestUser,
+    transactionId: string,
+    dto: RejectDraftDto,
+  ) {
+    const transaction = await this.findEditableDraft(
+      user.tenantId,
+      transactionId,
+      'rejected',
+    );
+    const claimed = await this.prisma.cashbookTransaction.updateMany({
+      where: {
+        id: transaction.id,
+        tenantId: user.tenantId,
+        status: CashbookTransactionStatus.DRAFT,
+      },
+      data: {
+        status: CashbookTransactionStatus.REJECTED,
+        rejectedAt: new Date(),
+        rejectedByUserId: user.id,
+        rejectionReason: dto.reason,
+        updatedByUserId: user.id,
+      },
+    });
+    if (claimed.count !== 1) {
+      throw new ConflictException(
+        'Cashbook transaction was changed by another request',
+      );
+    }
+    await this.recordAudit(
+      user,
+      'CASHBOOK_TRANSACTION_REJECTED',
+      'CashbookTransaction',
+      transaction.id,
+      { reason: dto.reason },
+    );
+    await this.notifySource(user.tenantId, transactionId, 'REJECTED');
+    return this.getCashbookTransaction(user, transactionId);
+  }
+
+  /** A draft direct receipt/payment. Customer receipts and vendor payments are handled through their own documents. */
+  private async findEditableDraft(
+    tenantId: string,
+    transactionId: string,
+    action: 'edited' | 'rejected',
+  ) {
+    const transaction = await this.prisma.cashbookTransaction.findFirst({
+      where: { id: transactionId, tenantId },
+      include: {
+        receivableReceipt: { select: { id: true } },
+        payablePayment: { select: { id: true } },
+      },
+    });
+    if (!transaction)
+      throw new NotFoundException('Cashbook transaction not found');
+    if (transaction.status !== CashbookTransactionStatus.DRAFT) {
+      throw new ConflictException(
+        `Only draft cashbook transactions can be ${action}`,
+      );
+    }
+    if (transaction.receivableReceipt || transaction.payablePayment) {
+      throw new ConflictException(
+        `This entry belongs to a receipt or payment document - it can't be ${action} here`,
+      );
+    }
+    if (
+      transaction.transactionType !== CashbookTransactionType.RECEIPT &&
+      transaction.transactionType !== CashbookTransactionType.PAYMENT
+    ) {
+      throw new ConflictException(
+        `Only direct receipts and payments can be ${action}`,
+      );
+    }
+    return transaction;
+  }
+
+  /** Tells the module that raised an entry what happened to it. Never fails the action itself. */
+  private async notifySource(
+    tenantId: string,
+    transactionId: string,
+    event: SourceTransactionEvent,
+  ) {
+    if (!this.sourceEvents) return;
+    const transaction = await this.prisma.cashbookTransaction.findFirst({
+      where: { id: transactionId, tenantId },
+      select: { sourceModule: true },
+    });
+    await this.sourceEvents.notify({
+      tenantId,
+      sourceModule: transaction?.sourceModule,
+      transactionId,
+      event,
+    });
   }
 
   async postTransactionInTransaction(
@@ -627,9 +813,11 @@ export class CashbookService {
     transactionId: string,
     dto: ReverseCashbookTransactionDto,
   ) {
-    return this.prisma.$transaction((tx) =>
+    const reversed = await this.prisma.$transaction((tx) =>
       this.reverseTransactionInTransaction(tx, user, transactionId, dto),
     );
+    await this.notifySource(user.tenantId, transactionId, 'REVERSED');
+    return reversed;
   }
 
   async reverseTransactionInTransaction(

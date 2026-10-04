@@ -6,6 +6,9 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { Input } from '@/components/atoms/Input';
+import { EditInvoiceDraftModal } from '@/components/organisms/accounting/panels/EditInvoiceDraftModal';
+import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
+import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import {
   AccountingTradeDocument,
   AccountingTradeDocumentPaymentState,
@@ -20,6 +23,7 @@ import {
   usePostReceivableCreditNote,
   usePostReceivableInvoice,
   useReceivableInvoiceBalance,
+  useRejectReceivableInvoice,
   useReversePayableBill,
   useReversePayableCreditNote,
   useReverseReceivableCreditNote,
@@ -47,12 +51,14 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  REJECTED: 'danger',
 };
 
 const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
   DRAFT: 'PENDING APPROVAL',
   POSTED: 'POSTED',
   REVERSED: 'REVERSED',
+  REJECTED: 'REJECTED',
 };
 
 const PAYMENT_STATE_VARIANT: Record<
@@ -61,6 +67,7 @@ const PAYMENT_STATE_VARIANT: Record<
 > = {
   DRAFT: 'neutral',
   REVERSED: 'danger',
+  REJECTED: 'danger',
   PAID: 'success',
   PARTIALLY_PAID: 'warning',
   OPEN: 'info',
@@ -69,6 +76,7 @@ const PAYMENT_STATE_VARIANT: Record<
 const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
   DRAFT: 'Draft',
   REVERSED: 'Reversed',
+  REJECTED: 'Rejected',
   PAID: 'Paid',
   PARTIALLY_PAID: 'Partially Paid',
   OPEN: 'Unpaid',
@@ -102,6 +110,8 @@ export function TradeDocumentDetailPanel({
 }: TradeDocumentDetailPanelProps) {
   const toast = useToast();
   const [reverseOpen, setReverseOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
   const [reversalDate, setReversalDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState('');
 
@@ -132,6 +142,7 @@ export function TradeDocumentDetailPanel({
   const postReceivableCreditNote = usePostReceivableCreditNote();
   const postPayableCreditNote = usePostPayableCreditNote();
   const reverseReceivableInvoice = useReverseReceivableInvoice();
+  const rejectInvoice = useRejectReceivableInvoice();
   const reversePayableBill = useReversePayableBill();
   const reverseReceivableCreditNote = useReverseReceivableCreditNote();
   const reversePayableCreditNote = useReversePayableCreditNote();
@@ -143,6 +154,14 @@ export function TradeDocumentDetailPanel({
 
   const isPosting = isReceivable ? postReceivable.isPending : postPayable.isPending;
   const isReversing = isReceivable ? reverseReceivable.isPending : reversePayable.isPending;
+
+  // A draft customer invoice can be completed or turned down, whoever raised it. Its amount, quantity
+  // and unit price are fixed when it is raised.
+  const canReviewDraft = isReceivable && !isCreditNote && document?.status === 'DRAFT';
+  const sourceLabel = document?.sourceModule
+    ? (SOURCE_MODULE_LABELS[document.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
+      document.sourceModule)
+    : null;
 
   const { data: glAccounts = [] } = useGLAccounts();
   const { data: taxTypes = [] } = useTaxTypes();
@@ -209,6 +228,18 @@ export function TradeDocumentDetailPanel({
     }
   };
 
+  const handleReject = async (rejectReason: string) => {
+    if (!document) return;
+    try {
+      await rejectInvoice.mutateAsync({ id: document.id, reason: rejectReason });
+      toast.success('Draft rejected.');
+      setRejectOpen(false);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to reject the draft'));
+    }
+  };
+
   const handleReverse = async () => {
     if (!document) return;
     if (!reason.trim()) {
@@ -251,6 +282,16 @@ export function TradeDocumentDetailPanel({
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {canReviewDraft && (
+                <>
+                  <Button variant="danger" onClick={() => setRejectOpen(true)}>
+                    Reject
+                  </Button>
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    Edit
+                  </Button>
+                </>
+              )}
               {onPostedForPayment && (
                 <Button
                   variant="outline"
@@ -298,6 +339,22 @@ export function TradeDocumentDetailPanel({
               )}
               {balance && creditStatus && <Badge label={creditStatus} variant="info" />}
             </div>
+
+            {sourceLabel && document.status === 'DRAFT' && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+                Raised from {sourceLabel}. Complete the remaining details, then post it — or reject
+                it with a reason.
+              </div>
+            )}
+
+            {document.status === 'REJECTED' && (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-900">
+                <p className="font-semibold">
+                  Rejected{document.rejectedAt ? ` on ${fmtDate(document.rejectedAt)}` : ''}
+                </p>
+                {document.rejectionReason && <p className="mt-1">{document.rejectionReason}</p>}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <Field label={partyLabel} value={`${document.party.name} (${document.party.code})`} />
@@ -398,6 +455,26 @@ export function TradeDocumentDetailPanel({
           </div>
         )}
       </SidePanel>
+
+      {editOpen && document && (
+        <EditInvoiceDraftModal
+          document={document}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            setEditOpen(false);
+            // The panel shows a snapshot of the row; reopening it shows the saved values.
+            handleClose();
+          }}
+        />
+      )}
+
+      <RejectDraftModal
+        isOpen={rejectOpen}
+        subject={`Invoice ${document?.documentNumber ?? ''}`}
+        isRejecting={rejectInvoice.isPending}
+        onConfirm={handleReject}
+        onClose={() => setRejectOpen(false)}
+      />
 
       <Modal
         isOpen={reverseOpen}

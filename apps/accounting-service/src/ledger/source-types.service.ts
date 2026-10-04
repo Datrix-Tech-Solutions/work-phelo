@@ -3,15 +3,19 @@ import { RequestUser } from '@work-phelo/types';
 import { SourceModule } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourceLedgerService } from './source-ledger.service';
+import { SourceProvisioningService } from './source-transactions/source-provisioning.service';
 
 @Injectable()
 export class SourceTypesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sourceLedger: SourceLedgerService,
+    private readonly provisioning: SourceProvisioningService,
   ) {}
 
   async list(user: RequestUser) {
+    // A module the tenant has is already here to link - it doesn't have to link itself first.
+    await this.provisioning.ensureForUser(user);
     const [items, summaries] = await Promise.all([
       this.prisma.sourceType.findMany({
         where: { tenantId: user.tenantId },

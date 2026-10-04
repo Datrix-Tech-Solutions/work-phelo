@@ -55,9 +55,9 @@ function assertAllowedInternalServices(): void {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  if (!allowedServices.includes('reinsurance-service')) {
+  if (allowedServices.length === 0) {
     throw new Error(
-      'Accounting service INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES must include reinsurance-service when internal source integrations are enabled',
+      'Accounting service INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES must name at least one calling service when internal source integrations are enabled',
     );
   }
 }

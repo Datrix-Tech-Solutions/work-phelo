@@ -9,7 +9,9 @@ import type {
   CreateCashbookTransferPayload,
   PaginatedResult,
   QueryCashbookParams,
+  RejectDraftPayload,
   ReverseCashbookTransactionPayload,
+  UpdateCashbookDraftPayload,
 } from '@/types/accounting';
 
 const BASE = '/accounting/cashbook';
@@ -223,6 +225,36 @@ export function usePostCashbookTransaction() {
   return useMutation({
     mutationFn: async (transactionId: string) => {
       const res = await api.post<CashbookTransaction>(`${BASE}/${transactionId}/post`);
+      return res.data;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Completes a draft direct receipt or payment. Its amount stays as raised. */
+export function useUpdateCashbookDraft() {
+  const invalidate = useInvalidateCashbook();
+  return useMutation({
+    mutationFn: async ({
+      transactionId,
+      ...payload
+    }: UpdateCashbookDraftPayload & { transactionId: string }) => {
+      const res = await api.patch<CashbookTransaction>(`${BASE}/${transactionId}`, payload);
+      return res.data;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Turns a draft direct receipt or payment down. It keeps its record, never posts. */
+export function useRejectCashbookTransaction() {
+  const invalidate = useInvalidateCashbook();
+  return useMutation({
+    mutationFn: async ({
+      transactionId,
+      ...payload
+    }: RejectDraftPayload & { transactionId: string }) => {
+      const res = await api.post<CashbookTransaction>(`${BASE}/${transactionId}/reject`, payload);
       return res.data;
     },
     onSuccess: invalidate,

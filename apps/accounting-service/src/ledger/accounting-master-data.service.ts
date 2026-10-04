@@ -2390,6 +2390,58 @@ export class AccountingMasterDataService {
     }
   }
 
+  /**
+   * The entity another module's record is represented by in Accounting, created the first time it
+   * is needed and found again after that. Matched by the record's reference alone, so a later
+   * change of entity type never produces a second entity. Once created it belongs to Accounting:
+   * its name is not kept in step with the module's record.
+   */
+  async ensureSourceEntity(
+    actorUserId: string,
+    input: {
+      tenantId: string;
+      type: string;
+      externalRef: string;
+      name: string;
+    },
+  ) {
+    const externalRef = this.requiredExternalRef(input.externalRef);
+    const name = this.requiredName(input.name);
+    const entityType = await this.assertEntityType(input.tenantId, input.type);
+
+    const existing = await this.prisma.subledgerAccount.findFirst({
+      where: { tenantId: input.tenantId, externalRef },
+    });
+    if (existing) {
+      if (existing.status !== RecordStatus.ACTIVE) {
+        throw new ConflictException(
+          "This record's entity is inactive and must be reactivated in Accounting first",
+        );
+      }
+      return existing;
+    }
+
+    try {
+      return await this.prisma.subledgerAccount.create({
+        data: {
+          tenantId: input.tenantId,
+          code: this.integrationSubledgerCode(entityType.name, externalRef),
+          name,
+          type: entityType.name,
+          externalRef,
+          createdByUserId: actorUserId,
+          updatedByUserId: actorUserId,
+        },
+      });
+    } catch (error) {
+      const raced = await this.prisma.subledgerAccount.findFirst({
+        where: { tenantId: input.tenantId, externalRef },
+      });
+      if (raced) return raced;
+      this.rethrowUnique(error, 'Subledger account already exists');
+    }
+  }
+
   async findFiscalPeriod(tenantId: string, id: string) {
     const period = await this.prisma.fiscalPeriod.findFirst({
       where: { id, tenantId },

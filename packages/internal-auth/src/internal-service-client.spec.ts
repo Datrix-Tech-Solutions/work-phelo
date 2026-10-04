@@ -105,4 +105,31 @@ describe('InternalServiceClient', () => {
     expect(client('').isConfigured()).toBe(false);
     expect(client().isConfigured()).toBe(true);
   });
+
+  it('signs the body, the query and the acting user, and the guard accepts it', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { id: 'a1' }));
+
+    await client().post('/internal/source-transactions', {
+      query: { tenantId: 't1' },
+      body: { amount: 20000, note: undefined },
+      actingUserId: 'user-1',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(init.headers[INTERNAL_SERVICE_AUTH_HEADERS.actingUser]).toBe('user-1');
+
+    const request = {
+      headers: init.headers,
+      method: 'POST',
+      originalUrl: url.replace('http://hr.local:4002', ''),
+      // What a body parser would hand the guard after the JSON round trip.
+      body: JSON.parse(init.body),
+    } as unknown as Request & { internalActingUserId?: string };
+    const context = {
+      switchToHttp: () => ({ getRequest: () => request }),
+    } as unknown as ExecutionContext;
+
+    expect(new InternalServiceAuthGuard().canActivate(context)).toBe(true);
+    expect(request.internalActingUserId).toBe('user-1');
+  });
 });

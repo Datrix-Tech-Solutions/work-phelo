@@ -22,6 +22,22 @@ describe('Accounting global prefix configuration', () => {
           method: RequestMethod.POST,
         },
         {
+          path: 'internal/source-transactions/options',
+          method: RequestMethod.GET,
+        },
+        {
+          path: 'internal/source-transactions',
+          method: RequestMethod.POST,
+        },
+        {
+          path: 'internal/source-transactions',
+          method: RequestMethod.GET,
+        },
+        {
+          path: 'internal/source-transactions/receipts-summary',
+          method: RequestMethod.POST,
+        },
+        {
           path: 'internal/payroll-integration/post-accrual',
           method: RequestMethod.POST,
         },

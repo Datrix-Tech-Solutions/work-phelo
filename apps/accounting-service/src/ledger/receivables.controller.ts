@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -35,6 +36,10 @@ import {
   ReverseAllocationDto,
   ReverseReceivableDto,
 } from './dto/receivables.dto';
+import {
+  RejectDraftDto,
+  UpdateReceivableInvoiceDraftDto,
+} from './dto/draft-actions.dto';
 import { ReceivablesService } from './receivables.service';
 
 @Controller('receivables')
@@ -112,6 +117,36 @@ export class ReceivablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.getInvoice(request.user, invoiceId);
+  }
+
+  @Patch('invoices/:invoiceId')
+  @ApiOperation({
+    summary: 'Complete a draft customer invoice',
+    description:
+      'Changes the dates, currency, tax lines, cost centre and references of a draft. The amount, quantity, unit price, customer and transaction type are fixed when it is raised and cannot be changed.',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_CREATE)
+  updateInvoiceDraft(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Body() dto: UpdateReceivableInvoiceDraftDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.updateInvoiceDraft(request.user, invoiceId, dto);
+  }
+
+  @Post('invoices/:invoiceId/reject')
+  @ApiOperation({
+    summary: 'Reject a draft customer invoice',
+    description:
+      'Marks the draft REJECTED with a reason. It never posts, keeps its record, and the module that raised it is told.',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  rejectInvoice(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Body() dto: RejectDraftDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.rejectInvoice(request.user, invoiceId, dto);
   }
 
   @Post('invoices/:invoiceId/post')

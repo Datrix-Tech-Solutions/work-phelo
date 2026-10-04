@@ -27,6 +27,10 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
 import { CashbookService } from './cashbook.service';
 import {
+  RejectDraftDto,
+  UpdateCashbookDraftDto,
+} from './dto/draft-actions.dto';
+import {
   CreateCashAccountDto,
   CreateCashbookAdjustmentDto,
   CreateCashbookChargeDto,
@@ -206,6 +210,42 @@ export class CashbookController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.createAdjustment(request.user, dto);
+  }
+
+  @Patch('cashbook/:transactionId')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Complete a draft direct receipt or payment',
+    description:
+      'Changes the date, cash account, settlement method, account and references of a draft. The amount, quantity and unit price are fixed when it is raised and cannot be changed.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  updateDraftTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: UpdateCashbookDraftDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.updateDraftTransaction(
+      request.user,
+      transactionId,
+      dto,
+    );
+  }
+
+  @Post('cashbook/:transactionId/reject')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Reject a draft direct receipt or payment',
+    description:
+      'Marks the draft REJECTED with a reason. It never posts, keeps its record, and the module that raised it is told.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  rejectTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: RejectDraftDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.rejectTransaction(request.user, transactionId, dto);
   }
 
   @Post('cashbook/:transactionId/post')
