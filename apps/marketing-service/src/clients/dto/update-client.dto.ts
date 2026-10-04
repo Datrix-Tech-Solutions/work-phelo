@@ -15,6 +15,14 @@ import {
 } from '../../prospects/dto/update-prospect.dto';
 
 export class UpdateClientDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'User to assign it to. Choosing someone else needs the assign permission.',
+  })
+  @IsOptional()
+  @IsUUID()
+  assignedUserId?: string;
   @ApiPropertyOptional({ example: 'Acme Manufacturing Ltd', maxLength: 200 })
   @CollapseWhitespaceString()
   @IsOptional()

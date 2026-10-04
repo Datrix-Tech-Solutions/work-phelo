@@ -249,6 +249,7 @@ export default function ClientDetailPage() {
 
       {editingCompany && (
         <EditClientCompanyModal
+          currentAssignedUserId={client.assignedUserId}
           clientId={id}
           clientName={client.companyName}
           currentBusinessTypeId={client.businessType?.id ?? ''}

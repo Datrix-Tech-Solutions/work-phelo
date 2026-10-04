@@ -133,6 +133,14 @@ export class UpdateProspectLocationDto {
 }
 
 export class UpdateProspectDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'User to assign it to. Choosing someone else needs the assign permission.',
+  })
+  @IsOptional()
+  @IsUUID()
+  assignedUserId?: string;
   @ApiPropertyOptional({ example: 'Acme Manufacturing Ltd', maxLength: 200 })
   @CollapseWhitespaceString()
   @IsOptional()

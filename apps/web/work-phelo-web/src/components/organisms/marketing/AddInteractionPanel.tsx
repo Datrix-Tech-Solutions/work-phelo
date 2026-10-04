@@ -10,7 +10,12 @@ import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { Toggle } from '@/components/atoms/Toggle';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
-import { useAddProspectInteraction } from '@/hooks/marketing/useProspects';
+import {
+  useAddProspectInteraction,
+  useProspect,
+  useUpdateProspect,
+} from '@/hooks/marketing/useProspects';
+import { usePipelineStages } from '@/hooks/marketing/usePipelineStages';
 import { useAddClientInteraction } from '@/hooks/marketing/useClients';
 import { useCompleteFollowUp } from '@/hooks/marketing/useFollowUps';
 import {
@@ -64,6 +69,16 @@ export function AddInteractionPanel({
   const createMedium = useCreateProspectingSetting('interaction-media');
   const mediumOptions = useMemo(() => media.map((m) => ({ value: m.id, label: m.name })), [media]);
 
+  // A prospect's sales stage can be moved as part of logging the interaction. Clients have no stage.
+  const { data: prospect } = useProspect(prospectId ?? '');
+  const { data: stages = [], isLoading: stagesLoading } = usePipelineStages();
+  const updateProspect = useUpdateProspect(prospectId ?? '');
+  const stageOptions = useMemo(() => stages.map((s) => ({ value: s.id, label: s.name })), [stages]);
+  const currentStageId = prospect?.salesStage.id ?? '';
+  // Follows the prospect's current stage until the user picks another.
+  const [pickedStageId, setPickedStageId] = useState<string | null>(null);
+  const stageId = pickedStageId ?? currentStageId;
+
   const [mediumId, setMediumId] = useState('');
   const [decisionMakerMet, setDecisionMakerMet] = useState(false);
   const [contactPhone, setContactPhone] = useState('');
@@ -107,6 +122,7 @@ export function AddInteractionPanel({
     setDecisionMakerMet(false);
     setContactPhone('');
     setPickedDate(null);
+    setPickedStageId(null);
     setDateError(undefined);
     setMediumError(undefined);
     setParticipantErrors({});
@@ -143,6 +159,17 @@ export function AddInteractionPanel({
     const callbacks = {
       onSuccess: () => {
         toast.success(`${noun} added`);
+        if (!clientId && stageId && currentStageId && stageId !== currentStageId) {
+          updateProspect.mutate(
+            { pipelineStageId: stageId },
+            {
+              onError: (error) =>
+                toast.error(
+                  apiErrorMessage(error, `${noun} saved, but the sales stage could not be updated`),
+                ),
+            },
+          );
+        }
         handleClose();
       },
       onError: (error: unknown) =>
@@ -226,6 +253,16 @@ export function AddInteractionPanel({
           error={dateError}
           disableFuture
         />
+        {!clientId && (
+          <SearchSelect
+            label="Sales Stage"
+            placeholder={stagesLoading || !prospect ? 'Loading stages...' : 'Select stage'}
+            options={stageOptions}
+            value={stageId}
+            onChange={setPickedStageId}
+            disabled={stagesLoading || !prospect}
+          />
+        )}
         <FormField
           label="Notes"
           type="textarea"

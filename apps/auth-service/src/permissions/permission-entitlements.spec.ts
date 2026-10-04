@@ -67,6 +67,7 @@ describe('permission entitlements', () => {
     'marketing.fleet',
     'marketing.requests',
     'marketing.requests.all',
+    'marketing.appointments.all',
     'marketing.transport-officers',
     'marketing.campaigns',
   ])('scopes %s to the Marketing module only', (name) => {

@@ -281,6 +281,7 @@ export default function ProspectDetailPage() {
 
       {editingCompany && (
         <EditProspectCompanyModal
+          currentAssignedUserId={prospect.assignedUserId}
           prospectId={id}
           prospectName={prospect.companyName}
           currentBusinessTypeId={prospect.businessType?.id ?? ''}

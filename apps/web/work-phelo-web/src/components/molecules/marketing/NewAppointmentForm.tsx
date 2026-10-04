@@ -10,7 +10,6 @@ export interface NewAppointmentFields {
   startTime: string;
   endTime: string;
   marketerId: string;
-  manager: string;
   comment: string;
 }
 
@@ -23,7 +22,8 @@ interface Props {
   prospectOptions?: SearchSelectOption[];
   onProspectSearch?: (query: string) => void;
   marketerOptions?: SearchSelectOption[];
-  managerOptions?: SearchSelectOption[];
+  /** False when the user can only book for themselves: the marketer is shown but locked. */
+  canChooseMarketer?: boolean;
 }
 
 export function NewAppointmentForm({
@@ -33,7 +33,7 @@ export function NewAppointmentForm({
   prospectOptions = [],
   onProspectSearch,
   marketerOptions = [],
-  managerOptions = [],
+  canChooseMarketer = false,
 }: Props) {
   function set<K extends keyof NewAppointmentFields>(key: K, val: string) {
     onChange({ ...values, [key]: val });
@@ -46,13 +46,16 @@ export function NewAppointmentForm({
         placeholder="Select a marketer"
         options={marketerOptions}
         value={values.marketerId}
-        onChange={(v) => set('marketerId', v)}
+        // Prospects belong to a marketer, so a different marketer means a different list.
+        onChange={(v) => onChange({ ...values, marketerId: v, prospectId: '' })}
         error={errors?.marketerId}
+        disabled={!canChooseMarketer}
+        clearable={false}
       />
 
       <SearchSelect
         label="Prospect Name"
-        placeholder="Select a prospect"
+        placeholder={values.marketerId ? 'Select a prospect' : 'Select a marketer first'}
         options={prospectOptions}
         value={values.prospectId}
         onChange={(v) => set('prospectId', v)}
@@ -89,15 +92,6 @@ export function NewAppointmentForm({
           {errors?.endTime && <p className="text-xs text-red-500">{errors.endTime}</p>}
         </div>
       </div>
-
-      <SearchSelect
-        label="Manager (optional)"
-        placeholder="Assign a manager"
-        options={managerOptions}
-        value={values.manager}
-        onChange={(v) => set('manager', v)}
-        error={errors?.manager}
-      />
 
       <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
         <label className="text-sm font-bold text-gray-900">Comment</label>

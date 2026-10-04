@@ -272,6 +272,12 @@ export const RESOURCES = [
       'Tenant-wide Marketing transport request visibility and approval',
   },
   {
+    name: 'marketing.appointments.all',
+    module: 'MARKETING',
+    description:
+      'Tenant-wide Marketing appointment visibility, booking on behalf of other marketers, and approval',
+  },
+  {
     name: 'marketing.transport-officers',
     module: 'MARKETING',
     description:

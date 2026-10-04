@@ -168,6 +168,7 @@ write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.dev" \
   "JWT_SECRET=${JWT_SECRET}" \
   "HR_SERVICE_URL=http://hr-service:4002" \
   "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "AUTH_SERVICE_URL=http://auth-service:4001" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 

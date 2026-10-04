@@ -6,6 +6,7 @@ const ACTIVE_STATUSES = [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION];
 
 const SELECT = {
   id: true,
+  userId: true,
   firstName: true,
   lastName: true,
   email: true,
@@ -15,6 +16,7 @@ const SELECT = {
 
 type EmployeeRow = {
   id: string;
+  userId: string | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -24,6 +26,8 @@ type EmployeeRow = {
 
 const toPerson = (employee: EmployeeRow) => ({
   employeeId: employee.id,
+  /** The login account linked to the employee, when there is one. */
+  userId: employee.userId,
   name: `${employee.firstName} ${employee.lastName}`,
   department: employee.department?.name ?? null,
   jobTitle: employee.jobTitle ?? null,
@@ -55,7 +59,7 @@ export class DirectoryService {
    */
   async resolve(
     tenantId: string,
-    input: { userId?: string; employeeIds?: string[] },
+    input: { userId?: string; employeeIds?: string[]; userIds?: string[] },
   ) {
     const person = input.userId
       ? await this.prisma.employee.findFirst({
@@ -80,9 +84,25 @@ export class DirectoryService {
       throw new NotFoundException('One or more employees were not found');
     }
 
+    // Users asked for by account: each must be an active employee of the tenant.
+    const userIds = [...new Set(input.userIds ?? [])];
+    const byUser = userIds.length
+      ? await this.prisma.employee.findMany({
+          where: {
+            tenantId,
+            userId: { in: userIds },
+            employmentStatus: { in: ACTIVE_STATUSES },
+          },
+          select: SELECT,
+        })
+      : [];
+    if (byUser.length !== userIds.length) {
+      throw new NotFoundException('One or more users were not found');
+    }
+
     return {
       person: person ? toPerson(person) : null,
-      people: employees.map(toPerson),
+      people: [...employees, ...byUser].map(toPerson),
     };
   }
 }

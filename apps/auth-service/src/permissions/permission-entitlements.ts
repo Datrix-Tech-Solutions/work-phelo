@@ -95,6 +95,9 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
   'marketing.requests.all': {
     moduleKey: 'marketing',
   },
+  'marketing.appointments.all': {
+    moduleKey: 'marketing',
+  },
   'marketing.transport-officers': {
     moduleKey: 'marketing',
   },

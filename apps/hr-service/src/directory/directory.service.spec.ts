@@ -5,6 +5,7 @@ const TENANT = '11111111-1111-4111-8111-111111111111';
 
 const ama = {
   id: 'e1',
+  userId: 'user-1',
   firstName: 'Ama',
   lastName: 'Mensah',
   email: 'ama@example.com',
@@ -13,6 +14,7 @@ const ama = {
 };
 const kofiRow = {
   id: 'e2',
+  userId: null,
   firstName: 'Kofi',
   lastName: 'Boateng',
   email: 'kofi@example.com',
@@ -37,6 +39,7 @@ describe('DirectoryService', () => {
       'employeeId',
       'jobTitle',
       'name',
+      'userId',
     ]);
   });
 
@@ -48,6 +51,7 @@ describe('DirectoryService', () => {
     expect(result).toEqual([
       {
         employeeId: 'e1',
+        userId: 'user-1',
         name: 'Ama Mensah',
         department: 'Operations',
         jobTitle: 'Driver',
@@ -55,6 +59,7 @@ describe('DirectoryService', () => {
       },
       {
         employeeId: 'e2',
+        userId: null,
         name: 'Kofi Boateng',
         department: null,
         jobTitle: null,
@@ -107,6 +112,35 @@ describe('DirectoryService', () => {
 
     await expect(
       service.resolve(TENANT, { employeeIds: ['e1', 'missing'] }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('validates users by account and returns their employees', async () => {
+    prisma.employee.findMany.mockResolvedValue([ama]);
+
+    const result = await service.resolve(TENANT, {
+      userIds: ['user-1', 'user-1'],
+    });
+
+    expect(result.people).toEqual([
+      expect.objectContaining({ employeeId: 'e1', userId: 'user-1' }),
+    ]);
+    expect(prisma.employee.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: TENANT,
+          userId: { in: ['user-1'] },
+          employmentStatus: { in: ['ACTIVE', 'PROBATION'] },
+        },
+      }),
+    );
+  });
+
+  it('fails when a user has no active employee record', async () => {
+    prisma.employee.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.resolve(TENANT, { userIds: ['ghost'] }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

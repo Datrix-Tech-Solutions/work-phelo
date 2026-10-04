@@ -25,4 +25,15 @@ export class InternalResolveDirectoryDto extends InternalDirectoryQueryDto {
   @ArrayMaxSize(50)
   @IsUUID('all', { each: true })
   employeeIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Auth user IDs that must all belong to active employees of the tenant.',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID('all', { each: true })
+  userIds?: string[];
 }

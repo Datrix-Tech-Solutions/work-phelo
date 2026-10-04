@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { AssignedToSelect } from '@/components/molecules/marketing/AssignedToSelect';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -15,6 +16,8 @@ interface Props {
   prospectName: string;
   currentBusinessTypeId: string;
   currentSourceTypeId: string;
+  /** The user it is assigned to now. */
+  currentAssignedUserId: string;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -24,6 +27,7 @@ export function EditProspectCompanyModal({
   prospectName,
   currentBusinessTypeId,
   currentSourceTypeId,
+  currentAssignedUserId,
   isOpen,
   onClose,
 }: Props) {
@@ -36,6 +40,7 @@ export function EditProspectCompanyModal({
   const [companyName, setCompanyName] = useState(prospectName);
   const [businessTypeId, setBusinessTypeId] = useState(currentBusinessTypeId);
   const [sourceTypeId, setSourceTypeId] = useState(currentSourceTypeId);
+  const [assignedUserId, setAssignedUserId] = useState(currentAssignedUserId);
 
   const businessOptions = useMemo(
     () => businessTypes.map((t) => ({ value: t.id, label: t.name })),
@@ -49,7 +54,8 @@ export function EditProspectCompanyModal({
   const changed =
     trimmedName !== prospectName ||
     businessTypeId !== currentBusinessTypeId ||
-    sourceTypeId !== currentSourceTypeId;
+    sourceTypeId !== currentSourceTypeId ||
+    assignedUserId !== currentAssignedUserId;
 
   function handleSave() {
     updateProspect.mutate(
@@ -57,6 +63,7 @@ export function EditProspectCompanyModal({
         companyName: trimmedName,
         businessTypeId: businessTypeId || null,
         sourceTypeId: sourceTypeId || null,
+        ...(assignedUserId !== currentAssignedUserId ? { assignedUserId } : {}),
       },
       {
         onSuccess: () => {
@@ -111,6 +118,11 @@ export function EditProspectCompanyModal({
           value={sourceTypeId}
           onChange={setSourceTypeId}
           disabled={loadingSource}
+        />
+        <AssignedToSelect
+          record="prospect"
+          value={assignedUserId}
+          onChange={(id) => setAssignedUserId(id || currentAssignedUserId)}
         />
       </div>
     </Modal>

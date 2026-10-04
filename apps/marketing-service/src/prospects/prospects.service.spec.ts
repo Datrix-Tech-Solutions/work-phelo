@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import {
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import {
   MarketingProspectFollowUpStatus,
   Prisma,
 } from '../../prisma/generated/client';
+import { AssigneesService } from '../assignees/assignees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { CreateProspectDto } from './dto/create-prospect.dto';
@@ -200,6 +202,7 @@ describe('ProspectsService', () => {
 
   let prisma: ReturnType<typeof makePrisma>;
   let service: ProspectsService;
+  let assignees: { forCreate: jest.Mock; forUpdate: jest.Mock };
 
   beforeEach(() => {
     prisma = makePrisma();
@@ -239,11 +242,48 @@ describe('ProspectsService', () => {
     prisma.marketingProspectFollowUp.updateMany.mockResolvedValue({ count: 1 });
     prisma.marketingPipelineStage.findMany.mockResolvedValue([]);
     prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
-    service = new ProspectsService(prisma as unknown as PrismaService);
+    assignees = {
+      forCreate: jest
+        .fn()
+        .mockImplementation((u: RequestUser, _r: string, requested?: string) =>
+          Promise.resolve(requested ?? u.id),
+        ),
+      forUpdate: jest.fn().mockResolvedValue(null),
+    };
+    service = new ProspectsService(
+      prisma as unknown as PrismaService,
+      assignees as unknown as AssigneesService,
+    );
   });
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('assigns the prospect to whoever the assignment rules choose', async () => {
+    assignees.forCreate.mockResolvedValue('user-9');
+
+    await service.create(user, { ...makeDto(), assignedUserId: 'user-9' });
+
+    expect(assignees.forCreate).toHaveBeenCalledWith(
+      user,
+      'prospect',
+      'user-9',
+    );
+    expect(prisma.marketingProspect.create.mock.calls[0][0].data).toMatchObject(
+      {
+        assignedUserId: 'user-9',
+      },
+    );
+  });
+
+  it('creates nothing when the assignment is refused', async () => {
+    assignees.forCreate.mockRejectedValue(new ForbiddenException());
+
+    await expect(
+      service.create(user, { ...makeDto(), assignedUserId: 'user-9' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.marketingProspect.create).not.toHaveBeenCalled();
   });
 
   it('creates a tenant-scoped prospect aggregate in one transaction', async () => {
@@ -1039,6 +1079,50 @@ describe('ProspectsService', () => {
       expect(
         prisma.marketingProspectInteraction.findMany,
       ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update assignment', () => {
+    it('moves the prospect to the new assignee and still shows the result to the editor', async () => {
+      const existing = makeExistingProspect();
+      prisma.marketingProspect.findFirst.mockResolvedValue(existing);
+      assignees.forUpdate.mockResolvedValue('user-9');
+
+      await service.update(user, 'prospect-a', { assignedUserId: 'user-9' });
+
+      expect(assignees.forUpdate).toHaveBeenCalledWith(
+        user,
+        'prospect',
+        existing.assignedUserId,
+        'user-9',
+      );
+      expect(prisma.marketingProspect.update).toHaveBeenCalledWith({
+        where: { id: 'prospect-a' },
+        data: expect.objectContaining({ assignedUserId: 'user-9' }),
+      });
+    });
+
+    it('changes nothing when the assignee is not changing', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue(
+        makeExistingProspect(),
+      );
+
+      await service.update(user, 'prospect-a', { assignedUserId: 'user-1' });
+
+      const data = prisma.marketingProspect.update.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('assignedUserId');
+    });
+
+    it('does not update anything when the assignment is refused', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue(
+        makeExistingProspect(),
+      );
+      assignees.forUpdate.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.update(user, 'prospect-a', { assignedUserId: 'user-9' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.marketingProspect.update).not.toHaveBeenCalled();
     });
   });
 

@@ -18,6 +18,7 @@ function buildPayload({
 }: ProspectWizardValues): CreateProspectPayload {
   return {
     companyName: company.companyName.trim(),
+    ...(company.assignedUserId ? { assignedUserId: company.assignedUserId } : {}),
     ...(company.businessType ? { businessTypeId: company.businessType } : {}),
     ...(company.sourceType ? { sourceTypeId: company.sourceType } : {}),
     pipelineStageId: saleStage.pipelineStageId,
