@@ -34,6 +34,9 @@ import { SourceLedgerController } from './source-ledger.controller';
 import { SourceLedgerService } from './source-ledger.service';
 import { SourceTypesController } from './source-types.controller';
 import { SourceTypesService } from './source-types.service';
+import { InternalPaymentRequestsController } from './payment-requests/internal-payment-requests.controller';
+import { PaymentRequestsController } from './payment-requests/payment-requests.controller';
+import { PaymentRequestsService } from './payment-requests/payment-requests.service';
 import { InternalSourceTransactionsController } from './source-transactions/internal-source-transactions.controller';
 import { SourceEventsNotifier } from './source-transactions/source-events.notifier';
 import { SourceProvisioningService } from './source-transactions/source-provisioning.service';
@@ -51,10 +54,12 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     BudgetsController,
     EntityTypesController,
     InternalPayrollIntegrationController,
+    InternalPaymentRequestsController,
     InternalSourceTransactionsController,
     InternalSubledgersController,
     JournalsController,
     PayablesController,
+    PaymentRequestsController,
     PayrollIntegrationController,
     RecurringJournalsController,
     ReceivablesController,
@@ -73,6 +78,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     JournalPolicy,
     JournalsService,
     PayablesService,
+    PaymentRequestsService,
     PayrollIntegrationService,
     RecurringJournalsCron,
     RecurringJournalsService,

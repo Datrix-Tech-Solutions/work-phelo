@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  AccountingPaymentRequestStatus,
   AccountingReceivableAllocationSource,
   AccountingReceivableDocumentType,
   AccountingReceivableStatus,
@@ -1802,6 +1803,24 @@ export class ReceivablesService {
         }
       }
     }
+    // Invoices with a payment request waiting for the accountant carry a count for the list tag.
+    const invoiceIds = documents
+      .filter((document) => !isCreditNote(document))
+      .map((document) => document.id);
+    const waiting = invoiceIds.length
+      ? await this.prisma.accountingPaymentRequest.groupBy({
+          by: ['invoiceId'],
+          where: {
+            tenantId,
+            invoiceId: { in: invoiceIds },
+            status: AccountingPaymentRequestStatus.PENDING,
+          },
+          _count: { _all: true },
+        })
+      : [];
+    const waitingByInvoiceId = new Map(
+      waiting.map((row) => [row.invoiceId, row._count._all]),
+    );
     return documents.map((document) => {
       const applied =
         (isCreditNote(document)
@@ -1821,6 +1840,7 @@ export class ReceivablesService {
             : (receiptsByInvoiceId.get(document.id) ?? zero),
         ),
         outstandingAmount: this.money(outstanding),
+        pendingPaymentRequestCount: waitingByInvoiceId.get(document.id) ?? 0,
       };
     });
   }

@@ -24,6 +24,7 @@ import {
   AccountingEventDto,
   QueryClientBillingDto,
   RaiseClientBillingDto,
+  RequestClientPaymentDto,
 } from './dto/billing.dto';
 
 const SOURCE_MODULE = 'MARKETING';
@@ -32,6 +33,10 @@ const ENTITY_TYPE_REQUIRED_MESSAGE =
   'An entity type is required for the first transaction of a client.';
 const INVALID_PRODUCT_MESSAGE =
   'The product must be one of this client’s products, and not an uninterested one.';
+const NOT_BILLED_MESSAGE =
+  'This client has not been billed yet, so there is no invoice to pay.';
+const SEND_PAYMENT_FAILED_MESSAGE =
+  'Accounting could not be reached, so the payment request was not sent. Please try again.';
 const SEND_FAILED_MESSAGE =
   'Accounting could not be reached, so nothing was created. Please try again.';
 
@@ -266,6 +271,56 @@ export class ClientBillingService {
     });
 
     return this.toRaiseResponse(row);
+  }
+
+  /**
+   * The client has paid (part of) a posted invoice: asks Accounting to record it. Accounting
+   * confirms through its own Receive Payment, choosing the bank, or rejects it. Nothing is
+   * stored here - the request and its outcome are read back from Accounting.
+   */
+  async requestPayment(
+    user: RequestUser,
+    clientId: string,
+    dto: RequestClientPaymentDto,
+  ) {
+    this.assertCanBill(user);
+    const client = await this.findVisibleClient(user, clientId);
+    if (!client.accountingEntityId) {
+      throw new BadRequestException(NOT_BILLED_MESSAGE);
+    }
+
+    return callAccounting(
+      this.logger,
+      () =>
+        this.accounting.createPaymentRequest(
+          {
+            tenantId: user.tenantId,
+            idempotencyKey: `client-payment:${client.id}:${dto.submissionId}`,
+            externalRef: client.id,
+            invoiceId: dto.invoiceId,
+            amount: dto.amount,
+            paymentDate: dto.paymentDate,
+            ...(dto.reference ? { reference: dto.reference } : {}),
+            ...(dto.note ? { note: dto.note } : {}),
+            ...(user.firstName ? { requestedByName: user.firstName } : {}),
+          },
+          user.id,
+        ),
+      SEND_PAYMENT_FAILED_MESSAGE,
+    );
+  }
+
+  /** Withdraws a payment request that Accounting has not acted on yet. */
+  async cancelPayment(user: RequestUser, clientId: string, requestId: string) {
+    this.assertCanBill(user);
+    const client = await this.findVisibleClient(user, clientId);
+
+    return callAccounting(this.logger, () =>
+      this.accounting.cancelPaymentRequest(
+        { tenantId: user.tenantId, requestId, externalRef: client.id },
+        user.id,
+      ),
+    );
   }
 
   /** The client's transactions, with their state read live from Accounting. */

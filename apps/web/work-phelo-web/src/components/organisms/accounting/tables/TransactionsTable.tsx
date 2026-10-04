@@ -19,16 +19,24 @@ import {
   AccountingTradeDocumentStatus,
   CashbookTransaction,
   CashbookTransactionType,
+  PaymentRequest,
   TransactionTypeDefinition,
 } from '@/types/accounting';
 import {
   useCashbookTransactions,
   usePayableBills,
+  usePendingPaymentRequests,
+  useReceivableInvoice,
+  useRejectPaymentRequest,
   usePayableCreditNotes,
   useReceivableCreditNotes,
   useReceivableInvoices,
   useTransactionTypes,
 } from '@/hooks';
+import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
+import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
 import { CashbookTransactionDetailPanel } from '@/components/organisms/accounting/panels/CashbookTransactionDetailPanel';
 import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
@@ -135,10 +143,12 @@ function fmtAmount(amount: string, currency: string) {
  *  on kind for every field, only for the handful that genuinely differ. */
 interface UnifiedTransactionRow {
   id: string;
-  kind: 'document' | 'cashbook';
+  kind: 'document' | 'cashbook' | 'paymentRequest';
   transactionNumber: string;
   date: string;
   entityLabel: string;
+  /** Shown under the entity name, e.g. who raised a payment request. */
+  entitySubLabel?: string;
   /** The original invoice/bill a credit/debit note reduces, when it has one. */
   linkedTo: string | null;
   subtotalAmount: string | null;
@@ -155,6 +165,7 @@ interface UnifiedTransactionRow {
   createdAt: string;
   document?: AccountingTradeDocument;
   cashbook?: CashbookTransaction;
+  paymentRequest?: PaymentRequest;
 }
 
 function toDocumentRow(
@@ -215,6 +226,35 @@ function toCashbookRow(cb: CashbookTransaction): UnifiedTransactionRow {
   };
 }
 
+/** A payment another module asked to have recorded. Only the ones waiting for the accountant get a
+ *  row - once settled or turned down they live on the invoice's request history. */
+function toPaymentRequestRow(request: PaymentRequest): UnifiedTransactionRow {
+  const source =
+    SOURCE_MODULE_LABELS[request.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
+    request.sourceModule;
+  return {
+    id: `payment-request-${request.id}`,
+    kind: 'paymentRequest',
+    transactionNumber: request.invoiceNumber,
+    date: request.paymentDate,
+    entityLabel: request.entity?.name ?? '—',
+    entitySubLabel: `Requested by ${request.requestedByName ?? 'a user'} · ${source}`,
+    linkedTo: null,
+    subtotalAmount: request.amount,
+    taxAmount: '0',
+    totalAmount: request.amount,
+    currency: request.currency,
+    typeLabel: 'Payment Request',
+    typeColor: 'blue',
+    filterSide: 'RECEIVABLE',
+    status: 'DRAFT',
+    paymentStateLabel: null,
+    documentKey: null,
+    createdAt: request.createdAt,
+    paymentRequest: request,
+  };
+}
+
 export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -226,6 +266,10 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   );
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<AccountingTradeDocument | null>(null);
+  const toast = useToast();
+  const [requestInvoiceId, setRequestInvoiceId] = useState<string | undefined>();
+  const [receiveRequest, setReceiveRequest] = useState<PaymentRequest | null>(null);
+  const [rejectRequest, setRejectRequest] = useState<PaymentRequest | null>(null);
   const [newTransactionOpen, setNewTransactionOpen] = useState(false);
   const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<TransactionTypeDefinition | null | undefined>(
@@ -247,6 +291,10 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   // resolved against a party the same way, so they're fetched but left out of that scoped
   // view's merged list below.
   const cashbookTransactions = useCashbookTransactions({ limit: 100 });
+  const paymentRequests = usePendingPaymentRequests();
+  const rejectPaymentRequest = useRejectPaymentRequest();
+  // The invoice behind a request, for its detail view and for recording the payment.
+  const requestInvoice = useReceivableInvoice(requestInvoiceId);
 
   const isLoading =
     invoices.isLoading ||
@@ -275,6 +323,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
             .filter((cb) => cb.sourceModule !== 'ACCOUNTING')
             .map(toCashbookRow)
         : []),
+      ...(paymentRequests.data ?? [])
+        .filter((request) => !partyId || request.entity?.id === partyId)
+        .map(toPaymentRequestRow),
     ];
     return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [
@@ -283,6 +334,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     receivableCreditNotes.data,
     payableCreditNotes.data,
     cashbookTransactions.data,
+    paymentRequests.data,
     partyId,
     documentKeyByTypeId,
   ]);
@@ -346,7 +398,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         label: 'Entity',
         width: 'minmax(120px, 1fr)',
         render: (row) => (
-          <span className="text-sm text-gray-800 font-medium truncate">{row.entityLabel}</span>
+          <div className="flex flex-col">
+            <span className="text-sm text-gray-800 font-medium truncate">{row.entityLabel}</span>
+            {row.entitySubLabel && (
+              <span className="text-xs text-gray-500 truncate">{row.entitySubLabel}</span>
+            )}
+          </div>
         ),
       },
       {
@@ -407,7 +464,22 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         width: '160px',
         render: (row) => (
           <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-            {row.kind === 'document' ? (
+            {row.kind === 'paymentRequest' ? (
+              <>
+                <TableButton variant="red" onClick={() => setRejectRequest(row.paymentRequest!)}>
+                  Reject
+                </TableButton>
+                <TableButton
+                  variant="green"
+                  onClick={() => {
+                    setRequestInvoiceId(row.paymentRequest!.invoiceId);
+                    setReceiveRequest(row.paymentRequest!);
+                  }}
+                >
+                  Receive Payment
+                </TableButton>
+              </>
+            ) : row.kind === 'document' ? (
               row.document!.status === 'DRAFT' ? (
                 <TableButton variant="green" onClick={() => setDetailTarget(row.document!)}>
                   Post
@@ -498,11 +570,11 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           setPage(1);
         }}
         extraFilters={extraFilters}
-        onRowClick={(row) =>
-          row.kind === 'document'
-            ? setDetailTarget(row.document!)
-            : setCashbookDetailTarget(row.cashbook!)
-        }
+        onRowClick={(row) => {
+          if (row.kind === 'paymentRequest') setRequestInvoiceId(row.paymentRequest!.invoiceId);
+          else if (row.kind === 'document') setDetailTarget(row.document!);
+          else setCashbookDetailTarget(row.cashbook!);
+        }}
         actionButton={
           partyId
             ? {
@@ -581,9 +653,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
 
       <TradeDocumentDetailPanel
         side={detailTarget?.side ?? 'RECEIVABLE'}
-        document={detailTarget}
+        document={detailTarget ?? (receiveRequest ? null : (requestInvoice.data ?? null))}
         documentKind={detailTarget?.documentType === 'CREDIT_NOTE' ? 'creditNote' : 'invoice'}
-        onClose={() => setDetailTarget(null)}
+        onClose={() => {
+          setDetailTarget(null);
+          setRequestInvoiceId(undefined);
+        }}
         onPostedForPayment={(document) => {
           setDetailTarget(null);
           setPaymentTarget(document);
@@ -593,6 +668,39 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       <DocumentPreviewPanel target={previewTarget} onClose={() => setPreviewTarget(null)} />
 
       <MakePaymentPanel document={paymentTarget} onClose={() => setPaymentTarget(null)} />
+
+      <MakePaymentPanel
+        document={receiveRequest ? (requestInvoice.data ?? null) : null}
+        paymentRequest={receiveRequest}
+        onClose={() => {
+          setReceiveRequest(null);
+          setRequestInvoiceId(undefined);
+        }}
+        onRejectRequest={() => {
+          setRejectRequest(receiveRequest);
+          setReceiveRequest(null);
+          setRequestInvoiceId(undefined);
+        }}
+      />
+
+      <RejectDraftModal
+        isOpen={!!rejectRequest}
+        title="Reject Payment Request"
+        subject="This payment request"
+        description="It is turned down, no payment is recorded, and the reason is shown to whoever asked."
+        isRejecting={rejectPaymentRequest.isPending}
+        onConfirm={async (reason) => {
+          if (!rejectRequest) return;
+          try {
+            await rejectPaymentRequest.mutateAsync({ id: rejectRequest.id, reason });
+            toast.success('Payment request rejected.');
+            setRejectRequest(null);
+          } catch (error) {
+            toast.error(extractError(error, 'Failed to reject the request'));
+          }
+        }}
+        onClose={() => setRejectRequest(null)}
+      />
 
       <CashbookTransactionDetailPanel
         transaction={cashbookDetailTarget}

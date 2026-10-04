@@ -974,6 +974,8 @@ export interface AccountingTradeDocument {
   /** What is still owed on a posted document, after payments and credit/debit notes.
    *  Only present on list rows. */
   outstandingAmount: string | null;
+  /** Invoices only, on list rows: payment requests from another module waiting for the accountant. */
+  pendingPaymentRequestCount: number;
   createdAt: string;
   updatedAt: string;
   postedAt: string | null;
@@ -1032,6 +1034,40 @@ export interface CreateTradeInvoicePayload {
   costCentreId?: string;
   description?: string;
   externalReference?: string;
+}
+
+export type PaymentRequestStatus = 'PENDING' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
+
+/** A request from another module (e.g. Marketing) to record a client's payment against an invoice. */
+export interface PaymentRequest {
+  id: string;
+  status: PaymentRequestStatus;
+  sourceModule: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  entity: { id: string; name: string; code: string } | null;
+  amount: string;
+  currency: string;
+  /** YYYY-MM-DD */
+  paymentDate: string;
+  reference: string | null;
+  note: string | null;
+  requestedByUserId: string;
+  requestedByName: string | null;
+  receiptId: string | null;
+  receiptNumber: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  rejectedAt: string | null;
+  cancelledAt: string | null;
+}
+
+/** What the accountant chooses when recording a requested payment; the amount is the request's. */
+export interface CompletePaymentRequestPayload {
+  cashAccountId: string;
+  settlementMethod: AccountingCashbookSettlementMethod;
+  receiptDate: string;
 }
 
 /** Why a draft is being turned down. Kept on the record and shown to whoever raised it. */
@@ -1878,8 +1914,6 @@ export type SourceTypeSetup =
       sourceName: string;
       linked: boolean;
       baseCurrency: string | null;
-      /** The entity type Accounting created for the module, when it exists. */
-      defaultEntityType: { id: string; name: string } | null;
       /** Entity types named on the usable linked transaction types - what the module's form offers. */
       entityTypes: { id: string; name: string }[];
       /** Every transaction type linked to the source, and why an unusable one cannot be used. */

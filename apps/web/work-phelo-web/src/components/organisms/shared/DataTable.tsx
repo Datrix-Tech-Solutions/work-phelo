@@ -69,6 +69,8 @@ interface DataTableProps<T extends { id: string | number }> {
    *  Set false to always render the ⋯ menu instead, even for a single action. */
   singleActionAsButton?: boolean;
   onRowClick?: (row: T) => void;
+  /** Content shown under a row (e.g. nested rows). Return null for rows with nothing to show. */
+  renderExpandedRow?: (row: T) => React.ReactNode;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -209,6 +211,7 @@ export function DataTable<T extends { id: string | number }>({
   rowActions,
   singleActionAsButton = true,
   onRowClick,
+  renderExpandedRow,
   currentPage,
   totalPages,
   onPageChange,
@@ -519,6 +522,7 @@ export function DataTable<T extends { id: string | number }>({
                           );
                         })()}
                     </div>
+                    {renderExpandedRow?.(row)}
                   </div>
                 ))
               )}

@@ -216,6 +216,9 @@ const setup = () => {
     cashbookTransaction: {
       update: jest.fn().mockResolvedValue({ id: 'cashbook-1' }),
     },
+    accountingPaymentRequest: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
     accountingReceivableAllocation: {
       aggregate: jest
         .fn()
@@ -228,6 +231,7 @@ const setup = () => {
         ),
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue(null),
+      groupBy: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
     },
     fiscalPeriod: {
@@ -267,6 +271,33 @@ const setup = () => {
 };
 
 describe('ReceivablesService', () => {
+  it('counts the payment requests waiting on each listed invoice', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingReceivableDocument.findMany.mockResolvedValue([
+      invoice({ id: 'invoice-1', status: AccountingReceivableStatus.POSTED }),
+      invoice({ id: 'invoice-2', status: AccountingReceivableStatus.POSTED }),
+    ]);
+    prisma.accountingReceivableAllocation.groupBy.mockResolvedValue([]);
+    prisma.accountingPaymentRequest.groupBy.mockResolvedValue([
+      { invoiceId: 'invoice-1', _count: { _all: 2 } },
+    ]);
+
+    const result = await service.listInvoices(actor.tenantId, {});
+
+    expect(prisma.accountingPaymentRequest.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: actor.tenantId,
+          invoiceId: { in: ['invoice-1', 'invoice-2'] },
+          status: 'PENDING',
+        },
+      }),
+    );
+    expect(result.items.map((i) => i.pendingPaymentRequestCount)).toEqual([
+      2, 0,
+    ]);
+  });
+
   it('stores an optional cost centre on a draft invoice', async () => {
     const { prisma, service } = setup();
 

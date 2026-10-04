@@ -6,6 +6,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { SUBLEDGER_TYPE_LABELS, SubledgerAccount } from '@/types/accounting';
 import { useAccountingConfig } from '@/hooks';
+import { sourceRecordLabel } from '@/lib/accounting/sourceModules';
 import {
   SUBLEDGER_TYPE_CHIP_COLOR,
   type SubledgerTypeChipColor,
@@ -65,9 +66,12 @@ export function EntityOverview({ entity }: EntityOverviewProps) {
         {entity.phone && <DetailField label="Contact" value={entity.phone} />}
         {entity.address && <DetailField label="Address" value={entity.address} />}
         {entity.description && <DetailField label="Description" value={entity.description} />}
-        {entity.externalRef && (
-          <DetailField label="External Reference" value={entity.externalRef} />
-        )}
+        {entity.externalRef &&
+          (sourceRecordLabel(entity.externalRef) ? (
+            <DetailField label="Source" value={sourceRecordLabel(entity.externalRef)} />
+          ) : (
+            <DetailField label="External Reference" value={entity.externalRef} />
+          ))}
       </div>
     </CollapsibleOverview>
   );

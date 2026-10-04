@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsDateString,
   IsEnum,
   IsInt,
   IsNumber,
@@ -97,6 +98,51 @@ export class RaiseClientBillingDto {
   @IsOptional()
   @IsUUID()
   productId?: string;
+}
+
+export class RequestClientPaymentDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Generated once per form submission. Sending the same id again never raises a second request.',
+  })
+  @IsUUID()
+  submissionId!: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description: "Accounting's id for the posted invoice being paid.",
+  })
+  @IsUUID()
+  invoiceId!: string;
+
+  @ApiProperty({
+    example: 5000,
+    description: 'The part of the invoice the client has paid.',
+  })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  @Max(1_000_000_000_000)
+  amount!: number;
+
+  @ApiProperty({ example: '2026-09-12', description: 'Not in the future.' })
+  @IsDateString({ strict: true })
+  paymentDate!: string;
+
+  @ApiPropertyOptional({ maxLength: 100 })
+  @OptionalCollapseWhitespaceString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  reference?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @OptionalCollapseWhitespaceString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
 
 export class QueryClientBillingDto {
