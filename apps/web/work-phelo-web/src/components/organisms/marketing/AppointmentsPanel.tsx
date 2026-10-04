@@ -1,7 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { List, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  List,
+  Calendar as CalendarIcon,
+  ClipboardCheck,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { cn, cardClass } from '@/lib/utils';
 import { Button } from '@/components/atoms/Button';
 import { Calendar } from '@/components/atoms/Calendar';
@@ -9,13 +15,14 @@ import { AppointmentTimeline } from '@/components/molecules/marketing/Appointmen
 import { AppointmentDayList } from '@/components/molecules/marketing/AppointmentDayList';
 import { useAppointments } from '@/hooks/marketing/useAppointments';
 import { CALENDAR_APPOINTMENT_STATUSES, LIVE_APPOINTMENT_STATUSES } from '@/lib/appointments';
-import type { Appointment } from '@/types/marketing';
+import type { Appointment, AppointmentStatus } from '@/types/marketing';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-type View = 'timeline' | 'calendar';
+type View = 'timeline' | 'calendar' | 'requests';
 
 const UPCOMING_LIMIT = 5;
+const PENDING_STATUSES: AppointmentStatus[] = ['PENDING'];
 
 interface Props {
   /** Called with the selected calendar day (if any) so the form can prefill its date. */
@@ -47,7 +54,19 @@ export function AppointmentsPanel({ onNew, onSelectAppointment }: Props) {
     limit: UPCOMING_LIMIT,
   });
 
-  const markedDates = monthAppointments.map((a) => a.date);
+  // Everything still waiting for approval: an approver sees all of it, anyone else their own.
+  const { data: pendingRequests = [], isLoading: pendingLoading } = useAppointments({
+    status: PENDING_STATUSES,
+  });
+
+  // A day with only pending appointments gets a fainter dot than a confirmed one.
+  const confirmedDates = new Set(
+    monthAppointments.filter((a) => a.status !== 'PENDING').map((a) => a.date),
+  );
+  const markedDates = [...confirmedDates];
+  const tentativeDates = monthAppointments
+    .filter((a) => a.status === 'PENDING' && !confirmedDates.has(a.date))
+    .map((a) => a.date);
 
   function prevMonth() {
     setSelectedDate(undefined);
@@ -69,7 +88,11 @@ export function AppointmentsPanel({ onNew, onSelectAppointment }: Props) {
     <div className={cardClass('p-4 flex flex-col gap-4 flex-1 min-h-0')}>
       <div className="flex items-center justify-between gap-3 shrink-0">
         <h2 className="text-lg font-bold text-gray-900">
-          {view === 'timeline' ? 'Upcoming Appointments' : 'Appointments'}
+          {view === 'timeline'
+            ? 'Upcoming Appointments'
+            : view === 'requests'
+              ? 'Awaiting Approval'
+              : 'Appointments'}
         </h2>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -102,6 +125,25 @@ export function AppointmentsPanel({ onNew, onSelectAppointment }: Props) {
             >
               <CalendarIcon className="w-4 h-4" />
             </button>
+            <button
+              type="button"
+              onClick={() => setView('requests')}
+              aria-label={`Awaiting approval (${pendingRequests.length})`}
+              aria-pressed={view === 'requests'}
+              className={cn(
+                'relative p-1.5 rounded-md transition-colors',
+                view === 'requests'
+                  ? 'bg-white shadow-sm text-(--module-btn-bg,var(--color-brand))'
+                  : 'text-gray-400 hover:text-gray-600',
+              )}
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              {pendingRequests.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-orange-500 text-white text-[10px] font-semibold leading-4 text-center">
+                  {pendingRequests.length > 99 ? '99+' : pendingRequests.length}
+                </span>
+              )}
+            </button>
           </div>
           <Button size="sm" onClick={() => onNew(view === 'calendar' ? selectedDate : undefined)}>
             New Appointment
@@ -109,7 +151,17 @@ export function AppointmentsPanel({ onNew, onSelectAppointment }: Props) {
         </div>
       </div>
 
-      {view === 'timeline' ? (
+      {view === 'requests' ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <AppointmentDayList
+            title="Waiting for approval"
+            emptyMessage="Nothing is waiting for approval"
+            appointments={pendingRequests}
+            isLoading={pendingLoading}
+            onSelect={onSelectAppointment}
+          />
+        </div>
+      ) : view === 'timeline' ? (
         <div className="flex-1 min-h-0 overflow-y-auto">
           <AppointmentTimeline
             appointments={upcoming}
@@ -150,6 +202,7 @@ export function AppointmentsPanel({ onNew, onSelectAppointment }: Props) {
               value={selectedDate}
               onSelectDay={(iso) => setSelectedDate((prev) => (prev === iso ? undefined : iso))}
               markedDates={markedDates}
+              tentativeDates={tentativeDates}
             />
           </div>
 

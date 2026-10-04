@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   NewAppointmentForm,
   NewAppointmentFields,
@@ -10,7 +11,11 @@ import { AppointmentDetailPanel } from '@/components/organisms/marketing/Appoint
 import { AppointmentsPanel } from '@/components/organisms/marketing/AppointmentsPanel';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { useAppointmentFormOptions, useCreateAppointment } from '@/hooks/marketing/useAppointments';
+import {
+  useAppointment,
+  useAppointmentFormOptions,
+  useCreateAppointment,
+} from '@/hooks/marketing/useAppointments';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { pageContent } from '@/lib/layout';
@@ -30,7 +35,19 @@ const EMPTY_FORM: NewAppointmentFields = {
 export default function AppointmentsPage() {
   const toast = useToast();
   const user = useAuthStore((s) => s.user);
+  const router = useRouter();
+  const pathname = usePathname();
   const [viewing, setViewing] = useState<Appointment | null>(null);
+
+  // A notification links here with ?appointmentId=…, which opens that appointment's details.
+  const linkedId = useSearchParams().get('appointmentId');
+  const { data: linked } = useAppointment(linkedId ?? undefined);
+  const detail = viewing ?? linked ?? null;
+
+  function closeDetail() {
+    setViewing(null);
+    if (linkedId) router.replace(pathname);
+  }
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [form, setForm] = useState<NewAppointmentFields>(EMPTY_FORM);
@@ -95,9 +112,9 @@ export default function AppointmentsPage() {
       <AppointmentsPanel onNew={openNew} onSelectAppointment={setViewing} />
 
       <AppointmentDetailPanel
-        key={viewing?.id ?? 'none'}
-        appointment={viewing}
-        onClose={() => setViewing(null)}
+        key={detail?.id ?? 'none'}
+        appointment={detail}
+        onClose={closeDetail}
       />
 
       <SidePanel

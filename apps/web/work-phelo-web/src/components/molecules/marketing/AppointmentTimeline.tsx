@@ -46,6 +46,7 @@ export function AppointmentTimeline({ appointments, isLoading, onSelect }: Props
               className={cn(
                 'flex-1 flex items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0 transition-shadow',
                 onSelect && 'cursor-pointer hover:shadow-md',
+                appt.status === 'PENDING' && 'opacity-60 border-dashed border-gray-300',
               )}
             >
               <div>
@@ -55,6 +56,9 @@ export function AppointmentTimeline({ appointments, isLoading, onSelect }: Props
               <span className="w-px h-8 bg-gray-200 shrink-0" />
               <div className="text-right min-w-0">
                 <p className="text-sm text-gray-500 truncate">{appt.prospectName}</p>
+                {appt.salesStage && (
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{appt.salesStage.name}</p>
+                )}
                 <p className="text-sm text-gray-500 mt-0.5 truncate">
                   {appt.marketerName}
                   {appt.managerName && ` · Mgr: ${appt.managerName}`}
