@@ -5,10 +5,13 @@ import {
   IsBoolean,
   IsNotEmpty,
   IsNotEmptyObject,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { CollapseWhitespaceString } from '../../crm-settings/dto/string.transforms';
@@ -19,6 +22,14 @@ import {
 } from '../../prospects/dto/create-prospect.dto';
 
 export class CreateClientDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'User to assign it to. Defaults to the creator; choosing someone else needs the assign permission.',
+  })
+  @IsOptional()
+  @IsUUID()
+  assignedUserId?: string;
   @ApiPropertyOptional({
     format: 'uuid',
     description:
@@ -122,4 +133,25 @@ export class AddClientProductDto {
   })
   @IsUUID()
   productId!: string;
+
+  @ApiPropertyOptional({ example: 10000, minimum: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  expectedValue?: number;
+
+  @ApiPropertyOptional({
+    example: 10,
+    minimum: 0,
+    maximum: 100,
+    description:
+      'Percentage of the expected value. The commission amount is derived from it.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(100)
+  commissionRate?: number;
 }

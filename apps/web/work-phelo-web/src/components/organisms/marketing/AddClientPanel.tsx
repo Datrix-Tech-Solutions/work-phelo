@@ -7,6 +7,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { EmailField } from '@/components/atoms/EmailField';
+import { AssignedToSelect } from '@/components/molecules/marketing/AssignedToSelect';
 import { BillingSection } from '@/components/organisms/marketing/BillingSection';
 import {
   ClientBillingErrors,
@@ -41,6 +42,8 @@ interface FormValues {
   productIds: string[];
   isBillable: boolean;
   location: CompanyLocationFields;
+  /** Empty means the person creating the client. */
+  assignedUserId: string;
 }
 
 type FormErrors = Partial<
@@ -58,6 +61,7 @@ const EMPTY: FormValues = {
   productIds: [],
   isBillable: false,
   location: { location: '' },
+  assignedUserId: '',
 };
 
 function toOptions(items: ProspectingSetting[]) {
@@ -141,6 +145,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     return {
       id: clientId,
       companyName: values.companyName.trim(),
+      ...(values.assignedUserId ? { assignedUserId: values.assignedUserId } : {}),
       ...(values.businessType ? { businessTypeId: values.businessType } : {}),
       ...(values.sourceType ? { sourceTypeId: values.sourceType } : {}),
       isBillable: values.isBillable,
@@ -233,6 +238,12 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
             (id) => set('sourceType', id),
             toast,
           )}
+        />
+
+        <AssignedToSelect
+          record="client"
+          value={values.assignedUserId}
+          onChange={(id) => set('assignedUserId', id)}
         />
 
         <SectionTitle>Contact Person</SectionTitle>

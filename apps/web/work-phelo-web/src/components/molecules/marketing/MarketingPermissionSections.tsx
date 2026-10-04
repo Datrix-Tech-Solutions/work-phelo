@@ -31,6 +31,7 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
       { key: 'manage_all_prospect_interactions', label: 'Manage All Prospect Interactions' },
       { key: 'manage_all_follow_ups', label: 'Manage All Follow Ups' },
       { key: 'create_prospect', label: 'Create Prospect' },
+      { key: 'assign_prospects', label: 'Assign Prospects' },
     ],
   },
   {
@@ -44,6 +45,7 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
       { key: 'delete_all_clients', label: 'Delete All Clients' },
       { key: 'create_client', label: 'Create Client' },
       { key: 'manage_billing', label: 'Manage Billing' },
+      { key: 'assign_clients', label: 'Assign Clients' },
     ],
   },
   {
@@ -129,6 +131,9 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
     ...pairs('marketing.follow-ups.all', FOLLOW_UP_ACTIONS),
   ],
 
+  // Assigning is on top of the own-records view: a user hands on the records they can already see.
+  assign_prospects: [...PROSPECT_OWN_VIEW, ...pairs('marketing.prospects', ['ASSIGN'])],
+
   // Clients — "create client" is the own-records bundle, like "create prospect".
   create_client: pairs('marketing.clients', CRUD),
   view_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['VIEW'])],
@@ -136,6 +141,8 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
   delete_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['DELETE'])],
   // Billing sits on top of client visibility: a user bills the clients they can already see.
   manage_billing: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.billing', ['VIEW', 'CREATE'])],
+
+  assign_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients', ['ASSIGN'])],
 
   // Transport — each "manage" pill carries the full set for its area.
   manage_requests: [

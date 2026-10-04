@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { AssignedToSelect } from '@/components/molecules/marketing/AssignedToSelect';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -29,6 +30,8 @@ interface Props {
   clientName: string;
   currentBusinessTypeId: string;
   currentSourceTypeId: string;
+  /** The user it is assigned to now. */
+  currentAssignedUserId: string;
   currentBillable: boolean;
   /** The client's entity type in Accounting, once it has an entity. */
   currentEntityTypeId: string | null;
@@ -43,6 +46,7 @@ export function EditClientCompanyModal({
   clientName,
   currentBusinessTypeId,
   currentSourceTypeId,
+  currentAssignedUserId,
   currentBillable,
   currentEntityTypeId,
   productOptions,
@@ -62,6 +66,7 @@ export function EditClientCompanyModal({
   const [companyName, setCompanyName] = useState(clientName);
   const [businessTypeId, setBusinessTypeId] = useState(currentBusinessTypeId);
   const [sourceTypeId, setSourceTypeId] = useState(currentSourceTypeId);
+  const [assignedUserId, setAssignedUserId] = useState(currentAssignedUserId);
   const [billable, setBillable] = useState(currentBillable);
   const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
   const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
@@ -79,6 +84,7 @@ export function EditClientCompanyModal({
     trimmedName !== clientName ||
     businessTypeId !== currentBusinessTypeId ||
     sourceTypeId !== currentSourceTypeId ||
+    assignedUserId !== currentAssignedUserId ||
     billable !== currentBillable;
 
   const isPending = updateClient.isPending || raiseBilling.isPending;
@@ -99,12 +105,14 @@ export function EditClientCompanyModal({
         trimmedName !== clientName ||
         businessTypeId !== currentBusinessTypeId ||
         sourceTypeId !== currentSourceTypeId ||
+        assignedUserId !== currentAssignedUserId ||
         switchingOff;
       if (detailsChanged) {
         await updateClient.mutateAsync({
           companyName: trimmedName,
           businessTypeId: businessTypeId || null,
           sourceTypeId: sourceTypeId || null,
+          ...(assignedUserId !== currentAssignedUserId ? { assignedUserId } : {}),
           ...(switchingOff ? { isBillable: false } : {}),
         });
       }
@@ -182,6 +190,11 @@ export function EditClientCompanyModal({
           value={sourceTypeId}
           onChange={setSourceTypeId}
           disabled={loadingSource}
+        />
+        <AssignedToSelect
+          record="client"
+          value={assignedUserId}
+          onChange={(id) => setAssignedUserId(id || currentAssignedUserId)}
         />
         {currentBillable ? (
           <ToggleRow

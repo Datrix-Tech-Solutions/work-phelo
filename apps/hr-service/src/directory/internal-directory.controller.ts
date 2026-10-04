@@ -41,6 +41,7 @@ export class InternalDirectoryController {
     return this.directory.resolve(dto.tenantId, {
       userId: dto.userId,
       employeeIds: dto.employeeIds,
+      userIds: dto.userIds,
     });
   }
 }

@@ -3,6 +3,8 @@ import { InternalServiceClient } from '@work-phelo/internal-auth';
 
 export interface DirectoryPerson {
   employeeId: string;
+  /** The login account linked to the employee, when there is one. */
+  userId?: string | null;
   name: string;
   department: string | null;
   jobTitle?: string | null;
@@ -33,7 +35,7 @@ export class HrDirectoryClient {
 
   resolve(
     tenantId: string,
-    input: { userId?: string; employeeIds?: string[] },
+    input: { userId?: string; employeeIds?: string[]; userIds?: string[] },
   ) {
     return this.http.post<ResolvedDirectory>(`${BASE}/resolve`, {
       body: { tenantId, ...input },

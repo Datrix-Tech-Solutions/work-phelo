@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-interface BadgeProps {
+export interface BadgeProps {
   label: string;
   variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 }

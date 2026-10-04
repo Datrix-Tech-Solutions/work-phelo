@@ -91,6 +91,16 @@ enum MarketingTransportRequestStatus {
   @@schema("marketing")
 }
 
+enum MarketingAppointmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+
+  @@schema("marketing")
+}
+
 enum MarketingFleetVehicleType {
   SEDAN
   SUV
@@ -181,6 +191,7 @@ model MarketingProspect {
   products     MarketingProspectProduct[]
   interactions MarketingProspectInteraction[]
   followUps    MarketingProspectFollowUp[]
+  appointments MarketingAppointment[]
   client       MarketingClient?
 
   @@index([tenantId, normalizedCompanyName])
@@ -470,6 +481,43 @@ model MarketingTransportRequestPassenger {
 /// A driver: an HR employee marked as a transport officer. HR owns the person;
 /// this row only records that they drive. `name` is a fallback label for when
 /// the employee is no longer active in HR.
+/// A meeting a marketer books with a prospect. Anyone can book for themselves; holders of
+/// marketing.appointments.all:CREATE can book for other marketers. An approver confirms it and may
+/// assign a manager. Names are snapshots so the history reads correctly after renames or removals.
+model MarketingAppointment {
+  id               String                     @id @default(uuid())
+  tenantId         String
+  prospectId       String?
+  prospectName     String
+  date             DateTime                   @db.Date
+  startTime        String
+  endTime          String?
+  /// The marketer the appointment is for (who requested it, or on whose behalf it was booked).
+  marketerUserId   String
+  marketerName     String
+  managerUserId    String?
+  managerName      String?
+  comment          String?
+  status           MarketingAppointmentStatus @default(PENDING)
+  createdByUserId  String
+  reviewedByUserId String?
+  reviewedByName   String?
+  reviewedAt       DateTime?
+  reviewNote       String?
+  cancelledAt      DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  prospect MarketingProspect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, date])
+  @@index([tenantId, marketerUserId, date], map: "MarketingAppointment_marketer_date_idx")
+  @@index([tenantId, managerUserId, date], map: "MarketingAppointment_manager_date_idx")
+  @@index([tenantId, prospectId])
+  @@schema("marketing")
+}
+
 model MarketingTransportOfficer {
   id              String    @id @default(uuid())
   tenantId        String

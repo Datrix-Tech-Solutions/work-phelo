@@ -12,6 +12,7 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
+import { AssigneesService } from '../assignees/assignees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientBillingService } from './client-billing.service';
 import { ClientBillingDto } from './dto/billing.dto';
@@ -59,6 +60,7 @@ export class ClientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly billing: ClientBillingService,
+    private readonly assignees: AssigneesService,
   ) {}
 
   async list(user: RequestUser, query: QueryClientsDto = {}) {
@@ -190,6 +192,11 @@ export class ClientsService {
     if (new Set(productIds).size !== productIds.length) {
       throw new BadRequestException(DUPLICATE_PRODUCT_MESSAGE);
     }
+    const assignedUserId = await this.assignees.forCreate(
+      user,
+      'client',
+      dto.assignedUserId,
+    );
 
     await this.assertReferences(user.tenantId, [
       {
@@ -228,7 +235,7 @@ export class ClientsService {
         normalizedCompanyName: this.normalizeText(dto.companyName),
         businessTypeId: dto.businessTypeId ?? null,
         sourceTypeId: dto.sourceTypeId ?? null,
-        assignedUserId: user.id,
+        assignedUserId,
         locationLabel: this.formatText(dto.location.label),
         latitude: dto.location.latitude,
         longitude: dto.location.longitude,
@@ -321,11 +328,19 @@ export class ClientsService {
       throw new BadRequestException(CONTACT_NAME_REQUIRED_MESSAGE);
     }
 
+    const newAssignee = await this.assignees.forUpdate(
+      user,
+      'client',
+      existing.assignedUserId,
+      dto.assignedUserId,
+    );
+
     await this.prisma.$transaction(async (tx) => {
       await tx.marketingClient.update({
         where: { id: existing.id },
         data: {
           updatedByUserId: user.id,
+          ...(newAssignee ? { assignedUserId: newAssignee } : {}),
           ...(dto.companyName !== undefined
             ? {
                 companyName: this.formatRequiredText(
@@ -405,7 +420,8 @@ export class ClientsService {
       }
     });
 
-    return this.findClientDetail(user, id, canEditAll);
+    // Someone who just handed a record on can still see the result of their edit.
+    return this.findClientDetail(user, id, canEditAll || !!newAssignee);
   }
 
   async remove(user: RequestUser, id: string): Promise<void> {
@@ -465,6 +481,15 @@ export class ClientsService {
           tenantId: user.tenantId,
           clientId: client.id,
           productId: dto.productId,
+          expectedValue: dto.expectedValue ?? null,
+          commissionRate: dto.commissionRate ?? null,
+          commissionAmount:
+            dto.expectedValue !== undefined && dto.commissionRate !== undefined
+              ? new Prisma.Decimal(dto.expectedValue)
+                  .mul(dto.commissionRate)
+                  .div(100)
+                  .toDecimalPlaces(2)
+              : null,
         },
       });
       const settings = await this.findSettingsByIds(user.tenantId, [

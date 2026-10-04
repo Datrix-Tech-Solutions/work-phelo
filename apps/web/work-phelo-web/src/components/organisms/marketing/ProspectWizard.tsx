@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ProspectFormLayout } from '@/components/organisms/marketing/ProspectFormLayout';
+import { AssignedToSelect } from '@/components/molecules/marketing/AssignedToSelect';
 import {
   CompanyInformationForm,
   CompanyInformationFields,
@@ -228,6 +229,15 @@ export function ProspectWizard({
             roleOptions={roleOptions}
             sourceTypeOptions={sourceTypeOptions}
             hideInteraction={isEdit}
+            assigneeSlot={
+              isEdit ? undefined : (
+                <AssignedToSelect
+                  record="prospect"
+                  value={companyForm.assignedUserId ?? ''}
+                  onChange={(id) => setCompanyForm((f) => ({ ...f, assignedUserId: id }))}
+                />
+              )
+            }
             businessTypeEmptyState={buildCreateOptionEmptyState(
               'business type',
               createBusinessType,

@@ -158,6 +158,15 @@ export class CreateProspectInitialInteractionDto {
 }
 
 export class CreateProspectDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'User to assign it to. Defaults to the creator; choosing someone else needs the assign permission.',
+  })
+  @IsOptional()
+  @IsUUID()
+  assignedUserId?: string;
+
   @ApiProperty({ example: 'Acme Manufacturing Ltd', maxLength: 200 })
   @CollapseWhitespaceString()
   @IsString()

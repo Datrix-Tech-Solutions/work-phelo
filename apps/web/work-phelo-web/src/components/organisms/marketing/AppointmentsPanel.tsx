@@ -7,7 +7,9 @@ import { Button } from '@/components/atoms/Button';
 import { Calendar } from '@/components/atoms/Calendar';
 import { AppointmentTimeline } from '@/components/molecules/marketing/AppointmentTimeline';
 import { AppointmentDayList } from '@/components/molecules/marketing/AppointmentDayList';
-import { Appointment } from '@/components/molecules/marketing/AppointmentCard';
+import { useAppointments } from '@/hooks/marketing/useAppointments';
+import { CALENDAR_APPOINTMENT_STATUSES, LIVE_APPOINTMENT_STATUSES } from '@/lib/appointments';
+import type { Appointment } from '@/types/marketing';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -16,28 +18,39 @@ type View = 'timeline' | 'calendar';
 const UPCOMING_LIMIT = 5;
 
 interface Props {
-  appointments: Appointment[];
   /** Called with the selected calendar day (if any) so the form can prefill its date. */
   onNew: (date?: string) => void;
   onSelectAppointment?: (appointment: Appointment) => void;
 }
 
-export function AppointmentsPanel({ appointments, onNew, onSelectAppointment }: Props) {
+export function AppointmentsPanel({ onNew, onSelectAppointment }: Props) {
   const [view, setView] = useState<View>('calendar');
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
 
-  const markedDates = appointments.map((a) => a.date);
+  const monthStart = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`;
+  const monthEnd = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(
+    new Date(viewYear, viewMonth + 1, 0).getDate(),
+  ).padStart(2, '0')}`;
 
-  const todayIso = new Date().toLocaleDateString('en-CA');
-  const upcoming = appointments
-    .filter((a) => a.date >= todayIso)
-    .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
-    .slice(0, UPCOMING_LIMIT);
+  // The calendar loads the month on screen; the timeline loads the next few from today.
+  const { data: monthAppointments = [], isLoading: monthLoading } = useAppointments({
+    from: monthStart,
+    to: monthEnd,
+    status: CALENDAR_APPOINTMENT_STATUSES,
+  });
+  const { data: upcoming = [], isLoading: upcomingLoading } = useAppointments({
+    from: today.toLocaleDateString('en-CA'),
+    status: LIVE_APPOINTMENT_STATUSES,
+    limit: UPCOMING_LIMIT,
+  });
+
+  const markedDates = monthAppointments.map((a) => a.date);
 
   function prevMonth() {
+    setSelectedDate(undefined);
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -45,6 +58,7 @@ export function AppointmentsPanel({ appointments, onNew, onSelectAppointment }: 
   }
 
   function nextMonth() {
+    setSelectedDate(undefined);
     if (viewMonth === 11) {
       setViewMonth(0);
       setViewYear((y) => y + 1);
@@ -97,7 +111,11 @@ export function AppointmentsPanel({ appointments, onNew, onSelectAppointment }: 
 
       {view === 'timeline' ? (
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <AppointmentTimeline appointments={upcoming} onSelect={onSelectAppointment} />
+          <AppointmentTimeline
+            appointments={upcoming}
+            isLoading={upcomingLoading}
+            onSelect={onSelectAppointment}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-[minmax(280px,380px)_1fr] gap-6 content-start md:content-stretch flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
@@ -138,9 +156,13 @@ export function AppointmentsPanel({ appointments, onNew, onSelectAppointment }: 
           <div className="min-h-0 md:overflow-y-auto">
             <AppointmentDayList
               date={selectedDate}
+              periodLabel={`${MONTHS[viewMonth]} ${viewYear}`}
+              isLoading={monthLoading}
               onSelect={onSelectAppointment}
               appointments={
-                selectedDate ? appointments.filter((a) => a.date === selectedDate) : appointments
+                selectedDate
+                  ? monthAppointments.filter((a) => a.date === selectedDate)
+                  : monthAppointments
               }
             />
           </div>

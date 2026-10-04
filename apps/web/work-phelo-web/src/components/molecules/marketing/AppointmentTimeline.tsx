@@ -2,17 +2,20 @@
 
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/lib/formatters';
-import {
-  Appointment,
-  formatAppointmentTime,
-} from '@/components/molecules/marketing/AppointmentCard';
+import { formatAppointmentTime } from '@/lib/appointments';
+import type { Appointment } from '@/types/marketing';
 
 interface Props {
   appointments: Appointment[];
+  isLoading?: boolean;
   onSelect?: (appointment: Appointment) => void;
 }
 
-export function AppointmentTimeline({ appointments, onSelect }: Props) {
+export function AppointmentTimeline({ appointments, isLoading, onSelect }: Props) {
+  if (isLoading && appointments.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-8">Loading...</p>;
+  }
+
   if (appointments.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-8">No upcoming appointments</p>;
   }
@@ -53,8 +56,8 @@ export function AppointmentTimeline({ appointments, onSelect }: Props) {
               <div className="text-right min-w-0">
                 <p className="text-sm text-gray-500 truncate">{appt.prospectName}</p>
                 <p className="text-sm text-gray-500 mt-0.5 truncate">
-                  {appt.marketer}
-                  {appt.manager && ` · Mgr: ${appt.manager}`}
+                  {appt.marketerName}
+                  {appt.managerName && ` · Mgr: ${appt.managerName}`}
                 </p>
               </div>
             </div>

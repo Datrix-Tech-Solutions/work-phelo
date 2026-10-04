@@ -11,6 +11,7 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
+import { AssigneesService } from '../assignees/assignees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientBillingService } from './client-billing.service';
 import { ClientsService } from './clients.service';
@@ -125,6 +126,7 @@ describe('ClientsService', () => {
 
   let prisma: ReturnType<typeof makePrisma>;
   let service: ClientsService;
+  let assignees: { forCreate: jest.Mock; forUpdate: jest.Mock };
   let billing: ReturnType<typeof makeBillingService>;
 
   beforeEach(() => {
@@ -150,9 +152,18 @@ describe('ClientsService', () => {
       state: 'DRAFT',
     });
     billing.record.mockResolvedValue({});
+    assignees = {
+      forCreate: jest
+        .fn()
+        .mockImplementation((u: RequestUser, _r: string, requested?: string) =>
+          Promise.resolve(requested ?? u.id),
+        ),
+      forUpdate: jest.fn().mockResolvedValue(null),
+    };
     service = new ClientsService(
       prisma as unknown as PrismaService,
       billing as unknown as ClientBillingService,
+      assignees as unknown as AssigneesService,
     );
   });
 
@@ -279,6 +290,34 @@ describe('ClientsService', () => {
         BadRequestException,
       );
       expect(prisma.marketingClient.create).not.toHaveBeenCalled();
+    });
+
+    it('assigns the client to whoever the assignment rules choose', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue(clientRecord);
+      assignees.forCreate.mockResolvedValue('user-9');
+
+      await service.create(user, { ...makeDto(), assignedUserId: 'user-9' });
+
+      expect(assignees.forCreate).toHaveBeenCalledWith(
+        user,
+        'client',
+        'user-9',
+      );
+      expect(prisma.marketingClient.create.mock.calls[0][0].data).toMatchObject(
+        {
+          assignedUserId: 'user-9',
+        },
+      );
+    });
+
+    it('creates nothing when the assignment is refused', async () => {
+      assignees.forCreate.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.create(user, { ...makeDto(), assignedUserId: 'user-9' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.marketingClient.create).not.toHaveBeenCalled();
+      expect(billing.submit).not.toHaveBeenCalled();
     });
 
     it('creates a tenant-scoped client assigned to the creator with PENDING products', async () => {
@@ -473,6 +512,27 @@ describe('ClientsService', () => {
         .mockResolvedValue(clientRecord);
     });
 
+    it('reassigns the client, and still shows the result to the editor', async () => {
+      assignees.forUpdate.mockResolvedValue('user-9');
+
+      await service.update(user, 'client-1', { assignedUserId: 'user-9' });
+
+      expect(
+        prisma.tx.marketingClient.update.mock.calls[0][0].data,
+      ).toMatchObject({
+        assignedUserId: 'user-9',
+      });
+    });
+
+    it('does not reassign when the assignment is refused', async () => {
+      assignees.forUpdate.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.update(user, 'client-1', { assignedUserId: 'user-9' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('rejects an empty patch', async () => {
       await expect(service.update(user, 'client-1', {})).rejects.toBeInstanceOf(
         BadRequestException,
@@ -661,13 +721,41 @@ describe('ClientsService', () => {
       });
 
       expect(prisma.marketingClientProduct.create).toHaveBeenCalledWith({
-        data: { tenantId: 'tenant-1', clientId: 'client-1', productId: 'p-1' },
+        data: {
+          tenantId: 'tenant-1',
+          clientId: 'client-1',
+          productId: 'p-1',
+          expectedValue: null,
+          commissionRate: null,
+          commissionAmount: null,
+        },
       });
       expect(result).toMatchObject({
         id: 'cp-1',
         product: { id: 'p-1', name: 'Fire Cover' },
         status: 'PENDING',
       });
+    });
+
+    it('stores the expected revenue and commission, deriving the commission amount', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue({ id: 'client-1' });
+      prisma.marketingClientProduct.create.mockResolvedValue({
+        id: 'cp-1',
+        productId: 'p-1',
+        status: MarketingClientProductStatus.PENDING,
+        createdAt: new Date('2026-10-02T10:00:00.000Z'),
+      });
+
+      await service.addProduct(user, 'client-1', {
+        productId: 'p-1',
+        expectedValue: 12500,
+        commissionRate: 7.5,
+      });
+
+      const data = prisma.marketingClientProduct.create.mock.calls[0][0].data;
+      expect(data.expectedValue).toBe(12500);
+      expect(data.commissionRate).toBe(7.5);
+      expect(String(data.commissionAmount)).toBe('937.5');
     });
 
     it('conflicts when the client already has the product', async () => {
