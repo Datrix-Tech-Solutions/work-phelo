@@ -27,12 +27,10 @@ import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequireAnyPermission } from '../auth/decorators/permissions.decorator';
 import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import { ClientBillingService } from './client-billing.service';
 import {
@@ -40,9 +38,6 @@ import {
   RaiseClientBillingDto,
   RequestClientPaymentDto,
 } from './dto/billing.dto';
-
-const { CLIENTS_VIEW, CLIENTS_BILLING_VIEW, CLIENTS_BILLING_CREATE } =
-  MarketingCrmSettingsPermission;
 
 /**
  * Billing for clients: marketing tells Accounting about a transaction, and Accounting owns it from
@@ -68,7 +63,8 @@ export class ClientBillingController {
   constructor(private readonly service: ClientBillingService) {}
 
   @Get('billing/options')
-  @RequireAnyPermission(CLIENTS_VIEW)
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Whether clients can be billed, and what the billing form offers',
     description:
@@ -80,7 +76,8 @@ export class ClientBillingController {
   }
 
   @Get(':id/billing/transactions')
-  @RequireAnyPermission(CLIENTS_BILLING_VIEW)
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary:
       "A client's billing transactions, with state read live from Accounting",
@@ -97,7 +94,8 @@ export class ClientBillingController {
   }
 
   @Get(':id/billing/summary')
-  @RequireAnyPermission(CLIENTS_BILLING_VIEW)
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: "A client's achieved revenue, in total and per product",
     description:
@@ -114,7 +112,8 @@ export class ClientBillingController {
   }
 
   @Post(':id/billing')
-  @RequireAnyPermission(CLIENTS_BILLING_CREATE)
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Raise a billing transaction for a client',
     description:
@@ -133,7 +132,8 @@ export class ClientBillingController {
   }
 
   @Post(':id/billing/payments')
-  @RequireAnyPermission(CLIENTS_BILLING_CREATE)
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Ask Accounting to record a client payment against an invoice',
     description:
@@ -153,7 +153,8 @@ export class ClientBillingController {
 
   @Post(':id/billing/payments/:requestId/cancel')
   @HttpCode(200)
-  @RequireAnyPermission(CLIENTS_BILLING_CREATE)
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Withdraw a payment request Accounting has not acted on yet',
     description: 'Releases the amount it was holding back.',

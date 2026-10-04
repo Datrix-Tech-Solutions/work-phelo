@@ -126,7 +126,12 @@ describe('ClientsService', () => {
 
   let prisma: ReturnType<typeof makePrisma>;
   let service: ClientsService;
-  let assignees: { forCreate: jest.Mock; forUpdate: jest.Mock };
+  let assignees: {
+    forCreate: jest.Mock;
+    forUpdate: jest.Mock;
+    nameFor: jest.Mock;
+    namesFor: jest.Mock;
+  };
   let billing: ReturnType<typeof makeBillingService>;
 
   beforeEach(() => {
@@ -159,6 +164,10 @@ describe('ClientsService', () => {
           Promise.resolve(requested ?? u.id),
         ),
       forUpdate: jest.fn().mockResolvedValue(null),
+      nameFor: jest.fn().mockResolvedValue('Ada Lovelace'),
+      namesFor: jest
+        .fn()
+        .mockResolvedValue(new Map([['user-1', 'Ada Lovelace']])),
     };
     service = new ClientsService(
       prisma as unknown as PrismaService,
@@ -497,6 +506,15 @@ describe('ClientsService', () => {
           },
         }),
       );
+    });
+
+    it('includes the assigned marketer’s name', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue(clientRecord);
+
+      const result = await service.findOne(user, 'client-1');
+
+      expect(result.assignedUserName).toBe('Ada Lovelace');
+      expect(assignees.nameFor).toHaveBeenCalledWith('tenant-1', 'user-1');
     });
   });
 

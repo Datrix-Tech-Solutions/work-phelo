@@ -126,6 +126,10 @@ export class ProspectsService {
     });
 
     if (!prospect) throw new NotFoundException('Prospect not found');
+    const assignedUserName = await this.assignees.nameFor(
+      user.tenantId,
+      prospect.assignedUserId,
+    );
 
     const [stage, settings] = await Promise.all([
       this.prisma.marketingPipelineStage.findFirst({
@@ -173,6 +177,7 @@ export class ProspectsService {
           )
         : null,
       assignedUserId: prospect.assignedUserId,
+      assignedUserName,
       clientId: prospect.client?.id ?? null,
       location: {
         label: prospect.locationLabel,
@@ -795,6 +800,11 @@ export class ProspectsService {
       ]),
     );
 
+    const assigneeNames = await this.assignees.namesFor(
+      user.tenantId,
+      prospects.map((prospect) => prospect.assignedUserId),
+    );
+
     const data = prospects.map((prospect) => {
       const prospectProducts = productsByProspect.get(prospect.id) ?? [];
       const primaryContact = contactsByProspect.get(prospect.id);
@@ -843,6 +853,7 @@ export class ProspectsService {
           prospectProducts.map((product) => product.expectedCloseDate),
         ),
         assignedUserId: prospect.assignedUserId,
+        assignedUserName: assigneeNames.get(prospect.assignedUserId) ?? null,
         createdAt: prospect.createdAt,
       };
     });

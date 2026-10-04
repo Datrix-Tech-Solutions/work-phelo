@@ -10,7 +10,6 @@ import { UpdateProspectStageModal } from '@/components/organisms/marketing/Updat
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { useToast } from '@/hooks/useToast';
-import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { apiErrorMessage } from '@/lib/apiError';
 import { pageContent } from '@/lib/layout';
 import { formatMoney } from '@/lib/formatMoney';
@@ -32,6 +31,7 @@ function toRow(item: ProspectListItem): Prospect {
     salesStageProgress: item.salesStage.probability,
     decisionMaker: item.primaryContact?.decisionMaker?.name ?? '',
     lastInteraction: item.lastInteractionDate ?? '',
+    assignedTo: item.assignedUserName ?? '',
   };
 }
 
@@ -46,7 +46,6 @@ export default function AllProspectsPage() {
   const [stageProspect, setStageProspect] = useState<Prospect | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const toast = useToast();
-  const canCreateClient = usePermissionRule('marketing.clients:CREATE');
   const deleteProspect = useDeleteProspect();
 
   const { data, isLoading, isError } = useProspects({
@@ -109,7 +108,7 @@ export default function AllProspectsPage() {
         onEdit={(row) => router.push(`/${tenantSlug}/marketing/prospects/all/${row.id}/edit`)}
         onUpdateStage={setStageProspect}
         onDelete={setPendingDelete}
-        onConvertToClient={canCreateClient ? (row) => setConvertingId(row.id) : undefined}
+        onConvertToClient={(row) => setConvertingId(row.id)}
         onAdd={() => router.push(`/${tenantSlug}/marketing/prospects/all/new`)}
         stageOptions={stageOptions}
         stageFilter={stageFilter}

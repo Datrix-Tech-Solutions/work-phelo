@@ -16,6 +16,7 @@ import { ClientBillingModal } from '@/components/organisms/marketing/ClientBilli
 import { ClientTransactionsTab } from '@/components/organisms/marketing/ClientTransactionsTab';
 import { EditClientCompanyModal } from '@/components/organisms/marketing/EditClientCompanyModal';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
+import { useAuthStore } from '@/store/auth.store';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Skeleton } from '@/components/atoms/Skeleton';
@@ -47,14 +48,24 @@ export default function ClientDetailPage() {
 
   const { data: client, isLoading, isError } = useClient(id);
   const deleteClient = useDeleteClient();
-  const canViewBilling = useAnyPermissionRules(['marketing.clients.billing:VIEW']);
-  const canBill = useAnyPermissionRules(['marketing.clients.billing:CREATE']);
+  // A client's assignee manages it - edit, follow-ups, billing - without any permission; the
+  // permissions only extend that to clients assigned to someone else. Deleting always needs one.
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isMine = !!client && client.assignedUserId === currentUserId;
+  const canViewBilling = true;
+  const hasBillingPermission = useAnyPermissionRules(['marketing.clients.billing:CREATE']);
+  const canBill = isMine || hasBillingPermission;
   const { data: billingSummary } = useClientBillingSummary(id, canViewBilling);
-  const canEdit = useAnyPermissionRules(['marketing.clients:EDIT', 'marketing.clients.all:EDIT']);
-  const canAddFollowUp = useAnyPermissionRules([
+  const hasEditPermission = useAnyPermissionRules([
+    'marketing.clients:EDIT',
+    'marketing.clients.all:EDIT',
+  ]);
+  const canEdit = isMine || hasEditPermission;
+  const hasFollowUpPermission = useAnyPermissionRules([
     'marketing.prospects.interactions:CREATE',
     'marketing.prospects.interactions.all:CREATE',
   ]);
+  const canAddFollowUp = isMine || hasFollowUpPermission;
   const canDelete = useAnyPermissionRules([
     'marketing.clients:DELETE',
     'marketing.clients.all:DELETE',
@@ -151,6 +162,7 @@ export default function ClientDetailPage() {
           <DetailField label="Company Name" value={client.companyName} />
           <DetailField label="Type of Business" value={client.businessType?.name} />
           <DetailField label="Source Type" value={client.sourceType?.name} />
+          <DetailField label="Assigned To" value={client.assignedUserName} />
           <DetailField label="Location" value={client.location.label} />
           <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />
@@ -250,6 +262,7 @@ export default function ClientDetailPage() {
       {editingCompany && (
         <EditClientCompanyModal
           currentAssignedUserId={client.assignedUserId}
+          currentAssignedUserName={client.assignedUserName}
           clientId={id}
           clientName={client.companyName}
           currentBusinessTypeId={client.businessType?.id ?? ''}

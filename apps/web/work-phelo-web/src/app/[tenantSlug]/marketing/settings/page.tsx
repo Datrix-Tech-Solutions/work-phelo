@@ -1,10 +1,7 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-export default async function SettingsPage({
-  params,
-}: {
-  params: Promise<{ tenantSlug: string }>;
-}) {
-  const { tenantSlug } = await params;
-  redirect(`/${tenantSlug}/marketing/settings/sales-pipeline`);
+import { MarketingTabRedirect } from '@/components/molecules/marketing/MarketingTabRedirect';
+
+export default function Page() {
+  return <MarketingTabRedirect page="settings" />;
 }

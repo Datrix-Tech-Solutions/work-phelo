@@ -100,6 +100,9 @@ export class ClientListItemDto {
   assignedUserId!: string;
 
   @ApiPropertyOptional({ nullable: true })
+  assignedUserName!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
   convertedFromProspectId!: string | null;
 
   @ApiProperty()

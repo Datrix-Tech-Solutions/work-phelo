@@ -4,7 +4,6 @@ import { AuthenticatedInternalRequest } from '@work-phelo/internal-auth';
 import { ANY_PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { FEATURE_KEY } from '../auth/guards/feature.guard';
 import { MODULE_KEY } from '../auth/guards/module.guard';
-import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { ClientBillingController } from './client-billing.controller';
 import { ClientBillingService } from './client-billing.service';
 import { AccountingEvent } from './dto/billing.dto';
@@ -24,34 +23,17 @@ describe('ClientBillingController authorization contract', () => {
     });
   });
 
-  it('lets anyone who can view clients ask whether billing is available', () => {
-    expect(anyPermissions(ClientBillingController.prototype.options)).toEqual([
-      P.CLIENTS_VIEW,
-    ]);
-  });
-
-  it('requires billing view to read transactions and revenue', () => {
-    expect(
-      anyPermissions(ClientBillingController.prototype.transactions),
-    ).toEqual([P.CLIENTS_BILLING_VIEW]);
-    expect(anyPermissions(ClientBillingController.prototype.summary)).toEqual([
-      P.CLIENTS_BILLING_VIEW,
-    ]);
-  });
-
-  it('requires billing create to request or cancel a payment', () => {
-    expect(
-      anyPermissions(ClientBillingController.prototype.requestPayment),
-    ).toEqual([P.CLIENTS_BILLING_CREATE]);
-    expect(
-      anyPermissions(ClientBillingController.prototype.cancelPayment),
-    ).toEqual([P.CLIENTS_BILLING_CREATE]);
-  });
-
-  it('requires billing create to raise a transaction', () => {
-    expect(anyPermissions(ClientBillingController.prototype.raise)).toEqual([
-      P.CLIENTS_BILLING_CREATE,
-    ]);
+  it('needs no permission on any billing route: the service limits it to the caller’s own clients unless they hold the billing permission', () => {
+    for (const handler of [
+      ClientBillingController.prototype.options,
+      ClientBillingController.prototype.transactions,
+      ClientBillingController.prototype.summary,
+      ClientBillingController.prototype.requestPayment,
+      ClientBillingController.prototype.cancelPayment,
+      ClientBillingController.prototype.raise,
+    ]) {
+      expect(anyPermissions(handler)).toBeUndefined();
+    }
   });
 });
 

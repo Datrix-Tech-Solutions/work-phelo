@@ -54,6 +54,12 @@ export class ClientDetailResponseDto {
   @ApiProperty()
   assignedUserId!: string;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: "The assigned marketer's name, when it can be found.",
+  })
+  assignedUserName!: string | null;
+
   @ApiProperty()
   isBillable!: boolean;
 

@@ -118,6 +118,11 @@ export class ClientsService {
       ),
     ]);
 
+    const assigneeNames = await this.assignees.namesFor(
+      user.tenantId,
+      clients.map((client) => client.assignedUserId),
+    );
+
     return {
       data: clients.map((client) => {
         const primary = client.contacts[0];
@@ -161,6 +166,7 @@ export class ClientsService {
             status: product.status,
           })),
           assignedUserId: client.assignedUserId,
+          assignedUserName: assigneeNames.get(client.assignedUserId) ?? null,
           convertedFromProspectId: client.convertedFromProspectId,
           createdAt: client.createdAt,
         };
@@ -225,6 +231,7 @@ export class ClientsService {
       productIds,
       clientId,
       clientName: this.formatText(dto.companyName),
+      assignedUserId,
     });
 
     const client = await this.prisma.marketingClient.create({
@@ -622,6 +629,7 @@ export class ClientsService {
       productIds: prospect.products.map((p) => p.productId),
       clientId,
       clientName: prospect.companyName,
+      assignedUserId: prospect.assignedUserId,
     });
 
     try {
@@ -720,6 +728,8 @@ export class ClientsService {
       productIds: string[];
       clientId: string;
       clientName: string;
+      /** Who the new client belongs to - they can bill it without the billing permission. */
+      assignedUserId: string;
     },
   ) {
     if (!input.isBillable) {
@@ -729,7 +739,7 @@ export class ClientsService {
       return null;
     }
     if (!input.billing) throw new BadRequestException(BILLING_REQUIRED_MESSAGE);
-    this.billing.assertCanBill(user);
+    this.billing.assertCanBill(user, input.assignedUserId);
     if (
       input.billing.productId &&
       !input.productIds.includes(input.billing.productId)
@@ -749,6 +759,7 @@ export class ClientsService {
       description: input.billing.description,
       productId: input.billing.productId,
       idempotencyKey,
+      assignedUserId: input.assignedUserId,
     });
     return { created, idempotencyKey, billing: input.billing };
   }
@@ -782,6 +793,10 @@ export class ClientsService {
       },
     });
     if (!client) throw new NotFoundException('Client not found');
+    const assignedUserName = await this.assignees.nameFor(
+      user.tenantId,
+      client.assignedUserId,
+    );
 
     const settings = await this.findSettingsByIds(user.tenantId, [
       client.businessTypeId,
@@ -811,6 +826,7 @@ export class ClientsService {
           )
         : null,
       assignedUserId: client.assignedUserId,
+      assignedUserName,
       isBillable: client.isBillable,
       hasAccountingEntity: Boolean(client.accountingEntityId),
       accountingEntityTypeId: client.accountingEntityTypeId,

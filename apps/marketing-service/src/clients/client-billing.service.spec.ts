@@ -37,6 +37,7 @@ describe('ClientBillingService', () => {
   const client = {
     id: 'client-1',
     companyName: 'Dell Computers',
+    assignedUserId: 'someone-else',
     accountingEntityId: null as string | null,
     products: [
       { productId: 'p-1', status: MarketingClientProductStatus.PENDING },
@@ -145,11 +146,11 @@ describe('ClientBillingService', () => {
       expect(accounting.getOptions).toHaveBeenCalledWith('tenant-1', 'user-1');
     });
 
-    it('tells a user without the billing permission, separately from readiness', async () => {
+    it('offers billing to everyone: it is decided per client when they submit', async () => {
       accounting.getOptions.mockResolvedValue(ready);
 
       await expect(service.getOptions(viewer)).resolves.toMatchObject({
-        canBill: false,
+        canBill: true,
         ready: true,
       });
     });
@@ -209,11 +210,23 @@ describe('ClientBillingService', () => {
       });
     });
 
-    it('refuses users without the billing permission', async () => {
+    it('refuses a user who has neither the billing permission nor the client', async () => {
       await expect(
         service.raise(viewer, 'client-1', raiseDto),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(accounting.createTransaction).not.toHaveBeenCalled();
+    });
+
+    it('lets the client’s assignee bill it without the billing permission', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue({
+        ...client,
+        assignedUserId: 'user-1',
+      });
+
+      await expect(
+        service.raise(viewer, 'client-1', raiseDto),
+      ).resolves.toBeDefined();
+      expect(accounting.createTransaction).toHaveBeenCalled();
     });
 
     it('returns not found for a client the user cannot see', async () => {
@@ -380,11 +393,23 @@ describe('ClientBillingService', () => {
       });
     });
 
-    it('refuses users without the billing permission', async () => {
+    it('refuses a user who has neither the billing permission nor the client', async () => {
       await expect(
         service.requestPayment(viewer, 'client-1', payment),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(accounting.createPaymentRequest).not.toHaveBeenCalled();
+    });
+
+    it('lets the client’s assignee request a payment without the billing permission', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue({
+        ...client,
+        assignedUserId: 'user-1',
+        accountingEntityId: 'entity-1',
+      });
+
+      await service.requestPayment(viewer, 'client-1', payment);
+
+      expect(accounting.createPaymentRequest).toHaveBeenCalled();
     });
 
     it('returns not found for a client the user cannot see', async () => {
@@ -481,11 +506,23 @@ describe('ClientBillingService', () => {
       });
     });
 
-    it('refuses users without the billing permission', async () => {
+    it('refuses a user who has neither the billing permission nor the client', async () => {
       await expect(
         service.cancelPayment(viewer, 'client-1', 'req-1'),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(accounting.cancelPaymentRequest).not.toHaveBeenCalled();
+    });
+
+    it('lets the client’s assignee cancel a payment request without the billing permission', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue({
+        ...client,
+        assignedUserId: 'user-1',
+        accountingEntityId: 'entity-1',
+      });
+
+      await service.cancelPayment(viewer, 'client-1', 'req-1');
+
+      expect(accounting.cancelPaymentRequest).toHaveBeenCalled();
     });
 
     it('returns not found for a client the user cannot see', async () => {

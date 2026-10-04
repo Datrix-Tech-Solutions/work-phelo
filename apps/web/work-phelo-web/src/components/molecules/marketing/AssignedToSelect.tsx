@@ -21,13 +21,28 @@ interface Props {
   value: string;
   onChange: (userId: string) => void;
   label?: string;
+  /** Name of the person it is assigned to now, so they show even when they are not on the list. */
+  currentName?: string | null;
 }
 
 /** "Assigned to" picker. Renders nothing for users without the assign permission. */
-export function AssignedToSelect({ record, value, onChange, label = 'Assigned To' }: Props) {
+export function AssignedToSelect({
+  record,
+  value,
+  onChange,
+  label = 'Assigned To',
+  currentName,
+}: Props) {
   const canAssign = useCanAssign(record);
   const { data: people = [], isLoading } = useAssignees(canAssign);
-  const options = useMemo(() => people.map((p) => ({ value: p.userId, label: p.name })), [people]);
+  const options = useMemo(() => {
+    const list = people.map((p) => ({ value: p.userId, label: p.name }));
+    // The current assignee may hold no Marketing permissions (e.g. an admin who created it).
+    if (value && currentName && !list.some((o) => o.value === value)) {
+      list.unshift({ value, label: currentName });
+    }
+    return list;
+  }, [people, value, currentName]);
 
   if (!canAssign) return null;
   return (

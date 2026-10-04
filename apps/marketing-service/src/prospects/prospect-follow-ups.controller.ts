@@ -25,12 +25,10 @@ import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequireAnyPermission } from '../auth/decorators/permissions.decorator';
 import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import {
   CompleteProspectFollowUpDto,
@@ -61,10 +59,8 @@ export class ProspectFollowUpsController {
   constructor(private readonly service: ProspectsService) {}
 
   @Get()
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW,
-    MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'List marketing prospect follow-ups that need attention',
     description:
@@ -76,10 +72,8 @@ export class ProspectFollowUpsController {
   }
 
   @Patch(':id')
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.FOLLOW_UPS_EDIT,
-    MarketingCrmSettingsPermission.FOLLOW_UPS_EDIT_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Update a pending marketing prospect follow-up',
     description:
@@ -98,10 +92,8 @@ export class ProspectFollowUpsController {
   }
 
   @Post(':id/cancel')
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.FOLLOW_UPS_CANCEL,
-    MarketingCrmSettingsPermission.FOLLOW_UPS_CANCEL_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Cancel a pending marketing prospect follow-up',
     description:
@@ -118,10 +110,8 @@ export class ProspectFollowUpsController {
   }
 
   @Post(':id/complete')
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE,
-    MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Complete a pending marketing prospect follow-up',
     description:

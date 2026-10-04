@@ -26,6 +26,7 @@ export function ClientCard({ client, onClick }: { client: ClientListItem; onClic
               : `${client.products.length} (${purchased} purchased)`,
         },
         { label: 'Achieved Revenue', value: formatMoney(client.achievedRevenue) },
+        { label: 'Assigned To', value: client.assignedUserName ?? '—' },
       ]}
       contactPerson={contact?.name}
       email={contact?.email ?? '—'}

@@ -102,6 +102,9 @@ export class ProspectResponseDto {
   @ApiProperty()
   assignedUserId!: string;
 
+  @ApiPropertyOptional({ nullable: true })
+  assignedUserName!: string | null;
+
   @ApiProperty()
   locationLabel!: string;
 
@@ -249,6 +252,12 @@ export class ProspectDetailResponseDto {
 
   @ApiProperty()
   assignedUserId!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: "The assigned marketer's name, when it can be found.",
+  })
+  assignedUserName!: string | null;
 
   @ApiPropertyOptional({
     nullable: true,
