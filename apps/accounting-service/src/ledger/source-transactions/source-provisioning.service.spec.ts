@@ -88,8 +88,21 @@ describe('SourceProvisioningService', () => {
       expect(prisma.sourceType.create).toHaveBeenCalledTimes(1);
     });
 
-    it('does nothing for modules the tenant does not have', async () => {
+    it('provisions the Payroll source, unlinked, for a tenant with HR', async () => {
       await service.ensureForUser(user({ hr: true }));
+
+      expect(prisma.sourceType.create).toHaveBeenCalledWith({
+        data: {
+          tenantId: 'tenant-1',
+          module: 'HR',
+          name: 'Payroll',
+          isActive: false,
+        },
+      });
+    });
+
+    it('does nothing for modules the tenant does not have', async () => {
+      await service.ensureForUser(user({ recruitment: true }));
 
       expect(prisma.sourceType.findFirst).not.toHaveBeenCalled();
       expect(prisma.sourceType.create).not.toHaveBeenCalled();

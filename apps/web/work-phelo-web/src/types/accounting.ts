@@ -341,6 +341,40 @@ export interface SeedPayrollAccountsResult {
   sourceType: { id: string; module: SourceModule; name: string };
 }
 
+/** One job payroll needs an account for, and the account the accountant chose for it. */
+export interface PayrollAccountRoleSetup {
+  key: string;
+  label: string;
+  description: string;
+  category: GLAccountCategory;
+  /** Every payroll run needs it, so payroll cannot be linked without it. */
+  core: boolean;
+  /** Raises its own open item to settle. */
+  isLiability: boolean;
+  account: { id: string; code: string; name: string } | null;
+  /** Unpaid payroll items still sitting on the account this was chosen as before. */
+  openItemCount: number;
+}
+
+export type PayrollNotReadyReason = 'NOT_LINKED' | 'NO_BASE_CURRENCY' | 'ACCOUNTS_MISSING';
+
+export interface PayrollSetup {
+  sourceTypeId: string;
+  sourceName: string;
+  linked: boolean;
+  /** Linked and every core account chosen. */
+  ready: boolean;
+  /** Everything needed before it can be linked is in place. */
+  readyToLink: boolean;
+  reason: PayrollNotReadyReason | null;
+  baseCurrency: string | null;
+  autoPostOnApproval: boolean;
+  /** Payroll items (across all runs) still unpaid. Unlinking is blocked while there are any. */
+  openLiabilityCount: number;
+  wagePaymentType: { id: string; code: string; name: string } | null;
+  roles: PayrollAccountRoleSetup[];
+}
+
 export type SourceLedgerPaymentState = 'OPEN' | 'PARTIALLY_PAID' | 'PAID';
 export type SourceLedgerStatusFilter = 'ALL' | 'PAID' | 'UNPAID';
 export type SourceLedgerSortBy = 'eventDate' | 'paymentDate';

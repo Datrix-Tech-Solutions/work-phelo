@@ -38,6 +38,8 @@ export interface PayrollRun {
   approvalNote?: string | null;
   returnToDraftNote?: string | null;
   paidAt?: string;
+  /** Approved while payroll was linked to Accounting, so it is posted and settled there. Fixed at approval. */
+  postedToAccounting?: boolean;
   payrollCountry: PayrollCountry;
   payrollCurrency: string;
   tier3Enabled: boolean;
@@ -146,6 +148,16 @@ export interface PayrollSettlementStatus {
   socialSecurity: PayrollLedgerLineStatus | null;
 }
 
+/** What the approve screen shows about Accounting. HR has no accounting setting: Accounting decides. */
+export interface PayrollAccountingStatus {
+  /** STANDALONE: payroll runs on its own. ACCOUNTING: linked in Accounting. UNKNOWN: it could not be asked. */
+  mode: 'STANDALONE' | 'ACCOUNTING' | 'UNKNOWN';
+  /** When linked: every payroll account the run needs is chosen. */
+  ready: boolean;
+  /** When linked and not ready: the accounts still to be chosen in Accounting. */
+  missingRoles: string[];
+}
+
 // ── DTOs ───────────────────────────────────────────────────────────────────────
 
 export interface PayrollDecisionDto {
@@ -188,8 +200,6 @@ export interface PayrollSettings {
   payrollTier3Enabled: boolean;
   payrollTier3Rate: number | null;
   payrollTier3SchemeName: string | null;
-  linkedToAccounting: boolean;
-  autoPostOnApproval: boolean;
 }
 
 export interface UpdatePayrollSettingsDto {
@@ -199,8 +209,6 @@ export interface UpdatePayrollSettingsDto {
   payrollTier3Enabled?: boolean;
   payrollTier3Rate?: number;
   payrollTier3SchemeName?: string;
-  linkedToAccounting?: boolean;
-  autoPostOnApproval?: boolean;
 }
 
 // ── Payslip display ────────────────────────────────────────────────────────────

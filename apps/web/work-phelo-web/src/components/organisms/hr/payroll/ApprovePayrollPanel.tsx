@@ -5,7 +5,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { PayrollRun } from '@/types/hr';
-import { useApprovePayroll } from '@/hooks';
+import { useApprovePayroll, usePayrollAccountingStatus } from '@/hooks';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -27,6 +27,16 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
   const { mutate: approve, isPending } = useApprovePayroll();
 
   const isOpen = run !== null;
+  // Accounting decides whether this payroll is posted there; HR just asks, every time the screen opens.
+  const accounting = usePayrollAccountingStatus(isOpen);
+  const accountingStatus = accounting.data;
+  const accountingChecking = accounting.isLoading || accounting.isFetching;
+  // Never approve blind: if Accounting could not be asked, or is linked but not ready, wait.
+  const accountingBlocked =
+    accountingChecking ||
+    accounting.isError ||
+    accountingStatus?.mode === 'UNKNOWN' ||
+    (accountingStatus?.mode === 'ACCOUNTING' && !accountingStatus.ready);
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '';
   const money = (value: string | number) =>
     formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
@@ -54,7 +64,12 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
         onError: (err) => {
           const code = (err as { response?: { data?: { code?: string; message?: string } } })
             ?.response?.data?.code;
-          if (code === 'ACCOUNTING_POSTING_FAILED') {
+          if (
+            code === 'ACCOUNTING_POSTING_FAILED' ||
+            code === 'ACCOUNTING_NOT_READY' ||
+            code === 'ACCOUNTING_STATUS_UNAVAILABLE'
+          ) {
+            accounting.refetch();
             // Approval did not go through — the run is still pending approval, so the same
             // "Approve Payroll" click safely retries; "Cancel" leaves it pending to try later.
             setAccountingError(
@@ -80,7 +95,10 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
             <Button variant="outline" onClick={handleClose} disabled={isPending}>
               Cancel
             </Button>
-            <Button disabled={!approvalNote.trim()} onClick={() => setShowConfirm(true)}>
+            <Button
+              disabled={!approvalNote.trim() || accountingBlocked}
+              onClick={() => setShowConfirm(true)}
+            >
               Approve Payroll
             </Button>
           </div>
@@ -101,6 +119,55 @@ export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
                 </p>
               </div>
             )}
+
+            {accountingStatus?.mode === 'ACCOUNTING' && accountingStatus.ready && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">
+                <p className="text-sm font-medium text-blue-900">Accounting is linked</p>
+                <p className="text-sm text-blue-800 mt-0.5">
+                  This payroll will be posted to Accounting and settled there.
+                </p>
+              </div>
+            )}
+            {accountingStatus?.mode === 'ACCOUNTING' && !accountingStatus.ready && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+                <p className="text-sm font-medium text-red-800">Accounting is not ready</p>
+                <p className="text-sm text-red-700 mt-0.5">
+                  Payroll is linked to Accounting, but no account is chosen for{' '}
+                  {accountingStatus.missingRoles.join(', ')}. Ask an accountant to choose them in
+                  Accounting under Source Types, then check again.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => accounting.refetch()}
+                  isLoading={accountingChecking}
+                  loadingText="Checking…"
+                >
+                  Check again
+                </Button>
+              </div>
+            )}
+            {(accounting.isError || accountingStatus?.mode === 'UNKNOWN') &&
+              !accountingChecking && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <p className="text-sm font-medium text-amber-900">
+                    Could not check whether payroll is linked to Accounting
+                  </p>
+                  <p className="text-sm text-amber-800 mt-0.5">
+                    Approval is paused so this payroll is not approved on the wrong footing. Try
+                    again.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2"
+                    onClick={() => accounting.refetch()}
+                  >
+                    Try again
+                  </Button>
+                </div>
+              )}
 
             <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
               <p className="text-xs text-gray-500">Approval Note</p>

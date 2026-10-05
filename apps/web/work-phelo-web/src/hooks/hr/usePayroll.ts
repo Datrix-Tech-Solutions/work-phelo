@@ -4,6 +4,7 @@ import {
   PayrollItem,
   PayrollRun,
   PayrollRunDetail,
+  PayrollAccountingStatus,
   PayrollSettings,
   PayrollSettlementStatus,
   RunPayrollDto,
@@ -151,6 +152,18 @@ export function useSubmitPayroll() {
       queryClient.invalidateQueries({ queryKey: ['payroll'] });
       queryClient.invalidateQueries({ queryKey: ['payroll', id] });
     },
+  });
+}
+
+/** Whether approving payroll will post it to Accounting - asked fresh each time the approve screen opens. */
+export function usePayrollAccountingStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: ['payroll', 'accounting-status'],
+    queryFn: async () =>
+      (await api.get<PayrollAccountingStatus>('/hr/payroll/accounting-status')).data,
+    enabled,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 }
 

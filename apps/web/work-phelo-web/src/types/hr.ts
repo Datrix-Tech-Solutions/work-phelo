@@ -439,6 +439,7 @@ export type {
   PayrollLedgerPaymentState,
   PayrollLedgerLineStatus,
   PayrollSettlementStatus,
+  PayrollAccountingStatus,
   PayrollDecisionDto,
   RunPayrollDto,
   UpdatePayrollItemDto,

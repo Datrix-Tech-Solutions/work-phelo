@@ -335,6 +335,7 @@ model GLAccount {
   parentAccount               GLAccount?                     @relation("GLAccountHierarchy", fields: [parentAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   childAccounts               GLAccount[]                    @relation("GLAccountHierarchy")
   journalLines                JournalLine[]
+  payrollAccountMappings      PayrollAccountMapping[]
   postingRuleLines            PostingRuleLine[]
   transactionRuleLines        TransactionTypeRuleLine[]
   subledgers                  SubledgerAccount[]
@@ -1430,6 +1431,10 @@ model SourceLedgerEntry {
   /// Traces back to the record that caused this entry to exist (e.g. a payroll run id) —
   /// informational only, not a hard FK since it belongs to another service's data.
   sourceRecordId String?
+  /// Which of the module's accounts this open item belongs to (e.g. payroll's "netPayPayable"),
+  /// recorded when the entry is created so a later change to the module's account mapping never
+  /// re-labels items that already exist.
+  sourceRole     String?
   description    String
   amount         Decimal  @db.Decimal(20, 4)
   currency       String
@@ -1633,5 +1638,34 @@ model AccountingPaymentRequest {
   @@index([tenantId, invoiceId, status])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, customerId])
+  @@schema("accounting")
+}
+
+/// Which of the tenant's GL accounts handles each payroll function (net pay payable, income tax
+/// payable, ...). The accountant chooses these in Accounting; payroll posting reads them instead
+/// of looking accounts up by name.
+model PayrollAccountMapping {
+  id          String   @id @default(uuid())
+  tenantId    String
+  /// A payroll account role key, e.g. "netPayPayable" (see payroll-account-roles.ts).
+  role        String
+  glAccountId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  glAccount GLAccount @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([tenantId, role])
+  @@index([tenantId, glAccountId])
+  @@schema("accounting")
+}
+
+/// Accounting-side choices about how payroll is posted. Payroll itself has no accounting settings.
+model PayrollAccountingSetting {
+  tenantId           String   @id
+  /// Post the accrual journal straight to the ledger instead of leaving it as a draft.
+  autoPostOnApproval Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+
   @@schema("accounting")
 }

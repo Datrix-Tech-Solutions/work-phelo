@@ -5,10 +5,12 @@ import {
   IsBoolean,
   IsDateString,
   IsNumber,
+  IsOptional,
   IsString,
   IsUUID,
   Min,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -122,17 +124,43 @@ export class PostPayrollAccrualDto {
   @IsNumber()
   @Min(0)
   totalOtherDeductions!: number;
-
-  @ApiProperty({
-    description:
-      'Post straight to the ledger instead of leaving the journal as a draft for review.',
-  })
-  @IsBoolean()
-  autoPost!: boolean;
 }
 
 export class QueryPayrollSettlementStatusDto {
   @ApiProperty({ description: 'Tenant the payroll run belongs to' })
   @IsUUID()
   tenantId!: string;
+}
+
+export class SetPayrollAccountMappingDto {
+  @ApiProperty({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The account that handles this payroll function, or null to clear it.',
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  glAccountId!: string | null;
+}
+
+export class CreatePayrollRoleAccountDto {
+  @ApiPropertyOptional({
+    example: 'Net Pay Payable',
+    description:
+      'Name for the new account. Defaults to the standard name for this function.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  name?: string;
+}
+
+export class UpdatePayrollAccountingSettingsDto {
+  @ApiProperty({
+    description:
+      'Post the accrual journal straight to the ledger instead of leaving it as a draft for review.',
+  })
+  @IsBoolean()
+  autoPostOnApproval!: boolean;
 }

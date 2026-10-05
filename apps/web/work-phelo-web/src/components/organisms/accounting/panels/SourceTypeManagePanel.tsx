@@ -28,7 +28,7 @@ export function SourceTypeManagePanel({
       }
     >
       {sourceType?.module === 'HR' ? (
-        <PayrollAccountingSetup />
+        <PayrollAccountingSetup sourceType={sourceType} />
       ) : sourceType?.module === 'MARKETING' ? (
         <SourceBillingSetup sourceType={sourceType} />
       ) : (
