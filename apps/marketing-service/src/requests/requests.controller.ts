@@ -42,14 +42,7 @@ import {
 } from './dto/transport-request.dto';
 import { RequestsService } from './requests.service';
 
-const {
-  REQUESTS_VIEW,
-  REQUESTS_VIEW_ALL,
-  REQUESTS_CREATE,
-  REQUESTS_EDIT,
-  REQUESTS_CANCEL,
-  REQUESTS_APPROVE_ALL,
-} = MarketingCrmSettingsPermission;
+const { REQUESTS_APPROVE_ALL } = MarketingCrmSettingsPermission;
 
 type AuthedRequest = Request & { user: RequestUser };
 
@@ -72,7 +65,8 @@ export class RequestsController {
   constructor(private readonly service: RequestsService) {}
 
   @Get()
-  @RequireAnyPermission(REQUESTS_VIEW, REQUESTS_VIEW_ALL)
+  // Open to everyone, like appointments: the service limits it to the caller's own requests (and
+  // lets approvers act on any).
   @ApiOperation({
     summary: 'List transport requests',
     description:
@@ -86,7 +80,8 @@ export class RequestsController {
   }
 
   @Get('form-options')
-  @RequireAnyPermission(REQUESTS_CREATE, REQUESTS_EDIT)
+  // Open to everyone, like appointments: the service limits it to the caller's own requests (and
+  // lets approvers act on any).
   @ApiOperation({
     summary: 'Requester details and selectable passengers for the request form',
     description:
@@ -113,7 +108,8 @@ export class RequestsController {
   }
 
   @Get(':id')
-  @RequireAnyPermission(REQUESTS_VIEW, REQUESTS_VIEW_ALL)
+  // Open to everyone, like appointments: the service limits it to the caller's own requests (and
+  // lets approvers act on any).
   @ApiOperation({ summary: 'Get a transport request' })
   @ApiParam({ name: 'id', format: 'uuid' })
   findOne(
@@ -124,7 +120,8 @@ export class RequestsController {
   }
 
   @Post()
-  @RequireAnyPermission(REQUESTS_CREATE)
+  // Open to everyone, like appointments: the service limits it to the caller's own requests (and
+  // lets approvers act on any).
   @ApiOperation({
     summary: 'Raise a transport request',
     description:
@@ -138,7 +135,8 @@ export class RequestsController {
   }
 
   @Patch(':id')
-  @RequireAnyPermission(REQUESTS_EDIT)
+  // Open to everyone, like appointments: the service limits it to the caller's own requests (and
+  // lets approvers act on any).
   @ApiOperation({ summary: 'Edit your own request while it is still pending' })
   @ApiParam({ name: 'id', format: 'uuid' })
   update(
@@ -151,7 +149,8 @@ export class RequestsController {
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @RequireAnyPermission(REQUESTS_CANCEL, REQUESTS_APPROVE_ALL)
+  // Open to everyone, like appointments: the service limits it to the caller's own requests (and
+  // lets approvers act on any).
   @ApiOperation({
     summary: 'Cancel a pending or approved (including on-route) request',
     description:
@@ -167,7 +166,8 @@ export class RequestsController {
 
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
-  @RequireAnyPermission(REQUESTS_EDIT, REQUESTS_APPROVE_ALL)
+  // Open to everyone, like appointments: the service limits it to the caller's own requests (and
+  // lets approvers act on any).
   @ApiOperation({
     summary: 'Complete a trip once its return time has passed',
     description:
